@@ -40,9 +40,13 @@ type RedisConfig struct {
 }
 
 type LogConfig struct {
-	Level  string `mapstructure:"level"`
-	Format string `mapstructure:"format"`
-	Output string `mapstructure:"output"`
+	Level      string `mapstructure:"level"`
+	Format     string `mapstructure:"format"`
+	Output     string `mapstructure:"output"`
+	MaxSize    int    `mapstructure:"max_size"`    // MB
+	MaxBackups int    `mapstructure:"max_backups"` // 保留文件数
+	MaxAge     int    `mapstructure:"max_age"`     // 保留天数
+	Compress   bool   `mapstructure:"compress"`    // 是否压缩
 }
 
 type AuthConfig struct {

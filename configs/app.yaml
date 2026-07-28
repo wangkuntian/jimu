@@ -21,6 +21,10 @@ log:
   level: "debug"
   format: "console"
   output: "stdout"
+  max_size: 100        # MB，单文件最大大小
+  max_backups: 30      # 保留旧文件数
+  max_age: 7           # 保留天数
+  compress: true       # 旧文件压缩
 
 auth:
   jwt_secret: "change-me-in-production"

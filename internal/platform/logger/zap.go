@@ -7,6 +7,7 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 type Logger struct {
@@ -29,13 +30,13 @@ func New(cfg config.LogConfig) *Logger {
 	}
 
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:       "timestamp",
-		LevelKey:      "level",
-		MessageKey:    "msg",
-		CallerKey:     "caller",
-		EncodeTime:    zapcore.ISO8601TimeEncoder,
-		EncodeLevel:   zapcore.LowercaseLevelEncoder,
-		EncodeCaller:  zapcore.ShortCallerEncoder,
+		TimeKey:      "timestamp",
+		LevelKey:     "level",
+		MessageKey:   "msg",
+		CallerKey:    "caller",
+		EncodeTime:   zapcore.ISO8601TimeEncoder,
+		EncodeLevel:  zapcore.LowercaseLevelEncoder,
+		EncodeCaller: zapcore.ShortCallerEncoder,
 	}
 
 	var encoder zapcore.Encoder
@@ -49,12 +50,13 @@ func New(cfg config.LogConfig) *Logger {
 	if cfg.Output == "stdout" || cfg.Output == "" {
 		writeSyncer = zapcore.AddSync(os.Stdout)
 	} else {
-		f, err := os.OpenFile(cfg.Output, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			writeSyncer = zapcore.AddSync(os.Stdout)
-		} else {
-			writeSyncer = zapcore.AddSync(f)
-		}
+		writeSyncer = zapcore.AddSync(&lumberjack.Logger{
+			Filename:   cfg.Output,
+			MaxSize:    cfg.MaxSize,
+			MaxBackups: cfg.MaxBackups,
+			MaxAge:     cfg.MaxAge,
+			Compress:   cfg.Compress,
+		})
 	}
 
 	core := zapcore.NewCore(encoder, writeSyncer, level)
