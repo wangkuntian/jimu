@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: "1.26"
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run release checks
+        run: make release-check
+
+      - name: Build release binaries
+        run: |
+          # Linux amd64
+          GOOS=linux GOARCH=amd64 go build -o bin/jimu-linux-amd64 cmd/server/main.go
+          # Linux arm64
+          GOOS=linux GOARCH=arm64 go build -o bin/jimu-linux-arm64 cmd/server/main.go
+          # Darwin amd64
+          GOOS=darwin GOARCH=amd64 go build -o bin/jimu-darwin-amd64 cmd/server/main.go
+          # Darwin arm64
+          GOOS=darwin GOARCH=arm64 go build -o bin/jimu-darwin-arm64 cmd/server/main.go
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # 提取上一个 tag 到当前 tag 之间的提交
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            CHANGES=$(git log --oneline --no-decorate)
+          else
+            CHANGES=$(git log --oneline --no-decorate ${PREV_TAG}..HEAD)
+          fi
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "changes<<$EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "$EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.changelog.outputs.version }}
+          body: |
+            ## 变更日志
+
+            ${{ steps.changelog.outputs.changes }}
+
+            ## 校验
+
+            - CI: 通过
+            - 构建: 多平台二进制
+          files: bin/jimu-*
+          draft: false
+          prerelease: false
