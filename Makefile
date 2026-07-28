@@ -1,4 +1,4 @@
-.PHONY: run build test vet fmt fmt-check lint clean migrate swagger cli docker help
+.PHONY: run build test vet fmt fmt-check lint clean migrate swagger cli docker docker-up docker-down help
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -9,6 +9,8 @@ SERVER_BIN := $(BIN_DIR)/server
 CLI_BIN := $(BIN_DIR)/jimu
 SERVER_CMD := cmd/server/main.go
 CLI_CMD := cmd/cli/main.go
+DOCKER_COMPOSE := docker-compose
+ENV ?= dev
 
 ## help: 显示帮助信息
 help:
@@ -21,7 +23,11 @@ help:
 
 ## run: 运行 HTTP 服务
 run:
-	go run $(SERVER_CMD)
+	JIMU_ENV=$(ENV) go run $(SERVER_CMD)
+
+## run-cli: 运行 CLI 工具
+run-cli:
+	JIMU_ENV=$(ENV) go run $(CLI_CMD)
 
 ## build: 编译服务端和 CLI
 build: build-server build-cli
@@ -81,7 +87,19 @@ clean:
 
 ## migrate: 运行数据库迁移
 migrate:
-	go run $(CLI_CMD) migrate
+	go run $(CLI_CMD) migrate up
+
+## migrate-down: 回滚最后一次迁移
+migrate-down:
+	go run $(CLI_CMD) migrate down
+
+## migrate-status: 查看迁移状态
+migrate-status:
+	go run $(CLI_CMD) migrate status
+
+## seed: 插入初始数据
+seed:
+	go run $(CLI_CMD) seed
 
 ## swagger: 生成 API 文档
 swagger:
@@ -93,6 +111,18 @@ cli: build-cli
 ## docker: 构建 Docker 镜像
 docker:
 	docker build -t jimu:latest .
+
+## docker-up: 启动所有容器（依赖 + 应用）
+docker-up:
+	$(DOCKER_COMPOSE) up -d
+
+## docker-down: 停止所有容器
+docker-down:
+	$(DOCKER_COMPOSE) down
+
+## docker-logs: 查看应用日志
+docker-logs:
+	$(DOCKER_COMPOSE) logs -f server
 
 ## all: 格式化 -> 静态检查 -> 测试 -> 编译
 all: fmt vet test build
