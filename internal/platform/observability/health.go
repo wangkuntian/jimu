@@ -1,4 +1,4 @@
-package health
+package observability
 
 import (
 	"jimu/internal/shared/response"

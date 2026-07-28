@@ -22,7 +22,13 @@ func Bootstrap(modules ...contract.Module) *http.Server {
 
 	// Health check (no auth required)
 	healthGroup := r.Group("/")
-	health.Register(healthGroup, container.DB, container.Redis)
+	observability.Register(healthGroup, container.DB, container.Redis)
+
+	// Debug routes (pprof + metrics)
+	observability.RegisterDebugRoutes(r.Group("/debug"))
+
+	// Swagger UI
+	http.RegisterSwagger(r.Group("/swagger"))
 
 	// Register modules
 	for _, m := range modules {
