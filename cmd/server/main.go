@@ -2,11 +2,11 @@ package main
 
 import (
 	"jimu/internal/app"
+	"jimu/internal/config"
 	authmodule "jimu/internal/modules/auth"
 	"jimu/internal/modules/permission"
 	"jimu/internal/modules/role"
 	"jimu/internal/modules/user"
-	"jimu/internal/config"
 	"jimu/internal/platform/db"
 )
 
