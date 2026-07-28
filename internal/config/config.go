@@ -1,12 +1,34 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/viper"
+)
+
+// 枚举常量
+const (
+	HTTPModeDebug   = "debug"
+	HTTPModeRelease = "release"
+	HTTPModeTest    = "test"
+
+	LogLevelDebug = "debug"
+	LogLevelInfo  = "info"
+	LogLevelWarn  = "warn"
+	LogLevelError = "error"
+
+	LogFormatJSON    = "json"
+	LogFormatConsole = "console"
+)
+
+var (
+	validHTTPModes  = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
+	validLogLevels  = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
+	validLogFormats = []string{LogFormatJSON, LogFormatConsole}
 )
 
 type Config struct {
@@ -97,7 +119,34 @@ func Load() (*Config, error) {
 	// Apply env overrides (viper's Unmarshal doesn't apply AutomaticEnv for nested keys)
 	applyEnvOverrides(&cfg)
 
+	// Validate enum values
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
+}
+
+func (c *Config) validate() error {
+	if !contains(validHTTPModes, c.HTTP.Mode) {
+		return fmt.Errorf("invalid http.mode: %q, must be one of %v", c.HTTP.Mode, validHTTPModes)
+	}
+	if !contains(validLogLevels, c.Log.Level) {
+		return fmt.Errorf("invalid log.level: %q, must be one of %v", c.Log.Level, validLogLevels)
+	}
+	if !contains(validLogFormats, c.Log.Format) {
+		return fmt.Errorf("invalid log.format: %q, must be one of %v", c.Log.Format, validLogFormats)
+	}
+	return nil
+}
+
+func contains(list []string, val string) bool {
+	for _, v := range list {
+		if v == val {
+			return true
+		}
+	}
+	return false
 }
 
 func applyEnvOverrides(cfg *Config) {
@@ -122,5 +171,11 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if secret := os.Getenv("JIMU__AUTH__JWT_SECRET"); secret != "" {
 		cfg.Auth.JWTSecret = secret
+	}
+	if level := os.Getenv("JIMU__LOG__LEVEL"); level != "" {
+		cfg.Log.Level = level
+	}
+	if format := os.Getenv("JIMU__LOG__FORMAT"); format != "" {
+		cfg.Log.Format = format
 	}
 }
