@@ -3,6 +3,7 @@ package main
 import (
 	"jimu/internal/app"
 	"jimu/internal/config"
+	auditmodule "jimu/internal/modules/audit"
 	authmodule "jimu/internal/modules/auth"
 	"jimu/internal/modules/permission"
 	"jimu/internal/modules/role"
@@ -30,7 +31,8 @@ func main() {
 	authModule := authmodule.New(dbConn, cfg.Auth)
 	roleModule := role.New(dbConn)
 	permModule := permission.New(dbConn)
+	auditModule := auditmodule.New(dbConn)
 
-	server := app.Bootstrap(userModule, authModule, roleModule, permModule)
+	server := app.Bootstrap(userModule, authModule, roleModule, permModule, auditModule)
 	server.Run()
 }
