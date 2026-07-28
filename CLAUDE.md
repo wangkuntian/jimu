@@ -1,18 +1,14 @@
 # CLAUDE.md
 
-这是本项目的 Claude 协作规范。全仓库默认遵守本文件；子目录如果以后有自己的
+本项目的 Claude 协作规范。全仓库默认遵守本文件；子目录如果以后有自己的
 `CLAUDE.md`，以更靠近被修改文件的规范为准。
 
 默认使用中文回复用户，除非用户明确要求使用其他语言。
 
-## 项目概览
+## 开发前必读
 
-Jimu 是一个用 Go 语言编写的通用后端基础框架，采用模块化单体 + Clean Architecture。
-
-- 模块路径：`jimu`
-- Go 版本：1.26.5
-- 数据库：MariaDB（MySQL 协议）
-- 技术栈：Gin + Gorm + Zap + Viper + Redis + Casbin + Goose + JWT + Cobra
+- 项目结构、技术栈、API 等见 [README.md](README.md)
+- 修改代码后，必须同步更新 README.md 相关章节
 
 ## 架构约束
 
@@ -46,19 +42,6 @@ type Module interface {
 
 HTTP 路由统一注册在 `/api/v1` 前缀下。
 
-### 目录职责
-
-- `internal/platform/` — 基础设施（HTTP、DB、Redis、Logger、Auth）
-- `internal/modules/` — 业务模块
-- `internal/shared/` — 跨模块通用能力（errors、response、pagination）
-- `internal/contract/` — 模块间契约接口
-- `internal/app/` — 启动装配（bootstrap、container）
-- `pkg/` — 对外暴露的 SDK/工具
-- `cmd/server/` — HTTP 服务入口
-- `cmd/cli/` — CLI 工具入口
-- `migrations/` — Goose 数据库迁移脚本
-- `conf/` — Casbin 等配置文件
-
 ## 配置约束
 
 ### 枚举值
@@ -74,6 +57,18 @@ HTTP 路由统一注册在 `/api/v1` 前缀下。
 ### 环境变量
 
 环境变量前缀 `JIMU`，层级分隔符 `__`，例如 `JIMU__HTTP__PORT=9090`。
+
+### 多环境配置
+
+通过 `JIMU_ENV` 环境变量切换配置文件：
+
+| 环境 | 配置文件 |
+|------|----------|
+| 开发 | `app.yaml` |
+| 测试 | `app.test.yaml` |
+| 生产 | `app.prod.yaml` |
+
+优先级：`环境变量 > app.{env}.yaml > app.yaml`
 
 ## 编码约束
 
@@ -103,6 +98,21 @@ HTTP 状态码始终 200，业务错误通过 `body.code` 体现：
 - 所有基础表包含字段：`id`、`created_at`、`updated_at`、`deleted_at`
 - 迁移使用 Goose，命名 `{seq}_create_{table}s.sql`
 
+### CLI
+
+- 基于 Cobra，入口在 `cmd/cli/main.go`
+- 迁移和种子命令通过 `jimu migrate` / `jimu seed` 调用
+
+## 文档维护
+
+修改代码后，必须同步更新 README.md：
+
+- 新增配置项 → 更新配置说明表
+- 新增 CLI 命令 → 更新命令表
+- 新增 API → 更新 API 示例
+- 项目结构变化 → 更新目录树
+- 新增 Makefile 目标 → 更新命令速查
+
 ## 简单优先
 
 只写当前任务需要的最少代码。
@@ -120,7 +130,7 @@ HTTP 状态码始终 200，业务错误通过 `body.code` 体现：
 
 - 修改前查看 `git status --short`。
 - 不覆盖、回滚或格式化无关文件。
-- 不运行 `git reset --hard`、`git checkout -- .`、批量删除等破坏性命令，除非用户明确要求。
+- 不运行 `git reset hard`、`git checkout -- .`、批量删除等破坏性命令，除非用户明确要求。
 - 提交前再次查看 `git status --short`，只纳入当前任务相关文件。
 - 除非用户明确要求，否则不要创建 commit。
 
