@@ -13,6 +13,20 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    groups:
+      # 将同一库的多个升级合并为一个 PR
+      gin:
+        patterns:
+          - "github.com/gin-gonic/*"
+      gorm:
+        patterns:
+          - "gorm.io/*"
+      casbin:
+        patterns:
+          - "github.com/casbin/*"
+      go-redis:
+        patterns:
+          - "github.com/redis/go-redis/*"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -26,3 +40,7 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    groups:
+      github-actions:
+        patterns:
+          - "actions/*"
