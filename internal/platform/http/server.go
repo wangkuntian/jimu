@@ -98,6 +98,8 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig) *gin.Engine {
 		middleware.Logger(log),
 		middleware.Recovery(),
 		middleware.CORS(),
+		middleware.Timeout(30*time.Second),
+		middleware.GlobalRateLimit(),
 	)
 
 	return r
