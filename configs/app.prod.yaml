@@ -1,0 +1,32 @@
+http:
+  host: "0.0.0.0"
+  port: 8080
+  mode: "release"
+
+db:
+  host: "${DB_HOST}"
+  port: "${DB_PORT}"
+  user: "${DB_USER}"
+  password: "${DB_PASSWORD}"
+  database: "${DB_DATABASE}"
+  max_open: 100
+  max_idle: 10
+
+redis:
+  addr: "${REDIS_ADDR}"
+  password: "${REDIS_PASSWORD}"
+  db: 0
+
+log:
+  level: "info"
+  format: "json"
+  output: "logs/app.log"
+  max_size: 100
+  max_backups: 30
+  max_age: 7
+  compress: true
+
+auth:
+  jwt_secret: "${JWT_SECRET}"
+  access_expire_min: 30
+  refresh_expire_day: 7

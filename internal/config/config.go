@@ -77,12 +77,18 @@ type AuthConfig struct {
 	RefreshExpireDay int    `mapstructure:"refresh_expire_day"`
 }
 
+// Load 加载配置，支持多环境
+// 优先级：环境变量 > app.{env}.yaml > app.yaml
 func Load() (*Config, error) {
+	env := os.Getenv("JIMU_ENV")
+
 	v := viper.New()
-	v.SetConfigName("app")
 	v.SetConfigType("yaml")
 
-	// Try to find project root by looking for configs/ directory
+	// 先加载基础配置 app.yaml
+	v.SetConfigName("app")
+
+	// 查找项目根目录下的 configs/
 	wd, _ := os.Getwd()
 	for i := 0; i < 5; i++ {
 		cfgDir := filepath.Join(wd, "configs")
@@ -92,39 +98,56 @@ func Load() (*Config, error) {
 		}
 		wd = filepath.Dir(wd)
 	}
-
 	v.AddConfigPath("./configs")
 	v.AddConfigPath(".")
 
-	// Environment variable override: JIMU__HTTP__PORT=9090
+	if err := v.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("failed to read app.yaml: %w", err)
+	}
+
+	// 环境配置覆盖（如 app.prod.yaml）
+	if env != "" && env != "dev" {
+		v.SetConfigName("app." + env)
+		if err := v.MergeInConfig(); err != nil {
+			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+				return nil, fmt.Errorf("failed to merge app.%s.yaml: %w", env, err)
+			}
+		}
+	}
+
+	// 环境变量覆盖：JIMU__HTTP__PORT=9090
 	v.SetEnvPrefix("JIMU")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "__"))
 	v.AutomaticEnv()
 
-	// Bind specific env vars to ensure override works on Unmarshal
-	for _, key := range []string{"http.port", "http.host", "http.mode", "db.host", "db.port",
-		"db.user", "db.password", "db.database", "redis.addr", "log.level", "auth.jwt_secret"} {
-		_ = v.BindEnv(key)
-	}
-
-	if err := v.ReadInConfig(); err != nil {
-		return nil, err
-	}
+	// 展开配置中的环境变量占位符 ${VAR}
+	expandConfig(v)
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, err
 	}
 
-	// Apply env overrides (viper's Unmarshal doesn't apply AutomaticEnv for nested keys)
+	// viper Unmarshal 不自动应用 AutomaticEnv，手动覆盖
 	applyEnvOverrides(&cfg)
 
-	// Validate enum values
+	// 校验枚举值
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 
 	return &cfg, nil
+}
+
+// expandConfig 展开配置值中的 ${VAR} 占位符
+func expandConfig(v *viper.Viper) {
+	for _, key := range v.AllKeys() {
+		val := v.GetString(key)
+		if strings.Contains(val, "${") {
+			expanded := os.ExpandEnv(val)
+			v.Set(key, expanded)
+		}
+	}
 }
 
 func (c *Config) validate() error {

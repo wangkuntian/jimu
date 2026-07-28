@@ -1,0 +1,28 @@
+http:
+  host: "0.0.0.0"
+  port: 8080
+  mode: "test"
+
+db:
+  host: "127.0.0.1"
+  port: 3306
+  user: "root"
+  password: "root"
+  database: "jimu_test"
+  max_open: 10
+  max_idle: 5
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 1
+
+log:
+  level: "debug"
+  format: "console"
+  output: "stdout"
+
+auth:
+  jwt_secret: "test-secret-key"
+  access_expire_min: 30
+  refresh_expire_day: 7
