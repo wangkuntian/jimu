@@ -44,3 +44,24 @@ updates:
       github-actions:
         patterns:
           - "actions/*"
+
+  # Docker 镜像
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      docker-images:
+        patterns:
+          - "golang"
+          - "alpine"
+          - "mariadb"
+          - "redis"
+          - "adminer"
