@@ -7,11 +7,15 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **模块化架构** — Clean Architecture 分层，业务逻辑依赖接口不依赖实现
 - **统一认证** — JWT + Casbin RBAC 权限模型
 - **统一响应** — 标准 `{code, message, data}` 格式 + 分页
-- **配置灵活** — Viper + yaml + 环境变量覆盖，枚举值启动校验
+- **多环境配置** — Viper + yaml + 环境变量覆盖，枚举值启动校验
 - **结构化日志** — Zap + lumberjack 自动滚动
+- **数据库迁移** — Goose 迁移 CLI (up/down/status/redo)
+- **数据初始化** — Seed 命令一键插入管理员和基础权限
 - **脚手架** — Cobra CLI 一键生成模块骨架
 - **API 文档** — Swagger/OpenAPI 注释生成
 - **健康检查** — `/health` 端点，DB + Redis 探活
+- **优雅停机** — SIGTERM 后等待活跃请求完成
+- **Docker 支持** — Dockerfile + docker-compose 一键起服务
 
 ## 技术栈
 
@@ -47,30 +51,56 @@ go mod download
 
 ### 配置
 
-复制并修改配置文件：
-
 ```bash
 cp configs/app.yaml configs/app.local.yaml
 # 编辑 configs/app.local.yaml 修改数据库、Redis 连接信息
 ```
 
-### 运行
+### 方式一：本地运行
 
 ```bash
-# 直接运行
-make run
+# 1. 启动依赖
+docker-compose up -d mariadb redis
 
-# 或编译后运行
-make build
-./bin/server
+# 2. 运行迁移
+make migrate
+
+# 3. 初始化数据（创建管理员 admin/admin123）
+make seed
+
+# 4. 启动服务
+make run
 ```
 
-### CLI 工具
+### 方式二：Docker Compose 一键启动
 
 ```bash
-# 生成新模块骨架
+cp .env.example .env
+# 编辑 .env 修改配置
+docker-compose up -d
+```
+
+服务启动后访问：
+- API: http://localhost:8080
+- Adminer (数据库管理): http://localhost:8081
+
+## CLI 工具
+
+```bash
+# 编译 CLI
 make cli
-./bin/jimu module create product
+
+# 模块管理
+./bin/jimu module create product    # 生成模块骨架
+
+# 数据库迁移
+./bin/jimu migrate up               # 执行所有迁移
+./bin/jimu migrate down             # 回滚最后一次迁移
+./bin/jimu migrate status           # 查看迁移状态
+./bin/jimu migrate redo             # 重做最后一次迁移
+
+# 数据初始化
+./bin/jimu seed                     # 插入初始数据
 ```
 
 ## 项目结构
@@ -81,7 +111,9 @@ jimu/
 │   ├── server/main.go          # HTTP 服务入口
 │   └── cli/main.go             # CLI 入口
 ├── configs/
-│   └── app.yaml                # 默认配置
+│   ├── app.yaml                # 默认配置（开发环境）
+│   ├── app.prod.yaml           # 生产环境配置
+│   └── app.test.yaml           # 测试环境配置
 ├── conf/
 │   └── rbac_model.conf         # Casbin RBAC 模型
 ├── migrations/                 # Goose 迁移脚本
@@ -93,7 +125,7 @@ jimu/
 │   ├── contract/               # Module 接口定义
 │   ├── platform/               # 基础设施
 │   │   ├── http/               # HTTP Server + 中间件
-│   │   ├── db/                 # Gorm 连接
+│   │   ├── db/                 # Gorm 连接 + 迁移 + Seed
 │   │   ├── redis/              # Redis 客户端
 │   │   ├── logger/             # Zap 日志
 │   │   ├── auth/               # JWT + Casbin
@@ -109,8 +141,11 @@ jimu/
 │       └── permission/         # 权限管理
 ├── pkg/                        # 对外暴露的工具
 ├── tools/generator/            # 代码生成器
+├── .github/                    # GitHub Actions + Dependabot
 ├── Makefile
-└── Dockerfile
+├── Dockerfile
+├── docker-compose.yml
+└── .env.example
 ```
 
 ## API 示例
@@ -162,6 +197,20 @@ curl http://localhost:8080/health
 
 ## 配置说明
 
+### 多环境配置
+
+通过 `JIMU_ENV` 环境变量切换：
+
+| 环境 | 配置文件 | 说明 |
+|------|----------|------|
+| 开发 | `app.yaml` | 默认，日志输出到 stdout |
+| 测试 | `app.test.yaml` | 独立数据库 `jimu_test` |
+| 生产 | `app.prod.yaml` | JSON 日志、文件滚动、release 模式 |
+
+优先级：`环境变量 > app.{env}.yaml > app.yaml`
+
+### 配置项
+
 | 字段 | 说明 | 默认值 |
 |------|------|--------|
 | `http.host` | 监听地址 | `0.0.0.0` |
@@ -180,7 +229,18 @@ curl http://localhost:8080/health
 | `auth.access_expire_min` | Access Token 有效期 (分钟) | `30` |
 | `auth.refresh_expire_day` | Refresh Token 有效期 (天) | `7` |
 
-环境变量覆盖：前缀 `JIMU`，层级分隔 `__`，例如 `JIMU__HTTP__PORT=9090`。
+### 环境变量
+
+前缀 `JIMU`，层级分隔 `__`，例如 `JIMU__HTTP__PORT=9090`。
+
+生产配置支持 `${VAR}` 占位符自动展开：
+
+```yaml
+# configs/app.prod.yaml
+db:
+  host: "${DB_HOST}"
+  password: "${DB_PASSWORD}"
+```
 
 ## 模块开发
 
@@ -206,11 +266,39 @@ productModule := product.New(dbConn)
 server := app.Bootstrap(userModule, authModule, roleModule, permModule, productModule)
 ```
 
+## Makefile 命令
+
+| 命令 | 说明 |
+|------|------|
+| `make run` | 运行服务 |
+| `make build` | 编译 server + cli |
+| `make test` | 运行测试 |
+| `make test-coverage` | 测试 + 覆盖率报告 |
+| `make vet` | 静态分析 |
+| `make fmt` | 格式化代码 |
+| `make lint` | golangci-lint |
+| `make migrate` | 执行迁移 |
+| `make seed` | 插入初始数据 |
+| `make swagger` | 生成 API 文档 |
+| `make docker` | 构建镜像 |
+| `make docker-up` | 启动所有容器 |
+| `make docker-down` | 停止所有容器 |
+| `make release-check` | 发布前检查 |
+
 ## Docker 部署
 
 ```bash
+# 构建镜像
 docker build -t jimu:latest .
-docker run -p 8080:8080 -v ./configs:/app/configs jimu:latest
+
+# 运行（需外部 DB + Redis）
+docker run -p 8080:8080 \
+  -e JIMU__DB__HOST=host.docker.internal \
+  -e JIMU__REDIS__ADDR=host.docker.internal:6379 \
+  jimu:latest
+
+# 或使用 docker-compose 一键启动全部
+docker-compose up -d
 ```
 
 ## License
