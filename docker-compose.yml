@@ -55,15 +55,6 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    environment:
-      JIMU_ENV: ${JIMU_ENV}
-      JIMU__DB__HOST: mariadb
-      JIMU__DB__PORT: 3306
-      JIMU__DB__USER: root
-      JIMU__DB__PASSWORD: ${DB_PASSWORD}
-      JIMU__DB__DATABASE: ${DB_DATABASE}
-      JIMU__REDIS__ADDR: redis:6379
-      JIMU__AUTH__JWT_SECRET: ${JWT_SECRET}
     ports:
       - "${HTTP_PORT}:8080"
     volumes:
