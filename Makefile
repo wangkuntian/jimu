@@ -79,17 +79,17 @@ build-cli:
 docker:
 	docker build -t $(DOCKER_IMAGE) .
 
-## docker-build: 构建镜像（docker 别名）
+## build-docker: 构建镜像（docker 别名）
 build-docker: docker
 
-## docker-push: 推送镜像到仓库（需先 docker tag）
-docker-push:
+## push-docker: 推送镜像到仓库（需先 docker tag）
+push-docker:
 	docker push $(DOCKER_IMAGE)
 
 # ========== Docker 单容器 ==========
 
-## docker-run: 运行容器（前台，需外部 DB + Redis）
-docker-run:
+## container-run: 运行容器（前台，需外部 DB + Redis）
+container-run:
 	docker run --rm -it \
 		--name $(DOCKER_CONTAINER) \
 		-p 8080:8080 \
@@ -98,31 +98,31 @@ docker-run:
 		-e JIMU__REDIS__ADDR=host.docker.internal:6379 \
 		$(DOCKER_IMAGE)
 
-## docker-stop: 停止并删除容器
-docker-stop:
+## container-stop: 停止并删除容器
+container-stop:
 	docker stop $(DOCKER_CONTAINER) 2>/dev/null || true
 	docker rm $(DOCKER_CONTAINER) 2>/dev/null || true
 
-## docker-logs: 查看容器日志
-docker-logs:
+## container-logs: 查看容器日志
+container-logs:
 	docker logs -f $(DOCKER_CONTAINER)
 
 # ========== Docker Compose ==========
 
-## docker-up: 启动所有服务（依赖 + 应用）
-docker-up:
+## compose-up: 启动所有服务（依赖 + 应用）
+compose-up:
 	$(DOCKER_COMPOSE) up -d
 
-## docker-down: 停止所有服务
-docker-down:
+## compose-down: 停止所有服务
+compose-down:
 	$(DOCKER_COMPOSE) down
 
-## docker-restart: 重启所有服务
-docker-restart:
+## compose-restart: 重启所有服务
+compose-restart:
 	$(DOCKER_COMPOSE) restart
 
-## docker-compose-logs: 查看应用日志
-docker-compose-logs:
+## compose-logs: 查看应用日志
+compose-logs:
 	$(DOCKER_COMPOSE) logs -f server
 
 # ========== 数据库迁移 ==========
