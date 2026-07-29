@@ -73,11 +73,20 @@ build-cli:
 	@mkdir -p $(BIN_DIR)
 	go build -o $(CLI_BIN) $(CLI_CMD)
 
-# ========== Docker 单容器 ==========
+# ========== Docker 镜像 ==========
 
 ## docker: 构建 Docker 镜像
 docker:
 	docker build -t $(DOCKER_IMAGE) .
+
+## docker-build: 构建镜像（docker 别名）
+build-docker: docker
+
+## docker-push: 推送镜像到仓库（需先 docker tag）
+docker-push:
+	docker push $(DOCKER_IMAGE)
+
+# ========== Docker 单容器 ==========
 
 ## docker-run: 运行容器（前台，需外部 DB + Redis）
 docker-run:
