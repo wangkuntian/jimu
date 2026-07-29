@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -95,16 +94,32 @@ type AuthConfig struct {
 // Load 加载配置
 // 优先级：环境变量 > .env > app.{env}.yaml > app.yaml
 func Load() (*Config, error) {
-	// 加载 .env 文件（不报错如果文件不存在）
-	_ = godotenv.Load()
-
 	env := os.Getenv("JIMU_ENV")
 
 	v := viper.New()
-	v.SetConfigType("yaml")
 
-	// 先加载基础配置 app.yaml
+	// 加载 .env 文件（viper 原生支持）
+	v.SetConfigFile(".env")
+	if err := v.MergeInConfig(); err != nil {
+		// .env 文件不存在时忽略
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			// 尝试查找项目根目录
+			wd, _ := os.Getwd()
+			for i := 0; i < 5; i++ {
+				envFile := filepath.Join(wd, ".env")
+				if _, statErr := os.Stat(envFile); statErr == nil {
+					v.SetConfigFile(envFile)
+					_ = v.MergeInConfig()
+					break
+				}
+				wd = filepath.Dir(wd)
+			}
+		}
+	}
+
+	// 加载 yaml 配置
 	v.SetConfigName("app")
+	v.SetConfigType("yaml")
 
 	// 查找项目根目录下的 configs/
 	wd, _ := os.Getwd()
@@ -138,15 +153,12 @@ func Load() (*Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "__"))
 	v.AutomaticEnv()
 
-	// 展开配置中的环境变量占位符 ${VAR}
-	expandConfig(v)
-
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, err
 	}
 
-	// viper 的 AutomaticEnv 在 Unmarshal 时不生效，手动覆盖
+	// viper AutomaticEnv 对嵌套键的 Unmarshal 不生效，手动覆盖
 	applyEnvOverrides(&cfg)
 
 	// 校验枚举值
@@ -157,7 +169,7 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
-// applyEnvOverrides 手动应用环境变量覆盖（viper AutomaticEnv 对 Unmarshal 不生效）
+// applyEnvOverrides 手动应用环境变量覆盖
 func applyEnvOverrides(cfg *Config) {
 	// HTTP
 	if v := os.Getenv("JIMU__HTTP__PORT"); v != "" {
@@ -211,17 +223,6 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("JIMU__LOG__FORMAT"); v != "" {
 		cfg.Log.Format = v
-	}
-}
-
-// expandConfig 展开配置值中的 ${VAR} 占位符
-func expandConfig(v *viper.Viper) {
-	for _, key := range v.AllKeys() {
-		val := v.GetString(key)
-		if strings.Contains(val, "${") {
-			expanded := os.ExpandEnv(val)
-			v.Set(key, expanded)
-		}
 	}
 }
 
