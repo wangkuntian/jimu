@@ -11,11 +11,20 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **结构化日志** — Zap + lumberjack 自动滚动
 - **数据库迁移** — Goose 迁移 CLI (up/down/status/redo)
 - **数据初始化** — Seed 命令一键插入管理员和基础权限
-- **脚手架** — Cobra CLI 一键生成模块骨架
-- **API 文档** — Swagger/OpenAPI 注释生成
+- **限流保护** — 令牌桶算法，支持全局/严格两种模式
+- **请求超时** — 全局请求超时控制
+- **缓存抽象** — Cache-Aside 模式，GetOrSet 自动回填
+- **自定义校验** — 手机号、密码强度、身份证、用户名等常用规则
+- **事件总线** — 内存实现，支持同步/异步发布订阅
+- **事务封装** — 统一的事务管理 helper
+- **审计日志** — 自动记录 API 调用（用户、IP、路径、状态码、耗时）
+- **性能分析** — pprof + metrics 端点
+- **脚手架** — Cobra CLI 一键生成完整模块骨架
+- **API 文档** — Swagger UI 交互式文档
 - **健康检查** — `/health` 端点，DB + Redis 探活
 - **优雅停机** — SIGTERM 后等待活跃请求完成
 - **Docker 支持** — Dockerfile + docker-compose 一键起服务
+- **CI/CD** — GitHub Actions + Dependabot 自动化
 
 ## 技术栈
 
@@ -82,7 +91,10 @@ docker-compose up -d
 
 服务启动后访问：
 - API: http://localhost:8080
+- Swagger UI: http://localhost:8080/swagger/index.html
 - Adminer (数据库管理): http://localhost:8081
+- Metrics: http://localhost:8080/debug/metrics
+- pprof: http://localhost:8080/debug/pprof/
 
 ## CLI 工具
 
@@ -91,7 +103,7 @@ docker-compose up -d
 make cli
 
 # 模块管理
-./bin/jimu module create product    # 生成模块骨架
+./bin/jimu module create product    # 生成完整模块骨架
 
 # 数据库迁移
 ./bin/jimu migrate up               # 执行所有迁移
@@ -125,20 +137,25 @@ jimu/
 │   ├── contract/               # Module 接口定义
 │   ├── platform/               # 基础设施
 │   │   ├── http/               # HTTP Server + 中间件
-│   │   ├── db/                 # Gorm 连接 + 迁移 + Seed
+│   │   ├── db/                 # Gorm 连接 + 迁移 + Seed + 事务
 │   │   ├── redis/              # Redis 客户端
+│   │   ├── cache/              # 缓存抽象层
 │   │   ├── logger/             # Zap 日志
 │   │   ├── auth/               # JWT + Casbin
-│   │   └── observability/      # 健康检查
+│   │   ├── event/              # 事件总线
+│   │   └── observability/      # 健康检查 + Metrics
 │   ├── shared/                 # 跨模块通用能力
 │   │   ├── errors/             # AppError + 错误码
 │   │   ├── response/           # 统一响应格式
-│   │   └── pagination/         # 分页
+│   │   ├── pagination/         # 分页
+│   │   ├── validator/          # 自定义校验规则
+│   │   └── testutil/           # 测试工具
 │   └── modules/                # 业务模块
 │       ├── auth/               # 登录/注册/Token
 │       ├── user/               # 用户管理
 │       ├── role/               # 角色管理
-│       └── permission/         # 权限管理
+│       ├── permission/         # 权限管理
+│       └── audit/              # 审计日志
 ├── pkg/                        # 对外暴露的工具
 ├── tools/generator/            # 代码生成器
 ├── .github/                    # GitHub Actions + Dependabot
@@ -195,6 +212,12 @@ curl -X POST http://localhost:8080/api/v1/users \
 curl http://localhost:8080/health
 ```
 
+### Metrics
+
+```bash
+curl http://localhost:8080/debug/metrics
+```
+
 ## 配置说明
 
 ### 多环境配置
@@ -228,6 +251,10 @@ curl http://localhost:8080/health
 | `auth.jwt_secret` | JWT 密钥 | `change-me-in-production` |
 | `auth.access_expire_min` | Access Token 有效期 (分钟) | `30` |
 | `auth.refresh_expire_day` | Refresh Token 有效期 (天) | `7` |
+| `server.timeout_sec` | 请求超时秒数 | `30` |
+| `server.rate_limit_rate` | 全局限流速率 | `100` |
+| `server.rate_limit_burst` | 限流桶容量 | `200` |
+| `cache.prefix` | 缓存 key 前缀 | `jimu` |
 
 ### 环境变量
 
@@ -250,12 +277,23 @@ db:
 ./bin/jimu module create product
 ```
 
-生成 `internal/modules/product/module.go` 骨架，然后按 Clean Architecture 补充：
+生成完整 Clean Architecture 骨架：
 
-1. `domain/` — 定义实体和仓储接口
-2. `application/` — 实现业务逻辑
-3. `infrastructure/` — 实现数据持久化
-4. `interfaces/` — 实现 HTTP handler 和路由
+```
+internal/modules/product/
+  module.go              # 模块注册
+  domain/
+    entity.go            # 实体（含基础字段 + gorm tag）
+    repository.go        # 仓储接口（CRUD）
+  application/
+    service.go           # 用例服务（CRUD 框架）
+    dto.go               # 请求/响应 DTO
+  infrastructure/
+    mysql_repository.go  # Gorm 实现
+  interfaces/
+    handler.go           # HTTP handler（CRUD 端点）
+    router.go            # 路由注册（RESTful）
+```
 
 ### 注册模块
 
@@ -263,7 +301,7 @@ db:
 
 ```go
 productModule := product.New(dbConn)
-server := app.Bootstrap(userModule, authModule, roleModule, permModule, productModule)
+server := app.Bootstrap(userModule, authModule, roleModule, permModule, auditModule, productModule)
 ```
 
 ## Makefile 命令
@@ -271,6 +309,7 @@ server := app.Bootstrap(userModule, authModule, roleModule, permModule, productM
 | 命令 | 说明 |
 |------|------|
 | `make run` | 运行服务 |
+| `make run ENV=prod` | 指定环境运行 |
 | `make build` | 编译 server + cli |
 | `make test` | 运行测试 |
 | `make test-coverage` | 测试 + 覆盖率报告 |
@@ -278,11 +317,15 @@ server := app.Bootstrap(userModule, authModule, roleModule, permModule, productM
 | `make fmt` | 格式化代码 |
 | `make lint` | golangci-lint |
 | `make migrate` | 执行迁移 |
+| `make migrate-down` | 回滚迁移 |
+| `make migrate-status` | 查看迁移状态 |
 | `make seed` | 插入初始数据 |
 | `make swagger` | 生成 API 文档 |
+| `make cli` | 编译 CLI |
 | `make docker` | 构建镜像 |
 | `make docker-up` | 启动所有容器 |
 | `make docker-down` | 停止所有容器 |
+| `make docker-logs` | 查看应用日志 |
 | `make release-check` | 发布前检查 |
 
 ## Docker 部署
