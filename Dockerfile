@@ -10,6 +10,7 @@ RUN go mod download
 # Build
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server cmd/server/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o jimu cmd/cli/main.go
 
 # Runtime stage
 FROM alpine:3.19
@@ -20,6 +21,7 @@ RUN apk --no-cache add ca-certificates tzdata curl && \
 WORKDIR /app
 
 COPY --from=builder /app/server .
+COPY --from=builder /app/jimu .
 COPY configs/ ./configs/
 RUN mkdir -p logs && chown -R jimu:jimu /app
 

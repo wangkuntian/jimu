@@ -14,6 +14,12 @@ DOCKER_IMAGE := jimu:latest
 DOCKER_CONTAINER := jimu-server
 ENV ?= dev
 
+# 加载 .env 文件（如果存在）
+ifneq (,$(wildcard .env))
+    include .env
+    export
+endif
+
 ## help: 显示帮助信息
 help:
 	@echo "Jimu Backend Framework"
@@ -37,11 +43,12 @@ help:
 	@echo "  make docker-restart   重启所有服务"
 	@echo "  make docker-compose-logs  查看应用日志"
 	@echo ""
-	@echo "其他:"
-	@echo "  make test             运行测试"
-	@echo "  make migrate          数据库迁移"
-	@echo "  make seed             插入初始数据"
-	@echo "  make cli              编译 CLI 工具"
+	@echo "数据库迁移:"
+	@echo "  make migrate          本地执行迁移"
+	@echo "  make migrate-docker   容器内执行迁移"
+	@echo "  make migrate-compose  Compose 环境执行迁移"
+	@echo "  make seed             本地插入初始数据"
+	@echo "  make seed-compose     Compose 环境插入初始数据"
 
 # ========== 本地运行 ==========
 
@@ -109,23 +116,59 @@ docker-restart:
 docker-compose-logs:
 	$(DOCKER_COMPOSE) logs -f server
 
-# ========== 数据库操作 ==========
+# ========== 数据库迁移 ==========
 
-## migrate: 运行数据库迁移
+## migrate: 本地执行迁移
 migrate:
-	go run $(CLI_CMD) migrate up
+	JIMU_ENV=$(ENV) go run $(CLI_CMD) migrate up
 
-## migrate-down: 回滚最后一次迁移
+## migrate-down: 本地回滚最后一次迁移
 migrate-down:
-	go run $(CLI_CMD) migrate down
+	JIMU_ENV=$(ENV) go run $(CLI_CMD) migrate down
 
-## migrate-status: 查看迁移状态
+## migrate-status: 本地查看迁移状态
 migrate-status:
-	go run $(CLI_CMD) migrate status
+	JIMU_ENV=$(ENV) go run $(CLI_CMD) migrate status
 
-## seed: 插入初始数据
+## migrate-docker: 容器内执行迁移
+migrate-docker:
+	docker run --rm \
+		--network host \
+		-e JIMU_ENV=prod \
+		-e JIMU__DB__HOST=host.docker.internal \
+		-e JIMU__REDIS__ADDR=host.docker.internal:6379 \
+		$(DOCKER_IMAGE) ./jimu migrate up
+
+## migrate-compose: Compose 环境执行迁移
+migrate-compose:
+	$(DOCKER_COMPOSE) run --rm server ./jimu migrate up
+
+## migrate-compose-down: Compose 环境回滚迁移
+migrate-compose-down:
+	$(DOCKER_COMPOSE) run --rm server ./jimu migrate down
+
+## migrate-compose-status: Compose 环境查看迁移状态
+migrate-compose-status:
+	$(DOCKER_COMPOSE) run --rm server ./jimu migrate status
+
+# ========== 数据初始化 ==========
+
+## seed: 本地插入初始数据
 seed:
-	go run $(CLI_CMD) seed
+	JIMU_ENV=$(ENV) go run $(CLI_CMD) seed
+
+## seed-docker: 容器内插入初始数据
+seed-docker:
+	docker run --rm \
+		--network host \
+		-e JIMU_ENV=prod \
+		-e JIMU__DB__HOST=host.docker.internal \
+		-e JIMU__REDIS__ADDR=host.docker.internal:6379 \
+		$(DOCKER_IMAGE) ./jimu seed
+
+## seed-compose: Compose 环境插入初始数据
+seed-compose:
+	$(DOCKER_COMPOSE) run --rm server ./jimu seed
 
 # ========== 工具 ==========
 
