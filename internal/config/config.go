@@ -187,32 +187,67 @@ func contains(list []string, val string) bool {
 }
 
 func applyEnvOverrides(cfg *Config) {
-	if port := os.Getenv("JIMU__HTTP__PORT"); port != "" {
-		if p, err := strconv.Atoi(port); err == nil {
+	// HTTP
+	if v := os.Getenv("JIMU__HTTP__PORT"); v != "" {
+		if p, err := strconv.Atoi(v); err == nil {
 			cfg.HTTP.Port = p
 		}
 	}
-	if host := os.Getenv("JIMU__HTTP__HOST"); host != "" {
-		cfg.HTTP.Host = host
+	if v := os.Getenv("JIMU__HTTP__HOST"); v != "" {
+		cfg.HTTP.Host = v
 	}
-	if mode := os.Getenv("JIMU__HTTP__MODE"); mode != "" {
-		cfg.HTTP.Mode = mode
+	if v := os.Getenv("JIMU__HTTP__MODE"); v != "" {
+		cfg.HTTP.Mode = v
 	}
-	if host := os.Getenv("JIMU__DB__HOST"); host != "" {
-		cfg.DB.Host = host
+	// DB
+	if v := os.Getenv("JIMU__DB__HOST"); v != "" {
+		cfg.DB.Host = v
 	}
-	if port := os.Getenv("JIMU__DB__PORT"); port != "" {
-		if p, err := strconv.Atoi(port); err == nil {
+	if v := os.Getenv("JIMU__DB__PORT"); v != "" {
+		if p, err := strconv.Atoi(v); err == nil {
 			cfg.DB.Port = p
 		}
 	}
-	if secret := os.Getenv("JIMU__AUTH__JWT_SECRET"); secret != "" {
-		cfg.Auth.JWTSecret = secret
+	if v := os.Getenv("JIMU__DB__USER"); v != "" {
+		cfg.DB.User = v
 	}
-	if level := os.Getenv("JIMU__LOG__LEVEL"); level != "" {
-		cfg.Log.Level = level
+	if v := os.Getenv("JIMU__DB__PASSWORD"); v != "" {
+		cfg.DB.Password = v
 	}
-	if format := os.Getenv("JIMU__LOG__FORMAT"); format != "" {
-		cfg.Log.Format = format
+	if v := os.Getenv("JIMU__DB__DATABASE"); v != "" {
+		cfg.DB.Database = v
+	}
+	// Redis
+	if v := os.Getenv("JIMU__REDIS__ADDR"); v != "" {
+		cfg.Redis.Addr = v
+	}
+	if v := os.Getenv("JIMU__REDIS__PASSWORD"); v != "" {
+		cfg.Redis.Password = v
+	}
+	if v := os.Getenv("JIMU__REDIS__DB"); v != "" {
+		if d, err := strconv.Atoi(v); err == nil {
+			cfg.Redis.DB = d
+		}
+	}
+	// Auth
+	if v := os.Getenv("JIMU__AUTH__JWT_SECRET"); v != "" {
+		cfg.Auth.JWTSecret = v
+	}
+	if v := os.Getenv("JIMU__AUTH__ACCESS_EXPIRE_MIN"); v != "" {
+		if m, err := strconv.Atoi(v); err == nil {
+			cfg.Auth.AccessExpireMin = m
+		}
+	}
+	if v := os.Getenv("JIMU__AUTH__REFRESH_EXPIRE_DAY"); v != "" {
+		if d, err := strconv.Atoi(v); err == nil {
+			cfg.Auth.RefreshExpireDay = d
+		}
+	}
+	// Log
+	if v := os.Getenv("JIMU__LOG__LEVEL"); v != "" {
+		cfg.Log.Level = v
+	}
+	if v := os.Getenv("JIMU__LOG__FORMAT"); v != "" {
+		cfg.Log.Format = v
 	}
 }
