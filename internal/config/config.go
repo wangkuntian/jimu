@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -32,13 +33,13 @@ var (
 )
 
 type Config struct {
-	HTTP     HTTPConfig     `mapstructure:"http"`
-	DB       DBConfig       `mapstructure:"db"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	Log      LogConfig      `mapstructure:"log"`
-	Auth     AuthConfig     `mapstructure:"auth"`
-	Server   ServerConfig   `mapstructure:"server"`
-	Cache    CacheConfig    `mapstructure:"cache"`
+	HTTP   HTTPConfig   `mapstructure:"http"`
+	DB     DBConfig     `mapstructure:"db"`
+	Redis  RedisConfig  `mapstructure:"redis"`
+	Log    LogConfig    `mapstructure:"log"`
+	Auth   AuthConfig   `mapstructure:"auth"`
+	Server ServerConfig `mapstructure:"server"`
+	Cache  CacheConfig  `mapstructure:"cache"`
 }
 
 // ServerConfig 服务运行时配置
@@ -91,9 +92,12 @@ type AuthConfig struct {
 	RefreshExpireDay int    `mapstructure:"refresh_expire_day"`
 }
 
-// Load 加载配置，支持多环境
-// 优先级：环境变量 > app.{env}.yaml > app.yaml
+// Load 加载配置
+// 优先级：环境变量 > .env > app.{env}.yaml > app.yaml
 func Load() (*Config, error) {
+	// 加载 .env 文件（不报错如果文件不存在）
+	_ = godotenv.Load()
+
 	env := os.Getenv("JIMU_ENV")
 
 	v := viper.New()
@@ -142,7 +146,7 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	// viper Unmarshal 不自动应用 AutomaticEnv，手动覆盖
+	// viper 的 AutomaticEnv 在 Unmarshal 时不生效，手动覆盖
 	applyEnvOverrides(&cfg)
 
 	// 校验枚举值
@@ -153,39 +157,7 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
-// expandConfig 展开配置值中的 ${VAR} 占位符
-func expandConfig(v *viper.Viper) {
-	for _, key := range v.AllKeys() {
-		val := v.GetString(key)
-		if strings.Contains(val, "${") {
-			expanded := os.ExpandEnv(val)
-			v.Set(key, expanded)
-		}
-	}
-}
-
-func (c *Config) validate() error {
-	if !contains(validHTTPModes, c.HTTP.Mode) {
-		return fmt.Errorf("invalid http.mode: %q, must be one of %v", c.HTTP.Mode, validHTTPModes)
-	}
-	if !contains(validLogLevels, c.Log.Level) {
-		return fmt.Errorf("invalid log.level: %q, must be one of %v", c.Log.Level, validLogLevels)
-	}
-	if !contains(validLogFormats, c.Log.Format) {
-		return fmt.Errorf("invalid log.format: %q, must be one of %v", c.Log.Format, validLogFormats)
-	}
-	return nil
-}
-
-func contains(list []string, val string) bool {
-	for _, v := range list {
-		if v == val {
-			return true
-		}
-	}
-	return false
-}
-
+// applyEnvOverrides 手动应用环境变量覆盖（viper AutomaticEnv 对 Unmarshal 不生效）
 func applyEnvOverrides(cfg *Config) {
 	// HTTP
 	if v := os.Getenv("JIMU__HTTP__PORT"); v != "" {
@@ -233,16 +205,6 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("JIMU__AUTH__JWT_SECRET"); v != "" {
 		cfg.Auth.JWTSecret = v
 	}
-	if v := os.Getenv("JIMU__AUTH__ACCESS_EXPIRE_MIN"); v != "" {
-		if m, err := strconv.Atoi(v); err == nil {
-			cfg.Auth.AccessExpireMin = m
-		}
-	}
-	if v := os.Getenv("JIMU__AUTH__REFRESH_EXPIRE_DAY"); v != "" {
-		if d, err := strconv.Atoi(v); err == nil {
-			cfg.Auth.RefreshExpireDay = d
-		}
-	}
 	// Log
 	if v := os.Getenv("JIMU__LOG__LEVEL"); v != "" {
 		cfg.Log.Level = v
@@ -250,4 +212,37 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("JIMU__LOG__FORMAT"); v != "" {
 		cfg.Log.Format = v
 	}
+}
+
+// expandConfig 展开配置值中的 ${VAR} 占位符
+func expandConfig(v *viper.Viper) {
+	for _, key := range v.AllKeys() {
+		val := v.GetString(key)
+		if strings.Contains(val, "${") {
+			expanded := os.ExpandEnv(val)
+			v.Set(key, expanded)
+		}
+	}
+}
+
+func (c *Config) validate() error {
+	if !contains(validHTTPModes, c.HTTP.Mode) {
+		return fmt.Errorf("invalid http.mode: %q, must be one of %v", c.HTTP.Mode, validHTTPModes)
+	}
+	if !contains(validLogLevels, c.Log.Level) {
+		return fmt.Errorf("invalid log.level: %q, must be one of %v", c.Log.Level, validLogLevels)
+	}
+	if !contains(validLogFormats, c.Log.Format) {
+		return fmt.Errorf("invalid log.format: %q, must be one of %v", c.Log.Format, validLogFormats)
+	}
+	return nil
+}
+
+func contains(list []string, val string) bool {
+	for _, v := range list {
+		if v == val {
+			return true
+		}
+	}
+	return false
 }

@@ -5,16 +5,14 @@ services:
     image: mariadb:12.1.2-noble
     container_name: jimu-mariadb
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
-      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD}
-      MARIADB_DATABASE: ${DB_DATABASE}
+      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      MARIADB_DATABASE: ${DB_DATABASE:-jimu}
       TZ: Asia/Shanghai
     ports:
-      - "${DB_PORT}:3306"
+      - "${DB_PORT:-3306}:3306"
     volumes:
-      - mariadb_data:/var/lib/mysql
+      - jimu-mariadb-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
@@ -25,12 +23,10 @@ services:
     image: redis:8.4.0-alpine
     container_name: jimu-redis
     restart: unless-stopped
-    env_file:
-      - .env
     ports:
-      - "${REDIS_PORT}:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
-      - redis_data:/data
+      - jimu-redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -42,7 +38,7 @@ services:
     container_name: jimu-adminer
     restart: unless-stopped
     ports:
-      - "${ADMINER_PORT}:8080"
+      - "${ADMINER_PORT:-8081}:8080"
     depends_on:
       mariadb:
         condition: service_healthy
@@ -56,7 +52,7 @@ services:
     env_file:
       - .env
     ports:
-      - "${HTTP_PORT}:8080"
+      - "${HTTP_PORT:-8080}:8080"
     volumes:
       - ./logs:/app/logs
     depends_on:
@@ -66,7 +62,5 @@ services:
         condition: service_healthy
 
 volumes:
-  mariadb_data:
-    name: jimu-mariadb-data
-  redis_data:
-    name: jimu-redis-data
+  jimu-mariadb-data:
+  jimu-redis-data:
