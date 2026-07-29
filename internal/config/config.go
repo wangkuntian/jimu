@@ -98,24 +98,8 @@ func Load() (*Config, error) {
 
 	v := viper.New()
 
-	// 加载 .env 文件（viper 原生支持）
-	v.SetConfigFile(".env")
-	if err := v.MergeInConfig(); err != nil {
-		// .env 文件不存在时忽略
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			// 尝试查找项目根目录
-			wd, _ := os.Getwd()
-			for i := 0; i < 5; i++ {
-				envFile := filepath.Join(wd, ".env")
-				if _, statErr := os.Stat(envFile); statErr == nil {
-					v.SetConfigFile(envFile)
-					_ = v.MergeInConfig()
-					break
-				}
-				wd = filepath.Dir(wd)
-			}
-		}
-	}
+	// 注意：.env 文件由 docker-compose 的 env_file 注入为环境变量
+	// 不需要 viper 加载 .env，避免与 docker-compose 冲突
 
 	// 加载 yaml 配置
 	v.SetConfigName("app")
