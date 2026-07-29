@@ -1,4 +1,4 @@
-.PHONY: run build test vet fmt fmt-check lint clean migrate swagger cli docker docker-up docker-down help
+.PHONY: run build test vet fmt fmt-check lint clean migrate swagger cli docker docker-run docker-stop docker-logs docker-up docker-down docker-restart help
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -10,6 +10,8 @@ CLI_BIN := $(BIN_DIR)/jimu
 SERVER_CMD := cmd/server/main.go
 CLI_CMD := cmd/cli/main.go
 DOCKER_COMPOSE := docker-compose
+DOCKER_IMAGE := jimu:latest
+DOCKER_CONTAINER := jimu-server
 ENV ?= dev
 
 ## help: 显示帮助信息
@@ -18,16 +20,38 @@ help:
 	@echo ""
 	@echo "Usage: make <target>"
 	@echo ""
-	@echo "Targets:"
-	@awk '/^## /{c=substr($$0,4);getline;gsub(/^[a-z-]+: */,c" ");print "  "$$0}' $(MAKEFILE_LIST) | sort
+	@echo "本地运行:"
+	@echo "  make run              编译并运行二进制"
+	@echo "  make run-go           直接 go run 运行（不编译）"
+	@echo "  make build            编译二进制到 bin/"
+	@echo ""
+	@echo "Docker 容器（单容器，需外部 DB + Redis）:"
+	@echo "  make docker           构建镜像"
+	@echo "  make docker-run       运行容器（前台）"
+	@echo "  make docker-stop      停止并删除容器"
+	@echo "  make docker-logs      查看容器日志"
+	@echo ""
+	@echo "Docker Compose（一键启动全部服务）:"
+	@echo "  make docker-up        启动所有服务"
+	@echo "  make docker-down      停止所有服务"
+	@echo "  make docker-restart   重启所有服务"
+	@echo "  make docker-compose-logs  查看应用日志"
+	@echo ""
+	@echo "其他:"
+	@echo "  make test             运行测试"
+	@echo "  make migrate          数据库迁移"
+	@echo "  make seed             插入初始数据"
+	@echo "  make cli              编译 CLI 工具"
 
-## run: 运行 HTTP 服务
-run:
+# ========== 本地运行 ==========
+
+## run: 编译并运行二进制
+run: build-server
+	./$(SERVER_BIN)
+
+## run-go: 直接 go run 运行（不编译）
+run-go:
 	JIMU_ENV=$(ENV) go run $(SERVER_CMD)
-
-## run-cli: 运行 CLI 工具
-run-cli:
-	JIMU_ENV=$(ENV) go run $(CLI_CMD)
 
 ## build: 编译服务端和 CLI
 build: build-server build-cli
@@ -41,6 +65,69 @@ build-server:
 build-cli:
 	@mkdir -p $(BIN_DIR)
 	go build -o $(CLI_BIN) $(CLI_CMD)
+
+# ========== Docker 单容器 ==========
+
+## docker: 构建 Docker 镜像
+docker:
+	docker build -t $(DOCKER_IMAGE) .
+
+## docker-run: 运行容器（前台，需外部 DB + Redis）
+docker-run:
+	docker run --rm -it \
+		--name $(DOCKER_CONTAINER) \
+		-p 8080:8080 \
+		-e JIMU_ENV=prod \
+		-e JIMU__DB__HOST=host.docker.internal \
+		-e JIMU__REDIS__ADDR=host.docker.internal:6379 \
+		$(DOCKER_IMAGE)
+
+## docker-stop: 停止并删除容器
+docker-stop:
+	docker stop $(DOCKER_CONTAINER) 2>/dev/null || true
+	docker rm $(DOCKER_CONTAINER) 2>/dev/null || true
+
+## docker-logs: 查看容器日志
+docker-logs:
+	docker logs -f $(DOCKER_CONTAINER)
+
+# ========== Docker Compose ==========
+
+## docker-up: 启动所有服务（依赖 + 应用）
+docker-up:
+	$(DOCKER_COMPOSE) up -d
+
+## docker-down: 停止所有服务
+docker-down:
+	$(DOCKER_COMPOSE) down
+
+## docker-restart: 重启所有服务
+docker-restart:
+	$(DOCKER_COMPOSE) restart
+
+## docker-compose-logs: 查看应用日志
+docker-compose-logs:
+	$(DOCKER_COMPOSE) logs -f server
+
+# ========== 数据库操作 ==========
+
+## migrate: 运行数据库迁移
+migrate:
+	go run $(CLI_CMD) migrate up
+
+## migrate-down: 回滚最后一次迁移
+migrate-down:
+	go run $(CLI_CMD) migrate down
+
+## migrate-status: 查看迁移状态
+migrate-status:
+	go run $(CLI_CMD) migrate status
+
+## seed: 插入初始数据
+seed:
+	go run $(CLI_CMD) seed
+
+# ========== 工具 ==========
 
 ## test: 运行所有测试
 test:
@@ -85,44 +172,12 @@ clean:
 	rm -rf $(BIN_DIR)
 	rm -f coverage.out coverage.html
 
-## migrate: 运行数据库迁移
-migrate:
-	go run $(CLI_CMD) migrate up
-
-## migrate-down: 回滚最后一次迁移
-migrate-down:
-	go run $(CLI_CMD) migrate down
-
-## migrate-status: 查看迁移状态
-migrate-status:
-	go run $(CLI_CMD) migrate status
-
-## seed: 插入初始数据
-seed:
-	go run $(CLI_CMD) seed
-
 ## swagger: 生成 API 文档
 swagger:
 	swag init -g $(SERVER_CMD) -o docs/openapi
 
 ## cli: 编译 CLI（build-cli 别名）
 cli: build-cli
-
-## docker: 构建 Docker 镜像
-docker:
-	docker build -t jimu:latest .
-
-## docker-up: 启动所有容器（依赖 + 应用）
-docker-up:
-	$(DOCKER_COMPOSE) up -d
-
-## docker-down: 停止所有容器
-docker-down:
-	$(DOCKER_COMPOSE) down
-
-## docker-logs: 查看应用日志
-docker-logs:
-	$(DOCKER_COMPOSE) logs -f server
 
 ## all: 格式化 -> 静态检查 -> 测试 -> 编译
 all: fmt vet test build
