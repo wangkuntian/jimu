@@ -87,7 +87,7 @@ func (rt *requestTracker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rt.handler.ServeHTTP(w, r)
 }
 
-func SetupRouter(log *logger.Logger, cfg config.HTTPConfig) *gin.Engine {
+func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.ServerConfig) *gin.Engine {
 	if cfg.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -98,8 +98,8 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig) *gin.Engine {
 		middleware.Logger(log),
 		middleware.Recovery(),
 		middleware.CORS(),
-		middleware.Timeout(30*time.Second),
-		middleware.GlobalRateLimit(),
+		middleware.Timeout(time.Duration(serverCfg.TimeoutSec)*time.Second),
+		middleware.GlobalRateLimit(serverCfg.RateLimitRate, serverCfg.RateLimitBurst),
 	)
 
 	return r

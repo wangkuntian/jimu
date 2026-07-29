@@ -18,7 +18,7 @@ func Bootstrap(modules ...contract.Module) *http.Server {
 		panic("failed to create container: " + err.Error())
 	}
 
-	r := http.SetupRouter(container.Logger, cfg.HTTP)
+	r := http.SetupRouter(container.Logger, cfg.HTTP, cfg.Server)
 
 	// Health check (no auth required)
 	healthGroup := r.Group("/")

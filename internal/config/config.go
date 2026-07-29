@@ -32,11 +32,25 @@ var (
 )
 
 type Config struct {
-	HTTP  HTTPConfig  `mapstructure:"http"`
-	DB    DBConfig    `mapstructure:"db"`
-	Redis RedisConfig `mapstructure:"redis"`
-	Log   LogConfig   `mapstructure:"log"`
-	Auth  AuthConfig  `mapstructure:"auth"`
+	HTTP     HTTPConfig     `mapstructure:"http"`
+	DB       DBConfig       `mapstructure:"db"`
+	Redis    RedisConfig    `mapstructure:"redis"`
+	Log      LogConfig      `mapstructure:"log"`
+	Auth     AuthConfig     `mapstructure:"auth"`
+	Server   ServerConfig   `mapstructure:"server"`
+	Cache    CacheConfig    `mapstructure:"cache"`
+}
+
+// ServerConfig 服务运行时配置
+type ServerConfig struct {
+	TimeoutSec     int `mapstructure:"timeout_sec"`      // 请求超时秒数，0 表示不限制
+	RateLimitRate  int `mapstructure:"rate_limit_rate"`  // 全局限流速率（每秒请求数），0 表示不限流
+	RateLimitBurst int `mapstructure:"rate_limit_burst"` // 限流桶容量，允许的突发请求数
+}
+
+// CacheConfig 缓存配置
+type CacheConfig struct {
+	Prefix string `mapstructure:"prefix"` // 缓存 key 前缀，用于多实例隔离
 }
 
 type HTTPConfig struct {

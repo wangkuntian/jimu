@@ -55,9 +55,16 @@ func (rl *RateLimiter) Limit() gin.HandlerFunc {
 	}
 }
 
-// GlobalRateLimit 全局限流（默认每秒 100 次，突发 200）
-func GlobalRateLimit() gin.HandlerFunc {
-	limiter := NewRateLimiter(100, 200)
+// GlobalRateLimit 全局限流（可配置速率和桶容量）
+func GlobalRateLimit(rps, burst int) gin.HandlerFunc {
+	if rps <= 0 {
+		rps = 100
+	}
+	if burst <= 0 {
+		burst = 200
+	}
+	limiter := NewRateLimiter(rate.Limit(rps), burst)
+
 	return limiter.Limit()
 }
 

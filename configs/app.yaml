@@ -30,3 +30,11 @@ auth:
   jwt_secret: "change-me-in-production"
   access_expire_min: 30
   refresh_expire_day: 7
+
+server:
+  timeout_sec: 30
+  rate_limit_rate: 100
+  rate_limit_burst: 200
+
+cache:
+  prefix: "jimu"
