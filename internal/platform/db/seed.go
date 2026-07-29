@@ -12,11 +12,11 @@ import (
 )
 
 // RunSeed 插入初始数据
-// 管理员密码优先从 SEED_ADMIN_PASSWORD 环境变量获取，默认 admin123
+// 管理员密码从 JIMU_ADMIN_PASSWORD 环境变量获取
 func RunSeed(db *gorm.DB) error {
-	adminPassword := os.Getenv("SEED_ADMIN_PASSWORD")
+	adminPassword := os.Getenv("JIMU_ADMIN_PASSWORD")
 	if adminPassword == "" {
-		adminPassword = "admin123"
+		return fmt.Errorf("JIMU_ADMIN_PASSWORD is required")
 	}
 
 	return db.Transaction(func(tx *gorm.DB) error {
