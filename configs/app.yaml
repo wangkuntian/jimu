@@ -1,40 +1,50 @@
+# Jimu Backend Framework - 开发环境配置
+# 优先级：环境变量 > app.{env}.yaml > app.yaml
+
+# HTTP 服务配置
 http:
-  host: "0.0.0.0"
-  port: 8080
-  mode: "debug"
+  host: "0.0.0.0"       # 监听地址
+  port: 8080             # 监听端口
+  mode: "debug"          # Gin 模式：debug / release / test
 
+# 数据库配置 (MariaDB)
 db:
-  host: "127.0.0.1"
-  port: 3306
-  user: "root"
-  password: "root"
-  database: "jimu"
-  max_open: 100
-  max_idle: 10
+  host: "127.0.0.1"      # 数据库地址
+  port: 3306             # 数据库端口
+  user: "root"           # 用户名
+  password: "root"       # 密码
+  database: "jimu"       # 数据库名
+  max_open: 100          # 最大连接数
+  max_idle: 10           # 最大空闲连接数
 
+# Redis 配置
 redis:
-  addr: "127.0.0.1:6379"
-  password: ""
-  db: 0
+  addr: "127.0.0.1:6379" # Redis 地址
+  password: ""           # Redis 密码（无密码留空）
+  db: 0                  # Redis 数据库编号
 
+# 日志配置
 log:
-  level: "debug"
-  format: "console"
-  output: "stdout"
-  max_size: 100        # MB，单文件最大大小
-  max_backups: 30      # 保留旧文件数
-  max_age: 7           # 保留天数
-  compress: true       # 旧文件压缩
+  level: "debug"         # 日志级别：debug / info / warn / error
+  format: "console"      # 日志格式：console / json
+  output: "stdout"       # 输出目标：stdout 或文件路径（如 logs/app.log）
+  max_size: 100          # 单文件最大大小（MB），仅文件输出时生效
+  max_backups: 30        # 保留旧文件数，仅文件输出时生效
+  max_age: 7             # 保留天数，仅文件输出时生效
+  compress: true         # 是否压缩旧文件，仅文件输出时生效
 
+# 认证配置
 auth:
-  jwt_secret: "change-me-in-production"
-  access_expire_min: 30
-  refresh_expire_day: 7
+  jwt_secret: "change-me-in-production"  # JWT 密钥（生产环境必须修改）
+  access_expire_min: 30                 # Access Token 有效期（分钟）
+  refresh_expire_day: 7                 # Refresh Token 有效期（天）
 
+# 服务运行时配置
 server:
-  timeout_sec: 30
-  rate_limit_rate: 100
-  rate_limit_burst: 200
+  timeout_sec: 30        # 请求超时秒数，0 表示不限制
+  rate_limit_rate: 100   # 全局限流速率（每秒请求数），0 表示不限流
+  rate_limit_burst: 200  # 限流桶容量，允许的突发请求数
 
+# 缓存配置
 cache:
-  prefix: "jimu"
+  prefix: "jimu"         # 缓存 key 前缀，多实例部署时用于隔离

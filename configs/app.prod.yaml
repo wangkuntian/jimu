@@ -1,32 +1,51 @@
+# Jimu Backend Framework - 生产环境配置
+# 通过 JIMU_ENV=prod 激活，覆盖 app.yaml 中的同名配置
+
+# HTTP 服务配置
 http:
-  host: "0.0.0.0"
-  port: 8080
-  mode: "release"
+  host: "0.0.0.0"       # 监听地址
+  port: 8080             # 监听端口
+  mode: "release"        # Gin 模式：生产环境使用 release
 
+# 数据库配置 (MariaDB)
+# 使用 ${VAR} 占位符，运行时从环境变量展开
 db:
-  host: "${DB_HOST}"
-  port: "${DB_PORT}"
-  user: "${DB_USER}"
-  password: "${DB_PASSWORD}"
-  database: "${DB_DATABASE}"
-  max_open: 100
-  max_idle: 10
+  host: "${DB_HOST}"         # 数据库地址
+  port: "${DB_PORT}"         # 数据库端口
+  user: "${DB_USER}"         # 用户名
+  password: "${DB_PASSWORD}" # 密码
+  database: "${DB_DATABASE}" # 数据库名
+  max_open: 100              # 最大连接数
+  max_idle: 10               # 最大空闲连接数
 
+# Redis 配置
 redis:
-  addr: "${REDIS_ADDR}"
-  password: "${REDIS_PASSWORD}"
-  db: 0
+  addr: "${REDIS_ADDR}"         # Redis 地址
+  password: "${REDIS_PASSWORD}" # Redis 密码
+  db: 0                         # Redis 数据库编号
 
+# 日志配置
 log:
-  level: "info"
-  format: "json"
-  output: "logs/app.log"
-  max_size: 100
-  max_backups: 30
-  max_age: 7
-  compress: true
+  level: "info"          # 日志级别：生产环境建议 info 或 warn
+  format: "json"         # 日志格式：生产环境使用 json 便于采集
+  output: "logs/app.log" # 输出到文件，启用滚动
+  max_size: 100          # 单文件最大大小（MB）
+  max_backups: 30        # 保留旧文件数
+  max_age: 7             # 保留天数
+  compress: true         # 压缩旧文件节省磁盘
 
+# 认证配置
 auth:
-  jwt_secret: "${JWT_SECRET}"
-  access_expire_min: 30
-  refresh_expire_day: 7
+  jwt_secret: "${JWT_SECRET}"  # JWT 密钥（必须通过环境变量设置）
+  access_expire_min: 30        # Access Token 有效期（分钟）
+  refresh_expire_day: 7        # Refresh Token 有效期（天）
+
+# 服务运行时配置
+server:
+  timeout_sec: 30        # 请求超时秒数
+  rate_limit_rate: 100   # 全局限流速率（每秒请求数）
+  rate_limit_burst: 200  # 限流桶容量
+
+# 缓存配置
+cache:
+  prefix: "jimu"         # 缓存 key 前缀
