@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"os"
 
 	"jimu/internal/modules/role/domain"
 	userdomain "jimu/internal/modules/user/domain"
@@ -11,7 +12,13 @@ import (
 )
 
 // RunSeed 插入初始数据
+// 管理员密码优先从 SEED_ADMIN_PASSWORD 环境变量获取，默认 admin123
 func RunSeed(db *gorm.DB) error {
+	adminPassword := os.Getenv("SEED_ADMIN_PASSWORD")
+	if adminPassword == "" {
+		adminPassword = "admin123"
+	}
+
 	return db.Transaction(func(tx *gorm.DB) error {
 		// 1. 创建基础权限
 		permissions := []domain.Permission{
@@ -55,7 +62,7 @@ func RunSeed(db *gorm.DB) error {
 		var adminUser userdomain.User
 		result := tx.Where("username = ?", "admin").First(&adminUser)
 		if result.Error == gorm.ErrRecordNotFound {
-			hashedPassword, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
 			if err != nil {
 				return fmt.Errorf("hash password failed: %w", err)
 			}
