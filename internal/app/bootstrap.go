@@ -1,40 +1,55 @@
 package app
 
 import (
-	"jimu/internal/config"
+	"fmt"
+	"time"
+
 	"jimu/internal/contract"
-	"jimu/internal/platform/http"
+	platformhttp "jimu/internal/platform/http"
 	"jimu/internal/platform/observability"
 )
 
-func Bootstrap(modules ...contract.Module) *http.Server {
-	cfg, err := config.Load()
+func Bootstrap(container *Container, modules ...contract.Module) (*Application, error) {
+	cfg := container.Config
+	router := platformhttp.SetupRouter(container.Logger, cfg.HTTP, cfg.Server)
+	if err := platformhttp.ConfigureTrustedProxies(router, cfg.HTTP.TrustedProxies); err != nil {
+		return nil, fmt.Errorf("configure trusted proxies: %w", err)
+	}
+	if cfg.HTTP.Mode != "release" {
+		platformhttp.RegisterSwagger(router.Group("/swagger"))
+	}
+
+	for _, module := range modules {
+		if provider, ok := module.(contract.HTTPMiddlewareProvider); ok {
+			router.Use(provider.HTTPMiddleware()...)
+		}
+	}
+	for _, module := range modules {
+		module.RegisterHTTP(router)
+		container.Logger.Info("module registered", "name", module.Name())
+	}
+
+	sqlDB, err := container.DB.DB()
 	if err != nil {
-		panic("failed to load config: " + err.Error())
+		return nil, fmt.Errorf("get database pool: %w", err)
 	}
+	readiness := observability.NewReadiness(
+		time.Duration(cfg.Management.ProbeTimeoutSec)*time.Second,
+		observability.NewSQLChecker(sqlDB),
+		observability.NewRedisChecker(container.Redis),
+	)
+	management := platformhttp.NewManagementServer(
+		cfg.Management,
+		platformhttp.HealthRouter(readiness, cfg.Management.EnablePprof),
+	)
+	public := platformhttp.NewServer(cfg.HTTP, router)
 
-	container, err := NewContainer(cfg)
-	if err != nil {
-		panic("failed to create container: " + err.Error())
+	components := []contract.Component{container}
+	for _, module := range modules {
+		if provider, ok := module.(contract.ComponentProvider); ok {
+			components = append(components, provider.Components()...)
+		}
 	}
-
-	r := http.SetupRouter(container.Logger, cfg.HTTP, cfg.Server)
-
-	// Health check (no auth required)
-	healthGroup := r.Group("/")
-	observability.Register(healthGroup, container.DB, container.Redis)
-
-	// Debug routes (pprof + metrics)
-	observability.RegisterDebugRoutes(r.Group("/debug"))
-
-	// Swagger UI
-	http.RegisterSwagger(r.Group("/swagger"))
-
-	// Register modules
-	for _, m := range modules {
-		m.RegisterHTTP(r)
-		container.Logger.Info("module registered", "name", m.Name())
-	}
-
-	return http.NewServer(cfg.HTTP, r)
+	components = append(components, management, public)
+	return NewApplication(time.Duration(cfg.HTTP.ShutdownTimeoutSec)*time.Second, components...), nil
 }

@@ -1,8 +1,9 @@
 package http
 
 import (
-	"jimu/internal/platform/http/middleware"
 	_ "jimu/docs/openapi"
+	"jimu/internal/platform/http/middleware"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -11,5 +12,5 @@ import (
 
 // RegisterSwagger 注册 Swagger UI 路由
 func RegisterSwagger(r *gin.RouterGroup) {
-	r.GET("/swagger/*any", middleware.Timeout(10), ginSwagger.WrapHandler(swaggerFiles.Handler))
+	r.GET("/swagger/*any", middleware.Timeout(10*time.Second), ginSwagger.WrapHandler(swaggerFiles.Handler))
 }

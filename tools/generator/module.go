@@ -25,14 +25,14 @@ func GenerateModule(name string) error {
 
 	// 生成各层文件
 	files := map[string]string{
-		filepath.Join("internal", "modules", name, "module.go"):                   moduleTemplate,
-		filepath.Join("internal", "modules", name, "domain", "entity.go"):         entityTemplate,
-		filepath.Join("internal", "modules", name, "domain", "repository.go"):     repositoryTemplate,
-		filepath.Join("internal", "modules", name, "application", "service.go"):   serviceTemplate,
-		filepath.Join("internal", "modules", name, "application", "dto.go"):        dtoTemplate,
+		filepath.Join("internal", "modules", name, "module.go"):                             moduleTemplate,
+		filepath.Join("internal", "modules", name, "domain", "entity.go"):                   entityTemplate,
+		filepath.Join("internal", "modules", name, "domain", "repository.go"):               repositoryTemplate,
+		filepath.Join("internal", "modules", name, "application", "service.go"):             serviceTemplate,
+		filepath.Join("internal", "modules", name, "application", "dto.go"):                 dtoTemplate,
 		filepath.Join("internal", "modules", name, "infrastructure", "mysql_repository.go"): mysqlRepoTemplate,
-		filepath.Join("internal", "modules", name, "interfaces", "handler.go"):    handlerTemplate,
-		filepath.Join("internal", "modules", name, "interfaces", "router.go"):      routerTemplate,
+		filepath.Join("internal", "modules", name, "interfaces", "handler.go"):              handlerTemplate,
+		filepath.Join("internal", "modules", name, "interfaces", "router.go"):               routerTemplate,
 	}
 
 	for path, tmpl := range files {
@@ -58,7 +58,7 @@ func writeTemplate(path, tmpl, name string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return t.Execute(f, map[string]string{
 		"Name":      name,
 		"NameCamel": capitalize(name),

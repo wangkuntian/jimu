@@ -1,6 +1,27 @@
 package contract
 
-import "github.com/gin-gonic/gin"
+import (
+	"context"
+
+	"github.com/gin-gonic/gin"
+)
+
+type Component interface {
+	Start(context.Context) error
+	Stop(context.Context) error
+}
+
+type ErrorSource interface {
+	Errors() <-chan error
+}
+
+type ComponentProvider interface {
+	Components() []Component
+}
+
+type HTTPMiddlewareProvider interface {
+	HTTPMiddleware() []gin.HandlerFunc
+}
 
 // Router 抽象路由注册器
 type Router interface {

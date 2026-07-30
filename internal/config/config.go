@@ -32,13 +32,15 @@ var (
 )
 
 type Config struct {
-	HTTP   HTTPConfig   `mapstructure:"http"`
-	DB     DBConfig     `mapstructure:"db"`
-	Redis  RedisConfig  `mapstructure:"redis"`
-	Log    LogConfig    `mapstructure:"log"`
-	Auth   AuthConfig   `mapstructure:"auth"`
-	Server ServerConfig `mapstructure:"server"`
-	Cache  CacheConfig  `mapstructure:"cache"`
+	HTTP       HTTPConfig       `mapstructure:"http"`
+	Management ManagementConfig `mapstructure:"management"`
+	DB         DBConfig         `mapstructure:"db"`
+	Redis      RedisConfig      `mapstructure:"redis"`
+	Log        LogConfig        `mapstructure:"log"`
+	Auth       AuthConfig       `mapstructure:"auth"`
+	Server     ServerConfig     `mapstructure:"server"`
+	Cache      CacheConfig      `mapstructure:"cache"`
+	Audit      AuditConfig      `mapstructure:"audit"`
 }
 
 // ServerConfig 服务运行时配置
@@ -53,10 +55,31 @@ type CacheConfig struct {
 	Prefix string `mapstructure:"prefix"` // 缓存 key 前缀，用于多实例隔离
 }
 
+type ManagementConfig struct {
+	Host            string `mapstructure:"host"`
+	Port            int    `mapstructure:"port"`
+	EnablePprof     bool   `mapstructure:"enable_pprof"`
+	ProbeTimeoutSec int    `mapstructure:"probe_timeout_sec"`
+}
+
+type AuditConfig struct {
+	QueueSize       int `mapstructure:"queue_size"`
+	BatchSize       int `mapstructure:"batch_size"`
+	FlushIntervalMS int `mapstructure:"flush_interval_ms"`
+}
+
 type HTTPConfig struct {
-	Host string `mapstructure:"host"`
-	Port int    `mapstructure:"port"`
-	Mode string `mapstructure:"mode"`
+	Host                 string   `mapstructure:"host"`
+	Port                 int      `mapstructure:"port"`
+	Mode                 string   `mapstructure:"mode"`
+	ReadHeaderTimeoutSec int      `mapstructure:"read_header_timeout_sec"`
+	ReadTimeoutSec       int      `mapstructure:"read_timeout_sec"`
+	WriteTimeoutSec      int      `mapstructure:"write_timeout_sec"`
+	IdleTimeoutSec       int      `mapstructure:"idle_timeout_sec"`
+	ShutdownTimeoutSec   int      `mapstructure:"shutdown_timeout_sec"`
+	MaxBodyBytes         int64    `mapstructure:"max_body_bytes"`
+	TrustedProxies       []string `mapstructure:"trusted_proxies"`
+	AllowedOrigins       []string `mapstructure:"allowed_origins"`
 }
 
 type DBConfig struct {
@@ -86,9 +109,15 @@ type LogConfig struct {
 }
 
 type AuthConfig struct {
-	JWTSecret        string `mapstructure:"jwt_secret"`
-	AccessExpireMin  int    `mapstructure:"access_expire_min"`
-	RefreshExpireDay int    `mapstructure:"refresh_expire_day"`
+	JWTSecret             string `mapstructure:"jwt_secret"`
+	Issuer                string `mapstructure:"issuer"`
+	AccessExpireMin       int    `mapstructure:"access_expire_min"`
+	RefreshExpireDay      int    `mapstructure:"refresh_expire_day"`
+	PublicRegistration    bool   `mapstructure:"public_registration"`
+	LoginRateLimit        int    `mapstructure:"login_rate_limit"`
+	LoginRateWindowSec    int    `mapstructure:"login_rate_window_sec"`
+	RegisterRateLimit     int    `mapstructure:"register_rate_limit"`
+	RegisterRateWindowSec int    `mapstructure:"register_rate_window_sec"`
 }
 
 // Load 加载配置
@@ -143,10 +172,11 @@ func Load() (*Config, error) {
 	}
 
 	// viper AutomaticEnv 对嵌套键的 Unmarshal 不生效，手动覆盖
-	applyEnvOverrides(&cfg)
+	if err := applyEnvOverrides(&cfg); err != nil {
+		return nil, err
+	}
 
-	// 校验枚举值
-	if err := cfg.validate(); err != nil {
+	if err := cfg.Validate(env); err != nil {
 		return nil, err
 	}
 
@@ -154,12 +184,10 @@ func Load() (*Config, error) {
 }
 
 // applyEnvOverrides 手动应用环境变量覆盖
-func applyEnvOverrides(cfg *Config) {
+func applyEnvOverrides(cfg *Config) error {
 	// HTTP
-	if v := os.Getenv("JIMU__HTTP__PORT"); v != "" {
-		if p, err := strconv.Atoi(v); err == nil {
-			cfg.HTTP.Port = p
-		}
+	if err := overrideInt("JIMU__HTTP__PORT", &cfg.HTTP.Port); err != nil {
+		return err
 	}
 	if v := os.Getenv("JIMU__HTTP__HOST"); v != "" {
 		cfg.HTTP.Host = v
@@ -167,14 +195,48 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("JIMU__HTTP__MODE"); v != "" {
 		cfg.HTTP.Mode = v
 	}
+	for _, item := range []struct {
+		key string
+		dst *int
+	}{
+		{"JIMU__HTTP__READ_HEADER_TIMEOUT_SEC", &cfg.HTTP.ReadHeaderTimeoutSec},
+		{"JIMU__HTTP__READ_TIMEOUT_SEC", &cfg.HTTP.ReadTimeoutSec},
+		{"JIMU__HTTP__WRITE_TIMEOUT_SEC", &cfg.HTTP.WriteTimeoutSec},
+		{"JIMU__HTTP__IDLE_TIMEOUT_SEC", &cfg.HTTP.IdleTimeoutSec},
+		{"JIMU__HTTP__SHUTDOWN_TIMEOUT_SEC", &cfg.HTTP.ShutdownTimeoutSec},
+	} {
+		if err := overrideInt(item.key, item.dst); err != nil {
+			return err
+		}
+	}
+	if err := overrideInt64("JIMU__HTTP__MAX_BODY_BYTES", &cfg.HTTP.MaxBodyBytes); err != nil {
+		return err
+	}
+	if v := os.Getenv("JIMU__HTTP__TRUSTED_PROXIES"); v != "" {
+		cfg.HTTP.TrustedProxies = splitList(v)
+	}
+	if v := os.Getenv("JIMU__HTTP__ALLOWED_ORIGINS"); v != "" {
+		cfg.HTTP.AllowedOrigins = splitList(v)
+	}
+	// Management
+	if v := os.Getenv("JIMU__MANAGEMENT__HOST"); v != "" {
+		cfg.Management.Host = v
+	}
+	if err := overrideInt("JIMU__MANAGEMENT__PORT", &cfg.Management.Port); err != nil {
+		return err
+	}
+	if err := overrideBool("JIMU__MANAGEMENT__ENABLE_PPROF", &cfg.Management.EnablePprof); err != nil {
+		return err
+	}
+	if err := overrideInt("JIMU__MANAGEMENT__PROBE_TIMEOUT_SEC", &cfg.Management.ProbeTimeoutSec); err != nil {
+		return err
+	}
 	// DB
 	if v := os.Getenv("JIMU__DB__HOST"); v != "" {
 		cfg.DB.Host = v
 	}
-	if v := os.Getenv("JIMU__DB__PORT"); v != "" {
-		if p, err := strconv.Atoi(v); err == nil {
-			cfg.DB.Port = p
-		}
+	if err := overrideInt("JIMU__DB__PORT", &cfg.DB.Port); err != nil {
+		return err
 	}
 	if v := os.Getenv("JIMU__DB__USER"); v != "" {
 		cfg.DB.User = v
@@ -192,14 +254,33 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("JIMU__REDIS__PASSWORD"); v != "" {
 		cfg.Redis.Password = v
 	}
-	if v := os.Getenv("JIMU__REDIS__DB"); v != "" {
-		if d, err := strconv.Atoi(v); err == nil {
-			cfg.Redis.DB = d
-		}
+	if err := overrideInt("JIMU__REDIS__DB", &cfg.Redis.DB); err != nil {
+		return err
 	}
 	// Auth
 	if v := os.Getenv("JIMU__AUTH__JWT_SECRET"); v != "" {
 		cfg.Auth.JWTSecret = v
+	}
+	if v := os.Getenv("JIMU__AUTH__ISSUER"); v != "" {
+		cfg.Auth.Issuer = v
+	}
+	if err := overrideBool("JIMU__AUTH__PUBLIC_REGISTRATION", &cfg.Auth.PublicRegistration); err != nil {
+		return err
+	}
+	for _, item := range []struct {
+		key string
+		dst *int
+	}{
+		{"JIMU__AUTH__ACCESS_EXPIRE_MIN", &cfg.Auth.AccessExpireMin},
+		{"JIMU__AUTH__REFRESH_EXPIRE_DAY", &cfg.Auth.RefreshExpireDay},
+		{"JIMU__AUTH__LOGIN_RATE_LIMIT", &cfg.Auth.LoginRateLimit},
+		{"JIMU__AUTH__LOGIN_RATE_WINDOW_SEC", &cfg.Auth.LoginRateWindowSec},
+		{"JIMU__AUTH__REGISTER_RATE_LIMIT", &cfg.Auth.RegisterRateLimit},
+		{"JIMU__AUTH__REGISTER_RATE_WINDOW_SEC", &cfg.Auth.RegisterRateWindowSec},
+	} {
+		if err := overrideInt(item.key, item.dst); err != nil {
+			return err
+		}
 	}
 	// Log
 	if v := os.Getenv("JIMU__LOG__LEVEL"); v != "" {
@@ -208,19 +289,70 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("JIMU__LOG__FORMAT"); v != "" {
 		cfg.Log.Format = v
 	}
-}
-
-func (c *Config) validate() error {
-	if !contains(validHTTPModes, c.HTTP.Mode) {
-		return fmt.Errorf("invalid http.mode: %q, must be one of %v", c.HTTP.Mode, validHTTPModes)
-	}
-	if !contains(validLogLevels, c.Log.Level) {
-		return fmt.Errorf("invalid log.level: %q, must be one of %v", c.Log.Level, validLogLevels)
-	}
-	if !contains(validLogFormats, c.Log.Format) {
-		return fmt.Errorf("invalid log.format: %q, must be one of %v", c.Log.Format, validLogFormats)
+	// Audit
+	for _, item := range []struct {
+		key string
+		dst *int
+	}{
+		{"JIMU__AUDIT__QUEUE_SIZE", &cfg.Audit.QueueSize},
+		{"JIMU__AUDIT__BATCH_SIZE", &cfg.Audit.BatchSize},
+		{"JIMU__AUDIT__FLUSH_INTERVAL_MS", &cfg.Audit.FlushIntervalMS},
+	} {
+		if err := overrideInt(item.key, item.dst); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func overrideInt(key string, dst *int) error {
+	v := os.Getenv(key)
+	if v == "" {
+		return nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fmt.Errorf("invalid %s", strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(key, "JIMU__"), "__", ".")))
+	}
+	*dst = n
+	return nil
+}
+
+func overrideInt64(key string, dst *int64) error {
+	v := os.Getenv(key)
+	if v == "" {
+		return nil
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid %s", strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(key, "JIMU__"), "__", ".")))
+	}
+	*dst = n
+	return nil
+}
+
+func overrideBool(key string, dst *bool) error {
+	v := os.Getenv(key)
+	if v == "" {
+		return nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return fmt.Errorf("invalid %s", strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(key, "JIMU__"), "__", ".")))
+	}
+	*dst = b
+	return nil
+}
+
+func splitList(value string) []string {
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if value := strings.TrimSpace(part); value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 func contains(list []string, val string) bool {

@@ -2,12 +2,10 @@ package http
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
-	"os"
-	"os/signal"
-	"sync/atomic"
-	"syscall"
 	"time"
 
 	"jimu/internal/config"
@@ -19,88 +17,74 @@ import (
 
 type Server struct {
 	*http.Server
-	activeRequests int64 // 活跃请求计数
+	errors chan error
 }
 
 func NewServer(cfg config.HTTPConfig, r *gin.Engine) *Server {
-	srv := &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-		Handler: r,
-	}
-
-	return &Server{Server: srv}
+	return newServer(&http.Server{
+		Addr:              formatAddr(cfg.Host, cfg.Port),
+		Handler:           r,
+		ReadHeaderTimeout: time.Duration(cfg.ReadHeaderTimeoutSec) * time.Second,
+		ReadTimeout:       time.Duration(cfg.ReadTimeoutSec) * time.Second,
+		WriteTimeout:      time.Duration(cfg.WriteTimeoutSec) * time.Second,
+		IdleTimeout:       time.Duration(cfg.IdleTimeoutSec) * time.Second,
+	})
 }
 
-// Run 启动服务并等待退出信号
-func (s *Server) Run() error {
-	// 包装 handler 统计活跃请求
-	originalHandler := s.Handler
-	s.Handler = &requestTracker{handler: originalHandler, counter: &s.activeRequests}
+func newServer(server *http.Server) *Server {
+	return &Server{Server: server, errors: make(chan error, 1)}
+}
 
+func formatAddr(host string, port int) string {
+	return fmt.Sprintf("%s:%d", host, port)
+}
+
+func (s *Server) Start(ctx context.Context) error {
+	var listener net.ListenConfig
+	ln, err := listener.Listen(ctx, "tcp", s.Addr)
+	if err != nil {
+		return err
+	}
 	go func() {
-		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fmt.Printf("server failed: %v\n", err)
-			os.Exit(1)
+		if err := s.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.errors <- err
 		}
 	}()
+	return nil
+}
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	sig := <-quit
-	fmt.Printf("received signal: %v, shutting down...\n", sig)
-
-	// 给负载均衡器/反向代理一点时间停止发送新请求
-	time.Sleep(1 * time.Second)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// 等待活跃请求完成（最多等 shutdown timeout）
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if atomic.LoadInt64(&s.activeRequests) == 0 {
-					cancel()
-					return
-				}
-			}
-		}
-	}()
-
+func (s *Server) Stop(ctx context.Context) error {
 	return s.Shutdown(ctx)
 }
 
-// requestTracker 包装 http.Handler 统计活跃请求
-type requestTracker struct {
-	handler http.Handler
-	counter *int64
-}
-
-func (rt *requestTracker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	atomic.AddInt64(rt.counter, 1)
-	defer atomic.AddInt64(rt.counter, -1)
-	rt.handler.ServeHTTP(w, r)
+func (s *Server) Errors() <-chan error {
+	return s.errors
 }
 
 func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.ServerConfig) *gin.Engine {
-	if cfg.Mode == "release" {
+	switch cfg.Mode {
+	case config.HTTPModeRelease:
 		gin.SetMode(gin.ReleaseMode)
+	case config.HTTPModeTest:
+		gin.SetMode(gin.TestMode)
 	}
 
 	r := gin.New()
 	r.Use(
 		middleware.RequestID(),
 		middleware.Logger(log),
+		middleware.Security(cfg),
 		middleware.Recovery(),
-		middleware.CORS(),
 		middleware.Timeout(time.Duration(serverCfg.TimeoutSec)*time.Second),
 		middleware.GlobalRateLimit(serverCfg.RateLimitRate, serverCfg.RateLimitBurst),
 	)
 
 	return r
+}
+
+func ConfigureTrustedProxies(engine *gin.Engine, proxies []string) error {
+	if len(proxies) == 0 {
+		proxies = nil
+	}
+	return engine.SetTrustedProxies(proxies)
 }

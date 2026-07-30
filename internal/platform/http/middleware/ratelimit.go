@@ -47,7 +47,7 @@ func (rl *RateLimiter) Limit() gin.HandlerFunc {
 		ip := c.ClientIP()
 		limiter := rl.getLimiter(ip)
 		if !limiter.Allow() {
-			response.Fail(c, errors.New(errors.CodeForbidden, "too many requests"))
+			response.Fail(c, errors.New(errors.CodeRateLimited, "too many requests"))
 			c.Abort()
 			return
 		}

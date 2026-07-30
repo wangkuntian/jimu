@@ -22,7 +22,9 @@ func setupTestCache(t *testing.T) *RedisCache {
 	}
 
 	// 清理测试数据
-	client.FlushDB(ctx)
+	if err := client.FlushDB(ctx).Err(); err != nil {
+		t.Fatalf("FlushDB failed: %v", err)
+	}
 
 	return NewRedisCache(client, "test")
 }
@@ -59,7 +61,9 @@ func TestRedisCache_Delete(t *testing.T) {
 	cache := setupTestCache(t)
 	ctx := context.Background()
 
-	cache.Set(ctx, "key", "value", time.Minute)
+	if err := cache.Set(ctx, "key", "value", time.Minute); err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
 
 	err := cache.Delete(ctx, "key")
 	if err != nil {
@@ -109,9 +113,15 @@ func TestRedisCache_DeletePattern(t *testing.T) {
 	cache := setupTestCache(t)
 	ctx := context.Background()
 
-	cache.Set(ctx, "user:1", "a", time.Minute)
-	cache.Set(ctx, "user:2", "b", time.Minute)
-	cache.Set(ctx, "post:1", "c", time.Minute)
+	if err := cache.Set(ctx, "user:1", "a", time.Minute); err != nil {
+		t.Fatalf("Set user:1 failed: %v", err)
+	}
+	if err := cache.Set(ctx, "user:2", "b", time.Minute); err != nil {
+		t.Fatalf("Set user:2 failed: %v", err)
+	}
+	if err := cache.Set(ctx, "post:1", "c", time.Minute); err != nil {
+		t.Fatalf("Set post:1 failed: %v", err)
+	}
 
 	err := cache.DeletePattern(ctx, "user:*")
 	if err != nil {

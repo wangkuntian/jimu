@@ -3,16 +3,19 @@ package errors
 import "fmt"
 
 const (
-	CodeOK              = 0
-	CodeInvalidParam    = 1001
-	CodeUnauthorized    = 1002
-	CodeForbidden       = 1003
-	CodeNotFound        = 1004
-	CodeInternalError   = 1005
-	CodeUserNotFound    = 2001
-	CodeUserExists      = 2002
-	CodeInvalidPassword = 2003
-	CodeRoleNotFound    = 2004
+	CodeOK                 = 0
+	CodeInvalidParam       = 1001
+	CodeUnauthorized       = 1002
+	CodeForbidden          = 1003
+	CodeNotFound           = 1004
+	CodeInternalError      = 1005
+	CodeInvalidCredentials = 1006
+	CodeRateLimited        = 1007
+	CodeTimeout            = 1008
+	CodeUserNotFound       = 2001
+	CodeUserExists         = 2002
+	CodeInvalidPassword    = 2003
+	CodeRoleNotFound       = 2004
 )
 
 type AppError struct {

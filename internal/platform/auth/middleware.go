@@ -25,7 +25,7 @@ func AuthMiddleware(jwtUtil *JWT) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := jwtUtil.Parse(parts[1])
+		claims, err := jwtUtil.Parse(parts[1], TokenTypeAccess)
 		if err != nil {
 			response.Fail(c, errors.New(errors.CodeUnauthorized, "invalid token"))
 			c.Abort()
@@ -33,6 +33,7 @@ func AuthMiddleware(jwtUtil *JWT) gin.HandlerFunc {
 		}
 
 		c.Set("user_id", claims.UserID)
+		c.Set("session_id", claims.SessionID)
 		c.Next()
 	}
 }

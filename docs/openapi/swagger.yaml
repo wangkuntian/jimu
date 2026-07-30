@@ -1,0 +1,174 @@
+basePath: /api/v1
+definitions:
+  application.CreateUserRequest:
+    properties:
+      password:
+        maxLength: 32
+        minLength: 6
+        type: string
+      username:
+        maxLength: 64
+        minLength: 3
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  interfaces.loginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  interfaces.refreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  response.Body:
+    properties:
+      code:
+        type: integer
+      data: {}
+      message:
+        type: string
+      request_id:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Jimu Backend Framework API
+  title: Jimu API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Login with username and password
+      parameters:
+      - description: Login info
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/interfaces.loginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: User login
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      description: Revoke the current refresh session
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Logout current session
+      tags:
+      - auth
+  /auth/logout-all:
+    post:
+      description: Revoke all refresh sessions for the current user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Logout all sessions
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Get new access token using refresh token
+      parameters:
+      - description: Refresh token
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/interfaces.refreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: Refresh access token
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user when public registration is enabled
+      parameters:
+      - description: Register info
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/interfaces.loginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: Register user
+      tags:
+      - auth
+  /users:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user
+      parameters:
+      - description: User info
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/application.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: Create user
+      tags:
+      - users
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

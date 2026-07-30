@@ -8,19 +8,24 @@ import (
 	"jimu/internal/modules/user/infrastructure"
 	"jimu/internal/platform/auth"
 
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 type Module struct {
+	cfg     config.AuthConfig
 	service *application.AuthService
 	jwtUtil *auth.JWT
+	limiter *auth.Limiter
 }
 
-func New(db *gorm.DB, cfg config.AuthConfig) *Module {
+func New(db *gorm.DB, rdb *redis.Client, cfg config.AuthConfig, failClosed bool) *Module {
 	userRepo := infrastructure.NewMysqlRepository(db)
-	jwtUtil := auth.New(cfg.JWTSecret, cfg.AccessExpireMin, cfg.RefreshExpireDay)
-	service := application.NewAuthService(userRepo, jwtUtil, cfg.AccessExpireMin)
-	return &Module{service: service, jwtUtil: jwtUtil}
+	jwtUtil := auth.New(cfg.JWTSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
+	sessionStore := auth.NewRedisSessionStore(rdb)
+	limiter := auth.NewLimiter(rdb, failClosed)
+	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, cfg.AccessExpireMin)
+	return &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter}
 }
 
 func (m *Module) Name() string {
@@ -28,7 +33,7 @@ func (m *Module) Name() string {
 }
 
 func (m *Module) RegisterHTTP(r contract.Router) {
-	interfaces.RegisterAuthRoutes(r.Group("/api/v1"), m.service, m.jwtUtil)
+	interfaces.RegisterAuthRoutes(r.Group("/api/v1"), m.service, m.jwtUtil, m.cfg, m.limiter)
 }
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}

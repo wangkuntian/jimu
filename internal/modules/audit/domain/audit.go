@@ -27,5 +27,6 @@ func (AuditLog) TableName() string {
 // AuditRepository 审计日志仓储接口
 type AuditRepository interface {
 	Create(ctx context.Context, log *AuditLog) error
+	CreateBatch(ctx context.Context, logs []AuditLog) error
 	List(ctx context.Context, offset, limit int) ([]AuditLog, int64, error)
 }

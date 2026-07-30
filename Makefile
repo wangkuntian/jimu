@@ -1,4 +1,4 @@
-.PHONY: run build test vet fmt fmt-check lint clean migrate swagger cli docker docker-run docker-stop docker-logs docker-up docker-down docker-restart help
+.PHONY: run build test vet fmt fmt-check lint clean migrate swagger cli docker docker-run docker-stop docker-logs docker-up docker-down docker-restart docker-compose-logs help
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -9,9 +9,10 @@ SERVER_BIN := $(BIN_DIR)/server
 CLI_BIN := $(BIN_DIR)/jimu
 SERVER_CMD := cmd/server/main.go
 CLI_CMD := cmd/cli/main.go
-DOCKER_COMPOSE := docker-compose
+DOCKER_COMPOSE ?= docker compose
 DOCKER_IMAGE := jimu:latest
 DOCKER_CONTAINER := jimu-server
+SWAG := go run -mod=mod github.com/swaggo/swag/cmd/swag
 ENV ?= dev
 
 # 加载 .env 文件（如果存在）
@@ -107,6 +108,15 @@ container-stop:
 container-logs:
 	docker logs -f $(DOCKER_CONTAINER)
 
+## docker-run: 运行单容器（container-run 别名）
+docker-run: container-run
+
+## docker-stop: 停止单容器（container-stop 别名）
+docker-stop: container-stop
+
+## docker-logs: 查看单容器日志（container-logs 别名）
+docker-logs: container-logs
+
 # ========== Docker Compose ==========
 
 ## compose-up: 启动所有服务（依赖 + 应用）
@@ -124,6 +134,18 @@ compose-restart:
 ## compose-logs: 查看应用日志
 compose-logs:
 	$(DOCKER_COMPOSE) logs -f server
+
+## docker-up: 启动 Compose 环境（compose-up 别名）
+docker-up: compose-up
+
+## docker-down: 停止 Compose 环境（compose-down 别名）
+docker-down: compose-down
+
+## docker-restart: 重启 Compose 环境（compose-restart 别名）
+docker-restart: compose-restart
+
+## docker-compose-logs: 查看 Compose 应用日志（compose-logs 别名）
+docker-compose-logs: compose-logs
 
 # ========== 数据库迁移 ==========
 
@@ -226,7 +248,7 @@ clean:
 
 ## swagger: 生成 API 文档
 swagger:
-	swag init -g $(SERVER_CMD) -o docs/openapi
+	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi
 
 ## cli: 编译 CLI（build-cli 别名）
 cli: build-cli

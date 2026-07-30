@@ -1,0 +1,65 @@
+package config
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
+
+func (c *Config) Validate(env string) error {
+	if err := c.validateCommon(); err != nil {
+		return err
+	}
+	if env != "prod" {
+		return nil
+	}
+	if len(c.Auth.JWTSecret) < 32 || c.Auth.JWTSecret == "change-me-in-production" || strings.Contains(c.Auth.JWTSecret, "${") {
+		return errors.New("invalid auth.jwt_secret")
+	}
+	if c.DB.Password == "" || c.DB.Password == "root" || strings.Contains(c.DB.Password, "${") {
+		return errors.New("invalid db.password")
+	}
+	if c.Management.Port < 1 || c.Management.Port > 65535 {
+		return errors.New("invalid management.port")
+	}
+	for _, origin := range c.HTTP.AllowedOrigins {
+		if origin == "*" {
+			return errors.New("invalid http.allowed_origins")
+		}
+	}
+	return nil
+}
+
+func (c *Config) validateCommon() error {
+	if !contains(validHTTPModes, c.HTTP.Mode) {
+		return fmt.Errorf("invalid http.mode: %q, must be one of %v", c.HTTP.Mode, validHTTPModes)
+	}
+	if !contains(validLogLevels, c.Log.Level) {
+		return fmt.Errorf("invalid log.level: %q, must be one of %v", c.Log.Level, validLogLevels)
+	}
+	if !contains(validLogFormats, c.Log.Format) {
+		return fmt.Errorf("invalid log.format: %q, must be one of %v", c.Log.Format, validLogFormats)
+	}
+	if c.HTTP.Port < 1 || c.HTTP.Port > 65535 {
+		return errors.New("invalid http.port")
+	}
+	if c.HTTP.ReadHeaderTimeoutSec <= 0 || c.HTTP.ReadTimeoutSec <= 0 || c.HTTP.WriteTimeoutSec <= 0 || c.HTTP.IdleTimeoutSec <= 0 || c.HTTP.ShutdownTimeoutSec <= 0 {
+		return errors.New("invalid http timeout")
+	}
+	if c.HTTP.MaxBodyBytes <= 0 {
+		return errors.New("invalid http.max_body_bytes")
+	}
+	if c.Management.ProbeTimeoutSec <= 0 {
+		return errors.New("invalid management.probe_timeout_sec")
+	}
+	if c.Auth.Issuer == "" || c.Auth.AccessExpireMin <= 0 || c.Auth.RefreshExpireDay <= 0 {
+		return errors.New("invalid auth configuration")
+	}
+	if c.Auth.LoginRateLimit <= 0 || c.Auth.LoginRateWindowSec <= 0 || c.Auth.RegisterRateLimit <= 0 || c.Auth.RegisterRateWindowSec <= 0 {
+		return errors.New("invalid auth rate limit")
+	}
+	if c.Audit.QueueSize <= 0 || c.Audit.BatchSize <= 0 || c.Audit.BatchSize > c.Audit.QueueSize || c.Audit.FlushIntervalMS <= 0 {
+		return errors.New("invalid audit configuration")
+	}
+	return nil
+}
