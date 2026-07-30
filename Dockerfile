@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server cmd/server/main
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o jimu cmd/cli/main.go
 
 # Runtime stage
-FROM alpine:3.19
+FROM alpine:3.24.1
 
 RUN apk --no-cache add ca-certificates tzdata curl && \
     addgroup -S jimu && adduser -S jimu -G jimu

@@ -63,4 +63,6 @@ services:
 
 volumes:
   jimu-mariadb-data:
+    name: jimu-mariadb-data
   jimu-redis-data:
+    name: jimu-redis-data
