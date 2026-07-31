@@ -4,9 +4,6 @@ import (
 	"context"
 	"time"
 
-	"jimu/internal/shared/errors"
-	"jimu/internal/shared/response"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,19 +14,6 @@ func Timeout(duration time.Duration) gin.HandlerFunc {
 		defer cancel()
 
 		c.Request = c.Request.WithContext(ctx)
-
-		done := make(chan struct{})
-		go func() {
-			c.Next()
-			close(done)
-		}()
-
-		select {
-		case <-done:
-			return
-		case <-ctx.Done():
-			response.Fail(c, errors.New(errors.CodeInternalError, "request timeout"))
-			c.Abort()
-		}
+		c.Next()
 	}
 }

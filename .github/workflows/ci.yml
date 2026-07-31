@@ -7,7 +7,8 @@ on:
     branches: [master, release/*]
 
 env:
-  GO_VERSION: "1.26"
+  GO_VERSION: "1.26.5"
+  GOLANGCI_LINT_VERSION: "v2.7.2"
 
 jobs:
   lint:
@@ -33,9 +34,9 @@ jobs:
         run: go vet ./...
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=5m
 
   test:
@@ -72,18 +73,21 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Run unit tests
-        run: go test ./internal/config/ ./internal/shared/... -v
+      - name: Run tests
+        run: go test ./...
 
-      - name: Run integration tests
-        env:
-          JIMU__DB__HOST: 127.0.0.1
-          JIMU__DB__PORT: 3306
-          JIMU__DB__USER: root
-          JIMU__DB__PASSWORD: root
-          JIMU__DB__DATABASE: jimu_test
-          JIMU__REDIS__ADDR: 127.0.0.1:6379
-        run: go test ./... -v -tags=integration
+      - name: Run race tests
+        run: go test -race ./internal/app ./internal/config ./internal/platform/auth ./internal/platform/http/... ./internal/modules/auth/... ./internal/modules/audit/...
+
+      - name: Check OpenAPI is current
+        run: |
+          make swagger
+          git diff --exit-code docs/openapi
+
+      - name: Check smoke scripts
+        run: |
+          bash -n work/test_runtime_security.sh
+          bash -n work/smoke_api_contract.sh
 
   build:
     name: Build

@@ -62,6 +62,14 @@ func (h *UserHandler) List(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
+	if err := p.Normalize("id", "username", "created_at"); err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
+		return
+	}
+	if h.service == nil {
+		response.Fail(c, errors.New(errors.CodeInternalError, "user service not configured"))
+		return
+	}
 	users, total, err := h.service.List(c.Request.Context(), p.Page, p.PageSize)
 	if err != nil {
 		response.Fail(c, err)

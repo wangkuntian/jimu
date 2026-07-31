@@ -1,6 +1,12 @@
 package main
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"jimu/internal/app"
 	"jimu/internal/config"
 	auditmodule "jimu/internal/modules/audit"
@@ -8,7 +14,6 @@ import (
 	"jimu/internal/modules/permission"
 	"jimu/internal/modules/role"
 	"jimu/internal/modules/user"
-	"jimu/internal/platform/db"
 )
 
 // @title           Jimu API
@@ -16,23 +21,43 @@ import (
 // @description     Jimu Backend Framework API
 // @host            localhost:8080
 // @BasePath        /api/v1
+// @securityDefinitions.apikey BearerAuth
+// @in              header
+// @name            Authorization
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	cfg, err := config.Load()
 	if err != nil {
-		panic("failed to load config: " + err.Error())
+		return fmt.Errorf("load config: %w", err)
 	}
-
-	dbConn, err := db.New(cfg.DB)
+	container, err := app.NewContainer(cfg)
 	if err != nil {
-		panic("failed to connect database: " + err.Error())
+		return fmt.Errorf("create container: %w", err)
 	}
 
-	userModule := user.New(dbConn)
-	authModule := authmodule.New(dbConn, cfg.Auth)
-	roleModule := role.New(dbConn)
-	permModule := permission.New(dbConn)
-	auditModule := auditmodule.New(dbConn)
+	application, err := app.Bootstrap(
+		container,
+		user.New(container.DB),
+		authmodule.New(container.DB, container.Redis, cfg.Auth, cfg.HTTP.Mode == config.HTTPModeRelease),
+		role.New(container.DB),
+		permission.New(container.DB),
+		auditmodule.New(container.DB, cfg.Audit, container.Logger),
+	)
+	if err != nil {
+		_ = container.Stop(context.Background())
+		return fmt.Errorf("bootstrap application: %w", err)
+	}
 
-	server := app.Bootstrap(userModule, authModule, roleModule, permModule, auditModule)
-	server.Run()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := application.Run(ctx); err != nil {
+		return fmt.Errorf("run application: %w", err)
+	}
+	return nil
 }

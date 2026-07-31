@@ -19,7 +19,7 @@ func Migrate(cfg config.DBConfig, direction string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
-	defer sqlDB.Close()
+	defer func() { _ = sqlDB.Close() }()
 
 	if err := goose.SetDialect("mysql"); err != nil {
 		return fmt.Errorf("failed to set dialect: %w", err)

@@ -6,6 +6,20 @@ http:
   host: "0.0.0.0"       # 监听地址
   port: 8080             # 监听端口
   mode: "test"           # Gin 模式：测试环境
+  read_header_timeout_sec: 5
+  read_timeout_sec: 15
+  write_timeout_sec: 30
+  idle_timeout_sec: 60
+  shutdown_timeout_sec: 5
+  max_body_bytes: 1048576
+  trusted_proxies: ["127.0.0.1"]
+  allowed_origins: ["http://localhost:3000"]
+
+management:
+  host: "127.0.0.1"
+  port: 9090
+  enable_pprof: false
+  probe_timeout_sec: 1
 
 # 数据库配置 (MariaDB)
 db:
@@ -36,8 +50,14 @@ log:
 # 认证配置
 auth:
   jwt_secret: "test-secret-key"  # 测试用 JWT 密钥
+  issuer: "jimu-test"
   access_expire_min: 30          # Access Token 有效期（分钟）
   refresh_expire_day: 7          # Refresh Token 有效期（天）
+  public_registration: true
+  login_rate_limit: 100
+  login_rate_window_sec: 60
+  register_rate_limit: 100
+  register_rate_window_sec: 60
 
 # 服务运行时配置
 server:
@@ -48,3 +68,8 @@ server:
 # 缓存配置
 cache:
   prefix: "jimu_test"    # 缓存 key 前缀（与生产隔离）
+
+audit:
+  queue_size: 64
+  batch_size: 10
+  flush_interval_ms: 50

@@ -66,10 +66,10 @@ func TestValidateUsername(t *testing.T) {
 	}{
 		{"admin", true},
 		{"user_123", true},
-		{"abc", false},    // 太短
-		{"ab", false},     // 太短
+		{"abc", false},       // 太短
+		{"ab", false},        // 太短
 		{"user name", false}, // 含空格
-		{"", true},        // 空值由 required 处理
+		{"", true},           // 空值由 required 处理
 	}
 
 	validate := validator.New()

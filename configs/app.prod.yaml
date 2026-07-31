@@ -6,22 +6,36 @@ http:
   host: "0.0.0.0"       # 监听地址
   port: 8080             # 监听端口
   mode: "release"        # Gin 模式：生产环境使用 release
+  read_header_timeout_sec: 5
+  read_timeout_sec: 15
+  write_timeout_sec: 30
+  idle_timeout_sec: 60
+  shutdown_timeout_sec: 30
+  max_body_bytes: 1048576
+  trusted_proxies: ["127.0.0.1"]
+  allowed_origins: ["https://admin.example.com"]
+
+management:
+  host: "0.0.0.0"
+  port: 9090
+  enable_pprof: false
+  probe_timeout_sec: 2
 
 # 数据库配置 (MariaDB)
-# 使用 ${VAR} 占位符，运行时从环境变量展开
+# 敏感值和部署地址必须通过 JIMU__... 环境变量覆盖
 db:
-  host: "${DB_HOST}"         # 数据库地址
-  port: "${DB_PORT}"         # 数据库端口
-  user: "${DB_USER}"         # 用户名
-  password: "${DB_PASSWORD}" # 密码
-  database: "${DB_DATABASE}" # 数据库名
+  host: "mariadb"             # 数据库地址
+  port: 3306                  # 数据库端口
+  user: "jimu"               # 用户名
+  password: ""               # 必须通过环境变量设置
+  database: "jimu"           # 数据库名
   max_open: 100              # 最大连接数
   max_idle: 10               # 最大空闲连接数
 
 # Redis 配置
 redis:
-  addr: "${REDIS_ADDR}"         # Redis 地址
-  password: "${REDIS_PASSWORD}" # Redis 密码
+  addr: "redis:6379"             # Redis 地址
+  password: ""                   # Redis 密码
   db: 0                         # Redis 数据库编号
 
 # 日志配置
@@ -36,9 +50,15 @@ log:
 
 # 认证配置
 auth:
-  jwt_secret: "${JWT_SECRET}"  # JWT 密钥（必须通过环境变量设置）
+  jwt_secret: ""               # 必须通过环境变量设置
+  issuer: "jimu"
   access_expire_min: 30        # Access Token 有效期（分钟）
   refresh_expire_day: 7        # Refresh Token 有效期（天）
+  public_registration: false
+  login_rate_limit: 10
+  login_rate_window_sec: 60
+  register_rate_limit: 5
+  register_rate_window_sec: 300
 
 # 服务运行时配置
 server:
@@ -49,3 +69,8 @@ server:
 # 缓存配置
 cache:
   prefix: "jimu"         # 缓存 key 前缀
+
+audit:
+  queue_size: 1024
+  batch_size: 100
+  flush_interval_ms: 500

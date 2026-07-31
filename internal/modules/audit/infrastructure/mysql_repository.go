@@ -20,6 +20,13 @@ func (r *mysqlAuditRepository) Create(ctx context.Context, log *domain.AuditLog)
 	return r.db.WithContext(ctx).Create(log).Error
 }
 
+func (r *mysqlAuditRepository) CreateBatch(ctx context.Context, logs []domain.AuditLog) error {
+	if len(logs) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Create(&logs).Error
+}
+
 func (r *mysqlAuditRepository) List(ctx context.Context, offset, limit int) ([]domain.AuditLog, int64, error) {
 	var logs []domain.AuditLog
 	var total int64

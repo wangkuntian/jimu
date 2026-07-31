@@ -1,7 +1,9 @@
 package logger
 
 import (
+	"errors"
 	"os"
+	"syscall"
 
 	"jimu/internal/config"
 
@@ -12,6 +14,14 @@ import (
 
 type Logger struct {
 	*zap.SugaredLogger
+}
+
+func (l *Logger) Sync() error {
+	err := l.SugaredLogger.Sync()
+	if errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTTY) {
+		return nil
+	}
+	return err
 }
 
 func New(cfg config.LogConfig) *Logger {
