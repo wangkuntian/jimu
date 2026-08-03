@@ -33,17 +33,17 @@
 - Produces: `func RoleLoaderMiddleware(loader platformauth.RoleLoader) gin.HandlerFunc`
 - Produces: `func ProtectedMiddleware(jwtUtil *platformauth.JWT, loader platformauth.RoleLoader, enforcer *casbin.Enforcer) []gin.HandlerFunc`
 
-- [ ] **Step 1: Write failing middleware tests**
+- [x] **Step 1: Write failing middleware tests**
 
 Run: `GOCACHE=/private/tmp/jimu-go-build-cache go test ./internal/modules/auth/interfaces ./internal/platform/auth -run 'TestProtected|TestPermission'`
 
 Expected: FAIL because `ProtectedMiddleware` and `RoleLoaderMiddleware` do not exist.
 
-- [ ] **Step 2: Implement role loader and protected middleware**
+- [x] **Step 2: Implement role loader and protected middleware**
 
 Implement only role lookup, context population, and existing permission middleware wiring.
 
-- [ ] **Step 3: Verify middleware tests pass**
+- [x] **Step 3: Verify middleware tests pass**
 
 Run: `GOCACHE=/private/tmp/jimu-go-build-cache go test ./internal/modules/auth/interfaces ./internal/platform/auth`
 
@@ -60,7 +60,7 @@ Expected: PASS.
 - Consumes: `ProtectedMiddleware(jwtUtil, loader, enforcer)`
 - Produces:业务模块路由注册前已挂载保护中间件。
 
-- [ ] **Step 1: Write failing bootstrap test**
+- [x] **Step 1: Write failing bootstrap test**
 
 Test `GET /api/v1/users` without token returns `401` when app bootstraps auth + user modules.
 
@@ -68,11 +68,11 @@ Run: `GOCACHE=/private/tmp/jimu-go-build-cache go test ./internal/app -run TestB
 
 Expected: FAIL, currently returns non-401.
 
-- [ ] **Step 2: Implement module middleware wiring**
+- [x] **Step 2: Implement module middleware wiring**
 
 Auth module creates role loader and enforcer. Bootstrap applies protected middleware before registering non-auth business modules.
 
-- [ ] **Step 3: Verify bootstrap test passes**
+- [x] **Step 3: Verify bootstrap test passes**
 
 Run: `GOCACHE=/private/tmp/jimu-go-build-cache go test ./internal/app -run TestBusinessRoutesRequireAuth`
 
@@ -83,7 +83,7 @@ Expected: PASS.
 **Files:**
 - Modify: `docs/superpowers/plans/2026-08-03-jimu-authz-routes.md`
 
-- [ ] **Step 1: Run full checks**
+- [x] **Step 1: Run full checks**
 
 Run:
 
@@ -96,7 +96,7 @@ git diff --check
 
 Expected: all commands exit 0.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 Run:
 

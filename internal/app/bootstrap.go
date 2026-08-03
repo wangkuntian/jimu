@@ -7,6 +7,8 @@ import (
 	"jimu/internal/contract"
 	platformhttp "jimu/internal/platform/http"
 	"jimu/internal/platform/observability"
+
+	"github.com/gin-gonic/gin"
 )
 
 func Bootstrap(container *Container, modules ...contract.Module) (*Application, error) {
@@ -19,14 +21,8 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		platformhttp.RegisterSwagger(router.Group("/swagger"))
 	}
 
-	for _, module := range modules {
-		if provider, ok := module.(contract.HTTPMiddlewareProvider); ok {
-			router.Use(provider.HTTPMiddleware()...)
-		}
-	}
-	for _, module := range modules {
-		module.RegisterHTTP(router)
-		container.Logger.Info("module registered", "name", module.Name())
+	if err := registerHTTP(router, container.Logger, modules...); err != nil {
+		return nil, err
 	}
 
 	sqlDB, err := container.DB.DB()
@@ -52,4 +48,47 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	}
 	components = append(components, management, public)
 	return NewApplication(time.Duration(cfg.HTTP.ShutdownTimeoutSec)*time.Second, components...), nil
+}
+
+type moduleLogger interface {
+	Info(args ...interface{})
+}
+
+type registerRouter interface {
+	contract.Router
+	Use(...gin.HandlerFunc) gin.IRoutes
+}
+
+func registerHTTP(router registerRouter, log moduleLogger, modules ...contract.Module) error {
+	for _, module := range modules {
+		if provider, ok := module.(contract.HTTPMiddlewareProvider); ok {
+			router.Use(provider.HTTPMiddleware()...)
+		}
+	}
+	var protected []gin.HandlerFunc
+	for _, module := range modules {
+		if provider, ok := module.(contract.ProtectedHTTPMiddlewareProvider); ok {
+			var err error
+			protected, err = provider.ProtectedHTTPMiddleware()
+			if err != nil {
+				return fmt.Errorf("configure protected middleware: %w", err)
+			}
+			break
+		}
+	}
+	for _, module := range modules {
+		if len(protected) > 0 && module.Name() != "auth" {
+			group := router.Group("", protected...)
+			module.RegisterHTTP(group)
+			if log != nil {
+				log.Info("module registered", "name", module.Name())
+			}
+			continue
+		}
+		module.RegisterHTTP(router)
+		if log != nil {
+			log.Info("module registered", "name", module.Name())
+		}
+	}
+	return nil
 }

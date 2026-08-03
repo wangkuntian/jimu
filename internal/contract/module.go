@@ -23,6 +23,10 @@ type HTTPMiddlewareProvider interface {
 	HTTPMiddleware() []gin.HandlerFunc
 }
 
+type ProtectedHTTPMiddlewareProvider interface {
+	ProtectedHTTPMiddleware() ([]gin.HandlerFunc, error)
+}
+
 // Router 抽象路由注册器
 type Router interface {
 	GET(relativePath string, handlers ...gin.HandlerFunc) gin.IRoutes

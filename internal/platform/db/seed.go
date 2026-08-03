@@ -21,18 +21,7 @@ func RunSeed(db *gorm.DB) error {
 
 	return db.Transaction(func(tx *gorm.DB) error {
 		// 1. 创建基础权限
-		permissions := []domain.Permission{
-			{Name: "用户查看", Resource: "/api/v1/users", Action: "GET"},
-			{Name: "用户创建", Resource: "/api/v1/users", Action: "POST"},
-			{Name: "用户修改", Resource: "/api/v1/users/*", Action: "PUT"},
-			{Name: "用户删除", Resource: "/api/v1/users/*", Action: "DELETE"},
-			{Name: "角色查看", Resource: "/api/v1/roles", Action: "GET"},
-			{Name: "角色创建", Resource: "/api/v1/roles", Action: "POST"},
-			{Name: "角色修改", Resource: "/api/v1/roles/*", Action: "PUT"},
-			{Name: "角色删除", Resource: "/api/v1/roles/*", Action: "DELETE"},
-			{Name: "权限查看", Resource: "/api/v1/permissions", Action: "GET"},
-			{Name: "权限创建", Resource: "/api/v1/permissions", Action: "POST"},
-		}
+		permissions := basePermissions()
 
 		for i := range permissions {
 			if err := tx.Where("resource = ? AND action = ?", permissions[i].Resource, permissions[i].Action).
@@ -83,4 +72,27 @@ func RunSeed(db *gorm.DB) error {
 
 		return nil
 	})
+}
+
+func basePermissions() []domain.Permission {
+	return []domain.Permission{
+		{Name: "用户列表", Resource: "/api/v1/users", Action: "GET"},
+		{Name: "用户创建", Resource: "/api/v1/users", Action: "POST"},
+		{Name: "用户详情", Resource: "/api/v1/users/*", Action: "GET"},
+		{Name: "用户修改", Resource: "/api/v1/users/*", Action: "PUT"},
+		{Name: "用户删除", Resource: "/api/v1/users/*", Action: "DELETE"},
+		{Name: "角色列表", Resource: "/api/v1/roles", Action: "GET"},
+		{Name: "角色创建", Resource: "/api/v1/roles", Action: "POST"},
+		{Name: "角色详情", Resource: "/api/v1/roles/*", Action: "GET"},
+		{Name: "角色修改", Resource: "/api/v1/roles/*", Action: "PUT"},
+		{Name: "角色删除", Resource: "/api/v1/roles/*", Action: "DELETE"},
+		{Name: "角色分配权限", Resource: "/api/v1/roles/*/permissions", Action: "POST"},
+		{Name: "权限列表", Resource: "/api/v1/permissions", Action: "GET"},
+		{Name: "权限创建", Resource: "/api/v1/permissions", Action: "POST"},
+		{Name: "权限详情", Resource: "/api/v1/permissions/*", Action: "GET"},
+		{Name: "权限修改", Resource: "/api/v1/permissions/*", Action: "PUT"},
+		{Name: "权限删除", Resource: "/api/v1/permissions/*", Action: "DELETE"},
+		{Name: "审计列表", Resource: "/api/v1/audits", Action: "GET"},
+		{Name: "审计详情", Resource: "/api/v1/audits/*", Action: "GET"},
+	}
 }

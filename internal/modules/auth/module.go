@@ -8,6 +8,7 @@ import (
 	"jimu/internal/modules/user/infrastructure"
 	"jimu/internal/platform/auth"
 
+	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
@@ -17,6 +18,7 @@ type Module struct {
 	service *application.AuthService
 	jwtUtil *auth.JWT
 	limiter *auth.Limiter
+	db      *gorm.DB
 }
 
 func New(db *gorm.DB, rdb *redis.Client, cfg config.AuthConfig, failClosed bool) *Module {
@@ -25,7 +27,7 @@ func New(db *gorm.DB, rdb *redis.Client, cfg config.AuthConfig, failClosed bool)
 	sessionStore := auth.NewRedisSessionStore(rdb)
 	limiter := auth.NewLimiter(rdb, failClosed)
 	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, cfg.AccessExpireMin)
-	return &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter}
+	return &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db}
 }
 
 func (m *Module) Name() string {
@@ -34,6 +36,14 @@ func (m *Module) Name() string {
 
 func (m *Module) RegisterHTTP(r contract.Router) {
 	interfaces.RegisterAuthRoutes(r.Group("/api/v1"), m.service, m.jwtUtil, m.cfg, m.limiter)
+}
+
+func (m *Module) ProtectedHTTPMiddleware() ([]gin.HandlerFunc, error) {
+	enforcer, err := auth.NewPathEnforcer()
+	if err != nil {
+		return nil, err
+	}
+	return interfaces.ProtectedMiddleware(m.jwtUtil, auth.NewDBAuthorizationStore(m.db), enforcer), nil
 }
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}
