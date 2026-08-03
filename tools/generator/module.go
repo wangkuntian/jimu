@@ -1,334 +1,215 @@
 package generator
 
 import (
+	"bytes"
 	"fmt"
+	"go/format"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 	"text/template"
-	"unicode"
 )
 
 // GenerateModule 生成完整的模块骨架（Clean Architecture 分层）
 func GenerateModule(name string) error {
-	dirs := []string{
-		filepath.Join("internal", "modules", name, "domain"),
-		filepath.Join("internal", "modules", name, "application"),
-		filepath.Join("internal", "modules", name, "infrastructure"),
-		filepath.Join("internal", "modules", name, "interfaces"),
+	root, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("get working directory: %w", err)
 	}
+	return GenerateModuleAt(root, name)
+}
 
-	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
+func GenerateModuleAt(root, name string) error {
+	data, targets, err := preflight(root, name)
+	if err != nil {
+		return err
 	}
-
-	// 生成各层文件
-	files := map[string]string{
-		filepath.Join("internal", "modules", name, "module.go"):                             moduleTemplate,
-		filepath.Join("internal", "modules", name, "domain", "entity.go"):                   entityTemplate,
-		filepath.Join("internal", "modules", name, "domain", "repository.go"):               repositoryTemplate,
-		filepath.Join("internal", "modules", name, "application", "service.go"):             serviceTemplate,
-		filepath.Join("internal", "modules", name, "application", "dto.go"):                 dtoTemplate,
-		filepath.Join("internal", "modules", name, "infrastructure", "mysql_repository.go"): mysqlRepoTemplate,
-		filepath.Join("internal", "modules", name, "interfaces", "handler.go"):              handlerTemplate,
-		filepath.Join("internal", "modules", name, "interfaces", "router.go"):               routerTemplate,
+	files, err := renderAll(data, targets)
+	if err != nil {
+		return err
 	}
-
-	for path, tmpl := range files {
-		if err := writeTemplate(path, tmpl, name); err != nil {
-			return fmt.Errorf("failed to create %s: %w", path, err)
-		}
+	if err := writeAll(root, files); err != nil {
+		return err
 	}
-
 	fmt.Printf("Module '%s' created at internal/modules/%s/\n", name, name)
-	fmt.Println("  domain/           - 实体和仓储接口")
-	fmt.Println("  application/      - 用例服务和 DTO")
-	fmt.Println("  infrastructure/   - 数据库实现")
-	fmt.Println("  interfaces/       - HTTP handler 和路由")
 	return nil
 }
 
-func writeTemplate(path, tmpl, name string) error {
-	t, err := template.New(name).Parse(tmpl)
+type templateData struct {
+	Name            string
+	NameCamel       string
+	VarName         string
+	TableName       string
+	RouteName       string
+	MigrationNumber string
+}
+
+type targetFile struct {
+	path     string
+	template string
+}
+
+var validModuleName = regexp.MustCompile(`^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`)
+
+var goKeywords = map[string]bool{
+	"break": true, "default": true, "func": true, "interface": true, "select": true,
+	"case": true, "defer": true, "go": true, "map": true, "struct": true,
+	"chan": true, "else": true, "goto": true, "package": true, "switch": true,
+	"const": true, "fallthrough": true, "if": true, "range": true, "type": true,
+	"continue": true, "for": true, "import": true, "return": true, "var": true,
+}
+
+func preflight(root, name string) (templateData, []targetFile, error) {
+	if !validModuleName.MatchString(name) || goKeywords[name] {
+		return templateData{}, nil, fmt.Errorf("invalid module name: %q", name)
+	}
+	for _, rel := range []string{"go.mod", filepath.Join("internal", "modules"), "migrations"} {
+		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
+			return templateData{}, nil, fmt.Errorf("repository missing %s: %w", rel, err)
+		}
+	}
+	migrationNumber, err := nextMigrationNumber(filepath.Join(root, "migrations"))
 	if err != nil {
-		return err
+		return templateData{}, nil, err
 	}
-	f, err := os.Create(path)
+	data := templateData{
+		Name:            name,
+		NameCamel:       camel(name),
+		VarName:         lowerCamel(name),
+		TableName:       name + "s",
+		RouteName:       strings.ReplaceAll(name, "_", "-") + "s",
+		MigrationNumber: migrationNumber,
+	}
+	targets := []targetFile{
+		{filepath.Join("internal", "modules", name, "module.go"), moduleTemplate},
+		{filepath.Join("internal", "modules", name, "domain", "entity.go"), entityTemplate},
+		{filepath.Join("internal", "modules", name, "domain", "repository.go"), repositoryTemplate},
+		{filepath.Join("internal", "modules", name, "application", "dto.go"), dtoTemplate},
+		{filepath.Join("internal", "modules", name, "application", "errors.go"), errorsTemplate},
+		{filepath.Join("internal", "modules", name, "application", "service.go"), serviceTemplate},
+		{filepath.Join("internal", "modules", name, "application", "service_test.go"), serviceTestTemplate},
+		{filepath.Join("internal", "modules", name, "infrastructure", "mysql_repository.go"), mysqlRepoTemplate},
+		{filepath.Join("internal", "modules", name, "interfaces", "handler.go"), handlerTemplate},
+		{filepath.Join("internal", "modules", name, "interfaces", "handler_test.go"), handlerTestTemplate},
+		{filepath.Join("internal", "modules", name, "interfaces", "router.go"), routerTemplate},
+		{filepath.Join("migrations", migrationNumber+"_create_"+data.TableName+".sql"), migrationTemplate},
+	}
+	for _, target := range targets {
+		if _, err := os.Stat(filepath.Join(root, target.path)); err == nil {
+			return templateData{}, nil, fmt.Errorf("target already exists: %s", target.path)
+		} else if !os.IsNotExist(err) {
+			return templateData{}, nil, fmt.Errorf("check target %s: %w", target.path, err)
+		}
+	}
+	return data, targets, nil
+}
+
+func nextMigrationNumber(dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return err
+		return "", fmt.Errorf("read migrations: %w", err)
 	}
-	defer func() { _ = f.Close() }()
-	return t.Execute(f, map[string]string{
-		"Name":      name,
-		"NameCamel": capitalize(name),
-	})
-}
-
-func capitalize(s string) string {
-	if s == "" {
-		return ""
+	max := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if len(name) < 3 {
+			continue
+		}
+		n, err := strconv.Atoi(name[:3])
+		if err == nil && n > max {
+			max = n
+		}
 	}
-	r := []rune(s)
-	r[0] = unicode.ToUpper(r[0])
-	return string(r)
+	return fmt.Sprintf("%03d", max+1), nil
 }
 
-const moduleTemplate = `package {{.Name}}
-
-import (
-	"jimu/internal/contract"
-	"jimu/internal/modules/{{.Name}}/infrastructure"
-	"jimu/internal/modules/{{.Name}}/application"
-	"jimu/internal/modules/{{.Name}}/interfaces"
-)
-
-type Module struct {
-	service *application.{{.NameCamel}}Service
-}
-
-func New(db *gorm.DB) *Module {
-	repo := infrastructure.NewMysql{{.NameCamel}}Repository(db)
-	service := application.New{{.NameCamel}}Service(repo)
-	return &Module{service: service}
-}
-
-func (m *Module) Name() string {
-	return "{{.Name}}"
-}
-
-func (m *Module) RegisterHTTP(r contract.Router) {
-	interfaces.Register{{.NameCamel}}Routes(r.Group("/api/v1"), m.service)
-}
-
-func (m *Module) RegisterJobs(j contract.JobRegistry) {}
-
-func (m *Module) RegisterEvents(e contract.EventBus) {}
-`
-
-const entityTemplate = `package domain
-
-import (
-	"time"
-
-	"gorm.io/gorm"
-)
-
-type {{.NameCamel}} struct {
-	ID        uint64         ` + "`gorm:\"primaryKey\" json:\"id\"`" + `
-	CreatedAt time.Time      ` + "`json:\"created_at\"`" + `
-	UpdatedAt time.Time      ` + "`json:\"updated_at\"`" + `
-	DeletedAt gorm.DeletedAt ` + "`gorm:\"index\" json:\"-\"`" + `
-}
-
-func ({{.NameCamel}}) TableName() string {
-	return "{{.Name}}s"
-}
-`
-
-const repositoryTemplate = `package domain
-
-import "context"
-
-type {{.NameCamel}}Repository interface {
-	FindByID(ctx context.Context, id uint64) (*{{.NameCamel}}, error)
-	List(ctx context.Context, offset, limit int) ([]{{.NameCamel}}, int64, error)
-	Create(ctx context.Context, entity *{{.NameCamel}}) error
-	Update(ctx context.Context, entity *{{.NameCamel}}) error
-	Delete(ctx context.Context, id uint64) error
-}
-`
-
-const serviceTemplate = `package application
-
-import (
-	"context"
-
-	"jimu/internal/modules/{{.Name}}/domain"
-	"jimu/internal/shared/errors"
-)
-
-type {{.NameCamel}}Service struct {
-	repo domain.{{.NameCamel}}Repository
-}
-
-func New{{.NameCamel}}Service(repo domain.{{.NameCamel}}Repository) *{{.NameCamel}}Service {
-	return &{{.NameCamel}}Service{repo: repo}
-}
-
-func (s *{{.NameCamel}}Service) Get(ctx context.Context, id uint64) (*domain.{{.NameCamel}}, error) {
-	entity, err := s.repo.FindByID(ctx, id)
-	if err != nil {
-		return nil, errors.New(errors.CodeNotFound, "{{.Name}} not found")
+func renderAll(data templateData, targets []targetFile) (map[string][]byte, error) {
+	files := make(map[string][]byte, len(targets))
+	for _, target := range targets {
+		t, err := template.New(filepath.Base(target.path)).Parse(target.template)
+		if err != nil {
+			return nil, err
+		}
+		var buf bytes.Buffer
+		if err := t.Execute(&buf, data); err != nil {
+			return nil, err
+		}
+		content := buf.Bytes()
+		if strings.HasSuffix(target.path, ".go") {
+			formatted, err := format.Source(content)
+			if err != nil {
+				return nil, fmt.Errorf("format %s: %w", target.path, err)
+			}
+			content = formatted
+		}
+		files[target.path] = content
 	}
-	return entity, nil
+	return files, nil
 }
 
-func (s *{{.NameCamel}}Service) List(ctx context.Context, page, pageSize int) ([]domain.{{.NameCamel}}, int64, error) {
-	offset := (page - 1) * pageSize
-	return s.repo.List(ctx, offset, pageSize)
-}
+var writeFile = os.WriteFile
 
-func (s *{{.NameCamel}}Service) Create(ctx context.Context, req Create{{.NameCamel}}Request) (*domain.{{.NameCamel}}, error) {
-	// TODO: implement
-	return nil, nil
-}
-
-func (s *{{.NameCamel}}Service) Update(ctx context.Context, id uint64, req Update{{.NameCamel}}Request) error {
-	// TODO: implement
+func writeAll(root string, files map[string][]byte) error {
+	createdFiles := make([]string, 0, len(files))
+	createdDirs := make([]string, 0, len(files))
+	seenDirs := make(map[string]bool)
+	for rel, content := range files {
+		path := filepath.Join(root, rel)
+		dir := filepath.Dir(path)
+		if err := mkdirAllTracked(root, dir, seenDirs, &createdDirs); err != nil {
+			rollback(createdFiles, createdDirs)
+			return err
+		}
+		if err := writeFile(path, content, 0o644); err != nil {
+			rollback(createdFiles, createdDirs)
+			return fmt.Errorf("write %s: %w", rel, err)
+		}
+		createdFiles = append(createdFiles, path)
+	}
 	return nil
 }
 
-func (s *{{.NameCamel}}Service) Delete(ctx context.Context, id uint64) error {
-	return s.repo.Delete(ctx, id)
-}
-`
-
-const dtoTemplate = `package application
-
-type Create{{.NameCamel}}Request struct {
-	// TODO: add fields
-}
-
-type Update{{.NameCamel}}Request struct {
-	// TODO: add fields
-}
-
-type {{.NameCamel}}Response struct {
-	ID uint64 ` + "`json:\"id\"`" + `
-}
-`
-
-const mysqlRepoTemplate = `package infrastructure
-
-import (
-	"context"
-
-	"jimu/internal/modules/{{.Name}}/domain"
-
-	"gorm.io/gorm"
-)
-
-type mysql{{.NameCamel}}Repository struct {
-	db *gorm.DB
-}
-
-func NewMysql{{.NameCamel}}Repository(db *gorm.DB) domain.{{.NameCamel}}Repository {
-	return &mysql{{.NameCamel}}Repository{db: db}
-}
-
-func (r *mysql{{.NameCamel}}Repository) FindByID(ctx context.Context, id uint64) (*domain.{{.NameCamel}}, error) {
-	var entity domain.{{.NameCamel}}
-	err := r.db.WithContext(ctx).First(&entity, id).Error
-	return &entity, err
-}
-
-func (r *mysql{{.NameCamel}}Repository) List(ctx context.Context, offset, limit int) ([]domain.{{.NameCamel}}, int64, error) {
-	var items []domain.{{.NameCamel}}
-	var total int64
-	db := r.db.WithContext(ctx).Model(&domain.{{.NameCamel}}{})
-	db.Count(&total)
-	err := db.Offset(offset).Limit(limit).Find(&items).Error
-	return items, total, err
-}
-
-func (r *mysql{{.NameCamel}}Repository) Create(ctx context.Context, entity *domain.{{.NameCamel}}) error {
-	return r.db.WithContext(ctx).Create(entity).Error
-}
-
-func (r *mysql{{.NameCamel}}Repository) Update(ctx context.Context, entity *domain.{{.NameCamel}}) error {
-	return r.db.WithContext(ctx).Save(entity).Error
-}
-
-func (r *mysql{{.NameCamel}}Repository) Delete(ctx context.Context, id uint64) error {
-	return r.db.WithContext(ctx).Delete(&domain.{{.NameCamel}}{}, id).Error
-}
-`
-
-const handlerTemplate = `package interfaces
-
-import (
-	"strconv"
-
-	"jimu/internal/modules/{{.Name}}/application"
-	"jimu/internal/shared/pagination"
-	"jimu/internal/shared/response"
-
-	"github.com/gin-gonic/gin"
-)
-
-type {{.NameCamel}}Handler struct {
-	service *application.{{.NameCamel}}Service
-}
-
-func New{{.NameCamel}}Handler(service *application.{{.NameCamel}}Service) *{{.NameCamel}}Handler {
-	return &{{.NameCamel}}Handler{service: service}
-}
-
-func (h *{{.NameCamel}}Handler) Create(c *gin.Context) {
-	var req application.Create{{.NameCamel}}Request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, gin.Error{})
-		return
+func mkdirAllTracked(root, dir string, seen map[string]bool, created *[]string) error {
+	if seen[dir] {
+		return nil
 	}
-	// TODO: implement
-}
-
-func (h *{{.NameCamel}}Handler) Get(c *gin.Context) {
-	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	entity, err := h.service.Get(c.Request.Context(), id)
-	if err != nil {
-		response.Fail(c, err)
-		return
+	seen[dir] = true
+	if _, err := os.Stat(dir); err == nil {
+		return nil
 	}
-	response.OK(c, entity)
-}
-
-func (h *{{.NameCamel}}Handler) List(c *gin.Context) {
-	var p pagination.Pagination
-	if err := c.ShouldBindQuery(&p); err != nil {
-		response.Fail(c, gin.Error{})
-		return
+	parent := filepath.Dir(dir)
+	if parent != dir && strings.HasPrefix(parent, root) {
+		if err := mkdirAllTracked(root, parent, seen, created); err != nil {
+			return err
+		}
 	}
-	items, total, err := h.service.List(c.Request.Context(), p.Page, p.PageSize)
-	if err != nil {
-		response.Fail(c, err)
-		return
+	if err := os.Mkdir(dir, 0o755); err != nil && !os.IsExist(err) {
+		return fmt.Errorf("create directory %s: %w", dir, err)
 	}
-	response.Page(c, items, total, p.Page, p.PageSize)
+	*created = append(*created, dir)
+	return nil
 }
 
-func (h *{{.NameCamel}}Handler) Update(c *gin.Context) {
-	// TODO: implement
-}
-
-func (h *{{.NameCamel}}Handler) Delete(c *gin.Context) {
-	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err := h.service.Delete(c.Request.Context(), id); err != nil {
-		response.Fail(c, err)
-		return
+func rollback(files, dirs []string) {
+	for i := len(files) - 1; i >= 0; i-- {
+		_ = os.Remove(files[i])
 	}
-	response.OK(c, nil)
-}
-`
-
-const routerTemplate = `package interfaces
-
-import (
-	"jimu/internal/modules/{{.Name}}/application"
-
-	"github.com/gin-gonic/gin"
-)
-
-func Register{{.NameCamel}}Routes(r *gin.RouterGroup, service *application.{{.NameCamel}}Service) {
-	handler := New{{.NameCamel}}Handler(service)
-	{{.Name}}s := r.Group("/{{.Name}}s")
-	{
-		{{.Name}}s.POST("", handler.Create)
-		{{.Name}}s.GET("", handler.List)
-		{{.Name}}s.GET("/:id", handler.Get)
-		{{.Name}}s.PUT("/:id", handler.Update)
-		{{.Name}}s.DELETE("/:id", handler.Delete)
+	for i := len(dirs) - 1; i >= 0; i-- {
+		_ = os.Remove(dirs[i])
 	}
 }
-`
+
+func camel(name string) string {
+	parts := strings.Split(name, "_")
+	for i, part := range parts {
+		parts[i] = strings.ToUpper(part[:1]) + part[1:]
+	}
+	return strings.Join(parts, "")
+}
+
+func lowerCamel(name string) string {
+	value := camel(name)
+	return strings.ToLower(value[:1]) + value[1:]
+}

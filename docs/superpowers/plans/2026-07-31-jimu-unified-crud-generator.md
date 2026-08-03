@@ -354,7 +354,7 @@ git commit -m "feat: unify module crud contracts"
 - 新增 `GenerateModuleAt(root, name string) error` 供 CLI 内部和测试使用。
 - 模板数据包含 `Name`、`NameCamel`、`TableName`、`RouteName` 和 `MigrationNumber`。
 
-- [ ] **步骤 1：写名称和冲突保护失败测试**
+- [x] **步骤 1：写名称和冲突保护失败测试**
 
 在 `module_test.go` 增加表驱动测试：
 
@@ -387,7 +387,7 @@ func TestGenerateModuleDoesNotOverwriteExistingTarget(t *testing.T) {
 }
 ```
 
-- [ ] **步骤 2：运行测试并确认新入口不存在**
+- [x] **步骤 2：运行测试并确认新入口不存在**
 
 运行：
 
@@ -397,7 +397,7 @@ GOCACHE=/private/tmp/jimu-go-build-cache go test ./tools/generator -run 'TestGen
 
 预期：编译失败，报告 `undefined: GenerateModuleAt`。
 
-- [ ] **步骤 3：实现预检和模板数据**
+- [x] **步骤 3：实现预检和模板数据**
 
 实现：
 
@@ -419,7 +419,7 @@ func GenerateModuleAt(root, name string) error {
 
 名称校验使用正则、Go keyword set 和 snake_case 转换；仓库根目录必须包含 `go.mod`、`internal/modules` 和 `migrations`。预检枚举全部目标路径，任何一个存在立即失败。
 
-- [ ] **步骤 4：写完整输出与 migration 失败测试**
+- [x] **步骤 4：写完整输出与 migration 失败测试**
 
 测试 `order_item` 生成 `OrderItem`，扫描 `001`、`006` 后生成 `007_create_order_items.sql`，并断言以下文件全部存在：Module、Entity、Repository、DTO、Service、MySQL Repository、Handler、Router、Service Test、Handler Test、migration。
 
@@ -433,7 +433,7 @@ for _, rel := range requiredFiles("order_item", "007") {
 
 遍历生成文件，断言不包含未实现标记和 `gin.Error{}`，并使用 `format.Source` 验证所有 `.go` 文件已格式化。
 
-- [ ] **步骤 5：运行完整输出测试并确认旧模板不满足契约**
+- [x] **步骤 5：运行完整输出测试并确认旧模板不满足契约**
 
 运行：
 
@@ -443,7 +443,7 @@ GOCACHE=/private/tmp/jimu-go-build-cache go test ./tools/generator -run 'TestGen
 
 预期：因缺少 migration、测试文件、默认字段和完整实现而失败。
 
-- [ ] **步骤 6：实现完整模板**
+- [x] **步骤 6：实现完整模板**
 
 `templates.go` 中的生成模块必须遵循任务 1 的最终签名。默认 DTO：
 
@@ -469,11 +469,11 @@ type ProductResponse struct {
 
 migration 必须创建唯一 `name`、`description`、时间和 `deleted_at` 索引，并提供对应 Down。生成测试使用内存 fake，不依赖真实 MariaDB 或 Redis。
 
-- [ ] **步骤 7：写写入失败回滚测试**
+- [x] **步骤 7：写写入失败回滚测试**
 
 通过包内可替换的窄文件写入函数制造第 N 次写入失败，断言本次生成的文件和空目录全部清理，预先存在的 `migrations/001_base.sql` 保持不变。测试结束后恢复默认 writer，避免污染其他测试。
 
-- [ ] **步骤 8：运行回滚测试并确认失败**
+- [x] **步骤 8：运行回滚测试并确认失败**
 
 运行：
 
@@ -483,11 +483,11 @@ GOCACHE=/private/tmp/jimu-go-build-cache go test ./tools/generator -run 'TestGen
 
 预期：在实现回滚前能够观察到残留文件，测试失败。
 
-- [ ] **步骤 9：实现原子式渲染和失败清理**
+- [x] **步骤 9：实现原子式渲染和失败清理**
 
 `renderAll` 在内存中完成所有 `template.Execute` 和 `format.Source`。`writeAll` 记录本次创建的文件和目录，任何写入失败时按反向顺序删除这些路径；不得删除预检前已经存在的目录或文件。
 
-- [ ] **步骤 10：验证生成模块编译并提交**
+- [x] **步骤 10：验证生成模块编译并提交**
 
 `compile_test.go` 在临时仓库写入最小 `go.mod`，复制生成模块依赖的 `internal/contract`、`internal/shared` 接口 stub，运行：
 
