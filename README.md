@@ -251,6 +251,8 @@ curl http://127.0.0.1:9090/metrics
 
 公共 API 固定在 `/api/v1` 下。响应使用 `{code,message,data}` 外形；错误响应可省略 `data`，分页响应额外包含 `total`、`page`、`page_size`。`X-Request-ID` 会写入响应 Header，统一响应体在存在 request ID 时也包含 `request_id`。
 
+创建接口成功返回 `201`，删除接口成功返回空响应体 `204`，其他成功响应返回 `200`。User、Role、Permission 提供完整 CRUD；Audit 提供只读 `List` 和 `Get`。
+
 HTTP status 表达协议结果，业务 `code` 表达稳定业务结果。内部错误对外固定为 `{"code":1005,"message":"internal error"}`，不返回 SQL、文件路径、堆栈或底层基础设施错误。
 
 列表接口统一支持以下查询参数：
@@ -261,7 +263,6 @@ HTTP status 表达协议结果，业务 `code` 表达稳定业务结果。内部
 | `page_size` | `20` | 最小 `1`，最大 `100` |
 | `sort` | `id` | 必须在 handler allow-list 内 |
 | `order` | `desc` | 仅 `asc` 或 `desc` |
-| `filter` | 空 | 自动 trim 空白 |
 
 ## API 契约检查
 
@@ -366,14 +367,20 @@ internal/modules/product/
     entity.go            # 实体（含基础字段 + gorm tag）
     repository.go        # 仓储接口（CRUD）
   application/
-    service.go           # 用例服务（CRUD 框架）
+    service.go           # 用例服务（完整 CRUD）
+    service_test.go      # Service 行为测试
     dto.go               # 请求/响应 DTO
   infrastructure/
     mysql_repository.go  # Gorm 实现
   interfaces/
     handler.go           # HTTP handler（CRUD 端点）
+    handler_test.go      # HTTP 契约测试
     router.go            # 路由注册（RESTful）
+migrations/
+  00N_create_products.sql # Goose migration，含 name/description/时间/软删除字段
 ```
+
+生成器会同时创建默认 `name`、`description` 字段、分页排序、`201/204` 状态码、migration 和测试文件；生成结果不包含未实现占位。
 
 ### 注册模块
 

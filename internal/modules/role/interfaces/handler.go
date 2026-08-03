@@ -19,6 +19,18 @@ func NewRoleHandler(service *application.RoleService) *RoleHandler {
 	return &RoleHandler{service: service}
 }
 
+// Create godoc
+// @Summary      Create role
+// @Tags         roles
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      application.CreateRoleRequest  true  "Role info"
+// @Success      201   {object}  response.Body
+// @Failure      400   {object}  contract.ErrorResponse
+// @Failure      409   {object}  contract.ErrorResponse
+// @Failure      500   {object}  contract.ErrorResponse
+// @Router       /roles [post]
 func (h *RoleHandler) Create(c *gin.Context) {
 	var req application.CreateRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -33,6 +45,17 @@ func (h *RoleHandler) Create(c *gin.Context) {
 	response.Created(c, role)
 }
 
+// Get godoc
+// @Summary      Get role
+// @Tags         roles
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "Role ID"
+// @Success      200  {object}  response.Body
+// @Failure      400  {object}  contract.ErrorResponse
+// @Failure      404  {object}  contract.ErrorResponse
+// @Failure      500  {object}  contract.ErrorResponse
+// @Router       /roles/{id} [get]
 func (h *RoleHandler) Get(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -47,6 +70,19 @@ func (h *RoleHandler) Get(c *gin.Context) {
 	response.OK(c, role)
 }
 
+// List godoc
+// @Summary      List roles
+// @Tags         roles
+// @Produce      json
+// @Security     BearerAuth
+// @Param        page       query     int     false  "Page"
+// @Param        page_size  query     int     false  "Page size"
+// @Param        sort       query     string  false  "Sort field"
+// @Param        order      query     string  false  "Sort order"
+// @Success      200        {object}  contract.PageResponse
+// @Failure      400        {object}  contract.ErrorResponse
+// @Failure      500        {object}  contract.ErrorResponse
+// @Router       /roles [get]
 func (h *RoleHandler) List(c *gin.Context) {
 	var p pagination.Pagination
 	if err := c.ShouldBindQuery(&p); err != nil {
@@ -65,6 +101,20 @@ func (h *RoleHandler) List(c *gin.Context) {
 	response.Page(c, roles, total, p.Page, p.PageSize)
 }
 
+// Update godoc
+// @Summary      Update role
+// @Tags         roles
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id    path      int                            true  "Role ID"
+// @Param        body  body      application.UpdateRoleRequest  true  "Role info"
+// @Success      200   {object}  response.Body
+// @Failure      400   {object}  contract.ErrorResponse
+// @Failure      404   {object}  contract.ErrorResponse
+// @Failure      409   {object}  contract.ErrorResponse
+// @Failure      500   {object}  contract.ErrorResponse
+// @Router       /roles/{id} [put]
 func (h *RoleHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -83,6 +133,16 @@ func (h *RoleHandler) Update(c *gin.Context) {
 	response.OK(c, nil)
 }
 
+// Delete godoc
+// @Summary      Delete role
+// @Tags         roles
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path  int  true  "Role ID"
+// @Success      204
+// @Failure      400  {object}  contract.ErrorResponse
+// @Failure      500  {object}  contract.ErrorResponse
+// @Router       /roles/{id} [delete]
 func (h *RoleHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -96,6 +156,18 @@ func (h *RoleHandler) Delete(c *gin.Context) {
 	response.NoContent(c)
 }
 
+// AssignPermissions godoc
+// @Summary      Assign role permissions
+// @Tags         roles
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id    path      int                                   true  "Role ID"
+// @Param        body  body      application.AssignPermissionsRequest  true  "Permission IDs"
+// @Success      200   {object}  response.Body
+// @Failure      400   {object}  contract.ErrorResponse
+// @Failure      500   {object}  contract.ErrorResponse
+// @Router       /roles/{id}/permissions [post]
 func (h *RoleHandler) AssignPermissions(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {

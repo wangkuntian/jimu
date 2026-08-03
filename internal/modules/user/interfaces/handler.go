@@ -26,7 +26,11 @@ func NewUserHandler(service *application.UserService) *UserHandler {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      application.CreateUserRequest  true  "User info"
-// @Success      200   {object}  response.Body
+// @Security     BearerAuth
+// @Success      201  {object}  response.Body
+// @Failure      400  {object}  contract.ErrorResponse
+// @Failure      409  {object}  contract.ErrorResponse
+// @Failure      500  {object}  contract.ErrorResponse
 // @Router       /users [post]
 func (h *UserHandler) Create(c *gin.Context) {
 	var req application.CreateUserRequest
@@ -42,6 +46,17 @@ func (h *UserHandler) Create(c *gin.Context) {
 	response.Created(c, user)
 }
 
+// Get godoc
+// @Summary      Get user
+// @Tags         users
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "User ID"
+// @Success      200  {object}  response.Body
+// @Failure      400  {object}  contract.ErrorResponse
+// @Failure      404  {object}  contract.ErrorResponse
+// @Failure      500  {object}  contract.ErrorResponse
+// @Router       /users/{id} [get]
 func (h *UserHandler) Get(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -56,6 +71,19 @@ func (h *UserHandler) Get(c *gin.Context) {
 	response.OK(c, user)
 }
 
+// List godoc
+// @Summary      List users
+// @Tags         users
+// @Produce      json
+// @Security     BearerAuth
+// @Param        page       query     int     false  "Page"
+// @Param        page_size  query     int     false  "Page size"
+// @Param        sort       query     string  false  "Sort field"
+// @Param        order      query     string  false  "Sort order"
+// @Success      200        {object}  contract.PageResponse
+// @Failure      400        {object}  contract.ErrorResponse
+// @Failure      500        {object}  contract.ErrorResponse
+// @Router       /users [get]
 func (h *UserHandler) List(c *gin.Context) {
 	var p pagination.Pagination
 	if err := c.ShouldBindQuery(&p); err != nil {
@@ -78,6 +106,19 @@ func (h *UserHandler) List(c *gin.Context) {
 	response.Page(c, users, total, p.Page, p.PageSize)
 }
 
+// Update godoc
+// @Summary      Update user
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id    path      int                            true  "User ID"
+// @Param        body  body      application.UpdateUserRequest  true  "User info"
+// @Success      200   {object}  response.Body
+// @Failure      400   {object}  contract.ErrorResponse
+// @Failure      404   {object}  contract.ErrorResponse
+// @Failure      500   {object}  contract.ErrorResponse
+// @Router       /users/{id} [put]
 func (h *UserHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -96,6 +137,16 @@ func (h *UserHandler) Update(c *gin.Context) {
 	response.OK(c, nil)
 }
 
+// Delete godoc
+// @Summary      Delete user
+// @Tags         users
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path  int  true  "User ID"
+// @Success      204
+// @Failure      400  {object}  contract.ErrorResponse
+// @Failure      500  {object}  contract.ErrorResponse
+// @Router       /users/{id} [delete]
 func (h *UserHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {

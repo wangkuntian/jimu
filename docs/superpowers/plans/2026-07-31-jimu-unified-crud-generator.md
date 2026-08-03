@@ -542,7 +542,7 @@ git commit -m "feat: generate complete crud modules"
 - 所有受保护路由声明 `@Security BearerAuth`。
 - List 路由声明四个统一查询参数。
 
-- [ ] **步骤 1：写 OpenAPI 路径失败测试**
+- [x] **步骤 1：写 OpenAPI 路径失败测试**
 
 测试读取 `docs/openapi/swagger.json`，解码为结构化 map，并断言下列 path/method 全部存在：
 
@@ -567,7 +567,7 @@ required := map[string][]string{
 
 List operation 必须包含 `page`、`page_size`、`sort`、`order`；除公开 Auth 路由外的操作必须含 BearerAuth security。
 
-- [ ] **步骤 2：运行测试并确认当前 OpenAPI 路径不完整**
+- [x] **步骤 2：运行测试并确认当前 OpenAPI 路径不完整**
 
 运行：
 
@@ -577,7 +577,7 @@ GOCACHE=/private/tmp/jimu-go-build-cache go test ./internal/contract -run TestOp
 
 预期：失败并报告缺少 `/users/{id}`、Role、Permission、Audit 等路径。
 
-- [ ] **步骤 3：增加稳定文档 Schema 和 Swagger 注解**
+- [x] **步骤 3：增加稳定文档 Schema 和 Swagger 注解**
 
 `internal/contract/openapi.go` 定义仅用于文档的结构：
 
@@ -601,7 +601,7 @@ type PageResponse struct {
 
 每个 Handler 注解明确 `@Param id path int true`、List 的四个 query 参数、请求 DTO、成功 status、`400/401/403/404/409/500` 错误和 BearerAuth。删除接口使用 `@Success 204`。
 
-- [ ] **步骤 4：生成 OpenAPI 并运行契约测试**
+- [x] **步骤 4：生成 OpenAPI 并运行契约测试**
 
 运行：
 
@@ -612,7 +612,7 @@ GOCACHE=/private/tmp/jimu-go-build-cache go test ./internal/contract -run TestOp
 
 预期：OpenAPI 测试通过，JSON 中包含全部路径与方法。
 
-- [ ] **步骤 5：验证 Swagger 生成稳定性**
+- [x] **步骤 5：验证 Swagger 生成稳定性**
 
 运行：
 
@@ -623,11 +623,11 @@ git diff --exit-code docs/openapi
 
 预期：第二次生成无新增 diff。
 
-- [ ] **步骤 6：更新 README 的 API 状态与生成器说明**
+- [x] **步骤 6：更新 README 的 API 状态与生成器说明**
 
 README 明确 Create `201`、Delete `204`、统一列表参数、Audit Get，以及生成器默认生成完整 CRUD、migration 和测试。删除与旧 `200` 或不完整骨架冲突的描述。
 
-- [ ] **步骤 7：运行完整 Go 验证**
+- [x] **步骤 7：运行完整 Go 验证**
 
 运行：
 
@@ -644,7 +644,7 @@ git diff --check
 
 预期：全部命令退出码为 0。
 
-- [ ] **步骤 8：构建最终 Docker 镜像**
+- [x] **步骤 8：构建最终 Docker 镜像**
 
 运行：
 
@@ -654,7 +654,7 @@ docker build -t jimu:unified-crud-test .
 
 预期：镜像构建完成，Server 和 CLI 均在 builder stage 编译成功。
 
-- [ ] **步骤 9：提交 OpenAPI 和文档**
+- [x] **步骤 9：提交 OpenAPI 和文档**
 
 ```bash
 git add internal/modules/auth/interfaces/handler.go \
@@ -667,7 +667,7 @@ git add internal/modules/auth/interfaces/handler.go \
 git commit -m "docs: complete openapi crud contract"
 ```
 
-- [ ] **步骤 10：检查最终提交边界和工作区状态**
+- [x] **步骤 10：检查最终提交边界和工作区状态**
 
 运行：
 

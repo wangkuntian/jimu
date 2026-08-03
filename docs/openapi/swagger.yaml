@@ -1,5 +1,36 @@
 basePath: /api/v1
 definitions:
+  application.AssignPermissionsRequest:
+    properties:
+      permission_ids:
+        items:
+          type: integer
+        type: array
+    required:
+    - permission_ids
+    type: object
+  application.CreatePermissionRequest:
+    properties:
+      action:
+        type: string
+      name:
+        type: string
+      resource:
+        type: string
+    required:
+    - action
+    - name
+    - resource
+    type: object
+  application.CreateRoleRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+    required:
+    - name
+    type: object
   application.CreateUserRequest:
     properties:
       password:
@@ -13,6 +44,61 @@ definitions:
     required:
     - password
     - username
+    type: object
+  application.UpdatePermissionRequest:
+    properties:
+      action:
+        type: string
+      name:
+        type: string
+      resource:
+        type: string
+    required:
+    - action
+    - name
+    - resource
+    type: object
+  application.UpdateRoleRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  application.UpdateUserRequest:
+    properties:
+      status:
+        enum:
+        - 0
+        - 1
+        type: integer
+    type: object
+  contract.ErrorResponse:
+    properties:
+      code:
+        type: integer
+      message:
+        type: string
+      request_id:
+        type: string
+    type: object
+  contract.PageResponse:
+    properties:
+      code:
+        type: integer
+      data: {}
+      message:
+        type: string
+      page:
+        type: integer
+      page_size:
+        type: integer
+      request_id:
+        type: string
+      total:
+        type: integer
     type: object
   interfaces.loginRequest:
     properties:
@@ -48,6 +134,77 @@ info:
   title: Jimu API
   version: "1.0"
 paths:
+  /audits:
+    get:
+      parameters:
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Sort field
+        in: query
+        name: sort
+        type: string
+      - description: Sort order
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/contract.PageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List audit logs
+      tags:
+      - audits
+  /audits/{id}:
+    get:
+      parameters:
+      - description: Audit log ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get audit log
+      tags:
+      - audits
   /auth/login:
     post:
       consumes:
@@ -144,7 +301,427 @@ paths:
       summary: Register user
       tags:
       - auth
+  /permissions:
+    get:
+      parameters:
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Sort field
+        in: query
+        name: sort
+        type: string
+      - description: Sort order
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/contract.PageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List permissions
+      tags:
+      - permissions
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Permission info
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/application.CreatePermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create permission
+      tags:
+      - permissions
+  /permissions/{id}:
+    delete:
+      parameters:
+      - description: Permission ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete permission
+      tags:
+      - permissions
+    get:
+      parameters:
+      - description: Permission ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get permission
+      tags:
+      - permissions
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Permission ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Permission info
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/application.UpdatePermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update permission
+      tags:
+      - permissions
+  /roles:
+    get:
+      parameters:
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Sort field
+        in: query
+        name: sort
+        type: string
+      - description: Sort order
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/contract.PageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List roles
+      tags:
+      - roles
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Role info
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/application.CreateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create role
+      tags:
+      - roles
+  /roles/{id}:
+    delete:
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete role
+      tags:
+      - roles
+    get:
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get role
+      tags:
+      - roles
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Role info
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/application.UpdateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update role
+      tags:
+      - roles
+  /roles/{id}/permissions:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Permission IDs
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/application.AssignPermissionsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Assign role permissions
+      tags:
+      - roles
   /users:
+    get:
+      parameters:
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Sort field
+        in: query
+        name: sort
+        type: string
+      - description: Sort order
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/contract.PageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List users
+      tags:
+      - users
     post:
       consumes:
       - application/json
@@ -159,11 +736,121 @@ paths:
       produces:
       - application/json
       responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create user
+      tags:
+      - users
+  /users/{id}:
+    delete:
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete user
+      tags:
+      - users
+    get:
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
         "200":
           description: OK
           schema:
             $ref: '#/definitions/response.Body'
-      summary: Create user
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: User info
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/application.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update user
       tags:
       - users
 securityDefinitions:

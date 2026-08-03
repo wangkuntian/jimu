@@ -19,6 +19,18 @@ func NewPermissionHandler(service *application.PermissionService) *PermissionHan
 	return &PermissionHandler{service: service}
 }
 
+// Create godoc
+// @Summary      Create permission
+// @Tags         permissions
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      application.CreatePermissionRequest  true  "Permission info"
+// @Success      201   {object}  response.Body
+// @Failure      400   {object}  contract.ErrorResponse
+// @Failure      409   {object}  contract.ErrorResponse
+// @Failure      500   {object}  contract.ErrorResponse
+// @Router       /permissions [post]
 func (h *PermissionHandler) Create(c *gin.Context) {
 	var req application.CreatePermissionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -33,6 +45,17 @@ func (h *PermissionHandler) Create(c *gin.Context) {
 	response.Created(c, perm)
 }
 
+// Get godoc
+// @Summary      Get permission
+// @Tags         permissions
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "Permission ID"
+// @Success      200  {object}  response.Body
+// @Failure      400  {object}  contract.ErrorResponse
+// @Failure      404  {object}  contract.ErrorResponse
+// @Failure      500  {object}  contract.ErrorResponse
+// @Router       /permissions/{id} [get]
 func (h *PermissionHandler) Get(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -47,6 +70,19 @@ func (h *PermissionHandler) Get(c *gin.Context) {
 	response.OK(c, perm)
 }
 
+// List godoc
+// @Summary      List permissions
+// @Tags         permissions
+// @Produce      json
+// @Security     BearerAuth
+// @Param        page       query     int     false  "Page"
+// @Param        page_size  query     int     false  "Page size"
+// @Param        sort       query     string  false  "Sort field"
+// @Param        order      query     string  false  "Sort order"
+// @Success      200        {object}  contract.PageResponse
+// @Failure      400        {object}  contract.ErrorResponse
+// @Failure      500        {object}  contract.ErrorResponse
+// @Router       /permissions [get]
 func (h *PermissionHandler) List(c *gin.Context) {
 	var p pagination.Pagination
 	if err := c.ShouldBindQuery(&p); err != nil {
@@ -65,6 +101,20 @@ func (h *PermissionHandler) List(c *gin.Context) {
 	response.Page(c, perms, total, p.Page, p.PageSize)
 }
 
+// Update godoc
+// @Summary      Update permission
+// @Tags         permissions
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id    path      int                                  true  "Permission ID"
+// @Param        body  body      application.UpdatePermissionRequest  true  "Permission info"
+// @Success      200   {object}  response.Body
+// @Failure      400   {object}  contract.ErrorResponse
+// @Failure      404   {object}  contract.ErrorResponse
+// @Failure      409   {object}  contract.ErrorResponse
+// @Failure      500   {object}  contract.ErrorResponse
+// @Router       /permissions/{id} [put]
 func (h *PermissionHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -83,6 +133,16 @@ func (h *PermissionHandler) Update(c *gin.Context) {
 	response.OK(c, nil)
 }
 
+// Delete godoc
+// @Summary      Delete permission
+// @Tags         permissions
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path  int  true  "Permission ID"
+// @Success      204
+// @Failure      400  {object}  contract.ErrorResponse
+// @Failure      500  {object}  contract.ErrorResponse
+// @Router       /permissions/{id} [delete]
 func (h *PermissionHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
