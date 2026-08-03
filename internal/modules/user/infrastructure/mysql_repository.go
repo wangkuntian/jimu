@@ -6,6 +6,7 @@ import (
 	"jimu/internal/modules/user/domain"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type mysqlRepository struct {
@@ -34,12 +35,17 @@ func (r *mysqlRepository) FindByUsername(ctx context.Context, username string) (
 	return &user, nil
 }
 
-func (r *mysqlRepository) List(ctx context.Context, offset, limit int) ([]domain.User, int64, error) {
+func (r *mysqlRepository) List(ctx context.Context, offset, limit int, sort, order string) ([]domain.User, int64, error) {
 	var users []domain.User
 	var total int64
 	db := r.db.WithContext(ctx).Model(&domain.User{})
-	db.Count(&total)
-	err := db.Offset(offset).Limit(limit).Find(&users).Error
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := db.Order(clause.OrderByColumn{
+		Column: clause.Column{Name: sort},
+		Desc:   order == "desc",
+	}).Offset(offset).Limit(limit).Find(&users).Error
 	return users, total, err
 }
 

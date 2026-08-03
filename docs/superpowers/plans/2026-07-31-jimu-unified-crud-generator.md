@@ -94,7 +94,7 @@
 - `response.NoContent(c)` 输出 `204` 且 body 长度为 0。
 - `errors.CodeConflict` 映射 HTTP `409`。
 
-- [ ] **步骤 1：先写共享响应 helper 的失败测试**
+- [x] **步骤 1：先写共享响应 helper 的失败测试**
 
 在 `internal/shared/response/response_test.go` 增加：
 
@@ -130,7 +130,7 @@ func TestNoContentWritesNoBody(t *testing.T) {
 }
 ```
 
-- [ ] **步骤 2：运行测试并确认因 helper 不存在而失败**
+- [x] **步骤 2：运行测试并确认因 helper 不存在而失败**
 
 运行：
 
@@ -140,7 +140,7 @@ GOCACHE=/private/tmp/jimu-go-build-cache go test ./internal/shared/response -run
 
 预期：编译失败，明确报告 `undefined: Created` 和 `undefined: NoContent`。
 
-- [ ] **步骤 3：实现共享状态码和响应 helper**
+- [x] **步骤 3：实现共享状态码和响应 helper**
 
 在 `internal/shared/errors/errors.go` 增加：
 
@@ -164,7 +164,7 @@ func NoContent(c *gin.Context) {
 
 并在 `StatusForCode` 中将 `CodeConflict` 映射到 `http.StatusConflict`。
 
-- [ ] **步骤 4：运行共享响应测试并确认通过**
+- [x] **步骤 4：运行共享响应测试并确认通过**
 
 运行：
 
@@ -174,7 +174,7 @@ GOCACHE=/private/tmp/jimu-go-build-cache go test ./internal/shared/response ./in
 
 预期：两个 package 均 `ok`。
 
-- [ ] **步骤 5：为四个 Service 写失败测试并固定接口**
+- [x] **步骤 5：为四个 Service 写失败测试并固定接口**
 
 每个 Service 测试使用实现对应 Repository interface 的内存 fake，至少覆盖以下断言：
 
@@ -204,7 +204,7 @@ func TestUserResponseDoesNotContainPassword(t *testing.T) {
 
 Role 和 Permission 测试还必须覆盖：Create 重复名称返回 `CodeConflict`、List 传递已规范化的 offset/limit/sort/order、Update 缺失资源返回 `404`、Delete Repository 错误被保留为脱敏内部错误。
 
-- [ ] **步骤 6：运行 Service 测试并确认因新接口和 DTO 不存在而失败**
+- [x] **步骤 6：运行 Service 测试并确认因新接口和 DTO 不存在而失败**
 
 运行：
 
@@ -214,7 +214,7 @@ GOCACHE=/private/tmp/jimu-go-build-cache go test ./internal/modules/user/applica
 
 预期：新增测试编译失败或断言失败，原因仅限缺少已设计的 DTO、Get/List 签名或错误映射。
 
-- [ ] **步骤 7：实现 DTO、Repository interface 和 Service**
+- [x] **步骤 7：实现 DTO、Repository interface 和 Service**
 
 DTO 转换保持显式，例如：
 
@@ -243,7 +243,7 @@ List(ctx context.Context, offset, limit int, sort, order string) ([]Entity, int6
 
 Service 使用 `p.GetOffset()`、`p.GetLimit()`、`p.Sort` 和 `p.Order` 调用 Repository，并将 entity slice 转为 DTO slice。`gorm.ErrRecordNotFound` 映射相应 not-found code，MySQL 1062 重复键映射 `CodeConflict` 或现有 `CodeUserExists`，其他错误使用 `errors.Wrap(CodeInternalError, ..., err)`。
 
-- [ ] **步骤 8：实现 Repository 的分页、排序和错误传播**
+- [x] **步骤 8：实现 Repository 的分页、排序和错误传播**
 
 每个 List 使用 Handler 已校验的 sort/order：
 
@@ -270,7 +270,7 @@ FindByID(ctx context.Context, id uint64) (*AuditLog, error)
 
 不得在 Repository 中拼接未经 Handler allow-list 校验的外部字段。
 
-- [ ] **步骤 9：为 Handler 写失败测试**
+- [x] **步骤 9：为 Handler 写失败测试**
 
 四个模块覆盖：Create `201`、Delete `204` 空 body、非法 ID `400`、List 默认分页和非法 sort、Get `404`、User body 不包含密码。典型断言：
 
@@ -288,7 +288,7 @@ func TestDeleteReturnsEmptyNoContent(t *testing.T) {
 }
 ```
 
-- [ ] **步骤 10：运行 Handler 测试并确认旧状态码、匿名 DTO 和未实现 Audit Get 导致失败**
+- [x] **步骤 10：运行 Handler 测试并确认旧状态码、匿名 DTO 和未实现 Audit Get 导致失败**
 
 运行：
 
@@ -298,7 +298,7 @@ GOCACHE=/private/tmp/jimu-go-build-cache go test ./internal/modules/user/interfa
 
 预期：新增断言失败；Audit Get 仍返回旧的 `not implemented` body。
 
-- [ ] **步骤 11：实现统一 Handler**
+- [x] **步骤 11：实现统一 Handler**
 
 每个 Handler 必须：
 
@@ -316,7 +316,7 @@ if err := p.Normalize("id", "name", "created_at"); err != nil {
 
 Create 调用 `response.Created`，Delete 调用 `response.NoContent`。Audit Get 解析 ID、调用 `service.Get` 并返回 Audit DTO。Role、Permission 移除 Handler 内匿名 struct，改用 Application DTO。
 
-- [ ] **步骤 12：验证整个 CRUD 契约并提交**
+- [x] **步骤 12：验证整个 CRUD 契约并提交**
 
 运行：
 

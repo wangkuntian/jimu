@@ -61,3 +61,33 @@ func TestFailHidesInternalCauseAndIncludesRequestID(t *testing.T) {
 		t.Fatalf("response missing safe diagnostics: %s", body)
 	}
 }
+
+func TestCreatedUsesStandardEnvelope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/", func(c *gin.Context) {
+		c.Set("request_id", "rid-created")
+		Created(c, gin.H{"id": uint64(7)})
+	})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/", nil))
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusCreated)
+	}
+	if !strings.Contains(w.Body.String(), `"request_id":"rid-created"`) {
+		t.Fatalf("body = %s", w.Body.String())
+	}
+}
+
+func TestNoContentWritesNoBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.DELETE("/", NoContent)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/", nil))
+
+	if w.Code != http.StatusNoContent || w.Body.Len() != 0 {
+		t.Fatalf("status = %d body = %q", w.Code, w.Body.String())
+	}
+}

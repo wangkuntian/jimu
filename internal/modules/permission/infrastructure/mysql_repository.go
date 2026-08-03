@@ -6,6 +6,7 @@ import (
 	"jimu/internal/modules/role/domain"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type mysqlPermissionRepository struct {
@@ -22,10 +23,18 @@ func (r *mysqlPermissionRepository) FindByID(ctx context.Context, id uint64) (*d
 	return &perm, err
 }
 
-func (r *mysqlPermissionRepository) FindAll(ctx context.Context) ([]domain.Permission, error) {
+func (r *mysqlPermissionRepository) List(ctx context.Context, offset, limit int, sort, order string) ([]domain.Permission, int64, error) {
 	var perms []domain.Permission
-	err := r.db.WithContext(ctx).Find(&perms).Error
-	return perms, err
+	var total int64
+	db := r.db.WithContext(ctx).Model(&domain.Permission{})
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := db.Order(clause.OrderByColumn{
+		Column: clause.Column{Name: sort},
+		Desc:   order == "desc",
+	}).Offset(offset).Limit(limit).Find(&perms).Error
+	return perms, total, err
 }
 
 func (r *mysqlPermissionRepository) Create(ctx context.Context, perm *domain.Permission) error {

@@ -28,5 +28,6 @@ func (AuditLog) TableName() string {
 type AuditRepository interface {
 	Create(ctx context.Context, log *AuditLog) error
 	CreateBatch(ctx context.Context, logs []AuditLog) error
-	List(ctx context.Context, offset, limit int) ([]AuditLog, int64, error)
+	FindByID(ctx context.Context, id uint64) (*AuditLog, error)
+	List(ctx context.Context, offset, limit int, sort, order string) ([]AuditLog, int64, error)
 }

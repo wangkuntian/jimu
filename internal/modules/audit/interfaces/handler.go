@@ -29,7 +29,7 @@ func (h *AuditHandler) List(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	logs, total, err := h.service.List(c.Request.Context(), p.Page, p.PageSize)
+	logs, total, err := h.service.List(c.Request.Context(), p)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -43,6 +43,10 @@ func (h *AuditHandler) Get(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
 		return
 	}
-	_ = id
-	c.JSON(200, gin.H{"message": "not implemented"})
+	log, err := h.service.Get(c.Request.Context(), id)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, log)
 }

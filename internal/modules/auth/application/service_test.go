@@ -162,7 +162,7 @@ func (r *fakeUserRepo) FindByUsername(_ context.Context, username string) (*user
 	return user, nil
 }
 
-func (r *fakeUserRepo) List(context.Context, int, int) ([]userdomain.User, int64, error) {
+func (r *fakeUserRepo) List(context.Context, int, int, string, string) ([]userdomain.User, int64, error) {
 	return nil, 0, stderrors.New("not implemented")
 }
 

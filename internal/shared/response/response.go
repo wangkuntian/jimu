@@ -35,6 +35,19 @@ func OK(c *gin.Context, data interface{}) {
 	})
 }
 
+func Created(c *gin.Context, data interface{}) {
+	c.JSON(http.StatusCreated, Body{
+		Code:      0,
+		Message:   "ok",
+		Data:      data,
+		RequestID: requestID(c),
+	})
+}
+
+func NoContent(c *gin.Context) {
+	c.Status(http.StatusNoContent)
+}
+
 func Fail(c *gin.Context, err error) {
 	var appErr *appErrs.AppError
 	if errors.As(err, &appErr) {
@@ -80,7 +93,7 @@ func StatusForCode(code int) int {
 		return http.StatusForbidden
 	case appErrs.CodeNotFound, appErrs.CodeUserNotFound, appErrs.CodeRoleNotFound:
 		return http.StatusNotFound
-	case appErrs.CodeUserExists:
+	case appErrs.CodeConflict, appErrs.CodeUserExists:
 		return http.StatusConflict
 	case appErrs.CodeRateLimited:
 		return http.StatusTooManyRequests

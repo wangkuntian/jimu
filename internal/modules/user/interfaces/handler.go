@@ -39,7 +39,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, user)
+	response.Created(c, user)
 }
 
 func (h *UserHandler) Get(c *gin.Context) {
@@ -70,7 +70,7 @@ func (h *UserHandler) List(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInternalError, "user service not configured"))
 		return
 	}
-	users, total, err := h.service.List(c.Request.Context(), p.Page, p.PageSize)
+	users, total, err := h.service.List(c.Request.Context(), p)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -106,5 +106,5 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, nil)
+	response.NoContent(c)
 }

@@ -35,7 +35,11 @@ func (r *fakeBatchRepository) CreateBatch(ctx context.Context, logs []domain.Aud
 	return nil
 }
 
-func (r *fakeBatchRepository) List(context.Context, int, int) ([]domain.AuditLog, int64, error) {
+func (r *fakeBatchRepository) FindByID(context.Context, uint64) (*domain.AuditLog, error) {
+	return nil, nil
+}
+
+func (r *fakeBatchRepository) List(context.Context, int, int, string, string) ([]domain.AuditLog, int64, error) {
 	return nil, 0, nil
 }
 

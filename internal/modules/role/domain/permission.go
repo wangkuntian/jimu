@@ -17,7 +17,7 @@ func (Permission) TableName() string { return "permissions" }
 
 type PermissionRepository interface {
 	FindByID(ctx context.Context, id uint64) (*Permission, error)
-	FindAll(ctx context.Context) ([]Permission, error)
+	List(ctx context.Context, offset, limit int, sort, order string) ([]Permission, int64, error)
 	Create(ctx context.Context, perm *Permission) error
 	Update(ctx context.Context, perm *Permission) error
 	Delete(ctx context.Context, id uint64) error

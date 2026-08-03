@@ -12,6 +12,7 @@ const (
 	CodeInvalidCredentials = 1006
 	CodeRateLimited        = 1007
 	CodeTimeout            = 1008
+	CodeConflict           = 1009
 	CodeUserNotFound       = 2001
 	CodeUserExists         = 2002
 	CodeInvalidPassword    = 2003

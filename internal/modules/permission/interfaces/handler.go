@@ -5,6 +5,7 @@ import (
 
 	"jimu/internal/modules/permission/application"
 	"jimu/internal/shared/errors"
+	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
@@ -19,21 +20,17 @@ func NewPermissionHandler(service *application.PermissionService) *PermissionHan
 }
 
 func (h *PermissionHandler) Create(c *gin.Context) {
-	var req struct {
-		Name     string `json:"name" binding:"required"`
-		Resource string `json:"resource" binding:"required"`
-		Action   string `json:"action" binding:"required"`
-	}
+	var req application.CreatePermissionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	perm, err := h.service.Create(c.Request.Context(), req.Name, req.Resource, req.Action)
+	perm, err := h.service.Create(c.Request.Context(), req)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, perm)
+	response.Created(c, perm)
 }
 
 func (h *PermissionHandler) Get(c *gin.Context) {
@@ -51,12 +48,21 @@ func (h *PermissionHandler) Get(c *gin.Context) {
 }
 
 func (h *PermissionHandler) List(c *gin.Context) {
-	perms, err := h.service.List(c.Request.Context())
+	var p pagination.Pagination
+	if err := c.ShouldBindQuery(&p); err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
+		return
+	}
+	if err := p.Normalize("id", "name", "resource", "action", "created_at"); err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
+		return
+	}
+	perms, total, err := h.service.List(c.Request.Context(), p)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, perms)
+	response.Page(c, perms, total, p.Page, p.PageSize)
 }
 
 func (h *PermissionHandler) Update(c *gin.Context) {
@@ -65,16 +71,12 @@ func (h *PermissionHandler) Update(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
 		return
 	}
-	var req struct {
-		Name     string `json:"name" binding:"required"`
-		Resource string `json:"resource" binding:"required"`
-		Action   string `json:"action" binding:"required"`
-	}
+	var req application.UpdatePermissionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	if err := h.service.Update(c.Request.Context(), id, req.Name, req.Resource, req.Action); err != nil {
+	if err := h.service.Update(c.Request.Context(), id, req); err != nil {
 		response.Fail(c, err)
 		return
 	}
@@ -91,5 +93,5 @@ func (h *PermissionHandler) Delete(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, nil)
+	response.NoContent(c)
 }

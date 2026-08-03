@@ -1,6 +1,10 @@
 package application
 
-import "time"
+import (
+	"time"
+
+	"jimu/internal/modules/user/domain"
+)
 
 type CreateUserRequest struct {
 	Username string `json:"username" binding:"required,min=3,max=64"`
@@ -16,4 +20,23 @@ type UserResponse struct {
 	Username  string    `json:"username"`
 	Status    int8      `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func ToUserResponse(user domain.User) UserResponse {
+	return UserResponse{
+		ID:        user.ID,
+		Username:  user.Username,
+		Status:    user.Status,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+	}
+}
+
+func ToUserResponses(users []domain.User) []UserResponse {
+	out := make([]UserResponse, 0, len(users))
+	for _, user := range users {
+		out = append(out, ToUserResponse(user))
+	}
+	return out
 }

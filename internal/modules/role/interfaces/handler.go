@@ -5,6 +5,7 @@ import (
 
 	"jimu/internal/modules/role/application"
 	"jimu/internal/shared/errors"
+	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
@@ -19,20 +20,17 @@ func NewRoleHandler(service *application.RoleService) *RoleHandler {
 }
 
 func (h *RoleHandler) Create(c *gin.Context) {
-	var req struct {
-		Name        string `json:"name" binding:"required"`
-		Description string `json:"description"`
-	}
+	var req application.CreateRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	role, err := h.service.Create(c.Request.Context(), req.Name, req.Description)
+	role, err := h.service.Create(c.Request.Context(), req)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, role)
+	response.Created(c, role)
 }
 
 func (h *RoleHandler) Get(c *gin.Context) {
@@ -50,12 +48,21 @@ func (h *RoleHandler) Get(c *gin.Context) {
 }
 
 func (h *RoleHandler) List(c *gin.Context) {
-	roles, err := h.service.List(c.Request.Context())
+	var p pagination.Pagination
+	if err := c.ShouldBindQuery(&p); err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
+		return
+	}
+	if err := p.Normalize("id", "name", "created_at"); err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
+		return
+	}
+	roles, total, err := h.service.List(c.Request.Context(), p)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, roles)
+	response.Page(c, roles, total, p.Page, p.PageSize)
 }
 
 func (h *RoleHandler) Update(c *gin.Context) {
@@ -64,15 +71,12 @@ func (h *RoleHandler) Update(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
 		return
 	}
-	var req struct {
-		Name        string `json:"name" binding:"required"`
-		Description string `json:"description"`
-	}
+	var req application.UpdateRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	if err := h.service.Update(c.Request.Context(), id, req.Name, req.Description); err != nil {
+	if err := h.service.Update(c.Request.Context(), id, req); err != nil {
 		response.Fail(c, err)
 		return
 	}
@@ -89,7 +93,7 @@ func (h *RoleHandler) Delete(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, nil)
+	response.NoContent(c)
 }
 
 func (h *RoleHandler) AssignPermissions(c *gin.Context) {
@@ -98,9 +102,7 @@ func (h *RoleHandler) AssignPermissions(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
 		return
 	}
-	var req struct {
-		PermissionIDs []uint64 `json:"permission_ids" binding:"required"`
-	}
+	var req application.AssignPermissionsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return

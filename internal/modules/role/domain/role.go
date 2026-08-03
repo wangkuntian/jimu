@@ -21,7 +21,7 @@ func (Role) TableName() string { return "roles" }
 
 type RoleRepository interface {
 	FindByID(ctx context.Context, id uint64) (*Role, error)
-	FindAll(ctx context.Context) ([]Role, error)
+	List(ctx context.Context, offset, limit int, sort, order string) ([]Role, int64, error)
 	Create(ctx context.Context, role *Role) error
 	Update(ctx context.Context, role *Role) error
 	Delete(ctx context.Context, id uint64) error

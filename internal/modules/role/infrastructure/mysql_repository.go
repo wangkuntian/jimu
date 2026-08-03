@@ -6,6 +6,7 @@ import (
 	"jimu/internal/modules/role/domain"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type mysqlRepository struct {
@@ -22,10 +23,18 @@ func (r *mysqlRepository) FindByID(ctx context.Context, id uint64) (*domain.Role
 	return &role, err
 }
 
-func (r *mysqlRepository) FindAll(ctx context.Context) ([]domain.Role, error) {
+func (r *mysqlRepository) List(ctx context.Context, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
 	var roles []domain.Role
-	err := r.db.WithContext(ctx).Find(&roles).Error
-	return roles, err
+	var total int64
+	db := r.db.WithContext(ctx).Model(&domain.Role{})
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := db.Order(clause.OrderByColumn{
+		Column: clause.Column{Name: sort},
+		Desc:   order == "desc",
+	}).Offset(offset).Limit(limit).Find(&roles).Error
+	return roles, total, err
 }
 
 func (r *mysqlRepository) Create(ctx context.Context, role *domain.Role) error {
