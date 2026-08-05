@@ -23,19 +23,29 @@ management:
 
 # 数据库配置 (MariaDB)
 db:
-  host: "127.0.0.1"      # 数据库地址
-  port: 3306             # 数据库端口
-  user: "root"           # 用户名
-  password: "root"       # 密码
-  database: "jimu"       # 数据库名
-  max_open: 100          # 最大连接数
-  max_idle: 10           # 最大空闲连接数
+  host: "127.0.0.1"         # 数据库地址
+  port: 3306                # 数据库端口
+  user: "root"              # 用户名
+  password: "root"          # 密码
+  database: "jimu"          # 数据库名
+  max_open: 100             # 最大连接数
+  max_idle: 10              # 最大空闲连接数
+  conn_max_lifetime_sec: 3600  # 连接最大存活时间（秒）
+  conn_max_idle_time_sec: 600  # 连接最大空闲时间（秒）
+  max_retries: 5            # 连接重试次数
+  retry_interval_sec: 3     # 重试间隔（秒）
 
 # Redis 配置
 redis:
-  addr: "127.0.0.1:6379" # Redis 地址
-  password: ""           # Redis 密码（无密码留空）
-  db: 0                  # Redis 数据库编号
+  addr: "127.0.0.1:6379"    # Redis 地址
+  password: ""              # Redis 密码（无密码留空）
+  db: 0                     # Redis 数据库编号
+  pool_size: 20             # 连接池大小
+  min_idle_conns: 5         # 最小空闲连接数
+  read_timeout_sec: 3       # 读超时（秒）
+  write_timeout_sec: 3      # 写超时（秒）
+  max_retries: 5            # 连接重试次数
+  retry_interval_sec: 3     # 重试间隔（秒）
 
 # 日志配置
 log:
@@ -73,3 +83,11 @@ audit:
   queue_size: 256
   batch_size: 50
   flush_interval_ms: 500
+
+# OpenTelemetry 追踪配置
+otel:
+  enabled: false                    # 开发环境默认关闭
+  endpoint: "localhost:4317"       # OTLP gRPC 端点
+  service_name: "jimu"
+  service_version: "dev"
+  sample_rate: 0.1                  # 采样率：dev 0.1, prod 1.0

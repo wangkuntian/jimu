@@ -32,12 +32,8 @@ func NewRoleHandler(service *application.RoleService) *RoleHandler {
 // @Failure      500   {object}  contract.ErrorResponse
 // @Router       /roles [post]
 func (h *RoleHandler) Create(c *gin.Context) {
-	var req application.CreateRoleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
-	role, err := h.service.Create(c.Request.Context(), req)
+	req := c.MustGet("validated_req").(*application.CreateRoleRequest)
+	role, err := h.service.Create(c.Request.Context(), *req)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -84,16 +80,12 @@ func (h *RoleHandler) Get(c *gin.Context) {
 // @Failure      500        {object}  contract.ErrorResponse
 // @Router       /roles [get]
 func (h *RoleHandler) List(c *gin.Context) {
-	var p pagination.Pagination
-	if err := c.ShouldBindQuery(&p); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
+	p := c.MustGet("validated_query").(*pagination.Pagination)
 	if err := p.Normalize("id", "name", "created_at"); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	roles, total, err := h.service.List(c.Request.Context(), p)
+	roles, total, err := h.service.List(c.Request.Context(), *p)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -121,12 +113,8 @@ func (h *RoleHandler) Update(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
 		return
 	}
-	var req application.UpdateRoleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
-	if err := h.service.Update(c.Request.Context(), id, req); err != nil {
+	req := c.MustGet("validated_req").(*application.UpdateRoleRequest)
+	if err := h.service.Update(c.Request.Context(), id, *req); err != nil {
 		response.Fail(c, err)
 		return
 	}
@@ -174,11 +162,7 @@ func (h *RoleHandler) AssignPermissions(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
 		return
 	}
-	var req application.AssignPermissionsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
+	req := c.MustGet("validated_req").(*application.AssignPermissionsRequest)
 	if err := h.service.AssignPermissions(c.Request.Context(), id, req.PermissionIDs); err != nil {
 		response.Fail(c, err)
 		return

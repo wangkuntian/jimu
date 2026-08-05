@@ -7,22 +7,25 @@ import (
 	"jimu/internal/config"
 	"jimu/internal/platform/db"
 	"jimu/internal/platform/logger"
+	"jimu/internal/platform/observability"
 	redistore "jimu/internal/platform/redis"
 
 	"github.com/redis/go-redis/v9"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"gorm.io/gorm"
 )
 
 type Container struct {
-	Config *config.Config
-	DB     *gorm.DB
-	Redis  *redis.Client
-	Logger *logger.Logger
+	Config         *config.Config
+	DB             *gorm.DB
+	Redis          *redis.Client
+	Logger         *logger.Logger
+	TracerProvider *sdktrace.TracerProvider
 }
 
 func (c *Container) Start(context.Context) error { return nil }
 
-func (c *Container) Stop(context.Context) error {
+func (c *Container) Stop(ctx context.Context) error {
 	var result error
 	if c.Redis != nil {
 		result = errors.Join(result, c.Redis.Close())
@@ -35,6 +38,9 @@ func (c *Container) Stop(context.Context) error {
 			result = errors.Join(result, sqlDB.Close())
 		}
 	}
+	if c.TracerProvider != nil {
+		result = errors.Join(result, observability.ShutdownTracing(ctx, c.TracerProvider))
+	}
 	if c.Logger != nil {
 		result = errors.Join(result, c.Logger.Sync())
 	}
@@ -42,12 +48,16 @@ func (c *Container) Stop(context.Context) error {
 }
 
 func NewContainer(cfg *config.Config) (*Container, error) {
-	dbConn, err := db.New(cfg.DB)
+	log := logger.New(cfg.Log)
+
+	dbConn, err := db.ConnectWithRetry(cfg.DB, log)
 	if err != nil {
 		return nil, err
 	}
-	rdb := redistore.New(cfg.Redis)
-	log := logger.New(cfg.Log)
+	rdb, err := redistore.ConnectWithRetry(cfg.Redis, log)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Container{
 		Config: cfg,

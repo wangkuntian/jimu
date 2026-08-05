@@ -11,8 +11,10 @@ import (
 	"jimu/internal/config"
 	"jimu/internal/platform/http/middleware"
 	"jimu/internal/platform/logger"
+	"jimu/internal/platform/observability"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 type Server struct {
@@ -61,7 +63,7 @@ func (s *Server) Errors() <-chan error {
 	return s.errors
 }
 
-func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.ServerConfig) *gin.Engine {
+func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.ServerConfig, otelCfg observability.TracingConfig) *gin.Engine {
 	switch cfg.Mode {
 	case config.HTTPModeRelease:
 		gin.SetMode(gin.ReleaseMode)
@@ -72,6 +74,16 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 	r := gin.New()
 	r.Use(
 		middleware.RequestID(),
+	)
+	// OpenTelemetry 追踪中间件（在 Logger 之前，确保 span 可记录到日志）
+	if otelCfg.Enabled {
+		serviceName := otelCfg.ServiceName
+		if serviceName == "" {
+			serviceName = "jimu"
+		}
+		r.Use(otelgin.Middleware(serviceName))
+	}
+	r.Use(
 		middleware.Logger(log),
 		middleware.Security(cfg),
 		middleware.Recovery(),

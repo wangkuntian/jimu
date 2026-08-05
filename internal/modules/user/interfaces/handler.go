@@ -33,12 +33,8 @@ func NewUserHandler(service *application.UserService) *UserHandler {
 // @Failure      500  {object}  contract.ErrorResponse
 // @Router       /users [post]
 func (h *UserHandler) Create(c *gin.Context) {
-	var req application.CreateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
-	user, err := h.service.Create(c.Request.Context(), req)
+	req := c.MustGet("validated_req").(*application.CreateUserRequest)
+	user, err := h.service.Create(c.Request.Context(), *req)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -85,20 +81,12 @@ func (h *UserHandler) Get(c *gin.Context) {
 // @Failure      500        {object}  contract.ErrorResponse
 // @Router       /users [get]
 func (h *UserHandler) List(c *gin.Context) {
-	var p pagination.Pagination
-	if err := c.ShouldBindQuery(&p); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
+	p := c.MustGet("validated_query").(*pagination.Pagination)
 	if err := p.Normalize("id", "username", "created_at"); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	if h.service == nil {
-		response.Fail(c, errors.New(errors.CodeInternalError, "user service not configured"))
-		return
-	}
-	users, total, err := h.service.List(c.Request.Context(), p)
+	users, total, err := h.service.List(c.Request.Context(), *p)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -125,12 +113,8 @@ func (h *UserHandler) Update(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
 		return
 	}
-	var req application.UpdateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
-	if err := h.service.Update(c.Request.Context(), id, req); err != nil {
+	req := c.MustGet("validated_req").(*application.UpdateUserRequest)
+	if err := h.service.Update(c.Request.Context(), id, *req); err != nil {
 		response.Fail(c, err)
 		return
 	}

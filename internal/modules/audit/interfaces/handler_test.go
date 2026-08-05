@@ -10,6 +10,7 @@ import (
 
 	"jimu/internal/modules/audit/application"
 	"jimu/internal/modules/audit/domain"
+	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,7 +18,11 @@ import (
 func TestAuditListInvalidQueryReturnsStableBadRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.GET("/audit", NewAuditHandler(nil).List)
+	r.GET("/audit", func(c *gin.Context) {
+		// 传入无效 sort 字段，触发 Normalize 失败
+		c.Set("validated_query", &pagination.Pagination{Sort: "password", Order: "desc"})
+		NewAuditHandler(application.NewAuditService(&fakeAuditRepository{})).List(c)
+	})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/audit?sort=password", nil))
 	if w.Code != http.StatusBadRequest {

@@ -10,6 +10,7 @@ import (
 
 	"jimu/internal/modules/user/application"
 	"jimu/internal/modules/user/domain"
+	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -18,7 +19,11 @@ import (
 func TestUserListRejectsInvalidPaginationContract(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.GET("/users", NewUserHandler(nil).List)
+	r.GET("/users", func(c *gin.Context) {
+		// 传入无效 sort 字段，触发 Normalize 失败
+		c.Set("validated_query", &pagination.Pagination{Sort: "password", Order: "desc"})
+		NewUserHandler(nil).List(c)
+	})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/users?sort=password", nil))
 	if w.Code != http.StatusBadRequest {
@@ -31,12 +36,13 @@ func TestUserListUsesDefaultPaginationBeforeService(t *testing.T) {
 	r := gin.New()
 	r.GET("/users", func(c *gin.Context) {
 		c.Set("request_id", "rid-list")
-		NewUserHandler(nil).List(c)
+		c.Set("validated_query", &pagination.Pagination{})
+		NewUserHandler(application.NewUserService(&fakeUserRepository{})).List(c)
 	})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/users", nil))
-	if w.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want nil service to fail after pagination", w.Code)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want pagination to pass with valid defaults", w.Code)
 	}
 	var body map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
@@ -50,7 +56,10 @@ func TestUserListUsesDefaultPaginationBeforeService(t *testing.T) {
 func TestUserCreateReturnsCreatedDTO(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.POST("/users", NewUserHandler(application.NewUserService(&fakeUserRepository{})).Create)
+	r.POST("/users", func(c *gin.Context) {
+		c.Set("validated_req", &application.CreateUserRequest{Username: "alice", Password: "secret123"})
+		NewUserHandler(application.NewUserService(&fakeUserRepository{})).Create(c)
+	})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(`{"username":"alice","password":"secret123"}`)))
 

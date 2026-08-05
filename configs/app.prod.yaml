@@ -24,19 +24,29 @@ management:
 # 数据库配置 (MariaDB)
 # 敏感值和部署地址必须通过 JIMU__... 环境变量覆盖
 db:
-  host: "mariadb"             # 数据库地址
-  port: 3306                  # 数据库端口
-  user: "jimu"               # 用户名
-  password: ""               # 必须通过环境变量设置
-  database: "jimu"           # 数据库名
-  max_open: 100              # 最大连接数
-  max_idle: 10               # 最大空闲连接数
+  host: "mariadb"               # 数据库地址
+  port: 3306                    # 数据库端口
+  user: "jimu"                  # 用户名
+  password: ""                  # 必须通过环境变量设置
+  database: "jimu"              # 数据库名
+  max_open: 100                 # 最大连接数
+  max_idle: 10                  # 最大空闲连接数
+  conn_max_lifetime_sec: 3600   # 连接最大存活时间（秒）
+  conn_max_idle_time_sec: 600   # 连接最大空闲时间（秒）
+  max_retries: 10               # 连接重试次数（生产环境更耐心）
+  retry_interval_sec: 5         # 重试间隔（秒）
 
 # Redis 配置
 redis:
-  addr: "redis:6379"             # Redis 地址
-  password: ""                   # Redis 密码
+  addr: "redis:6379"            # Redis 地址
+  password: ""                  # Redis 密码
   db: 0                         # Redis 数据库编号
+  pool_size: 50                 # 连接池大小（生产环境更大）
+  min_idle_conns: 10            # 最小空闲连接数
+  read_timeout_sec: 3           # 读超时（秒）
+  write_timeout_sec: 3          # 写超时（秒）
+  max_retries: 10               # 连接重试次数
+  retry_interval_sec: 5         # 重试间隔（秒）
 
 # 日志配置
 log:
@@ -74,3 +84,11 @@ audit:
   queue_size: 1024
   batch_size: 100
   flush_interval_ms: 500
+
+# OpenTelemetry 追踪配置
+otel:
+  enabled: true                     # 生产环境默认开启
+  endpoint: "otel-collector:4317"  # OTLP gRPC 端点（K8s service name）
+  service_name: "jimu"
+  service_version: "1.0.0"
+  sample_rate: 1.0                  # 生产环境全量采样
