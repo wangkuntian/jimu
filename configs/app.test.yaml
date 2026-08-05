@@ -23,19 +23,29 @@ management:
 
 # 数据库配置 (MariaDB)
 db:
-  host: "127.0.0.1"      # 数据库地址
-  port: 3306             # 数据库端口
-  user: "root"           # 用户名
-  password: "root"       # 密码
-  database: "jimu_test"  # 测试数据库名（与生产隔离）
-  max_open: 10           # 最大连接数（测试环境可较小）
-  max_idle: 5            # 最大空闲连接数
+  host: "127.0.0.1"         # 数据库地址
+  port: 3306                # 数据库端口
+  user: "root"              # 用户名
+  password: "root"          # 密码
+  database: "jimu_test"     # 测试数据库名（与生产隔离）
+  max_open: 10              # 最大连接数（测试环境可较小）
+  max_idle: 5               # 最大空闲连接数
+  conn_max_lifetime_sec: 300  # 连接最大存活时间（秒）
+  conn_max_idle_time_sec: 60  # 连接最大空闲时间（秒）
+  max_retries: 3            # 连接重试次数
+  retry_interval_sec: 1     # 重试间隔（秒）
 
 # Redis 配置
 redis:
-  addr: "127.0.0.1:6379" # Redis 地址
-  password: ""           # Redis 密码
-  db: 1                  # Redis 数据库编号（与开发的 0 隔离）
+  addr: "127.0.0.1:6379"    # Redis 地址
+  password: ""              # Redis 密码
+  db: 1                     # Redis 数据库编号（与开发的 0 隔离）
+  pool_size: 5              # 连接池大小
+  min_idle_conns: 2         # 最小空闲连接数
+  read_timeout_sec: 2       # 读超时（秒）
+  write_timeout_sec: 2      # 写超时（秒）
+  max_retries: 3            # 连接重试次数
+  retry_interval_sec: 1     # 重试间隔（秒）
 
 # 日志配置
 log:
@@ -73,3 +83,11 @@ audit:
   queue_size: 64
   batch_size: 10
   flush_interval_ms: 50
+
+# OpenTelemetry 追踪配置（测试环境关闭）
+otel:
+  enabled: false
+  endpoint: "localhost:4317"
+  service_name: "jimu-test"
+  service_version: "test"
+  sample_rate: 0

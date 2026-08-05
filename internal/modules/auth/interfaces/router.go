@@ -4,6 +4,7 @@ import (
 	"jimu/internal/config"
 	"jimu/internal/modules/auth/application"
 	"jimu/internal/platform/auth"
+	"jimu/internal/platform/http/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -12,11 +13,11 @@ func RegisterAuthRoutes(r *gin.RouterGroup, service *application.AuthService, jw
 	handler := NewAuthHandler(service, cfg, limiter)
 	authGroup := r.Group("/auth")
 	{
-		authGroup.POST("/login", handler.Login)
+		authGroup.POST("/login", middleware.ValidateJSON(&loginRequest{}), handler.Login)
 		if cfg.PublicRegistration {
-			authGroup.POST("/register", handler.Register)
+			authGroup.POST("/register", middleware.ValidateJSON(&loginRequest{}), handler.Register)
 		}
-		authGroup.POST("/refresh", handler.RefreshToken)
+		authGroup.POST("/refresh", middleware.ValidateJSON(&refreshRequest{}), handler.RefreshToken)
 
 		protected := authGroup.Group("")
 		protected.Use(auth.AuthMiddleware(jwtUtil))

@@ -32,12 +32,8 @@ func NewPermissionHandler(service *application.PermissionService) *PermissionHan
 // @Failure      500   {object}  contract.ErrorResponse
 // @Router       /permissions [post]
 func (h *PermissionHandler) Create(c *gin.Context) {
-	var req application.CreatePermissionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
-	perm, err := h.service.Create(c.Request.Context(), req)
+	req := c.MustGet("validated_req").(*application.CreatePermissionRequest)
+	perm, err := h.service.Create(c.Request.Context(), *req)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -84,16 +80,12 @@ func (h *PermissionHandler) Get(c *gin.Context) {
 // @Failure      500        {object}  contract.ErrorResponse
 // @Router       /permissions [get]
 func (h *PermissionHandler) List(c *gin.Context) {
-	var p pagination.Pagination
-	if err := c.ShouldBindQuery(&p); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
+	p := c.MustGet("validated_query").(*pagination.Pagination)
 	if err := p.Normalize("id", "name", "resource", "action", "created_at"); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	perms, total, err := h.service.List(c.Request.Context(), p)
+	perms, total, err := h.service.List(c.Request.Context(), *p)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -121,12 +113,8 @@ func (h *PermissionHandler) Update(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
 		return
 	}
-	var req application.UpdatePermissionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
-	if err := h.service.Update(c.Request.Context(), id, req); err != nil {
+	req := c.MustGet("validated_req").(*application.UpdatePermissionRequest)
+	if err := h.service.Update(c.Request.Context(), id, *req); err != nil {
 		response.Fail(c, err)
 		return
 	}

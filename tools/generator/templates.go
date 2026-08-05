@@ -287,12 +287,8 @@ func New{{.NameCamel}}Handler(service *application.{{.NameCamel}}Service) *{{.Na
 }
 
 func (h *{{.NameCamel}}Handler) Create(c *gin.Context) {
-	var req application.Create{{.NameCamel}}Request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
-	entity, err := h.service.Create(c.Request.Context(), req)
+	req := c.MustGet("validated_req").(*application.Create{{.NameCamel}}Request)
+	entity, err := h.service.Create(c.Request.Context(), *req)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -315,16 +311,12 @@ func (h *{{.NameCamel}}Handler) Get(c *gin.Context) {
 }
 
 func (h *{{.NameCamel}}Handler) List(c *gin.Context) {
-	var p pagination.Pagination
-	if err := c.ShouldBindQuery(&p); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
+	p := c.MustGet("validated_query").(*pagination.Pagination)
 	if err := p.Normalize("id", "name", "created_at"); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	items, total, err := h.service.List(c.Request.Context(), p)
+	items, total, err := h.service.List(c.Request.Context(), *p)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -338,12 +330,8 @@ func (h *{{.NameCamel}}Handler) Update(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
 		return
 	}
-	var req application.Update{{.NameCamel}}Request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
-	if err := h.service.Update(c.Request.Context(), id, req); err != nil {
+	req := c.MustGet("validated_req").(*application.Update{{.NameCamel}}Request)
+	if err := h.service.Update(c.Request.Context(), id, *req); err != nil {
 		response.Fail(c, err)
 		return
 	}
@@ -368,6 +356,8 @@ const routerTemplate = `package interfaces
 
 import (
 	"jimu/internal/modules/{{.Name}}/application"
+	"jimu/internal/platform/http/middleware"
+	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"
 )
@@ -376,10 +366,10 @@ func Register{{.NameCamel}}Routes(r *gin.RouterGroup, service *application.{{.Na
 	handler := New{{.NameCamel}}Handler(service)
 	group := r.Group("/{{.RouteName}}")
 	{
-		group.POST("", handler.Create)
-		group.GET("", handler.List)
+		group.POST("", middleware.ValidateJSON(&application.Create{{.NameCamel}}Request{}), handler.Create)
+		group.GET("", middleware.ValidateQuery(&pagination.Pagination{}), handler.List)
 		group.GET("/:id", handler.Get)
-		group.PUT("/:id", handler.Update)
+		group.PUT("/:id", middleware.ValidateJSON(&application.Update{{.NameCamel}}Request{}), handler.Update)
 		group.DELETE("/:id", handler.Delete)
 	}
 }
@@ -486,6 +476,7 @@ import (
 
 	"jimu/internal/modules/{{.Name}}/application"
 	"jimu/internal/modules/{{.Name}}/domain"
+	"jimu/internal/platform/http/middleware"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -494,7 +485,8 @@ import (
 func Test{{.NameCamel}}CreateReturnsCreated(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.POST("/{{.RouteName}}", New{{.NameCamel}}Handler(application.New{{.NameCamel}}Service(&fake{{.NameCamel}}Repository{})).Create)
+	handler := New{{.NameCamel}}Handler(application.New{{.NameCamel}}Service(&fake{{.NameCamel}}Repository{}))
+	r.POST("/{{.RouteName}}", middleware.ValidateJSON(&application.Create{{.NameCamel}}Request{}), handler.Create)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/{{.RouteName}}", strings.NewReader(` + "`" + `{"name":"one","description":"desc"}` + "`" + `)))
 
@@ -506,7 +498,8 @@ func Test{{.NameCamel}}CreateReturnsCreated(t *testing.T) {
 func Test{{.NameCamel}}DeleteReturnsNoContent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.DELETE("/{{.RouteName}}/:id", New{{.NameCamel}}Handler(application.New{{.NameCamel}}Service(&fake{{.NameCamel}}Repository{})).Delete)
+	handler := New{{.NameCamel}}Handler(application.New{{.NameCamel}}Service(&fake{{.NameCamel}}Repository{}))
+	r.DELETE("/{{.RouteName}}/:id", handler.Delete)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/{{.RouteName}}/7", nil))
 

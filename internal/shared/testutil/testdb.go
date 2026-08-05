@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"jimu/internal/config"
+	"jimu/internal/platform/db"
 
 	"github.com/pressly/goose/v3"
 	"gorm.io/driver/mysql"
@@ -20,12 +21,21 @@ func NewTestDB(cfg config.DBConfig) (*TestDB, error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
 
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	gdb, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect test database: %w", err)
 	}
 
-	return &TestDB{DB: db}, nil
+	return &TestDB{DB: gdb}, nil
+}
+
+// NewTestDBWithPool 创建带连接池配置的测试数据库连接
+func NewTestDBWithPool(cfg config.DBConfig) (*TestDB, error) {
+	gdb, err := db.ConnectWithRetry(cfg, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect test database: %w", err)
+	}
+	return &TestDB{DB: gdb}, nil
 }
 
 // Migrate 执行迁移

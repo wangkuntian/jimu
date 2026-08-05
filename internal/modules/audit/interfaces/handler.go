@@ -33,16 +33,12 @@ func NewAuditHandler(service *application.AuditService) *AuditHandler {
 // @Failure      500        {object}  contract.ErrorResponse
 // @Router       /audits [get]
 func (h *AuditHandler) List(c *gin.Context) {
-	var p pagination.Pagination
-	if err := c.ShouldBindQuery(&p); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
+	p := c.MustGet("validated_query").(*pagination.Pagination)
 	if err := p.Normalize("id", "created_at"); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	logs, total, err := h.service.List(c.Request.Context(), p)
+	logs, total, err := h.service.List(c.Request.Context(), *p)
 	if err != nil {
 		response.Fail(c, err)
 		return

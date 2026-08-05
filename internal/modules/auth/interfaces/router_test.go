@@ -72,7 +72,7 @@ func TestLoginRateLimitUsesIPScope(t *testing.T) {
 	r := testRouter(false)
 	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":"alice","password":"secret"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":"alice","password":"secret1234"}`))
 	req.RemoteAddr = "127.0.0.1:1234"
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusTooManyRequests {
@@ -91,7 +91,7 @@ func TestLoginRateLimitUsesNormalizedUsernameScope(t *testing.T) {
 	r := testRouter(false)
 	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":" Alice ","password":"secret"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":" Alice ","password":"secret1234"}`))
 	req.RemoteAddr = "127.0.0.1:1234"
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusTooManyRequests {
@@ -111,7 +111,7 @@ func TestRegisterRateLimitUsesIPScope(t *testing.T) {
 	r := testRouter(false)
 	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(`{"username":"alice","password":"secret"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(`{"username":"alice","password":"secret1234"}`))
 	req.RemoteAddr = "127.0.0.1:1234"
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusTooManyRequests {

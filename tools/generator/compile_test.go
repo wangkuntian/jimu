@@ -122,6 +122,64 @@ func Page(c *gin.Context, data interface{}, total int64, page, pageSize int) {
 	c.JSON(http.StatusOK, data)
 }
 `)
+	writeFileForTest(t, root, "internal/shared/errors/errors_test.go", `package errors
+`)
+	writeFileForTest(t, root, "internal/platform/http/middleware/middleware.go", `package middleware
+
+import (
+	stderrors "errors"
+	"fmt"
+	"strings"
+
+	"jimu/internal/shared/errors"
+	"jimu/internal/shared/response"
+
+	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
+)
+
+func ValidateJSON(dst interface{}) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := c.ShouldBindJSON(dst); err != nil {
+			response.Fail(c, errors.New(errors.CodeInvalidParam, translateValidationError(err)))
+			c.Abort()
+			return
+		}
+		c.Set("validated_req", dst)
+		c.Next()
+	}
+}
+
+func ValidateQuery(dst interface{}) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := c.ShouldBindQuery(dst); err != nil {
+			response.Fail(c, errors.New(errors.CodeInvalidParam, translateValidationError(err)))
+			c.Abort()
+			return
+		}
+		c.Set("validated_query", dst)
+		c.Next()
+	}
+}
+
+func translateValidationError(err error) string {
+	var verr validator.ValidationErrors
+	if stderrors.As(err, &verr) && len(verr) > 0 {
+		e := verr[0]
+		field := e.Field()
+		switch e.Tag() {
+		case "required":
+			return fmt.Sprintf("%s 不能为空", field)
+		default:
+			return fmt.Sprintf("%s 校验失败", field)
+		}
+	}
+	if strings.Contains(err.Error(), "invalid") {
+		return "请求体格式错误"
+	}
+	return "请求参数错误"
+}
+`)
 }
 
 func writeFileForTest(t *testing.T, root, rel, content string) {

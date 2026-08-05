@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"jimu/internal/platform/observability"
+
 	"github.com/spf13/viper"
 )
 
@@ -32,15 +34,16 @@ var (
 )
 
 type Config struct {
-	HTTP       HTTPConfig       `mapstructure:"http"`
-	Management ManagementConfig `mapstructure:"management"`
-	DB         DBConfig         `mapstructure:"db"`
-	Redis      RedisConfig      `mapstructure:"redis"`
-	Log        LogConfig        `mapstructure:"log"`
-	Auth       AuthConfig       `mapstructure:"auth"`
-	Server     ServerConfig     `mapstructure:"server"`
-	Cache      CacheConfig      `mapstructure:"cache"`
-	Audit      AuditConfig      `mapstructure:"audit"`
+	HTTP       HTTPConfig                  `mapstructure:"http"`
+	Management ManagementConfig            `mapstructure:"management"`
+	DB         DBConfig                    `mapstructure:"db"`
+	Redis      RedisConfig                 `mapstructure:"redis"`
+	Log        LogConfig                   `mapstructure:"log"`
+	Auth       AuthConfig                  `mapstructure:"auth"`
+	Server     ServerConfig                `mapstructure:"server"`
+	Cache      CacheConfig                 `mapstructure:"cache"`
+	Audit      AuditConfig                 `mapstructure:"audit"`
+	OTEL       observability.TracingConfig `mapstructure:"otel"`
 }
 
 // ServerConfig 服务运行时配置
@@ -83,19 +86,29 @@ type HTTPConfig struct {
 }
 
 type DBConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-	Database string `mapstructure:"database"`
-	MaxOpen  int    `mapstructure:"max_open"`
-	MaxIdle  int    `mapstructure:"max_idle"`
+	Host               string `mapstructure:"host"`
+	Port               int    `mapstructure:"port"`
+	User               string `mapstructure:"user"`
+	Password           string `mapstructure:"password"`
+	Database           string `mapstructure:"database"`
+	MaxOpen            int    `mapstructure:"max_open"`
+	MaxIdle            int    `mapstructure:"max_idle"`
+	ConnMaxLifetimeSec int    `mapstructure:"conn_max_lifetime_sec"`
+	ConnMaxIdleTimeSec int    `mapstructure:"conn_max_idle_time_sec"`
+	MaxRetries         int    `mapstructure:"max_retries"`
+	RetryIntervalSec   int    `mapstructure:"retry_interval_sec"`
 }
 
 type RedisConfig struct {
-	Addr     string `mapstructure:"addr"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
+	Addr             string `mapstructure:"addr"`
+	Password         string `mapstructure:"password"`
+	DB               int    `mapstructure:"db"`
+	PoolSize         int    `mapstructure:"pool_size"`
+	MinIdleConns     int    `mapstructure:"min_idle_conns"`
+	ReadTimeoutSec   int    `mapstructure:"read_timeout_sec"`
+	WriteTimeoutSec  int    `mapstructure:"write_timeout_sec"`
+	MaxRetries       int    `mapstructure:"max_retries"`
+	RetryIntervalSec int    `mapstructure:"retry_interval_sec"`
 }
 
 type LogConfig struct {
@@ -257,6 +270,25 @@ func applyEnvOverrides(cfg *Config) error {
 	if err := overrideInt("JIMU__REDIS__DB", &cfg.Redis.DB); err != nil {
 		return err
 	}
+	for _, item := range []struct {
+		key string
+		dst *int
+	}{
+		{"JIMU__DB__CONN_MAX_LIFETIME_SEC", &cfg.DB.ConnMaxLifetimeSec},
+		{"JIMU__DB__CONN_MAX_IDLE_TIME_SEC", &cfg.DB.ConnMaxIdleTimeSec},
+		{"JIMU__DB__MAX_RETRIES", &cfg.DB.MaxRetries},
+		{"JIMU__DB__RETRY_INTERVAL_SEC", &cfg.DB.RetryIntervalSec},
+		{"JIMU__REDIS__POOL_SIZE", &cfg.Redis.PoolSize},
+		{"JIMU__REDIS__MIN_IDLE_CONNS", &cfg.Redis.MinIdleConns},
+		{"JIMU__REDIS__READ_TIMEOUT_SEC", &cfg.Redis.ReadTimeoutSec},
+		{"JIMU__REDIS__WRITE_TIMEOUT_SEC", &cfg.Redis.WriteTimeoutSec},
+		{"JIMU__REDIS__MAX_RETRIES", &cfg.Redis.MaxRetries},
+		{"JIMU__REDIS__RETRY_INTERVAL_SEC", &cfg.Redis.RetryIntervalSec},
+	} {
+		if err := overrideInt(item.key, item.dst); err != nil {
+			return err
+		}
+	}
 	// Auth
 	if v := os.Getenv("JIMU__AUTH__JWT_SECRET"); v != "" {
 		cfg.Auth.JWTSecret = v
@@ -300,6 +332,26 @@ func applyEnvOverrides(cfg *Config) error {
 	} {
 		if err := overrideInt(item.key, item.dst); err != nil {
 			return err
+		}
+	}
+	// OTEL
+	if v := os.Getenv("JIMU__OTEL__ENABLED"); v != "" {
+		if err := overrideBool("JIMU__OTEL__ENABLED", &cfg.OTEL.Enabled); err != nil {
+			return err
+		}
+	}
+	if v := os.Getenv("JIMU__OTEL__ENDPOINT"); v != "" {
+		cfg.OTEL.Endpoint = v
+	}
+	if v := os.Getenv("JIMU__OTEL__SERVICE_NAME"); v != "" {
+		cfg.OTEL.ServiceName = v
+	}
+	if v := os.Getenv("JIMU__OTEL__SERVICE_VERSION"); v != "" {
+		cfg.OTEL.ServiceVersion = v
+	}
+	if v := os.Getenv("JIMU__OTEL__SAMPLE_RATE"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.OTEL.SampleRate = f
 		}
 	}
 	return nil

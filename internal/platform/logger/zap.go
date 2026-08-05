@@ -1,12 +1,14 @@
 package logger
 
 import (
+	"context"
 	"errors"
 	"os"
 	"syscall"
 
 	"jimu/internal/config"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -22,6 +24,18 @@ func (l *Logger) Sync() error {
 		return nil
 	}
 	return err
+}
+
+// WithContext 从 context 中提取 trace_id 和 span_id 加入日志字段
+func (l *Logger) WithContext(ctx context.Context) *Logger {
+	spanContext := trace.SpanContextFromContext(ctx)
+	if spanContext.IsValid() {
+		return &Logger{l.SugaredLogger.With(
+			"trace_id", spanContext.TraceID().String(),
+			"span_id", spanContext.SpanID().String(),
+		)}
+	}
+	return l
 }
 
 func New(cfg config.LogConfig) *Logger {

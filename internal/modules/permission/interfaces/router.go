@@ -2,6 +2,8 @@ package interfaces
 
 import (
 	"jimu/internal/modules/permission/application"
+	"jimu/internal/platform/http/middleware"
+	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"
 )
@@ -10,10 +12,10 @@ func RegisterPermissionRoutes(r *gin.RouterGroup, service *application.Permissio
 	handler := NewPermissionHandler(service)
 	perms := r.Group("/permissions")
 	{
-		perms.POST("", handler.Create)
-		perms.GET("", handler.List)
+		perms.POST("", middleware.ValidateJSON(&application.CreatePermissionRequest{}), handler.Create)
+		perms.GET("", middleware.ValidateQuery(&pagination.Pagination{}), handler.List)
 		perms.GET("/:id", handler.Get)
-		perms.PUT("/:id", handler.Update)
+		perms.PUT("/:id", middleware.ValidateJSON(&application.UpdatePermissionRequest{}), handler.Update)
 		perms.DELETE("/:id", handler.Delete)
 	}
 }

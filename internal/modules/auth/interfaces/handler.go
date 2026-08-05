@@ -23,11 +23,6 @@ func NewAuthHandler(service *application.AuthService, cfg config.AuthConfig, lim
 	return &AuthHandler{service: service, cfg: cfg, limiter: limiter}
 }
 
-type loginRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
-}
-
 // Login godoc
 // @Summary      User login
 // @Description  Login with username and password
@@ -38,11 +33,7 @@ type loginRequest struct {
 // @Success      200   {object}  response.Body
 // @Router       /auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
-	var req loginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
+	req := c.MustGet("validated_req").(*loginRequest)
 	if !h.allow(c, "login", "ip:"+c.ClientIP(), h.cfg.LoginRateLimit, time.Duration(h.cfg.LoginRateWindowSec)*time.Second) {
 		return
 	}
@@ -67,11 +58,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Success      200   {object}  response.Body
 // @Router       /auth/register [post]
 func (h *AuthHandler) Register(c *gin.Context) {
-	var req loginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
+	req := c.MustGet("validated_req").(*loginRequest)
 	if !h.allow(c, "register", "ip:"+c.ClientIP(), h.cfg.RegisterRateLimit, time.Duration(h.cfg.RegisterRateWindowSec)*time.Second) {
 		return
 	}
@@ -81,10 +68,6 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 	response.OK(c, user)
-}
-
-type refreshRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
 // RefreshToken godoc
@@ -97,11 +80,7 @@ type refreshRequest struct {
 // @Success      200   {object}  response.Body
 // @Router       /auth/refresh [post]
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	var req refreshRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
-	}
+	req := c.MustGet("validated_req").(*refreshRequest)
 	tokenPair, err := h.service.Refresh(c.Request.Context(), req.RefreshToken)
 	if err != nil {
 		response.Fail(c, err)

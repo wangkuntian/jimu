@@ -16,7 +16,10 @@ import (
 func TestPermissionCreateReturnsCreated(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.POST("/permissions", NewPermissionHandler(application.NewPermissionService(&fakePermissionRepository{})).Create)
+	r.POST("/permissions", func(c *gin.Context) {
+		c.Set("validated_req", &application.CreatePermissionRequest{Name: "user:read", Resource: "user", Action: "read"})
+		NewPermissionHandler(application.NewPermissionService(&fakePermissionRepository{})).Create(c)
+	})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/permissions", strings.NewReader(`{"name":"user:read","resource":"user","action":"read"}`)))
 

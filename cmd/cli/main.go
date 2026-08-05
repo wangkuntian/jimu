@@ -6,6 +6,7 @@ import (
 
 	"jimu/internal/config"
 	"jimu/internal/platform/db"
+	"jimu/internal/platform/logger"
 	"jimu/tools/generator"
 
 	"github.com/spf13/cobra"
@@ -44,7 +45,8 @@ var migrateUpCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
-		if err := db.Migrate(cfg.DB, "up"); err != nil {
+		log := logger.New(cfg.Log)
+		if err := db.MigrateWithRetry(cfg.DB, log, "up"); err != nil {
 			return fmt.Errorf("migration failed: %w", err)
 		}
 		fmt.Println("Migrations applied successfully")
@@ -60,7 +62,8 @@ var migrateDownCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
-		if err := db.Migrate(cfg.DB, "down"); err != nil {
+		log := logger.New(cfg.Log)
+		if err := db.MigrateWithRetry(cfg.DB, log, "down"); err != nil {
 			return fmt.Errorf("rollback failed: %w", err)
 		}
 		fmt.Println("Rollback successful")
@@ -76,7 +79,8 @@ var migrateStatusCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
-		if err := db.Migrate(cfg.DB, "status"); err != nil {
+		log := logger.New(cfg.Log)
+		if err := db.MigrateWithRetry(cfg.DB, log, "status"); err != nil {
 			return fmt.Errorf("failed to get status: %w", err)
 		}
 		return nil
@@ -91,7 +95,8 @@ var migrateRedoCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
-		if err := db.Migrate(cfg.DB, "redo"); err != nil {
+		log := logger.New(cfg.Log)
+		if err := db.MigrateWithRetry(cfg.DB, log, "redo"); err != nil {
 			return fmt.Errorf("redo failed: %w", err)
 		}
 		fmt.Println("Redo successful")
@@ -107,7 +112,8 @@ var seedCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
-		dbConn, err := db.New(cfg.DB)
+		log := logger.New(cfg.Log)
+		dbConn, err := db.ConnectWithRetry(cfg.DB, log)
 		if err != nil {
 			return fmt.Errorf("failed to connect database: %w", err)
 		}

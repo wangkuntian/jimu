@@ -61,5 +61,14 @@ func (c *Config) validateCommon() error {
 	if c.Audit.QueueSize <= 0 || c.Audit.BatchSize <= 0 || c.Audit.BatchSize > c.Audit.QueueSize || c.Audit.FlushIntervalMS <= 0 {
 		return errors.New("invalid audit configuration")
 	}
+	if c.DB.MaxOpen <= 0 || c.DB.MaxIdle <= 0 || c.DB.MaxIdle > c.DB.MaxOpen {
+		return errors.New("invalid db pool configuration")
+	}
+	if c.DB.MaxRetries <= 0 || c.DB.RetryIntervalSec <= 0 {
+		return errors.New("invalid db retry configuration")
+	}
+	if c.Redis.MaxRetries <= 0 || c.Redis.RetryIntervalSec <= 0 {
+		return errors.New("invalid redis retry configuration")
+	}
 	return nil
 }

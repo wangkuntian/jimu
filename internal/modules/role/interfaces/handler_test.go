@@ -16,7 +16,10 @@ import (
 func TestRoleCreateReturnsCreated(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.POST("/roles", NewRoleHandler(application.NewRoleService(&fakeRoleRepository{})).Create)
+	r.POST("/roles", func(c *gin.Context) {
+		c.Set("validated_req", &application.CreateRoleRequest{Name: "admin", Description: "ops"})
+		NewRoleHandler(application.NewRoleService(&fakeRoleRepository{})).Create(c)
+	})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/roles", strings.NewReader(`{"name":"admin","description":"ops"}`)))
 

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -13,7 +14,15 @@ import (
 
 func Bootstrap(container *Container, modules ...contract.Module) (*Application, error) {
 	cfg := container.Config
-	router := platformhttp.SetupRouter(container.Logger, cfg.HTTP, cfg.Server)
+
+	// 初始化 OpenTelemetry 追踪
+	tp, err := observability.InitTracing(context.Background(), cfg.OTEL)
+	if err != nil {
+		return nil, fmt.Errorf("init tracing: %w", err)
+	}
+	container.TracerProvider = tp
+
+	router := platformhttp.SetupRouter(container.Logger, cfg.HTTP, cfg.Server, cfg.OTEL)
 	if err := platformhttp.ConfigureTrustedProxies(router, cfg.HTTP.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
