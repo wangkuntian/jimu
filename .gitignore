@@ -34,4 +34,7 @@ go.work.sum
 # OS generated files
 .DS_Store
 
+# Build artifacts
+bin/
+graphify-out/
 .codegraph/
