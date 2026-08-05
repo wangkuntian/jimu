@@ -15,7 +15,8 @@ DOCKER_CONTAINER := jimu-server
 SWAG := go run -mod=mod github.com/swaggo/swag/cmd/swag
 ENV ?= dev
 
-# 加载 .env 文件（如果存在）
+# 加载 .env 文件（如果存在），导出敏感变量供 docker 命令使用
+# 本地 make run/migrate/seed 直接读取 configs/ 中的 YAML，无需环境变量
 ifneq (,$(wildcard .env))
     include .env
     export
@@ -55,7 +56,7 @@ help:
 
 ## run: 编译并运行二进制
 run: build-server
-	./$(SERVER_BIN)
+	JIMU_ENV=$(ENV) ./$(SERVER_BIN)
 
 ## run-go: 直接 go run 运行（不编译）
 run-go:
@@ -94,9 +95,9 @@ container-run:
 	docker run --rm -it \
 		--name $(DOCKER_CONTAINER) \
 		-p 8080:8080 \
-		-e JIMU_ENV=prod \
-		-e JIMU__DB__HOST=host.docker.internal \
-		-e JIMU__REDIS__ADDR=host.docker.internal:6379 \
+		-e JWT_SECRET \
+		-e DB_PASSWORD \
+		-v $(PWD)/configs:/app/configs \
 		$(DOCKER_IMAGE)
 
 ## container-stop: 停止并删除容器
@@ -165,9 +166,9 @@ migrate-status:
 migrate-docker:
 	docker run --rm \
 		--network host \
-		-e JIMU_ENV=prod \
-		-e JIMU__DB__HOST=host.docker.internal \
-		-e JIMU__REDIS__ADDR=host.docker.internal:6379 \
+		-e JWT_SECRET \
+		-e DB_PASSWORD \
+		-v $(PWD)/configs:/app/configs \
 		$(DOCKER_IMAGE) ./jimu migrate up
 
 ## migrate-compose: Compose 环境执行迁移
@@ -192,9 +193,9 @@ seed:
 seed-docker:
 	docker run --rm \
 		--network host \
-		-e JIMU_ENV=prod \
-		-e JIMU__DB__HOST=host.docker.internal \
-		-e JIMU__REDIS__ADDR=host.docker.internal:6379 \
+		-e JWT_SECRET \
+		-e DB_PASSWORD \
+		-v $(PWD)/configs:/app/configs \
 		$(DOCKER_IMAGE) ./jimu seed
 
 ## seed-compose: Compose 环境插入初始数据

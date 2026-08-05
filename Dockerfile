@@ -22,10 +22,11 @@ WORKDIR /app
 
 COPY --from=builder /app/server .
 COPY --from=builder /app/jimu .
-COPY configs/ ./configs/
 COPY migrations/ ./migrations/
 COPY conf/ ./conf/
 RUN mkdir -p logs && chown -R jimu:jimu /app
+
+# 注意：configs/ 不打包进镜像，运行时通过 -v $(pwd)/configs:/app/configs 挂载
 
 USER jimu
 
