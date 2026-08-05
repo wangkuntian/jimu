@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 
 	"jimu/internal/platform/observability"
 
@@ -174,18 +172,12 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// 环境变量覆盖：JIMU__HTTP__PORT=9090
-	v.SetEnvPrefix("JIMU")
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "__"))
-	v.AutomaticEnv()
+	// 绑定少量敏感环境变量（简洁命名，无 JIMU__ 前缀）
+	_ = v.BindEnv("auth.jwt_secret", "JWT_SECRET")
+	_ = v.BindEnv("db.password", "MARIADB_PASSWORD")
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, err
-	}
-
-	// viper AutomaticEnv 对嵌套键的 Unmarshal 不生效，手动覆盖
-	if err := applyEnvOverrides(&cfg); err != nil {
 		return nil, err
 	}
 
@@ -196,216 +188,9 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
-// applyEnvOverrides 手动应用环境变量覆盖
-func applyEnvOverrides(cfg *Config) error {
-	// HTTP
-	if err := overrideInt("JIMU__HTTP__PORT", &cfg.HTTP.Port); err != nil {
-		return err
-	}
-	if v := os.Getenv("JIMU__HTTP__HOST"); v != "" {
-		cfg.HTTP.Host = v
-	}
-	if v := os.Getenv("JIMU__HTTP__MODE"); v != "" {
-		cfg.HTTP.Mode = v
-	}
-	for _, item := range []struct {
-		key string
-		dst *int
-	}{
-		{"JIMU__HTTP__READ_HEADER_TIMEOUT_SEC", &cfg.HTTP.ReadHeaderTimeoutSec},
-		{"JIMU__HTTP__READ_TIMEOUT_SEC", &cfg.HTTP.ReadTimeoutSec},
-		{"JIMU__HTTP__WRITE_TIMEOUT_SEC", &cfg.HTTP.WriteTimeoutSec},
-		{"JIMU__HTTP__IDLE_TIMEOUT_SEC", &cfg.HTTP.IdleTimeoutSec},
-		{"JIMU__HTTP__SHUTDOWN_TIMEOUT_SEC", &cfg.HTTP.ShutdownTimeoutSec},
-	} {
-		if err := overrideInt(item.key, item.dst); err != nil {
-			return err
-		}
-	}
-	if err := overrideInt64("JIMU__HTTP__MAX_BODY_BYTES", &cfg.HTTP.MaxBodyBytes); err != nil {
-		return err
-	}
-	if v := os.Getenv("JIMU__HTTP__TRUSTED_PROXIES"); v != "" {
-		cfg.HTTP.TrustedProxies = splitList(v)
-	}
-	if v := os.Getenv("JIMU__HTTP__ALLOWED_ORIGINS"); v != "" {
-		cfg.HTTP.AllowedOrigins = splitList(v)
-	}
-	// Management
-	if v := os.Getenv("JIMU__MANAGEMENT__HOST"); v != "" {
-		cfg.Management.Host = v
-	}
-	if err := overrideInt("JIMU__MANAGEMENT__PORT", &cfg.Management.Port); err != nil {
-		return err
-	}
-	if err := overrideBool("JIMU__MANAGEMENT__ENABLE_PPROF", &cfg.Management.EnablePprof); err != nil {
-		return err
-	}
-	if err := overrideInt("JIMU__MANAGEMENT__PROBE_TIMEOUT_SEC", &cfg.Management.ProbeTimeoutSec); err != nil {
-		return err
-	}
-	// DB
-	if v := os.Getenv("JIMU__DB__HOST"); v != "" {
-		cfg.DB.Host = v
-	}
-	if err := overrideInt("JIMU__DB__PORT", &cfg.DB.Port); err != nil {
-		return err
-	}
-	if v := os.Getenv("JIMU__DB__USER"); v != "" {
-		cfg.DB.User = v
-	}
-	if v := os.Getenv("JIMU__DB__PASSWORD"); v != "" {
-		cfg.DB.Password = v
-	}
-	if v := os.Getenv("JIMU__DB__DATABASE"); v != "" {
-		cfg.DB.Database = v
-	}
-	// Redis
-	if v := os.Getenv("JIMU__REDIS__ADDR"); v != "" {
-		cfg.Redis.Addr = v
-	}
-	if v := os.Getenv("JIMU__REDIS__PASSWORD"); v != "" {
-		cfg.Redis.Password = v
-	}
-	if err := overrideInt("JIMU__REDIS__DB", &cfg.Redis.DB); err != nil {
-		return err
-	}
-	for _, item := range []struct {
-		key string
-		dst *int
-	}{
-		{"JIMU__DB__CONN_MAX_LIFETIME_SEC", &cfg.DB.ConnMaxLifetimeSec},
-		{"JIMU__DB__CONN_MAX_IDLE_TIME_SEC", &cfg.DB.ConnMaxIdleTimeSec},
-		{"JIMU__DB__MAX_RETRIES", &cfg.DB.MaxRetries},
-		{"JIMU__DB__RETRY_INTERVAL_SEC", &cfg.DB.RetryIntervalSec},
-		{"JIMU__REDIS__POOL_SIZE", &cfg.Redis.PoolSize},
-		{"JIMU__REDIS__MIN_IDLE_CONNS", &cfg.Redis.MinIdleConns},
-		{"JIMU__REDIS__READ_TIMEOUT_SEC", &cfg.Redis.ReadTimeoutSec},
-		{"JIMU__REDIS__WRITE_TIMEOUT_SEC", &cfg.Redis.WriteTimeoutSec},
-		{"JIMU__REDIS__MAX_RETRIES", &cfg.Redis.MaxRetries},
-		{"JIMU__REDIS__RETRY_INTERVAL_SEC", &cfg.Redis.RetryIntervalSec},
-	} {
-		if err := overrideInt(item.key, item.dst); err != nil {
-			return err
-		}
-	}
-	// Auth
-	if v := os.Getenv("JIMU__AUTH__JWT_SECRET"); v != "" {
-		cfg.Auth.JWTSecret = v
-	}
-	if v := os.Getenv("JIMU__AUTH__ISSUER"); v != "" {
-		cfg.Auth.Issuer = v
-	}
-	if err := overrideBool("JIMU__AUTH__PUBLIC_REGISTRATION", &cfg.Auth.PublicRegistration); err != nil {
-		return err
-	}
-	for _, item := range []struct {
-		key string
-		dst *int
-	}{
-		{"JIMU__AUTH__ACCESS_EXPIRE_MIN", &cfg.Auth.AccessExpireMin},
-		{"JIMU__AUTH__REFRESH_EXPIRE_DAY", &cfg.Auth.RefreshExpireDay},
-		{"JIMU__AUTH__LOGIN_RATE_LIMIT", &cfg.Auth.LoginRateLimit},
-		{"JIMU__AUTH__LOGIN_RATE_WINDOW_SEC", &cfg.Auth.LoginRateWindowSec},
-		{"JIMU__AUTH__REGISTER_RATE_LIMIT", &cfg.Auth.RegisterRateLimit},
-		{"JIMU__AUTH__REGISTER_RATE_WINDOW_SEC", &cfg.Auth.RegisterRateWindowSec},
-	} {
-		if err := overrideInt(item.key, item.dst); err != nil {
-			return err
-		}
-	}
-	// Log
-	if v := os.Getenv("JIMU__LOG__LEVEL"); v != "" {
-		cfg.Log.Level = v
-	}
-	if v := os.Getenv("JIMU__LOG__FORMAT"); v != "" {
-		cfg.Log.Format = v
-	}
-	// Audit
-	for _, item := range []struct {
-		key string
-		dst *int
-	}{
-		{"JIMU__AUDIT__QUEUE_SIZE", &cfg.Audit.QueueSize},
-		{"JIMU__AUDIT__BATCH_SIZE", &cfg.Audit.BatchSize},
-		{"JIMU__AUDIT__FLUSH_INTERVAL_MS", &cfg.Audit.FlushIntervalMS},
-	} {
-		if err := overrideInt(item.key, item.dst); err != nil {
-			return err
-		}
-	}
-	// OTEL
-	if v := os.Getenv("JIMU__OTEL__ENABLED"); v != "" {
-		if err := overrideBool("JIMU__OTEL__ENABLED", &cfg.OTEL.Enabled); err != nil {
-			return err
-		}
-	}
-	if v := os.Getenv("JIMU__OTEL__ENDPOINT"); v != "" {
-		cfg.OTEL.Endpoint = v
-	}
-	if v := os.Getenv("JIMU__OTEL__SERVICE_NAME"); v != "" {
-		cfg.OTEL.ServiceName = v
-	}
-	if v := os.Getenv("JIMU__OTEL__SERVICE_VERSION"); v != "" {
-		cfg.OTEL.ServiceVersion = v
-	}
-	if v := os.Getenv("JIMU__OTEL__SAMPLE_RATE"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			cfg.OTEL.SampleRate = f
-		}
-	}
-	return nil
-}
-
-func overrideInt(key string, dst *int) error {
-	v := os.Getenv(key)
-	if v == "" {
-		return nil
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return fmt.Errorf("invalid %s", strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(key, "JIMU__"), "__", ".")))
-	}
-	*dst = n
-	return nil
-}
-
-func overrideInt64(key string, dst *int64) error {
-	v := os.Getenv(key)
-	if v == "" {
-		return nil
-	}
-	n, err := strconv.ParseInt(v, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid %s", strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(key, "JIMU__"), "__", ".")))
-	}
-	*dst = n
-	return nil
-}
-
-func overrideBool(key string, dst *bool) error {
-	v := os.Getenv(key)
-	if v == "" {
-		return nil
-	}
-	b, err := strconv.ParseBool(v)
-	if err != nil {
-		return fmt.Errorf("invalid %s", strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(key, "JIMU__"), "__", ".")))
-	}
-	*dst = b
-	return nil
-}
-
-func splitList(value string) []string {
-	parts := strings.Split(value, ",")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if value := strings.TrimSpace(part); value != "" {
-			result = append(result, value)
-		}
-	}
-	return result
-}
+// applyEnvOverrides、overrideInt/Int64/Bool、splitList 已移除。
+// 配置以 configs/ 下的 YAML 环境文件为唯一来源。
+// 仅 JWT_SECRET 和 DB_PASSWORD 支持环境变量覆盖（生产密钥管理）。
 
 func contains(list []string, val string) bool {
 	for _, v := range list {

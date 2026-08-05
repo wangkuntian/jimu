@@ -3,15 +3,15 @@ services:
     image: mariadb:12.1.2-noble
     restart: unless-stopped
     environment:
-      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-change-this-root-password}
-      MARIADB_DATABASE: ${DB_DATABASE:-jimu}
-      MARIADB_USER: ${DB_USER:-jimu}
-      MARIADB_PASSWORD: ${DB_PASSWORD:-change-this-jimu-db-password}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-change-this-root-password}
+      MARIADB_DATABASE: jimu
+      MARIADB_USER: jimu
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-change-this-jimu-db-password}
       TZ: Asia/Shanghai
     volumes:
       - jimu-mariadb-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: ["CMD", "mariadb-admin", "ping", "--silent"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,7 +32,7 @@ services:
     profiles: ["dev"]
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${ADMINER_PORT:-8081}:8080"
+      - "127.0.0.1:8081:8080"
     depends_on:
       mariadb:
         condition: service_healthy
@@ -42,21 +42,14 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    env_file:
-      - path: .env
-        required: false
     environment:
-      JIMU_ENV: ${JIMU_ENV:-prod}
-      JIMU__DB__HOST: mariadb
-      JIMU__DB__PORT: 3306
-      JIMU__DB__USER: ${DB_USER:-jimu}
-      JIMU__DB__PASSWORD: ${DB_PASSWORD:-change-this-jimu-db-password}
-      JIMU__REDIS__ADDR: redis:6379
-      JIMU__AUTH__JWT_SECRET: ${JWT_SECRET:-01234567890123456789012345678901}
+      JIMU_ENV: prod
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-change-this-jimu-db-password}
     ports:
-      - "${HTTP_PORT:-8080}:8080"
-      - "127.0.0.1:${MANAGEMENT_PORT:-9090}:9090"
+      - "8080:8080"
+      - "127.0.0.1:9090:9090"
     volumes:
+      - ./configs:/app/configs
       - ./logs:/app/logs
     depends_on:
       mariadb:

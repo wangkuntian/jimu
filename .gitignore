@@ -36,5 +36,5 @@ go.work.sum
 
 # Build artifacts
 bin/
-graphify-out/
 .codegraph/
+logs/

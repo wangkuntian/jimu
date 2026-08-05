@@ -27,6 +27,18 @@ func TestEnvOverride(t *testing.T) {
 	}
 }
 
+func TestInvalidNestedEnvReturnsStableKey(t *testing.T) {
+	t.Setenv("JIMU__DB__PORT", "not-a-port")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for invalid db.port, got nil")
+	}
+	if err.Error() != "invalid db.port" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestValidateHTTPMode(t *testing.T) {
 	t.Setenv("JIMU__HTTP__MODE", "invalid")
 
