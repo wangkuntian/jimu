@@ -32,17 +32,20 @@ var (
 )
 
 type Config struct {
-	HTTP       HTTPConfig                  `mapstructure:"http"`
-	Management ManagementConfig            `mapstructure:"management"`
-	DB         DBConfig                    `mapstructure:"db"`
-	Redis      RedisConfig                 `mapstructure:"redis"`
-	Log        LogConfig                   `mapstructure:"log"`
-	Auth       AuthConfig                  `mapstructure:"auth"`
-	Server     ServerConfig                `mapstructure:"server"`
-	Cache      CacheConfig                 `mapstructure:"cache"`
-	Audit      AuditConfig                 `mapstructure:"audit"`
-	Storage    StorageConfig               `mapstructure:"storage"`
-	OTEL       observability.TracingConfig `mapstructure:"otel"`
+	HTTP        HTTPConfig                  `mapstructure:"http"`
+	Management  ManagementConfig            `mapstructure:"management"`
+	DB          DBConfig                    `mapstructure:"db"`
+	Redis       RedisConfig                 `mapstructure:"redis"`
+	Log         LogConfig                   `mapstructure:"log"`
+	Auth        AuthConfig                  `mapstructure:"auth"`
+	Server      ServerConfig                `mapstructure:"server"`
+	Cache       CacheConfig                 `mapstructure:"cache"`
+	Audit       AuditConfig                 `mapstructure:"audit"`
+	Storage     StorageConfig               `mapstructure:"storage"`
+	OTEL        observability.TracingConfig `mapstructure:"otel"`
+	// 元数据（非 YAML 配置，运行时注入）
+	Version     string `mapstructure:"-"`
+	Environment string `mapstructure:"-"`
 }
 
 // ServerConfig 服务运行时配置

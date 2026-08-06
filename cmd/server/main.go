@@ -9,6 +9,7 @@ import (
 
 	"jimu/internal/app"
 	"jimu/internal/config"
+	adminmodule "jimu/internal/modules/admin"
 	auditmodule "jimu/internal/modules/audit"
 	authmodule "jimu/internal/modules/auth"
 	"jimu/internal/modules/permission"
@@ -36,6 +37,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+
+	// 注入元数据
+	cfg.Version = "1.0.0"
+	cfg.Environment = os.Getenv("JIMU_ENV")
+
 	container, err := app.NewContainer(cfg)
 	if err != nil {
 		return fmt.Errorf("create container: %w", err)
@@ -48,6 +54,7 @@ func run() error {
 		role.New(container.DB),
 		permission.New(container.DB),
 		auditmodule.New(container.DB, cfg.Audit, container.Logger),
+		adminmodule.New(*cfg),
 	)
 	if err != nil {
 		_ = container.Stop(context.Background())
