@@ -1,7 +1,7 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "Jimu Backend Framework API",
+        "description": "Jimu 后端框架 API - 提供用户认证、权限管理、角色管理、系统监控等功能",
         "title": "Jimu API",
         "contact": {},
         "version": "1.0"
@@ -11,17 +11,17 @@
     "paths": {
         "/admin/error-codes": {
             "get": {
-                "description": "获取所有业务错误码及其 HTTP 状态码映射",
+                "description": "获取所有业务错误码及其对应的 HTTP 状态码映射。用于前端和第三方系统集成时参考。包含错误码、错误消息、HTTP 状态码和分类信息。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "系统管理"
                 ],
                 "summary": "获取错误码列表",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功，返回错误码列表",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
@@ -31,17 +31,17 @@
         },
         "/admin/status": {
             "get": {
-                "description": "获取运行时状态（版本、内存、Goroutine 等）",
+                "description": "获取运行时系统状态信息，包括：版本号、运行环境（dev/prod）、启动时间、运行时长、Goroutine 数量、CPU 核心数、内存使用情况（已分配、总分配、系统内存、GC 次数、堆分配、堆使用）。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "系统管理"
                 ],
                 "summary": "获取系统状态",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功，返回系统状态信息",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
@@ -56,19 +56,37 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取当前在线用户列表",
+                "description": "获取当前在线用户列表。从 Redis 中扫描所有活跃的会话信息，返回用户 ID、用户名和会话 ID。需要管理员权限。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "系统管理"
                 ],
                 "summary": "获取在线用户列表",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功，返回在线用户列表",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无管理员权限",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
                 }
@@ -81,18 +99,18 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "强制指定用户的所有会话下线",
+                "description": "强制指定用户的所有会话下线。删除该用户在 Redis 中的所有会话数据，使其在所有设备上需要重新登录。需要管理员权限。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "系统管理"
                 ],
                 "summary": "强制用户下线",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "User ID",
+                        "description": "要强制下线的用户 ID",
                         "name": "user_id",
                         "in": "path",
                         "required": true
@@ -100,9 +118,33 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（ID 格式无效）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无管理员权限",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
                 }
@@ -115,54 +157,55 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "分页获取系统审计日志。记录用户的操作行为（如登录、创建、修改、删除等），用于安全审计和行为追踪。支持按 ID、创建时间排序。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "audits"
+                    "审计日志"
                 ],
-                "summary": "List audit logs",
+                "summary": "获取审计日志列表",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Page",
+                        "description": "页码（默认 1）",
                         "name": "page",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Page size",
+                        "description": "每页数量（默认 20，最大 100）",
                         "name": "page_size",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Sort field",
+                        "description": "排序字段（支持 id、created_at，默认 id）",
                         "name": "sort",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Sort order",
+                        "description": "排序方向（asc 或 desc，默认 desc）",
                         "name": "order",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功，返回分页审计日志列表",
                         "schema": {
                             "$ref": "#/definitions/contract.PageResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（如无效的排序字段）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -177,17 +220,18 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "根据审计日志 ID 获取详细信息，包括操作用户、操作类型、资源、详情、IP 地址、HTTP 方法、请求路径和状态码。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "audits"
+                    "审计日志"
                 ],
-                "summary": "Get audit log",
+                "summary": "获取审计日志详情",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Audit log ID",
+                        "description": "审计日志 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -195,25 +239,25 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功，返回审计日志详情",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（ID 格式无效）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "审计日志不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -223,7 +267,7 @@
         },
         "/auth/login": {
             "post": {
-                "description": "Login with username and password",
+                "description": "使用用户名和密码进行身份验证，成功返回访问令牌和刷新令牌。支持 IP 和用户名维度的限流保护。",
                 "consumes": [
                     "application/json"
                 ],
@@ -231,12 +275,12 @@
                     "application/json"
                 ],
                 "tags": [
-                    "auth"
+                    "认证"
                 ],
-                "summary": "User login",
+                "summary": "用户登录",
                 "parameters": [
                     {
-                        "description": "Login info",
+                        "description": "登录信息",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -247,9 +291,27 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功，返回 accessToken 和 refreshToken",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（用户名或密码格式不符）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "认证失败（用户名或密码错误）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "请求过于频繁，请稍后再试",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
                 }
@@ -262,19 +324,25 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Revoke the current refresh session",
+                "description": "撤销当前会话的刷新令牌，使其失效。需要有效的访问令牌进行身份验证。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "auth"
+                    "认证"
                 ],
-                "summary": "Logout current session",
+                "summary": "退出当前会话",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或会话无效",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
                 }
@@ -287,19 +355,25 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Revoke all refresh sessions for the current user",
+                "description": "撤销该用户的所有刷新会话，强制所有设备重新登录。需要有效的访问令牌进行身份验证。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "auth"
+                    "认证"
                 ],
-                "summary": "Logout all sessions",
+                "summary": "退出所有会话",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或会话无效",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
                 }
@@ -307,7 +381,7 @@
         },
         "/auth/refresh": {
             "post": {
-                "description": "Get new access token using refresh token",
+                "description": "使用有效的刷新令牌获取新的访问令牌。刷新令牌轮换机制会同时生成新的刷新令牌，旧的刷新令牌失效。",
                 "consumes": [
                     "application/json"
                 ],
@@ -315,12 +389,12 @@
                     "application/json"
                 ],
                 "tags": [
-                    "auth"
+                    "认证"
                 ],
-                "summary": "Refresh access token",
+                "summary": "刷新访问令牌",
                 "parameters": [
                     {
-                        "description": "Refresh token",
+                        "description": "刷新令牌",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -331,9 +405,21 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功，返回新的 token 对",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "刷新令牌无效或已过期",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
                 }
@@ -341,7 +427,7 @@
         },
         "/auth/register": {
             "post": {
-                "description": "Register a new user when public registration is enabled",
+                "description": "注册新用户账户。仅当系统配置中 public_registration 为 true 时可用。支持 IP 维度的限流保护。",
                 "consumes": [
                     "application/json"
                 ],
@@ -349,12 +435,12 @@
                     "application/json"
                 ],
                 "tags": [
-                    "auth"
+                    "认证"
                 ],
-                "summary": "Register user",
+                "summary": "用户注册",
                 "parameters": [
                     {
-                        "description": "Register info",
+                        "description": "注册信息（用户名和密码）",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -365,9 +451,21 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功，返回用户信息",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（如用户名已存在）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "请求过于频繁",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
                 }
@@ -380,54 +478,55 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "分页获取权限列表。支持按 ID、名称、资源路径、操作类型、创建时间排序。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "permissions"
+                    "权限管理"
                 ],
-                "summary": "List permissions",
+                "summary": "获取权限列表",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Page",
+                        "description": "页码（默认 1）",
                         "name": "page",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Page size",
+                        "description": "每页数量（默认 20，最大 100）",
                         "name": "page_size",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Sort field",
+                        "description": "排序字段（支持 id、name、resource、action、created_at，默认 id）",
                         "name": "sort",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Sort order",
+                        "description": "排序方向（asc 或 desc，默认 desc）",
                         "name": "order",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功，返回分页权限列表",
                         "schema": {
                             "$ref": "#/definitions/contract.PageResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（如无效的排序字段）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -440,6 +539,7 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "创建新权限。权限由资源路径（resource）和操作类型（action）唯一标识，用于控制 API 访问。",
                 "consumes": [
                     "application/json"
                 ],
@@ -447,12 +547,12 @@
                     "application/json"
                 ],
                 "tags": [
-                    "permissions"
+                    "权限管理"
                 ],
-                "summary": "Create permission",
+                "summary": "创建权限",
                 "parameters": [
                     {
-                        "description": "Permission info",
+                        "description": "权限信息（名称、资源路径、操作类型）",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -463,25 +563,25 @@
                 ],
                 "responses": {
                     "201": {
-                        "description": "Created",
+                        "description": "创建成功，返回权限信息",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（如名称为空）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "409": {
-                        "description": "Conflict",
+                        "description": "权限已存在（resource + action 重复）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -496,17 +596,18 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "根据权限 ID 获取权限详细信息，包括资源路径和操作类型。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "permissions"
+                    "权限管理"
                 ],
-                "summary": "Get permission",
+                "summary": "获取权限详情",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Permission ID",
+                        "description": "权限 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -514,25 +615,25 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功，返回权限信息",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（ID 格式无效）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "权限不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -545,6 +646,7 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "更新指定权限的名称、资源路径或操作类型。",
                 "consumes": [
                     "application/json"
                 ],
@@ -552,19 +654,19 @@
                     "application/json"
                 ],
                 "tags": [
-                    "permissions"
+                    "权限管理"
                 ],
-                "summary": "Update permission",
+                "summary": "更新权限信息",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Permission ID",
+                        "description": "权限 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Permission info",
+                        "description": "要更新的权限信息",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -575,31 +677,31 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "更新成功",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（ID 格式无效）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "权限不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "409": {
-                        "description": "Conflict",
+                        "description": "权限冲突（resource + action 重复）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -612,17 +714,18 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "软删除指定权限。删除后权限数据仍保留在数据库中，但无法分配给角色。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "permissions"
+                    "权限管理"
                 ],
-                "summary": "Delete permission",
+                "summary": "删除权限",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Permission ID",
+                        "description": "权限 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -630,16 +733,16 @@
                 ],
                 "responses": {
                     "204": {
-                        "description": "No Content"
+                        "description": "删除成功，无返回内容"
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（ID 格式无效）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -654,54 +757,55 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "分页获取角色列表。支持按 ID、名称、创建时间排序。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "roles"
+                    "角色管理"
                 ],
-                "summary": "List roles",
+                "summary": "获取角色列表",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Page",
+                        "description": "页码（默认 1）",
                         "name": "page",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Page size",
+                        "description": "每页数量（默认 20，最大 100）",
                         "name": "page_size",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Sort field",
+                        "description": "排序字段（支持 id、name、created_at，默认 id）",
                         "name": "sort",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Sort order",
+                        "description": "排序方向（asc 或 desc，默认 desc）",
                         "name": "order",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功，返回分页角色列表",
                         "schema": {
                             "$ref": "#/definitions/contract.PageResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（如无效的排序字段）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -714,6 +818,7 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "创建新角色。角色名称必须唯一，用于权限管理和访问控制。",
                 "consumes": [
                     "application/json"
                 ],
@@ -721,12 +826,12 @@
                     "application/json"
                 ],
                 "tags": [
-                    "roles"
+                    "角色管理"
                 ],
-                "summary": "Create role",
+                "summary": "创建角色",
                 "parameters": [
                     {
-                        "description": "Role info",
+                        "description": "角色信息（名称和描述）",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -737,25 +842,25 @@
                 ],
                 "responses": {
                     "201": {
-                        "description": "Created",
+                        "description": "创建成功，返回角色信息",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（如名称为空）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "409": {
-                        "description": "Conflict",
+                        "description": "角色名称已存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -770,17 +875,18 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "根据角色 ID 获取角色详细信息，包括关联的权限列表。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "roles"
+                    "角色管理"
                 ],
-                "summary": "Get role",
+                "summary": "获取角色详情",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Role ID",
+                        "description": "角色 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -788,25 +894,25 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功，返回角色信息",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（ID 格式无效）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "角色不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -819,6 +925,7 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "更新指定角色的名称或描述。",
                 "consumes": [
                     "application/json"
                 ],
@@ -826,19 +933,19 @@
                     "application/json"
                 ],
                 "tags": [
-                    "roles"
+                    "角色管理"
                 ],
-                "summary": "Update role",
+                "summary": "更新角色信息",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Role ID",
+                        "description": "角色 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Role info",
+                        "description": "要更新的角色信息",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -849,31 +956,31 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "更新成功",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（ID 格式无效）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "角色不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "409": {
-                        "description": "Conflict",
+                        "description": "角色名称已存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -886,17 +993,18 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "软删除指定角色。删除后角色数据仍保留在数据库中，但无法分配给用户。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "roles"
+                    "角色管理"
                 ],
-                "summary": "Delete role",
+                "summary": "删除角色",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Role ID",
+                        "description": "角色 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -904,16 +1012,16 @@
                 ],
                 "responses": {
                     "204": {
-                        "description": "No Content"
+                        "description": "删除成功，无返回内容"
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（ID 格式无效）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -928,6 +1036,7 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "为指定角色分配权限。传入权限 ID 数组，角色将被赋予这些权限。原有权限会被替换。",
                 "consumes": [
                     "application/json"
                 ],
@@ -935,19 +1044,19 @@
                     "application/json"
                 ],
                 "tags": [
-                    "roles"
+                    "角色管理"
                 ],
-                "summary": "Assign role permissions",
+                "summary": "分配角色权限",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Role ID",
+                        "description": "角色 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Permission IDs",
+                        "description": "权限 ID 列表",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -958,19 +1067,19 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "分配成功",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（ID 格式无效或权限不存在）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -985,54 +1094,55 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "分页获取用户列表。支持按 ID、用户名、创建时间排序，可指定升序或降序。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "users"
+                    "用户管理"
                 ],
-                "summary": "List users",
+                "summary": "获取用户列表",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Page",
+                        "description": "页码（默认 1）",
                         "name": "page",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Page size",
+                        "description": "每页数量（默认 20，最大 100）",
                         "name": "page_size",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Sort field",
+                        "description": "排序字段（支持 id、username、created_at，默认 id）",
                         "name": "sort",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "Sort order",
+                        "description": "排序方向（asc 或 desc，默认 desc）",
                         "name": "order",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功，返回分页用户列表",
                         "schema": {
                             "$ref": "#/definitions/contract.PageResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（如无效的排序字段或排序方向）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1045,7 +1155,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Create a new user",
+                "description": "创建新用户账户。用户名必须唯一，密码需符合强度要求（8-32位，包含字母和数字）。支持幂等性保护（通过 Idempotency-Key 请求头）。",
                 "consumes": [
                     "application/json"
                 ],
@@ -1053,12 +1163,12 @@
                     "application/json"
                 ],
                 "tags": [
-                    "users"
+                    "用户管理"
                 ],
-                "summary": "Create user",
+                "summary": "创建用户",
                 "parameters": [
                     {
-                        "description": "User info",
+                        "description": "用户信息（用户名和密码）",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1069,25 +1179,25 @@
                 ],
                 "responses": {
                     "201": {
-                        "description": "Created",
+                        "description": "创建成功，返回用户信息",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（如用户名格式不符、密码强度不足）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "409": {
-                        "description": "Conflict",
+                        "description": "用户名已存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1102,17 +1212,18 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "根据用户 ID 获取用户详细信息。不包含密码等敏感字段。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "users"
+                    "用户管理"
                 ],
-                "summary": "Get user",
+                "summary": "获取用户详情",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "User ID",
+                        "description": "用户 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -1120,25 +1231,25 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功，返回用户信息",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（ID 格式无效）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "用户不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1151,6 +1262,7 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "更新指定用户的信息（如状态）。部分字段支持部分更新。",
                 "consumes": [
                     "application/json"
                 ],
@@ -1158,19 +1270,19 @@
                     "application/json"
                 ],
                 "tags": [
-                    "users"
+                    "用户管理"
                 ],
-                "summary": "Update user",
+                "summary": "更新用户信息",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "User ID",
+                        "description": "用户 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "User info",
+                        "description": "要更新的用户信息",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1181,25 +1293,25 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "更新成功",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（ID 格式无效）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "用户不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1212,17 +1324,18 @@
                         "BearerAuth": []
                     }
                 ],
+                "description": "软删除指定用户。删除后用户数据仍保留在数据库中，但无法登录系统。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "users"
+                    "用户管理"
                 ],
-                "summary": "Delete user",
+                "summary": "删除用户",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "User ID",
+                        "description": "用户 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -1230,16 +1343,16 @@
                 ],
                 "responses": {
                     "204": {
-                        "description": "No Content"
+                        "description": "删除成功，无返回内容"
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "参数错误（ID 格式无效）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1406,11 +1519,13 @@
             ],
             "properties": {
                 "password": {
+                    "description": "密码（8-32 位，必须包含字母和数字）",
                     "type": "string",
                     "maxLength": 32,
                     "minLength": 8
                 },
                 "username": {
+                    "description": "用户名（4-20 位字母、数字或下划线）",
                     "type": "string",
                     "maxLength": 20,
                     "minLength": 4
@@ -1424,6 +1539,7 @@
             ],
             "properties": {
                 "refresh_token": {
+                    "description": "刷新令牌（从登录或刷新接口获取）",
                     "type": "string"
                 }
             }

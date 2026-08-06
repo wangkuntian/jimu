@@ -24,13 +24,16 @@ func NewAuthHandler(service *application.AuthService, cfg config.AuthConfig, lim
 }
 
 // Login godoc
-// @Summary      User login
-// @Description  Login with username and password
-// @Tags         auth
+// @Summary      用户登录
+// @Description  使用用户名和密码进行身份验证，成功返回访问令牌和刷新令牌。支持 IP 和用户名维度的限流保护。
+// @Tags         认证
 // @Accept       json
 // @Produce      json
-// @Param        body  body      loginRequest  true  "Login info"
-// @Success      200   {object}  response.Body
+// @Param        body  body      loginRequest  true  "登录信息"
+// @Success      200   {object}  response.Body  "成功，返回 accessToken 和 refreshToken"
+// @Failure      400   {object}  contract.ErrorResponse  "参数错误（用户名或密码格式不符）"
+// @Failure      401   {object}  contract.ErrorResponse  "认证失败（用户名或密码错误）"
+// @Failure      429   {object}  contract.ErrorResponse  "请求过于频繁，请稍后再试"
 // @Router       /auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	req := c.MustGet("validated_req").(*loginRequest)
@@ -49,13 +52,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 }
 
 // Register godoc
-// @Summary      Register user
-// @Description  Register a new user when public registration is enabled
-// @Tags         auth
+// @Summary      用户注册
+// @Description  注册新用户账户。仅当系统配置中 public_registration 为 true 时可用。支持 IP 维度的限流保护。
+// @Tags         认证
 // @Accept       json
 // @Produce      json
-// @Param        body  body      loginRequest  true  "Register info"
-// @Success      200   {object}  response.Body
+// @Param        body  body      loginRequest  true  "注册信息（用户名和密码）"
+// @Success      200   {object}  response.Body  "成功，返回用户信息"
+// @Failure      400   {object}  contract.ErrorResponse  "参数错误（如用户名已存在）"
+// @Failure      429   {object}  contract.ErrorResponse  "请求过于频繁"
 // @Router       /auth/register [post]
 func (h *AuthHandler) Register(c *gin.Context) {
 	req := c.MustGet("validated_req").(*loginRequest)
@@ -71,13 +76,15 @@ func (h *AuthHandler) Register(c *gin.Context) {
 }
 
 // RefreshToken godoc
-// @Summary      Refresh access token
-// @Description  Get new access token using refresh token
-// @Tags         auth
+// @Summary      刷新访问令牌
+// @Description  使用有效的刷新令牌获取新的访问令牌。刷新令牌轮换机制会同时生成新的刷新令牌，旧的刷新令牌失效。
+// @Tags         认证
 // @Accept       json
 // @Produce      json
-// @Param        body  body      refreshRequest  true  "Refresh token"
-// @Success      200   {object}  response.Body
+// @Param        body  body      refreshRequest  true  "刷新令牌"
+// @Success      200   {object}  response.Body  "成功，返回新的 token 对"
+// @Failure      400   {object}  contract.ErrorResponse  "参数错误"
+// @Failure      401   {object}  contract.ErrorResponse  "刷新令牌无效或已过期"
 // @Router       /auth/refresh [post]
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	req := c.MustGet("validated_req").(*refreshRequest)
@@ -90,12 +97,13 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 }
 
 // Logout godoc
-// @Summary      Logout current session
-// @Description  Revoke the current refresh session
-// @Tags         auth
+// @Summary      退出当前会话
+// @Description  撤销当前会话的刷新令牌，使其失效。需要有效的访问令牌进行身份验证。
+// @Tags         认证
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {object}  response.Body
+// @Success      200  {object}  response.Body  "成功"
+// @Failure      401  {object}  contract.ErrorResponse  "未认证或会话无效"
 // @Router       /auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
 	userID, sessionID, ok := authContext(c)
@@ -111,12 +119,13 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 }
 
 // LogoutAll godoc
-// @Summary      Logout all sessions
-// @Description  Revoke all refresh sessions for the current user
-// @Tags         auth
+// @Summary      退出所有会话
+// @Description  撤销该用户的所有刷新会话，强制所有设备重新登录。需要有效的访问令牌进行身份验证。
+// @Tags         认证
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {object}  response.Body
+// @Success      200  {object}  response.Body  "成功"
+// @Failure      401  {object}  contract.ErrorResponse  "未认证或会话无效"
 // @Router       /auth/logout-all [post]
 func (h *AuthHandler) LogoutAll(c *gin.Context) {
 	userID, _, ok := authContext(c)

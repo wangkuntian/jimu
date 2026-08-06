@@ -19,7 +19,7 @@ import (
 
 // @title           Jimu API
 // @version         1.0
-// @description     Jimu Backend Framework API
+// @description     Jimu 后端框架 API - 提供用户认证、权限管理、角色管理、系统监控等功能
 // @host            localhost:8080
 // @BasePath        /api/v1
 // @securityDefinitions.apikey BearerAuth
