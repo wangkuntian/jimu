@@ -5,26 +5,38 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 ## 特性
 
 - **模块化架构** — Clean Architecture 分层，业务逻辑依赖接口不依赖实现
-- **统一认证** — typed JWT + Redis refresh session + Casbin RBAC 权限模型
+- **统一认证** — typed JWT + Redis refresh session + Casbin RBAC v3 权限模型
 - **统一响应** — 标准 `{code, message, data}` 格式 + 分页
 - **多环境配置** — Viper + yaml + 环境变量覆盖，枚举值启动校验
 - **结构化日志** — Zap + lumberjack 自动滚动
 - **数据库迁移** — Goose 迁移 CLI (up/down/status/redo)
-- **数据初始化** — Seed 命令一键插入管理员和基础权限
-- **限流保护** — 全局令牌桶 + Redis 登录/注册固定窗口限流
-- **HTTP 安全边界** — 请求体大小、超时、可信代理、allow-list CORS
+- **数据初始化** — Seed 命令一键插入管理员和基础权限（含 Casbin 策略同步）
+- **限流保护** — 全局令牌桶 + Redis 登录/注册固定窗口限流 + 用户维度滑动窗口限流
+- **HTTP 安全边界** — 请求体大小、超时、可信代理、CORS、CSRF 防护、API 签名验证、安全 Headers
 - **缓存抽象** — Cache-Aside 模式，GetOrSet 自动回填
 - **自定义校验** — 手机号、密码强度、身份证、用户名等常用规则
 - **事件总线** — 内存实现，支持同步/异步发布订阅
 - **事务封装** — 统一的事务管理 helper
 - **审计日志** — 有界队列批量写入，匿名请求安全处理
 - **管理端点** — 独立 management server 暴露健康检查、metrics 和可选 pprof
+- **管理 API** — 系统状态、在线用户、强制下线、错误码文档
 - **脚手架** — Cobra CLI 一键生成完整模块骨架
-- **API 文档** — Swagger UI 交互式文档
+- **API 文档** — Swagger UI 交互式文档（中文注释）
 - **健康检查** — `/livez` 与 `/readyz`，readiness 有界探测 DB + Redis
 - **优雅停机** — 显式 Application 生命周期，反向停止组件
+- **分布式锁** — Redis 实现的分布式锁（防并发、选主）
+- **文件存储** — 本地/S3/OSS/MinIO 统一接口
+- **通知系统** — 邮件/SMS/WebSocket/Webhook 抽象
+- **Outbox 模式** — 事件发布与数据库事务一致性保证
+- **定时任务** — Cron 调度器（robfig/cron）
+- **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
+- **多租户** — 租户中间件 + 行级数据隔离
+- **OpenTelemetry** — 分布式追踪（OTLP gRPC）
+- **Prometheus 指标** — DB 连接池 + 运行时指标
 - **Docker 支持** — Dockerfile + docker-compose 一键起服务
-- **CI/CD** — GitHub Actions + Dependabot 自动化
+- **Docker Secrets** — 敏感配置通过文件注入（`_FILE` 后缀）
+- **K8s 部署** — Deployment/Service/HPA/Ingress manifests
+- **CI/CD** — GitHub Actions + Dependabot 自动化 + 测试覆盖率门禁
 
 ## 技术栈
 
@@ -36,11 +48,14 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 | 缓存 | Redis |
 | 配置 | Viper |
 | 日志 | Zap + lumberjack |
-| 鉴权 | JWT + Casbin |
+| 鉴权 | JWT + Casbin v3 |
 | 迁移 | Goose |
 | CLI | Cobra |
 | 校验 | go-playground/validator |
 | API 文档 | swaggo/swag |
+| 追踪 | OpenTelemetry |
+| 指标 | Prometheus client_golang |
+| 调度 | robfig/cron |
 
 ## 快速开始
 
@@ -61,21 +76,21 @@ go mod download
 ### 配置
 
 ```bash
-cp configs/app.yaml configs/app.local.yaml
-# 编辑 configs/app.local.yaml 修改数据库、Redis 连接信息
+cp .env.example .env
+# 编辑 .env 修改数据库、Redis 连接信息
 ```
 
 ### 方式一：本地运行
 
 ```bash
 # 1. 启动依赖
-docker-compose up -d mariadb redis
+docker compose up -d mariadb redis
 
 # 2. 运行迁移
 make migrate
 
-# 3. 初始化数据（管理员密码通过受保护环境变量或交互输入提供）
-make seed
+# 3. 初始化数据（管理员密码通过环境变量提供）
+ADMIN_PASSWORD=admin123 make seed
 
 # 4. 启动服务
 make run
@@ -84,18 +99,27 @@ make run
 ### 方式二：Docker Compose 一键启动
 
 ```bash
-cp .env.example .env
-# 编辑 .env 修改配置
-docker-compose up -d
+# 1. 创建密码文件
+mkdir -p secrets
+echo "your-root-password" > secrets/db_root_password.txt
+echo "your-db-password" > secrets/db_password.txt
+openssl rand -hex 32 > secrets/jwt_secret.txt
+
+# 2. 启动全部服务
+make compose-up
+
+# 3. 运行迁移
+docker compose run --rm server ./jimu migrate up
+
+# 4. 初始化数据
+docker compose run --rm -e ADMIN_PASSWORD=admin123 server ./jimu seed
 ```
 
 服务启动后访问：
 - API: http://localhost:8080
 - Swagger UI: http://localhost:8080/swagger/index.html （非 release 模式）
-- Management: `http://127.0.0.1:9090/livez`、`/readyz`、`/metrics`（仅绑定宿主机 loopback）
+- Management: `http://127.0.0.1:9090/livez`、`/readyz`、`/metrics`
 - Adminer: `docker compose --profile dev up -d adminer` 后访问 http://127.0.0.1:8081
-
-公共 API 不暴露 `/debug/pprof/` 或 metrics。pprof 默认关闭，只能通过 management server 显式开启。
 
 ## CLI 工具
 
@@ -113,7 +137,7 @@ make cli
 ./bin/jimu migrate redo             # 重做最后一次迁移
 
 # 数据初始化
-./bin/jimu seed                     # 插入初始数据
+./bin/jimu seed                     # 插入初始数据（含 Casbin 策略同步）
 ```
 
 ## 项目结构
@@ -125,26 +149,41 @@ jimu/
 │   └── cli/main.go             # CLI 入口
 ├── configs/
 │   ├── app.yaml                # 默认配置（开发环境）
-│   ├── app.prod.yaml           # 生产环境配置
-│   └── app.test.yaml           # 测试环境配置
+│   └── app.prod.yaml           # 生产环境配置
 ├── conf/
 │   └── rbac_model.conf         # Casbin RBAC 模型
+├── deploy/k8s/                 # Kubernetes manifests
+│   ├── configmap.yaml
+│   ├── secret.yaml
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── hpa.yaml
+│   └── ingress.yaml
+├── docs/openapi/               # Swagger 生成的 API 文档
 ├── migrations/                 # Goose 迁移脚本
+├── secrets/                    # Docker Secrets（gitignore）
 ├── internal/
 │   ├── app/
 │   │   ├── bootstrap.go        # 应用启动装配
-│   │   └── container.go        # 依赖容器
+│   │   ├── container.go        # 依赖容器
+│   │   └── application.go      # Application 生命周期
 │   ├── config/                 # 配置加载 + 校验
 │   ├── contract/               # Module 接口定义
 │   ├── platform/               # 基础设施
 │   │   ├── http/               # HTTP Server + 中间件
 │   │   ├── db/                 # Gorm 连接 + 迁移 + Seed + 事务
-│   │   ├── redis/              # Redis 客户端
+│   │   ├── redis/              # Redis 客户端 + 分布式锁
 │   │   ├── cache/              # 缓存抽象层
 │   │   ├── logger/             # Zap 日志
-│   │   ├── auth/               # JWT + Casbin
+│   │   ├── auth/               # JWT + Casbin + Session
 │   │   ├── event/              # 事件总线
-│   │   └── observability/      # 健康检查 + Metrics
+│   │   ├── observability/      # 健康检查 + Metrics + Tracing
+│   │   ├── storage/            # 文件存储抽象
+│   │   ├── notification/       # 通知系统
+│   │   ├── outbox/             # Outbox 模式
+│   │   ├── scheduler/          # Cron 调度器
+│   │   ├── feature/            # Feature Flag
+│   │   └── tenant/             # 多租户支持
 │   ├── shared/                 # 跨模块通用能力
 │   │   ├── errors/             # AppError + 错误码
 │   │   ├── response/           # 统一响应格式
@@ -156,8 +195,8 @@ jimu/
 │       ├── user/               # 用户管理
 │       ├── role/               # 角色管理
 │       ├── permission/         # 权限管理
-│       └── audit/              # 审计日志
-├── pkg/                        # 对外暴露的工具
+│       ├── audit/              # 审计日志
+│       └── admin/              # 系统管理
 ├── tools/generator/            # 代码生成器
 ├── .github/                    # GitHub Actions + Dependabot
 ├── Makefile
@@ -167,20 +206,6 @@ jimu/
 ```
 
 ## API 示例
-
-### 注册（可选）
-
-公开注册默认关闭。需要公网用户自助注册时设置：
-
-```bash
-JIMU__AUTH__PUBLIC_REGISTRATION=true
-```
-
-```bash
-curl -X POST http://localhost:8080/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "secret123"}'
-```
 
 ### 登录
 
@@ -206,22 +231,10 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 
 ### 刷新 Token
 
-Refresh token 存在 Redis session 中，刷新成功后旧 refresh token 立即失效。
-
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/refresh \
   -H "Content-Type: application/json" \
   -d '{"refresh_token": "<refresh_token>"}'
-```
-
-### 退出登录
-
-```bash
-curl -X POST http://localhost:8080/api/v1/auth/logout \
-  -H "Authorization: Bearer <access_token>"
-
-curl -X POST http://localhost:8080/api/v1/auth/logout-all \
-  -H "Authorization: Bearer <access_token>"
 ```
 
 ### 创建用户
@@ -230,7 +243,14 @@ curl -X POST http://localhost:8080/api/v1/auth/logout-all \
 curl -X POST http://localhost:8080/api/v1/users \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: <uuid>" \
   -d '{"username": "newuser", "password": "pass1234"}'
+```
+
+### 获取系统状态
+
+```bash
+curl http://localhost:8080/api/v1/admin/status
 ```
 
 ### 健康检查
@@ -246,49 +266,32 @@ curl http://127.0.0.1:9090/readyz
 curl http://127.0.0.1:9090/metrics
 ```
 
-## API 契约
-
-
-公共 API 固定在 `/api/v1` 下。响应使用 `{code,message,data}` 外形；错误响应可省略 `data`，分页响应额外包含 `total`、`page`、`page_size`。`X-Request-ID` 会写入响应 Header，统一响应体在存在 request ID 时也包含 `request_id`。
-
-创建接口成功返回 `201`，删除接口成功返回空响应体 `204`，其他成功响应返回 `200`。User、Role、Permission 提供完整 CRUD；Audit 提供只读 `List` 和 `Get`。
-
-HTTP status 表达协议结果，业务 `code` 表达稳定业务结果。内部错误对外固定为 `{"code":1005,"message":"internal error"}`，不返回 SQL、文件路径、堆栈或底层基础设施错误。
-
-列表接口统一支持以下查询参数：
-
-| 参数 | 默认值 | 约束 |
-|------|--------|------|
-| `page` | `1` | 最小 `1` |
-| `page_size` | `20` | 最小 `1`，最大 `100` |
-| `sort` | `id` | 必须在 handler allow-list 内 |
-| `order` | `desc` | 仅 `asc` 或 `desc` |
-
-## API 契约检查
-
-```bash
-work/test_runtime_security.sh
-work/smoke_api_contract.sh
-make swagger
-make swagger
-git diff -- docs/openapi
-```
-
-CI 会在干净工作区执行 OpenAPI 生成并检查 `docs/openapi` 是否与仓库一致。本地未提交阶段性改动时，以上命令用于确认重复生成没有额外漂移。
-
 ## 配置说明
 
 ### 多环境配置
 
-通过 `JIMU_ENV` 环境变量切换：
+通过 `APP_ENV` 环境变量切换：
 
 | 环境 | 配置文件 | 说明 |
 |------|----------|------|
 | 开发 | `app.yaml` | 默认，日志输出到 stdout |
-| 测试 | `app.test.yaml` | 独立数据库 `jimu_test` |
 | 生产 | `app.prod.yaml` | JSON 日志、文件滚动、release 模式 |
 
 优先级：`环境变量 > app.{env}.yaml > app.yaml`
+
+### 环境变量
+
+敏感配置支持 `_FILE` 后缀从文件读取（Docker Secrets 兼容）：
+
+```bash
+# 直接环境变量
+DB_HOST=mariadb
+DB_PASSWORD=secret
+
+# 或从文件读取（推荐生产环境）
+DB_PASSWORD_FILE=/run/secrets/db_password
+JWT_SECRET_FILE=/run/secrets/jwt_secret
+```
 
 ### 配置项
 
@@ -297,106 +300,25 @@ CI 会在干净工作区执行 OpenAPI 生成并检查 `docs/openapi` 是否与�
 | `http.host` | 监听地址 | `0.0.0.0` |
 | `http.port` | 监听端口 | `8080` |
 | `http.mode` | Gin 模式 (`debug`/`release`/`test`) | `debug` |
-| `http.read_header_timeout_sec` | Header 读取超时 | `5` |
-| `http.read_timeout_sec` | 请求读取超时 | `15` |
-| `http.write_timeout_sec` | 响应写入超时 | `30` |
-| `http.idle_timeout_sec` | Keep-alive 空闲超时 | `60` |
-| `http.shutdown_timeout_sec` | 关闭等待超时 | `30` |
-| `http.max_body_bytes` | 最大请求体字节数 | `1048576` |
-| `http.trusted_proxies` | 可信代理列表 | `["127.0.0.1"]` |
-| `http.allowed_origins` | CORS allow-list | `["http://localhost:3000"]` |
-| `management.host` | Management server 监听地址 | `127.0.0.1` |
-| `management.port` | Management server 端口 | `9090` |
-| `management.enable_pprof` | 是否开启 pprof | `false` |
-| `management.probe_timeout_sec` | readiness 依赖探测超时 | `2` |
-| `db.*` | 数据库连接配置 | — |
-| `redis.*` | Redis 连接配置 | — |
-| `log.level` | 日志级别 (`debug`/`info`/`warn`/`error`) | `debug` |
-| `log.format` | 日志格式 (`json`/`console`) | `console` |
-| `log.output` | 输出目标 (`stdout` 或文件路径) | `stdout` |
-| `log.max_size` | 单文件最大大小 (MB) | `100` |
-| `log.max_backups` | 保留旧文件数 | `30` |
-| `log.max_age` | 保留天数 | `7` |
-| `log.compress` | 旧文件压缩 | `true` |
-| `auth.jwt_secret` | JWT 密钥，生产必须用 `JIMU__AUTH__JWT_SECRET` 覆盖 | `change-me-in-production` |
-| `auth.issuer` | JWT issuer | `jimu` |
-| `auth.access_expire_min` | Access Token 有效期 (分钟) | `30` |
-| `auth.refresh_expire_day` | Refresh Token 有效期 (天) | `7` |
-| `auth.public_registration` | 是否开放公网注册 | `false` |
-| `auth.login_rate_limit` | 登录窗口内允许次数 | `10` |
-| `auth.login_rate_window_sec` | 登录限流窗口秒数 | `60` |
-| `auth.register_rate_limit` | 注册窗口内允许次数 | `5` |
-| `auth.register_rate_window_sec` | 注册限流窗口秒数 | `300` |
-| `server.timeout_sec` | 请求超时秒数 | `30` |
-| `server.rate_limit_rate` | 全局限流速率 | `100` |
-| `server.rate_limit_burst` | 限流桶容量 | `200` |
-| `cache.prefix` | 缓存 key 前缀 | `jimu` |
-| `audit.queue_size` | 审计队列容量 | `256` |
-| `audit.batch_size` | 审计批写大小 | `50` |
-| `audit.flush_interval_ms` | 审计批写间隔毫秒 | `500` |
-
-### 环境变量
-
-前缀 `JIMU`，层级分隔 `__`，例如 `JIMU__HTTP__PORT=9090`。
-
-生产配置不依赖 YAML `${VAR}` 插值。敏感值通过环境变量覆盖，例如：
-
-```bash
-JIMU__DB__PASSWORD=replace-with-strong-password
-JIMU__AUTH__JWT_SECRET=replace-with-at-least-32-characters
-JIMU__AUTH__PUBLIC_REGISTRATION=false
-JIMU__HTTP__ALLOWED_ORIGINS=https://admin.example.com
-```
-
-生产启动会拒绝弱 JWT secret、空/默认 DB 密码、wildcard CORS、非法端口和非法超时配置。错误信息只包含配置键，不输出敏感值。
-
-## 模块开发
-
-### 创建新模块
-
-```bash
-./bin/jimu module create product
-```
-
-生成完整 Clean Architecture 骨架：
-
-```
-internal/modules/product/
-  module.go              # 模块注册
-  domain/
-    entity.go            # 实体（含基础字段 + gorm tag）
-    repository.go        # 仓储接口（CRUD）
-  application/
-    service.go           # 用例服务（完整 CRUD）
-    service_test.go      # Service 行为测试
-    dto.go               # 请求/响应 DTO
-  infrastructure/
-    mysql_repository.go  # Gorm 实现
-  interfaces/
-    handler.go           # HTTP handler（CRUD 端点）
-    handler_test.go      # HTTP 契约测试
-    router.go            # 路由注册（RESTful）
-migrations/
-  00N_create_products.sql # Goose migration，含 name/description/时间/软删除字段
-```
-
-生成器会同时创建默认 `name`、`description` 字段、分页排序、`201/204` 状态码、migration 和测试文件；生成结果不包含未实现占位。
-
-### 注册模块
-
-在 `cmd/server/main.go` 中添加：
-
-```go
-productModule := product.New(dbConn)
-application, err := app.Bootstrap(container, userModule, authModule, roleModule, permModule, auditModule, productModule)
-```
+| `db.host` | 数据库地址 | `127.0.0.1` |
+| `db.port` | 数据库端口 | `3306` |
+| `db.user` | 数据库用户名 | `jimu` |
+| `db.password` | 数据库密码（通过环境变量覆盖） | — |
+| `db.max_open` | 最大连接数 | `25`（开发）/ `100`（生产） |
+| `redis.addr` | Redis 地址 | `127.0.0.1:6379` |
+| `redis.pool_size` | Redis 连接池大小 | `10`（开发）/ `50`（生产） |
+| `log.level` | 日志级别 | `debug`（开发）/ `info`（生产） |
+| `log.format` | 日志格式 | `console`（开发）/ `json`（生产） |
+| `auth.access_expire_min` | Access Token 有效期 (分钟) | `60`（开发）/ `15`（生产） |
+| `auth.refresh_expire_day` | Refresh Token 有效期 (天) | `30`（开发）/ `7`（生产） |
+| `storage.type` | 存储类型 (`local`/`s3`/`oss`/`minio`) | `local` |
+| `otel.enabled` | 是否启用 OpenTelemetry | `false`（开发）/ `true`（生产） |
 
 ## Makefile 命令
 
 | 命令 | 说明 |
 |------|------|
 | `make run` | 运行服务 |
-| `make run ENV=prod` | 指定环境运行 |
 | `make build` | 编译 server + cli |
 | `make test` | 运行测试 |
 | `make test-coverage` | 测试 + 覆盖率报告 |
@@ -404,38 +326,35 @@ application, err := app.Bootstrap(container, userModule, authModule, roleModule,
 | `make fmt` | 格式化代码 |
 | `make lint` | golangci-lint |
 | `make migrate` | 执行迁移 |
-| `make migrate-down` | 回滚迁移 |
-| `make migrate-status` | 查看迁移状态 |
 | `make seed` | 插入初始数据 |
 | `make swagger` | 生成 API 文档 |
 | `make cli` | 编译 CLI |
-| `make docker` | 构建镜像 |
-| `make docker-up` | 启动所有容器 |
-| `make docker-down` | 停止所有容器 |
-| `make docker-logs` | 查看应用日志 |
+| `make docker-build` | 构建 Docker 镜像 |
+| `make compose-up` | 启动所有容器 |
+| `make compose-down` | 停止所有容器 |
+| `make compose-logs` | 查看应用日志 |
+| `make compose-migrate` | Compose 环境执行迁移 |
+| `make compose-seed` | Compose 环境插入初始数据 |
 | `make release-check` | 发布前检查 |
 
 ## Docker 部署
 
 ```bash
-# 构建镜像
-docker build -t jimu:latest .
+# 1. 构建镜像
+make docker-build
 
-# 运行（需外部 DB + Redis）
-docker run -p 8080:8080 \
-  -p 127.0.0.1:9090:9090 \
-  -e JIMU_ENV=prod \
-  -e JIMU__DB__HOST=host.docker.internal \
-  -e JIMU__DB__USER=jimu \
-  -e JIMU__DB__PASSWORD=replace-with-strong-password \
-  -e JIMU__REDIS__ADDR=host.docker.internal:6379 \
-  -e JIMU__AUTH__JWT_SECRET=replace-with-at-least-32-characters \
-  jimu:latest
+# 2. 创建密码文件
+mkdir -p secrets
+echo "your-root-password" > secrets/db_root_password.txt
+echo "your-db-password" > secrets/db_password.txt
+openssl rand -hex 32 > secrets/jwt_secret.txt
 
-# 或使用 docker-compose 一键启动全部
-cp .env.example .env
-# 编辑 .env：替换 DB_ROOT_PASSWORD、DB_PASSWORD、JIMU__DB__PASSWORD、JIMU__AUTH__JWT_SECRET
-docker-compose up -d
+# 3. 启动全部服务
+make compose-up
+
+# 4. 运行迁移和初始化
+docker compose run --rm server ./jimu migrate up
+docker compose run --rm -e ADMIN_PASSWORD=admin123 server ./jimu seed
 ```
 
 ## License
