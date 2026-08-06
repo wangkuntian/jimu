@@ -42,31 +42,89 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+
           # 提取上一个 tag 到当前 tag 之间的提交
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -z "$PREV_TAG" ]; then
-            CHANGES=$(git log --oneline --no-decorate)
+
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..HEAD"
           else
-            CHANGES=$(git log --oneline --no-decorate ${PREV_TAG}..HEAD)
+            RANGE="HEAD"
           fi
+
+          # 按 conventional commits 分类
+          FEATS=$(git log --oneline --no-decorate $RANGE | grep -E "^[a-f0-9]+ feat(\([^)]+\))?:" || true)
+          FIXES=$(git log --oneline --no-decorate $RANGE | grep -E "^[a-f0-9]+ fix(\([^)]+\))?:" || true)
+          DOCS=$(git log --oneline --no-decorate $RANGE | grep -E "^[a-f0-9]+ docs(\([^)]+\))?:" || true)
+          CHORES=$(git log --oneline --no-decorate $RANGE | grep -E "^[a-f0-9]+ chore(\([^)]+\))?:" || true)
+          REFACTORS=$(git log --oneline --no-decorate $RANGE | grep -E "^[a-f0-9]+ refactor(\([^)]+\))?:" || true)
+          TESTS=$(git log --oneline --no-decorate $RANGE | grep -E "^[a-f0-9]+ test(\([^)]+\))?:" || true)
+          OTHERS=$(git log --oneline --no-decorate $RANGE | grep -vE "^[a-f0-9]+ (feat|fix|docs|chore|refactor|test)(\([^)]+\))?:" || true)
+
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          echo "changes<<$EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "body<<$EOF" >> $GITHUB_OUTPUT
+
+          echo "## 亮点" >> $GITHUB_OUTPUT
+          if [ -n "$FEATS" ]; then
+            echo "" >> $GITHUB_OUTPUT
+            echo "$FEATS" | sed 's/^/- /' >> $GITHUB_OUTPUT
+          fi
+
+          echo "" >> $GITHUB_OUTPUT
+          echo "## 修复" >> $GITHUB_OUTPUT
+          if [ -n "$FIXES" ]; then
+            echo "" >> $GITHUB_OUTPUT
+            echo "$FIXES" | sed 's/^/- /' >> $GITHUB_OUTPUT
+          fi
+
+          echo "" >> $GITHUB_OUTPUT
+          echo "## 变更" >> $GITHUB_OUTPUT
+          if [ -n "$REFACTORS" ]; then
+            echo "" >> $GITHUB_OUTPUT
+            echo "$REFACTORS" | sed 's/^/- /' >> $GITHUB_OUTPUT
+          fi
+
+          echo "" >> $GITHUB_OUTPUT
+          echo "## 文档" >> $GITHUB_OUTPUT
+          if [ -n "$DOCS" ]; then
+            echo "" >> $GITHUB_OUTPUT
+            echo "$DOCS" | sed 's/^/- /' >> $GITHUB_OUTPUT
+          fi
+
+          echo "" >> $GITHUB_OUTPUT
+          echo "## 维护" >> $GITHUB_OUTPUT
+          if [ -n "$CHORES" ]; then
+            echo "" >> $GITHUB_OUTPUT
+            echo "$CHORES" | sed 's/^/- /' >> $GITHUB_OUTPUT
+          fi
+
+          echo "" >> $GITHUB_OUTPUT
+          echo "## 测试" >> $GITHUB_OUTPUT
+          if [ -n "$TESTS" ]; then
+            echo "" >> $GITHUB_OUTPUT
+            echo "$TESTS" | sed 's/^/- /' >> $GITHUB_OUTPUT
+          fi
+
+          echo "" >> $GITHUB_OUTPUT
+          echo "## 其他" >> $GITHUB_OUTPUT
+          if [ -n "$OTHERS" ]; then
+            echo "" >> $GITHUB_OUTPUT
+            echo "$OTHERS" | sed 's/^/- /' >> $GITHUB_OUTPUT
+          fi
+
+          echo "" >> $GITHUB_OUTPUT
+          echo "## 校验" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "- CI: 通过" >> $GITHUB_OUTPUT
+          echo "- 构建: 多平台二进制" >> $GITHUB_OUTPUT
+
           echo "$EOF" >> $GITHUB_OUTPUT
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.changelog.outputs.version }}
-          body: |
-            ## 变更日志
-
-            ${{ steps.changelog.outputs.changes }}
-
-            ## 校验
-
-            - CI: 通过
-            - 构建: 多平台二进制
+          body: ${{ steps.changelog.outputs.body }}
           files: bin/jimu-*
           draft: false
           prerelease: false

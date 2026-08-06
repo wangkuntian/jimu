@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jimu-server
+  namespace: jimu
+  labels:
+    app: jimu-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: jimu-server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: jimu-server
+    spec:
+      containers:
+        - name: jimu
+          image: jimu:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9090
+          envFrom:
+            - configMapRef:
+                name: jimu-config
+            - secretRef:
+                name: jimu-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: management
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: management
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: configs
+              mountPath: /app/configs
+              readOnly: true
+      volumes:
+        - name: configs
+          configMap:
+            name: jimu-config-files

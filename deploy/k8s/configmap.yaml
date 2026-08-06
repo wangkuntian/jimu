@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jimu-config
+  namespace: jimu
+data:
+  # 仅 JIMU_ENV 被配置系统读取，其余配置通过 app.prod.yaml 提供
+  JIMU_ENV: "prod"

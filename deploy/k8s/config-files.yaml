@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jimu-config-files
+  namespace: jimu
+data:
+  app.yaml: |
+    # 开发环境配置（容器内默认配置）
+    http:
+      host: "0.0.0.0"
+      port: 8080
+      mode: "release"
+      read_header_timeout_sec: 5
+      read_timeout_sec: 15
+      write_timeout_sec: 30
+      idle_timeout_sec: 60
+      shutdown_timeout_sec: 30
+      max_body_bytes: 1048576
+      trusted_proxies: ["127.0.0.1", "10.0.0.0/8"]
+      allowed_origins: ["https://admin.example.com"]
+    management:
+      host: "0.0.0.0"
+      port: 9090
+      enable_pprof: false
+      probe_timeout_sec: 2
+    db:
+      host: "mariadb"
+      port: 3306
+      user: "jimu"
+      database: "jimu"
+      max_open: 100
+      max_idle: 10
+      conn_max_lifetime_sec: 3600
+      conn_max_idle_time_sec: 600
+      max_retries: 10
+      retry_interval_sec: 5
+    redis:
+      addr: "redis:6379"
+      db: 0
+      pool_size: 50
+      min_idle_conns: 10
+      read_timeout_sec: 3
+      write_timeout_sec: 3
+      max_retries: 10
+      retry_interval_sec: 5
+    log:
+      level: "info"
+      format: "json"
+      output: "stdout"
+      max_size: 100
+      max_backups: 30
+      max_age: 7
+      compress: true
+    auth:
+      issuer: "jimu"
+      access_expire_min: 30
+      refresh_expire_day: 7
+      public_registration: false
+      login_rate_limit: 10
+      login_rate_window_sec: 60
+      register_rate_limit: 5
+      register_rate_window_sec: 300
+    server:
+      timeout_sec: 30
+      rate_limit_rate: 100
+      rate_limit_burst: 200
+    cache:
+      prefix: "jimu"
+    audit:
+      queue_size: 1024
+      batch_size: 100
+      flush_interval_ms: 500
+    storage:
+      type: "local"
+      base_dir: "storage"
+      base_url: "/files"
+    otel:
+      enabled: false
+      endpoint: "localhost:4317"
+      service_name: "jimu"
+      service_version: "1.0.0"
+      sample_rate: 1.0
+
+  app.prod.yaml: |
+    # 生产环境配置（覆盖 app.yaml）
+    http:
+      mode: "release"
+      trusted_proxies: ["10.0.0.0/8", "172.16.0.0/12"]
+    management:
+      host: "0.0.0.0"
+    log:
+      level: "info"
+      format: "json"
+      output: "stdout"
