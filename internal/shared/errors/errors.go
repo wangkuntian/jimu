@@ -4,44 +4,46 @@ import "fmt"
 
 // 错误码定义
 // 编码规则：
-//   1xxx - 通用错误
-//   2xxx - 用户/认证模块
-//   3xxx - 角色/权限模块
-//   4xxx - 预留
-//   9xxx - 系统级错误
+//
+//	1xxx - 通用错误
+//	2xxx - 用户/认证模块
+//	3xxx - 角色/权限模块
+//	4xxx - 预留
+//	9xxx - 系统级错误
 //
 // HTTP 映射：
-//   1001 -> 400 Bad Request
-//   1002 -> 401 Unauthorized
-//   1003 -> 403 Forbidden
-//   1004 -> 404 Not Found
-//   1005 -> 500 Internal Server Error
-//   1006 -> 401 Unauthorized
-//   1007 -> 429 Too Many Requests
-//   1008 -> 504 Gateway Timeout
-//   1009 -> 409 Conflict
-//   2001 -> 404 Not Found
-//   2002 -> 409 Conflict
-//   2003 -> 401 Unauthorized
-//   2004 -> 404 Not Found
+//
+//	1001 -> 400 Bad Request
+//	1002 -> 401 Unauthorized
+//	1003 -> 403 Forbidden
+//	1004 -> 404 Not Found
+//	1005 -> 500 Internal Server Error
+//	1006 -> 401 Unauthorized
+//	1007 -> 429 Too Many Requests
+//	1008 -> 504 Gateway Timeout
+//	1009 -> 409 Conflict
+//	2001 -> 404 Not Found
+//	2002 -> 409 Conflict
+//	2003 -> 401 Unauthorized
+//	2004 -> 404 Not Found
 const (
 	// 通用错误 (1xxx)
-	CodeOK                 = 0     // 成功
-	CodeInvalidParam       = 1001  // 参数错误
-	CodeUnauthorized       = 1002  // 未认证
-	CodeForbidden          = 1003  // 无权限
-	CodeNotFound           = 1004  // 资源不存在
-	CodeInternalError      = 1005  // 服务器内部错误
-	CodeInvalidCredentials = 1006  // 认证信息无效
-	CodeRateLimited        = 1007  // 请求过于频繁
-	CodeTimeout            = 1008  // 请求超时
-	CodeConflict           = 1009  // 资源冲突
+	CodeOK                 = 0    // 成功
+	CodeInvalidParam       = 1001 // 参数错误
+	CodeUnauthorized       = 1002 // 未认证
+	CodeForbidden          = 1003 // 无权限
+	CodeNotFound           = 1004 // 资源不存在
+	CodeInternalError      = 1005 // 服务器内部错误
+	CodeInvalidCredentials = 1006 // 认证信息无效
+	CodeRateLimited        = 1007 // 请求过于频繁
+	CodeTimeout            = 1008 // 请求超时
+	CodeConflict           = 1009 // 资源冲突
 
 	// 用户/认证模块 (2xxx)
-	CodeUserNotFound       = 2001  // 用户不存在
-	CodeUserExists         = 2002  // 用户已存在
-	CodeInvalidPassword    = 2003  // 密码错误
-	CodeRoleNotFound       = 2004  // 角色不存在
+	CodeUserNotFound    = 2001 // 用户不存在
+	CodeUserExists      = 2002 // 用户已存在
+	CodeInvalidPassword = 2003 // 密码错误
+	CodeRoleNotFound    = 2004 // 角色不存在
 )
 
 type AppError struct {

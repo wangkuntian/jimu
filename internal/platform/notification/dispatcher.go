@@ -8,8 +8,8 @@ import (
 
 // dispatcher 通知调度器实现
 type dispatcher struct {
-	mu        sync.RWMutex
-	channels  map[Channel]Notification
+	mu       sync.RWMutex
+	channels map[Channel]Notification
 }
 
 // NewDispatcher 创建通知调度器

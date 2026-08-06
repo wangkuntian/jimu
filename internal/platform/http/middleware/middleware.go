@@ -105,7 +105,7 @@ func Logger(log *logger.Logger, cfg LogConfig) gin.HandlerFunc {
 			}
 		}
 
-		log.Infow("request", fields...)
+		log.WithContext(c.Request.Context()).Infow("request", fields...)
 	}
 }
 

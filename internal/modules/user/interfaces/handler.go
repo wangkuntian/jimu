@@ -33,7 +33,7 @@ func NewUserHandler(service *application.UserService) *UserHandler {
 // @Failure      500  {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /users [post]
 func (h *UserHandler) Create(c *gin.Context) {
-	req := c.MustGet("validated_req").(*application.CreateUserRequest)
+	req, _ := c.MustGet("validated_req").(*application.CreateUserRequest)
 	user, err := h.service.Create(c.Request.Context(), *req)
 	if err != nil {
 		response.Fail(c, err)
@@ -83,7 +83,7 @@ func (h *UserHandler) Get(c *gin.Context) {
 // @Failure      500        {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /users [get]
 func (h *UserHandler) List(c *gin.Context) {
-	p := c.MustGet("validated_query").(*pagination.Pagination)
+	p, _ := c.MustGet("validated_query").(*pagination.Pagination)
 	if err := p.Normalize("id", "username", "created_at"); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
@@ -116,7 +116,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
 		return
 	}
-	req := c.MustGet("validated_req").(*application.UpdateUserRequest)
+	req, _ := c.MustGet("validated_req").(*application.UpdateUserRequest)
 	if err := h.service.Update(c.Request.Context(), id, *req); err != nil {
 		response.Fail(c, err)
 		return

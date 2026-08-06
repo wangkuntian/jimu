@@ -34,7 +34,7 @@ func NewAuditHandler(service *application.AuditService) *AuditHandler {
 // @Failure      500        {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /audits [get]
 func (h *AuditHandler) List(c *gin.Context) {
-	p := c.MustGet("validated_query").(*pagination.Pagination)
+	p, _ := c.MustGet("validated_query").(*pagination.Pagination)
 	if err := p.Normalize("id", "created_at"); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return

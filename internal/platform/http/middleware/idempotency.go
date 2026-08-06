@@ -43,7 +43,7 @@ func IdempotencyMiddleware(redis *redis.Client, ttl time.Duration) gin.HandlerFu
 				for k, v := range cachedResp.Headers {
 					c.Header(k, v)
 				}
-				c.Writer.Write([]byte(cachedResp.Body))
+				_, _ = c.Writer.Write([]byte(cachedResp.Body))
 				c.Abort()
 				return
 			}

@@ -10,8 +10,8 @@ import (
 // responseBodyWriter 包装 gin.ResponseWriter 以捕获响应体
 type responseBodyWriter struct {
 	gin.ResponseWriter
-	body    *bytes.Buffer
-	maxSize int
+	body      *bytes.Buffer
+	maxSize   int
 	truncated bool
 }
 

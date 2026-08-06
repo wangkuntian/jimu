@@ -9,13 +9,13 @@ import (
 // Event 待发布事件
 type Event struct {
 	ID          uint64          `gorm:"primaryKey" json:"id"`
-	AggregateID string          `gorm:"size:128;index" json:"aggregate_id"` // 聚合根 ID
+	AggregateID string          `gorm:"size:128;index" json:"aggregate_id"`  // 聚合根 ID
 	EventType   string          `gorm:"size:128;index" json:"event_type"`    // 事件类型
 	Payload     json.RawMessage `gorm:"type:json" json:"payload"`            // 事件数据
 	Metadata    json.RawMessage `gorm:"type:json" json:"metadata,omitempty"` // 元数据
 	CreatedAt   time.Time       `json:"created_at"`
 	PublishedAt *time.Time      `json:"published_at,omitempty"` // 发布时间（NULL 表示未发布）
-	RetryCount  int             `json:"retry_count"`           // 重试次数
+	RetryCount  int             `json:"retry_count"`            // 重试次数
 }
 
 // TableName 表名

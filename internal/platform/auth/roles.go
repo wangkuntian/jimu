@@ -56,7 +56,7 @@ func (s *DBAuthorizationStore) Policies(ctx context.Context) ([]Policy, error) {
 func AuthorizationMiddleware(store AuthorizationStore, enforcer *casbin.Enforcer) gin.HandlerFunc {
 	var mu sync.Mutex
 	return func(c *gin.Context) {
-		userID, ok := c.Get("user_id")
+		userID, _ := c.Get("user_id")
 		id, ok := userID.(uint64)
 		if !ok || id == 0 {
 			response.Fail(c, errors.New(errors.CodeUnauthorized, "missing user context"))
