@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"jimu/internal/platform/observability"
 
@@ -147,7 +148,7 @@ type AuthConfig struct {
 // Load 加载配置
 // 优先级：环境变量 > .env > app.{env}.yaml > app.yaml
 func Load() (*Config, error) {
-	env := os.Getenv("JIMU_ENV")
+	env := os.Getenv("APP_ENV")
 
 	v := viper.New()
 
@@ -190,19 +191,52 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	// 少量敏感配置支持环境变量覆盖（生产密钥管理）
-	if v := os.Getenv("JWT_SECRET"); v != "" {
-		cfg.Auth.JWTSecret = v
-	}
-	if v := os.Getenv("MARIADB_PASSWORD"); v != "" {
-		cfg.DB.Password = v
-	}
+	// 敏感配置环境变量覆盖（不使用 JIMU_ 前缀）
+	applyEnvOverrides(&cfg)
 
 	if err := cfg.Validate(env); err != nil {
 		return nil, err
 	}
 
 	return &cfg, nil
+}
+
+// applyEnvOverrides 应用环境变量覆盖（简洁命名，无 JIMU_ 前缀）
+func applyEnvOverrides(cfg *Config) {
+	// 认证
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		cfg.Auth.JWTSecret = v
+	}
+	// 数据库
+	if v := os.Getenv("DB_HOST"); v != "" {
+		cfg.DB.Host = v
+	}
+	if v := os.Getenv("DB_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil {
+			cfg.DB.Port = port
+		}
+	}
+	if v := os.Getenv("DB_USER"); v != "" {
+		cfg.DB.User = v
+	}
+	if v := os.Getenv("DB_PASSWORD"); v != "" {
+		cfg.DB.Password = v
+	}
+	if v := os.Getenv("DB_NAME"); v != "" {
+		cfg.DB.Database = v
+	}
+	// Redis
+	if v := os.Getenv("REDIS_ADDR"); v != "" {
+		cfg.Redis.Addr = v
+	}
+	if v := os.Getenv("REDIS_PASSWORD"); v != "" {
+		cfg.Redis.Password = v
+	}
+	if v := os.Getenv("REDIS_DB"); v != "" {
+		if db, err := strconv.Atoi(v); err == nil {
+			cfg.Redis.DB = db
+		}
+	}
 }
 
 func contains(list []string, val string) bool {
