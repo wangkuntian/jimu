@@ -117,10 +117,10 @@ var seedCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to connect database: %w", err)
 		}
-		if err := db.RunSeed(dbConn); err != nil {
+		if err := db.RunSeedWithCasbin(dbConn); err != nil {
 			return fmt.Errorf("seed failed: %w", err)
 		}
-		fmt.Println("Seed data inserted successfully")
+		fmt.Println("Seed data inserted successfully (with Casbin policies)")
 		return nil
 	},
 }

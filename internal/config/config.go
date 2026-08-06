@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"jimu/internal/platform/observability"
 
@@ -202,9 +203,10 @@ func Load() (*Config, error) {
 }
 
 // applyEnvOverrides 应用环境变量覆盖（简洁命名，无 JIMU_ 前缀）
+// 支持 _FILE 后缀从文件读取敏感值（Docker Secrets 兼容）
 func applyEnvOverrides(cfg *Config) {
-	// 认证
-	if v := os.Getenv("JWT_SECRET"); v != "" {
+	// 认证：优先 JWT_SECRET_FILE，其次 JWT_SECRET
+	if v := getEnvOrFile("JWT_SECRET_FILE", "JWT_SECRET"); v != "" {
 		cfg.Auth.JWTSecret = v
 	}
 	// 数据库
@@ -219,7 +221,8 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("DB_USER"); v != "" {
 		cfg.DB.User = v
 	}
-	if v := os.Getenv("DB_PASSWORD"); v != "" {
+	// 密码：优先 DB_PASSWORD_FILE，其次 DB_PASSWORD
+	if v := getEnvOrFile("DB_PASSWORD_FILE", "DB_PASSWORD"); v != "" {
 		cfg.DB.Password = v
 	}
 	if v := os.Getenv("DB_NAME"); v != "" {
@@ -229,7 +232,7 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("REDIS_ADDR"); v != "" {
 		cfg.Redis.Addr = v
 	}
-	if v := os.Getenv("REDIS_PASSWORD"); v != "" {
+	if v := getEnvOrFile("REDIS_PASSWORD_FILE", "REDIS_PASSWORD"); v != "" {
 		cfg.Redis.Password = v
 	}
 	if v := os.Getenv("REDIS_DB"); v != "" {
@@ -237,6 +240,19 @@ func applyEnvOverrides(cfg *Config) {
 			cfg.Redis.DB = db
 		}
 	}
+}
+
+// getEnvOrFile 优先从 _FILE 指向的文件读取，其次直接读取环境变量
+func getEnvOrFile(fileKey, directKey string) string {
+	// 优先从文件读取（Docker Secrets）
+	if path := os.Getenv(fileKey); path != "" {
+		if data, err := os.ReadFile(path); err == nil {
+			// 去除首尾空白（secret 文件通常有末尾换行符）
+			return strings.TrimSpace(string(data))
+		}
+	}
+	// 回退到直接环境变量
+	return os.Getenv(directKey)
 }
 
 func contains(list []string, val string) bool {

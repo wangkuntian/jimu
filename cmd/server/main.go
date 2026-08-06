@@ -49,12 +49,12 @@ func run() error {
 
 	application, err := app.Bootstrap(
 		container,
-		user.New(container.DB),
+		user.New(container.DB, container.Redis),
 		authmodule.New(container.DB, container.Redis, cfg.Auth, cfg.HTTP.Mode == config.HTTPModeRelease),
 		role.New(container.DB),
 		permission.New(container.DB),
 		auditmodule.New(container.DB, cfg.Audit, container.Logger),
-		adminmodule.New(*cfg),
+		adminmodule.New(cfg.Version, cfg.Environment, container.Redis),
 	)
 	if err != nil {
 		_ = container.Stop(context.Background())

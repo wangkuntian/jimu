@@ -5,18 +5,20 @@ import (
 	"os"
 
 	"jimu/internal/modules/role/domain"
+	"jimu/internal/platform/auth"
 	userdomain "jimu/internal/modules/user/domain"
 
+	"github.com/casbin/casbin/v3"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 // RunSeed 插入初始数据
-// 管理员密码从 JIMU_ADMIN_PASSWORD 环境变量获取
+// 管理员密码从 ADMIN_PASSWORD 环境变量获取
 func RunSeed(db *gorm.DB) error {
-	adminPassword := os.Getenv("JIMU_ADMIN_PASSWORD")
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
 	if adminPassword == "" {
-		return fmt.Errorf("JIMU_ADMIN_PASSWORD is required")
+		return fmt.Errorf("ADMIN_PASSWORD is required")
 	}
 
 	return db.Transaction(func(tx *gorm.DB) error {
@@ -73,6 +75,55 @@ func RunSeed(db *gorm.DB) error {
 		return nil
 	})
 }
+
+// SeedCasbinPolicies 同步数据库中的角色-权限关系到 Casbin
+// 应在 RunSeed 之后调用
+func SeedCasbinPolicies(db *gorm.DB) error {
+	enforcer, err := auth.NewEnforcer(db)
+	if err != nil {
+		return fmt.Errorf("create enforcer: %w", err)
+	}
+
+	// 清空现有策略
+	enforcer.ClearPolicy()
+
+	// 从数据库加载角色-权限关系
+	var policies []struct {
+		Role     string `gorm:"column:role"`
+		Resource string `gorm:"column:resource"`
+		Action   string `gorm:"column:action"`
+	}
+
+	err = db.Table("roles").
+		Select("roles.name AS role, permissions.resource, permissions.action").
+		Joins("JOIN role_permissions rp ON rp.role_id = roles.id").
+		Joins("JOIN permissions ON permissions.id = rp.permission_id").
+		Scan(&policies).Error
+	if err != nil {
+		return fmt.Errorf("load role permissions: %w", err)
+	}
+
+	// 批量添加策略
+	for _, p := range policies {
+		_, err := enforcer.AddPolicy(p.Role, p.Resource, p.Action)
+		if err != nil {
+			return fmt.Errorf("add policy (%s, %s, %s): %w", p.Role, p.Resource, p.Action, err)
+		}
+	}
+
+	return enforcer.SavePolicy()
+}
+
+// RunSeedWithCasbin 执行完整种子（含 Casbin 策略）
+func RunSeedWithCasbin(db *gorm.DB) error {
+	if err := RunSeed(db); err != nil {
+		return err
+	}
+	return SeedCasbinPolicies(db)
+}
+
+// 确保接口实现
+var _ = func() *casbin.Enforcer { return nil }
 
 func basePermissions() []domain.Permission {
 	return []domain.Permission{

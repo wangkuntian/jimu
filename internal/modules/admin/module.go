@@ -1,10 +1,11 @@
 package admin
 
 import (
-	"jimu/internal/config"
 	"jimu/internal/contract"
 	adminapp "jimu/internal/modules/admin/application"
 	admininterfaces "jimu/internal/modules/admin/interfaces"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // Module 管理模块
@@ -13,9 +14,9 @@ type Module struct {
 }
 
 // New 创建管理模块
-func New(cfg config.Config) *Module {
+func New(version, env string, rdb *redis.Client) *Module {
 	return &Module{
-		service: adminapp.NewService(cfg.Version, cfg.Environment),
+		service: adminapp.NewService(version, env, rdb),
 	}
 }
 
