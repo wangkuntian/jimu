@@ -8,9 +8,12 @@ import (
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/platform/db"
+	"jimu/internal/platform/event"
+	"jimu/internal/platform/feature"
 	"jimu/internal/platform/logger"
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/observability"
+	"jimu/internal/platform/outbox"
 	"jimu/internal/platform/scheduler"
 	"jimu/internal/platform/storage"
 	httpplatform "jimu/internal/platform/http"
@@ -33,6 +36,11 @@ type Container struct {
 	Lock           *redistore.Lock
 	Storage        storage.Storage
 	Notification   notification.Dispatcher
+	FeatureFlag    *feature.Manager
+	WebSocketHub   *notification.Hub
+	EventBus       *event.EventBus
+	Outbox         *outbox.Outbox
+	DBCollector    *observability.DBCollector
 }
 
 func (c *Container) Start(context.Context) error { return nil }
@@ -86,6 +94,37 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 
 	notifier := notification.NewDispatcher()
 
+	// Feature Flag
+	featureMgr := feature.NewManager()
+	// 注册默认特性开关
+	featureMgr.Register(feature.Flag{
+		Name:       "new_dashboard",
+		Enabled:    false,
+		Percentage: 0,
+	})
+	featureMgr.Register(feature.Flag{
+		Name:       "beta_features",
+		Enabled:    true,
+		Percentage: 10, // 10% 灰度
+	})
+
+	// WebSocket Hub
+	wsHub := notification.NewHub()
+
+	// Event Bus
+	eventBus := event.New()
+
+	// Outbox
+	outboxStore := outbox.NewMySQLStore(dbConn)
+	outboxPublisher := outbox.NewEventBusPublisher(eventBus)
+	outboxProcessor := outbox.New(outboxStore, outboxPublisher)
+
+	// DB Metrics Collector
+	var dbCollector *observability.DBCollector
+	if sqlDB, err := dbConn.DB(); err == nil {
+		dbCollector = observability.NewDBCollector(sqlDB, "primary")
+	}
+
 	return &Container{
 		Config:       cfg,
 		DB:           dbConn,
@@ -97,5 +136,10 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		Lock:         lock,
 		Storage:      store,
 		Notification: notifier,
+		FeatureFlag:  featureMgr,
+		WebSocketHub: wsHub,
+		EventBus:     eventBus,
+		Outbox:       outboxProcessor,
+		DBCollector:  dbCollector,
 	}, nil
 }

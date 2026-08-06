@@ -55,6 +55,31 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			module.RegisterJobs(container.JobRegistry)
 			container.Logger.Info("module jobs registered", "name", module.Name())
 		}
+
+		// 注册 Outbox 定时处理（每 10 秒处理一次待发布事件）
+		if container.Outbox != nil {
+			_ = container.JobRegistry.AddFunc("@every 10s", func() {
+				n, err := container.Outbox.Process(context.Background(), 100)
+				if err != nil {
+					container.Logger.Error("outbox process error", "error", err.Error())
+				} else if n > 0 {
+					container.Logger.Debug("outbox processed", "count", n)
+				}
+			})
+		}
+
+		// 注册 DB 指标收集（每 15 秒收集一次）
+		if container.DBCollector != nil {
+			_ = container.JobRegistry.AddFunc("@every 15s", func() {
+				container.DBCollector.Collect()
+				observability.CollectRuntime()
+			})
+		}
+
+		// 注册 WebSocket Hub 运行
+		if container.WebSocketHub != nil {
+			go container.WebSocketHub.Run(context.Background())
+		}
 	}
 
 	components := []contract.Component{container}
