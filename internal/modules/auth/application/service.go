@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"fmt"
 	stderrors "errors"
 	"strings"
 	"time"
@@ -19,29 +20,52 @@ type AuthService struct {
 	userRepo  userdomain.UserRepository
 	jwtUtil   *auth.JWT
 	sessions  auth.SessionStore
+	lockout   *auth.LoginFailureTracker
 	accessMin int
 }
 
-func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, accessMin int) *AuthService {
+func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int) *AuthService {
 	return &AuthService{
 		userRepo:  userRepo,
 		jwtUtil:   jwtUtil,
 		sessions:  sessions,
+		lockout:   lockout,
 		accessMin: accessMin,
 	}
 }
 
 func (s *AuthService) Login(ctx context.Context, username, password string) (*authdomain.TokenPair, error) {
-	user, err := s.userRepo.FindByUsername(ctx, normalizeUsername(username))
+	normalized := normalizeUsername(username)
+
+	// 检查账号是否被锁定
+	if s.lockout != nil {
+		locked, remaining, err := s.lockout.CheckLocked(ctx, normalized)
+		if err != nil {
+			return nil, errors.Wrap(errors.CodeInternalError, "lockout check failed", err)
+		}
+		if locked {
+			return nil, ErrAccountLocked(remaining)
+		}
+	}
+
+	user, err := s.userRepo.FindByUsername(ctx, normalized)
 	if err != nil {
+		s.recordFailure(ctx, normalized)
 		return nil, invalidCredentials()
 	}
 	if user.Status != 1 {
+		s.recordFailure(ctx, normalized)
 		return nil, invalidCredentials()
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		s.recordFailure(ctx, normalized)
 		return nil, invalidCredentials()
+	}
+
+	// 登录成功，清除失败计数
+	if s.lockout != nil {
+		_ = s.lockout.Reset(ctx, normalized)
 	}
 
 	sessionID := uuid.NewString()
@@ -58,6 +82,15 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*au
 		RefreshToken: refreshToken,
 		ExpiresIn:    s.accessMin * 60,
 	}, nil
+}
+
+func (s *AuthService) recordFailure(ctx context.Context, username string) {
+	if s.lockout == nil {
+		return
+	}
+	if _, err := s.lockout.RecordFailure(ctx, username); err != nil {
+		// 锁定记录失败不影响主流程，仅忽略
+	}
 }
 
 func (s *AuthService) Register(ctx context.Context, username, password string) (*userdomain.User, error) {
@@ -150,4 +183,13 @@ func normalizeUsername(username string) string {
 
 func invalidCredentials() error {
 	return errors.New(errors.CodeInvalidCredentials, "invalid credentials")
+}
+
+// ErrAccountLocked 返回账号锁定错误，message 包含剩余锁定时间
+func ErrAccountLocked(remaining time.Duration) error {
+	minutes := int(remaining.Minutes())
+	if minutes < 1 {
+		minutes = 1
+	}
+	return errors.New(errors.CodeForbidden, fmt.Sprintf("account locked due to too many failed attempts, try again in %d minutes", minutes))
 }

@@ -1,6 +1,7 @@
 package interfaces
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -161,10 +162,20 @@ func (h *AuthHandler) allow(c *gin.Context, scope, key string, limit int, window
 		return true
 	}
 	if err != nil || !ok {
+		writeAuthRateLimitHeaders(c, limit, window)
 		response.Fail(c, errors.New(errors.CodeRateLimited, "too many requests"))
 		return false
 	}
 	return true
+}
+
+// writeAuthRateLimitHeaders 写入认证维度限流响应头
+func writeAuthRateLimitHeaders(c *gin.Context, limit int, window time.Duration) {
+	c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", limit))
+	c.Header("X-RateLimit-Remaining", "0")
+	if window > 0 {
+		c.Header("Retry-After", fmt.Sprintf("%d", int(window.Seconds())))
+	}
 }
 
 func normalizeUsername(username string) string {

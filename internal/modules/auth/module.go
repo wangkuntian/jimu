@@ -26,7 +26,8 @@ func New(db *gorm.DB, rdb *redis.Client, cfg config.AuthConfig, failClosed bool)
 	jwtUtil := auth.New(cfg.JWTSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
 	sessionStore := auth.NewRedisSessionStore(rdb)
 	limiter := auth.NewLimiter(rdb, failClosed)
-	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, cfg.AccessExpireMin)
+	lockoutTracker := auth.NewLoginFailureTracker(rdb, auth.DefaultLockoutConfig())
+	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin)
 	return &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db}
 }
 
