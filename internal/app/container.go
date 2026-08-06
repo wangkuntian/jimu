@@ -5,9 +5,12 @@ import (
 	"errors"
 
 	"jimu/internal/config"
+	"jimu/internal/contract"
 	"jimu/internal/platform/db"
 	"jimu/internal/platform/logger"
 	"jimu/internal/platform/observability"
+	"jimu/internal/platform/scheduler"
+	httpplatform "jimu/internal/platform/http"
 	redistore "jimu/internal/platform/redis"
 
 	"github.com/redis/go-redis/v9"
@@ -21,6 +24,9 @@ type Container struct {
 	Redis          *redis.Client
 	Logger         *logger.Logger
 	TracerProvider *sdktrace.TracerProvider
+	JobRegistry    contract.JobRegistry
+	Scheduler      *scheduler.CronScheduler
+	HTTPClient     *httpplatform.Client
 }
 
 func (c *Container) Start(context.Context) error { return nil }
@@ -59,10 +65,16 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		return nil, err
 	}
 
+	sched := scheduler.New(log)
+	httpClient := httpplatform.NewClient(log)
+
 	return &Container{
-		Config: cfg,
-		DB:     dbConn,
-		Redis:  rdb,
-		Logger: log,
+		Config:      cfg,
+		DB:          dbConn,
+		Redis:       rdb,
+		Logger:      log,
+		JobRegistry: sched,
+		Scheduler:   sched,
+		HTTPClient:  httpClient,
 	}, nil
 }
