@@ -169,6 +169,7 @@ type LogConfig struct {
 
 type AuthConfig struct {
 	JWTSecret             string `mapstructure:"jwt_secret"`
+	JWTPreviousSecret     string `mapstructure:"jwt_previous_secret"`
 	Issuer                string `mapstructure:"issuer"`
 	AccessExpireMin       int    `mapstructure:"access_expire_min"`
 	RefreshExpireDay      int    `mapstructure:"refresh_expire_day"`
@@ -241,6 +242,10 @@ func applyEnvOverrides(cfg *Config) {
 	// 认证：优先 JWT_SECRET_FILE，其次 JWT_SECRET
 	if v := getEnvOrFile("JWT_SECRET_FILE", "JWT_SECRET"); v != "" {
 		cfg.Auth.JWTSecret = v
+	}
+	// 密钥轮换：旧 JWT 密钥（用于验证轮换期间尚未过期的旧 token）
+	if v := getEnvOrFile("JWT_PREVIOUS_SECRET_FILE", "JWT_PREVIOUS_SECRET"); v != "" {
+		cfg.Auth.JWTPreviousSecret = v
 	}
 	// 数据库
 	if v := os.Getenv("DB_HOST"); v != "" {
