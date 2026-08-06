@@ -20,17 +20,18 @@ func NewAuditHandler(service *application.AuditService) *AuditHandler {
 }
 
 // List godoc
-// @Summary      List audit logs
-// @Tags         audits
+// @Summary      获取审计日志列表
+// @Description  分页获取系统审计日志。记录用户的操作行为（如登录、创建、修改、删除等），用于安全审计和行为追踪。支持按 ID、创建时间排序。
+// @Tags         审计日志
 // @Produce      json
 // @Security     BearerAuth
-// @Param        page       query     int     false  "Page"
-// @Param        page_size  query     int     false  "Page size"
-// @Param        sort       query     string  false  "Sort field"
-// @Param        order      query     string  false  "Sort order"
-// @Success      200        {object}  contract.PageResponse
-// @Failure      400        {object}  contract.ErrorResponse
-// @Failure      500        {object}  contract.ErrorResponse
+// @Param        page       query     int     false  "页码（默认 1）"
+// @Param        page_size  query     int     false  "每页数量（默认 20，最大 100）"
+// @Param        sort       query     string  false  "排序字段（支持 id、created_at，默认 id）"
+// @Param        order      query     string  false  "排序方向（asc 或 desc，默认 desc）"
+// @Success      200        {object}  contract.PageResponse  "成功，返回分页审计日志列表"
+// @Failure      400        {object}  contract.ErrorResponse  "参数错误（如无效的排序字段）"
+// @Failure      500        {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /audits [get]
 func (h *AuditHandler) List(c *gin.Context) {
 	p := c.MustGet("validated_query").(*pagination.Pagination)
@@ -47,15 +48,16 @@ func (h *AuditHandler) List(c *gin.Context) {
 }
 
 // Get godoc
-// @Summary      Get audit log
-// @Tags         audits
+// @Summary      获取审计日志详情
+// @Description  根据审计日志 ID 获取详细信息，包括操作用户、操作类型、资源、详情、IP 地址、HTTP 方法、请求路径和状态码。
+// @Tags         审计日志
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id   path      int  true  "Audit log ID"
-// @Success      200  {object}  response.Body
-// @Failure      400  {object}  contract.ErrorResponse
-// @Failure      404  {object}  contract.ErrorResponse
-// @Failure      500  {object}  contract.ErrorResponse
+// @Param        id   path      int  true  "审计日志 ID"
+// @Success      200  {object}  response.Body  "成功，返回审计日志详情"
+// @Failure      400  {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
+// @Failure      404  {object}  contract.ErrorResponse  "审计日志不存在"
+// @Failure      500  {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /audits/{id} [get]
 func (h *AuditHandler) Get(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
