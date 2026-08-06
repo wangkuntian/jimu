@@ -30,7 +30,7 @@ func (s *AdminAPIKeyService) ListKeys(ctx context.Context, offset, limit int) ([
 type CreateKeyInput struct {
 	Name      string
 	Scopes    []string
-	ExpiresIn int  // days, 0 = no expiry
+	ExpiresIn int // days, 0 = no expiry
 	CreatedBy uint64
 }
 

@@ -33,9 +33,9 @@ func (h *AdminMonitoringHandler) Health(c *gin.Context) {
 func (h *AdminMonitoringHandler) Metrics(c *gin.Context) {
 	status := h.service.GetStatus()
 	response.OK(c, gin.H{
-		"goroutines":  status.NumGoroutine,
-		"memory_mb":   status.Memory.Alloc / 1024 / 1024,
-		"gc_count":    status.Memory.NumGC,
-		"uptime":      status.Uptime,
+		"goroutines": status.NumGoroutine,
+		"memory_mb":  status.Memory.Alloc / 1024 / 1024,
+		"gc_count":   status.Memory.NumGC,
+		"uptime":     status.Uptime,
 	})
 }

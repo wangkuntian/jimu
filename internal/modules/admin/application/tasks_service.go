@@ -7,12 +7,12 @@ import (
 
 // TaskInfo 任务信息
 type TaskInfo struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Cron        string    `json:"cron"`
-	Enabled     bool      `json:"enabled"`
-	LastRun     time.Time `json:"last_run,omitempty"`
-	LastStatus  string    `json:"last_status"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Cron       string    `json:"cron"`
+	Enabled    bool      `json:"enabled"`
+	LastRun    time.Time `json:"last_run,omitempty"`
+	LastStatus string    `json:"last_status"`
 }
 
 // TaskExecution 任务执行记录
