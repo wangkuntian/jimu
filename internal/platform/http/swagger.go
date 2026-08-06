@@ -11,6 +11,7 @@ import (
 )
 
 // RegisterSwagger 注册 Swagger UI 路由
+// 注意：传入的 r 已经是 /swagger 组，所以这里用 /*
 func RegisterSwagger(r *gin.RouterGroup) {
-	r.GET("/swagger/*any", middleware.Timeout(10*time.Second), ginSwagger.WrapHandler(swaggerFiles.Handler))
+	r.GET("/*any", middleware.Timeout(10*time.Second), ginSwagger.WrapHandler(swaggerFiles.Handler))
 }

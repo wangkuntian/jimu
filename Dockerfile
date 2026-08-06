@@ -30,6 +30,7 @@ COPY --from=builder /app/server .
 COPY --from=builder /app/jimu .
 COPY migrations/ ./migrations/
 COPY conf/ ./conf/
+COPY docs/openapi/ ./docs/openapi/
 RUN mkdir -p logs && chown -R jimu:jimu /app
 
 USER jimu
