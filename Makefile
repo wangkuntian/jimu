@@ -12,13 +12,13 @@ CLI_BIN := $(BIN_DIR)/jimu
 SERVER_CMD := cmd/server/main.go
 CLI_CMD := cmd/cli/main.go
 DOCKER_COMPOSE ?= docker compose
-DOCKER_IMAGE := jimu\:latest
+DOCKER_IMAGE = jimu:latest
 DOCKER_CONTAINER := jimu-server
 SWAG := go run -mod=mod github.com/swaggo/swag/cmd/swag
 ENV ?= dev
 
-# 根据 COMPOSE_PROFILES 生成 --profile 参数（在 recipe 中展开）
-COMPOSE_PROFILE_FLAG = $(if $(COMPOSE_PROFILES),--profile $(COMPOSE_PROFILES))
+# 根据 APP_ENV 自动生成 --profile 参数：dev 环境启动 adminer
+COMPOSE_PROFILE_FLAG = $(if $(filter dev,$(APP_ENV)),--profile dev)
 
 # 加载 .env 文件（如果存在），导出敏感变量供 docker 命令使用
 # 本地 make run/migrate/seed 直接读取 configs/ 中的 YAML，无需环境变量
@@ -70,7 +70,7 @@ help:
 
 ## run: 编译并运行服务端
 run: build-server
-	JIMU_ENV=$(ENV) ./$(SERVER_BIN)
+	APP_ENV=$(ENV) ./$(SERVER_BIN)
 
 ## build: 编译服务端和 CLI
 build: build-server build-cli
@@ -88,19 +88,19 @@ build-cli:
 
 ## migrate: 本地执行迁移
 migrate:
-	JIMU_ENV=$(ENV) go run $(CLI_CMD) migrate up
+	APP_ENV=$(ENV) go run $(CLI_CMD) migrate up
 
 ## migrate-down: 本地回滚迁移
 migrate-down:
-	JIMU_ENV=$(ENV) go run $(CLI_CMD) migrate down
+	APP_ENV=$(ENV) go run $(CLI_CMD) migrate down
 
 ## migrate-status: 查看迁移状态
 migrate-status:
-	JIMU_ENV=$(ENV) go run $(CLI_CMD) migrate status
+	APP_ENV=$(ENV) go run $(CLI_CMD) migrate status
 
 ## seed: 本地插入初始数据
 seed:
-	JIMU_ENV=$(ENV) go run $(CLI_CMD) seed
+	APP_ENV=$(ENV) go run $(CLI_CMD) seed
 
 # ========== Docker 单容器 ==========
 
@@ -114,7 +114,7 @@ docker-run:
 		--name $(DOCKER_CONTAINER) \
 		-p 8080:8080 \
 		-e JWT_SECRET \
-		-e MARIADB_PASSWORD \
+		-e DB_PASSWORD \
 		-v $(PWD)/configs:/app/configs \
 		"$(DOCKER_IMAGE)"
 

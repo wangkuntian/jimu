@@ -28,14 +28,14 @@ func TestJWTSecretOverride(t *testing.T) {
 }
 
 func TestDBPasswordOverride(t *testing.T) {
-	t.Setenv("MARIADB_PASSWORD", "secret-from-env")
+	t.Setenv("DB_PASSWORD", "secret-from-env")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
 	if cfg.DB.Password != "secret-from-env" {
-		t.Errorf("expected MARIADB_PASSWORD to override, got %q", cfg.DB.Password)
+		t.Errorf("expected DB_PASSWORD to override, got %q", cfg.DB.Password)
 	}
 }
 

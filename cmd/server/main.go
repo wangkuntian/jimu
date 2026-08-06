@@ -40,7 +40,7 @@ func run() error {
 
 	// 注入元数据
 	cfg.Version = "1.0.0"
-	cfg.Environment = os.Getenv("JIMU_ENV")
+	cfg.Environment = os.Getenv("APP_ENV")
 
 	container, err := app.NewContainer(cfg)
 	if err != nil {

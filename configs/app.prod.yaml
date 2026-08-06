@@ -1,49 +1,50 @@
 # Jimu Backend Framework - 生产环境配置
-# 通过 JIMU_ENV=prod 激活，覆盖 app.yaml 中的同名配置
+# 通过 APP_ENV=prod 激活，覆盖 app.yaml 中的同名配置
+# 完整配置项（含注释），便于独立查阅
 
 # HTTP 服务配置
 http:
   host: "0.0.0.0"       # 监听地址
   port: 8080             # 监听端口
-  mode: "release"        # Gin 模式：生产环境使用 release
+  mode: "release"        # Gin release 模式（高性能，无调试信息）
   read_header_timeout_sec: 5
   read_timeout_sec: 15
   write_timeout_sec: 30
   idle_timeout_sec: 60
   shutdown_timeout_sec: 30
-  max_body_bytes: 1048576
-  trusted_proxies: ["127.0.0.1"]
+  max_body_bytes: 10485760  # 10MB（支持大文件上传）
+  trusted_proxies: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
   allowed_origins: ["https://admin.example.com"]
 
 management:
-  host: "0.0.0.0"
+  host: "0.0.0.0"      # 生产环境需被监控系统访问
   port: 9090
-  enable_pprof: false
+  enable_pprof: false    # 生产环境关闭（安全考虑）
   probe_timeout_sec: 2
 
 # 数据库配置 (MariaDB)
 db:
-  host: "mariadb"               # 主库地址（写）
+  host: "mariadb"               # 主库地址（K8s service 名称）
   port: 3306                    # 主库端口
-  user: "jimu"                  # 用户名
-  password: ""                  # 通过 Secret 注入
-  database: "jimu"              # 数据库名
+  user: "jimu"                  # 用户名（可通过 DB_USER 覆盖）
+  password: ""                  # 必须通过 DB_PASSWORD 环境变量设置
+  database: "jimu"              # 数据库名（可通过 DB_NAME 覆盖）
   max_open: 100                 # 最大连接数
-  max_idle: 10                  # 最大空闲连接数
+  max_idle: 20                  # 最大空闲连接数
   conn_max_lifetime_sec: 3600   # 连接最大存活时间（秒）
   conn_max_idle_time_sec: 600   # 连接最大空闲时间（秒）
   max_retries: 10               # 连接重试次数
   retry_interval_sec: 5         # 重试间隔（秒）
-  # 读写分离（从库配置，留空则不启用）
+  # 读写分离（取消注释启用）
   # read_hosts: ["mariadb-read-1", "mariadb-read-2"]
   # read_ports: [3306, 3306]
 
 # Redis 配置
 redis:
-  addr: "redis:6379"            # Redis 地址
-  password: ""                  # Redis 密码
-  db: 0                         # Redis 数据库编号
-  pool_size: 50                 # 连接池大小（生产环境更大）
+  addr: "redis:6379"            # Redis 地址（K8s service 名称）
+  password: ""                  # Redis 密码（可通过 REDIS_PASSWORD 覆盖）
+  db: 0                         # Redis 数据库编号（可通过 REDIS_DB 覆盖）
+  pool_size: 50                 # 连接池大小
   min_idle_conns: 10            # 最小空闲连接数
   read_timeout_sec: 3           # 读超时（秒）
   write_timeout_sec: 3          # 写超时（秒）
@@ -52,9 +53,9 @@ redis:
 
 # 日志配置
 log:
-  level: "info"          # 日志级别：生产环境建议 info 或 warn
-  format: "json"         # 日志格式：生产环境使用 json 便于采集
-  output: "logs/app.log" # 输出到文件，启用滚动
+  level: "info"          # 日志级别：info（生产环境）
+  format: "json"         # 日志格式：json（便于 ELK/Loki 采集）
+  output: "stdout"       # 输出到 stdout，由容器日志系统收集
   max_size: 100          # 单文件最大大小（MB）
   max_backups: 30        # 保留旧文件数
   max_age: 7             # 保留天数
@@ -62,41 +63,41 @@ log:
 
 # 认证配置
 auth:
-  jwt_secret: ""               # 必须通过环境变量设置
+  jwt_secret: ""               # JWT 密钥（必须通过 JWT_SECRET 环境变量设置）
   issuer: "jimu"
-  access_expire_min: 30        # Access Token 有效期（分钟）
+  access_expire_min: 15        # Access Token 有效期（分钟，生产较短）
   refresh_expire_day: 7        # Refresh Token 有效期（天）
-  public_registration: false
-  login_rate_limit: 10
-  login_rate_window_sec: 60
-  register_rate_limit: 5
-  register_rate_window_sec: 300
+  public_registration: false   # 生产环境禁止公开注册
+  login_rate_limit: 5          # 登录限流（次/窗口）
+  login_rate_window_sec: 60    # 登录限流窗口（秒）
+  register_rate_limit: 3       # 注册限流（次/窗口）
+  register_rate_window_sec: 300 # 注册限流窗口（秒）
 
 # 服务运行时配置
 server:
   timeout_sec: 30        # 请求超时秒数
   rate_limit_rate: 100   # 全局限流速率（每秒请求数）
-  rate_limit_burst: 200  # 限流桶容量
+  rate_limit_burst: 200  # 限流桶容量（允许的突发请求数）
 
 # 缓存配置
 cache:
   prefix: "jimu"         # 缓存 key 前缀
 
 audit:
-  queue_size: 1024
-  batch_size: 100
-  flush_interval_ms: 500
+  queue_size: 1024       # 队列大小
+  batch_size: 100        # 批量写入大小
+  flush_interval_ms: 500 # 刷新间隔（毫秒）
 
 # 文件存储配置
 storage:
-  type: "local"           # local, s3, oss, minio
+  type: "local"           # 可选: local, s3, oss, minio
   base_dir: "storage"     # 本地存储目录
   base_url: "/files"      # 访问 URL 前缀
 
 # OpenTelemetry 追踪配置
 otel:
-  enabled: true                     # 生产环境默认开启
-  endpoint: "otel-collector:4317"  # OTLP gRPC 端点（K8s service name）
+  enabled: true                     # 生产环境启用
+  endpoint: "otel-collector.monitoring.svc.cluster.local:4317"
   service_name: "jimu"
   service_version: "1.0.0"
-  sample_rate: 1.0                  # 生产环境全量采样
+  sample_rate: 1.0                  # 采样率（1.0 = 全量）

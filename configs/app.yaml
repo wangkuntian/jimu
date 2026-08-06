@@ -1,99 +1,103 @@
 # Jimu Backend Framework - 开发环境配置
 # 优先级：环境变量 > app.{env}.yaml > app.yaml
+# 完整配置项（含注释），便于独立查阅
 
 # HTTP 服务配置
 http:
   host: "0.0.0.0"       # 监听地址
   port: 8080             # 监听端口
-  mode: "debug"          # Gin 模式：debug / release / test
+  mode: "debug"          # Gin debug 模式（详细错误信息，便于调试）
   read_header_timeout_sec: 5
   read_timeout_sec: 15
   write_timeout_sec: 30
   idle_timeout_sec: 60
   shutdown_timeout_sec: 30
-  max_body_bytes: 1048576
+  max_body_bytes: 1048576  # 1MB
   trusted_proxies: ["127.0.0.1"]
-  allowed_origins: ["http://localhost:3000"]
+  allowed_origins: ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 management:
-  host: "127.0.0.1"
+  host: "127.0.0.1"      # 仅本地访问（安全）
   port: 9090
-  enable_pprof: false
+  enable_pprof: true     # 开发环境启用 pprof（性能分析）
   probe_timeout_sec: 2
 
 # 数据库配置 (MariaDB)
 db:
-  host: "127.0.0.1"         # 数据库地址
-  port: 3306                # 数据库端口
-  user: "root"              # 用户名
-  password: "root"          # 密码
-  database: "jimu"          # 数据库名
-  max_open: 100             # 最大连接数
-  max_idle: 10              # 最大空闲连接数
+  host: "127.0.0.1"         # 数据库地址（可通过 DB_HOST 覆盖）
+  port: 3306                # 数据库端口（可通过 DB_PORT 覆盖）
+  user: "jimu"              # 用户名（可通过 DB_USER 覆盖）
+  password: ""              # 密码（通过 DB_PASSWORD 环境变量覆盖）
+  database: "jimu"          # 数据库名（可通过 DB_NAME 覆盖）
+  max_open: 25              # 最大连接数（开发环境较小）
+  max_idle: 5               # 最大空闲连接数
   conn_max_lifetime_sec: 3600  # 连接最大存活时间（秒）
   conn_max_idle_time_sec: 600  # 连接最大空闲时间（秒）
-  max_retries: 5            # 连接重试次数
-  retry_interval_sec: 3     # 重试间隔（秒）
+  max_retries: 3            # 连接重试次数（开发环境快速失败）
+  retry_interval_sec: 1     # 重试间隔（秒）
+  # 读写分离（开发环境通常不需要）
+  # read_hosts: ["mariadb-read-1"]
+  # read_ports: [3306]
 
 # Redis 配置
 redis:
-  addr: "127.0.0.1:6379"    # Redis 地址
-  password: ""              # Redis 密码（无密码留空）
-  db: 0                     # Redis 数据库编号
-  pool_size: 20             # 连接池大小
-  min_idle_conns: 5         # 最小空闲连接数
+  addr: "127.0.0.1:6379"    # Redis 地址（可通过 REDIS_ADDR 覆盖）
+  password: ""              # Redis 密码（可通过 REDIS_PASSWORD 覆盖）
+  db: 0                     # Redis 数据库编号（可通过 REDIS_DB 覆盖）
+  pool_size: 10             # 连接池大小（开发环境较小）
+  min_idle_conns: 2         # 最小空闲连接数
   read_timeout_sec: 3       # 读超时（秒）
   write_timeout_sec: 3      # 写超时（秒）
-  max_retries: 5            # 连接重试次数
-  retry_interval_sec: 3     # 重试间隔（秒）
+  max_retries: 3            # 连接重试次数
+  retry_interval_sec: 1     # 重试间隔（秒）
 
 # 日志配置
 log:
-  level: "debug"         # 日志级别：debug / info / warn / error
-  format: "console"      # 日志格式：console / json
-  output: "stdout"       # 输出目标：stdout 或文件路径（如 logs/app.log）
-  max_size: 100          # 单文件最大大小（MB），仅文件输出时生效
-  max_backups: 30        # 保留旧文件数，仅文件输出时生效
-  max_age: 7             # 保留天数，仅文件输出时生效
-  compress: true         # 是否压缩旧文件，仅文件输出时生效
+  level: "debug"         # 日志级别：debug（开发环境详细日志）
+  format: "console"      # 日志格式：console（便于终端阅读）
+  output: "stdout"       # 输出目标：stdout（输出到终端）
+  max_size: 100          # 单文件最大大小（MB，仅文件输出时生效）
+  max_backups: 30        # 保留旧文件数（仅文件输出时生效）
+  max_age: 7             # 保留天数（仅文件输出时生效）
+  compress: true         # 是否压缩旧文件（仅文件输出时生效）
 
 # 认证配置
 auth:
-  jwt_secret: "change-me-in-production"  # JWT 密钥（生产环境必须修改）
+  jwt_secret: "dev-secret-do-not-use-in-production"  # JWT 密钥（可通过 JWT_SECRET 覆盖）
   issuer: "jimu"
-  access_expire_min: 30                 # Access Token 有效期（分钟）
-  refresh_expire_day: 7                 # Refresh Token 有效期（天）
-  public_registration: false
-  login_rate_limit: 10
-  login_rate_window_sec: 60
-  register_rate_limit: 5
-  register_rate_window_sec: 300
+  access_expire_min: 60  # Access Token 有效期（分钟，开发环境较长方便调试）
+  refresh_expire_day: 30 # Refresh Token 有效期（天）
+  public_registration: true  # 开发环境允许公开注册（方便测试）
+  login_rate_limit: 100      # 登录限流（次/窗口，开发环境宽松）
+  login_rate_window_sec: 60  # 登录限流窗口（秒）
+  register_rate_limit: 100   # 注册限流（次/窗口）
+  register_rate_window_sec: 60 # 注册限流窗口（秒）
 
 # 服务运行时配置
 server:
-  timeout_sec: 30        # 请求超时秒数，0 表示不限制
-  rate_limit_rate: 100   # 全局限流速率（每秒请求数），0 表示不限流
-  rate_limit_burst: 200  # 限流桶容量，允许的突发请求数
+  timeout_sec: 60        # 请求超时秒数（开发环境较长，便于调试）
+  rate_limit_rate: 0     # 全局限流速率（0 = 不限流）
+  rate_limit_burst: 0    # 限流桶容量（0 = 不限流）
 
 # 缓存配置
 cache:
-  prefix: "jimu"         # 缓存 key 前缀，多实例部署时用于隔离
+  prefix: "jimu_dev"     # 缓存 key 前缀（开发环境隔离）
 
 audit:
-  queue_size: 256
-  batch_size: 50
-  flush_interval_ms: 500
+  queue_size: 64         # 队列大小（开发环境较小）
+  batch_size: 10         # 批量写入大小
+  flush_interval_ms: 1000 # 刷新间隔（毫秒，开发环境刷新频率低）
 
 # 文件存储配置
 storage:
-  type: "local"           # local, s3, oss, minio
+  type: "local"           # 可选: local, s3, oss, minio
   base_dir: "storage"     # 本地存储目录
   base_url: "/files"      # 访问 URL 前缀
 
 # OpenTelemetry 追踪配置
 otel:
-  enabled: false                    # 开发环境默认关闭
-  endpoint: "localhost:4317"       # OTLP gRPC 端点
+  enabled: false          # 开发环境关闭
+  endpoint: "localhost:4317"  # OTLP gRPC 端点
   service_name: "jimu"
   service_version: "dev"
-  sample_rate: 0.1                  # 采样率：dev 0.1, prod 1.0
+  sample_rate: 0.1        # 采样率（0.1 = 10%）
