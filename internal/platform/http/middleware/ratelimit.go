@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"sync"
 
 	"jimu/internal/shared/errors"
@@ -41,16 +42,21 @@ func (rl *RateLimiter) getLimiter(ip string) *rate.Limiter {
 	return limiter
 }
 
-// Limit 限流中间件
+// Limit 限流中间件（带 RFC 6585 标准响应头）
 func (rl *RateLimiter) Limit() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 		limiter := rl.getLimiter(ip)
 		if !limiter.Allow() {
+			c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", int(rl.rate)))
+			c.Header("X-RateLimit-Remaining", "0")
+			c.Header("Retry-After", fmt.Sprintf("%d", int(60/rl.rate)+1))
 			response.Fail(c, errors.New(errors.CodeRateLimited, "too many requests"))
 			c.Abort()
 			return
 		}
+		c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", int(rl.rate)))
+		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", int(limiter.Tokens())))
 		c.Next()
 	}
 }

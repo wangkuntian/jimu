@@ -21,7 +21,7 @@ func TestLoginHidesCredentialFailures(t *testing.T) {
 	repo := &fakeUserRepo{users: map[string]*userdomain.User{
 		"alice": userWithPassword(t, 42, "alice", "correct", 1),
 	}}
-	service := NewAuthService(repo, jwtUtil, store, 30)
+	service := NewAuthService(repo, jwtUtil, store, nil, 30)
 
 	_, missingErr := service.Login(ctx, "missing", "correct")
 	_, wrongPasswordErr := service.Login(ctx, "alice", "wrong")
@@ -81,7 +81,7 @@ func TestRegisterRejectsDuplicateUsername(t *testing.T) {
 	repo := &fakeUserRepo{users: map[string]*userdomain.User{
 		"alice": userWithPassword(t, 42, "alice", "correct", 1),
 	}}
-	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), 30)
+	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30)
 
 	_, err := service.Register(context.Background(), " Alice ", "secret123")
 	if appCode(err) != apperrors.CodeUserExists {
@@ -242,7 +242,7 @@ func (s *fakeSessionStore) RevokeAll(_ context.Context, userID uint64) error {
 
 func newTestService(t *testing.T, users map[string]*userdomain.User, store auth.SessionStore) *AuthService {
 	t.Helper()
-	return NewAuthService(&fakeUserRepo{users: users}, auth.New("01234567890123456789012345678901", "jimu", 30, 7), store, 30)
+	return NewAuthService(&fakeUserRepo{users: users}, auth.New("01234567890123456789012345678901", "jimu", 30, 7), store, nil, 30)
 }
 
 func userWithPassword(t *testing.T, id uint64, username, password string, status int8) *userdomain.User {

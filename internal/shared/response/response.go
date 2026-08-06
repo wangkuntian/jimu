@@ -14,6 +14,7 @@ type Body struct {
 	Message   string      `json:"message"`
 	Data      interface{} `json:"data,omitempty"`
 	RequestID string      `json:"request_id,omitempty"`
+	Details   interface{} `json:"details,omitempty"`
 }
 
 type Paginated struct {
@@ -49,6 +50,15 @@ func NoContent(c *gin.Context) {
 }
 
 func Fail(c *gin.Context, err error) {
+	failWithDetails(c, err, nil)
+}
+
+// FailWithDetails 返回带字段级错误详情的失败响应
+func FailWithDetails(c *gin.Context, err error, details interface{}) {
+	failWithDetails(c, err, details)
+}
+
+func failWithDetails(c *gin.Context, err error, details interface{}) {
 	var appErr *appErrs.AppError
 	if errors.As(err, &appErr) {
 		message := appErr.Message
@@ -59,6 +69,7 @@ func Fail(c *gin.Context, err error) {
 			Code:      appErr.Code,
 			Message:   message,
 			RequestID: requestID(c),
+			Details:   details,
 		})
 		return
 	}
@@ -66,6 +77,7 @@ func Fail(c *gin.Context, err error) {
 		Code:      appErrs.CodeInternalError,
 		Message:   "internal error",
 		RequestID: requestID(c),
+		Details:   details,
 	})
 }
 
