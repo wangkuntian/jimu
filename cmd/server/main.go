@@ -49,7 +49,7 @@ func run() error {
 
 	application, err := app.Bootstrap(
 		container,
-		user.New(container.DB, container.Redis),
+		user.New(container.DB, *cfg, container.Redis),
 		authmodule.New(container.DB, container.Redis, cfg.Auth, cfg.HTTP.Mode == config.HTTPModeRelease),
 		role.New(container.DB),
 		permission.New(container.DB),

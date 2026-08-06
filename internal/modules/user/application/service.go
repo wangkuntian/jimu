@@ -3,8 +3,11 @@ package application
 import (
 	"context"
 	stderrors "errors"
+	"fmt"
+	"time"
 
 	"jimu/internal/modules/user/domain"
+	"jimu/internal/platform/cache"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -13,12 +16,15 @@ import (
 )
 
 type UserService struct {
-	repo domain.UserRepository
+	repo  domain.UserRepository
+	cache cache.Cache
 }
 
-func NewUserService(repo domain.UserRepository) *UserService {
-	return &UserService{repo: repo}
+func NewUserService(repo domain.UserRepository, cache cache.Cache) *UserService {
+	return &UserService{repo: repo, cache: cache}
 }
+
+const userCacheTTL = 5 * time.Minute
 
 func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserResponse, error) {
 	existing, err := s.repo.FindByUsername(ctx, req.Username)
@@ -47,6 +53,15 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserR
 }
 
 func (s *UserService) Get(ctx context.Context, id uint64) (*UserResponse, error) {
+	// Cache-Aside: 先查缓存
+	if s.cache != nil {
+		cacheKey := fmt.Sprintf("user:id:%d", id)
+		var resp UserResponse
+		if found, _ := s.cache.Get(ctx, cacheKey, &resp); found {
+			return &resp, nil
+		}
+	}
+
 	user, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		code := errors.CodeInternalError
@@ -58,6 +73,11 @@ func (s *UserService) Get(ctx context.Context, id uint64) (*UserResponse, error)
 		return nil, errors.Wrap(code, message, err)
 	}
 	resp := ToUserResponse(*user)
+
+	// 写入缓存
+	if s.cache != nil {
+		_ = s.cache.Set(ctx, fmt.Sprintf("user:id:%d", id), resp, userCacheTTL)
+	}
 	return &resp, nil
 }
 
@@ -83,6 +103,7 @@ func (s *UserService) Update(ctx context.Context, id uint64, req UpdateUserReque
 	if err := s.repo.Update(ctx, user); err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to update user", err)
 	}
+	s.invalidateUserCache(ctx, id)
 	return nil
 }
 
@@ -90,5 +111,15 @@ func (s *UserService) Delete(ctx context.Context, id uint64) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to delete user", err)
 	}
+	s.invalidateUserCache(ctx, id)
 	return nil
+}
+
+// invalidateUserCache 清除用户相关缓存
+func (s *UserService) invalidateUserCache(ctx context.Context, id uint64) {
+	if s.cache == nil {
+		return
+	}
+	_ = s.cache.Delete(ctx, fmt.Sprintf("user:id:%d", id))
+	_ = s.cache.DeletePattern(ctx, "user:list:*")
 }
