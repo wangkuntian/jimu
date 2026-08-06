@@ -2,21 +2,46 @@ package errors
 
 import "fmt"
 
+// 错误码定义
+// 编码规则：
+//   1xxx - 通用错误
+//   2xxx - 用户/认证模块
+//   3xxx - 角色/权限模块
+//   4xxx - 预留
+//   9xxx - 系统级错误
+//
+// HTTP 映射：
+//   1001 -> 400 Bad Request
+//   1002 -> 401 Unauthorized
+//   1003 -> 403 Forbidden
+//   1004 -> 404 Not Found
+//   1005 -> 500 Internal Server Error
+//   1006 -> 401 Unauthorized
+//   1007 -> 429 Too Many Requests
+//   1008 -> 504 Gateway Timeout
+//   1009 -> 409 Conflict
+//   2001 -> 404 Not Found
+//   2002 -> 409 Conflict
+//   2003 -> 401 Unauthorized
+//   2004 -> 404 Not Found
 const (
-	CodeOK                 = 0
-	CodeInvalidParam       = 1001
-	CodeUnauthorized       = 1002
-	CodeForbidden          = 1003
-	CodeNotFound           = 1004
-	CodeInternalError      = 1005
-	CodeInvalidCredentials = 1006
-	CodeRateLimited        = 1007
-	CodeTimeout            = 1008
-	CodeConflict           = 1009
-	CodeUserNotFound       = 2001
-	CodeUserExists         = 2002
-	CodeInvalidPassword    = 2003
-	CodeRoleNotFound       = 2004
+	// 通用错误 (1xxx)
+	CodeOK                 = 0     // 成功
+	CodeInvalidParam       = 1001  // 参数错误
+	CodeUnauthorized       = 1002  // 未认证
+	CodeForbidden          = 1003  // 无权限
+	CodeNotFound           = 1004  // 资源不存在
+	CodeInternalError      = 1005  // 服务器内部错误
+	CodeInvalidCredentials = 1006  // 认证信息无效
+	CodeRateLimited        = 1007  // 请求过于频繁
+	CodeTimeout            = 1008  // 请求超时
+	CodeConflict           = 1009  // 资源冲突
+
+	// 用户/认证模块 (2xxx)
+	CodeUserNotFound       = 2001  // 用户不存在
+	CodeUserExists         = 2002  // 用户已存在
+	CodeInvalidPassword    = 2003  // 密码错误
+	CodeRoleNotFound       = 2004  // 角色不存在
 )
 
 type AppError struct {
@@ -42,4 +67,56 @@ func New(code int, message string) *AppError {
 
 func Wrap(code int, message string, cause error) *AppError {
 	return &AppError{Code: code, Message: message, Cause: cause}
+}
+
+// HTTPStatus 返回错误码对应的 HTTP 状态码
+func HTTPStatus(code int) int {
+	switch code {
+	case CodeOK:
+		return 200
+	case CodeInvalidParam:
+		return 400
+	case CodeUnauthorized, CodeInvalidCredentials, CodeInvalidPassword:
+		return 401
+	case CodeForbidden:
+		return 403
+	case CodeNotFound, CodeUserNotFound, CodeRoleNotFound:
+		return 404
+	case CodeConflict, CodeUserExists:
+		return 409
+	case CodeRateLimited:
+		return 429
+	case CodeTimeout:
+		return 504
+	case CodeInternalError:
+		return 500
+	default:
+		return 500
+	}
+}
+
+// IsCode 判断错误码是否匹配
+func IsCode(err error, code int) bool {
+	var appErr *AppError
+	if As(err, &appErr) {
+		return appErr.Code == code
+	}
+	return false
+}
+
+// As 类型断言
+func As(err error, target **AppError) bool {
+	for err != nil {
+		if e, ok := err.(*AppError); ok {
+			*target = e
+			return true
+		}
+		type unwrapper interface{ Unwrap() error }
+		if u, ok := err.(unwrapper); ok {
+			err = u.Unwrap()
+		} else {
+			return false
+		}
+	}
+	return false
 }
