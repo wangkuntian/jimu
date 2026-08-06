@@ -56,16 +56,25 @@ HTTP 路由统一注册在 `/api/v1` 前缀下。
 
 ### 环境变量
 
-环境变量前缀 `JIMU`，层级分隔符 `__`，例如 `JIMU__HTTP__PORT=9090`。
+支持 `_FILE` 后缀从文件读取敏感值（Docker Secrets 兼容）：
+
+```bash
+# 直接环境变量
+DB_HOST=mariadb
+DB_PASSWORD=secret
+
+# 或从文件读取（推荐生产环境）
+DB_PASSWORD_FILE=/run/secrets/db_password
+JWT_SECRET_FILE=/run/secrets/jwt_secret
+```
 
 ### 多环境配置
 
-通过 `JIMU_ENV` 环境变量切换配置文件：
+通过 `APP_ENV` 环境变量切换配置文件：
 
 | 环境 | 配置文件 |
 |------|----------|
 | 开发 | `app.yaml` |
-| 测试 | `app.test.yaml` |
 | 生产 | `app.prod.yaml` |
 
 优先级：`环境变量 > app.{env}.yaml > app.yaml`
@@ -97,6 +106,8 @@ HTTP 状态码始终 200，业务错误通过 `body.code` 体现：
 - Gorm + `gorm.io/driver/mysql`
 - 所有基础表包含字段：`id`、`created_at`、`updated_at`、`deleted_at`
 - 迁移使用 Goose，命名 `{seq}_create_{table}s.sql`
+- 迁移文件需为每个字段和表添加 COMMENT（中文说明）
+- 支持读写分离（通过 `read_hosts`、`read_ports` 配置）
 
 ### CLI
 
@@ -112,6 +123,7 @@ HTTP 状态码始终 200，业务错误通过 `body.code` 体现：
 - 新增 API → 更新 API 示例
 - 项目结构变化 → 更新目录树
 - 新增 Makefile 目标 → 更新命令速查
+- 新增 API → 使用中文 swagger 注解（@Summary、@Description、@Param、@Success、@Failure）
 
 ## 简单优先
 
