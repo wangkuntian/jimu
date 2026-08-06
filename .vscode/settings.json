@@ -1,0 +1,13 @@
+{
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/golangci/golangci-lint/master/assets/golangci.jsonschema.json": ".golangci.yml"
+  },
+  "go.lintTool": "golangci-lint",
+  "go.lintFlags": ["--fast"],
+  "go.testFlags": ["-v"],
+  "go.toolsManagement.autoUpdate": false,
+  "[go]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "golang.go"
+  }
+}

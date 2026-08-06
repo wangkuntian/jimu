@@ -1,0 +1,44 @@
+# Git pre-commit 钩子配置
+# 安装: pip install pre-commit && pre-commit install
+# 手动运行全部: pre-commit run --all-files
+# 文档: https://pre-commit.com
+
+repos:
+  # Go 格式化
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+      - id: go-vet
+      - id: go-lint  # golint (已弃用但轻量); 主要靠下面的 golangci-lint
+
+  # golangci-lint（完整静态检查）
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.7.2
+    hooks:
+      - id: golangci-lint
+        args: [--timeout=5m]
+        # 仅检查已暂存文件会更快，但全量更安全:
+        # entry: golangci-lint run --new-from-rev=HEAD
+
+  # 通用检查
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=512']
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+
+  # 防止提交敏感文件
+  - repo: local
+    hooks:
+      - id: no-env-and-secrets
+        name: "禁止提交 .env 和 secrets/"
+        entry: '错误: .env 或 secrets/ 目录不应提交。请检查 .gitignore。'
+        language: fail
+        files: '(\.env$|secrets/)'
+        types: [file]
