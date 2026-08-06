@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"context"
+	"encoding/json"
 
 	"jimu/internal/modules/audit/domain"
 
@@ -34,6 +35,7 @@ func (r *mysqlAuditRepository) FindByID(ctx context.Context, id uint64) (*domain
 	if err != nil {
 		return nil, err
 	}
+	deserializeChanges(&log)
 	return &log, nil
 }
 
@@ -48,5 +50,19 @@ func (r *mysqlAuditRepository) List(ctx context.Context, offset, limit int, sort
 		Column: clause.Column{Name: sort},
 		Desc:   order == "desc",
 	}).Offset(offset).Limit(limit).Find(&logs).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range logs {
+		deserializeChanges(&logs[i])
+	}
 	return logs, total, err
+}
+
+// deserializeChanges 从 ChangesRaw 反序列化字段变更列表
+func deserializeChanges(log *domain.AuditLog) {
+	if log.ChangesRaw == "" {
+		return
+	}
+	_ = json.Unmarshal([]byte(log.ChangesRaw), &log.Changes)
 }
