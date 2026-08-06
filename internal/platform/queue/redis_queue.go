@@ -59,9 +59,11 @@ func (q *RedisQueue) Consume(ctx context.Context, timeout time.Duration) (*JobDa
 // MoveDueJobs 将到期的延迟任务移入实时队列
 func (q *RedisQueue) MoveDueJobs(ctx context.Context) (int, error) {
 	now := time.Now().Unix()
-	members, err := q.client.ZRangeByScore(ctx, DelayedKey, &redis.ZRangeBy{
-		Min: "0",
-		Max: fmt.Sprintf("%d", now),
+	members, err := q.client.ZRangeArgs(ctx, redis.ZRangeArgs{
+		Key:     DelayedKey,
+		ByScore: true,
+		Start:   "0",
+		Stop:    fmt.Sprintf("%d", now),
 	}).Result()
 	if err != nil {
 		return 0, err
