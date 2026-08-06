@@ -22,7 +22,7 @@ type UserCreatedEvent struct {
 
 // UserUpdatedEvent 用户更新事件
 type UserUpdatedEvent struct {
-	UserID  uint64 `json:"user_id"`
+	UserID  uint64   `json:"user_id"`
 	Changes []string `json:"changes"` // 变更字段列表
 }
 

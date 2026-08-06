@@ -92,7 +92,7 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 	r.Use(
 		middleware.CORSMiddleware(middleware.CORSConfig{
 			AllowedOrigins: cfg.AllowedOrigins,
-			MaxAge:        86400,
+			MaxAge:         86400,
 		}),
 		middleware.SecurityHeadersFromConfig(securityCfg),
 		middleware.GzipCompression(),

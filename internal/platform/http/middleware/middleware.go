@@ -138,21 +138,21 @@ func Recovery() gin.HandlerFunc {
 
 // CORSConfig CORS 配置
 type CORSConfig struct {
-	AllowedOrigins []string // 允许的来源，["*"] 表示允许所有
-	AllowedMethods []string // 允许的方法
-	AllowedHeaders []string // 允许的头部
-	AllowCredentials bool   // 是否允许携带凭证
-	MaxAge         int     // 预请求缓存秒数
+	AllowedOrigins   []string // 允许的来源，["*"] 表示允许所有
+	AllowedMethods   []string // 允许的方法
+	AllowedHeaders   []string // 允许的头部
+	AllowCredentials bool     // 是否允许携带凭证
+	MaxAge           int      // 预请求缓存秒数
 }
 
 // DefaultCORSConfig 返回默认 CORS 配置
 func DefaultCORSConfig() CORSConfig {
 	return CORSConfig{
-		AllowedOrigins:  []string{"*"},
-		AllowedMethods:  []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:  []string{"Content-Type", "Authorization", "X-Request-ID", "Idempotency-Key"},
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Request-ID", "Idempotency-Key"},
 		AllowCredentials: false,
-		MaxAge:         86400,
+		MaxAge:           86400,
 	}
 }
 

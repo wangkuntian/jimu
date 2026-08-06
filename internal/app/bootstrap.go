@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"jimu/internal/contract"
-	"jimu/internal/platform/notification"
 	platformhttp "jimu/internal/platform/http"
+	"jimu/internal/platform/notification"
 	"jimu/internal/platform/observability"
 
 	"github.com/gin-gonic/gin"
