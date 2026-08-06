@@ -27,6 +27,9 @@ func RegisterUserRoutes(r *gin.RouterGroup, service *application.UserService, rd
 			users.POST("", middleware.ValidateJSON(&application.CreateUserRequest{}), handler.Create)
 		}
 		users.GET("", middleware.ValidateQuery(&pagination.Pagination{}), handler.List)
+		// CSV 导出（必须在 /:id 之前注册，避免路径冲突）
+		users.GET("/export.csv", middleware.ValidateQuery(&pagination.Pagination{}), handler.ExportCSV)
+		users.POST("/batch-delete", middleware.ValidateJSON(&application.BatchDeleteRequest{}), handler.BatchDelete)
 		users.GET("/:id", handler.Get)
 		users.PUT("/:id", middleware.ValidateJSON(&application.UpdateUserRequest{}), handler.Update)
 		users.DELETE("/:id", handler.Delete)

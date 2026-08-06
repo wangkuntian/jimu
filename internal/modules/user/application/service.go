@@ -123,3 +123,19 @@ func (s *UserService) invalidateUserCache(ctx context.Context, id uint64) {
 	_ = s.cache.Delete(ctx, fmt.Sprintf("user:id:%d", id))
 	_ = s.cache.DeletePattern(ctx, "user:list:*")
 }
+
+// BatchDelete 批量删除用户（逐个软删除，返回成功/失败计数）
+func (s *UserService) BatchDelete(ctx context.Context, ids []uint64) (BatchResult, error) {
+	result := BatchResult{}
+	for _, id := range ids {
+		if err := s.Delete(ctx, id); err != nil {
+			result.Failed++
+			continue
+		}
+		result.Success++
+	}
+	if result.Success == 0 && result.Failed > 0 {
+		return result, errors.Wrap(errors.CodeInternalError, "batch delete failed", nil)
+	}
+	return result, nil
+}
