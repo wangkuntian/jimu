@@ -28,13 +28,15 @@ func NewAdminMonitoringService(version, env string, rdb *redis.Client) *AdminMon
 
 // SystemStatus 系统状态
 type SystemStatus struct {
-	Version      string      `json:"version"`
-	Environment  string      `json:"environment"`
-	StartTime    time.Time   `json:"start_time"`
-	Uptime       string      `json:"uptime"`
-	NumGoroutine int         `json:"num_goroutine"`
-	NumCPU       int         `json:"num_cpu"`
-	Memory       MemoryStats `json:"memory"`
+	Version        string      `json:"version"`
+	Environment    string      `json:"environment"`
+	StartTime      time.Time   `json:"start_time"`
+	Uptime         string      `json:"uptime"`
+	NumGoroutine   int         `json:"num_goroutine"`
+	NumCPU         int         `json:"num_cpu"`
+	Memory         MemoryStats `json:"memory"`
+	DBConnected    bool        `json:"db_connected"`
+	RedisConnected bool        `json:"redis_connected"`
 }
 
 // MemoryStats 内存统计

@@ -35,7 +35,7 @@ func (h *AdminMonitoringHandler) Metrics(c *gin.Context) {
 	response.OK(c, gin.H{
 		"goroutines":  status.NumGoroutine,
 		"memory_mb":   status.Memory.Alloc / 1024 / 1024,
-		"gc_count":    status.NumGC,
+		"gc_count":    status.Memory.NumGC,
 		"uptime":      status.Uptime,
 	})
 }

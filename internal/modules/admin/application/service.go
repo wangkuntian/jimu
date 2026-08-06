@@ -9,28 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// SystemStatus 系统状态
-type SystemStatus struct {
-	Version        string      `json:"version"`
-	Environment    string      `json:"environment"`
-	StartTime      time.Time   `json:"start_time"`
-	Uptime         string      `json:"uptime"`
-	NumGoroutine   int         `json:"num_goroutine"`
-	NumCPU         int         `json:"num_cpu"`
-	Memory         MemoryStats `json:"memory"`
-	DBConnected    bool        `json:"db_connected"`
-	RedisConnected bool        `json:"redis_connected"`
-}
-
-// MemoryStats 内存统计
-type MemoryStats struct {
-	Alloc      uint64 `json:"alloc"`       // 已分配字节
-	TotalAlloc uint64 `json:"total_alloc"` // 总分配字节
-	Sys        uint64 `json:"sys"`         // 系统字节
-	NumGC      uint32 `json:"num_gc"`      // GC 次数
-	HeapAlloc  uint64 `json:"heap_alloc"`  // 堆分配
-	HeapInuse  uint64 `json:"heap_inuse"`  // 堆使用
-}
+// SystemStatus 和 MemoryStats 定义在 monitoring_service.go 中
 
 // OnlineUser 在线用户信息
 type OnlineUser struct {
@@ -57,6 +36,12 @@ func NewService(version, env string, rdb *redis.Client) *Service {
 		redis:     rdb,
 	}
 }
+
+// Version 返回版本号
+func (s *Service) Version() string { return s.version }
+
+// Env 返回运行环境
+func (s *Service) Env() string { return s.env }
 
 // GetStatus 获取系统状态
 func (s *Service) GetStatus() SystemStatus {
