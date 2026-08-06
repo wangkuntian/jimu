@@ -118,6 +118,14 @@ type HTTPConfig struct {
 	MaxBodyBytes         int64    `mapstructure:"max_body_bytes"`
 	TrustedProxies       []string `mapstructure:"trusted_proxies"`
 	AllowedOrigins       []string `mapstructure:"allowed_origins"`
+	TLS                  TLSConfig `mapstructure:"tls"`
+}
+
+// TLSConfig TLS 配置
+type TLSConfig struct {
+	Enabled  bool   `mapstructure:"enabled"`   // 是否启用 TLS
+	CertFile string `mapstructure:"cert_file"` // 证书文件路径
+	KeyFile  string `mapstructure:"key_file"`  // 私钥文件路径
 }
 
 type DBConfig struct {
