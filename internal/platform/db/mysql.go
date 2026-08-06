@@ -23,7 +23,7 @@ func New(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {
 	return db, nil
 }
 
-// ConnectWithRetry 带重试的数据库连接
+// ConnectWithRetry 带重试的数据库连接（使用自定义 logger 支持慢查询告警）
 func ConnectWithRetry(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {
 	maxRetries := cfg.MaxRetries
 	if maxRetries <= 0 {
@@ -38,7 +38,7 @@ func ConnectWithRetry(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error)
 	var err error
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		db, err = open(cfg)
+		db, err = open(cfg, log)
 		if err == nil {
 			if pingErr := pingDB(context.Background(), db); pingErr == nil {
 				if log != nil {
@@ -76,10 +76,14 @@ func dsn(cfg config.DBConfig, host string, port int) string {
 		cfg.User, cfg.Password, host, port, cfg.Database)
 }
 
-func open(cfg config.DBConfig) (*gorm.DB, error) {
-	db, err := gorm.Open(mysql.Open(dsn(cfg, "", 0)), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Info),
-	})
+func open(cfg config.DBConfig, log ...*logger.Logger) (*gorm.DB, error) {
+	gormCfg := &gorm.Config{}
+	if len(log) > 0 && log[0] != nil {
+		gormCfg.Logger = NewGormLogger(log[0], SlowQueryThreshold)
+	} else {
+		gormCfg.Logger = gormlogger.Default.LogMode(gormlogger.Silent)
+	}
+	db, err := gorm.Open(mysql.Open(dsn(cfg, "", 0)), gormCfg)
 	if err != nil {
 		return nil, err
 	}
