@@ -37,6 +37,8 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **Docker Secrets** — 敏感配置通过文件注入（`_FILE` 后缀）
 - **K8s 部署** — Deployment/Service/HPA/Ingress manifests
 - **CI/CD** — GitHub Actions + Dependabot 自动化 + 测试覆盖率门禁
+- **静态检查** — golangci-lint + pre-commit 钩子（fmt / vet / lint）
+- **追踪关联** — 访问日志自动注入 trace_id / span_id，关联 OpenTelemetry 追踪
 
 ## 技术栈
 
@@ -336,6 +338,7 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `make compose-migrate` | Compose 环境执行迁移 |
 | `make compose-seed` | Compose 环境插入初始数据 |
 | `make release-check` | 发布前检查 |
+| `make hooks` | 安装 pre-commit 钩子 |
 
 ## Docker 部署
 
