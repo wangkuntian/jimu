@@ -138,6 +138,19 @@ info:
   title: Jimu API
   version: "1.0"
 paths:
+  /admin/error-codes:
+    get:
+      description: 获取所有业务错误码及其 HTTP 状态码映射
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: 获取错误码列表
+      tags:
+      - admin
   /admin/status:
     get:
       description: 获取运行时状态（版本、内存、Goroutine 等）

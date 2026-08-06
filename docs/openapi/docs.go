@@ -2,7 +2,14 @@
 
 package openapi
 
-import "github.com/swaggo/swag"
+import (
+	"embed"
+
+	"github.com/swaggo/swag"
+)
+
+//go:embed swagger.json swagger.yaml
+var swaggerFiles embed.FS
 
 const docTemplate = `{
     "schemes": {{ marshal .Schemes }},
@@ -16,6 +23,26 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/admin/error-codes": {
+            "get": {
+                "description": "获取所有业务错误码及其 HTTP 状态码映射",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "获取错误码列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/status": {
             "get": {
                 "description": "获取运行时状态（版本、内存、Goroutine 等）",
