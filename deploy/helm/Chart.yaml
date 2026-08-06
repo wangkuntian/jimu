@@ -1,0 +1,16 @@
+apiVersion: v2
+name: jimu
+description: Jimu Backend Framework - Production-ready Go backend
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - golang
+  - backend
+  - api
+  - rbac
+maintainers:
+  - name: Jimu Team
+    email: team@your-org.com
+sources:
+  - https://github.com/your-org/jimu
