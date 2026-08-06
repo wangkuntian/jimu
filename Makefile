@@ -217,3 +217,12 @@ release-check: fmt-check vet test
 hooks:
 	pre-commit install
 	@echo "pre-commit hooks installed"
+
+## dev: 热重载开发模式（需 air: go install github.com/air-verse/air@latest）
+dev:
+	@if command -v air >/dev/null 2>&1; then \
+		APP_ENV=dev air; \
+	else \
+		echo "air 未安装，运行: go install github.com/air-verse/air@latest"; \
+		exit 1; \
+	fi
