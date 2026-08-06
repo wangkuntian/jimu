@@ -1,10 +1,12 @@
 package user
 
 import (
+	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/modules/user/application"
 	"jimu/internal/modules/user/infrastructure"
 	"jimu/internal/modules/user/interfaces"
+	"jimu/internal/platform/cache"
 
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -15,9 +17,13 @@ type Module struct {
 	rdb     *redis.Client
 }
 
-func New(db *gorm.DB, rdb ...*redis.Client) *Module {
+func New(db *gorm.DB, cfg config.Config, rdb ...*redis.Client) *Module {
 	repo := infrastructure.NewMysqlRepository(db)
-	service := application.NewUserService(repo)
+	var c cache.Cache
+	if len(rdb) > 0 {
+		c = cache.NewRedisCache(rdb[0], cfg.Cache.Prefix)
+	}
+	service := application.NewUserService(repo, c)
 	m := &Module{service: service}
 	if len(rdb) > 0 {
 		m.rdb = rdb[0]

@@ -30,7 +30,7 @@ func TestUserServiceListPassesPaginationAndReturnsDTO(t *testing.T) {
 		users: []domain.User{{ID: 7, Username: "alice", Password: "hash", Status: 1}},
 		total: 33,
 	}
-	service := NewUserService(repo)
+	service := NewUserService(repo, nil)
 
 	users, total, err := service.List(context.Background(), pagination.Pagination{Page: 3, PageSize: 10, Sort: "created_at", Order: "asc"})
 	if err != nil {
@@ -45,7 +45,7 @@ func TestUserServiceListPassesPaginationAndReturnsDTO(t *testing.T) {
 }
 
 func TestUserServiceGetMapsNotFound(t *testing.T) {
-	service := NewUserService(&fakeUserRepository{findErr: gorm.ErrRecordNotFound})
+	service := NewUserService(&fakeUserRepository{findErr: gorm.ErrRecordNotFound}, nil)
 
 	_, err := service.Get(context.Background(), 9)
 	if appCode(err) != apperrors.CodeNotFound {

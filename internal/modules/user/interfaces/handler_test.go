@@ -37,7 +37,7 @@ func TestUserListUsesDefaultPaginationBeforeService(t *testing.T) {
 	r.GET("/users", func(c *gin.Context) {
 		c.Set("request_id", "rid-list")
 		c.Set("validated_query", &pagination.Pagination{})
-		NewUserHandler(application.NewUserService(&fakeUserRepository{})).List(c)
+		NewUserHandler(application.NewUserService(&fakeUserRepository{}, nil)).List(c)
 	})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/users", nil))
@@ -58,7 +58,7 @@ func TestUserCreateReturnsCreatedDTO(t *testing.T) {
 	r := gin.New()
 	r.POST("/users", func(c *gin.Context) {
 		c.Set("validated_req", &application.CreateUserRequest{Username: "alice", Password: "secret123"})
-		NewUserHandler(application.NewUserService(&fakeUserRepository{})).Create(c)
+		NewUserHandler(application.NewUserService(&fakeUserRepository{}, nil)).Create(c)
 	})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(`{"username":"alice","password":"secret123"}`)))
@@ -74,7 +74,7 @@ func TestUserCreateReturnsCreatedDTO(t *testing.T) {
 func TestUserDeleteReturnsNoContent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.DELETE("/users/:id", NewUserHandler(application.NewUserService(&fakeUserRepository{})).Delete)
+	r.DELETE("/users/:id", NewUserHandler(application.NewUserService(&fakeUserRepository{}, nil)).Delete)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/users/7", nil))
 
