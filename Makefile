@@ -1,4 +1,6 @@
-.PHONY: run build test vet fmt fmt-check lint clean migrate swagger cli docker docker-run docker-stop docker-logs docker-up docker-down docker-restart docker-compose-logs help
+.PHONY: run build test vet fmt fmt-check lint clean migrate migrate-down migrate-status seed help
+.PHONY: docker-build docker-run docker-stop docker-logs
+.PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -32,90 +34,98 @@ help:
 	@echo "Usage: make <target>"
 	@echo ""
 	@echo "本地运行:"
-	@echo "  make run              编译并运行二进制"
-	@echo "  make run-go           直接 go run 运行（不编译）"
-	@echo "  make build            编译二进制到 bin/"
+	@echo "  make run                  编译并运行服务端"
+	@echo "  make build                编译服务端和 CLI"
+	@echo "  make test                 运行测试"
+	@echo "  make vet                  静态分析"
+	@echo "  make fmt                  格式化代码"
+	@echo "  make lint                 静态检查"
+	@echo ""
+	@echo "数据库:"
+	@echo "  make migrate              本地执行迁移"
+	@echo "  make migrate-down         本地回滚迁移"
+	@echo "  make migrate-status       查看迁移状态"
+	@echo "  make seed                 本地插入初始数据"
 	@echo ""
 	@echo "Docker 容器（单容器，需外部 DB + Redis）:"
-	@echo "  make docker           构建镜像"
-	@echo "  make docker-run       运行容器（前台）"
-	@echo "  make docker-stop      停止并删除容器"
-	@echo "  make docker-logs      查看容器日志"
+	@echo "  make docker-build         构建镜像"
+	@echo "  make docker-run           运行容器（前台）"
+	@echo "  make docker-stop          停止并删除容器"
+	@echo "  make docker-logs          查看容器日志"
 	@echo ""
 	@echo "Docker Compose（一键启动全部服务）:"
-	@echo "  make docker-up        启动所有服务"
-	@echo "  make docker-down      停止所有服务"
-	@echo "  make docker-restart   重启所有服务"
-	@echo "  make docker-compose-logs  查看应用日志"
+	@echo "  make compose-up           启动所有服务"
+	@echo "  make compose-down         停止所有服务"
+	@echo "  make compose-restart      重启所有服务"
+	@echo "  make compose-logs         查看应用日志"
+	@echo "  make compose-migrate      Compose 环境执行迁移"
+	@echo "  make compose-seed         Compose 环境插入初始数据"
 	@echo ""
-	@echo "数据库迁移:"
-	@echo "  make migrate          本地执行迁移"
-	@echo "  make migrate-docker   容器内执行迁移"
-	@echo "  make migrate-compose  Compose 环境执行迁移"
-	@echo "  make seed             本地插入初始数据"
-	@echo "  make seed-compose     Compose 环境插入初始数据"
+	@echo "工具:"
+	@echo "  make clean                清理构建产物"
+	@echo "  make swagger              生成 API 文档"
+	@echo "  make release-check        发布前检查"
 
 # ========== 本地运行 ==========
 
-## run: 编译并运行二进制
+## run: 编译并运行服务端
 run: build-server
 	JIMU_ENV=$(ENV) ./$(SERVER_BIN)
-
-## run-go: 直接 go run 运行（不编译）
-run-go:
-	JIMU_ENV=$(ENV) go run $(SERVER_CMD)
 
 ## build: 编译服务端和 CLI
 build: build-server build-cli
 
-## build-server: 编译 HTTP 服务
+# 内部目标（不直接调用）
 build-server:
 	@mkdir -p $(BIN_DIR)
 	go build -o $(SERVER_BIN) $(SERVER_CMD)
 
-## build-cli: 编译 CLI 工具
 build-cli:
 	@mkdir -p $(BIN_DIR)
 	go build -o $(CLI_BIN) $(CLI_CMD)
 
-# ========== Docker 镜像 ==========
+# ========== 数据库 ==========
 
-## docker: 构建 Docker 镜像
-build-image: docker build -t "$(DOCKER_IMAGE)" .
+## migrate: 本地执行迁移
+migrate:
+	JIMU_ENV=$(ENV) go run $(CLI_CMD) migrate up
 
-## push-docker: 推送镜像到仓库（需先 docker tag）
-push-image:
-	docker push "$(DOCKER_IMAGE)"
+## migrate-down: 本地回滚迁移
+migrate-down:
+	JIMU_ENV=$(ENV) go run $(CLI_CMD) migrate down
+
+## migrate-status: 查看迁移状态
+migrate-status:
+	JIMU_ENV=$(ENV) go run $(CLI_CMD) migrate status
+
+## seed: 本地插入初始数据
+seed:
+	JIMU_ENV=$(ENV) go run $(CLI_CMD) seed
 
 # ========== Docker 单容器 ==========
 
-## container-run: 运行容器（前台，需外部 DB + Redis）
-container-run:
+## docker-build: 构建 Docker 镜像
+docker-build:
+	docker build -t "$(DOCKER_IMAGE)" .
+
+## docker-run: 运行容器（前台，需外部 DB + Redis）
+docker-run:
 	docker run --rm -it \
 		--name $(DOCKER_CONTAINER) \
 		-p 8080:8080 \
 		-e JWT_SECRET \
-		-e DB_PASSWORD \
+		-e MARIADB_PASSWORD \
 		-v $(PWD)/configs:/app/configs \
-		$(DOCKER_IMAGE)
+		"$(DOCKER_IMAGE)"
 
-## container-stop: 停止并删除容器
-container-stop:
+## docker-stop: 停止并删除容器
+docker-stop:
 	docker stop $(DOCKER_CONTAINER) 2>/dev/null || true
 	docker rm $(DOCKER_CONTAINER) 2>/dev/null || true
 
-## container-logs: 查看容器日志
-container-logs:
+## docker-logs: 查看容器日志
+docker-logs:
 	docker logs -f $(DOCKER_CONTAINER)
-
-## docker-run: 运行单容器（container-run 别名）
-docker-run: container-run
-
-## docker-stop: 停止单容器（container-stop 别名）
-docker-stop: container-stop
-
-## docker-logs: 查看单容器日志（container-logs 别名）
-docker-logs: container-logs
 
 # ========== Docker Compose ==========
 # 通过 .env 中 COMPOSE_PROFILES 控制启动的 profile（如 dev 启动 adminer）
@@ -136,75 +146,17 @@ compose-restart:
 compose-logs:
 	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) logs -f server
 
-## docker-up: 启动 Compose 环境（compose-up 别名）
-docker-up: compose-up
+## compose-migrate: Compose 环境执行迁移
+compose-migrate:
+	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) run --rm server ./jimu migrate up
 
-## docker-down: 停止 Compose 环境（compose-down 别名）
-docker-down: compose-down
-
-## docker-restart: 重启 Compose 环境（compose-restart 别名）
-docker-restart: compose-restart
-
-## docker-compose-logs: 查看 Compose 应用日志（compose-logs 别名）
-docker-compose-logs: compose-logs
-
-# ========== 数据库迁移 ==========
-
-## migrate: 本地执行迁移
-migrate:
-	JIMU_ENV=$(ENV) go run $(CLI_CMD) migrate up
-
-## migrate-down: 本地回滚最后一次迁移
-migrate-down:
-	JIMU_ENV=$(ENV) go run $(CLI_CMD) migrate down
-
-## migrate-status: 本地查看迁移状态
-migrate-status:
-	JIMU_ENV=$(ENV) go run $(CLI_CMD) migrate status
-
-## migrate-docker: 容器内执行迁移
-migrate-docker:
-	docker run --rm \
-		--network host \
-		-e JWT_SECRET \
-		-e DB_PASSWORD \
-		-v $(PWD)/configs:/app/configs \
-		$(DOCKER_IMAGE) ./jimu migrate up
-
-## migrate-compose: Compose 环境执行迁移
-migrate-compose:
-	$(DOCKER_COMPOSE) run --rm server ./jimu migrate up
-
-## migrate-compose-down: Compose 环境回滚迁移
-migrate-compose-down:
-	$(DOCKER_COMPOSE) run --rm server ./jimu migrate down
-
-## migrate-compose-status: Compose 环境查看迁移状态
-migrate-compose-status:
-	$(DOCKER_COMPOSE) run --rm server ./jimu migrate status
-
-# ========== 数据初始化 ==========
-
-## seed: 本地插入初始数据
-seed:
-	JIMU_ENV=$(ENV) go run $(CLI_CMD) seed
-
-## seed-docker: 容器内插入初始数据
-seed-docker:
-	docker run --rm \
-		--network host \
-		-e JWT_SECRET \
-		-e DB_PASSWORD \
-		-v $(PWD)/configs:/app/configs \
-		$(DOCKER_IMAGE) ./jimu seed
-
-## seed-compose: Compose 环境插入初始数据
-seed-compose:
-	$(DOCKER_COMPOSE) run --rm server ./jimu seed
+## compose-seed: Compose 环境插入初始数据
+compose-seed:
+	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) run --rm server ./jimu seed
 
 # ========== 工具 ==========
 
-## test: 运行所有测试
+## test: 运行测试
 test:
 	go test ./... -v
 
@@ -251,7 +203,7 @@ clean:
 swagger:
 	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi
 
-## cli: 编译 CLI（build-cli 别名）
+## cli: 编译 CLI
 cli: build-cli
 
 ## all: 格式化 -> 静态检查 -> 测试 -> 编译
