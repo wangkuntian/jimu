@@ -78,34 +78,35 @@ func translateValidationDetails(err error) []fieldError {
 }
 
 // translateValidationMessage 将单个 validator 字段错误翻译为中文友好消息
+// 注意：生产环境应使用 i18n.T 根据请求语言返回对应消息
 func translateValidationMessage(e validator.FieldError) string {
 	field := e.Field()
 	switch e.Tag() {
 	case "required":
-		return fmt.Sprintf("%s 不能为空", field)
+		return fmt.Sprintf("%s is required", field)
 	case "min":
-		return fmt.Sprintf("%s 长度不能少于 %s 个字符", field, e.Param())
+		return fmt.Sprintf("%s must be at least %s characters", field, e.Param())
 	case "max":
-		return fmt.Sprintf("%s 长度不能超过 %s 个字符", field, e.Param())
+		return fmt.Sprintf("%s must be at most %s characters", field, e.Param())
 	case "email":
-		return fmt.Sprintf("%s 邮箱格式不正确", field)
+		return fmt.Sprintf("%s is not a valid email", field)
 	case "len":
-		return fmt.Sprintf("%s 长度必须为 %s 个字符", field, e.Param())
+		return fmt.Sprintf("%s must be %s characters", field, e.Param())
 	case "gte":
-		return fmt.Sprintf("%s 不能小于 %s", field, e.Param())
+		return fmt.Sprintf("%s must be greater than or equal to %s", field, e.Param())
 	case "lte":
-		return fmt.Sprintf("%s 不能大于 %s", field, e.Param())
+		return fmt.Sprintf("%s must be less than or equal to %s", field, e.Param())
 	case "oneof":
-		return fmt.Sprintf("%s 必须是以下值之一: %s", field, strings.ReplaceAll(e.Param(), " ", ", "))
+		return fmt.Sprintf("%s must be one of: %s", field, strings.ReplaceAll(e.Param(), " ", ", "))
 	case "mobile":
-		return fmt.Sprintf("%s 手机号格式不正确", field)
+		return fmt.Sprintf("%s is not a valid mobile number", field)
 	case "password":
-		return fmt.Sprintf("%s 密码必须为 8-32 位且包含字母和数字", field)
+		return fmt.Sprintf("%s must be 8-32 characters with letters and numbers", field)
 	case "username":
-		return fmt.Sprintf("%s 用户名必须为 4-20 位字母、数字或下划线", field)
+		return fmt.Sprintf("%s must be 4-20 characters (letters, numbers, underscore)", field)
 	case "idcard":
-		return fmt.Sprintf("%s 身份证号格式不正确", field)
+		return fmt.Sprintf("%s is not a valid ID card number", field)
 	default:
-		return fmt.Sprintf("%s 校验失败: %s", field, e.Tag())
+		return fmt.Sprintf("%s validation failed: %s", field, e.Tag())
 	}
 }
