@@ -103,8 +103,12 @@ definitions:
   interfaces.loginRequest:
     properties:
       password:
+        maxLength: 32
+        minLength: 8
         type: string
       username:
+        maxLength: 20
+        minLength: 4
         type: string
     required:
     - password
@@ -134,6 +138,55 @@ info:
   title: Jimu API
   version: "1.0"
 paths:
+  /admin/status:
+    get:
+      description: 获取运行时状态（版本、内存、Goroutine 等）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: 获取系统状态
+      tags:
+      - admin
+  /admin/users/{user_id}/logout:
+    post:
+      description: 强制指定用户的所有会话下线
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: 强制用户下线
+      tags:
+      - admin
+  /admin/users/online:
+    get:
+      description: 获取当前在线用户列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: 获取在线用户列表
+      tags:
+      - admin
   /audits:
     get:
       parameters:

@@ -70,3 +70,14 @@ func (h *Handler) ForceLogout(c *gin.Context) {
 	}
 	response.OK(c, gin.H{})
 }
+
+// GetErrorCodes godoc
+// @Summary      获取错误码列表
+// @Description  获取所有业务错误码及其 HTTP 状态码映射
+// @Tags         admin
+// @Produce      json
+// @Success      200  {object}  response.Body
+// @Router       /admin/error-codes [get]
+func (h *Handler) GetErrorCodes(c *gin.Context) {
+	response.OK(c, errors.AllErrorCodes())
+}
