@@ -84,6 +84,12 @@ audit:
   batch_size: 50
   flush_interval_ms: 500
 
+# 文件存储配置
+storage:
+  type: "local"           # local, s3, oss, minio
+  base_dir: "storage"     # 本地存储目录
+  base_url: "/files"      # 访问 URL 前缀
+
 # OpenTelemetry 追踪配置
 otel:
   enabled: false                    # 开发环境默认关闭
