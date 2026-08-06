@@ -84,7 +84,7 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 		r.Use(otelgin.Middleware(serviceName))
 	}
 	r.Use(
-		middleware.Logger(log),
+		middleware.Logger(log, middleware.DefaultLogConfig()),
 		middleware.Security(cfg),
 		middleware.Recovery(),
 		middleware.Timeout(time.Duration(serverCfg.TimeoutSec)*time.Second),

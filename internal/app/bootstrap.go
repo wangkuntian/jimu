@@ -49,7 +49,18 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	)
 	public := platformhttp.NewServer(cfg.HTTP, router)
 
+	// 注册各模块的定时任务
+	if container.JobRegistry != nil {
+		for _, module := range modules {
+			module.RegisterJobs(container.JobRegistry)
+			container.Logger.Info("module jobs registered", "name", module.Name())
+		}
+	}
+
 	components := []contract.Component{container}
+	if container.Scheduler != nil {
+		components = append(components, container.Scheduler)
+	}
 	for _, module := range modules {
 		if provider, ok := module.(contract.ComponentProvider); ok {
 			components = append(components, provider.Components()...)

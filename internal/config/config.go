@@ -172,13 +172,17 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// 绑定少量敏感环境变量（简洁命名，无 JIMU__ 前缀）
-	_ = v.BindEnv("auth.jwt_secret", "JWT_SECRET")
-	_ = v.BindEnv("db.password", "MARIADB_PASSWORD")
-
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, err
+	}
+
+	// 少量敏感配置支持环境变量覆盖（生产密钥管理）
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		cfg.Auth.JWTSecret = v
+	}
+	if v := os.Getenv("MARIADB_PASSWORD"); v != "" {
+		cfg.DB.Password = v
 	}
 
 	if err := cfg.Validate(env); err != nil {
@@ -187,10 +191,6 @@ func Load() (*Config, error) {
 
 	return &cfg, nil
 }
-
-// applyEnvOverrides、overrideInt/Int64/Bool、splitList 已移除。
-// 配置以 configs/ 下的 YAML 环境文件为唯一来源。
-// 仅 JWT_SECRET 和 DB_PASSWORD 支持环境变量覆盖（生产密钥管理）。
 
 func contains(list []string, val string) bool {
 	for _, v := range list {

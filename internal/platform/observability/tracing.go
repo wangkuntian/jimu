@@ -61,17 +61,11 @@ func InitTracing(ctx context.Context, cfg TracingConfig) (*sdktrace.TracerProvid
 		serviceVersion = "dev"
 	}
 
-	resource, err := sdkresource.Merge(
-		sdkresource.Default(),
-		sdkresource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceName(serviceName),
-			semconv.ServiceVersion(serviceVersion),
-		),
+	resource := sdkresource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceName(serviceName),
+		semconv.ServiceVersion(serviceVersion),
 	)
-	if err != nil {
-		return nil, fmt.Errorf("create resource: %w", err)
-	}
 
 	sampleRate := cfg.SampleRate
 	if sampleRate <= 0 {

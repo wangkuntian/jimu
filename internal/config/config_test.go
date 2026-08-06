@@ -15,34 +15,35 @@ func TestLoad(t *testing.T) {
 	}
 }
 
-func TestEnvOverride(t *testing.T) {
-	t.Setenv("JIMU__HTTP__PORT", "9999")
+func TestJWTSecretOverride(t *testing.T) {
+	t.Setenv("JWT_SECRET", strings.Repeat("a", 32))
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-	if cfg.HTTP.Port != 9999 {
-		t.Errorf("expected port 9999, got %d", cfg.HTTP.Port)
+	if cfg.Auth.JWTSecret != strings.Repeat("a", 32) {
+		t.Errorf("expected JWT_SECRET to override, got %q", cfg.Auth.JWTSecret)
 	}
 }
 
-func TestInvalidNestedEnvReturnsStableKey(t *testing.T) {
-	t.Setenv("JIMU__DB__PORT", "not-a-port")
+func TestDBPasswordOverride(t *testing.T) {
+	t.Setenv("MARIADB_PASSWORD", "secret-from-env")
 
-	_, err := Load()
-	if err == nil {
-		t.Fatal("expected error for invalid db.port, got nil")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
 	}
-	if err.Error() != "invalid db.port" {
-		t.Fatalf("unexpected error: %v", err)
+	if cfg.DB.Password != "secret-from-env" {
+		t.Errorf("expected MARIADB_PASSWORD to override, got %q", cfg.DB.Password)
 	}
 }
 
 func TestValidateHTTPMode(t *testing.T) {
-	t.Setenv("JIMU__HTTP__MODE", "invalid")
-
-	_, err := Load()
+	// http.mode 验证通过 YAML 文件，不通过环境变量
+	cfg := validProdConfig()
+	cfg.HTTP.Mode = "invalid"
+	err := cfg.Validate("prod")
 	if err == nil {
 		t.Fatal("expected error for invalid http.mode, got nil")
 	}
@@ -52,9 +53,9 @@ func TestValidateHTTPMode(t *testing.T) {
 }
 
 func TestValidateLogLevel(t *testing.T) {
-	t.Setenv("JIMU__LOG__LEVEL", "trace")
-
-	_, err := Load()
+	cfg := validProdConfig()
+	cfg.Log.Level = "trace"
+	err := cfg.Validate("prod")
 	if err == nil {
 		t.Fatal("expected error for invalid log.level, got nil")
 	}
@@ -64,9 +65,9 @@ func TestValidateLogLevel(t *testing.T) {
 }
 
 func TestValidateLogFormat(t *testing.T) {
-	t.Setenv("JIMU__LOG__FORMAT", "xml")
-
-	_, err := Load()
+	cfg := validProdConfig()
+	cfg.Log.Format = "xml"
+	err := cfg.Validate("prod")
 	if err == nil {
 		t.Fatal("expected error for invalid log.format, got nil")
 	}
@@ -164,19 +165,5 @@ func TestValidateProdRejectsInsecureValues(t *testing.T) {
 				t.Fatalf("validation error leaked a secret: %v", err)
 			}
 		})
-	}
-}
-
-func TestLoadOverridesNewNestedFields(t *testing.T) {
-	t.Setenv("JIMU__MANAGEMENT__PORT", "9191")
-	t.Setenv("JIMU__AUTH__PUBLIC_REGISTRATION", "true")
-	t.Setenv("JIMU__HTTP__MAX_BODY_BYTES", "2048")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Management.Port != 9191 || !cfg.Auth.PublicRegistration || cfg.HTTP.MaxBodyBytes != 2048 {
-		t.Fatalf("nested overrides not applied: %#v", cfg)
 	}
 }

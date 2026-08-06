@@ -3,6 +3,10 @@ FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 
+# 国内加速：使用阿里云 Go 模块代理
+ENV GOPROXY=https://mirrors.aliyun.com/goproxy/,direct
+ENV GOSUMDB=off
+
 # Cache dependencies
 COPY go.mod go.sum ./
 RUN go mod download

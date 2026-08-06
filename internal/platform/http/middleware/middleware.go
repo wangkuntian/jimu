@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"bytes"
+	"io"
+	"strings"
 	"time"
 
 	"jimu/internal/platform/logger"
@@ -10,6 +13,22 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
+
+// LogConfig 日志中间件配置
+type LogConfig struct {
+	LogRequestBody  bool // 是否记录请求体
+	LogResponseBody bool // 是否记录响应体
+	MaxBodyLogSize  int  // 最大记录体字节数
+}
+
+// DefaultLogConfig 返回默认日志配置
+func DefaultLogConfig() LogConfig {
+	return LogConfig{
+		LogRequestBody:  false,
+		LogResponseBody: false,
+		MaxBodyLogSize:  1024,
+	}
+}
 
 func RequestID() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -23,19 +42,91 @@ func RequestID() gin.HandlerFunc {
 	}
 }
 
-func Logger(log *logger.Logger) gin.HandlerFunc {
+func Logger(log *logger.Logger, cfg LogConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
+		method := c.Request.Method
+
+		// 捕获请求体
+		var requestBody string
+		if cfg.LogRequestBody && shouldLogBody(c.Request.Header.Get("Content-Type")) {
+			body, _ := c.GetRawData()
+			if len(body) > 0 {
+				// 重新设置 body 以便后续 handler 可以读取
+				c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
+				if len(body) > cfg.MaxBodyLogSize {
+					requestBody = sanitizeBody(string(body[:cfg.MaxBodyLogSize])) + "...[truncated]"
+				} else {
+					requestBody = sanitizeBody(string(body))
+				}
+			}
+		}
+
+		// 捕获响应体
+		var responseBody string
+		var truncated bool
+		if cfg.LogResponseBody {
+			w := newResponseBodyWriter(c.Writer, cfg.MaxBodyLogSize)
+			c.Writer = w
+		}
+
 		c.Next()
-		log.Info("request",
-			"method", c.Request.Method,
+
+		latency := time.Since(start)
+		status := c.Writer.Status()
+
+		// 获取捕获的响应体
+		if cfg.LogResponseBody {
+			if w, ok := c.Writer.(*responseBodyWriter); ok {
+				responseBody = w.capturedBody()
+				truncated = w.isTruncated()
+			}
+		}
+
+		// 构建日志字段
+		fields := []interface{}{
+			"method", method,
 			"path", path,
-			"status", c.Writer.Status(),
-			"latency", time.Since(start).String(),
+			"status", status,
+			"latency", latency.String(),
 			"request_id", c.GetString("request_id"),
-		)
+			"client_ip", c.ClientIP(),
+			"user_agent", c.Request.UserAgent(),
+		}
+
+		if requestBody != "" {
+			fields = append(fields, "request_body", requestBody)
+		}
+		if responseBody != "" {
+			fields = append(fields, "response_body", responseBody)
+			if truncated {
+				fields = append(fields, "response_truncated", true)
+			}
+		}
+
+		log.Infow("request", fields...)
 	}
+}
+
+// shouldLogBody 判断是否应该记录该 Content-Type 的 body
+func shouldLogBody(contentType string) bool {
+	if contentType == "" {
+		return false
+	}
+	// 只记录文本类请求体
+	textTypes := []string{
+		"application/json",
+		"application/xml",
+		"application/x-www-form-urlencoded",
+		"text/",
+	}
+	for _, t := range textTypes {
+		if strings.Contains(contentType, t) {
+			return true
+		}
+	}
+	return false
 }
 
 func Recovery() gin.HandlerFunc {
