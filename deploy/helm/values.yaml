@@ -1,0 +1,186 @@
+# Jimu Helm Chart 默认值
+# 覆盖方式：helm install -f custom-values.yaml 或 --set key=value
+
+# 镜像配置
+image:
+  repository: jimu
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+# 副本数与扩缩容
+replicaCount: 2
+
+# 环境：dev / staging / production
+environment: production
+
+# 资源配额
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# 自动扩缩容
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilization: 70
+  targetMemoryUtilization: 80
+
+# Pod 中断预算
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# 网络策略
+networkPolicy:
+  enabled: true
+  ingressNamespace: ingress-nginx
+  monitoringNamespace: monitoring
+
+# 服务配置
+service:
+  type: ClusterIP
+  port: 8080
+  managementPort: 9090
+
+# Ingress 配置
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  hosts:
+    - host: api.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: jimu-tls
+      hosts:
+        - api.example.com
+
+# HTTP 配置
+http:
+  host: "0.0.0.0"
+  port: 8080
+  mode: release
+  readHeaderTimeoutSec: 5
+  readTimeoutSec: 15
+  writeTimeoutSec: 30
+  idleTimeoutSec: 60
+  shutdownTimeoutSec: 30
+  maxBodyBytes: 10485760  # 10MB
+  trustedProxies:
+    - "10.0.0.0/8"
+    - "172.16.0.0/12"
+    - "192.168.0.0/16"
+  allowedOrigins:
+    - "https://admin.example.com"
+  tls:
+    enabled: false
+
+# Management server 配置
+management:
+  host: "0.0.0.0"
+  port: 9090
+  enablePprof: false
+  probeTimeoutSec: 2
+
+# 安全头配置
+security:
+  contentTypeOptions: "nosniff"
+  frameOptions: "DENY"
+  xssProtection: "0"
+  strictTransport: "max-age=63072000; includeSubDomains; preload"
+  contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+  referrerPolicy: "strict-origin-when-cross-origin"
+  permissionsPolicy: "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+
+# 限流配置
+server:
+  timeoutSec: 30
+  rateLimitRate: 100
+  rateLimitBurst: 200
+
+# 缓存配置
+cache:
+  prefix: jimu
+
+# 审计配置
+audit:
+  queueSize: 1024
+  batchSize: 100
+  flushIntervalMs: 500
+
+# 存储配置
+storage:
+  type: local
+  baseDir: /app/storage
+  baseUrl: /files
+
+# 日志配置
+log:
+  level: info
+  format: json
+  output: stdout
+  maxSize: 100
+  maxBackups: 30
+  maxAge: 7
+  compress: true
+
+# 认证配置
+auth:
+  issuer: jimu
+  accessExpireMin: 15
+  refreshExpireDay: 7
+  publicRegistration: false
+  loginRateLimit: 5
+  loginRateWindowSec: 60
+  registerRateLimit: 3
+  registerRateWindowSec: 300
+
+# OpenTelemetry 配置
+otel:
+  enabled: true
+  endpoint: "otel-collector.monitoring.svc.cluster.local:4317"
+  serviceName: jimu
+  serviceVersion: "1.0.0"
+  sampleRate: 1.0
+
+# 数据库配置（引用外部 Secret）
+db:
+  existingSecret: jimu-secrets
+  passwordKey: db_password
+  host: mariadb
+  port: 3306
+  user: jimu
+  database: jimu
+  maxOpen: 100
+  maxIdle: 20
+  connMaxLifetimeSec: 3600
+  connMaxIdleTimeSec: 600
+  maxRetries: 10
+  retryIntervalSec: 5
+
+# Redis 配置（引用外部 Secret）
+redis:
+  existingSecret: jimu-secrets
+  passwordKey: redis_password
+  addr: redis:6379
+  db: 0
+  poolSize: 50
+  minIdleConns: 10
+  readTimeoutSec: 3
+  writeTimeoutSec: 3
+  maxRetries: 10
+  retryIntervalSec: 5
+
+# Prometheus 告警规则
+prometheusRule:
+  enabled: true
+  namespace: monitoring

@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "jimu.labels" . | nindent 4 }}
+data:
+  APP_ENV: {{ .Values.environment | quote }}
+  DB_HOST: {{ .Values.db.host | quote }}
+  DB_PORT: {{ .Values.db.port | quote }}
+  DB_USER: {{ .Values.db.user | quote }}
+  DB_NAME: {{ .Values.db.database | quote }}
+  REDIS_ADDR: {{ .Values.redis.addr | quote }}
+  REDIS_DB: {{ .Values.redis.db | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config-files
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "jimu.labels" . | nindent 4 }}
+data:
+  app.yaml: |
+    http:
+      host: {{ .Values.http.host | quote }}
+      port: {{ .Values.http.port }}
+      mode: {{ .Values.http.mode | quote }}
+      read_header_timeout_sec: {{ .Values.http.readHeaderTimeoutSec }}
+      read_timeout_sec: {{ .Values.http.readTimeoutSec }}
+      write_timeout_sec: {{ .Values.http.writeTimeoutSec }}
+      idle_timeout_sec: {{ .Values.http.idleTimeoutSec }}
+      shutdown_timeout_sec: {{ .Values.http.shutdownTimeoutSec }}
+      max_body_bytes: {{ .Values.http.maxBodyBytes }}
+      trusted_proxies:
+        {{- range .Values.http.trusted_proxies }}
+        - {{ . | quote }}
+        {{- end }}
+      allowed_origins:
+        {{- range .Values.http.allowedOrigins }}
+        - {{ . | quote }}
+        {{- end }}
+      tls:
+        enabled: {{ .Values.http.tls.enabled }}
+
+    management:
+      host: {{ .Values.management.host | quote }}
+      port: {{ .Values.management.port }}
+      enable_pprof: {{ .Values.management.enablePprof }}
+      probe_timeout_sec: {{ .Values.management.probeTimeoutSec }}
+
+    security:
+      content_type_options: {{ .Values.security.contentTypeOptions | quote }}
+      frame_options: {{ .Values.security.frameOptions | quote }}
+      xss_protection: {{ .Values.security.xssProtection | quote }}
+      strict_transport: {{ .Values.security.strictTransport | quote }}
+      content_security_policy: {{ .Values.security.contentSecurityPolicy | quote }}
+      referrer_policy: {{ .Values.security.referrerPolicy | quote }}
+      permissions_policy: {{ .Values.security.permissionsPolicy | quote }}
+
+    server:
+      timeout_sec: {{ .Values.server.timeoutSec }}
+      rate_limit_rate: {{ .Values.server.rateLimitRate }}
+      rate_limit_burst: {{ .Values.server.rateLimitBurst }}
+
+    cache:
+      prefix: {{ .Values.cache.prefix | quote }}
+
+    audit:
+      queue_size: {{ .Values.audit.queueSize }}
+      batch_size: {{ .Values.audit.batchSize }}
+      flush_interval_ms: {{ .Values.audit.flushIntervalMs }}
+
+    storage:
+      type: {{ .Values.storage.type | quote }}
+      base_dir: {{ .Values.storage.baseDir | quote }}
+      base_url: {{ .Values.storage.baseUrl | quote }}
+
+    log:
+      level: {{ .Values.log.level | quote }}
+      format: {{ .Values.log.format | quote }}
+      output: {{ .Values.log.output | quote }}
+      max_size: {{ .Values.log.maxSize }}
+      max_backups: {{ .Values.log.maxBackups }}
+      max_age: {{ .Values.log.maxAge }}
+      compress: {{ .Values.log.compress }}
+
+    auth:
+      issuer: {{ .Values.auth.issuer | quote }}
+      access_expire_min: {{ .Values.auth.accessExpireMin }}
+      refresh_expire_day: {{ .Values.auth.refreshExpireDay }}
+      public_registration: {{ .Values.auth.publicRegistration }}
+      login_rate_limit: {{ .Values.auth.loginRateLimit }}
+      login_rate_window_sec: {{ .Values.auth.loginRateWindowSec }}
+      register_rate_limit: {{ .Values.auth.registerRateLimit }}
+      register_rate_window_sec: {{ .Values.auth.registerRateWindowSec }}
+
+    otel:
+      enabled: {{ .Values.otel.enabled }}
+      endpoint: {{ .Values.otel.endpoint | quote }}
+      service_name: {{ .Values.otel.serviceName | quote }}
+      service_version: {{ .Values.otel.serviceVersion | quote }}
+      sample_rate: {{ .Values.otel.sampleRate }}
+
+    db:
+      host: {{ .Values.db.host | quote }}
+      port: {{ .Values.db.port }}
+      user: {{ .Values.db.user | quote }}
+      database: {{ .Values.db.database | quote }}
+      max_open: {{ .Values.db.maxOpen }}
+      max_idle: {{ .Values.db.maxIdle }}
+      conn_max_lifetime_sec: {{ .Values.db.connMaxLifetimeSec }}
+      conn_max_idle_time_sec: {{ .Values.db.connMaxIdleTimeSec }}
+      max_retries: {{ .Values.db.maxRetries }}
+      retry_interval_sec: {{ .Values.db.retryIntervalSec }}
+
+    redis:
+      addr: {{ .Values.redis.addr | quote }}
+      db: {{ .Values.redis.db }}
+      pool_size: {{ .Values.redis.poolSize }}
+      min_idle_conns: {{ .Values.redis.minIdleConns }}
+      read_timeout_sec: {{ .Values.redis.readTimeoutSec }}
+      write_timeout_sec: {{ .Values.redis.writeTimeoutSec }}
+      max_retries: {{ .Values.redis.maxRetries }}
+      retry_interval_sec: {{ .Values.redis.retryIntervalSec }}
