@@ -88,9 +88,8 @@ func (s *AuthService) recordFailure(ctx context.Context, username string) {
 	if s.lockout == nil {
 		return
 	}
-	if _, err := s.lockout.RecordFailure(ctx, username); err != nil {
-		// 锁定记录失败不影响主流程，仅忽略
-	}
+	// 锁定记录失败不影响主流程，仅忽略
+	_, _ = s.lockout.RecordFailure(ctx, username)
 }
 
 func (s *AuthService) Register(ctx context.Context, username, password string) (*userdomain.User, error) {
