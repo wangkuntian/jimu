@@ -40,7 +40,7 @@ func GzipCompression() gin.HandlerFunc {
 		}
 
 		gz := gzip.NewWriter(c.Writer)
-		defer gz.Close()
+		defer func() { _ = gz.Close() }()
 
 		gzw := &gzipResponseWriter{ResponseWriter: c.Writer, writer: gz}
 		c.Writer = gzw
@@ -90,7 +90,7 @@ func GzipDecompression() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		defer gz.Close()
+		defer func() { _ = gz.Close() }()
 
 		c.Request.Body = gzipReaderCloser{Reader: gz, Closer: gz}
 		c.Next()

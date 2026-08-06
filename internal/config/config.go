@@ -107,17 +107,17 @@ type StorageConfig struct {
 }
 
 type HTTPConfig struct {
-	Host                 string   `mapstructure:"host"`
-	Port                 int      `mapstructure:"port"`
-	Mode                 string   `mapstructure:"mode"`
-	ReadHeaderTimeoutSec int      `mapstructure:"read_header_timeout_sec"`
-	ReadTimeoutSec       int      `mapstructure:"read_timeout_sec"`
-	WriteTimeoutSec      int      `mapstructure:"write_timeout_sec"`
-	IdleTimeoutSec       int      `mapstructure:"idle_timeout_sec"`
-	ShutdownTimeoutSec   int      `mapstructure:"shutdown_timeout_sec"`
-	MaxBodyBytes         int64    `mapstructure:"max_body_bytes"`
-	TrustedProxies       []string `mapstructure:"trusted_proxies"`
-	AllowedOrigins       []string `mapstructure:"allowed_origins"`
+	Host                 string    `mapstructure:"host"`
+	Port                 int       `mapstructure:"port"`
+	Mode                 string    `mapstructure:"mode"`
+	ReadHeaderTimeoutSec int       `mapstructure:"read_header_timeout_sec"`
+	ReadTimeoutSec       int       `mapstructure:"read_timeout_sec"`
+	WriteTimeoutSec      int       `mapstructure:"write_timeout_sec"`
+	IdleTimeoutSec       int       `mapstructure:"idle_timeout_sec"`
+	ShutdownTimeoutSec   int       `mapstructure:"shutdown_timeout_sec"`
+	MaxBodyBytes         int64     `mapstructure:"max_body_bytes"`
+	TrustedProxies       []string  `mapstructure:"trusted_proxies"`
+	AllowedOrigins       []string  `mapstructure:"allowed_origins"`
 	TLS                  TLSConfig `mapstructure:"tls"`
 }
 
