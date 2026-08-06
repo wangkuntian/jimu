@@ -87,6 +87,15 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 		adminapp.NewAdminAuditService(nil), // TODO: wire repository
 	)
 	admin.GET("/audit", auditHandler.List)
+
+	// 任务队列端点
+	jobHandler := admininterfaces.NewAdminJobHandler()
+	admin.GET("/jobs", jobHandler.List)
+	admin.POST("/jobs", jobHandler.Submit)
+	admin.GET("/jobs/:id", jobHandler.Get)
+	admin.POST("/jobs/:id/retry", jobHandler.Retry)
+	admin.GET("/jobs/dead-letters", jobHandler.ListDeadLetters)
+	admin.POST("/jobs/dead-letters/:id/resolve", jobHandler.ResolveDeadLetter)
 }
 
 // RegisterJobs 注册定时任务
