@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"jimu/internal/platform/event"
 	"github.com/redis/go-redis/v9"
+	"jimu/internal/platform/event"
 )
 
 // AdminConfigService 配置热更新服务
@@ -74,8 +74,8 @@ func (s *AdminConfigService) configKey(key string) string {
 	return fmt.Sprintf("jimu:config:%s", key)
 }
 
-// MarshalJSON JSON 序列化辅助
-func (s *AdminConfigService) MarshalJSON(v interface{}) string {
+// ToJSON JSON 序列化辅助
+func (s *AdminConfigService) ToJSON(v interface{}) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }

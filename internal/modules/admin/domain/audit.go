@@ -7,13 +7,13 @@ import (
 
 // AuditLog 审计日志实体
 type AuditLog struct {
-	ID        uint64 `gorm:"primaryKey" json:"id"`
-	AdminID   uint64 `gorm:"not null;index" json:"admin_id"`
-	AdminName string `gorm:"size:64" json:"admin_name"`
-	Action    string `gorm:"size:64;not null;index" json:"action"`
-	Resource  string `gorm:"size:128;not null" json:"resource"`
-	Detail    string `gorm:"type:text" json:"detail"`
-	IP        string `gorm:"size:64" json:"ip"`
+	ID        uint64    `gorm:"primaryKey" json:"id"`
+	AdminID   uint64    `gorm:"not null;index" json:"admin_id"`
+	AdminName string    `gorm:"size:64" json:"admin_name"`
+	Action    string    `gorm:"size:64;not null;index" json:"action"`
+	Resource  string    `gorm:"size:128;not null" json:"resource"`
+	Detail    string    `gorm:"type:text" json:"detail"`
+	IP        string    `gorm:"size:64" json:"ip"`
 	CreatedAt time.Time `gorm:"index" json:"created_at"`
 }
 
