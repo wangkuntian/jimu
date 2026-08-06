@@ -41,6 +41,7 @@ type Config struct {
 	Server     ServerConfig                `mapstructure:"server"`
 	Cache      CacheConfig                 `mapstructure:"cache"`
 	Audit      AuditConfig                 `mapstructure:"audit"`
+	Storage    StorageConfig               `mapstructure:"storage"`
 	OTEL       observability.TracingConfig `mapstructure:"otel"`
 }
 
@@ -67,6 +68,12 @@ type AuditConfig struct {
 	QueueSize       int `mapstructure:"queue_size"`
 	BatchSize       int `mapstructure:"batch_size"`
 	FlushIntervalMS int `mapstructure:"flush_interval_ms"`
+}
+
+type StorageConfig struct {
+	Type    string `mapstructure:"type"`     // local, s3, oss, minio
+	BaseDir string `mapstructure:"base_dir"` // 本地存储目录
+	BaseURL string `mapstructure:"base_url"` // 访问 URL 前缀
 }
 
 type HTTPConfig struct {

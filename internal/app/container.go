@@ -3,13 +3,16 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/platform/db"
 	"jimu/internal/platform/logger"
+	"jimu/internal/platform/notification"
 	"jimu/internal/platform/observability"
 	"jimu/internal/platform/scheduler"
+	"jimu/internal/platform/storage"
 	httpplatform "jimu/internal/platform/http"
 	redistore "jimu/internal/platform/redis"
 
@@ -28,6 +31,8 @@ type Container struct {
 	Scheduler      *scheduler.CronScheduler
 	HTTPClient     *httpplatform.Client
 	Lock           *redistore.Lock
+	Storage        storage.Storage
+	Notification   notification.Dispatcher
 }
 
 func (c *Container) Start(context.Context) error { return nil }
@@ -70,14 +75,27 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	httpClient := httpplatform.NewClient(log)
 	lock := redistore.NewLock(rdb, "lock")
 
+	store, err := storage.New(storage.Config{
+		Type:    storage.StorageType(cfg.Storage.Type),
+		BaseDir: cfg.Storage.BaseDir,
+		BaseURL: cfg.Storage.BaseURL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("init storage: %w", err)
+	}
+
+	notifier := notification.NewDispatcher()
+
 	return &Container{
-		Config:      cfg,
-		DB:          dbConn,
-		Redis:       rdb,
-		Logger:      log,
-		JobRegistry: sched,
-		Scheduler:   sched,
-		HTTPClient:  httpClient,
-		Lock:        lock,
+		Config:       cfg,
+		DB:           dbConn,
+		Redis:        rdb,
+		Logger:       log,
+		JobRegistry:  sched,
+		Scheduler:    sched,
+		HTTPClient:   httpClient,
+		Lock:         lock,
+		Storage:      store,
+		Notification: notifier,
 	}, nil
 }
