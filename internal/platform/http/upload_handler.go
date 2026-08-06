@@ -71,9 +71,9 @@ func (h *UploadHandler) HandleUpload(formField ...string) gin.HandlerFunc {
 			response.Fail(c, errors.New(errors.CodeInvalidParam, "file is required"))
 			return
 		}
-		defer file.Close()
 
 		result, err := h.upload(c.Request.Context(), file, header)
+		_ = file.Close()
 		if err != nil {
 			response.Fail(c, err)
 			return
@@ -112,7 +112,7 @@ func (h *UploadHandler) HandleUploadMultiple(formField string, maxFiles int) gin
 				return
 			}
 			result, uploadErr := h.upload(c.Request.Context(), f, header)
-			f.Close()
+			_ = f.Close()
 			if uploadErr != nil {
 				response.Fail(c, uploadErr)
 				return
