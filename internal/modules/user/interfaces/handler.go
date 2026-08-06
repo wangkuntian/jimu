@@ -1,7 +1,10 @@
 package interfaces
 
 import (
+	"bytes"
+	"encoding/csv"
 	"strconv"
+	"time"
 
 	"jimu/internal/modules/user/application"
 	"jimu/internal/shared/errors"
@@ -146,4 +149,65 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		return
 	}
 	response.NoContent(c)
+}
+
+// BatchDelete godoc
+// @Summary      批量删除用户
+// @Description  批量软删除用户（单次最多 100 个）。返回成功/失败计数。
+// @Tags         用户管理
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      application.BatchDeleteRequest  true  "要删除的用户 ID 列表"
+// @Success      200   {object}  response.Body  "操作完成，返回 success/failed 计数"
+// @Failure      400   {object}  contract.ErrorResponse  "参数错误"
+// @Router       /users/batch-delete [post]
+func (h *UserHandler) BatchDelete(c *gin.Context) {
+	req, _ := c.MustGet("validated_req").(*application.BatchDeleteRequest)
+	result, err := h.service.BatchDelete(c.Request.Context(), req.IDs)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, result)
+}
+
+// ExportCSV godoc
+// @Summary      导出用户列表（CSV）
+// @Description  导出所有用户为 CSV 文件。列：ID、用户名、状态、创建时间。
+// @Tags         用户管理
+// @Produce      text/csv
+// @Security     BearerAuth
+// @Param        sort   query     string  false  "排序字段（支持 id、username、created_at，默认 id）"
+// @Param        order  query     string  false  "排序方向（asc 或 desc，默认 desc）"
+// @Success      200    {file}    binary  "CSV 文件"
+// @Failure      400    {object}  contract.ErrorResponse  "参数错误"
+// @Router       /users/export.csv [get]
+func (h *UserHandler) ExportCSV(c *gin.Context) {
+	p, _ := c.MustGet("validated_query").(*pagination.Pagination)
+	if err := p.Normalize("id", "username", "created_at"); err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
+		return
+	}
+	users, _, err := h.service.List(c.Request.Context(), *p)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", "attachment; filename=users_"+strconv.FormatInt(time.Now().Unix(), 10)+".csv")
+	buf := new(bytes.Buffer)
+	buf.WriteString("\xEF\xBB\xBF") // UTF-8 BOM
+	w := csv.NewWriter(buf)
+	_ = w.Write([]string{"ID", "Username", "Status", "Created At"})
+	for _, u := range users {
+		_ = w.Write([]string{
+			strconv.FormatUint(u.ID, 10),
+			u.Username,
+			strconv.FormatInt(int64(u.Status), 10),
+			u.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	w.Flush()
+	c.String(200, buf.String())
 }

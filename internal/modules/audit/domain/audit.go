@@ -20,12 +20,12 @@ type AuditLog struct {
 	Action     string    `gorm:"size:64" json:"action"`
 	Resource   string    `gorm:"size:128" json:"resource"`
 	Detail     string    `gorm:"type:text" json:"detail"`
-	ChangesRaw string   `gorm:"column:changes;type:text" json:"-"`
-	Changes    []Change `gorm:"-" json:"changes,omitempty"`
-	IP         string   `gorm:"size:64" json:"ip"`
-	Method     string   `gorm:"size:16" json:"method"`
-	Path       string   `gorm:"size:256" json:"path"`
-	Status     int      `json:"status"`
+	ChangesRaw string    `gorm:"column:changes;type:text" json:"-"`
+	Changes    []Change  `gorm:"-" json:"changes,omitempty"`
+	IP         string    `gorm:"size:64" json:"ip"`
+	Method     string    `gorm:"size:16" json:"method"`
+	Path       string    `gorm:"size:256" json:"path"`
+	Status     int       `json:"status"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 
