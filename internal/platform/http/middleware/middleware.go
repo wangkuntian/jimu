@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -135,15 +136,71 @@ func Recovery() gin.HandlerFunc {
 	})
 }
 
-func CORS() gin.HandlerFunc {
+// CORSConfig CORS 配置
+type CORSConfig struct {
+	AllowedOrigins []string // 允许的来源，["*"] 表示允许所有
+	AllowedMethods []string // 允许的方法
+	AllowedHeaders []string // 允许的头部
+	AllowCredentials bool   // 是否允许携带凭证
+	MaxAge         int     // 预请求缓存秒数
+}
+
+// DefaultCORSConfig 返回默认 CORS 配置
+func DefaultCORSConfig() CORSConfig {
+	return CORSConfig{
+		AllowedOrigins:  []string{"*"},
+		AllowedMethods:  []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:  []string{"Content-Type", "Authorization", "X-Request-ID", "Idempotency-Key"},
+		AllowCredentials: false,
+		MaxAge:         86400,
+	}
+}
+
+// CORSMiddleware 基于配置的 CORS 中间件
+func CORSMiddleware(cfg CORSConfig) gin.HandlerFunc {
+	origins := cfg.AllowedOrigins
+	methods := strings.Join(cfg.AllowedMethods, ",")
+	headers := strings.Join(cfg.AllowedHeaders, ",")
+	credentials := "false"
+	if cfg.AllowCredentials {
+		credentials = "true"
+	}
+	maxAge := strconv.Itoa(cfg.MaxAge)
+
+	// 是否允许所有来源
+	allOrigins := len(origins) == 1 && origins[0] == "*"
+
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization")
+		origin := c.GetHeader("Origin")
+		if allOrigins {
+			c.Header("Access-Control-Allow-Origin", "*")
+		} else if isAllowedOrigin(origin, origins) {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+		}
+		c.Header("Access-Control-Allow-Methods", methods)
+		c.Header("Access-Control-Allow-Headers", headers)
+		c.Header("Access-Control-Allow-Credentials", credentials)
+		c.Header("Access-Control-Max-Age", maxAge)
+
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
 		}
 		c.Next()
 	}
+}
+
+func isAllowedOrigin(origin string, allowed []string) bool {
+	for _, o := range allowed {
+		if o == origin {
+			return true
+		}
+	}
+	return false
+}
+
+// CORS 向后兼容的简单 CORS 中间件
+func CORS() gin.HandlerFunc {
+	return CORSMiddleware(DefaultCORSConfig())
 }

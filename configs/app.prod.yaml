@@ -15,6 +15,21 @@ http:
   max_body_bytes: 10485760  # 10MB（支持大文件上传）
   trusted_proxies: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
   allowed_origins: ["https://admin.example.com"]
+  # TLS 配置（通过反向代理终止 TLS 时保持禁用）
+  tls:
+    enabled: false
+    cert_path: "/app/certs/tls.crt"
+    key_path: "/app/certs/tls.key"
+
+# 安全头配置（生产环境严格配置）
+security:
+  content_type_options: "nosniff"
+  frame_options: "DENY"
+  xss_protection: "0"  # 现代浏览器已弃用，靠 CSP
+  strict_transport: "max-age=63072000; includeSubDomains; preload"
+  content_security_policy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+  referrer_policy: "strict-origin-when-cross-origin"
+  permissions_policy: "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
 
 management:
   host: "0.0.0.0"      # 生产环境需被监控系统访问

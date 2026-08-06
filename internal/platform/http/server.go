@@ -48,8 +48,14 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	go func() {
-		if err := s.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			s.errors <- err
+		var serveErr error
+		if s.TLSConfig != nil {
+			serveErr = s.ServeTLS(ln, "", "")
+		} else {
+			serveErr = s.Serve(ln)
+		}
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			s.errors <- serveErr
 		}
 	}()
 	return nil
@@ -84,7 +90,12 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 		r.Use(otelgin.Middleware(serviceName))
 	}
 	r.Use(
+		middleware.CORSMiddleware(middleware.CORSConfig{
+			AllowedOrigins: cfg.AllowedOrigins,
+			MaxAge:        86400,
+		}),
 		middleware.SecurityHeadersFromConfig(securityCfg),
+		middleware.GzipCompression(),
 		middleware.Logger(log, middleware.DefaultLogConfig()),
 		middleware.Security(cfg),
 		middleware.Recovery(),

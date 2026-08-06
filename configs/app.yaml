@@ -99,7 +99,7 @@ security:
   content_type_options: "nosniff"
   frame_options: "DENY"
   xss_protection: "1; mode=block"
-  strict_transport: "max-age=31536000; includeSubDomains"
+  strict_transport: ""  # 开发环境不启用 HSTS（无 HTTPS）
   content_security_policy: "default-src 'self'"
   referrer_policy: "strict-origin-when-cross-origin"
   permissions_policy: "camera=(), microphone=(), geolocation=()"
