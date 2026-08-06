@@ -9,15 +9,15 @@ import (
 
 // CleanupConfig 数据清理配置
 type CleanupConfig struct {
-	RetentionDays int           // 保留天数，超过此天数的软删除数据将被清理
-	BatchSize     int           // 每批清理数量
+	RetentionDays int            // 保留天数，超过此天数的软删除数据将被清理
+	BatchSize     int            // 每批清理数量
 	Tables        []CleanupTable // 要清理的表
 }
 
 // CleanupTable 要清理的表配置
 type CleanupTable struct {
-	Model       interface{} // GORM 模型
-	DeletedAt   string      // 软删除字段名，默认 "deleted_at"
+	Model     interface{} // GORM 模型
+	DeletedAt string      // 软删除字段名，默认 "deleted_at"
 }
 
 // DefaultCleanupConfig 返回默认清理配置
