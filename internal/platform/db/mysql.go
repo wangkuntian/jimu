@@ -10,6 +10,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
+	"gorm.io/plugin/dbresolver"
 )
 
 // New 创建数据库连接（带重试和连接池配置）
@@ -63,13 +64,52 @@ func ConnectWithRetry(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error)
 	return nil, fmt.Errorf("database connection failed after %d attempts: %w", maxRetries, err)
 }
 
-func open(cfg config.DBConfig) (*gorm.DB, error) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
+func dsn(cfg config.DBConfig, host string, port int) string {
+	if host == "" {
+		host = cfg.Host
+	}
+	if port == 0 {
+		port = cfg.Port
+	}
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		cfg.User, cfg.Password, host, port, cfg.Database)
+}
 
-	return gorm.Open(mysql.Open(dsn), &gorm.Config{
+func open(cfg config.DBConfig) (*gorm.DB, error) {
+	db, err := gorm.Open(mysql.Open(dsn(cfg, "", 0)), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Info),
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 配置读写分离（如果有从库）
+	if len(cfg.ReadHosts) > 0 {
+		sources := []gorm.Dialector{mysql.Open(dsn(cfg, "", 0))}
+		var replicas []gorm.Dialector
+		for i, host := range cfg.ReadHosts {
+			port := 3306
+			if i < len(cfg.ReadPorts) {
+				port = cfg.ReadPorts[i]
+			}
+			replicas = append(replicas, mysql.Open(dsn(cfg, host, port)))
+		}
+
+		resolverCfg := dbresolver.Config{
+			Sources:  sources,
+			Replicas: replicas,
+			Policy:   dbresolver.RandomPolicy{},
+		}
+
+		db.Use(dbresolver.Register(resolverCfg).
+			SetConnMaxIdleTime(time.Duration(cfg.ConnMaxIdleTimeSec) * time.Second).
+			SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetimeSec) * time.Second).
+			SetMaxIdleConns(cfg.MaxIdle).
+			SetMaxOpenConns(cfg.MaxOpen),
+		)
+	}
+
+	return db, nil
 }
 
 func pingDB(db *gorm.DB) error {
