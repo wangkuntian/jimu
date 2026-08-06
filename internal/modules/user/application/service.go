@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"jimu/internal/contract"
 	"jimu/internal/modules/user/domain"
 	"jimu/internal/platform/cache"
+	"jimu/internal/platform/event"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -16,12 +18,17 @@ import (
 )
 
 type UserService struct {
-	repo  domain.UserRepository
-	cache cache.Cache
+	repo     domain.UserRepository
+	cache    cache.Cache
+	eventBus *event.EventBus
 }
 
-func NewUserService(repo domain.UserRepository, cache cache.Cache) *UserService {
-	return &UserService{repo: repo, cache: cache}
+func NewUserService(repo domain.UserRepository, cache cache.Cache, eventBus ...*event.EventBus) *UserService {
+	s := &UserService{repo: repo, cache: cache}
+	if len(eventBus) > 0 {
+		s.eventBus = eventBus[0]
+	}
+	return s
 }
 
 const userCacheTTL = 5 * time.Minute
@@ -49,6 +56,15 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserR
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to create user", err)
 	}
 	resp := ToUserResponse(*user)
+
+	// 发布用户创建事件（异步，不影响主流程）
+	if s.eventBus != nil {
+		s.eventBus.PublishAsync(contract.EventUserCreated, contract.UserCreatedEvent{
+			UserID:   user.ID,
+			Username: user.Username,
+		})
+	}
+
 	return &resp, nil
 }
 
@@ -104,6 +120,13 @@ func (s *UserService) Update(ctx context.Context, id uint64, req UpdateUserReque
 		return errors.Wrap(errors.CodeInternalError, "failed to update user", err)
 	}
 	s.invalidateUserCache(ctx, id)
+
+	if s.eventBus != nil {
+		s.eventBus.PublishAsync(contract.EventUserUpdated, contract.UserUpdatedEvent{
+			UserID:  id,
+			Changes: []string{"status"},
+		})
+	}
 	return nil
 }
 
@@ -112,6 +135,12 @@ func (s *UserService) Delete(ctx context.Context, id uint64) error {
 		return errors.Wrap(errors.CodeInternalError, "failed to delete user", err)
 	}
 	s.invalidateUserCache(ctx, id)
+
+	if s.eventBus != nil {
+		s.eventBus.PublishAsync(contract.EventUserDeleted, contract.UserDeletedEvent{
+			UserID: id,
+		})
+	}
 	return nil
 }
 

@@ -7,7 +7,7 @@ import (
 // Handler 事件处理函数
 type Handler func(payload interface{})
 
-// EventBus 内存事件总线
+// EventBus 内存事件总线（实现 contract.EventBus 接口）
 type EventBus struct {
 	mu       sync.RWMutex
 	handlers map[string][]Handler
@@ -20,8 +20,8 @@ func New() *EventBus {
 	}
 }
 
-// Subscribe 订阅事件
-func (b *EventBus) Subscribe(event string, handler Handler) {
+// Subscribe 订阅事件（实现 contract.EventBus 接口）
+func (b *EventBus) Subscribe(event string, handler func(payload interface{})) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.handlers[event] = append(b.handlers[event], handler)

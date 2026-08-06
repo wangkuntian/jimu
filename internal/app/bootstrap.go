@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"jimu/internal/contract"
+	"jimu/internal/platform/notification"
 	platformhttp "jimu/internal/platform/http"
 	"jimu/internal/platform/observability"
 
@@ -48,6 +49,23 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		platformhttp.HealthRouter(readiness, cfg.Management.EnablePprof),
 	)
 	public := platformhttp.NewServer(cfg.HTTP, router)
+
+	// 注册各模块的事件处理器（在定时任务之前，确保事件订阅就绪）
+	for _, module := range modules {
+		module.RegisterEvents(container.EventBus)
+		container.Logger.Info("module events registered", "name", module.Name())
+	}
+
+	// 注册全局事件处理器：将领域事件桥接到通知系统
+	if container.Notification != nil {
+		container.EventBus.Subscribe(contract.UserCreatedEmailNotification, func(payload interface{}) {
+			if msg, ok := payload.(notification.Message); ok {
+				if err := container.Notification.Dispatch(context.Background(), msg); err != nil {
+					container.Logger.Error("notification dispatch failed", "error", err.Error())
+				}
+			}
+		})
+	}
 
 	// 注册各模块的定时任务
 	if container.JobRegistry != nil {
