@@ -212,3 +212,8 @@ all: fmt vet test build
 ## release-check: 发布前检查（fmt-check + vet + test）
 release-check: fmt-check vet test
 	@echo "All checks passed"
+
+## hooks: 安装 pre-commit 钩子（需 pip install pre-commit）
+hooks:
+	pre-commit install
+	@echo "pre-commit hooks installed"
