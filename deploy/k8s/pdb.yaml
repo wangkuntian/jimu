@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: jimu-server
+  namespace: jimu
+  labels:
+    app: jimu-server
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: jimu-server
