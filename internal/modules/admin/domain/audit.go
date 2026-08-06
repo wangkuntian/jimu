@@ -1,6 +1,9 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // AuditLog 审计日志实体
 type AuditLog struct {
