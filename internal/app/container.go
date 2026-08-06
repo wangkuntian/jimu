@@ -27,6 +27,7 @@ type Container struct {
 	JobRegistry    contract.JobRegistry
 	Scheduler      *scheduler.CronScheduler
 	HTTPClient     *httpplatform.Client
+	Lock           *redistore.Lock
 }
 
 func (c *Container) Start(context.Context) error { return nil }
@@ -67,6 +68,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 
 	sched := scheduler.New(log)
 	httpClient := httpplatform.NewClient(log)
+	lock := redistore.NewLock(rdb, "lock")
 
 	return &Container{
 		Config:      cfg,
@@ -76,5 +78,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		JobRegistry: sched,
 		Scheduler:   sched,
 		HTTPClient:  httpClient,
+		Lock:        lock,
 	}, nil
 }
