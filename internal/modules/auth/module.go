@@ -23,7 +23,7 @@ type Module struct {
 
 func New(db *gorm.DB, rdb *redis.Client, cfg config.AuthConfig, failClosed bool) *Module {
 	userRepo := infrastructure.NewMysqlRepository(db)
-	jwtUtil := auth.New(cfg.JWTSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
+	jwtUtil := auth.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
 	sessionStore := auth.NewRedisSessionStore(rdb)
 	limiter := auth.NewLimiter(rdb, failClosed)
 	lockoutTracker := auth.NewLoginFailureTracker(rdb, auth.DefaultLockoutConfig())

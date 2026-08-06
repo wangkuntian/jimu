@@ -23,6 +23,7 @@ type Claims struct {
 
 type JWT struct {
 	secret           []byte
+	previousSecret   []byte // 轮换前的旧密钥（用于验证旧 token）
 	issuer           string
 	accessExpireMin  time.Duration
 	refreshExpireDay time.Duration
@@ -35,6 +36,21 @@ func New(secret, issuer string, accessExpireMin, refreshExpireDay int) *JWT {
 		accessExpireMin:  time.Duration(accessExpireMin) * time.Minute,
 		refreshExpireDay: time.Duration(refreshExpireDay) * 24 * time.Hour,
 	}
+}
+
+// NewWithRotation 创建支持密钥轮换的 JWT 实例
+// previousSecret 是轮换前的旧密钥，用于在轮换期间验证尚未过期的旧 token
+func NewWithRotation(currentSecret, previousSecret, issuer string, accessExpireMin, refreshExpireDay int) *JWT {
+	j := New(currentSecret, issuer, accessExpireMin, refreshExpireDay)
+	if previousSecret != "" {
+		j.previousSecret = []byte(previousSecret)
+	}
+	return j
+}
+
+// SetPreviousSecret 设置旧密钥（用于密钥轮换）
+func (j *JWT) SetPreviousSecret(secret string) {
+	j.previousSecret = []byte(secret)
 }
 
 func (j *JWT) GenerateAccess(userID uint64, sessionID string) (string, error) {
@@ -55,13 +71,26 @@ func (j *JWT) Parse(tokenString, expectedType string) (*Claims, error) {
 		jwt.WithExpirationRequired(),
 	)
 
-	token, err := parser.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+	// 尝试用当前密钥解析，失败时尝试旧密钥（密钥轮换期间）
+	var parseErr error
+	secretFunc := func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
 		return j.secret, nil
-	})
-	if err != nil {
+	}
+
+	token, err := parser.ParseWithClaims(tokenString, &Claims{}, secretFunc)
+	if err != nil && j.previousSecret != nil {
+		// 尝试用旧密钥验证
+		oldSecretFunc := func(token *jwt.Token) (interface{}, error) {
+			return j.previousSecret, nil
+		}
+		token, parseErr = parser.ParseWithClaims(tokenString, &Claims{}, oldSecretFunc)
+		if parseErr != nil {
+			return nil, err // 返回原始错误
+		}
+	} else if err != nil {
 		return nil, err
 	}
 
