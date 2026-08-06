@@ -13,6 +13,24 @@ type Queue interface {
 	Enqueue(domain.AuditLog) bool
 }
 
+// auditChangesKey 存储变更记录的 context key
+const auditChangesKey = "audit_changes"
+
+// SetChanges 在上下文中设置字段变更记录（供 handler 调用）
+func SetChanges(c *gin.Context, changes []domain.Change) {
+	c.Set(auditChangesKey, changes)
+}
+
+// GetChanges 从上下文中读取字段变更记录
+func GetChanges(c *gin.Context) []domain.Change {
+	val, ok := c.Get(auditChangesKey)
+	if !ok {
+		return nil
+	}
+	changes, _ := val.([]domain.Change)
+	return changes
+}
+
 func AuditMiddleware(queue Queue) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
@@ -34,6 +52,7 @@ func AuditMiddleware(queue Queue) gin.HandlerFunc {
 			Path:     path,
 			Status:   c.Writer.Status(),
 			Detail:   time.Since(start).String(),
+			Changes:  GetChanges(c),
 		})
 	}
 }

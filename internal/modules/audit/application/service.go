@@ -3,6 +3,8 @@ package application
 import (
 	"context"
 	stderrors "errors"
+	"encoding/json"
+	"fmt"
 
 	"jimu/internal/modules/audit/domain"
 	"jimu/internal/shared/errors"
@@ -21,7 +23,29 @@ func NewAuditService(repo domain.AuditRepository) *AuditService {
 
 // Record 记录审计日志
 func (s *AuditService) Record(ctx context.Context, log domain.AuditLog) error {
-	return s.repo.Create(ctx, &log)
+	return s.repo.Create(ctx, serializeChanges(&log))
+}
+
+// serializeChanges 将 Changes 序列化到 ChangesRaw 以便存储
+func serializeChanges(log *domain.AuditLog) *domain.AuditLog {
+	if len(log.Changes) > 0 {
+		if raw, err := json.Marshal(log.Changes); err == nil {
+			log.ChangesRaw = string(raw)
+		}
+	}
+	return log
+}
+
+// RecordChange 记录带字段变更的审计日志（便捷方法）
+func (s *AuditService) RecordChange(ctx context.Context, userID uint64, username, action, resource string, changes []domain.Change) error {
+	return s.repo.Create(ctx, &domain.AuditLog{
+		UserID:   userID,
+		Username: username,
+		Action:   action,
+		Resource: resource,
+		Detail:   fmt.Sprintf("%d field(s) changed", len(changes)),
+		Changes:  changes,
+	})
 }
 
 func (s *AuditService) Get(ctx context.Context, id uint64) (*AuditLogResponse, error) {
