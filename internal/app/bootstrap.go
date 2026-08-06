@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"jimu/internal/contract"
+	"jimu/internal/platform/db"
 	platformhttp "jimu/internal/platform/http"
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/observability"
@@ -98,6 +99,21 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		if container.WebSocketHub != nil {
 			go container.WebSocketHub.Run(context.Background())
 		}
+
+		// 注册数据清理 Job（每天凌晨 3 点清理超过 90 天的软删除数据）
+		cleanupSvc := db.NewCleanupService(container.DB, db.DefaultCleanupConfig())
+		_ = container.JobRegistry.AddFunc("0 3 * * *", func() {
+			results, err := cleanupSvc.Run(context.Background())
+			if err != nil {
+				container.Logger.Error("cleanup job failed", "error", err.Error())
+				return
+			}
+			for _, r := range results {
+				if r.Deleted > 0 {
+					container.Logger.Info("cleanup completed", "table", r.Table, "deleted", r.Deleted)
+				}
+			}
+		})
 	}
 
 	components := []contract.Component{container}
