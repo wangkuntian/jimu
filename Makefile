@@ -10,10 +10,13 @@ CLI_BIN := $(BIN_DIR)/jimu
 SERVER_CMD := cmd/server/main.go
 CLI_CMD := cmd/cli/main.go
 DOCKER_COMPOSE ?= docker compose
-DOCKER_IMAGE := jimu:latest
+DOCKER_IMAGE := jimu\:latest
 DOCKER_CONTAINER := jimu-server
 SWAG := go run -mod=mod github.com/swaggo/swag/cmd/swag
 ENV ?= dev
+
+# 根据 COMPOSE_PROFILES 生成 --profile 参数（在 recipe 中展开）
+COMPOSE_PROFILE_FLAG = $(if $(COMPOSE_PROFILES),--profile $(COMPOSE_PROFILES))
 
 # 加载 .env 文件（如果存在），导出敏感变量供 docker 命令使用
 # 本地 make run/migrate/seed 直接读取 configs/ 中的 YAML，无需环境变量
@@ -78,15 +81,11 @@ build-cli:
 # ========== Docker 镜像 ==========
 
 ## docker: 构建 Docker 镜像
-docker:
-	docker build -t $(DOCKER_IMAGE) .
-
-## build-docker: 构建镜像（docker 别名）
-build-docker: docker
+build-image: docker build -t "$(DOCKER_IMAGE)" .
 
 ## push-docker: 推送镜像到仓库（需先 docker tag）
-push-docker:
-	docker push $(DOCKER_IMAGE)
+push-image:
+	docker push "$(DOCKER_IMAGE)"
 
 # ========== Docker 单容器 ==========
 
@@ -119,22 +118,23 @@ docker-stop: container-stop
 docker-logs: container-logs
 
 # ========== Docker Compose ==========
+# 通过 .env 中 COMPOSE_PROFILES 控制启动的 profile（如 dev 启动 adminer）
 
 ## compose-up: 启动所有服务（依赖 + 应用）
 compose-up:
-	$(DOCKER_COMPOSE) up -d
+	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) up -d
 
 ## compose-down: 停止所有服务
 compose-down:
-	$(DOCKER_COMPOSE) down
+	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) down
 
 ## compose-restart: 重启所有服务
 compose-restart:
-	$(DOCKER_COMPOSE) restart
+	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) restart
 
 ## compose-logs: 查看应用日志
 compose-logs:
-	$(DOCKER_COMPOSE) logs -f server
+	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) logs -f server
 
 ## docker-up: 启动 Compose 环境（compose-up 别名）
 docker-up: compose-up
