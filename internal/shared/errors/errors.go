@@ -120,3 +120,31 @@ func As(err error, target **AppError) bool {
 	}
 	return false
 }
+
+// ErrorInfo 错误码信息（用于文档生成）
+type ErrorInfo struct {
+	Code       int    `json:"code"`
+	Message    string `json:"message"`
+	HTTPStatus int    `json:"http_status"`
+	Category   string `json:"category"`
+}
+
+// AllErrorCodes 返回所有错误码信息（用于 Swagger 文档）
+func AllErrorCodes() []ErrorInfo {
+	return []ErrorInfo{
+		{CodeOK, "成功", 200, "通用"},
+		{CodeInvalidParam, "参数错误", 400, "通用"},
+		{CodeUnauthorized, "未认证", 401, "通用"},
+		{CodeForbidden, "无权限", 403, "通用"},
+		{CodeNotFound, "资源不存在", 404, "通用"},
+		{CodeInternalError, "服务器内部错误", 500, "通用"},
+		{CodeInvalidCredentials, "认证信息无效", 401, "通用"},
+		{CodeRateLimited, "请求过于频繁", 429, "通用"},
+		{CodeTimeout, "请求超时", 504, "通用"},
+		{CodeConflict, "资源冲突", 409, "通用"},
+		{CodeUserNotFound, "用户不存在", 404, "用户"},
+		{CodeUserExists, "用户已存在", 409, "用户"},
+		{CodeInvalidPassword, "密码错误", 401, "用户"},
+		{CodeRoleNotFound, "角色不存在", 404, "角色"},
+	}
+}
