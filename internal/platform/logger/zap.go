@@ -30,10 +30,11 @@ func (l *Logger) Sync() error {
 func (l *Logger) WithContext(ctx context.Context) *Logger {
 	spanContext := trace.SpanContextFromContext(ctx)
 	if spanContext.IsValid() {
-		return &Logger{l.SugaredLogger.With(
+		withTrace := l.With(
 			"trace_id", spanContext.TraceID().String(),
 			"span_id", spanContext.SpanID().String(),
-		)}
+		)
+		return &Logger{withTrace}
 	}
 	return l
 }

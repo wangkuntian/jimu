@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -39,7 +40,7 @@ func ConnectWithRetry(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error)
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		db, err = open(cfg)
 		if err == nil {
-			if pingErr := pingDB(db); pingErr == nil {
+			if pingErr := pingDB(context.Background(), db); pingErr == nil {
 				if log != nil {
 					log.Info("database connected", "attempt", attempt)
 				}
@@ -101,23 +102,25 @@ func open(cfg config.DBConfig) (*gorm.DB, error) {
 			Policy:   dbresolver.RandomPolicy{},
 		}
 
-		db.Use(dbresolver.Register(resolverCfg).
+		if err := db.Use(dbresolver.Register(resolverCfg).
 			SetConnMaxIdleTime(time.Duration(cfg.ConnMaxIdleTimeSec) * time.Second).
 			SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetimeSec) * time.Second).
 			SetMaxIdleConns(cfg.MaxIdle).
 			SetMaxOpenConns(cfg.MaxOpen),
-		)
+		); err != nil {
+			return nil, fmt.Errorf("register dbresolver: %w", err)
+		}
 	}
 
 	return db, nil
 }
 
-func pingDB(db *gorm.DB) error {
+func pingDB(ctx context.Context, db *gorm.DB) error {
 	sqlDB, err := db.DB()
 	if err != nil {
 		return err
 	}
-	return sqlDB.Ping()
+	return sqlDB.PingContext(ctx)
 }
 
 func configurePool(db *gorm.DB, cfg config.DBConfig) {

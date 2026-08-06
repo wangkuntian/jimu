@@ -7,11 +7,11 @@ import (
 
 // Flag 特性开关
 type Flag struct {
-	Name        string            `json:"name"`
-	Enabled     bool              `json:"enabled"`      // 是否启用
-	Percentage  int               `json:"percentage"`   // 灰度百分比 (0-100)
-	Users       map[string]bool   `json:"-"`            // 白名单用户
-	Metadata    map[string]string `json:"metadata"`     // 元数据
+	Name       string            `json:"name"`
+	Enabled    bool              `json:"enabled"`    // 是否启用
+	Percentage int               `json:"percentage"` // 灰度百分比 (0-100)
+	Users      map[string]bool   `json:"-"`          // 白名单用户
+	Metadata   map[string]string `json:"metadata"`   // 元数据
 }
 
 // IsEnabled 判断特性是否对指定用户启用

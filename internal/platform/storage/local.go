@@ -12,8 +12,8 @@ import (
 
 // LocalStorage 本地文件存储实现
 type LocalStorage struct {
-	baseDir   string // 存储根目录
-	baseURL   string // 访问 URL 前缀
+	baseDir string // 存储根目录
+	baseURL string // 访问 URL 前缀
 }
 
 // NewLocalStorage 创建本地存储
@@ -46,20 +46,22 @@ func (s *LocalStorage) Upload(ctx context.Context, key string, reader io.Reader,
 	}
 
 	written, err := io.Copy(f, reader)
-	f.Close()
+	if closeErr := f.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
 	if err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return fmt.Errorf("write file: %w", err)
 	}
 
 	if size > 0 && written != size {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return fmt.Errorf("size mismatch: expected %d, got %d", size, written)
 	}
 
 	// 原子重命名
 	if err := os.Rename(tmpFile, fullPath); err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return fmt.Errorf("rename file: %w", err)
 	}
 

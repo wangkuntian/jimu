@@ -61,8 +61,12 @@ func Middleware(headerName string) gin.HandlerFunc {
 
 // Scope 创建带租户过滤的查询作用域
 // 用于 Gorm 的 Scopes 模式
-func Scope(tenantID string) func(db interface{ Where(query interface{}, args ...interface{}) interface{} }) interface{} {
-	return func(db interface{ Where(query interface{}, args ...interface{}) interface{} }) interface{} {
+func Scope(tenantID string) func(db interface {
+	Where(query interface{}, args ...interface{}) interface{}
+}) interface{} {
+	return func(db interface {
+		Where(query interface{}, args ...interface{}) interface{}
+	}) interface{} {
 		return db.Where("tenant_id = ?", tenantID)
 	}
 }

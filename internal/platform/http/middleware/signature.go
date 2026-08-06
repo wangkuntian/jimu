@@ -20,13 +20,13 @@ import (
 
 // SignatureConfig API 签名验证配置
 type SignatureConfig struct {
-	Secret        []byte        // HMAC 密钥
-	HeaderKey     string        // API Key Header，默认 "X-Api-Key"
-	HeaderSign    string        // 签名 Header，默认 "X-Signature"
-	HeaderTimestamp string      // 时间戳 Header，默认 "X-Timestamp"
-	HeaderNonce   string        // 随机数 Header，默认 "X-Nonce"
-	MaxAge        time.Duration // 签名有效期，默认 5 分钟
-	Skipper       func(*gin.Context) bool
+	Secret          []byte        // HMAC 密钥
+	HeaderKey       string        // API Key Header，默认 "X-Api-Key"
+	HeaderSign      string        // 签名 Header，默认 "X-Signature"
+	HeaderTimestamp string        // 时间戳 Header，默认 "X-Timestamp"
+	HeaderNonce     string        // 随机数 Header，默认 "X-Nonce"
+	MaxAge          time.Duration // 签名有效期，默认 5 分钟
+	Skipper         func(*gin.Context) bool
 }
 
 // DefaultSignatureConfig 返回默认签名配置

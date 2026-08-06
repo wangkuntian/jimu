@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"jimu/internal/modules/role/domain"
-	"jimu/internal/platform/auth"
 	userdomain "jimu/internal/modules/user/domain"
+	"jimu/internal/platform/auth"
 
 	"github.com/casbin/casbin/v3"
 	"golang.org/x/crypto/bcrypt"

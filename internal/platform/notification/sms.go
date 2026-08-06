@@ -7,10 +7,10 @@ import (
 
 // SMSConfig 短信配置
 type SMSConfig struct {
-	Provider string `mapstructure:"provider"` // aliyun, tencent, twilio
-	APIKey   string `mapstructure:"api_key"`
+	Provider  string `mapstructure:"provider"` // aliyun, tencent, twilio
+	APIKey    string `mapstructure:"api_key"`
 	APISecret string `mapstructure:"api_secret"`
-	SignName string `mapstructure:"sign_name"` // 短信签名
+	SignName  string `mapstructure:"sign_name"` // 短信签名
 }
 
 // SMS 短信通知实现
@@ -49,12 +49,12 @@ func (s *SMS) Channel() Channel {
 
 func (s *SMS) sendAliyun(ctx context.Context, msg Message) error {
 	// TODO: 引入 aliyun-dysmsapi-sdk
-	return fmt.Errorf("Aliyun SMS not implemented yet")
+	return fmt.Errorf("aliyun SMS not implemented yet")
 }
 
 func (s *SMS) sendTencent(ctx context.Context, msg Message) error {
 	// TODO: 引入 tencentcloud-sdk-go
-	return fmt.Errorf("Tencent SMS not implemented yet")
+	return fmt.Errorf("tencent SMS not implemented yet")
 }
 
 var _ Notification = (*SMS)(nil)

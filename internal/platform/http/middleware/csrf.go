@@ -15,13 +15,13 @@ import (
 
 // CSRFConfig CSRF 防护配置
 type CSRFConfig struct {
-	Secret        []byte        // HMAC 密钥
-	TokenHeader   string        // Token 所在 Header，默认 "X-CSRF-Token"
-	TokenField    string        // Token 所在 Form Field，默认 "_csrf"
-	CookieName    string        // Cookie 名称，默认 "csrf_token"
-	CookieMaxAge  int           // Cookie 有效期（秒），默认 86400
-	SafeMethods   []string      // 安全方法（不校验），默认 GET/HEAD/OPTIONS
-	Skipper       func(*gin.Context) bool // 跳过校验的路径判断
+	Secret       []byte                  // HMAC 密钥
+	TokenHeader  string                  // Token 所在 Header，默认 "X-CSRF-Token"
+	TokenField   string                  // Token 所在 Form Field，默认 "_csrf"
+	CookieName   string                  // Cookie 名称，默认 "csrf_token"
+	CookieMaxAge int                     // Cookie 有效期（秒），默认 86400
+	SafeMethods  []string                // 安全方法（不校验），默认 GET/HEAD/OPTIONS
+	Skipper      func(*gin.Context) bool // 跳过校验的路径判断
 }
 
 // DefaultCSRFConfig 返回默认 CSRF 配置
@@ -169,4 +169,3 @@ func isSafeMethod(method string, safeMethods []string) bool {
 	}
 	return false
 }
-

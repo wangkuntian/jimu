@@ -36,7 +36,7 @@ func NewAuthHandler(service *application.AuthService, cfg config.AuthConfig, lim
 // @Failure      429   {object}  contract.ErrorResponse  "请求过于频繁，请稍后再试"
 // @Router       /auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
-	req := c.MustGet("validated_req").(*loginRequest)
+	req, _ := c.MustGet("validated_req").(*loginRequest)
 	if !h.allow(c, "login", "ip:"+c.ClientIP(), h.cfg.LoginRateLimit, time.Duration(h.cfg.LoginRateWindowSec)*time.Second) {
 		return
 	}
@@ -63,7 +63,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Failure      429   {object}  contract.ErrorResponse  "请求过于频繁"
 // @Router       /auth/register [post]
 func (h *AuthHandler) Register(c *gin.Context) {
-	req := c.MustGet("validated_req").(*loginRequest)
+	req, _ := c.MustGet("validated_req").(*loginRequest)
 	if !h.allow(c, "register", "ip:"+c.ClientIP(), h.cfg.RegisterRateLimit, time.Duration(h.cfg.RegisterRateWindowSec)*time.Second) {
 		return
 	}
@@ -87,7 +87,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 // @Failure      401   {object}  contract.ErrorResponse  "刷新令牌无效或已过期"
 // @Router       /auth/refresh [post]
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	req := c.MustGet("validated_req").(*refreshRequest)
+	req, _ := c.MustGet("validated_req").(*refreshRequest)
 	tokenPair, err := h.service.Refresh(c.Request.Context(), req.RefreshToken)
 	if err != nil {
 		response.Fail(c, err)

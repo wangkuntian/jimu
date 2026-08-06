@@ -34,17 +34,17 @@ var (
 )
 
 type Config struct {
-	HTTP        HTTPConfig                  `mapstructure:"http"`
-	Management  ManagementConfig            `mapstructure:"management"`
-	DB          DBConfig                    `mapstructure:"db"`
-	Redis       RedisConfig                 `mapstructure:"redis"`
-	Log         LogConfig                   `mapstructure:"log"`
-	Auth        AuthConfig                  `mapstructure:"auth"`
-	Server      ServerConfig                `mapstructure:"server"`
-	Cache       CacheConfig                 `mapstructure:"cache"`
-	Audit       AuditConfig                 `mapstructure:"audit"`
-	Storage     StorageConfig               `mapstructure:"storage"`
-	OTEL        observability.TracingConfig `mapstructure:"otel"`
+	HTTP       HTTPConfig                  `mapstructure:"http"`
+	Management ManagementConfig            `mapstructure:"management"`
+	DB         DBConfig                    `mapstructure:"db"`
+	Redis      RedisConfig                 `mapstructure:"redis"`
+	Log        LogConfig                   `mapstructure:"log"`
+	Auth       AuthConfig                  `mapstructure:"auth"`
+	Server     ServerConfig                `mapstructure:"server"`
+	Cache      CacheConfig                 `mapstructure:"cache"`
+	Audit      AuditConfig                 `mapstructure:"audit"`
+	Storage    StorageConfig               `mapstructure:"storage"`
+	OTEL       observability.TracingConfig `mapstructure:"otel"`
 	// 元数据（非 YAML 配置，运行时注入）
 	Version     string `mapstructure:"-"`
 	Environment string `mapstructure:"-"`
@@ -96,17 +96,17 @@ type HTTPConfig struct {
 }
 
 type DBConfig struct {
-	Host               string   `mapstructure:"host"`
-	Port               int      `mapstructure:"port"`
-	User               string   `mapstructure:"user"`
-	Password           string   `mapstructure:"password"`
-	Database           string   `mapstructure:"database"`
-	MaxOpen            int      `mapstructure:"max_open"`
-	MaxIdle            int      `mapstructure:"max_idle"`
-	ConnMaxLifetimeSec int      `mapstructure:"conn_max_lifetime_sec"`
-	ConnMaxIdleTimeSec int      `mapstructure:"conn_max_idle_time_sec"`
-	MaxRetries         int      `mapstructure:"max_retries"`
-	RetryIntervalSec   int      `mapstructure:"retry_interval_sec"`
+	Host               string `mapstructure:"host"`
+	Port               int    `mapstructure:"port"`
+	User               string `mapstructure:"user"`
+	Password           string `mapstructure:"password"`
+	Database           string `mapstructure:"database"`
+	MaxOpen            int    `mapstructure:"max_open"`
+	MaxIdle            int    `mapstructure:"max_idle"`
+	ConnMaxLifetimeSec int    `mapstructure:"conn_max_lifetime_sec"`
+	ConnMaxIdleTimeSec int    `mapstructure:"conn_max_idle_time_sec"`
+	MaxRetries         int    `mapstructure:"max_retries"`
+	RetryIntervalSec   int    `mapstructure:"retry_interval_sec"`
 	// 读写分离
 	ReadHosts []string `mapstructure:"read_hosts"` // 从库地址列表
 	ReadPorts []int    `mapstructure:"read_ports"` // 从库端口列表

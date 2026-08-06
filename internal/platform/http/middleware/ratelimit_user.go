@@ -15,11 +15,11 @@ import (
 
 // UserRateLimiter 基于用户/API Key 的限流器（Redis 滑动窗口）
 type UserRateLimiter struct {
-	client   *redis.Client
-	prefix   string
-	limit    int           // 窗口内允许的最大请求数
-	window   time.Duration // 窗口大小
-	keyFunc  func(*gin.Context) string // 提取限流 key 的函数
+	client  *redis.Client
+	prefix  string
+	limit   int                       // 窗口内允许的最大请求数
+	window  time.Duration             // 窗口大小
+	keyFunc func(*gin.Context) string // 提取限流 key 的函数
 }
 
 // UserRateLimiterOption 配置选项
@@ -42,10 +42,10 @@ func WithKeyFunc(fn func(*gin.Context) string) UserRateLimiterOption {
 // NewUserRateLimiter 创建用户维度限流器
 func NewUserRateLimiter(client *redis.Client, limit int, window time.Duration, opts ...UserRateLimiterOption) *UserRateLimiter {
 	r := &UserRateLimiter{
-		client: client,
-		prefix: "ratelimit:user",
-		limit:  limit,
-		window: window,
+		client:  client,
+		prefix:  "ratelimit:user",
+		limit:   limit,
+		window:  window,
 		keyFunc: defaultKeyFunc,
 	}
 	for _, opt := range opts {

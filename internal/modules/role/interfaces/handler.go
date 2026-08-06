@@ -33,7 +33,7 @@ func NewRoleHandler(service *application.RoleService) *RoleHandler {
 // @Failure      500   {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /roles [post]
 func (h *RoleHandler) Create(c *gin.Context) {
-	req := c.MustGet("validated_req").(*application.CreateRoleRequest)
+	req, _ := c.MustGet("validated_req").(*application.CreateRoleRequest)
 	role, err := h.service.Create(c.Request.Context(), *req)
 	if err != nil {
 		response.Fail(c, err)
@@ -83,7 +83,7 @@ func (h *RoleHandler) Get(c *gin.Context) {
 // @Failure      500        {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /roles [get]
 func (h *RoleHandler) List(c *gin.Context) {
-	p := c.MustGet("validated_query").(*pagination.Pagination)
+	p, _ := c.MustGet("validated_query").(*pagination.Pagination)
 	if err := p.Normalize("id", "name", "created_at"); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
@@ -117,7 +117,7 @@ func (h *RoleHandler) Update(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
 		return
 	}
-	req := c.MustGet("validated_req").(*application.UpdateRoleRequest)
+	req, _ := c.MustGet("validated_req").(*application.UpdateRoleRequest)
 	if err := h.service.Update(c.Request.Context(), id, *req); err != nil {
 		response.Fail(c, err)
 		return
@@ -168,7 +168,7 @@ func (h *RoleHandler) AssignPermissions(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
 		return
 	}
-	req := c.MustGet("validated_req").(*application.AssignPermissionsRequest)
+	req, _ := c.MustGet("validated_req").(*application.AssignPermissionsRequest)
 	if err := h.service.AssignPermissions(c.Request.Context(), id, req.PermissionIDs); err != nil {
 		response.Fail(c, err)
 		return
