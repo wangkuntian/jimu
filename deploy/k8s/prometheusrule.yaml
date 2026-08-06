@@ -1,0 +1,79 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: jimu-server
+  namespace: monitoring
+  labels:
+    app: jimu-server
+    release: prometheus
+spec:
+  groups:
+    - name: jimu.rules
+      rules:
+        # 高错误率告警
+        - alert: JimuHighErrorRate
+          expr: |
+            sum(rate(http_requests_total{job="jimu-server",status=~"5.."}[5m]))
+            / sum(rate(http_requests_total{job="jimu-server"}[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Jimu 5xx 错误率超过 5%"
+            description: "5xx 错误率 {{ $value | humanizePercentage }}，持续 5 分钟"
+
+        # 高延迟告警
+        - alert: JimuHighLatency
+          expr: |
+            histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="jimu-server"}[5m])) by (le)) > 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Jimu P95 延迟超过 1 秒"
+            description: "P95 延迟 {{ $value }}s，持续 5 分钟"
+
+        # Pod 重启告警
+        - alert: JimuPodCrashLooping
+          expr: |
+            rate(kube_pod_container_status_restarts_total{namespace="jimu",container="jimu"}[15m]) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Jimu Pod 频繁重启"
+            description: "Pod {{ $labels.pod }} 在过去 15 分钟内重启"
+
+        # Pod 不可用告警
+        - alert: JimuPodDown
+          expr: |
+            kube_pod_status_ready{namespace="jimu",container="jimu",condition="true"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Jimu Pod 不可用"
+            description: "Pod {{ $labels.pod }} 就绪状态为 false"
+
+        # 数据库连接池告警
+        - alert: JimuDBPoolHigh
+          expr: |
+            jimu_db_connections_in_use / jimu_db_connections_max > 0.8
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "数据库连接池使用率超过 80%"
+            description: "连接池使用率 {{ $value | humanizePercentage }}"
+
+        # 就绪探针失败告警
+        - alert: JimuReadinessFailing
+          expr: |
+            kube_pod_status_ready{namespace="jimu",container="jimu",condition="true"} == 0
+            and kube_pod_status_phase{namespace="jimu",phase="Running"} == 1
+          for: 3m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Jimu 就绪探针失败"
+            description: "Pod 运行中但未就绪，可能依赖服务异常"

@@ -63,7 +63,7 @@ func (s *Server) Errors() <-chan error {
 	return s.errors
 }
 
-func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.ServerConfig, otelCfg observability.TracingConfig) *gin.Engine {
+func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.ServerConfig, securityCfg config.SecurityConfig, otelCfg observability.TracingConfig) *gin.Engine {
 	switch cfg.Mode {
 	case config.HTTPModeRelease:
 		gin.SetMode(gin.ReleaseMode)
@@ -84,7 +84,7 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 		r.Use(otelgin.Middleware(serviceName))
 	}
 	r.Use(
-		middleware.SecurityHeaders(middleware.DefaultSecurityHeadersConfig()),
+		middleware.SecurityHeadersFromConfig(securityCfg),
 		middleware.Logger(log, middleware.DefaultLogConfig()),
 		middleware.Security(cfg),
 		middleware.Recovery(),

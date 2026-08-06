@@ -94,6 +94,16 @@ storage:
   base_dir: "storage"     # 本地存储目录
   base_url: "/files"      # 访问 URL 前缀
 
+# 安全头配置（留空则使用默认值）
+security:
+  content_type_options: "nosniff"
+  frame_options: "DENY"
+  xss_protection: "1; mode=block"
+  strict_transport: "max-age=31536000; includeSubDomains"
+  content_security_policy: "default-src 'self'"
+  referrer_policy: "strict-origin-when-cross-origin"
+  permissions_policy: "camera=(), microphone=(), geolocation=()"
+
 # OpenTelemetry 追踪配置
 otel:
   enabled: false          # 开发环境关闭
