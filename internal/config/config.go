@@ -34,17 +34,18 @@ var (
 )
 
 type Config struct {
-	HTTP       HTTPConfig                  `mapstructure:"http"`
-	Management ManagementConfig            `mapstructure:"management"`
-	DB         DBConfig                    `mapstructure:"db"`
-	Redis      RedisConfig                 `mapstructure:"redis"`
-	Log        LogConfig                   `mapstructure:"log"`
-	Auth       AuthConfig                  `mapstructure:"auth"`
-	Server     ServerConfig                `mapstructure:"server"`
-	Cache      CacheConfig                 `mapstructure:"cache"`
-	Audit      AuditConfig                 `mapstructure:"audit"`
-	Storage    StorageConfig               `mapstructure:"storage"`
-	OTEL       observability.TracingConfig `mapstructure:"otel"`
+	HTTP        HTTPConfig                  `mapstructure:"http"`
+	Management  ManagementConfig            `mapstructure:"management"`
+	DB          DBConfig                    `mapstructure:"db"`
+	Redis       RedisConfig                 `mapstructure:"redis"`
+	Log         LogConfig                   `mapstructure:"log"`
+	Auth        AuthConfig                  `mapstructure:"auth"`
+	Server      ServerConfig                `mapstructure:"server"`
+	Cache       CacheConfig                 `mapstructure:"cache"`
+	Audit       AuditConfig                 `mapstructure:"audit"`
+	Storage     StorageConfig               `mapstructure:"storage"`
+	Security    SecurityConfig              `mapstructure:"security"`
+	OTEL        observability.TracingConfig `mapstructure:"otel"`
 	// 元数据（非 YAML 配置，运行时注入）
 	Version     string `mapstructure:"-"`
 	Environment string `mapstructure:"-"`
@@ -55,6 +56,30 @@ type ServerConfig struct {
 	TimeoutSec     int `mapstructure:"timeout_sec"`      // 请求超时秒数，0 表示不限制
 	RateLimitRate  int `mapstructure:"rate_limit_rate"`  // 全局限流速率（每秒请求数），0 表示不限流
 	RateLimitBurst int `mapstructure:"rate_limit_burst"` // 限流桶容量，允许的突发请求数
+}
+
+// SecurityConfig 安全头配置
+type SecurityConfig struct {
+	ContentTypeOptions    string `mapstructure:"content_type_options"`    // X-Content-Type-Options
+	FrameOptions          string `mapstructure:"frame_options"`           // X-Frame-Options
+	XSSProtection         string `mapstructure:"xss_protection"`          // X-XSS-Protection
+	StrictTransport       string `mapstructure:"strict_transport"`        // Strict-Transport-Security
+	ContentSecurityPolicy string `mapstructure:"content_security_policy"` // Content-Security-Policy
+	ReferrerPolicy        string `mapstructure:"referrer_policy"`         // Referrer-Policy
+	PermissionsPolicy     string `mapstructure:"permissions_policy"`      // Permissions-Policy
+}
+
+// DefaultSecurityConfig 返回默认安全配置
+func DefaultSecurityConfig() SecurityConfig {
+	return SecurityConfig{
+		ContentTypeOptions:    "nosniff",
+		FrameOptions:          "DENY",
+		XSSProtection:         "1; mode=block",
+		StrictTransport:       "max-age=31536000; includeSubDomains",
+		ContentSecurityPolicy: "default-src 'self'",
+		ReferrerPolicy:        "strict-origin-when-cross-origin",
+		PermissionsPolicy:     "camera=(), microphone=(), geolocation=()",
+	}
 }
 
 // CacheConfig 缓存配置

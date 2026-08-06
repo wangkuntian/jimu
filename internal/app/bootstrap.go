@@ -22,7 +22,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	}
 	container.TracerProvider = tp
 
-	router := platformhttp.SetupRouter(container.Logger, cfg.HTTP, cfg.Server, cfg.OTEL)
+	router := platformhttp.SetupRouter(container.Logger, cfg.HTTP, cfg.Server, cfg.Security, cfg.OTEL)
 	if err := platformhttp.ConfigureTrustedProxies(router, cfg.HTTP.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
