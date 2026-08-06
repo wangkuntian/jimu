@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	workersMu sync.RWMutex
-	workerMap = map[string]WorkerFunc{}
+	workersMu    sync.RWMutex
+	jobWorkerMap = map[string]WorkerFunc{}
 )
 
 // WorkerFunc 任务处理函数
@@ -31,9 +31,6 @@ func GetWorker(jobType string) (WorkerFunc, bool) {
 	fn, ok := jobWorkerMap[jobType]
 	return fn, ok
 }
-
-// jobWorkerMap 任务处理器注册表
-var jobWorkerMap = map[string]WorkerFunc{}
 
 // WorkerConfig Worker 池配置
 type WorkerConfig struct {
@@ -116,7 +113,7 @@ func (p *WorkerPool) delayedJobScanner() {
 		case <-p.ctx.Done():
 			return
 		case <-ticker.C:
-			p.queue.MoveDueJobs(p.ctx)
+			_, _ = p.queue.MoveDueJobs(p.ctx)
 		}
 	}
 }
@@ -125,11 +122,11 @@ func (p *WorkerPool) executeJob(data *JobData) {
 	ctx, cancel := context.WithTimeout(p.ctx, 5*time.Minute)
 	defer cancel()
 
-	p.store.MarkRunning(ctx, data.ID)
+	_ = p.store.MarkRunning(ctx, data.ID)
 
 	fn, ok := GetWorker(data.Type)
 	if !ok {
-		p.store.MarkFailed(ctx, data.ID, data.Type, data.Payload,
+		_ = p.store.MarkFailed(ctx, data.ID, data.Type, data.Payload,
 			apperrors.New(apperrors.CodeInternalError, "no worker for type: "+data.Type), 0)
 		return
 	}
@@ -139,9 +136,9 @@ func (p *WorkerPool) executeJob(data *JobData) {
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {
-		p.store.MarkFailed(ctx, data.ID, data.Type, data.Payload, err, duration)
+		_ = p.store.MarkFailed(ctx, data.ID, data.Type, data.Payload, err, duration)
 	} else {
-		p.store.MarkSuccess(ctx, data.ID, duration)
+		_ = p.store.MarkSuccess(ctx, data.ID, duration)
 	}
 }
 
