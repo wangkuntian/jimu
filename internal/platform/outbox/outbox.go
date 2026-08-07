@@ -58,6 +58,16 @@ func New(store Store, publisher Publisher) *Outbox {
 	}
 }
 
+// Add 记录业务事件到 Outbox（供业务模块调用）
+func (o *Outbox) Add(ctx context.Context, tx interface{}, events ...Event) error {
+	return o.store.Add(ctx, tx, events...)
+}
+
+// Store 返回底层存储（供需要直接操作时使用）
+func (o *Outbox) Store() Store {
+	return o.store
+}
+
 // Process 处理待发布事件（由定时任务调用）
 func (o *Outbox) Process(ctx context.Context, batchSize int) (int, error) {
 	events, err := o.store.FetchUnpublish(ctx, batchSize)

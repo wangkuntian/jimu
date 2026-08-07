@@ -11,8 +11,11 @@ import (
 	userinfra "jimu/internal/modules/user/infrastructure"
 	"jimu/internal/platform/auth"
 	"jimu/internal/platform/event"
+	"jimu/internal/platform/feature"
+	platformhttp "jimu/internal/platform/http"
 	"jimu/internal/platform/http/middleware"
 	"jimu/internal/platform/scheduler"
+	"jimu/internal/platform/storage"
 	"jimu/internal/platform/ws"
 
 	"github.com/gin-gonic/gin"
@@ -26,17 +29,26 @@ type Module struct {
 	rdb     *redis.Client
 	db      *gorm.DB
 	sched   *scheduler.CronScheduler
+	storage storage.Storage
+	feature *feature.Manager
 }
 
 // New 创建管理模块
-func New(version, env string, rdb *redis.Client, db *gorm.DB, sched ...*scheduler.CronScheduler) *Module {
+func New(version, env string, rdb *redis.Client, db *gorm.DB, deps ...interface{}) *Module {
 	m := &Module{
 		service: adminapp.NewService(version, env, rdb),
 		rdb:     rdb,
 		db:      db,
 	}
-	if len(sched) > 0 {
-		m.sched = sched[0]
+	for _, dep := range deps {
+		switch d := dep.(type) {
+		case *scheduler.CronScheduler:
+			m.sched = d
+		case storage.Storage:
+			m.storage = d
+		case *feature.Manager:
+			m.feature = d
+		}
 	}
 	return m
 }
@@ -123,6 +135,24 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 	// WebSocket 实时通信端点
 	wsHandler := m.wsHandler()
 	admin.GET("/ws", gin.WrapF(wsHandler))
+
+	// 文件上传端点（接入存储抽象）
+	if m.storage != nil {
+		uploadHandler := platformhttp.NewUploadHandler(platformhttp.UploadConfig{
+			Storage:    m.storage,
+			MaxSize:    10 * 1024 * 1024,
+			BasePrefix: "uploads",
+		})
+		admin.POST("/files", uploadHandler.HandleUpload())
+		admin.DELETE("/files", uploadHandler.HandleDelete())
+	}
+
+	// Feature Flag 端点（运行时开关功能）
+	if m.feature != nil {
+		featureHandler := admininterfaces.NewAdminFeatureHandler(m.feature)
+		admin.GET("/features", featureHandler.List)
+		admin.PUT("/features/:name", featureHandler.Update)
+	}
 }
 
 // RegisterJobs 注册定时任务

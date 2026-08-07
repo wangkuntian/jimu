@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	stderrors "errors"
 	"fmt"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"jimu/internal/modules/user/domain"
 	"jimu/internal/platform/cache"
 	"jimu/internal/platform/event"
+	"jimu/internal/platform/outbox"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -21,17 +23,41 @@ type UserService struct {
 	repo     domain.UserRepository
 	cache    cache.Cache
 	eventBus *event.EventBus
+	outbox   *outbox.Outbox
 }
 
-func NewUserService(repo domain.UserRepository, cache cache.Cache, eventBus ...*event.EventBus) *UserService {
+func NewUserService(repo domain.UserRepository, cache cache.Cache, deps ...interface{}) *UserService {
 	s := &UserService{repo: repo, cache: cache}
-	if len(eventBus) > 0 {
-		s.eventBus = eventBus[0]
+	for _, dep := range deps {
+		switch d := dep.(type) {
+		case *event.EventBus:
+			s.eventBus = d
+		case *outbox.Outbox:
+			s.outbox = d
+		}
 	}
 	return s
 }
 
 const userCacheTTL = 5 * time.Minute
+
+// TenantIDFromContext 从 context 读取租户 ID
+func TenantIDFromContext(ctx context.Context) string {
+	if t, ok := ctx.Value(tenantContextKey{}).(string); ok {
+		return t
+	}
+	return ""
+}
+
+// WithTenantID 将租户 ID 注入 context
+func WithTenantID(ctx context.Context, tenantID string) context.Context {
+	if tenantID != "" {
+		return context.WithValue(ctx, tenantContextKey{}, tenantID)
+	}
+	return ctx
+}
+
+type tenantContextKey struct{}
 
 func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserResponse, error) {
 	existing, err := s.repo.FindByUsername(ctx, req.Username)
@@ -51,6 +77,7 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserR
 		Username: req.Username,
 		Password: string(hashedPassword),
 		Status:   1,
+		TenantID: TenantIDFromContext(ctx),
 	}
 	if err := s.repo.Create(ctx, user); err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to create user", err)
@@ -62,6 +89,19 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserR
 		s.eventBus.PublishAsync(contract.EventUserCreated, contract.UserCreatedEvent{
 			UserID:   user.ID,
 			Username: user.Username,
+		})
+	}
+
+	// 写入 Outbox（确保事件可靠投递）
+	if s.outbox != nil {
+		payload, _ := json.Marshal(contract.UserCreatedEvent{
+			UserID:   user.ID,
+			Username: user.Username,
+		})
+		_ = s.outbox.Add(ctx, nil, outbox.Event{
+			AggregateID: fmt.Sprintf("user:%d", user.ID),
+			EventType:   contract.EventUserCreated,
+			Payload:     payload,
 		})
 	}
 
@@ -101,6 +141,18 @@ func (s *UserService) List(ctx context.Context, p pagination.Pagination) ([]User
 	users, total, err := s.repo.List(ctx, p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
 	if err != nil {
 		return nil, 0, errors.Wrap(errors.CodeInternalError, "failed to list users", err)
+	}
+
+	// 租户过滤：若请求带有租户 ID，仅返回该租户的用户
+	tenantID := TenantIDFromContext(ctx)
+	if tenantID != "" {
+		filtered := make([]domain.User, 0, len(users))
+		for _, u := range users {
+			if u.TenantID == tenantID {
+				filtered = append(filtered, u)
+			}
+		}
+		return ToUserResponses(filtered), int64(len(filtered)), nil
 	}
 	return ToUserResponses(users), total, nil
 }
