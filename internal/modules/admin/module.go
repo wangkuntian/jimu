@@ -1,13 +1,19 @@
 package admin
 
 import (
+	"context"
+	"net/http"
+
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	adminapp "jimu/internal/modules/admin/application"
 	admininterfaces "jimu/internal/modules/admin/interfaces"
+	"jimu/internal/platform/auth"
 	"jimu/internal/platform/event"
 	"jimu/internal/platform/http/middleware"
+	"jimu/internal/platform/ws"
 
+	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
@@ -27,6 +33,15 @@ func New(version, env string, rdb *redis.Client, db *gorm.DB) *Module {
 		rdb:     rdb,
 		db:      db,
 	}
+}
+
+// wsHandler 创建 WebSocket 处理器
+func (m *Module) wsHandler() http.HandlerFunc {
+	presence := ws.NewPresenceManager()
+	channels := ws.NewChannelManager()
+	hub := ws.NewClientHub(presence, channels)
+	go hub.Run(context.Background())
+	return ws.WSHandler(hub, auth.New("dev-secret", "jimu", 30, 7), presence, channels)
 }
 
 // Name 返回模块名称
@@ -96,6 +111,10 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 	admin.POST("/jobs/:id/retry", jobHandler.Retry)
 	admin.GET("/jobs/dead-letters", jobHandler.ListDeadLetters)
 	admin.POST("/jobs/dead-letters/:id/resolve", jobHandler.ResolveDeadLetter)
+
+	// WebSocket 实时通信端点
+	wsHandler := m.wsHandler()
+	admin.GET("/ws", gin.WrapF(wsHandler))
 }
 
 // RegisterJobs 注册定时任务
