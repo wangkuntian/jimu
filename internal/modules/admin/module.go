@@ -12,6 +12,7 @@ import (
 	"jimu/internal/platform/auth"
 	"jimu/internal/platform/event"
 	"jimu/internal/platform/http/middleware"
+	"jimu/internal/platform/scheduler"
 	"jimu/internal/platform/ws"
 
 	"github.com/gin-gonic/gin"
@@ -24,15 +25,20 @@ type Module struct {
 	service *adminapp.Service
 	rdb     *redis.Client
 	db      *gorm.DB
+	sched   *scheduler.CronScheduler
 }
 
 // New 创建管理模块
-func New(version, env string, rdb *redis.Client, db *gorm.DB) *Module {
-	return &Module{
+func New(version, env string, rdb *redis.Client, db *gorm.DB, sched ...*scheduler.CronScheduler) *Module {
+	m := &Module{
 		service: adminapp.NewService(version, env, rdb),
 		rdb:     rdb,
 		db:      db,
 	}
+	if len(sched) > 0 {
+		m.sched = sched[0]
+	}
+	return m
 }
 
 // wsHandler 创建 WebSocket 处理器
@@ -93,7 +99,7 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 	admin.POST("/config/reload", configHandler.Reload)
 
 	// 任务调度端点
-	taskHandler := admininterfaces.NewAdminTaskHandler(adminapp.NewAdminTaskService())
+	taskHandler := admininterfaces.NewAdminTaskHandler(adminapp.NewAdminTaskService(m.sched))
 	admin.GET("/tasks", taskHandler.List)
 	admin.POST("/tasks/:id/run", taskHandler.Trigger)
 	admin.POST("/tasks/:id/toggle", taskHandler.Toggle)

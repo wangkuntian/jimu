@@ -54,7 +54,7 @@ func run() error {
 		role.New(container.DB),
 		permission.New(container.DB),
 		auditmodule.New(container.DB, cfg.Audit, container.Logger),
-		adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB),
+		adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, container.Scheduler),
 	)
 	if err != nil {
 		_ = container.Stop(context.Background())

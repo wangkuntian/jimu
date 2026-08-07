@@ -3,6 +3,8 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"jimu/internal/contract"
 	"jimu/internal/platform/logger"
@@ -10,12 +12,28 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+// JobInfo 注册的任务信息
+type JobInfo struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Cron       string    `json:"cron"`
+	Enabled    bool      `json:"enabled"`
+	LastRun    time.Time `json:"last_run,omitempty"`
+	LastStatus string    `json:"last_status"`
+	LastError  string    `json:"last_error,omitempty"`
+	RunCount   int64     `json:"run_count"`
+}
+
 // CronScheduler 基于 robfig/cron 的定时任务调度器
 type CronScheduler struct {
 	cron    *cron.Cron
 	logger  *logger.Logger
 	errors  chan error
 	entries []cron.EntryID
+
+	mu     sync.RWMutex
+	jobs   map[string]*JobInfo // id -> job info
+	byName map[string]string   // name -> id
 }
 
 // New 创建 CronScheduler
@@ -29,7 +47,57 @@ func New(log *logger.Logger) *CronScheduler {
 		cron:   c,
 		logger: log,
 		errors: make(chan error, 16),
+		jobs:   make(map[string]*JobInfo),
+		byName: make(map[string]string),
 	}
+}
+
+// AddNamedFunc 注册带名称的任务（支持管理）
+func (s *CronScheduler) AddNamedFunc(id, name, spec string, cmd func()) error {
+	info := &JobInfo{ID: id, Name: name, Cron: spec, Enabled: true}
+	entryID, err := s.cron.AddFunc(spec, func() {
+		s.recordRun(info, cmd)
+	})
+	if err != nil {
+		return fmt.Errorf("add job %q: %w", spec, err)
+	}
+	s.mu.Lock()
+	s.jobs[id] = info
+	s.byName[name] = id
+	s.entries = append(s.entries, entryID)
+	s.mu.Unlock()
+	return nil
+}
+
+// recordRun 记录任务执行并调用命令
+func (s *CronScheduler) recordRun(info *JobInfo, cmd func()) {
+	info.LastRun = time.Now()
+	info.RunCount++
+	start := time.Now()
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				info.LastStatus = "failed"
+				info.LastError = fmt.Sprintf("%v", r)
+				s.logger.Error("job panic", "name", info.Name, "panic", fmt.Sprintf("%v", r))
+			}
+		}()
+		cmd()
+		info.LastStatus = "success"
+		info.LastError = ""
+	}()
+	s.logger.Debug("job completed", "name", info.Name, "duration", time.Since(start))
+}
+
+// Jobs 返回所有注册任务的信息
+func (s *CronScheduler) Jobs() []JobInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]JobInfo, 0, len(s.jobs))
+	for _, info := range s.jobs {
+		result = append(result, *info)
+	}
+	return result
 }
 
 // AddFunc 实现 contract.JobRegistry 接口
