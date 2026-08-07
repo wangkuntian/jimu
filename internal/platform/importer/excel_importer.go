@@ -36,7 +36,7 @@ func (e *ExcelImporter) Parse(ctx context.Context, file io.Reader) ([]map[string
 	if err != nil {
 		return nil, fmt.Errorf("open excel file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	sheet := e.Sheet
 	if sheet == "" {

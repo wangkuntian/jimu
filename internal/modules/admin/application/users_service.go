@@ -2,9 +2,7 @@ package application
 
 import (
 	"context"
-	"strings"
 
-	"jimu/internal/modules/admin/domain"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 )
@@ -42,10 +40,7 @@ type UpdateUserRequest struct {
 }
 
 // AdminUserService 用户管理服务
-type AdminUserService struct {
-	apiKeyRepo domain.APIKeyRepository
-	auditRepo  domain.AuditRepository
-}
+type AdminUserService struct{}
 
 // NewAdminUserService 创建用户管理服务
 func NewAdminUserService() *AdminUserService {
@@ -70,28 +65,4 @@ func (s *AdminUserService) ValidateNotLastSuperAdmin(ctx context.Context, target
 func (s *AdminUserService) SearchUsers(ctx context.Context, filter ListUserFilter, p pagination.Pagination) ([]AdminUser, int64, error) {
 	// TODO: implement with actual user repository
 	return []AdminUser{}, 0, nil
-}
-
-// sanitizeSortField 防止 SQL 注入的排序字段白名单
-func sanitizeSortField(sort string) string {
-	allowed := map[string]bool{
-		"id":         true,
-		"username":   true,
-		"status":     true,
-		"created_at": true,
-	}
-	if allowed[sort] {
-		return sort
-	}
-	return "id"
-}
-
-// containsRole 检查角色列表是否包含指定角色
-func containsRole(roles []string, target string) bool {
-	for _, r := range roles {
-		if strings.EqualFold(r, target) {
-			return true
-		}
-	}
-	return false
 }

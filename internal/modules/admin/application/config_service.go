@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/redis/go-redis/v9"
 	"jimu/internal/platform/event"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // AdminConfigService 配置热更新服务

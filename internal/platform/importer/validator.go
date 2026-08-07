@@ -14,24 +14,24 @@ import (
 type FieldType string
 
 const (
-	TypeString  FieldType = "string"
-	TypeInt     FieldType = "int"
-	TypeFloat   FieldType = "float"
-	TypeBool    FieldType = "bool"
-	TypeDate    FieldType = "date"
-	TypeEmail   FieldType = "email"
-	TypePhone   FieldType = "phone"
+	TypeString FieldType = "string"
+	TypeInt    FieldType = "int"
+	TypeFloat  FieldType = "float"
+	TypeBool   FieldType = "bool"
+	TypeDate   FieldType = "date"
+	TypeEmail  FieldType = "email"
+	TypePhone  FieldType = "phone"
 )
 
 // FieldRule defines validation constraints for a single field.
 type FieldRule struct {
-	Field    string   `json:"field"`
+	Field    string    `json:"field"`
 	Type     FieldType `json:"type"`
-	Required bool     `json:"required"`
-	Unique   bool     `json:"unique"` // uniqueness is checked across the batch
-	Pattern  string   `json:"pattern,omitempty"`
-	Min      *float64 `json:"min,omitempty"`
-	Max      *float64 `json:"max,omitempty"`
+	Required bool      `json:"required"`
+	Unique   bool      `json:"unique"` // uniqueness is checked across the batch
+	Pattern  string    `json:"pattern,omitempty"`
+	Min      *float64  `json:"min,omitempty"`
+	Max      *float64  `json:"max,omitempty"`
 }
 
 // ValidationRules is the collection of field rules for an import operation.
