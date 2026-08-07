@@ -6,7 +6,9 @@ import (
 
 	"jimu/internal/contract"
 	adminapp "jimu/internal/modules/admin/application"
+	admininfra "jimu/internal/modules/admin/infrastructure"
 	admininterfaces "jimu/internal/modules/admin/interfaces"
+	userinfra "jimu/internal/modules/user/infrastructure"
 	"jimu/internal/platform/auth"
 	"jimu/internal/platform/event"
 	"jimu/internal/platform/http/middleware"
@@ -63,7 +65,9 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 	admin.GET("/monitoring/metrics", adminSvc.Metrics)
 
 	// 用户管理端点
-	userHandler := admininterfaces.NewAdminUserHandler(adminapp.NewAdminUserService())
+	userHandler := admininterfaces.NewAdminUserHandler(
+		adminapp.NewAdminUserService(userinfra.NewMysqlRepository(m.db)),
+	)
 	admin.GET("/users", userHandler.List)
 	admin.POST("/users", userHandler.Create)
 	admin.GET("/users/:id", userHandler.Get)
@@ -73,7 +77,7 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 
 	// API Key 管理端点
 	apiKeyHandler := admininterfaces.NewAdminAPIKeyHandler(
-		adminapp.NewAdminAPIKeyService(nil), // TODO: wire repository
+		adminapp.NewAdminAPIKeyService(admininfra.NewMysqlAPIKeyRepository(m.db)),
 	)
 	admin.GET("/apikeys", apiKeyHandler.List)
 	admin.POST("/apikeys", apiKeyHandler.Create)
@@ -97,7 +101,7 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 
 	// 审计日志端点
 	auditHandler := admininterfaces.NewAdminAuditHandler(
-		adminapp.NewAdminAuditService(nil), // TODO: wire repository
+		adminapp.NewAdminAuditService(admininfra.NewMysqlAuditRepository(m.db)),
 	)
 	admin.GET("/audit", auditHandler.List)
 
