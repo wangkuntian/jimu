@@ -77,7 +77,21 @@ func (h *AdminUserHandler) Create(c *gin.Context) {
 
 // Update 更新用户
 func (h *AdminUserHandler) Update(c *gin.Context) {
-	response.OK(c, nil)
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
+		return
+	}
+	var req application.UpdateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
+		return
+	}
+	if err := h.service.UpdateUser(c.Request.Context(), id, req); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"updated": id})
 }
 
 // Disable 禁用用户

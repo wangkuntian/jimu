@@ -126,6 +126,16 @@ func (s *AdminUserService) CreateUser(ctx context.Context, req CreateUserRequest
 
 // DisableUser 禁用用户
 func (s *AdminUserService) DisableUser(ctx context.Context, id uint64) error {
+	return s.UpdateUser(ctx, id, UpdateUserRequest{Status: int8Ptr(0)})
+}
+
+// UpdateUserRequest 管理员更新用户请求
+type UpdateUserRequest struct {
+	Status *int8 `json:"status" binding:"omitempty,oneof=0 1"`
+}
+
+// UpdateUser 更新用户状态
+func (s *AdminUserService) UpdateUser(ctx context.Context, id uint64, req UpdateUserRequest) error {
 	user, err := s.userRepo.FindByID(ctx, id)
 	if err != nil {
 		if stderrors.Is(err, gorm.ErrRecordNotFound) {
@@ -133,6 +143,13 @@ func (s *AdminUserService) DisableUser(ctx context.Context, id uint64) error {
 		}
 		return apperrors.Wrap(apperrors.CodeInternalError, "failed to get user", err)
 	}
-	user.Status = 0
+	if req.Status != nil {
+		user.Status = *req.Status
+	}
 	return s.userRepo.Update(ctx, user)
+}
+
+// int8Ptr 返回 int8 指针
+func int8Ptr(v int8) *int8 {
+	return &v
 }

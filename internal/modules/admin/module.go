@@ -106,7 +106,7 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 	admin.GET("/audit", auditHandler.List)
 
 	// 任务队列端点
-	jobHandler := admininterfaces.NewAdminJobHandler()
+	jobHandler := admininterfaces.NewAdminJobHandler(admininfra.NewMysqlJobRepository(m.db))
 	admin.GET("/jobs", jobHandler.List)
 	admin.POST("/jobs", jobHandler.Submit)
 	admin.GET("/jobs/:id", jobHandler.Get)
