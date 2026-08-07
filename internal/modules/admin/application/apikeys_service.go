@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
+	"time"
 
 	"jimu/internal/modules/admin/domain"
 	apperrors "jimu/internal/shared/errors"
@@ -47,15 +49,22 @@ func (s *AdminAPIKeyService) CreateKey(ctx context.Context, input CreateKeyInput
 	}
 	plaintext := apiKeyPrefix + hex.EncodeToString(raw)
 
+	scopesJSON, err := json.Marshal(input.Scopes)
+	if err != nil {
+		return "", nil, apperrors.Wrap(apperrors.CodeInternalError, "failed to marshal scopes", err)
+	}
+
 	key := &domain.APIKey{
 		Name:      input.Name,
 		KeyPrefix: plaintext[:min(8+len(apiKeyPrefix), len(plaintext))],
 		KeyHash:   domain.HashKey(plaintext),
+		Scopes:    string(scopesJSON),
 		Enabled:   true,
 		CreatedBy: input.CreatedBy,
 	}
-	// Scopes serialized to JSON string
-	// ExpiresAt set if ExpiresIn > 0
+	if input.ExpiresIn > 0 {
+		key.ExpiresAt = time.Now().Add(time.Duration(input.ExpiresIn) * 24 * time.Hour)
+	}
 
 	if err := s.repo.Create(ctx, key); err != nil {
 		return "", nil, err
