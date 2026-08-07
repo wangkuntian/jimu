@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"jimu/internal/config"
 	"jimu/internal/contract"
 	adminapp "jimu/internal/modules/admin/application"
 	admininterfaces "jimu/internal/modules/admin/interfaces"
@@ -21,7 +20,6 @@ import (
 // Module 管理模块
 type Module struct {
 	service *adminapp.Service
-	cfg     config.Config
 	rdb     *redis.Client
 	db      *gorm.DB
 }

@@ -24,7 +24,7 @@ const (
 	ChannelBroadcast  = "broadcast"
 )
 
-// WebSocket 消息协议
+// WSMessage WebSocket 消息协议
 type WSMessage struct {
 	Type    string          `json:"type"`    // notification/chat/presence/ping/pong
 	Channel string          `json:"channel"` // user:123 / room:abc / broadcast

@@ -4,11 +4,11 @@ import "time"
 
 // ImportResult contains the outcome of an import operation.
 type ImportResult struct {
-	TotalRows   int            `json:"total_rows"`
-	SuccessRows int            `json:"success_rows"`
-	ErrorRows   int            `json:"error_rows"`
-	Errors      []ImportError  `json:"errors,omitempty"`
-	Duration    string         `json:"duration"`
+	TotalRows   int           `json:"total_rows"`
+	SuccessRows int           `json:"success_rows"`
+	ErrorRows   int           `json:"error_rows"`
+	Errors      []ImportError `json:"errors,omitempty"`
+	Duration    string        `json:"duration"`
 }
 
 // ImportError describes a single validation/import error for a specific row and field.

@@ -40,11 +40,10 @@ var upgrader = websocket.Upgrader{
 
 // Client 表示一个 WebSocket 连接
 type Client struct {
-	hub      *ClientHub
-	conn     *websocket.Conn
-	send     chan []byte
-	userID   uint64
-	username string
+	hub    *ClientHub
+	conn   *websocket.Conn
+	send   chan []byte
+	userID uint64
 	// 订阅的频道列表
 	mu       sync.RWMutex
 	channels map[string]bool
@@ -75,13 +74,15 @@ func (c *Client) ReadPump(ctx context.Context, jwtUtil *auth.JWT, presence *Pres
 	for {
 		_, data, err := c.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err,
+			// 忽略正常关闭错误，仅处理异常关闭
+			if !websocket.IsUnexpectedCloseError(err,
 				websocket.CloseGoingAway,
 				websocket.CloseAbnormalClosure,
 				websocket.CloseNormalClosure,
 			) {
-				// 异常关闭，记录日志（此处简化处理）
+				break
 			}
+			// 异常关闭，直接退出
 			break
 		}
 
