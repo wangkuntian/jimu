@@ -11,6 +11,7 @@ import (
 	"jimu/internal/platform/cache"
 	"jimu/internal/platform/event"
 	"jimu/internal/platform/notification"
+	"jimu/internal/platform/outbox"
 
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -20,19 +21,29 @@ type Module struct {
 	service  *application.UserService
 	rdb      *redis.Client
 	eventBus contract.EventBus
+	outbox   *outbox.Outbox
 }
 
-func New(db *gorm.DB, cfg config.Config, rdb ...*redis.Client) *Module {
+func New(db *gorm.DB, cfg config.Config, deps ...interface{}) *Module {
 	repo := infrastructure.NewMysqlRepository(db)
 	var c cache.Cache
-	if len(rdb) > 0 {
-		c = cache.NewRedisCache(rdb[0], cfg.Cache.Prefix)
+	var ob *outbox.Outbox
+	for _, dep := range deps {
+		switch d := dep.(type) {
+		case *redis.Client:
+			c = cache.NewRedisCache(d, cfg.Cache.Prefix)
+		case *outbox.Outbox:
+			ob = d
+		}
 	}
 	eb := event.New()
-	service := application.NewUserService(repo, c, eb)
-	m := &Module{service: service, eventBus: eb}
-	if len(rdb) > 0 {
-		m.rdb = rdb[0]
+	service := application.NewUserService(repo, c, eb, ob)
+	m := &Module{service: service, eventBus: eb, outbox: ob}
+	for _, dep := range deps {
+		if rdb, ok := dep.(*redis.Client); ok {
+			m.rdb = rdb
+			break
+		}
 	}
 	return m
 }

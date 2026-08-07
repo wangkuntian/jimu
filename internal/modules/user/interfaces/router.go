@@ -3,6 +3,7 @@ package interfaces
 import (
 	"jimu/internal/modules/user/application"
 	"jimu/internal/platform/http/middleware"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"
@@ -13,7 +14,9 @@ import (
 // rdb 可选：传入 Redis 客户端以启用 POST 幂等性保护
 func RegisterUserRoutes(r *gin.RouterGroup, service *application.UserService, rdb ...*redis.Client) {
 	handler := NewUserHandler(service)
+	// 多租户隔离：从 X-Tenant-ID header 提取租户上下文
 	users := r.Group("/users")
+	users.Use(tenant.Middleware("X-Tenant-ID"))
 	{
 		// POST 创建用户：可选幂等性保护
 		if len(rdb) > 0 && rdb[0] != nil {
