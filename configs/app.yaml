@@ -97,6 +97,16 @@ storage:
 # 队列配置
 queue:
   type: "redis"           # 队列类型：redis, kafka, rabbitmq
+  # Kafka 队列配置（type=kafka 时使用；容器接线由后续 Plan 2 实现）
+  kafka:
+    brokers: ["127.0.0.1:9092"]
+    topic: "jimu-jobs"
+    group_id: "jimu-workers"
+  # RabbitMQ 队列配置（type=rabbitmq 时使用；容器接线由后续 Plan 2 实现）
+  rabbitmq:
+    url: "amqp://guest:guest@127.0.0.1:5672/"
+    queue: "jimu-jobs"
+    exchange: ""
 
 # 安全头配置（留空则使用默认值）
 security:
