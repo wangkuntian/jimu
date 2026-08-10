@@ -94,6 +94,10 @@ storage:
   base_dir: "storage"     # 本地存储目录
   base_url: "/files"      # 访问 URL 前缀
 
+# 队列配置
+queue:
+  type: "redis"           # 队列类型：redis, kafka, rabbitmq
+
 # 安全头配置（留空则使用默认值）
 security:
   content_type_options: "nosniff"
