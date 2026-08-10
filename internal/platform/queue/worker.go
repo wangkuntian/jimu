@@ -51,7 +51,7 @@ var DefaultWorkerConfig = WorkerConfig{
 // WorkerPool Worker 池
 type WorkerPool struct {
 	config   WorkerConfig
-	queue    *RedisQueue
+	queue    Consumer // 依赖接口而非具体实现
 	store    *MySQLStore
 	strategy RetryStrategy
 	ctx      context.Context
@@ -60,7 +60,7 @@ type WorkerPool struct {
 }
 
 // NewWorkerPool 创建 Worker 池
-func NewWorkerPool(config WorkerConfig, queue *RedisQueue, store *MySQLStore) *WorkerPool {
+func NewWorkerPool(config WorkerConfig, queue Consumer, store *MySQLStore) *WorkerPool {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &WorkerPool{
 		config:   config,
@@ -113,7 +113,10 @@ func (p *WorkerPool) delayedJobScanner() {
 		case <-p.ctx.Done():
 			return
 		case <-ticker.C:
-			_, _ = p.queue.MoveDueJobs(p.ctx)
+			// Consumer 接口无 MoveDueJobs，支持延迟队列的实现（如 Redis）通过断言触发
+			if m, ok := p.queue.(interface{ MoveDueJobs(context.Context) (int, error) }); ok {
+				_, _ = m.MoveDueJobs(p.ctx)
+			}
 		}
 	}
 }
@@ -148,7 +151,11 @@ func (p *WorkerPool) Submit(ctx context.Context, jobType, payload string) (*doma
 	if err != nil {
 		return nil, err
 	}
-	if err := p.queue.Submit(ctx, &JobData{ID: job.ID, Type: jobType, Payload: payload}); err != nil {
+	producer, ok := p.queue.(Queue)
+	if !ok {
+		return nil, apperrors.New(apperrors.CodeInternalError, "queue does not support submit")
+	}
+	if err := producer.Submit(ctx, &JobData{ID: job.ID, Type: jobType, Payload: payload}); err != nil {
 		return nil, err
 	}
 	return job, nil
@@ -160,7 +167,11 @@ func (p *WorkerPool) SubmitDelayed(ctx context.Context, jobType, payload string,
 	if err != nil {
 		return nil, err
 	}
-	if err := p.queue.SubmitDelayed(ctx, &JobData{ID: job.ID, Type: jobType, Payload: payload}, delay); err != nil {
+	producer, ok := p.queue.(Queue)
+	if !ok {
+		return nil, apperrors.New(apperrors.CodeInternalError, "queue does not support submit")
+	}
+	if err := producer.SubmitDelayed(ctx, &JobData{ID: job.ID, Type: jobType, Payload: payload}, delay); err != nil {
 		return nil, err
 	}
 	return job, nil
