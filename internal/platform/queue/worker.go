@@ -147,13 +147,13 @@ func (p *WorkerPool) executeJob(data *JobData) {
 
 // Submit 提交任务
 func (p *WorkerPool) Submit(ctx context.Context, jobType, payload string) (*domain.Job, error) {
-	job, err := p.store.CreateJob(ctx, jobType, payload, p.config.MaxRetries)
-	if err != nil {
-		return nil, err
-	}
 	producer, ok := p.queue.(Queue)
 	if !ok {
 		return nil, apperrors.New(apperrors.CodeInternalError, "queue does not support submit")
+	}
+	job, err := p.store.CreateJob(ctx, jobType, payload, p.config.MaxRetries)
+	if err != nil {
+		return nil, err
 	}
 	if err := producer.Submit(ctx, &JobData{ID: job.ID, Type: jobType, Payload: payload}); err != nil {
 		return nil, err
@@ -163,13 +163,13 @@ func (p *WorkerPool) Submit(ctx context.Context, jobType, payload string) (*doma
 
 // SubmitDelayed 提交延迟任务
 func (p *WorkerPool) SubmitDelayed(ctx context.Context, jobType, payload string, delay time.Duration) (*domain.Job, error) {
-	job, err := p.store.CreateJob(ctx, jobType, payload, p.config.MaxRetries)
-	if err != nil {
-		return nil, err
-	}
 	producer, ok := p.queue.(Queue)
 	if !ok {
 		return nil, apperrors.New(apperrors.CodeInternalError, "queue does not support submit")
+	}
+	job, err := p.store.CreateJob(ctx, jobType, payload, p.config.MaxRetries)
+	if err != nil {
+		return nil, err
 	}
 	if err := producer.SubmitDelayed(ctx, &JobData{ID: job.ID, Type: jobType, Payload: payload}, delay); err != nil {
 		return nil, err
