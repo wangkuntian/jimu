@@ -80,6 +80,16 @@ func (q *RedisQueue) MoveDueJobs(ctx context.Context) (int, error) {
 	return len(members), err
 }
 
+// Ack 确认任务。Redis 为破坏性消费，任务已在 Consume 时移除，无需 ack。
+func (q *RedisQueue) Ack(ctx context.Context, job *JobData) error {
+	return nil
+}
+
+// Nack 否认任务。Redis 破坏性消费下任务已丢失，no-op 保持接口一致。
+func (q *RedisQueue) Nack(ctx context.Context, job *JobData) error {
+	return nil
+}
+
 // JobData Redis 中的任务数据
 type JobData struct {
 	ID      uint64 `json:"id"`
