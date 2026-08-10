@@ -25,13 +25,23 @@ const (
 
 	LogFormatJSON    = "json"
 	LogFormatConsole = "console"
+
+	QueueTypeRedis    = "redis"
+	QueueTypeKafka    = "kafka"
+	QueueTypeRabbitMQ = "rabbitmq"
 )
 
 var (
 	validHTTPModes  = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
 	validLogLevels  = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
 	validLogFormats = []string{LogFormatJSON, LogFormatConsole}
+	validQueueTypes = []string{QueueTypeRedis, QueueTypeKafka, QueueTypeRabbitMQ}
 )
+
+// QueueConfig 队列配置
+type QueueConfig struct {
+	Type string `mapstructure:"type"` // 队列类型：redis, kafka, rabbitmq
+}
 
 type Config struct {
 	HTTP       HTTPConfig                  `mapstructure:"http"`
@@ -45,6 +55,7 @@ type Config struct {
 	Audit      AuditConfig                 `mapstructure:"audit"`
 	Storage    StorageConfig               `mapstructure:"storage"`
 	Security   SecurityConfig              `mapstructure:"security"`
+	Queue      QueueConfig                 `mapstructure:"queue"`
 	OTEL       observability.TracingConfig `mapstructure:"otel"`
 	// 元数据（非 YAML 配置，运行时注入）
 	Version     string `mapstructure:"-"`

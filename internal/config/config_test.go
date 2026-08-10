@@ -137,6 +137,9 @@ func validProdConfig() Config {
 			BatchSize:       50,
 			FlushIntervalMS: 500,
 		},
+		Queue: QueueConfig{
+			Type: QueueTypeRedis,
+		},
 	}
 }
 

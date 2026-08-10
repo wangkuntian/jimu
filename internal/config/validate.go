@@ -40,6 +40,9 @@ func (c *Config) validateCommon() error {
 	if !contains(validLogFormats, c.Log.Format) {
 		return fmt.Errorf("invalid log.format: %q, must be one of %v", c.Log.Format, validLogFormats)
 	}
+	if !contains(validQueueTypes, c.Queue.Type) {
+		return fmt.Errorf("invalid queue.type: %q, must be one of %v", c.Queue.Type, validQueueTypes)
+	}
 	if c.HTTP.Port < 1 || c.HTTP.Port > 65535 {
 		return errors.New("invalid http.port")
 	}

@@ -16,6 +16,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **缓存抽象** — Cache-Aside 模式，GetOrSet 自动回填
 - **自定义校验** — 手机号、密码强度、身份证、用户名等常用规则
 - **事件总线** — 内存实现，支持同步/异步发布订阅
+- **多队列支持** — Redis/Kafka/RabbitMQ 统一队列接口，`queue.type` 切换
 - **事务封装** — 统一的事务管理 helper
 - **审计日志** — 有界队列批量写入，匿名请求安全处理
 - **管理端点** — 独立 management server 暴露健康检查、metrics 和可选 pprof
@@ -314,6 +315,7 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `auth.access_expire_min` | Access Token 有效期 (分钟) | `60`（开发）/ `15`（生产） |
 | `auth.refresh_expire_day` | Refresh Token 有效期 (天) | `30`（开发）/ `7`（生产） |
 | `storage.type` | 存储类型 (`local`/`s3`/`oss`/`minio`) | `local` |
+| `queue.type` | 队列类型 (`redis`/`kafka`/`rabbitmq`) | `redis` |
 | `otel.enabled` | 是否启用 OpenTelemetry | `false`（开发）/ `true`（生产） |
 
 ## Makefile 命令

@@ -109,6 +109,10 @@ storage:
   base_dir: "storage"     # 本地存储目录
   base_url: "/files"      # 访问 URL 前缀
 
+# 队列配置
+queue:
+  type: "redis"           # 队列类型：redis, kafka, rabbitmq
+
 # OpenTelemetry 追踪配置
 otel:
   enabled: true                     # 生产环境启用
