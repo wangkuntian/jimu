@@ -10,10 +10,20 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
+// KafkaMessageWriter 抽象 kafka.Writer 写消息能力，便于测试注入
+type KafkaMessageWriter interface {
+	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
+}
+
+// KafkaMessageReader 抽象 kafka.Reader 读消息能力，便于测试注入
+type KafkaMessageReader interface {
+	ReadMessage(ctx context.Context) (kafka.Message, error)
+}
+
 // KafkaQueue Kafka 消息队列实现
 type KafkaQueue struct {
-	writer *kafka.Writer
-	reader *kafka.Reader
+	writer KafkaMessageWriter
+	reader KafkaMessageReader
 }
 
 // NewKafkaQueue 创建 Kafka 队列
@@ -49,8 +59,8 @@ func (q *KafkaQueue) Submit(ctx context.Context, job *JobData) error {
 	})
 }
 
-// SubmitDelayed Kafka 无原生延迟队列，使用消息头标注延迟，由消费端处理。
-// 当前实现先直接发送（延迟由业务侧在 payload 中携带时间戳处理）。
+// SubmitDelayed Kafka 无原生延迟队列，当前直接发送，延迟由业务侧处理。
+// 如需真实延迟，需引入定时中间件（如延迟 topic + 调度器）另行实现。
 func (q *KafkaQueue) SubmitDelayed(ctx context.Context, job *JobData, delay time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, delay+10*time.Second)
 	defer cancel()
@@ -72,12 +82,13 @@ func (q *KafkaQueue) Consume(ctx context.Context, timeout time.Duration) (*JobDa
 	return &job, nil
 }
 
-// Ack Kafka 通过 offset 自动提交，显式 ack 无需额外操作
+// Ack 确认任务。Kafka at-most-once 语义下 offset 自动提交，显式 ack 为 no-op。
 func (q *KafkaQueue) Ack(ctx context.Context, job *JobData) error {
 	return nil
 }
 
-// Nack Kafka 通过 offset 自动提交，显式 nack 无需额外操作
+// Nack 否认任务。Kafka at-most-once 语义下 offset 自动提交，no-op；
+// 重试由 WorkerPool 的持久化存储驱动。
 func (q *KafkaQueue) Nack(ctx context.Context, job *JobData) error {
 	return nil
 }
