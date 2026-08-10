@@ -147,6 +147,22 @@ func TestWorkerPoolConsumeJob(t *testing.T) {
 	wp.Stop()
 }
 
+func TestWorkerPoolSubmitRejectsConsumerOnly(t *testing.T) {
+	// fakeConsumer 只实现 Consumer 不实现 Queue，断言应在持久化前失败，避免孤儿记录
+	consumer := &fakeConsumer{jobs: make(chan *JobData, 1)}
+	jobRepo := newFakeJobRepo()
+	store := NewMySQLStore(jobRepo, &fakeHistoryRepo{}, &fakeDeadRepo{})
+	wp := NewWorkerPool(DefaultWorkerConfig, consumer, store)
+
+	_, err := wp.Submit(context.Background(), "echo", `{"x":1}`)
+	assert.Error(t, err)
+	assert.Len(t, jobRepo.jobs, 0)
+
+	_, err = wp.SubmitDelayed(context.Background(), "echo", `{"x":1}`, time.Minute)
+	assert.Error(t, err)
+	assert.Len(t, jobRepo.jobs, 0)
+}
+
 func TestWorkerPoolSubmitAndDelayed(t *testing.T) {
 	producer := &fakeProducer{}
 	wp := NewWorkerPool(DefaultWorkerConfig, producer, fakeStore())
