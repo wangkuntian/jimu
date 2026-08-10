@@ -112,6 +112,16 @@ storage:
 # 队列配置
 queue:
   type: "redis"           # 队列类型：redis, kafka, rabbitmq
+  # Kafka 队列配置（type=kafka 时使用；容器接线由后续 Plan 2 实现）
+  kafka:
+    brokers: ["kafka:9092"]
+    topic: "jimu-jobs"
+    group_id: "jimu-workers"
+  # RabbitMQ 队列配置（type=rabbitmq 时使用；容器接线由后续 Plan 2 实现）
+  rabbitmq:
+    url: "amqp://guest:guest@rabbitmq:5672/"
+    queue: "jimu-jobs"
+    exchange: ""
 
 # OpenTelemetry 追踪配置
 otel:

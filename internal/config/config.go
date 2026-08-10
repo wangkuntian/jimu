@@ -40,7 +40,23 @@ var (
 
 // QueueConfig 队列配置
 type QueueConfig struct {
-	Type string `mapstructure:"type"` // 队列类型：redis, kafka, rabbitmq
+	Type     string              `mapstructure:"type"`     // 队列类型：redis, kafka, rabbitmq
+	Kafka    QueueKafkaConfig    `mapstructure:"kafka"`    // Kafka 队列配置（type=kafka 时使用）
+	RabbitMQ QueueRabbitMQConfig `mapstructure:"rabbitmq"` // RabbitMQ 队列配置（type=rabbitmq 时使用）
+}
+
+// QueueKafkaConfig Kafka 队列配置
+type QueueKafkaConfig struct {
+	Brokers []string `mapstructure:"brokers"`  // broker 地址列表，如 ["kafka:9092"]
+	Topic   string   `mapstructure:"topic"`    // 消费/生产主题
+	GroupID string   `mapstructure:"group_id"` // 消费组 ID
+}
+
+// QueueRabbitMQConfig RabbitMQ 队列配置
+type QueueRabbitMQConfig struct {
+	URL      string `mapstructure:"url"`      // AMQP URL，如 amqp://guest:guest@rabbitmq:5672/
+	Queue    string `mapstructure:"queue"`    // 队列名
+	Exchange string `mapstructure:"exchange"` // 交换机名（留空则使用默认直连交换机）
 }
 
 type Config struct {
