@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"jimu/internal/config"
 	"jimu/internal/contract"
+	"jimu/internal/platform/captcha"
 	"jimu/internal/platform/db"
 	"jimu/internal/platform/event"
 	"jimu/internal/platform/feature"
@@ -42,6 +44,7 @@ type Container struct {
 	EventBus       *event.EventBus
 	Outbox         *outbox.Outbox
 	DBCollector    *observability.DBCollector
+	Captcha        *captcha.Service
 }
 
 func (c *Container) Start(context.Context) error { return nil }
@@ -149,6 +152,9 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		dbCollector = observability.NewDBCollector(sqlDB, "primary")
 	}
 
+	// Captcha 验证码服务（平台能力，非业务模块；auth 模块消费）
+	captchaSvc := captcha.NewService(rdb, time.Duration(cfg.Captcha.TTLMin)*time.Minute)
+
 	return &Container{
 		Config:       cfg,
 		DB:           dbConn,
@@ -165,5 +171,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		EventBus:     eventBus,
 		Outbox:       outboxProcessor,
 		DBCollector:  dbCollector,
+		Captcha:      captchaSvc,
 	}, nil
 }

@@ -46,17 +46,13 @@ func (s *RedisStore) Verify(id, answer string, clear bool) bool {
 
 // Service 验证码服务（生成 + Redis 存储 + 校验）
 type Service struct {
-	client *redis.Client
-	store  *RedisStore
-	ttl    time.Duration
+	store *RedisStore
 }
 
 // NewService 创建验证码服务
 func NewService(client *redis.Client, ttl time.Duration) *Service {
 	return &Service{
-		client: client,
-		store:  NewRedisStore(client, ttl),
-		ttl:    ttl,
+		store: NewRedisStore(client, ttl),
 	}
 }
 
@@ -73,14 +69,8 @@ func (s *Service) Generate(ctx context.Context) (string, string, error) {
 
 // Verify 校验验证码，校验后无论成败都删除（一次性）
 func (s *Service) Verify(ctx context.Context, id, code string) error {
-	key := fmt.Sprintf("jimu:captcha:%s", id)
-	stored, err := s.client.Get(ctx, key).Result()
-	if err != nil {
-		return fmt.Errorf("captcha not found or expired")
-	}
-	_ = s.client.Del(ctx, key).Err()
-	if stored != code {
-		return fmt.Errorf("captcha code mismatch")
+	if !s.store.Verify(id, code, true) {
+		return fmt.Errorf("invalid captcha")
 	}
 	return nil
 }

@@ -31,7 +31,7 @@ func TestRegisterRouteDependsOnPublicRegistration(t *testing.T) {
 			r := testRouter(false)
 			cfg := testAuthConfig()
 			cfg.PublicRegistration = tt.publicRegistration
-			RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, nil)
+			RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, nil, nil, config.CaptchaConfig{})
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader("{}")))
 			if w.Code != tt.want {
@@ -43,7 +43,7 @@ func TestRegisterRouteDependsOnPublicRegistration(t *testing.T) {
 
 func TestLogoutRouteRequiresAccessToken(t *testing.T) {
 	r := testRouter(false)
-	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), testAuthConfig(), nil)
+	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), testAuthConfig(), nil, nil, config.CaptchaConfig{})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil))
 	if w.Code != http.StatusUnauthorized {
@@ -53,7 +53,7 @@ func TestLogoutRouteRequiresAccessToken(t *testing.T) {
 
 func TestRefreshRouteStaysPublic(t *testing.T) {
 	r := testRouter(false)
-	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), testAuthConfig(), nil)
+	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), testAuthConfig(), nil, nil, config.CaptchaConfig{})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", strings.NewReader("{}")))
 	if w.Code != http.StatusBadRequest {
@@ -70,7 +70,7 @@ func TestLoginRateLimitUsesIPScope(t *testing.T) {
 	}
 
 	r := testRouter(false)
-	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter)
+	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter, nil, config.CaptchaConfig{})
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":"alice","password":"secret1234"}`))
 	req.RemoteAddr = "127.0.0.1:1234"
@@ -89,7 +89,7 @@ func TestLoginRateLimitUsesNormalizedUsernameScope(t *testing.T) {
 	}
 
 	r := testRouter(false)
-	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter)
+	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter, nil, config.CaptchaConfig{})
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":" Alice ","password":"secret1234"}`))
 	req.RemoteAddr = "127.0.0.1:1234"
@@ -109,7 +109,7 @@ func TestRegisterRateLimitUsesIPScope(t *testing.T) {
 	}
 
 	r := testRouter(false)
-	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter)
+	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter, nil, config.CaptchaConfig{})
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(`{"username":"alice","password":"secret1234"}`))
 	req.RemoteAddr = "127.0.0.1:1234"

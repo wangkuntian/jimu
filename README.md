@@ -7,6 +7,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **模块化架构** — Clean Architecture 分层，业务逻辑依赖接口不依赖实现
 - **统一认证** — typed JWT + Redis refresh session + Casbin RBAC v3 权限模型
 - **OAuth 登录** — Google/GitHub/微信第三方登录，`oauth.providers` 配置开关
+- **图形验证码** — 登录/注册验证码，Redis 存储一次性校验，`captcha.enabled` 配置开关
 - **统一响应** — 标准 `{code, message, data}` 格式 + 分页
 - **多环境配置** — Viper + yaml + 环境变量覆盖，枚举值启动校验
 - **结构化日志** — Zap + lumberjack 自动滚动
@@ -181,6 +182,7 @@ jimu/
 │   │   ├── logger/             # Zap 日志
 │   │   ├── auth/               # JWT + Casbin + Session
 │   │   ├── oauth/              # OAuth 第三方登录 Provider
+│   │   ├── captcha/            # 图形验证码（生成 + Redis 存储 + 校验）
 │   │   ├── event/              # 事件总线
 │   │   ├── observability/      # 健康检查 + Metrics + Tracing
 │   │   ├── storage/            # 文件存储抽象
@@ -213,12 +215,35 @@ jimu/
 
 ## API 示例
 
+### 获取验证码
+
+启用 `captcha.enabled` 后，登录/注册需先获取验证码。返回 `captcha_id` 与 base64 图片：
+
+```bash
+curl http://localhost:8080/api/v1/captcha
+```
+
+响应：
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "captcha_id": "hQq...",
+    "captcha_image": "data:image/png;base64,iVBOR..."
+  }
+}
+```
+
 ### 登录
+
+启用验证码时需携带 `captcha_id` 与 `captcha_code`：
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "secret123"}'
+  -d '{"username": "admin", "password": "secret123", "captcha_id": "hQq...", "captcha_code": "1234"}'
 ```
 
 响应：
@@ -352,6 +377,8 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `oauth.providers.{name}.client_id` | 提供商应用 Client ID | — |
 | `oauth.providers.{name}.client_secret` | 提供商应用 Client Secret（生产建议环境变量注入） | — |
 | `oauth.providers.{name}.redirect_url` | 授权回调地址 | — |
+| `captcha.enabled` | 是否启用登录/注册验证码 | `false`（开发）/ `true`（生产） |
+| `captcha.ttl_min` | 验证码有效期 (分钟) | `5` |
 | `otel.enabled` | 是否启用 OpenTelemetry | `false`（开发）/ `true`（生产） |
 
 ## Makefile 命令

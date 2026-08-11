@@ -67,6 +67,18 @@ type OAuthConfig struct {
 	Providers map[string]OAuthProviderConfig `mapstructure:"providers"` // 提供商名 -> 配置（google/github/wechat）
 }
 
+// CaptchaConfig 验证码配置
+type CaptchaConfig struct {
+	Enabled bool `mapstructure:"enabled"` // 是否启用登录/注册验证码
+	TTLMin  int  `mapstructure:"ttl_min"` // 验证码有效期（分钟）
+}
+
+// CaptchaResult 验证码返回
+type CaptchaResult struct {
+	CaptchaID    string `json:"captcha_id"`
+	CaptchaImage string `json:"captcha_image"`
+}
+
 // QueueKafkaConfig Kafka 队列配置
 type QueueKafkaConfig struct {
 	Brokers []string `mapstructure:"brokers"`  // broker 地址列表，如 ["kafka:9092"]
@@ -96,6 +108,7 @@ type Config struct {
 	Queue      QueueConfig                 `mapstructure:"queue"`
 	Outbox     OutboxConfig                `mapstructure:"outbox"`
 	OAuth      OAuthConfig                 `mapstructure:"oauth"`
+	Captcha    CaptchaConfig               `mapstructure:"captcha"`
 	OTEL       observability.TracingConfig `mapstructure:"otel"`
 	// 元数据（非 YAML 配置，运行时注入）
 	Version     string `mapstructure:"-"`

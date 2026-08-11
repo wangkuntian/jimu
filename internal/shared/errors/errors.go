@@ -8,7 +8,7 @@ import "fmt"
 //	1xxx - 通用错误
 //	2xxx - 用户/认证模块
 //	3xxx - OAuth 模块
-//	4xxx - 预留
+//	4xxx - 验证码模块
 //	9xxx - 系统级错误
 //
 // HTTP 映射：
@@ -26,6 +26,8 @@ import "fmt"
 //	2002 -> 409 Conflict
 //	2003 -> 401 Unauthorized
 //	2004 -> 404 Not Found
+//	4001 -> 400 Bad Request
+//	4002 -> 400 Bad Request
 const (
 	// 通用错误 (1xxx)
 	CodeOK                 = 0    // 成功
@@ -47,6 +49,10 @@ const (
 
 	// OAuth 模块 (3xxx)
 	CodeOAuthProviderNotFound = 3001 // 第三方登录提供商不存在
+
+	// 验证码模块 (4xxx)
+	CodeCaptchaRequired = 4001 // 缺少验证码
+	CodeCaptchaInvalid  = 4002 // 验证码无效
 )
 
 type AppError struct {
@@ -89,6 +95,8 @@ func HTTPStatus(code int) int {
 		return 404
 	case CodeConflict, CodeUserExists:
 		return 409
+	case CodeCaptchaRequired, CodeCaptchaInvalid:
+		return 400
 	case CodeRateLimited:
 		return 429
 	case CodeTimeout:
@@ -152,5 +160,7 @@ func AllErrorCodes() []ErrorInfo {
 		{CodeInvalidPassword, "密码错误", 401, "用户"},
 		{CodeRoleNotFound, "角色不存在", 404, "角色"},
 		{CodeOAuthProviderNotFound, "第三方登录提供商不存在", 404, "OAuth"},
+		{CodeCaptchaRequired, "缺少验证码", 400, "验证码"},
+		{CodeCaptchaInvalid, "验证码无效", 400, "验证码"},
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"jimu/internal/config"
 	"jimu/internal/modules/auth/application"
 	platformauth "jimu/internal/platform/auth"
+	"jimu/internal/platform/captcha"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
@@ -15,13 +16,15 @@ import (
 )
 
 type AuthHandler struct {
-	service *application.AuthService
-	cfg     config.AuthConfig
-	limiter *platformauth.Limiter
+	service    *application.AuthService
+	cfg        config.AuthConfig
+	limiter    *platformauth.Limiter
+	captcha    *captcha.Service
+	captchaCfg config.CaptchaConfig
 }
 
-func NewAuthHandler(service *application.AuthService, cfg config.AuthConfig, limiter *platformauth.Limiter) *AuthHandler {
-	return &AuthHandler{service: service, cfg: cfg, limiter: limiter}
+func NewAuthHandler(service *application.AuthService, cfg config.AuthConfig, limiter *platformauth.Limiter, captchaSvc *captcha.Service, captchaCfg config.CaptchaConfig) *AuthHandler {
+	return &AuthHandler{service: service, cfg: cfg, limiter: limiter, captcha: captchaSvc, captchaCfg: captchaCfg}
 }
 
 // Login godoc
@@ -42,6 +45,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 	if !h.allow(c, "login", "username:"+normalizeUsername(req.Username), h.cfg.LoginRateLimit, time.Duration(h.cfg.LoginRateWindowSec)*time.Second) {
+		return
+	}
+	if !h.verifyCaptcha(c, req) {
 		return
 	}
 	tokenPair, err := h.service.Login(c.Request.Context(), req.Username, req.Password)
@@ -66,6 +72,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 func (h *AuthHandler) Register(c *gin.Context) {
 	req, _ := c.MustGet("validated_req").(*loginRequest)
 	if !h.allow(c, "register", "ip:"+c.ClientIP(), h.cfg.RegisterRateLimit, time.Duration(h.cfg.RegisterRateWindowSec)*time.Second) {
+		return
+	}
+	if !h.verifyCaptcha(c, req) {
 		return
 	}
 	user, err := h.service.Register(c.Request.Context(), req.Username, req.Password)
@@ -151,6 +160,22 @@ func authContext(c *gin.Context) (uint64, string, bool) {
 		return 0, "", false
 	}
 	return id, c.GetString("session_id"), c.GetString("session_id") != ""
+}
+
+// verifyCaptcha 校验验证码（启用时）。放在限流检查之后，先限流防刷验证码暴力重试，再校验验证码。
+func (h *AuthHandler) verifyCaptcha(c *gin.Context, req *loginRequest) bool {
+	if !h.captchaCfg.Enabled || h.captcha == nil {
+		return true
+	}
+	if req.CaptchaID == "" || req.CaptchaCode == "" {
+		response.Fail(c, errors.New(errors.CodeCaptchaRequired, "captcha required"))
+		return false
+	}
+	if err := h.captcha.Verify(c.Request.Context(), req.CaptchaID, req.CaptchaCode); err != nil {
+		response.Fail(c, errors.New(errors.CodeCaptchaInvalid, "invalid captcha"))
+		return false
+	}
+	return true
 }
 
 func (h *AuthHandler) allow(c *gin.Context, scope, key string, limit int, window time.Duration) bool {
