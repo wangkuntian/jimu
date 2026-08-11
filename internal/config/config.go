@@ -29,13 +29,17 @@ const (
 	QueueTypeRedis    = "redis"
 	QueueTypeKafka    = "kafka"
 	QueueTypeRabbitMQ = "rabbitmq"
+
+	OutboxPublisherEventBus = "event_bus"
+	OutboxPublisherMQ       = "mq"
 )
 
 var (
-	validHTTPModes  = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
-	validLogLevels  = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
-	validLogFormats = []string{LogFormatJSON, LogFormatConsole}
-	validQueueTypes = []string{QueueTypeRedis, QueueTypeKafka, QueueTypeRabbitMQ}
+	validHTTPModes         = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
+	validLogLevels         = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
+	validLogFormats        = []string{LogFormatJSON, LogFormatConsole}
+	validQueueTypes        = []string{QueueTypeRedis, QueueTypeKafka, QueueTypeRabbitMQ}
+	validOutboxPublishers  = []string{OutboxPublisherEventBus, OutboxPublisherMQ}
 )
 
 // QueueConfig 队列配置
@@ -43,6 +47,11 @@ type QueueConfig struct {
 	Type     string              `mapstructure:"type"`     // 队列类型：redis, kafka, rabbitmq
 	Kafka    QueueKafkaConfig    `mapstructure:"kafka"`    // Kafka 队列配置（type=kafka 时使用）
 	RabbitMQ QueueRabbitMQConfig `mapstructure:"rabbitmq"` // RabbitMQ 队列配置（type=rabbitmq 时使用）
+}
+
+// OutboxConfig Outbox 配置
+type OutboxConfig struct {
+	Publisher string `mapstructure:"publisher"` // 发布器类型：event_bus, mq
 }
 
 // QueueKafkaConfig Kafka 队列配置
@@ -72,6 +81,7 @@ type Config struct {
 	Storage    StorageConfig               `mapstructure:"storage"`
 	Security   SecurityConfig              `mapstructure:"security"`
 	Queue      QueueConfig                 `mapstructure:"queue"`
+	Outbox     OutboxConfig                `mapstructure:"outbox"`
 	OTEL       observability.TracingConfig `mapstructure:"otel"`
 	// 元数据（非 YAML 配置，运行时注入）
 	Version     string `mapstructure:"-"`

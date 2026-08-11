@@ -123,6 +123,10 @@ queue:
     queue: "jimu-jobs"
     exchange: ""
 
+# Outbox 配置
+outbox:
+  publisher: "event_bus"     # 发布器类型：event_bus（内存事件总线）, mq（消息队列跨服务发布）
+
 # OpenTelemetry 追踪配置
 otel:
   enabled: true                     # 生产环境启用

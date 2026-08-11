@@ -64,6 +64,18 @@ func TestValidateLogLevel(t *testing.T) {
 	}
 }
 
+func TestValidateOutboxPublisher(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Outbox.Publisher = "invalid"
+	err := cfg.Validate("prod")
+	if err == nil {
+		t.Fatal("expected error for invalid outbox.publisher, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid outbox.publisher") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestValidateLogFormat(t *testing.T) {
 	cfg := validProdConfig()
 	cfg.Log.Format = "xml"
@@ -139,6 +151,9 @@ func validProdConfig() Config {
 		},
 		Queue: QueueConfig{
 			Type: QueueTypeRedis,
+		},
+		Outbox: OutboxConfig{
+			Publisher: OutboxPublisherEventBus,
 		},
 	}
 }

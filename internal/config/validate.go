@@ -43,6 +43,9 @@ func (c *Config) validateCommon() error {
 	if !contains(validQueueTypes, c.Queue.Type) {
 		return fmt.Errorf("invalid queue.type: %q, must be one of %v", c.Queue.Type, validQueueTypes)
 	}
+	if !contains(validOutboxPublishers, c.Outbox.Publisher) {
+		return fmt.Errorf("invalid outbox.publisher: %q, must be one of %v", c.Outbox.Publisher, validOutboxPublishers)
+	}
 	if c.HTTP.Port < 1 || c.HTTP.Port > 65535 {
 		return errors.New("invalid http.port")
 	}
