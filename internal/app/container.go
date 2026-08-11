@@ -15,6 +15,7 @@ import (
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/observability"
 	"jimu/internal/platform/outbox"
+	"jimu/internal/platform/queue"
 	redistore "jimu/internal/platform/redis"
 	"jimu/internal/platform/scheduler"
 	"jimu/internal/platform/storage"
@@ -116,7 +117,30 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 
 	// Outbox
 	outboxStore := outbox.NewMySQLStore(dbConn)
-	outboxPublisher := outbox.NewEventBusPublisher(eventBus)
+	var outboxPublisher outbox.Publisher
+	switch cfg.Outbox.Publisher {
+	case config.OutboxPublisherMQ:
+		q, err := queue.New(queue.Config{
+			Type:  queue.Type(cfg.Queue.Type),
+			Redis: rdb,
+			Kafka: queue.KafkaConfig{
+				Brokers: cfg.Queue.Kafka.Brokers,
+				Topic:   cfg.Queue.Kafka.Topic,
+				GroupID: cfg.Queue.Kafka.GroupID,
+			},
+			RabbitMQ: queue.RabbitMQConfig{
+				URL:       cfg.Queue.RabbitMQ.URL,
+				QueueName: cfg.Queue.RabbitMQ.Queue,
+				Exchange:  cfg.Queue.RabbitMQ.Exchange,
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("init outbox queue: %w", err)
+		}
+		outboxPublisher = outbox.NewMQPublisher(q)
+	default:
+		outboxPublisher = outbox.NewEventBusPublisher(eventBus)
+	}
 	outboxProcessor := outbox.New(outboxStore, outboxPublisher)
 
 	// DB Metrics Collector
