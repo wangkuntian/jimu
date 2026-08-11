@@ -195,6 +195,7 @@ jimu/
 │   │   └── testutil/           # 测试工具
 │   └── modules/                # 业务模块
 │       ├── auth/               # 登录/注册/Token
+│       ├── oauth/              # 第三方登录绑定
 │       ├── user/               # 用户管理
 │       ├── role/               # 角色管理
 │       ├── permission/         # 权限管理
