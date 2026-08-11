@@ -84,15 +84,7 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserR
 	}
 	resp := ToUserResponse(*user)
 
-	// 发布用户创建事件（异步，不影响主流程）
-	if s.eventBus != nil {
-		s.eventBus.PublishAsync(contract.EventUserCreated, contract.UserCreatedEvent{
-			UserID:   user.ID,
-			Username: user.Username,
-		})
-	}
-
-	// 写入 Outbox（确保事件可靠投递）
+	// 写入 Outbox（统一事件投递路径，确保可靠投递）
 	if s.outbox != nil {
 		payload, _ := json.Marshal(contract.UserCreatedEvent{
 			UserID:   user.ID,
@@ -173,10 +165,15 @@ func (s *UserService) Update(ctx context.Context, id uint64, req UpdateUserReque
 	}
 	s.invalidateUserCache(ctx, id)
 
-	if s.eventBus != nil {
-		s.eventBus.PublishAsync(contract.EventUserUpdated, contract.UserUpdatedEvent{
+	if s.outbox != nil {
+		payload, _ := json.Marshal(contract.UserUpdatedEvent{
 			UserID:  id,
 			Changes: []string{"status"},
+		})
+		_ = s.outbox.Add(ctx, nil, outbox.Event{
+			AggregateID: fmt.Sprintf("user:%d", id),
+			EventType:   contract.EventUserUpdated,
+			Payload:     payload,
 		})
 	}
 	return nil
@@ -188,9 +185,14 @@ func (s *UserService) Delete(ctx context.Context, id uint64) error {
 	}
 	s.invalidateUserCache(ctx, id)
 
-	if s.eventBus != nil {
-		s.eventBus.PublishAsync(contract.EventUserDeleted, contract.UserDeletedEvent{
+	if s.outbox != nil {
+		payload, _ := json.Marshal(contract.UserDeletedEvent{
 			UserID: id,
+		})
+		_ = s.outbox.Add(ctx, nil, outbox.Event{
+			AggregateID: fmt.Sprintf("user:%d", id),
+			EventType:   contract.EventUserDeleted,
+			Payload:     payload,
 		})
 	}
 	return nil
