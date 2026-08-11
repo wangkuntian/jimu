@@ -9,7 +9,6 @@ import (
 	"jimu/internal/modules/user/infrastructure"
 	"jimu/internal/modules/user/interfaces"
 	"jimu/internal/platform/cache"
-	"jimu/internal/platform/event"
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/outbox"
 
@@ -18,10 +17,9 @@ import (
 )
 
 type Module struct {
-	service  *application.UserService
-	rdb      *redis.Client
-	eventBus contract.EventBus
-	outbox   *outbox.Outbox
+	service *application.UserService
+	rdb     *redis.Client
+	outbox  *outbox.Outbox
 }
 
 func New(db *gorm.DB, cfg config.Config, deps ...interface{}) *Module {
@@ -36,9 +34,8 @@ func New(db *gorm.DB, cfg config.Config, deps ...interface{}) *Module {
 			ob = d
 		}
 	}
-	eb := event.New()
-	service := application.NewUserService(repo, c, eb, ob)
-	m := &Module{service: service, eventBus: eb, outbox: ob}
+	service := application.NewUserService(repo, c, ob)
+	m := &Module{service: service, outbox: ob}
 	for _, dep := range deps {
 		if rdb, ok := dep.(*redis.Client); ok {
 			m.rdb = rdb

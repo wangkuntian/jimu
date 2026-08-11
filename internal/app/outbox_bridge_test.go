@@ -61,6 +61,18 @@ func TestBridgeWorkerUnknownTypeErrors(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestBridgeWorkerConversionFailureErrors(t *testing.T) {
+	c := fakeContainer()
+	// 已知事件类型但 Payload 不是该强类型的 JSON（如数组）：转换应报错，不发布零值事件
+	evtPayload, _ := json.Marshal(outbox.EventPayload{
+		ID:        1,
+		EventType: contract.EventUserCreated,
+		Payload:   json.RawMessage(`[1,2,3]`),
+	})
+	err := bridgeFn(c)(context.Background(), string(evtPayload))
+	assert.Error(t, err)
+}
+
 func TestEventBusBridgePublishesToBareTopic(t *testing.T) {
 	c := fakeContainer()
 	c.EventBus.Subscribe(contract.EventUserCreated, func(payload interface{}) {
