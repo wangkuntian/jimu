@@ -410,6 +410,11 @@ func (h *ClientHub) SendToUser(userID uint64, msg *WSMessage) {
 	h.broadcastToChannel(channel, msg)
 }
 
+// BroadcastToChannel 广播消息到指定频道
+func (h *ClientHub) BroadcastToChannel(channel string, msg *WSMessage) {
+	h.broadcastToChannel(channel, msg)
+}
+
 // SendToUsers 发送消息给多个用户
 func (h *ClientHub) SendToUsers(userIDs []uint64, msg *WSMessage) {
 	for _, id := range userIDs {

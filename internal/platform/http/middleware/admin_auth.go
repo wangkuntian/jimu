@@ -8,30 +8,36 @@ import (
 )
 
 // AdminAuth 管理员权限校验中间件
-// 检查用户是否拥有 admin scope
+// 前置：AuthMiddleware 设置 user_id，AuthorizationMiddleware 设置 roles 并按 Casbin 校验。
+// 此处检查用户是否拥有管理员角色（角色名来自 DB，seed 默认"超级管理员"）。
 func AdminAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 从 context 获取用户 scopes（由 JWT 中间件设置）
-		scopes, ok := c.Get("scopes")
-		if !ok {
-			response.Fail(c, errors.New(errors.CodeForbidden, "admin access required"))
+		userID, exists := c.Get("user_id")
+		if !exists || userID == nil {
+			response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
 			c.Abort()
 			return
 		}
 
-		// 检查是否有 admin scope
-		hasAdmin := false
-		if scopeList, ok := scopes.([]string); ok {
-			for _, s := range scopeList {
-				if s == "admin" || s == "super_admin" {
-					hasAdmin = true
+		roles, exists := c.Get("roles")
+		if !exists || roles == nil {
+			response.Fail(c, errors.New(errors.CodeForbidden, "admin role required"))
+			c.Abort()
+			return
+		}
+
+		isAdmin := false
+		if roleList, ok := roles.([]string); ok {
+			for _, role := range roleList {
+				if role == "超级管理员" || role == "admin" {
+					isAdmin = true
 					break
 				}
 			}
 		}
 
-		if !hasAdmin {
-			response.Fail(c, errors.New(errors.CodeForbidden, "admin access required"))
+		if !isAdmin {
+			response.Fail(c, errors.New(errors.CodeForbidden, "admin role required"))
 			c.Abort()
 			return
 		}

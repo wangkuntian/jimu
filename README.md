@@ -40,6 +40,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **Docker Secrets** — 敏感配置通过文件注入（`_FILE` 后缀）
 - **K8s 部署** — Deployment/Service/HPA/Ingress manifests
 - **CI/CD** — GitHub Actions + Dependabot 自动化 + 测试覆盖率门禁
+- **安全扫描** — CI 执行 govulncheck 依赖漏洞扫描、Trivy 镜像扫描、SBOM 生成与镜像 smoke test
 - **静态检查** — golangci-lint + pre-commit 钩子（fmt / vet / lint）
 - **追踪关联** — 访问日志自动注入 trace_id / span_id，关联 OpenTelemetry 追踪
 
@@ -126,6 +127,19 @@ docker compose run --rm -e ADMIN_PASSWORD=admin123 server ./jimu seed
 - Management: `http://127.0.0.1:9090/livez`、`/readyz`、`/metrics`
 - Adminer: `docker compose --profile dev up -d adminer` 后访问 http://127.0.0.1:8081
 
+### 可观测性（可选）
+
+启动 Prometheus + Grafana 监控栈（抓取 Management `/metrics` 端点）：
+
+```bash
+make compose-observability   # 或 docker compose --profile observability up -d
+```
+
+- Prometheus: http://127.0.0.1:9093
+- Grafana: http://127.0.0.1:3000 （默认账号 admin / admin，用 GRAFANA_ADMIN_PASSWORD 覆盖）
+
+停止：`make compose-observability-down`。
+
 ## CLI 工具
 
 ```bash
@@ -157,13 +171,18 @@ jimu/
 │   └── app.prod.yaml           # 生产环境配置
 ├── conf/
 │   └── rbac_model.conf         # Casbin RBAC 模型
-├── deploy/k8s/                 # Kubernetes manifests
-│   ├── configmap.yaml
-│   ├── secret.yaml
-│   ├── deployment.yaml
-│   ├── service.yaml
-│   ├── hpa.yaml
-│   └── ingress.yaml
+├── deploy/
+│   ├── k8s/                     # Kubernetes manifests
+│   │   ├── configmap.yaml
+│   │   ├── secret.yaml
+│   │   ├── deployment.yaml
+│   │   ├── service.yaml
+│   │   ├── hpa.yaml
+│   │   └── ingress.yaml
+│   ├── prometheus.yml           # Prometheus 抓取配置（observability profile）
+│   └── grafana/
+│       ├── dashboard.json       # Jimu 监控面板
+│       └── provisioning/        # Grafana 数据源 + 面板自动加载
 ├── docs/openapi/               # Swagger 生成的 API 文档
 ├── migrations/                 # Goose 迁移脚本
 ├── secrets/                    # Docker Secrets（gitignore）
@@ -403,6 +422,8 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `make compose-logs` | 查看应用日志 |
 | `make compose-migrate` | Compose 环境执行迁移 |
 | `make compose-seed` | Compose 环境插入初始数据 |
+| `make compose-observability` | 启动监控栈（Prometheus + Grafana） |
+| `make compose-observability-down` | 停止监控栈 |
 | `make release-check` | 发布前检查 |
 | `make hooks` | 安装 pre-commit 钩子 |
 

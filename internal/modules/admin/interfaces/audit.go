@@ -1,28 +1,32 @@
 package interfaces
 
 import (
-	"jimu/internal/modules/admin/application"
+	auditdomain "jimu/internal/modules/audit/domain"
+	auditinfra "jimu/internal/modules/audit/infrastructure"
 	"jimu/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // AdminAuditHandler 审计日志 handler
+// 复用 audit 模块仓储，保证与 audit_logs 表实际 schema（006 迁移）一致
 type AdminAuditHandler struct {
-	service *application.AdminAuditService
+	repo auditdomain.AuditRepository
 }
 
 // NewAdminAuditHandler 创建审计日志 handler
-func NewAdminAuditHandler(service *application.AdminAuditService) *AdminAuditHandler {
-	return &AdminAuditHandler{service: service}
+func NewAdminAuditHandler(db *gorm.DB) *AdminAuditHandler {
+	return &AdminAuditHandler{repo: auditinfra.NewMysqlAuditRepository(db)}
 }
 
 // List 获取审计日志列表
 func (h *AdminAuditHandler) List(c *gin.Context) {
-	logs, total, err := h.service.ListAuditLogs(c.Request.Context(), 0, 20, nil)
+	p := paginationFromQuery(c)
+	logs, total, err := h.repo.List(c.Request.Context(), p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	response.Page(c, logs, total, 1, 20)
+	response.Page(c, logs, total, p.Page, p.PageSize)
 }

@@ -42,6 +42,13 @@ var outboxTypeConverters = map[string]func(json.RawMessage) (interface{}, error)
 		}
 		return e, nil
 	},
+	contract.EventUserLoggedIn: func(p json.RawMessage) (interface{}, error) {
+		var e contract.UserLoggedInEvent
+		if err := json.Unmarshal(p, &e); err != nil {
+			return nil, err
+		}
+		return e, nil
+	},
 }
 
 // bridgeFn 反序列化 outbox 载荷并发布强类型事件到全局业务主题（裸主题）
@@ -150,6 +157,23 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			}
 		})
 	}
+
+	// 注册配置热更新处理器
+	container.EventBus.Subscribe("config.updated", func(payload interface{}) {
+		m, ok := payload.(map[string]string)
+		if !ok {
+			container.Logger.Warn("config.updated payload type mismatch")
+			return
+		}
+		switch m["key"] {
+		case "log_level":
+			if err := container.Logger.SetLevel(m["value"]); err != nil {
+				container.Logger.Error("apply config.updated log_level failed", "error", err.Error())
+				return
+			}
+		}
+		container.Logger.Info("config updated applied", "key", m["key"], "value", m["value"])
+	})
 
 	// 注册各模块的定时任务
 	if container.JobRegistry != nil {

@@ -352,6 +352,10 @@ func applyEnvOverrides(cfg *Config) {
 			cfg.Redis.DB = db
 		}
 	}
+	// Management 端点监听地址（容器内需暴露给 Prometheus 抓取）
+	if v := os.Getenv("MANAGEMENT_HOST"); v != "" {
+		cfg.Management.Host = v
+	}
 }
 
 // getEnvOrFile 优先从 _FILE 指向的文件读取，其次直接读取环境变量

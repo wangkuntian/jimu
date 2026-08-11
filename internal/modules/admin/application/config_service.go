@@ -2,10 +2,9 @@ package application
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
-	"jimu/internal/platform/event"
+	"jimu/internal/contract"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -13,22 +12,13 @@ import (
 // AdminConfigService 配置热更新服务
 type AdminConfigService struct {
 	redis    *redis.Client
-	eventBus *event.EventBus
+	eventBus contract.EventBus
 	prefix   string
 }
 
 // NewAdminConfigService 创建配置热更新服务
-func NewAdminConfigService(rdb *redis.Client, eb *event.EventBus, prefix string) *AdminConfigService {
+func NewAdminConfigService(rdb *redis.Client, eb contract.EventBus, prefix string) *AdminConfigService {
 	return &AdminConfigService{redis: rdb, eventBus: eb, prefix: prefix}
-}
-
-// GetConfig 获取单个配置
-func (s *AdminConfigService) GetConfig(ctx context.Context, key string) (string, error) {
-	val, err := s.redis.Get(ctx, s.configKey(key)).Result()
-	if err != nil {
-		return "", err
-	}
-	return val, nil
 }
 
 // GetAllConfig 获取所有配置
@@ -60,6 +50,18 @@ func (s *AdminConfigService) UpdateConfig(ctx context.Context, key, value string
 	return nil
 }
 
+// ReloadConfig 从 Redis 重读全部配置并发布事件，触发各节点应用
+func (s *AdminConfigService) ReloadConfig(ctx context.Context) error {
+	all, err := s.GetAllConfig(ctx)
+	if err != nil {
+		return err
+	}
+	for key, value := range all {
+		s.eventBus.Publish("config.updated", map[string]string{"key": key, "value": value})
+	}
+	return nil
+}
+
 // IsValidKey 验证配置 key 是否合法
 func (s *AdminConfigService) IsValidKey(key string) bool {
 	allowed := map[string]bool{
@@ -73,10 +75,4 @@ func (s *AdminConfigService) IsValidKey(key string) bool {
 
 func (s *AdminConfigService) configKey(key string) string {
 	return fmt.Sprintf("jimu:config:%s", key)
-}
-
-// ToJSON JSON 序列化辅助
-func (s *AdminConfigService) ToJSON(v interface{}) string {
-	b, _ := json.Marshal(v)
-	return string(b)
 }

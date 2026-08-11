@@ -34,9 +34,11 @@ type CronScheduler struct {
 	store   Store
 	lock    *redis.Lock // 多实例协调（可选）
 
-	mu     sync.RWMutex
-	jobs   map[string]*JobInfo // id -> job info
-	byName map[string]string   // name -> id
+	mu        sync.RWMutex
+	jobs      map[string]*JobInfo // id -> job info
+	byName    map[string]string   // name -> id
+	cmdByID   map[string]func()   // id -> 原始命令（手动触发用）
+	entryByID map[string]cron.EntryID
 }
 
 // New 创建内存调度器（store 默认 MemoryStore，不持久化）
@@ -52,13 +54,15 @@ func NewWithStore(log *logger.Logger, store Store, lock *redis.Lock) *CronSchedu
 	))
 
 	return &CronScheduler{
-		cron:   c,
-		logger: log,
-		errors: make(chan error, 16),
-		jobs:   make(map[string]*JobInfo),
-		byName: make(map[string]string),
-		store:  store,
-		lock:   lock,
+		cron:      c,
+		logger:    log,
+		errors:    make(chan error, 16),
+		jobs:      make(map[string]*JobInfo),
+		byName:    make(map[string]string),
+		cmdByID:   make(map[string]func()),
+		entryByID: make(map[string]cron.EntryID),
+		store:     store,
+		lock:      lock,
 	}
 }
 
@@ -90,6 +94,8 @@ func (s *CronScheduler) AddNamedFunc(id, name, spec string, cmd func()) error {
 	s.mu.Lock()
 	s.jobs[id] = info
 	s.byName[name] = id
+	s.cmdByID[id] = cmd
+	s.entryByID[id] = entryID
 	s.entries = append(s.entries, entryID)
 	s.mu.Unlock()
 	return nil
@@ -136,6 +142,67 @@ func (s *CronScheduler) recordRun(info *JobInfo, cmd func()) {
 		info.LastError = ""
 	}()
 	s.logger.Debug("job completed", "name", info.Name, "duration", time.Since(start))
+}
+
+// TriggerJob 手动触发任务（不依赖 cron 调度，立即执行）
+func (s *CronScheduler) TriggerJob(ctx context.Context, id string) error {
+	s.mu.RLock()
+	info, ok := s.jobs[id]
+	cmd := s.cmdByID[id]
+	s.mu.RUnlock()
+	if !ok || cmd == nil {
+		return fmt.Errorf("job %q not found", id)
+	}
+	if !info.Enabled {
+		return fmt.Errorf("job %q disabled", id)
+	}
+	// 与 cron 触发共用 recordRun，保证状态追踪一致
+	go s.recordRun(info, cmd)
+	return nil
+}
+
+// SetEnabled 暂停/恢复任务
+// 暂停：从 cron 移除该 entry；恢复：按保存的 spec 与命令重新注册
+func (s *CronScheduler) SetEnabled(ctx context.Context, id string, enabled bool) error {
+	s.mu.Lock()
+	info, ok := s.jobs[id]
+	if !ok {
+		s.mu.Unlock()
+		return fmt.Errorf("job %q not found", id)
+	}
+	cmd := s.cmdByID[id]
+	s.mu.Unlock()
+
+	info.Enabled = enabled
+	if !enabled {
+		s.mu.Lock()
+		entryID, hasEntry := s.entryByID[id]
+		if hasEntry {
+			s.cron.Remove(entryID)
+			delete(s.entryByID, id)
+		}
+		s.mu.Unlock()
+		return nil
+	}
+
+	// 恢复：重新注册（若 entry 已移除）
+	s.mu.RLock()
+	_, hasEntry := s.entryByID[id]
+	s.mu.RUnlock()
+	if hasEntry || cmd == nil {
+		return nil // 仍注册中，无需操作
+	}
+	entryID, err := s.cron.AddFunc(info.Cron, func() {
+		s.recordRun(info, cmd)
+	})
+	if err != nil {
+		return fmt.Errorf("re-add job %q: %w", id, err)
+	}
+	s.mu.Lock()
+	s.entryByID[id] = entryID
+	s.entries = append(s.entries, entryID)
+	s.mu.Unlock()
+	return nil
 }
 
 // Jobs 返回所有注册任务的信息
@@ -198,9 +265,11 @@ func (s *CronScheduler) Errors() <-chan error {
 	return s.errors
 }
 
-// EntryCount 返回已注册任务数量
+// EntryCount 返回已注册且启用的任务数量
 func (s *CronScheduler) EntryCount() int {
-	return len(s.entries)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.entryByID)
 }
 
 // 确保 CronScheduler 实现了所需接口

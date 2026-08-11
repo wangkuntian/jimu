@@ -12,17 +12,47 @@ import (
 
 // AdminJobHandler 任务队列 handler
 type AdminJobHandler struct {
-	jobRepo domain.JobRepository
+	jobRepo  domain.JobRepository
+	deadRepo domain.DeadLetterRepository
 }
 
 // NewAdminJobHandler 创建任务队列 handler
-func NewAdminJobHandler(jobRepo domain.JobRepository) *AdminJobHandler {
-	return &AdminJobHandler{jobRepo: jobRepo}
+func NewAdminJobHandler(jobRepo domain.JobRepository, deadRepo domain.DeadLetterRepository) *AdminJobHandler {
+	return &AdminJobHandler{jobRepo: jobRepo, deadRepo: deadRepo}
 }
 
 // Submit 提交任务
 func (h *AdminJobHandler) Submit(c *gin.Context) {
-	response.OK(c, gin.H{"job_id": "pending"})
+	var req struct {
+		Type        string `json:"type" binding:"required"`
+		Payload     string `json:"payload"`
+		Priority    int    `json:"priority"`
+		MaxAttempts int    `json:"max_attempts"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	job := &domain.Job{
+		Type:     req.Type,
+		Payload:  req.Payload,
+		Status:   domain.JobStatusPending,
+		Priority: req.Priority,
+		Attempts: 0,
+	}
+	if req.Priority == 0 {
+		job.Priority = 5
+	}
+	if req.MaxAttempts > 0 {
+		job.MaxAttempts = req.MaxAttempts
+	} else {
+		job.MaxAttempts = 3
+	}
+	if err := h.jobRepo.Create(c.Request.Context(), job); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"job_id": job.ID})
 }
 
 // List 获取任务列表
@@ -55,17 +85,57 @@ func (h *AdminJobHandler) Get(c *gin.Context) {
 	response.OK(c, job)
 }
 
-// Retry 手动重试
+// Retry 手动重试：重置任务为 pending，清除错误
 func (h *AdminJobHandler) Retry(c *gin.Context) {
-	response.OK(c, gin.H{"retried": true})
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
+		return
+	}
+	job, err := h.jobRepo.FindByID(c.Request.Context(), id)
+	if err != nil {
+		response.Fail(c, errors.Wrap(errors.CodeNotFound, "job not found", err))
+		return
+	}
+	job.Status = domain.JobStatusPending
+	job.Attempts = 0
+	job.Error = ""
+	if err := h.jobRepo.Update(c.Request.Context(), job); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"retried": id})
 }
 
 // ListDeadLetters 获取死信列表
 func (h *AdminJobHandler) ListDeadLetters(c *gin.Context) {
-	response.Page(c, []interface{}{}, 0, 1, 20)
+	if h.deadRepo == nil {
+		response.Fail(c, errors.New(errors.CodeInternalError, "dead letter repository not configured"))
+		return
+	}
+	resolved := c.Query("resolved") == "true"
+	letters, total, err := h.deadRepo.List(c.Request.Context(), 0, 20, resolved)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.Page(c, letters, total, 1, 20)
 }
 
 // ResolveDeadLetter 处理死信
 func (h *AdminJobHandler) ResolveDeadLetter(c *gin.Context) {
-	response.OK(c, gin.H{"resolved": true})
+	if h.deadRepo == nil {
+		response.Fail(c, errors.New(errors.CodeInternalError, "dead letter repository not configured"))
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
+		return
+	}
+	if err := h.deadRepo.MarkResolved(c.Request.Context(), id); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"resolved": id})
 }

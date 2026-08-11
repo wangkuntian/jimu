@@ -32,7 +32,32 @@ func (h *AdminAPIKeyHandler) List(c *gin.Context) {
 
 // Create 创建 API Key（返回明文，仅此一次）
 func (h *AdminAPIKeyHandler) Create(c *gin.Context) {
-	response.OK(c, gin.H{"key": "jimu_xxxx", "message": "store this key safely - it won't be shown again"})
+	var req struct {
+		Name      string   `json:"name" binding:"required"`
+		Scopes    []string `json:"scopes"`
+		ExpiresIn int      `json:"expires_in"` // days, 0 = no expiry
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	createdBy, _ := c.Get("user_id")
+	byID, _ := createdBy.(uint64)
+	plaintext, key, err := h.service.CreateKey(c.Request.Context(), application.CreateKeyInput{
+		Name:      req.Name,
+		Scopes:    req.Scopes,
+		ExpiresIn: req.ExpiresIn,
+		CreatedBy: byID,
+	})
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{
+		"key":     plaintext,
+		"id":      key.ID,
+		"message": "store this key safely - it won't be shown again",
+	})
 }
 
 // Get 获取 API Key 详情
