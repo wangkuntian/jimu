@@ -143,7 +143,7 @@ oauth:
 
 # 验证码配置
 captcha:
-  enabled: true            # 生产环境建议启用登录/注册验证码
+  enabled: false           # 生产环境待前端验证码流程就绪后再开启；开启后登录/注册需携带 captcha_id/captcha_code
   ttl_min: 5               # 验证码有效期（分钟）
 
 # OpenTelemetry 追踪配置
