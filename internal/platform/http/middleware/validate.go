@@ -2,10 +2,10 @@ package middleware
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 
 	appErrs "jimu/internal/shared/errors"
+	"jimu/internal/shared/i18n"
 	"jimu/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
@@ -24,8 +24,9 @@ type fieldError struct {
 func ValidateJSON(dst interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if err := c.ShouldBindJSON(dst); err != nil {
-			details := translateValidationDetails(err)
-			msg := "请求参数错误"
+			locale := localeOf(c)
+			details := translateValidationDetails(err, locale)
+			msg := i18n.T("invalid_param", locale)
 			if len(details) > 0 {
 				msg = details[0].Message
 			}
@@ -44,8 +45,9 @@ func ValidateJSON(dst interface{}) gin.HandlerFunc {
 func ValidateQuery(dst interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if err := c.ShouldBindQuery(dst); err != nil {
-			details := translateValidationDetails(err)
-			msg := "请求参数错误"
+			locale := localeOf(c)
+			details := translateValidationDetails(err, locale)
+			msg := i18n.T("invalid_param", locale)
 			if len(details) > 0 {
 				msg = details[0].Message
 			}
@@ -58,55 +60,68 @@ func ValidateQuery(dst interface{}) gin.HandlerFunc {
 	}
 }
 
+// localeOf 读取 gin context 中的语言，缺省 zh
+func localeOf(c *gin.Context) string {
+	if l := c.GetString("locale"); l != "" {
+		return l
+	}
+	return i18n.LangZH
+}
+
 // translateValidationDetails 将 validator 错误翻译为字段级错误列表
-func translateValidationDetails(err error) []fieldError {
+func translateValidationDetails(err error, locale string) []fieldError {
 	var verr validator.ValidationErrors
 	if errors.As(err, &verr) {
 		details := make([]fieldError, 0, len(verr))
 		for _, e := range verr {
 			details = append(details, fieldError{
 				Field:   e.Field(),
-				Message: translateValidationMessage(e),
+				Message: translateValidationMessage(e, locale),
 			})
 		}
 		return details
 	}
 	if strings.Contains(err.Error(), "unexpected") || strings.Contains(err.Error(), "invalid character") {
-		return []fieldError{{Field: "body", Message: "请求体格式错误，请检查 JSON 格式"}}
+		return []fieldError{{Field: "body", Message: i18n.T("validation_body_json", locale)}}
 	}
 	return nil
 }
 
-// translateValidationMessage 将单个 validator 字段错误翻译为中文友好消息
-// 注意：生产环境应使用 i18n.T 根据请求语言返回对应消息
-func translateValidationMessage(e validator.FieldError) string {
+// translateValidationMessage 将单个 validator 字段错误按语言翻译为友好消息
+func translateValidationMessage(e validator.FieldError, locale string) string {
 	field := e.Field()
+	key := "validation_default"
 	switch e.Tag() {
 	case "required":
-		return fmt.Sprintf("%s is required", field)
+		key = "validation_required"
 	case "min":
-		return fmt.Sprintf("%s must be at least %s characters", field, e.Param())
+		key = "validation_min"
 	case "max":
-		return fmt.Sprintf("%s must be at most %s characters", field, e.Param())
+		key = "validation_max"
 	case "email":
-		return fmt.Sprintf("%s is not a valid email", field)
+		key = "validation_email"
 	case "len":
-		return fmt.Sprintf("%s must be %s characters", field, e.Param())
+		key = "validation_len"
 	case "gte":
-		return fmt.Sprintf("%s must be greater than or equal to %s", field, e.Param())
+		key = "validation_gte"
 	case "lte":
-		return fmt.Sprintf("%s must be less than or equal to %s", field, e.Param())
+		key = "validation_lte"
 	case "oneof":
-		return fmt.Sprintf("%s must be one of: %s", field, strings.ReplaceAll(e.Param(), " ", ", "))
+		return i18n.Tf("validation_oneof", locale, field, strings.ReplaceAll(e.Param(), " ", ", "))
 	case "mobile":
-		return fmt.Sprintf("%s is not a valid mobile number", field)
+		key = "validation_mobile"
 	case "password":
-		return fmt.Sprintf("%s must be 8-32 characters with letters and numbers", field)
+		key = "validation_password"
 	case "username":
-		return fmt.Sprintf("%s must be 4-20 characters (letters, numbers, underscore)", field)
+		key = "validation_username"
 	case "idcard":
-		return fmt.Sprintf("%s is not a valid ID card number", field)
+		key = "validation_idcard"
 	default:
-		return fmt.Sprintf("%s validation failed: %s", field, e.Tag())
+		return i18n.Tf("validation_default", locale, field, e.Tag())
 	}
+	// required 只有一个占位符（字段名）；其余规则带参数
+	if key == "validation_required" {
+		return i18n.Tf(key, locale, field)
+	}
+	return i18n.Tf(key, locale, field, e.Param())
 }

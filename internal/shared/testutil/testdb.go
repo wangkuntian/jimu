@@ -1,7 +1,13 @@
 package testutil
 
 import (
+	"context"
 	"fmt"
+	"net"
+	"os"
+	"strconv"
+	"testing"
+	"time"
 
 	"jimu/internal/config"
 	"jimu/internal/platform/db"
@@ -27,6 +33,66 @@ func NewTestDB(cfg config.DBConfig) (*TestDB, error) {
 	}
 
 	return &TestDB{DB: gdb}, nil
+}
+
+// mysqlEnvDBConfig 从环境变量读取 MySQL 测试配置（CI 通过 services.mariadb 提供）
+func mysqlEnvDBConfig() config.DBConfig {
+	cfg := config.DBConfig{
+		Host:     os.Getenv("DB_HOST"),
+		Port:     3306,
+		User:     os.Getenv("DB_USER"),
+		Password: os.Getenv("DB_PASSWORD"),
+		Database: os.Getenv("DB_NAME"),
+	}
+	if cfg.Host == "" {
+		cfg.Host = "127.0.0.1"
+	}
+	if cfg.User == "" {
+		cfg.User = "root"
+	}
+	if cfg.Database == "" {
+		cfg.Database = "jimu_test"
+	}
+	if p := os.Getenv("DB_PORT"); p != "" {
+		if n, err := strconv.Atoi(p); err == nil {
+			cfg.Port = n
+		}
+	}
+	return cfg
+}
+
+// mysqlReachable 探测 MySQL 端口是否可连接
+func mysqlReachable(host string, port int) bool {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, port), 2*time.Second)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
+// SkipUnlessMysql 返回真实 MySQL 测试连接；数据库不可达时跳过测试。
+// 供 env-gated 集成测试使用：CI 的 mariadb service 满足条件，本地无 DB 时自动跳过。
+func SkipUnlessMysql(t *testing.T) *TestDB {
+	t.Helper()
+	cfg := mysqlEnvDBConfig()
+	if !mysqlReachable(cfg.Host, cfg.Port) {
+		t.Skipf("mysql %s:%d unreachable; skipping integration test", cfg.Host, cfg.Port)
+	}
+	tdb, err := NewTestDB(cfg)
+	if err != nil {
+		t.Skipf("connect mysql failed: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	sqlDB, err := tdb.DB.DB()
+	if err != nil {
+		t.Skipf("get sql.DB failed: %v", err)
+	}
+	if err := sqlDB.PingContext(ctx); err != nil {
+		t.Skipf("mysql ping failed: %v", err)
+	}
+	return tdb
 }
 
 // NewTestDBWithPool 创建带连接池配置的测试数据库连接

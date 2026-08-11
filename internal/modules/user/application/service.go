@@ -37,24 +37,6 @@ func NewUserService(repo domain.UserRepository, cache cache.Cache, deps ...inter
 
 const userCacheTTL = 5 * time.Minute
 
-// TenantIDFromContext 从 context 读取租户 ID
-func TenantIDFromContext(ctx context.Context) string {
-	if t, ok := ctx.Value(tenantContextKey{}).(string); ok {
-		return t
-	}
-	return ""
-}
-
-// WithTenantID 将租户 ID 注入 context
-func WithTenantID(ctx context.Context, tenantID string) context.Context {
-	if tenantID != "" {
-		return context.WithValue(ctx, tenantContextKey{}, tenantID)
-	}
-	return ctx
-}
-
-type tenantContextKey struct{}
-
 func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserResponse, error) {
 	existing, err := s.repo.FindByUsername(ctx, req.Username)
 	if err == nil && existing != nil {
@@ -73,7 +55,6 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserR
 		Username: req.Username,
 		Password: string(hashedPassword),
 		Status:   1,
-		TenantID: TenantIDFromContext(ctx),
 	}
 	if err := s.repo.Create(ctx, user); err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to create user", err)
@@ -135,18 +116,6 @@ func (s *UserService) List(ctx context.Context, p pagination.Pagination) ([]User
 	if err != nil {
 		return nil, 0, errors.Wrap(errors.CodeInternalError, "failed to list users", err)
 	}
-
-	// 租户过滤：若请求带有租户 ID，仅返回该租户的用户
-	tenantID := TenantIDFromContext(ctx)
-	if tenantID != "" {
-		filtered := make([]domain.User, 0, len(users))
-		for _, u := range users {
-			if u.TenantID == tenantID {
-				filtered = append(filtered, u)
-			}
-		}
-		return ToUserResponses(filtered), int64(len(filtered)), nil
-	}
 	return ToUserResponses(users), total, nil
 }
 
@@ -185,7 +154,15 @@ func (s *UserService) Update(ctx context.Context, id uint64, req UpdateUserReque
 }
 
 func (s *UserService) Delete(ctx context.Context, id uint64) error {
-	if err := s.repo.Delete(ctx, id); err != nil {
+	// 先加载再删除，未找到映射为 CodeNotFound
+	user, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.Wrap(errors.CodeNotFound, "user not found", err)
+		}
+		return errors.Wrap(errors.CodeInternalError, "failed to get user", err)
+	}
+	if err := s.repo.Delete(ctx, user.ID); err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to delete user", err)
 	}
 	s.invalidateUserCache(ctx, id)

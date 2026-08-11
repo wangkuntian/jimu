@@ -13,8 +13,8 @@ spec:
       rules:
         - alert: JimuHighErrorRate
           expr: |
-            sum(rate(http_requests_total{job="{{ .Release.Name }}",status=~"5.."}[5m]))
-            / sum(rate(http_requests_total{job="{{ .Release.Name }}"}[5m])) > 0.05
+            sum(rate(jimu_http_requests_total{job="{{ .Release.Name }}",status=~"5.."}[5m]))
+            / sum(rate(jimu_http_requests_total{job="{{ .Release.Name }}"}[5m])) > 0.05
           for: 5m
           labels:
             severity: critical
@@ -24,7 +24,7 @@ spec:
 
         - alert: JimuHighLatency
           expr: |
-            histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="{{ .Release.Name }}"}[5m])) by (le)) > 1
+            histogram_quantile(0.95, sum(rate(jimu_http_request_duration_seconds_bucket{job="{{ .Release.Name }}"}[5m])) by (le)) > 1
           for: 5m
           labels:
             severity: warning
@@ -51,7 +51,7 @@ spec:
 
         - alert: JimuDBPoolHigh
           expr: |
-            jimu_db_connections_in_use / jimu_db_connections_max > 0.8
+            jimu_db_in_use_connections / jimu_db_max_open_connections > 0.8
           for: 5m
           labels:
             severity: warning

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	appErrs "jimu/internal/shared/errors"
+	"jimu/internal/shared/i18n"
 
 	"github.com/gin-gonic/gin"
 )
@@ -58,13 +59,40 @@ func FailWithDetails(c *gin.Context, err error, details interface{}) {
 	failWithDetails(c, err, details)
 }
 
+// codeToKey 错误码 → i18n key
+var codeToKey = map[int]string{
+	appErrs.CodeInvalidParam:       "invalid_param",
+	appErrs.CodeUnauthorized:       "unauthorized",
+	appErrs.CodeForbidden:          "forbidden",
+	appErrs.CodeNotFound:           "not_found",
+	appErrs.CodeInternalError:      "internal_error",
+	appErrs.CodeInvalidCredentials: "invalid_credentials",
+	appErrs.CodeRateLimited:        "rate_limit_exceeded",
+	appErrs.CodeTimeout:            "timeout",
+	appErrs.CodeConflict:           "conflict",
+	appErrs.CodeUserNotFound:       "user_not_found",
+	appErrs.CodeUserExists:         "user_exists",
+}
+
+// localeFrom 从 gin context 读取语言，缺省 zh
+func localeFrom(c *gin.Context) string {
+	if c != nil {
+		if l := c.GetString("locale"); l != "" {
+			return l
+		}
+	}
+	return i18n.LangZH
+}
+
 func failWithDetails(c *gin.Context, err error, details interface{}) {
 	var appErr *appErrs.AppError
 	if errors.As(err, &appErr) {
-		message := appErr.Message
-		if appErr.Code == appErrs.CodeInternalError {
-			message = "internal error"
+		// 内部错误隐藏具体原因，只返回翻译后的通用消息；其余错误码按 key 翻译
+		key, ok := codeToKey[appErr.Code]
+		if !ok {
+			key = "internal_error"
 		}
+		message := i18n.T(key, localeFrom(c))
 		c.JSON(StatusForCode(appErr.Code), Body{
 			Code:      appErr.Code,
 			Message:   message,
@@ -75,7 +103,7 @@ func failWithDetails(c *gin.Context, err error, details interface{}) {
 	}
 	c.JSON(http.StatusInternalServerError, Body{
 		Code:      appErrs.CodeInternalError,
-		Message:   "internal error",
+		Message:   i18n.T("internal_error", localeFrom(c)),
 		RequestID: requestID(c),
 		Details:   details,
 	})
