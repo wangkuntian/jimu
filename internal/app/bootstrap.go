@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -10,9 +11,70 @@ import (
 	platformhttp "jimu/internal/platform/http"
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/observability"
+	"jimu/internal/platform/outbox"
+	"jimu/internal/platform/queue"
 
 	"github.com/gin-gonic/gin"
 )
+
+// outboxTypeConverters 按事件类型将 outbox 内层 Payload 还原为强类型事件
+var outboxTypeConverters = map[string]func(json.RawMessage) interface{}{
+	contract.EventUserCreated: func(p json.RawMessage) interface{} {
+		var e contract.UserCreatedEvent
+		_ = json.Unmarshal(p, &e)
+		return e
+	},
+	contract.EventUserUpdated: func(p json.RawMessage) interface{} {
+		var e contract.UserUpdatedEvent
+		_ = json.Unmarshal(p, &e)
+		return e
+	},
+	contract.EventUserDeleted: func(p json.RawMessage) interface{} {
+		var e contract.UserDeletedEvent
+		_ = json.Unmarshal(p, &e)
+		return e
+	},
+}
+
+// bridgeFn 反序列化 outbox 载荷并发布强类型事件到全局业务主题（裸主题）
+func bridgeFn(c *Container) queue.WorkerFunc {
+	return func(ctx context.Context, payload string) error {
+		var evt outbox.EventPayload
+		if err := json.Unmarshal([]byte(payload), &evt); err != nil {
+			return fmt.Errorf("unmarshal outbox event: %w", err)
+		}
+		conv, ok := outboxTypeConverters[evt.EventType]
+		if !ok {
+			return fmt.Errorf("no converter for outbox event type: %s", evt.EventType)
+		}
+		c.EventBus.Publish(evt.EventType, conv(evt.Payload))
+		return nil
+	}
+}
+
+// registerOutboxWorkers 注册 MQ 消费端的 outbox 桥接 worker
+func registerOutboxWorkers(c *Container) {
+	for eventType := range outboxTypeConverters {
+		eventType := eventType
+		queue.RegisterWorker("outbox:"+eventType, bridgeFn(c))
+	}
+}
+
+// registerEventBusBridge 订阅全局总线 outbox:* 主题，转强类型后发布到裸业务主题（event_bus 模式）
+func registerEventBusBridge(c *Container) {
+	for eventType := range outboxTypeConverters {
+		eventType := eventType
+		c.EventBus.Subscribe("outbox:"+eventType, func(payload interface{}) {
+			evt, ok := payload.(outbox.EventPayload)
+			if !ok {
+				c.Logger.Error("outbox bridge: unexpected payload type")
+				return
+			}
+			conv := outboxTypeConverters[evt.EventType]
+			c.EventBus.Publish(evt.EventType, conv(evt.Payload))
+		})
+	}
+}
 
 func Bootstrap(container *Container, modules ...contract.Module) (*Application, error) {
 	cfg := container.Config
