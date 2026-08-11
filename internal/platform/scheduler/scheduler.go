@@ -111,7 +111,7 @@ func (s *CronScheduler) RestoreFromStore(ctx context.Context, cmdFactory func(id
 			continue
 		}
 		if err := s.AddNamedFunc(job.ID, job.Name, job.Cron, fn); err != nil {
-			return nil, fmt.Errorf("restore job %q: %w", job.ID, err)
+			return restored, fmt.Errorf("restore job %q: %w", job.ID, err)
 		}
 		restored = append(restored, job.ID)
 	}

@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -127,12 +128,16 @@ func (p *WorkerPool) executeJob(data *JobData) {
 	ctx, cancel := context.WithTimeout(p.ctx, 5*time.Minute)
 	defer cancel()
 
-	_ = p.store.MarkRunning(ctx, data.ID)
+	if err := p.store.MarkRunning(ctx, data.ID); err != nil {
+		log.Printf("queue: mark running job %d: %v", data.ID, err)
+	}
 
 	fn, ok := GetWorker(data.Type)
 	if !ok {
-		_ = p.store.MarkFailed(ctx, data.ID, data.Type, data.Payload,
-			apperrors.New(apperrors.CodeInternalError, "no worker for type: "+data.Type), 0)
+		if err := p.store.MarkFailed(ctx, data.ID, data.Type, data.Payload,
+			apperrors.New(apperrors.CodeInternalError, "no worker for type: "+data.Type), 0); err != nil {
+			log.Printf("queue: mark failed job %d: %v", data.ID, err)
+		}
 		return
 	}
 
@@ -141,9 +146,13 @@ func (p *WorkerPool) executeJob(data *JobData) {
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {
-		_ = p.store.MarkFailed(ctx, data.ID, data.Type, data.Payload, err, duration)
+		if err := p.store.MarkFailed(ctx, data.ID, data.Type, data.Payload, err, duration); err != nil {
+			log.Printf("queue: mark failed job %d: %v", data.ID, err)
+		}
 	} else {
-		_ = p.store.MarkSuccess(ctx, data.ID, duration)
+		if err := p.store.MarkSuccess(ctx, data.ID, duration); err != nil {
+			log.Printf("queue: mark success job %d: %v", data.ID, err)
+		}
 	}
 }
 
