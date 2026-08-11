@@ -20,6 +20,7 @@ jimu 已实现发布端与存储端，但消费/恢复链路未接线：
 | 决策 | 选择 | 理由 |
 |------|------|------|
 | outbox 事件消费后做什么 | 桥接回事件总线 | 与 event_bus 模式行为一致，复用现有 Subscribe，外部服务可消费 MQ |
+| 事件投递路径 | 统一走 outbox（删除 service 直接 PublishAsync，Update/Delete 补写） | 避免 MQ 模式下同一事件双路触发（service 直发 + outbox bridge）导致重复通知 |
 | 消费走 WorkerPool 还是独立循环 | 复用 WorkerPool | 现成消费底座，RegisterWorker 机制已就绪，避免平行机制 |
 | WorkerPool 何时启动 | 仅 `outbox.publisher=mq` 且 `queue.type∈{kafka,rabbitmq}` | Redis 队列单机无跨服务语义，与 outbox_process 定时器重复 |
 | Restore 恢复范围 | 全部内置任务（outbox_process/metrics_collect/cleanup） | 兑现重启恢复核心价值 |
@@ -32,9 +33,11 @@ jimu 已实现发布端与存储端，但消费/恢复链路未接线：
 ```
 outbox.Process → MQPublisher.Publish → queue.Submit(JobData{Type:"outbox:user.created", Payload:json(EventPayload)})
   → WorkerPool.Consume → GetWorker("outbox:user.created") → 桥接 worker
-  → 反序列化 EventPayload → eventBus.Publish("outbox:"+EventType, payload)
-  → user module RegisterEvents 的 Subscribe 处理（发通知/审计等）
+  → 反序列化 EventPayload → 按 EventType 转强类型 → globalBus.Publish(EventType, payload)
+  → user module RegisterEvents（订阅全局总线裸主题）处理（发通知/审计等）
 ```
+
+event_bus 模式（非 MQ）走同一条全局裸主题：bootstrap 注册 `outbox:*` → 全局总线桥接器，`EventBusPublisher` 发布 `outbox:user.created` 后由该桥接器转强类型发全局裸主题。两模式订阅方一致。
 
 ### Scheduler 恢复
 
@@ -68,15 +71,26 @@ bootstrap 启动：
 **`internal/app/bootstrap.go`**
 - 新增 `registerOutboxWorkers(container)`：
   - 遍历已知业务事件类型（contract 常量），`queue.RegisterWorker("outbox:"+t, bridgeFn)`
-  - bridgeFn：反序列化 `outbox.EventPayload` → `container.EventBus.Publish("outbox:"+evt.EventType, payload)`
+  - bridgeFn：反序列化 `outbox.EventPayload` → 按 EventType 转强类型 → `container.EventBus.Publish(evt.EventType, payload)`（裸业务主题）
+- event_bus 模式：新增全局总线桥接器——订阅 `outbox:*` 主题，转强类型后发裸业务主题（复用同一转换表）
 - WorkerPool 启动：若 `container.WorkerPool != nil`，`go WorkerPool.Start()`（纳入 Application 生命周期，Stop 需关闭）
+
+**`internal/modules/user/application/service.go`**
+- `Create`/`Update`/`Delete` 删除 `PublishAsync` 直发
+- `Update`/`Delete` 补写 `outbox.Add`（Update 传 changes 字段，Delete 传 user_id）
+- Create 保留已有 outbox.Add
+
+**`internal/modules/user/module.go`**
+- `RegisterEvents` 由订阅私有总线 `m.eventBus` 改为订阅全局总线 `e`（裸业务主题）；转发 `notification.user.created`/`event.user.deleted` 逻辑保留
 
 **`internal/contract/events.go`**（如需）
 - 已有 `EventUserCreated/Updated/Deleted` 常量，直接复用
 
 ### 事件桥接细节
 
-**类型转换表**：outbox.Add 存的内层 Payload 是强类型事件 JSON（如 `contract.UserCreatedEvent`）。桥接 worker 反序列化 `EventPayload` 后，按 EventType 查转换表还原强类型，再 Publish 到事件总线——保证订阅方类型断言成功。
+**类型转换表**：outbox.Add 存的内层 Payload 是强类型事件 JSON（如 `contract.UserCreatedEvent`）。桥接 worker 反序列化 `EventPayload` 后，按 EventType 查转换表还原强类型，再 Publish 到全局总线**裸业务主题**——保证订阅方类型断言成功。
+
+**发布主题**：发布到全局总线裸业务主题（`user.created`/`user.updated`/`user.deleted`），与 service 原 `PublishAsync` 同主题。user module `RegisterEvents` 由订阅私有总线改为订阅全局总线（global bus 参数直用），转发逻辑保留。
 
 ```go
 // bootstrap.go
@@ -98,28 +112,33 @@ var outboxTypeConverters = map[string]func(json.RawMessage) interface{}{
     },
 }
 
+// bridgeFn 反序列化 outbox 载荷并发布强类型事件到全局业务主题
+func bridgeFn(c *Container) queue.WorkerFunc {
+    return func(ctx context.Context, payload string) error {
+        var evt outbox.EventPayload
+        if err := json.Unmarshal([]byte(payload), &evt); err != nil {
+            return fmt.Errorf("unmarshal outbox event: %w", err)
+        }
+        conv, ok := outboxTypeConverters[evt.EventType]
+        if !ok {
+            return fmt.Errorf("no converter for outbox event type: %s", evt.EventType)
+        }
+        c.EventBus.Publish(evt.EventType, conv(evt.Payload)) // 裸业务主题
+        return nil
+    }
+}
+
 func registerOutboxWorkers(c *Container) {
     for eventType := range outboxTypeConverters {
         eventType := eventType
-        queue.RegisterWorker("outbox:"+eventType, func(ctx context.Context, payload string) error {
-            var evt outbox.EventPayload
-            if err := json.Unmarshal([]byte(payload), &evt); err != nil {
-                return fmt.Errorf("unmarshal outbox event: %w", err)
-            }
-            conv, ok := outboxTypeConverters[evt.EventType]
-            if !ok {
-                return fmt.Errorf("no converter for outbox event type: %s", evt.EventType)
-            }
-            c.EventBus.Publish("outbox:"+evt.EventType, conv(evt.Payload))
-            return nil
-        })
+        queue.RegisterWorker("outbox:"+eventType, bridgeFn(c))
     }
 }
 ```
 
 **架构边界**：platform/queue 层不硬编码业务事件名。worker 注册（业务契约绑定）放装配层 bootstrap，platform 只提供通用 RegisterWorker 机制。
 
-**两种模式行为一致**：event_bus 模式 service.go 直接 `PublishAsync(EventUserCreated, UserCreatedEvent)`；MQ 模式经 outbox → MQ → WorkerPool → 桥接 Publish 同型事件。订阅方收同类型，邮件/审计均触发。
+**两种模式行为一致**：事件统一走 outbox。event_bus 模式 `EventBusPublisher` 发布 `outbox:user.created` → 全局总线 `outbox:*` 桥接器转强类型发裸主题；MQ 模式经 outbox → MQ → WorkerPool → 桥接 worker 发裸主题。两路最终都从 `outbox.EventPayload` 转强类型发全局裸业务主题，订阅方收同类型，邮件/审计均触发且不重复。
 
 ### 条件启动
 
@@ -195,11 +214,14 @@ RestoreFromStore 内部 `AddNamedFunc` 会重复 Save（幂等无害）+ 重复 
 | `job_history_repository_test.go` | Create/ListByJobID（sqlite 内存库，对齐 job_repository 测试模式） |
 | `dead_letter_repository_test.go` | Create/List/MarkResolved（sqlite） |
 | `scheduler_store_test.go` 更新 | TestRestoreFromStore 断言返回值 |
-| 桥接 worker 单测 | 注册 outbox worker → 反序列化 EventPayload → 断言 eventBus 收到强类型事件 |
+| 桥接 worker 单测 | 注册 outbox worker → 反序列化 EventPayload → 断言 eventBus 收到强类型事件（裸业务主题） |
+| 全局总线 `outbox:*` 桥接器单测 | EventBusPublisher 发 `outbox:user.created` → 桥接器转强类型 → 断言裸主题收到 |
+| user service 事件单测 | Create/Update/Delete 不再 PublishAsync，Update/Delete 写 outbox |
 
 ## 风险
 
 - **桥接类型转换**（Task 1 关键风险）：MQ 与 event_bus 行为需一致，桥接需按 EventType 转换强类型。范围比预期大。
+- **事件投递路径改造**：删除 service 直接 PublishAsync、Update/Delete 补写 outbox 属于行为变更，需确保 event_bus 模式（默认）下通知链路不回归（全局总线 `outbox:*` 桥接器补齐）。
 - WorkerPool 生命周期：非 contract.Component，bootstrap 需包装管理优雅停机。
 - Task 2 去重：Restore 返回 id 列表是核心新增逻辑，需测试覆盖。
 - 仓储补全：history/dead_letter 无实现是历史欠账，补全后 WorkerPool 才可构造。
