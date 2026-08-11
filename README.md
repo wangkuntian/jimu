@@ -28,7 +28,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **分布式锁** — Redis 实现的分布式锁（防并发、选主）
 - **文件存储** — 本地/S3/OSS/MinIO 统一接口
 - **通知系统** — 邮件/SMS/WebSocket/Webhook 抽象
-- **Outbox 模式** — 事件发布与数据库事务一致性保证
+- **Outbox 模式** — 事件发布与数据库事务一致性保证，支持 MQ 跨服务发布（`outbox.publisher` 切换）
 - **定时任务** — Cron 调度器（robfig/cron）
 - **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
 - **多租户** — 租户中间件 + 行级数据隔离
@@ -316,6 +316,7 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `auth.refresh_expire_day` | Refresh Token 有效期 (天) | `30`（开发）/ `7`（生产） |
 | `storage.type` | 存储类型 (`local`/`s3`/`oss`/`minio`) | `local` |
 | `queue.type` | 队列类型 (`redis`/`kafka`/`rabbitmq`) | `redis` |
+| `outbox.publisher` | Outbox 发布器类型 (`event_bus`/`mq`) | `event_bus` |
 | `otel.enabled` | 是否启用 OpenTelemetry | `false`（开发）/ `true`（生产） |
 
 ## Makefile 命令
