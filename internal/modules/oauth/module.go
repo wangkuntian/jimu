@@ -26,7 +26,7 @@ func New(db *gorm.DB, rdb *redis.Client, oauthCfg config.OAuthConfig, authCfg co
 	bindingRepo := oauthinfra.NewMySQLBindingRepository(db)
 	jwtUtil := auth.NewWithRotation(authCfg.JWTSecret, authCfg.JWTPreviousSecret, authCfg.Issuer, authCfg.AccessExpireMin, authCfg.RefreshExpireDay)
 	sessionStore := auth.NewRedisSessionStore(rdb)
-	service := oauthapp.NewOAuthService(userRepo, bindingRepo, jwtUtil, sessionStore, buildProviders(oauthCfg), authCfg.AccessExpireMin)
+	service := oauthapp.NewOAuthService(userRepo, bindingRepo, jwtUtil, sessionStore, buildProviders(oauthCfg), rdb, db, authCfg.AccessExpireMin)
 	return &Module{service: service}
 }
 

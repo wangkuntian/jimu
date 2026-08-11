@@ -156,7 +156,7 @@ func registerHTTP(router registerRouter, log moduleLogger, modules ...contract.M
 		}
 	}
 	for _, module := range modules {
-		if len(protected) > 0 && module.Name() != "auth" {
+		if len(protected) > 0 && module.Name() != "auth" && module.Name() != "oauth" {
 			group := router.Group("", protected...)
 			module.RegisterHTTP(group)
 			if log != nil {

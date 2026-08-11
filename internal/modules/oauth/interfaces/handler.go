@@ -23,12 +23,11 @@ func NewOAuthHandler(service *application.OAuthService) *OAuthHandler {
 // @Description  重定向到第三方授权页
 // @Tags         OAuth
 // @Param        provider path string true "提供商 (google/github/wechat)"
-// @Param        state   query string true "防 CSRF 状态"
 // @Success      302
 // @Router       /oauth/{provider}/login [get]
 func (h *OAuthHandler) Login(c *gin.Context) {
 	providerName := c.Param("provider")
-	url, err := h.service.AuthURL(providerName, c.Query("state"))
+	url, _, err := h.service.BeginLogin(c.Request.Context(), providerName)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -47,7 +46,7 @@ func (h *OAuthHandler) Login(c *gin.Context) {
 // @Router       /oauth/{provider}/callback [get]
 func (h *OAuthHandler) Callback(c *gin.Context) {
 	providerName := c.Param("provider")
-	tokenPair, err := h.service.Login(c.Request.Context(), providerName, c.Query("code"))
+	tokenPair, err := h.service.Login(c.Request.Context(), providerName, c.Query("code"), c.Query("state"))
 	if err != nil {
 		response.Fail(c, err)
 		return
