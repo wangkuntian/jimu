@@ -8,6 +8,7 @@ import (
 
 	"jimu/internal/config"
 	"jimu/internal/contract"
+	admininfra "jimu/internal/modules/admin/infrastructure"
 	"jimu/internal/platform/captcha"
 	"jimu/internal/platform/db"
 	"jimu/internal/platform/event"
@@ -45,6 +46,7 @@ type Container struct {
 	Outbox         *outbox.Outbox
 	DBCollector    *observability.DBCollector
 	Captcha        *captcha.Service
+	WorkerPool     *queue.WorkerPool
 }
 
 func (c *Container) Start(context.Context) error { return nil }
@@ -73,6 +75,7 @@ func (c *Container) Stop(ctx context.Context) error {
 
 func NewContainer(cfg *config.Config) (*Container, error) {
 	log := logger.New(cfg.Log)
+	var pendingWorkerPool *queue.WorkerPool
 
 	dbConn, err := db.ConnectWithRetry(cfg.DB, log)
 	if err != nil {
@@ -150,6 +153,20 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 			return nil, fmt.Errorf("init outbox queue: %w", err)
 		}
 		outboxPublisher = outbox.NewMQPublisher(q)
+		if cfg.Queue.Type == string(queue.TypeKafka) || cfg.Queue.Type == string(queue.TypeRabbitMQ) {
+			consumer, ok := q.(queue.Consumer)
+			if !ok {
+				return nil, fmt.Errorf("queue %s does not implement consumer", cfg.Queue.Type)
+			}
+			store := queue.NewMySQLStore(
+				admininfra.NewMysqlJobRepository(dbConn),
+				admininfra.NewMysqlJobHistoryRepository(dbConn),
+				admininfra.NewMysqlDeadLetterRepository(dbConn),
+			)
+			workerPool := queue.NewWorkerPool(queue.DefaultWorkerConfig, consumer, store)
+			// 延迟到 Container 构造后赋值（见 Step 3）
+			pendingWorkerPool = workerPool
+		}
 	default:
 		outboxPublisher = outbox.NewEventBusPublisher(eventBus)
 	}
@@ -181,5 +198,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		Outbox:       outboxProcessor,
 		DBCollector:  dbCollector,
 		Captcha:      captchaSvc,
+		WorkerPool:   pendingWorkerPool,
 	}, nil
 }
