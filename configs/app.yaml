@@ -112,6 +112,10 @@ queue:
 outbox:
   publisher: "event_bus"     # 发布器类型：event_bus（内存事件总线）, mq（消息队列跨服务发布）
 
+# 调度器配置
+scheduler:
+  store: "memory"            # 任务定义存储：memory（内存，不持久化）, mysql（MySQL 持久化）
+
 # OAuth 登录配置（第三方登录，默认关闭；enabled 后需填写 client_id/client_secret）
 oauth:
   providers:

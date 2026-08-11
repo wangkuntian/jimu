@@ -46,6 +46,9 @@ func (c *Config) validateCommon() error {
 	if !contains(validOutboxPublishers, c.Outbox.Publisher) {
 		return fmt.Errorf("invalid outbox.publisher: %q, must be one of %v", c.Outbox.Publisher, validOutboxPublishers)
 	}
+	if !contains(validSchedulerStores, c.Scheduler.Store) {
+		return fmt.Errorf("invalid scheduler.store: %q, must be one of %v", c.Scheduler.Store, validSchedulerStores)
+	}
 	if c.HTTP.Port < 1 || c.HTTP.Port > 65535 {
 		return errors.New("invalid http.port")
 	}

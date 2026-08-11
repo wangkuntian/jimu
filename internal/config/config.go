@@ -32,6 +32,9 @@ const (
 
 	OutboxPublisherEventBus = "event_bus"
 	OutboxPublisherMQ       = "mq"
+
+	SchedulerStoreMemory = "memory"
+	SchedulerStoreMySQL  = "mysql"
 )
 
 var (
@@ -40,6 +43,7 @@ var (
 	validLogFormats       = []string{LogFormatJSON, LogFormatConsole}
 	validQueueTypes       = []string{QueueTypeRedis, QueueTypeKafka, QueueTypeRabbitMQ}
 	validOutboxPublishers = []string{OutboxPublisherEventBus, OutboxPublisherMQ}
+	validSchedulerStores  = []string{SchedulerStoreMemory, SchedulerStoreMySQL}
 )
 
 // QueueConfig 队列配置
@@ -52,6 +56,11 @@ type QueueConfig struct {
 // OutboxConfig Outbox 配置
 type OutboxConfig struct {
 	Publisher string `mapstructure:"publisher"` // 发布器类型：event_bus, mq
+}
+
+// SchedulerConfig 调度器配置
+type SchedulerConfig struct {
+	Store string `mapstructure:"store"` // 任务定义存储类型：memory, mysql
 }
 
 // OAuthProviderConfig 单个 OAuth 提供商配置
@@ -107,6 +116,7 @@ type Config struct {
 	Security   SecurityConfig              `mapstructure:"security"`
 	Queue      QueueConfig                 `mapstructure:"queue"`
 	Outbox     OutboxConfig                `mapstructure:"outbox"`
+	Scheduler  SchedulerConfig             `mapstructure:"scheduler"`
 	OAuth      OAuthConfig                 `mapstructure:"oauth"`
 	Captcha    CaptchaConfig               `mapstructure:"captcha"`
 	OTEL       observability.TracingConfig `mapstructure:"otel"`
