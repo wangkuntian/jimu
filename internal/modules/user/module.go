@@ -58,10 +58,10 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}
 
-// RegisterEvents 注册用户事件处理器
+// RegisterEvents 注册用户事件处理器（订阅全局事件总线的裸业务主题）
 func (m *Module) RegisterEvents(e contract.EventBus) {
-	// 将本地事件总线桥接到全局事件总线
-	m.eventBus.Subscribe(contract.EventUserCreated, func(payload interface{}) {
+	// 订阅全局总线的用户创建事件，桥接到通知系统
+	e.Subscribe(contract.EventUserCreated, func(payload interface{}) {
 		if evt, ok := payload.(contract.UserCreatedEvent); ok {
 			e.Publish(contract.UserCreatedEmailNotification, notification.Message{
 				Channel: notification.ChannelEmail,
@@ -75,7 +75,7 @@ func (m *Module) RegisterEvents(e contract.EventBus) {
 		}
 	})
 
-	m.eventBus.Subscribe(contract.EventUserDeleted, func(payload interface{}) {
+	e.Subscribe(contract.EventUserDeleted, func(payload interface{}) {
 		if evt, ok := payload.(contract.UserDeletedEvent); ok {
 			e.Publish(contract.UserDeletedEventLog, evt)
 		}
