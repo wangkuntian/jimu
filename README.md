@@ -6,6 +6,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 
 - **模块化架构** — Clean Architecture 分层，业务逻辑依赖接口不依赖实现
 - **统一认证** — typed JWT + Redis refresh session + Casbin RBAC v3 权限模型
+- **OAuth 登录** — Google/GitHub/微信第三方登录，`oauth.providers` 配置开关
 - **统一响应** — 标准 `{code, message, data}` 格式 + 分页
 - **多环境配置** — Viper + yaml + 环境变量覆盖，枚举值启动校验
 - **结构化日志** — Zap + lumberjack 自动滚动
@@ -179,6 +180,7 @@ jimu/
 │   │   ├── cache/              # 缓存抽象层
 │   │   ├── logger/             # Zap 日志
 │   │   ├── auth/               # JWT + Casbin + Session
+│   │   ├── oauth/              # OAuth 第三方登录 Provider
 │   │   ├── event/              # 事件总线
 │   │   ├── observability/      # 健康检查 + Metrics + Tracing
 │   │   ├── storage/            # 文件存储抽象
@@ -229,6 +231,34 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
     "access_token": "eyJ...",
     "refresh_token": "eyJ...",
     "expires_in": 1800
+  }
+}
+```
+
+### OAuth 登录
+
+```bash
+# 跳转第三方授权页（浏览器访问，返回 302）
+curl -L "http://localhost:8080/api/v1/oauth/google/login?state=<state>"
+```
+
+回调接口（第三方授权后重定向）：
+
+```bash
+# 第三方授权后回调，签发 JWT（浏览器访问）
+GET /api/v1/oauth/google/callback?code=<code>&state=<state>
+```
+
+响应（与登录相同）：
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "access_token": "eyJ...",
+    "refresh_token": "eyJ...",
+    "expires_in": 3600
   }
 }
 ```
@@ -318,6 +348,10 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `storage.type` | 存储类型 (`local`/`s3`/`oss`/`minio`) | `local` |
 | `queue.type` | 队列类型 (`redis`/`kafka`/`rabbitmq`)，切 Kafka/RabbitMQ 时需保证 broker 可用，否则启动失败 | `redis` |
 | `outbox.publisher` | Outbox 发布器类型 (`event_bus`/`mq`) | `event_bus` |
+| `oauth.providers.{name}.enabled` | 是否启用某 OAuth 提供商 (`google`/`github`/`wechat`) | `false` |
+| `oauth.providers.{name}.client_id` | 提供商应用 Client ID | — |
+| `oauth.providers.{name}.client_secret` | 提供商应用 Client Secret（生产建议环境变量注入） | — |
+| `oauth.providers.{name}.redirect_url` | 授权回调地址 | — |
 | `otel.enabled` | 是否启用 OpenTelemetry | `false`（开发）/ `true`（生产） |
 
 ## Makefile 命令

@@ -12,6 +12,7 @@ import (
 	adminmodule "jimu/internal/modules/admin"
 	auditmodule "jimu/internal/modules/audit"
 	authmodule "jimu/internal/modules/auth"
+	oauthmodule "jimu/internal/modules/oauth"
 	"jimu/internal/modules/permission"
 	"jimu/internal/modules/role"
 	"jimu/internal/modules/user"
@@ -55,6 +56,7 @@ func run() error {
 		permission.New(container.DB),
 		auditmodule.New(container.DB, cfg.Audit, container.Logger),
 		adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, container.Scheduler, container.Storage, container.FeatureFlag),
+		oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth),
 	)
 	if err != nil {
 		_ = container.Stop(context.Background())

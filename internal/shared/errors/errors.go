@@ -7,7 +7,7 @@ import "fmt"
 //
 //	1xxx - 通用错误
 //	2xxx - 用户/认证模块
-//	3xxx - 角色/权限模块
+//	3xxx - OAuth 模块
 //	4xxx - 预留
 //	9xxx - 系统级错误
 //
@@ -44,6 +44,9 @@ const (
 	CodeUserExists      = 2002 // 用户已存在
 	CodeInvalidPassword = 2003 // 密码错误
 	CodeRoleNotFound    = 2004 // 角色不存在
+
+	// OAuth 模块 (3xxx)
+	CodeOAuthProviderNotFound = 3001 // 第三方登录提供商不存在
 )
 
 type AppError struct {
@@ -82,7 +85,7 @@ func HTTPStatus(code int) int {
 		return 401
 	case CodeForbidden:
 		return 403
-	case CodeNotFound, CodeUserNotFound, CodeRoleNotFound:
+	case CodeNotFound, CodeUserNotFound, CodeRoleNotFound, CodeOAuthProviderNotFound:
 		return 404
 	case CodeConflict, CodeUserExists:
 		return 409
@@ -148,5 +151,6 @@ func AllErrorCodes() []ErrorInfo {
 		{CodeUserExists, "用户已存在", 409, "用户"},
 		{CodeInvalidPassword, "密码错误", 401, "用户"},
 		{CodeRoleNotFound, "角色不存在", 404, "角色"},
+		{CodeOAuthProviderNotFound, "第三方登录提供商不存在", 404, "OAuth"},
 	}
 }

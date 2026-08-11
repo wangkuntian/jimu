@@ -54,6 +54,19 @@ type OutboxConfig struct {
 	Publisher string `mapstructure:"publisher"` // 发布器类型：event_bus, mq
 }
 
+// OAuthProviderConfig 单个 OAuth 提供商配置
+type OAuthProviderConfig struct {
+	ClientID     string `mapstructure:"client_id"`
+	ClientSecret string `mapstructure:"client_secret"`
+	RedirectURL  string `mapstructure:"redirect_url"`
+	Enabled      bool   `mapstructure:"enabled"`
+}
+
+// OAuthConfig OAuth 登录配置
+type OAuthConfig struct {
+	Providers map[string]OAuthProviderConfig `mapstructure:"providers"` // 提供商名 -> 配置（google/github/wechat）
+}
+
 // QueueKafkaConfig Kafka 队列配置
 type QueueKafkaConfig struct {
 	Brokers []string `mapstructure:"brokers"`  // broker 地址列表，如 ["kafka:9092"]
@@ -82,6 +95,7 @@ type Config struct {
 	Security   SecurityConfig              `mapstructure:"security"`
 	Queue      QueueConfig                 `mapstructure:"queue"`
 	Outbox     OutboxConfig                `mapstructure:"outbox"`
+	OAuth      OAuthConfig                 `mapstructure:"oauth"`
 	OTEL       observability.TracingConfig `mapstructure:"otel"`
 	// 元数据（非 YAML 配置，运行时注入）
 	Version     string `mapstructure:"-"`

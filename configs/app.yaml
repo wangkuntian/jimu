@@ -112,6 +112,20 @@ queue:
 outbox:
   publisher: "event_bus"     # 发布器类型：event_bus（内存事件总线）, mq（消息队列跨服务发布）
 
+# OAuth 登录配置（第三方登录，默认关闭；enabled 后需填写 client_id/client_secret）
+oauth:
+  providers:
+    google:
+      client_id: ""
+      client_secret: ""
+      redirect_url: "http://localhost:8080/api/v1/oauth/google/callback"
+      enabled: false
+    github:
+      client_id: ""
+      client_secret: ""
+      redirect_url: "http://localhost:8080/api/v1/oauth/github/callback"
+      enabled: false
+
 # 安全头配置（留空则使用默认值）
 security:
   content_type_options: "nosniff"
