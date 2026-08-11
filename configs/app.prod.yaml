@@ -127,6 +127,20 @@ queue:
 outbox:
   publisher: "event_bus"     # 发布器类型：event_bus（内存事件总线）, mq（消息队列跨服务发布）
 
+# OAuth 登录配置（生产默认关闭；enabled 时 client_secret 建议通过环境变量注入）
+oauth:
+  providers:
+    google:
+      client_id: ""
+      client_secret: ""
+      redirect_url: "https://api.example.com/api/v1/oauth/google/callback"
+      enabled: false
+    github:
+      client_id: ""
+      client_secret: ""
+      redirect_url: "https://api.example.com/api/v1/oauth/github/callback"
+      enabled: false
+
 # OpenTelemetry 追踪配置
 otel:
   enabled: true                     # 生产环境启用
