@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/platform/db"
 	platformhttp "jimu/internal/platform/http"
@@ -137,38 +138,30 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			container.Logger.Info("module jobs registered", "name", module.Name())
 		}
 
-		// 注册 Outbox 定时处理（每 10 秒处理一次待发布事件）
+		type jobDef struct {
+			name string
+			spec string
+			fn   func()
+		}
+		jobFns := map[string]jobDef{}
 		if container.Outbox != nil {
-			if err := container.Scheduler.AddNamedFunc("outbox_process", "Process Outbox Events", "@every 10s", func() {
+			jobFns["outbox_process"] = jobDef{name: "Process Outbox Events", spec: "@every 10s", fn: func() {
 				n, err := container.Outbox.Process(context.Background(), 100)
 				if err != nil {
 					container.Logger.Error("outbox process error", "error", err.Error())
 				} else if n > 0 {
 					container.Logger.Debug("outbox processed", "count", n)
 				}
-			}); err != nil {
-				container.Logger.Error("register outbox job failed", "error", err.Error())
-			}
+			}}
 		}
-
-		// 注册 DB 指标收集（每 15 秒收集一次）
 		if container.DBCollector != nil {
-			if err := container.Scheduler.AddNamedFunc("metrics_collect", "Collect DB Metrics", "@every 15s", func() {
+			jobFns["metrics_collect"] = jobDef{name: "Collect DB Metrics", spec: "@every 15s", fn: func() {
 				container.DBCollector.Collect()
 				observability.CollectRuntime()
-			}); err != nil {
-				container.Logger.Error("register metrics job failed", "error", err.Error())
-			}
+			}}
 		}
-
-		// 注册 WebSocket Hub 运行
-		if container.WebSocketHub != nil {
-			go container.WebSocketHub.Run(context.Background())
-		}
-
-		// 注册数据清理 Job（每天凌晨 3 点清理超过 90 天的软删除数据）
 		cleanupSvc := db.NewCleanupService(container.DB, db.DefaultCleanupConfig())
-		if err := container.Scheduler.AddNamedFunc("cleanup", "Data Cleanup", "0 3 * * *", func() {
+		jobFns["cleanup"] = jobDef{name: "Data Cleanup", spec: "0 3 * * *", fn: func() {
 			results, err := cleanupSvc.Run(context.Background())
 			if err != nil {
 				container.Logger.Error("cleanup job failed", "error", err.Error())
@@ -179,12 +172,49 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 					container.Logger.Info("cleanup completed", "table", r.Table, "deleted", r.Deleted)
 				}
 			}
-		}); err != nil {
-			container.Logger.Error("register cleanup job failed", "error", err.Error())
+		}}
+
+		// 注册 WebSocket Hub 运行
+		if container.WebSocketHub != nil {
+			go container.WebSocketHub.Run(context.Background())
+		}
+
+		// 从 store 恢复持久化任务，跳过已恢复 id，防双注册
+		restored, err := container.Scheduler.RestoreFromStore(context.Background(), func(id string) func() {
+			if def, ok := jobFns[id]; ok {
+				return def.fn
+			}
+			return nil
+		})
+		if err != nil {
+			container.Logger.Error("restore scheduled jobs failed", "error", err.Error())
+		}
+		restoredSet := make(map[string]struct{}, len(restored))
+		for _, id := range restored {
+			restoredSet[id] = struct{}{}
+		}
+		for id, def := range jobFns {
+			if _, ok := restoredSet[id]; ok {
+				continue
+			}
+			if err := container.Scheduler.AddNamedFunc(id, def.name, def.spec, def.fn); err != nil {
+				container.Logger.Error("register job failed", "id", id, "error", err.Error())
+			}
 		}
 	}
 
+	// 接线 outbox 事件消费：MQ 模式注册 worker 并启动 WorkerPool；event_bus 模式注册全局总线桥接器
+	switch cfg.Outbox.Publisher {
+	case config.OutboxPublisherMQ:
+		registerOutboxWorkers(container)
+	case config.OutboxPublisherEventBus:
+		registerEventBusBridge(container)
+	}
+
 	components := []contract.Component{container}
+	if container.WorkerPool != nil {
+		components = append(components, workerPoolComponent{pool: container.WorkerPool})
+	}
 	if container.Scheduler != nil {
 		components = append(components, container.Scheduler)
 	}
@@ -195,6 +225,21 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	}
 	components = append(components, management, public)
 	return NewApplication(time.Duration(cfg.HTTP.ShutdownTimeoutSec)*time.Second, components...), nil
+}
+
+// workerPoolComponent 包装 WorkerPool，实现 contract.Component 以纳入应用生命周期
+type workerPoolComponent struct {
+	pool *queue.WorkerPool
+}
+
+func (w workerPoolComponent) Start(context.Context) error {
+	go w.pool.Start()
+	return nil
+}
+
+func (w workerPoolComponent) Stop(context.Context) error {
+	w.pool.Stop()
+	return nil
 }
 
 type moduleLogger interface {

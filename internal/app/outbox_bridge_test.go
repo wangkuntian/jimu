@@ -10,6 +10,7 @@ import (
 	"jimu/internal/platform/event"
 	"jimu/internal/platform/logger"
 	"jimu/internal/platform/outbox"
+	"jimu/internal/platform/queue"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -77,4 +78,14 @@ func TestEventBusBridgePublishesToBareTopic(t *testing.T) {
 		EventType: contract.EventUserCreated,
 		Payload:   payload,
 	})
+}
+
+func TestRegisterOutboxWorkersRegistersAll(t *testing.T) {
+	// queue 包全局 worker map 无导出清理；本测试只断言三个事件类型可注册后 GetWorker 命中，重复运行幂等
+	registerOutboxWorkers(fakeContainer())
+	for _, et := range []string{"outbox:user.created", "outbox:user.updated", "outbox:user.deleted"} {
+		fn, ok := queue.GetWorker(et)
+		assert.True(t, ok, "worker %s not registered", et)
+		assert.NotNil(t, fn)
+	}
 }
