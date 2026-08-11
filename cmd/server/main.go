@@ -26,6 +26,10 @@ import (
 // @securityDefinitions.apikey BearerAuth
 // @in              header
 // @name            Authorization
+
+// version 版本号，通过 ldflags 注入：-ldflags "-X main.version=v0.1.0"
+var version = "dev"
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -40,7 +44,7 @@ func run() error {
 	}
 
 	// 注入元数据
-	cfg.Version = "1.0.0"
+	cfg.Version = version
 	cfg.Environment = os.Getenv("APP_ENV")
 
 	container, err := app.NewContainer(cfg)
@@ -51,11 +55,11 @@ func run() error {
 	application, err := app.Bootstrap(
 		container,
 		user.New(container.DB, *cfg, container.Redis, container.Outbox),
-		authmodule.New(container.DB, container.Redis, cfg.Auth, cfg.HTTP.Mode == config.HTTPModeRelease, container.Captcha, cfg.Captcha),
+		authmodule.New(container.DB, container.Redis, cfg.Auth, cfg.HTTP.Mode == config.HTTPModeRelease, container.Captcha, cfg.Captcha, container.Outbox),
 		role.New(container.DB),
 		permission.New(container.DB),
 		auditmodule.New(container.DB, cfg.Audit, container.Logger),
-		adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, container.Scheduler, container.Storage, container.FeatureFlag),
+		adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, container.Scheduler, container.Storage, container.FeatureFlag, container.EventBus),
 		oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth),
 	)
 	if err != nil {

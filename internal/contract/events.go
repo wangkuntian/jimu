@@ -30,3 +30,9 @@ type UserUpdatedEvent struct {
 type UserDeletedEvent struct {
 	UserID uint64 `json:"user_id"`
 }
+
+// UserLoggedInEvent 用户登录成功事件
+type UserLoggedInEvent struct {
+	UserID   uint64 `json:"user_id"`
+	Username string `json:"username"`
+}

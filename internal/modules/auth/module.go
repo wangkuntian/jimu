@@ -8,6 +8,7 @@ import (
 	"jimu/internal/modules/user/infrastructure"
 	"jimu/internal/platform/auth"
 	"jimu/internal/platform/captcha"
+	"jimu/internal/platform/outbox"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -22,16 +23,23 @@ type Module struct {
 	db         *gorm.DB
 	captcha    *captcha.Service
 	captchaCfg config.CaptchaConfig
+	outbox     *outbox.Outbox
 }
 
-func New(db *gorm.DB, rdb *redis.Client, cfg config.AuthConfig, failClosed bool, captchaSvc *captcha.Service, captchaCfg config.CaptchaConfig) *Module {
+func New(db *gorm.DB, rdb *redis.Client, cfg config.AuthConfig, failClosed bool, captchaSvc *captcha.Service, captchaCfg config.CaptchaConfig, deps ...interface{}) *Module {
 	userRepo := infrastructure.NewMysqlRepository(db)
 	jwtUtil := auth.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
 	sessionStore := auth.NewRedisSessionStore(rdb)
 	limiter := auth.NewLimiter(rdb, failClosed)
 	lockoutTracker := auth.NewLoginFailureTracker(rdb, auth.DefaultLockoutConfig())
-	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin)
-	return &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaSvc, captchaCfg: captchaCfg}
+	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin, deps...)
+	m := &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaSvc, captchaCfg: captchaCfg}
+	for _, dep := range deps {
+		if ob, ok := dep.(*outbox.Outbox); ok {
+			m.outbox = ob
+		}
+	}
+	return m
 }
 
 func (m *Module) Name() string {

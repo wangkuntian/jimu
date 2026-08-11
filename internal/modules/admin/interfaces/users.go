@@ -108,9 +108,25 @@ func (h *AdminUserHandler) Disable(c *gin.Context) {
 	response.OK(c, gin.H{"disabled": id})
 }
 
-// AssignRole 分配角色
+// AssignRole 分配角色（替换全部角色）
 func (h *AdminUserHandler) AssignRole(c *gin.Context) {
-	response.OK(c, gin.H{})
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
+		return
+	}
+	var req struct {
+		Roles []string `json:"roles"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
+		return
+	}
+	if err := h.service.AssignRoles(c.Request.Context(), id, req.Roles); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"assigned": id, "roles": req.Roles})
 }
 
 // paginationFromQuery 从 query 解析分页参数

@@ -137,3 +137,110 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t jimu:${{ github.sha }} .
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: [docker]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: govulncheck (依赖漏洞扫描)
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      - name: Build Docker image for scanning
+        run: docker build -t jimu:${{ github.sha }} .
+
+      - name: Trivy 镜像漏洞扫描
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: jimu:${{ github.sha }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+      - name: SBOM 生成
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: jimu:${{ github.sha }}
+          format: cyclonedx
+          output: jimu-sbom.json
+
+      - name: 上传 SBOM 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: jimu-sbom.json
+
+      - name: 生成依赖许可证报告
+        run: |
+          go run github.com/google/go-licenses@latest report ./... > license-report.txt
+          echo "许可证报告生成完成"
+        continue-on-error: true
+
+      - name: 上传许可证报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: license-report.txt
+        continue-on-error: true
+
+  smoke:
+    name: Image Smoke Test
+    runs-on: ubuntu-latest
+    needs: [security]
+    services:
+      mariadb:
+        image: mariadb:12.1.2-noble
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: jimu_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u root -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:8.4.0-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t jimu:${{ github.sha }} .
+
+      - name: 启动容器并验证健康检查
+        run: |
+          docker run -d --name jimu-smoke \
+            -p 18080:8080 -p 19090:9090 \
+            -e APP_ENV=dev \
+            -e DB_HOST=127.0.0.1 -e DB_PORT=3306 \
+            -e DB_USER=root -e DB_PASSWORD=root \
+            -e DB_NAME=jimu_test \
+            -e REDIS_ADDR=127.0.0.1:6379 \
+            -e JWT_SECRET=smoke-test-secret \
+            jimu:${{ github.sha }}
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:19090/livez >/dev/null 2>&1; then
+              echo "livez OK"
+              break
+            fi
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:19090/livez
+          curl -sf http://127.0.0.1:19090/readyz
+          echo "镜像 smoke test 通过"

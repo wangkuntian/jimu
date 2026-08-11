@@ -16,6 +16,7 @@ import (
 
 type Logger struct {
 	*zap.SugaredLogger
+	level *zap.AtomicLevel
 }
 
 func (l *Logger) Sync() error {
@@ -26,6 +27,25 @@ func (l *Logger) Sync() error {
 	return err
 }
 
+// SetLevel 动态调整日志级别（支持运行热更新）
+func (l *Logger) SetLevel(level string) error {
+	var lv zapcore.Level
+	switch level {
+	case "debug":
+		lv = zapcore.DebugLevel
+	case "info":
+		lv = zapcore.InfoLevel
+	case "warn":
+		lv = zapcore.WarnLevel
+	case "error":
+		lv = zapcore.ErrorLevel
+	default:
+		return errors.New("invalid log level: " + level)
+	}
+	l.level.SetLevel(lv)
+	return nil
+}
+
 // WithContext 从 context 中提取 trace_id 和 span_id 加入日志字段
 func (l *Logger) WithContext(ctx context.Context) *Logger {
 	spanContext := trace.SpanContextFromContext(ctx)
@@ -34,7 +54,7 @@ func (l *Logger) WithContext(ctx context.Context) *Logger {
 			"trace_id", spanContext.TraceID().String(),
 			"span_id", spanContext.SpanID().String(),
 		)
-		return &Logger{withTrace}
+		return &Logger{withTrace, l.level}
 	}
 	return l
 }
@@ -84,8 +104,9 @@ func New(cfg config.LogConfig) *Logger {
 		})
 	}
 
-	core := zapcore.NewCore(encoder, writeSyncer, level)
+	atomicLevel := zap.NewAtomicLevelAt(level)
+	core := zapcore.NewCore(encoder, writeSyncer, atomicLevel)
 	zapLogger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
 
-	return &Logger{zapLogger.Sugar()}
+	return &Logger{zapLogger.Sugar(), &atomicLevel}
 }

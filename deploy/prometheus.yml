@@ -1,0 +1,10 @@
+# Prometheus 抓取配置（observability profile 使用）
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "jimu-server"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["server:9090"]

@@ -13,6 +13,14 @@ import (
 	"gorm.io/gorm"
 )
 
+// userRole 用户-角色关联（对应 user_roles 表）
+type userRole struct {
+	UserID uint64 `gorm:"primaryKey"`
+	RoleID uint64 `gorm:"primaryKey"`
+}
+
+func (userRole) TableName() string { return "user_roles" }
+
 // AdminUser DTO for admin user list responses
 type AdminUser struct {
 	ID        uint64   `json:"id"`
@@ -42,19 +50,60 @@ type AdminCreateUserRequest struct {
 // AdminUserService 用户管理服务
 type AdminUserService struct {
 	userRepo domain.UserRepository
+	db       *gorm.DB
 }
 
 // NewAdminUserService 创建用户管理服务
-func NewAdminUserService(userRepo domain.UserRepository) *AdminUserService {
-	return &AdminUserService{userRepo: userRepo}
+func NewAdminUserService(userRepo domain.UserRepository, db ...*gorm.DB) *AdminUserService {
+	s := &AdminUserService{userRepo: userRepo}
+	if len(db) > 0 {
+		s.db = db[0]
+	}
+	return s
 }
 
-// ValidateUserNotSelf 验证管理员不能操作自己
-func (s *AdminUserService) ValidateUserNotSelf(adminID, targetID uint64) error {
-	if adminID == targetID {
-		return apperrors.New(apperrors.CodeForbidden, "cannot modify yourself")
+// AssignRoles 为用户分配角色（替换全部角色）
+func (s *AdminUserService) AssignRoles(ctx context.Context, userID uint64, roleNames []string) error {
+	if s.db == nil {
+		return apperrors.New(apperrors.CodeInternalError, "db not configured for role assignment")
 	}
-	return nil
+	if _, err := s.userRepo.FindByID(ctx, userID); err != nil {
+		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.Wrap(apperrors.CodeNotFound, "user not found", err)
+		}
+		return apperrors.Wrap(apperrors.CodeInternalError, "failed to get user", err)
+	}
+
+	// 解析角色名 -> 角色 ID
+	var roleIDs []uint64
+	if len(roleNames) > 0 {
+		var roles []struct {
+			ID uint64
+		}
+		if err := s.db.WithContext(ctx).Table("roles").
+			Where("name IN ?", roleNames).Find(&roles).Error; err != nil {
+			return apperrors.Wrap(apperrors.CodeInternalError, "failed to load roles", err)
+		}
+		for _, r := range roles {
+			roleIDs = append(roleIDs, r.ID)
+		}
+		if len(roleIDs) != len(roleNames) {
+			return apperrors.New(apperrors.CodeNotFound, "one or more roles not found")
+		}
+	}
+
+	// 事务：清空旧角色，写入新角色
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Delete(&userRole{}).Error; err != nil {
+			return err
+		}
+		for _, roleID := range roleIDs {
+			if err := tx.Create(&userRole{UserID: userID, RoleID: roleID}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // ListUsers 获取用户列表（支持搜索/过滤/分页）

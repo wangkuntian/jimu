@@ -49,7 +49,11 @@ func (h *AdminConfigHandler) Update(c *gin.Context) {
 	response.OK(c, gin.H{"updated": key})
 }
 
-// Reload 触发配置重载
+// Reload 触发配置重载：从 Redis 重读全部配置并发布事件应用
 func (h *AdminConfigHandler) Reload(c *gin.Context) {
+	if err := h.service.ReloadConfig(c.Request.Context()); err != nil {
+		response.Fail(c, err)
+		return
+	}
 	response.OK(c, gin.H{"reloaded": true})
 }

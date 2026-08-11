@@ -12,6 +12,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// version 版本号，通过 ldflags 注入：-ldflags "-X main.version=v0.1.0"
+var version = "dev"
+
 var rootCmd = &cobra.Command{
 	Use:   "jimu",
 	Short: "Jimu backend framework CLI",
@@ -104,6 +107,33 @@ var migrateRedoCmd = &cobra.Command{
 	},
 }
 
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print version",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println(version)
+	},
+}
+
+var configCmd = &cobra.Command{
+	Use:   "config",
+	Short: "Configuration commands",
+}
+
+var configCheckCmd = &cobra.Command{
+	Use:   "check",
+	Short: "Load and validate configuration",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := config.Load()
+		if err != nil {
+			return fmt.Errorf("config invalid: %w", err)
+		}
+		fmt.Printf("config valid (env=%s, http.mode=%s, db=%s:%d/%s)\n",
+			os.Getenv("APP_ENV"), cfg.HTTP.Mode, cfg.DB.Host, cfg.DB.Port, cfg.DB.Database)
+		return nil
+	},
+}
+
 var seedCmd = &cobra.Command{
 	Use:   "seed",
 	Short: "Seed initial data",
@@ -134,6 +164,9 @@ func init() {
 	rootCmd.AddCommand(moduleCmd)
 	rootCmd.AddCommand(migrateCmd)
 	rootCmd.AddCommand(seedCmd)
+	rootCmd.AddCommand(versionCmd)
+	configCmd.AddCommand(configCheckCmd)
+	rootCmd.AddCommand(configCmd)
 }
 
 func main() {

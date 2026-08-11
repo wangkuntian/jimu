@@ -63,17 +63,45 @@ func (s *AdminTaskService) ListTasks() []TaskInfo {
 
 // TriggerTask 手动触发任务
 func (s *AdminTaskService) TriggerTask(ctx context.Context, taskID string) error {
-	// TODO: 需要 scheduler 支持手动触发，当前仅返回未实现
-	return apperrors.New(apperrors.CodeNotFound, "manual trigger not supported for task: "+taskID)
+	if s.sched == nil {
+		return apperrors.New(apperrors.CodeInternalError, "scheduler not configured")
+	}
+	return s.sched.TriggerJob(ctx, taskID)
 }
 
 // ToggleTask 暂停/恢复任务
 func (s *AdminTaskService) ToggleTask(ctx context.Context, taskID string) error {
-	// TODO: 需要 scheduler 支持暂停/恢复
-	return apperrors.New(apperrors.CodeNotFound, "toggle not supported for task: "+taskID)
+	if s.sched == nil {
+		return apperrors.New(apperrors.CodeInternalError, "scheduler not configured")
+	}
+	// 根据当前状态切换
+	jobs := s.sched.Jobs()
+	for _, j := range jobs {
+		if j.ID == taskID {
+			return s.sched.SetEnabled(ctx, taskID, !j.Enabled)
+		}
+	}
+	return apperrors.New(apperrors.CodeNotFound, "task not found: "+taskID)
 }
 
 // GetHistory 获取任务执行历史
+// 说明：调度器当前仅在内存记录最近一次运行状态（JobInfo），无持久化执行历史
 func (s *AdminTaskService) GetHistory(taskID string) []TaskExecution {
+	if s.sched == nil {
+		return []TaskExecution{}
+	}
+	for _, j := range s.sched.Jobs() {
+		if j.ID == taskID {
+			exec := TaskExecution{
+				TaskID: j.ID,
+				Status: j.LastStatus,
+				Error:  j.LastError,
+			}
+			if !j.LastRun.IsZero() {
+				exec.StartedAt = j.LastRun
+			}
+			return []TaskExecution{exec}
+		}
+	}
 	return []TaskExecution{}
 }

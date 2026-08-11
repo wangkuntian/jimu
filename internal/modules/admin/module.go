@@ -10,7 +10,6 @@ import (
 	admininterfaces "jimu/internal/modules/admin/interfaces"
 	userinfra "jimu/internal/modules/user/infrastructure"
 	"jimu/internal/platform/auth"
-	"jimu/internal/platform/event"
 	"jimu/internal/platform/feature"
 	platformhttp "jimu/internal/platform/http"
 	"jimu/internal/platform/http/middleware"
@@ -25,12 +24,16 @@ import (
 
 // Module 管理模块
 type Module struct {
-	service *adminapp.Service
-	rdb     *redis.Client
-	db      *gorm.DB
-	sched   *scheduler.CronScheduler
-	storage storage.Storage
-	feature *feature.Manager
+	service    *adminapp.Service
+	rdb        *redis.Client
+	db         *gorm.DB
+	sched      *scheduler.CronScheduler
+	storage    storage.Storage
+	feature    *feature.Manager
+	eventBus   contract.EventBus
+	wsHub      *ws.ClientHub
+	wsPres     *ws.PresenceManager
+	wsChannels *ws.ChannelManager
 }
 
 // New 创建管理模块
@@ -48,18 +51,28 @@ func New(version, env string, rdb *redis.Client, db *gorm.DB, deps ...interface{
 			m.storage = d
 		case *feature.Manager:
 			m.feature = d
+		case contract.EventBus:
+			m.eventBus = d
 		}
 	}
 	return m
 }
 
+// initWS 初始化 WebSocket hub 与 presence（幂等）
+func (m *Module) initWS() {
+	if m.wsHub != nil {
+		return
+	}
+	m.wsPres = ws.NewPresenceManager()
+	m.wsChannels = ws.NewChannelManager()
+	m.wsHub = ws.NewClientHub(m.wsPres, m.wsChannels)
+	go m.wsHub.Run(context.Background())
+}
+
 // wsHandler 创建 WebSocket 处理器
 func (m *Module) wsHandler() http.HandlerFunc {
-	presence := ws.NewPresenceManager()
-	channels := ws.NewChannelManager()
-	hub := ws.NewClientHub(presence, channels)
-	go hub.Run(context.Background())
-	return ws.WSHandler(hub, auth.New("dev-secret", "jimu", 30, 7), presence, channels)
+	m.initWS()
+	return ws.WSHandler(m.wsHub, auth.New("dev-secret", "jimu", 30, 7), m.wsPres, m.wsChannels)
 }
 
 // Name 返回模块名称
@@ -84,7 +97,7 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 
 	// 用户管理端点
 	userHandler := admininterfaces.NewAdminUserHandler(
-		adminapp.NewAdminUserService(userinfra.NewMysqlRepository(m.db)),
+		adminapp.NewAdminUserService(userinfra.NewMysqlRepository(m.db), m.db),
 	)
 	admin.GET("/users", userHandler.List)
 	admin.POST("/users", userHandler.Create)
@@ -104,7 +117,7 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 
 	// 配置热更新端点
 	configHandler := admininterfaces.NewAdminConfigHandler(
-		adminapp.NewAdminConfigService(m.rdb, event.New(), "jimu"),
+		adminapp.NewAdminConfigService(m.rdb, m.eventBus, "jimu"),
 	)
 	admin.GET("/config", configHandler.Get)
 	admin.PUT("/config/:key", configHandler.Update)
@@ -117,14 +130,27 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 	admin.POST("/tasks/:id/toggle", taskHandler.Toggle)
 	admin.GET("/tasks/:id/history", taskHandler.History)
 
-	// 审计日志端点
-	auditHandler := admininterfaces.NewAdminAuditHandler(
-		adminapp.NewAdminAuditService(admininfra.NewMysqlAuditRepository(m.db)),
+	// 数据导入端点
+	importHandler := admininterfaces.NewAdminImportHandler(
+		adminapp.NewImportService(
+			admininfra.NewMysqlImportJobRepository(m.db),
+			userinfra.NewMysqlRepository(m.db),
+			m.db,
+		),
 	)
-	admin.GET("/audit", auditHandler.List)
+	admin.POST("/users/import/preview", importHandler.Preview)
+	admin.POST("/users/import", importHandler.Import)
+	admin.GET("/users/import/template", importHandler.Template)
+	admin.GET("/users/import/:id", importHandler.Get)
+
+	// 审计日志端点（复用 audit 模块仓储，读 006 迁移的 audit_logs 表）
+	admin.GET("/audit", admininterfaces.NewAdminAuditHandler(m.db).List)
 
 	// 任务队列端点
-	jobHandler := admininterfaces.NewAdminJobHandler(admininfra.NewMysqlJobRepository(m.db))
+	jobHandler := admininterfaces.NewAdminJobHandler(
+		admininfra.NewMysqlJobRepository(m.db),
+		admininfra.NewMysqlDeadLetterRepository(m.db),
+	)
 	admin.GET("/jobs", jobHandler.List)
 	admin.POST("/jobs", jobHandler.Submit)
 	admin.GET("/jobs/:id", jobHandler.Get)
@@ -133,8 +159,12 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 	admin.POST("/jobs/dead-letters/:id/resolve", jobHandler.ResolveDeadLetter)
 
 	// WebSocket 实时通信端点
-	wsHandler := m.wsHandler()
-	admin.GET("/ws", gin.WrapF(wsHandler))
+	m.initWS()
+	admin.GET("/ws", gin.WrapF(m.wsHandler()))
+	wsAdmin := admininterfaces.NewAdminWSHandler(m.wsHub, m.wsPres)
+	admin.POST("/ws/push", wsAdmin.Push)
+	admin.GET("/ws/presence/:userId", wsAdmin.Presence)
+	admin.GET("/ws/online", wsAdmin.OnlineUsers)
 
 	// 文件上传端点（接入存储抽象）
 	if m.storage != nil {

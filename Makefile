@@ -1,6 +1,7 @@
 .PHONY: run build test vet fmt fmt-check lint clean migrate migrate-down migrate-status seed help
 .PHONY: docker-build docker-run docker-stop docker-logs
 .PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
+.PHONY: compose-observability compose-observability-down
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -11,6 +12,9 @@ SERVER_BIN := $(BIN_DIR)/server
 CLI_BIN := $(BIN_DIR)/jimu
 SERVER_CMD := cmd/server/main.go
 CLI_CMD := cmd/cli/main.go
+VERSION ?= dev
+# 注入版本号到两个 main 包
+LDFLAGS := -X main.version=$(VERSION)
 DOCKER_COMPOSE ?= docker compose
 DOCKER_IMAGE = jimu:latest
 DOCKER_CONTAINER := jimu-server
@@ -60,6 +64,8 @@ help:
 	@echo "  make compose-logs         查看应用日志"
 	@echo "  make compose-migrate      Compose 环境执行迁移"
 	@echo "  make compose-seed         Compose 环境插入初始数据"
+	@echo "  make compose-observability      启动监控栈（Prometheus + Grafana）"
+	@echo "  make compose-observability-down 停止监控栈"
 	@echo ""
 	@echo "工具:"
 	@echo "  make clean                清理构建产物"
@@ -78,11 +84,11 @@ build: build-server build-cli
 # 内部目标（不直接调用）
 build-server:
 	@mkdir -p $(BIN_DIR)
-	go build -o $(SERVER_BIN) $(SERVER_CMD)
+	go build -ldflags "$(LDFLAGS)" -o $(SERVER_BIN) $(SERVER_CMD)
 
 build-cli:
 	@mkdir -p $(BIN_DIR)
-	go build -o $(CLI_BIN) $(CLI_CMD)
+	go build -ldflags "$(LDFLAGS)" -o $(CLI_BIN) $(CLI_CMD)
 
 # ========== 数据库 ==========
 
@@ -153,6 +159,14 @@ compose-migrate:
 ## compose-seed: Compose 环境插入初始数据
 compose-seed:
 	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) run --rm server ./jimu seed
+
+## compose-observability: 启动监控栈（Prometheus + Grafana）
+compose-observability:
+	$(DOCKER_COMPOSE) --profile observability up -d
+
+## compose-observability-down: 停止监控栈
+compose-observability-down:
+	$(DOCKER_COMPOSE) --profile observability down
 
 # ========== 工具 ==========
 

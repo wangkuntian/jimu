@@ -3,7 +3,6 @@ package domain
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
 	"time"
 )
@@ -41,10 +40,4 @@ type APIKeyRepository interface {
 func HashKey(key string) string {
 	sum := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(sum[:])
-}
-
-// VerifyKey 恒定时间比较 API Key（防时序攻击）
-func VerifyKey(provided, hash string) bool {
-	providedHash := HashKey(provided)
-	return subtle.ConstantTimeCompare([]byte(providedHash), []byte(hash)) == 1
 }

@@ -109,6 +109,8 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	}
 
 	notifier := notification.NewDispatcher()
+	// 未配置真实发送渠道时，注册日志型兜底渠道，保证通知链路不报错且可观察
+	notifier.Register(notification.ChannelEmail, notification.NewLogChannel(notification.ChannelEmail, log))
 
 	// Feature Flag
 	featureMgr := feature.NewManager()

@@ -54,17 +54,7 @@ func New(cfg Config) (Storage, error) {
 	}
 }
 
-// newS3Storage 创建 S3 存储（占位，需要引入 aws-sdk-go-v2）
-func newS3Storage(cfg Config) (Storage, error) {
-	return nil, fmt.Errorf("S3 storage not implemented yet")
-}
-
 // newOSSStorage 创建 OSS 存储（占位，需要引入 aliyun-oss-go-sdk）
 func newOSSStorage(cfg Config) (Storage, error) {
 	return nil, fmt.Errorf("OSS storage not implemented yet")
-}
-
-// newMinioStorage 创建 MinIO 存储（占位）
-func newMinioStorage(cfg Config) (Storage, error) {
-	return nil, fmt.Errorf("MinIO storage not implemented yet")
 }

@@ -55,6 +55,8 @@ services:
       DB_NAME: ${DB_NAME:-jimu}
       REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
       REDIS_DB: ${REDIS_DB:-0}
+      # 容器内 expose management 端点供 Prometheus 抓取（默认 app.yaml 绑定 127.0.0.1）
+      MANAGEMENT_HOST: "0.0.0.0"
       # 敏感配置通过文件注入（非环境变量）
       DB_PASSWORD_FILE: /run/secrets/db_password
       JWT_SECRET_FILE: /run/secrets/jwt_secret
@@ -73,11 +75,44 @@ services:
       - db_password
       - jwt_secret
 
+  # 可选的 observability profile：Prometheus 抓取 /metrics，Grafana 可视化
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["observability"]
+    restart: unless-stopped
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - jimu-prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9093:9090"
+    depends_on:
+      server:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    profiles: ["observability"]
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - jimu-grafana-data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboard.json:/var/lib/grafana/dashboards/jimu.json:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   jimu-mariadb-data:
     name: jimu-mariadb-data
   jimu-redis-data:
     name: jimu-redis-data
+  jimu-prometheus-data:
+    name: jimu-prometheus-data
+  jimu-grafana-data:
+    name: jimu-grafana-data
 
 secrets:
   db_root_password:

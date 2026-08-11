@@ -2,14 +2,18 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
+	"jimu/internal/contract"
 	authdomain "jimu/internal/modules/auth/domain"
 	userdomain "jimu/internal/modules/user/domain"
 	"jimu/internal/platform/auth"
+	"jimu/internal/platform/outbox"
 	"jimu/internal/shared/errors"
 
 	"github.com/google/uuid"
@@ -22,16 +26,23 @@ type AuthService struct {
 	sessions  auth.SessionStore
 	lockout   *auth.LoginFailureTracker
 	accessMin int
+	outbox    *outbox.Outbox
 }
 
-func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int) *AuthService {
-	return &AuthService{
+func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int, deps ...interface{}) *AuthService {
+	s := &AuthService{
 		userRepo:  userRepo,
 		jwtUtil:   jwtUtil,
 		sessions:  sessions,
 		lockout:   lockout,
 		accessMin: accessMin,
 	}
+	for _, dep := range deps {
+		if ob, ok := dep.(*outbox.Outbox); ok {
+			s.outbox = ob
+		}
+	}
+	return s
 }
 
 func (s *AuthService) Login(ctx context.Context, username, password string) (*authdomain.TokenPair, error) {
@@ -75,6 +86,23 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*au
 	}
 	if err := s.sessions.Create(ctx, user.ID, sessionID, refreshClaims.ID, refreshTTL(refreshClaims)); err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to create session", err)
+	}
+
+	// 写入 Outbox 发布登录成功事件（同用户创建一致，走统一可靠投递路径）
+	if s.outbox != nil {
+		payload, err := json.Marshal(contract.UserLoggedInEvent{
+			UserID:   user.ID,
+			Username: user.Username,
+		})
+		if err != nil {
+			log.Printf("auth: marshal logged_in event: %v", err)
+		} else if err := s.outbox.Add(ctx, nil, outbox.Event{
+			AggregateID: fmt.Sprintf("user:%d", user.ID),
+			EventType:   contract.EventUserLoggedIn,
+			Payload:     payload,
+		}); err != nil {
+			log.Printf("auth: write outbox event %s: %v", contract.EventUserLoggedIn, err)
+		}
 	}
 
 	return &authdomain.TokenPair{
