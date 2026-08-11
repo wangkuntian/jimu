@@ -52,7 +52,7 @@ func TestRestoreFromStore(t *testing.T) {
 	_ = store.Save(context.Background(), JobDef{ID: "r2", Name: "Disabled", Cron: "@every 10s", Enabled: false})
 	s := NewWithStore(log, store, nil)
 
-	err := s.RestoreFromStore(context.Background(), func(id string) func() {
+	restored, err := s.RestoreFromStore(context.Background(), func(id string) func() {
 		if id == "r1" {
 			return func() {}
 		}
@@ -60,6 +60,9 @@ func TestRestoreFromStore(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("RestoreFromStore() error: %v", err)
+	}
+	if len(restored) != 1 || restored[0] != "r1" {
+		t.Fatalf("RestoreFromStore() restored = %v, want [r1]", restored)
 	}
 	if got := s.EntryCount(); got != 1 {
 		t.Fatalf("EntryCount() = %d, want 1 (only enabled r1)", got)

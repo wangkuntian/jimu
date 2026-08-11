@@ -95,12 +95,13 @@ func (s *CronScheduler) AddNamedFunc(id, name, spec string, cmd func()) error {
 	return nil
 }
 
-// RestoreFromStore 从 store 加载任务并恢复注册（启动时调用）
-func (s *CronScheduler) RestoreFromStore(ctx context.Context, cmdFactory func(id string) func()) error {
+// RestoreFromStore 从 store 加载任务并恢复注册（启动时调用），返回已恢复的 enabled 任务 id 列表
+func (s *CronScheduler) RestoreFromStore(ctx context.Context, cmdFactory func(id string) func()) ([]string, error) {
 	jobs, err := s.store.List(ctx)
 	if err != nil {
-		return fmt.Errorf("list scheduled jobs: %w", err)
+		return nil, fmt.Errorf("list scheduled jobs: %w", err)
 	}
+	var restored []string
 	for _, job := range jobs {
 		if !job.Enabled {
 			continue
@@ -110,10 +111,11 @@ func (s *CronScheduler) RestoreFromStore(ctx context.Context, cmdFactory func(id
 			continue
 		}
 		if err := s.AddNamedFunc(job.ID, job.Name, job.Cron, fn); err != nil {
-			return fmt.Errorf("restore job %q: %w", job.ID, err)
+			return nil, fmt.Errorf("restore job %q: %w", job.ID, err)
 		}
+		restored = append(restored, job.ID)
 	}
-	return nil
+	return restored, nil
 }
 
 // recordRun 记录任务执行并调用命令
