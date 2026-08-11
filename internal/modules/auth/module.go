@@ -7,6 +7,7 @@ import (
 	"jimu/internal/modules/auth/interfaces"
 	"jimu/internal/modules/user/infrastructure"
 	"jimu/internal/platform/auth"
+	"jimu/internal/platform/captcha"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -14,21 +15,23 @@ import (
 )
 
 type Module struct {
-	cfg     config.AuthConfig
-	service *application.AuthService
-	jwtUtil *auth.JWT
-	limiter *auth.Limiter
-	db      *gorm.DB
+	cfg        config.AuthConfig
+	service    *application.AuthService
+	jwtUtil    *auth.JWT
+	limiter    *auth.Limiter
+	db         *gorm.DB
+	captcha    *captcha.Service
+	captchaCfg config.CaptchaConfig
 }
 
-func New(db *gorm.DB, rdb *redis.Client, cfg config.AuthConfig, failClosed bool) *Module {
+func New(db *gorm.DB, rdb *redis.Client, cfg config.AuthConfig, failClosed bool, captchaSvc *captcha.Service, captchaCfg config.CaptchaConfig) *Module {
 	userRepo := infrastructure.NewMysqlRepository(db)
 	jwtUtil := auth.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
 	sessionStore := auth.NewRedisSessionStore(rdb)
 	limiter := auth.NewLimiter(rdb, failClosed)
 	lockoutTracker := auth.NewLoginFailureTracker(rdb, auth.DefaultLockoutConfig())
 	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin)
-	return &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db}
+	return &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaSvc, captchaCfg: captchaCfg}
 }
 
 func (m *Module) Name() string {
@@ -36,7 +39,8 @@ func (m *Module) Name() string {
 }
 
 func (m *Module) RegisterHTTP(r contract.Router) {
-	interfaces.RegisterAuthRoutes(r.Group("/api/v1"), m.service, m.jwtUtil, m.cfg, m.limiter)
+	interfaces.RegisterAuthRoutes(r.Group("/api/v1"), m.service, m.jwtUtil, m.cfg, m.limiter, m.captcha, m.captchaCfg)
+	interfaces.RegisterCaptchaRoute(r.Group("/api/v1"), m.captcha)
 }
 
 func (m *Module) ProtectedHTTPMiddleware() ([]gin.HandlerFunc, error) {

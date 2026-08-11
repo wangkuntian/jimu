@@ -4,13 +4,14 @@ import (
 	"jimu/internal/config"
 	"jimu/internal/modules/auth/application"
 	"jimu/internal/platform/auth"
+	"jimu/internal/platform/captcha"
 	"jimu/internal/platform/http/middleware"
 
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterAuthRoutes(r *gin.RouterGroup, service *application.AuthService, jwtUtil *auth.JWT, cfg config.AuthConfig, limiter *auth.Limiter) {
-	handler := NewAuthHandler(service, cfg, limiter)
+func RegisterAuthRoutes(r *gin.RouterGroup, service *application.AuthService, jwtUtil *auth.JWT, cfg config.AuthConfig, limiter *auth.Limiter, captchaSvc *captcha.Service, captchaCfg config.CaptchaConfig) {
+	handler := NewAuthHandler(service, cfg, limiter, captchaSvc, captchaCfg)
 	authGroup := r.Group("/auth")
 	{
 		authGroup.POST("/login", middleware.ValidateJSON(&loginRequest{}), handler.Login)
@@ -24,4 +25,13 @@ func RegisterAuthRoutes(r *gin.RouterGroup, service *application.AuthService, jw
 		protected.POST("/logout", handler.Logout)
 		protected.POST("/logout-all", handler.LogoutAll)
 	}
+}
+
+// RegisterCaptchaRoute 注册验证码路由
+func RegisterCaptchaRoute(r *gin.RouterGroup, svc *captcha.Service) {
+	if svc == nil {
+		return
+	}
+	handler := captcha.NewCaptchaHandler(svc)
+	r.GET("/captcha", handler.Generate)
 }

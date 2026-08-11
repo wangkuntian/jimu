@@ -76,5 +76,8 @@ func (c *Config) validateCommon() error {
 	if c.Redis.MaxRetries <= 0 || c.Redis.RetryIntervalSec <= 0 {
 		return errors.New("invalid redis retry configuration")
 	}
+	if c.Captcha.Enabled && c.Captcha.TTLMin <= 0 {
+		return errors.New("invalid captcha.ttl_min")
+	}
 	return nil
 }

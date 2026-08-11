@@ -126,6 +126,11 @@ oauth:
       redirect_url: "http://localhost:8080/api/v1/oauth/github/callback"
       enabled: false
 
+# 验证码配置
+captcha:
+  enabled: false           # 是否启用登录/注册验证码
+  ttl_min: 5               # 验证码有效期（分钟）
+
 # 安全头配置（留空则使用默认值）
 security:
   content_type_options: "nosniff"

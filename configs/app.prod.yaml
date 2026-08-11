@@ -141,6 +141,11 @@ oauth:
       redirect_url: "https://api.example.com/api/v1/oauth/github/callback"
       enabled: false
 
+# 验证码配置
+captcha:
+  enabled: true            # 生产环境建议启用登录/注册验证码
+  ttl_min: 5               # 验证码有效期（分钟）
+
 # OpenTelemetry 追踪配置
 otel:
   enabled: true                     # 生产环境启用
