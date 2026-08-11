@@ -54,14 +54,14 @@ func TestMQPublisher_Publish(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, fq.submitted, 2)
 
-	// job Type 带 outbox: 前缀，ID 复用事件 ID，Payload 为事件 JSON 序列化结果
+	// job Type 带 outbox: 前缀，ID 复用事件 ID，Payload 为 EventPayload JSON 序列化结果（不含内部记账字段）
 	assert.Equal(t, uint64(1), fq.submitted[0].ID)
 	assert.Equal(t, "outbox:UserCreated", fq.submitted[0].Type)
-	assert.JSONEq(t, `{"id":1,"aggregate_id":"user-1","event_type":"UserCreated","payload":{"name":"tom"},"metadata":{"trace":"abc"},"created_at":"0001-01-01T00:00:00Z","retry_count":0}`, fq.submitted[0].Payload)
+	assert.JSONEq(t, `{"id":1,"aggregate_id":"user-1","event_type":"UserCreated","payload":{"name":"tom"},"metadata":{"trace":"abc"},"created_at":"0001-01-01T00:00:00Z"}`, fq.submitted[0].Payload)
 
 	assert.Equal(t, uint64(2), fq.submitted[1].ID)
 	assert.Equal(t, "outbox:OrderPlaced", fq.submitted[1].Type)
-	assert.JSONEq(t, `{"id":2,"aggregate_id":"order-1","event_type":"OrderPlaced","payload":{"amount":100},"created_at":"0001-01-01T00:00:00Z","retry_count":0}`, fq.submitted[1].Payload)
+	assert.JSONEq(t, `{"id":2,"aggregate_id":"order-1","event_type":"OrderPlaced","payload":{"amount":100},"created_at":"0001-01-01T00:00:00Z"}`, fq.submitted[1].Payload)
 }
 
 // TestMQPublisher_PublishError 验证队列提交失败时返回错误并停止后续发布
