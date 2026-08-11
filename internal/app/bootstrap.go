@@ -77,22 +77,26 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 
 		// 注册 Outbox 定时处理（每 10 秒处理一次待发布事件）
 		if container.Outbox != nil {
-			_ = container.Scheduler.AddNamedFunc("outbox_process", "Process Outbox Events", "@every 10s", func() {
+			if err := container.Scheduler.AddNamedFunc("outbox_process", "Process Outbox Events", "@every 10s", func() {
 				n, err := container.Outbox.Process(context.Background(), 100)
 				if err != nil {
 					container.Logger.Error("outbox process error", "error", err.Error())
 				} else if n > 0 {
 					container.Logger.Debug("outbox processed", "count", n)
 				}
-			})
+			}); err != nil {
+				container.Logger.Error("register outbox job failed", "error", err.Error())
+			}
 		}
 
 		// 注册 DB 指标收集（每 15 秒收集一次）
 		if container.DBCollector != nil {
-			_ = container.Scheduler.AddNamedFunc("metrics_collect", "Collect DB Metrics", "@every 15s", func() {
+			if err := container.Scheduler.AddNamedFunc("metrics_collect", "Collect DB Metrics", "@every 15s", func() {
 				container.DBCollector.Collect()
 				observability.CollectRuntime()
-			})
+			}); err != nil {
+				container.Logger.Error("register metrics job failed", "error", err.Error())
+			}
 		}
 
 		// 注册 WebSocket Hub 运行
@@ -102,7 +106,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 
 		// 注册数据清理 Job（每天凌晨 3 点清理超过 90 天的软删除数据）
 		cleanupSvc := db.NewCleanupService(container.DB, db.DefaultCleanupConfig())
-		_ = container.Scheduler.AddNamedFunc("cleanup", "Data Cleanup", "0 3 * * *", func() {
+		if err := container.Scheduler.AddNamedFunc("cleanup", "Data Cleanup", "0 3 * * *", func() {
 			results, err := cleanupSvc.Run(context.Background())
 			if err != nil {
 				container.Logger.Error("cleanup job failed", "error", err.Error())
@@ -113,7 +117,9 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 					container.Logger.Info("cleanup completed", "table", r.Table, "deleted", r.Deleted)
 				}
 			}
-		})
+		}); err != nil {
+			container.Logger.Error("register cleanup job failed", "error", err.Error())
+		}
 	}
 
 	components := []contract.Component{container}
