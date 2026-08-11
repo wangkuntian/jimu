@@ -105,9 +105,11 @@ func (o *recordingOutboxStore) Add(_ context.Context, _ interface{}, events ...o
 	o.events = append(o.events, events...)
 	return nil
 }
-func (o *recordingOutboxStore) FetchUnpublish(context.Context, int) ([]outbox.Event, error) { return nil, nil }
-func (o *recordingOutboxStore) MarkPublished(context.Context, []uint64) error               { return nil }
-func (o *recordingOutboxStore) MarkFailed(context.Context, uint64, error) error             { return nil }
+func (o *recordingOutboxStore) FetchUnpublish(context.Context, int) ([]outbox.Event, error) {
+	return nil, nil
+}
+func (o *recordingOutboxStore) MarkPublished(context.Context, []uint64) error   { return nil }
+func (o *recordingOutboxStore) MarkFailed(context.Context, uint64, error) error { return nil }
 
 // createOutboxUserService 构造带 recording outbox 的 UserService
 func createOutboxUserService() (*UserService, *recordingOutboxStore) {
