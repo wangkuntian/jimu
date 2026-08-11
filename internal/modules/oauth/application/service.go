@@ -28,7 +28,6 @@ func oauthStateKey(state string) string { return "jimu:oauth:state:" + state }
 
 // OAuthService OAuth 登录服务
 type OAuthService struct {
-	userRepo    userdomain.UserRepository
 	bindingRepo oauthdomain.BindingRepository
 	jwtUtil     *auth.JWT
 	sessions    auth.SessionStore
@@ -39,9 +38,8 @@ type OAuthService struct {
 }
 
 // NewOAuthService 创建 OAuth 服务
-func NewOAuthService(userRepo userdomain.UserRepository, bindingRepo oauthdomain.BindingRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, providers map[string]oauthplatform.Provider, rdb *redis.Client, db *gorm.DB, accessMin int) *OAuthService {
+func NewOAuthService(bindingRepo oauthdomain.BindingRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, providers map[string]oauthplatform.Provider, rdb *redis.Client, db *gorm.DB, accessMin int) *OAuthService {
 	return &OAuthService{
-		userRepo:    userRepo,
 		bindingRepo: bindingRepo,
 		jwtUtil:     jwtUtil,
 		sessions:    sessions,

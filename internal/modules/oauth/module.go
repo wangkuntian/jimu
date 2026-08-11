@@ -7,7 +7,6 @@ import (
 	oauthapp "jimu/internal/modules/oauth/application"
 	oauthinfra "jimu/internal/modules/oauth/infrastructure"
 	"jimu/internal/modules/oauth/interfaces"
-	userinfra "jimu/internal/modules/user/infrastructure"
 	"jimu/internal/platform/auth"
 	oauthplatform "jimu/internal/platform/oauth"
 
@@ -22,11 +21,10 @@ type Module struct {
 
 // New 创建 OAuth 模块（自包含装配依赖）
 func New(db *gorm.DB, rdb *redis.Client, oauthCfg config.OAuthConfig, authCfg config.AuthConfig) *Module {
-	userRepo := userinfra.NewMysqlRepository(db)
 	bindingRepo := oauthinfra.NewMySQLBindingRepository(db)
 	jwtUtil := auth.NewWithRotation(authCfg.JWTSecret, authCfg.JWTPreviousSecret, authCfg.Issuer, authCfg.AccessExpireMin, authCfg.RefreshExpireDay)
 	sessionStore := auth.NewRedisSessionStore(rdb)
-	service := oauthapp.NewOAuthService(userRepo, bindingRepo, jwtUtil, sessionStore, buildProviders(oauthCfg), rdb, db, authCfg.AccessExpireMin)
+	service := oauthapp.NewOAuthService(bindingRepo, jwtUtil, sessionStore, buildProviders(oauthCfg), rdb, db, authCfg.AccessExpireMin)
 	return &Module{service: service}
 }
 
