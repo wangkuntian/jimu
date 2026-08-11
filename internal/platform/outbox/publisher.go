@@ -33,7 +33,7 @@ func (p *EventBusPublisher) Publish(ctx context.Context, events ...Event) error 
 	return nil
 }
 
-// EventPayload 发布到事件总线的载荷
+// EventPayload Outbox 事件发布载荷（事件总线/MQ 共用）
 type EventPayload struct {
 	ID          uint64          `json:"id"`
 	AggregateID string          `json:"aggregate_id"`
