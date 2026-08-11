@@ -11,7 +11,6 @@ type User struct {
 	Username  string         `gorm:"size:64;uniqueIndex;not null" json:"username"`
 	Password  string         `gorm:"size:255;not null" json:"-"`
 	Status    int8           `gorm:"default:1" json:"status"`
-	TenantID  string         `gorm:"size:64;index:idx_tenant_id;default:''" json:"tenant_id,omitempty"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

@@ -17,6 +17,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **HTTP 安全边界** — 请求体大小、超时、可信代理、CORS、CSRF 防护、API 签名验证、安全 Headers
 - **缓存抽象** — Cache-Aside 模式，GetOrSet 自动回填
 - **自定义校验** — 手机号、密码强度、身份证、用户名等常用规则
+- **国际化** — 按 `Accept-Language` 返回中文/英文错误与校验消息
 - **事件总线** — 内存实现，支持同步/异步发布订阅
 - **多队列支持** — Redis/Kafka/RabbitMQ 统一队列接口，`queue.type` 切换（Kafka/RabbitMQ 当前 at-most-once）
 - **事务封装** — 统一的事务管理 helper
@@ -33,9 +34,9 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **Outbox 模式** — 事件发布与数据库事务一致性保证，支持 MQ 跨服务发布（`outbox.publisher` 切换；`mq` 模式下通过 WorkerPool 消费事件，`event_bus` 模式通过 `outbox:*` 桥接器注入事件总线）
 - **定时任务** — Cron 调度器（robfig/cron），支持 MySQL 持久化（`scheduler.store=mysql`）与多实例分布式锁协调，启动时通过 `RestoreFromStore` 恢复持久化任务（内置任务去重）
 - **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
-- **多租户** — 租户中间件 + 行级数据隔离
 - **OpenTelemetry** — 分布式追踪（OTLP gRPC）
-- **Prometheus 指标** — DB 连接池 + 运行时指标
+- **Prometheus 指标** — DB 连接池 + 运行时 + HTTP 请求指标（`jimu_http_*`）
+- **分布式 ID** — 雪花 ID 生成器（`internal/shared/id`），需全局有序 ID 或分片场景可接入
 - **Docker 支持** — Dockerfile + docker-compose 一键起服务
 - **Docker Secrets** — 敏感配置通过文件注入（`_FILE` 后缀）
 - **K8s 部署** — Deployment/Service/HPA/Ingress manifests
@@ -209,12 +210,13 @@ jimu/
 │   │   ├── outbox/             # Outbox 模式
 │   │   ├── scheduler/          # Cron 调度器
 │   │   ├── feature/            # Feature Flag
-│   │   └── tenant/             # 多租户支持
 │   ├── shared/                 # 跨模块通用能力
 │   │   ├── errors/             # AppError + 错误码
 │   │   ├── response/           # 统一响应格式
 │   │   ├── pagination/         # 分页
 │   │   ├── validator/          # 自定义校验规则
+│   │   ├── i18n/               # 国际化翻译
+│   │   ├── id/                 # 分布式 ID（雪花/UUID）
 │   │   └── testutil/           # 测试工具
 │   └── modules/                # 业务模块
 │       ├── auth/               # 登录/注册/Token

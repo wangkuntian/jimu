@@ -2,13 +2,11 @@ package interfaces
 
 import (
 	"bytes"
-	"context"
 	"encoding/csv"
 	"strconv"
 	"time"
 
 	"jimu/internal/modules/user/application"
-	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"
@@ -39,8 +37,7 @@ func NewUserHandler(service *application.UserService) *UserHandler {
 // @Router       /users [post]
 func (h *UserHandler) Create(c *gin.Context) {
 	req, _ := c.MustGet("validated_req").(*application.CreateUserRequest)
-	ctx := tenantRequestContext(c)
-	user, err := h.service.Create(ctx, *req)
+	user, err := h.service.Create(c.Request.Context(), *req)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -94,7 +91,7 @@ func (h *UserHandler) List(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	users, total, err := h.service.List(tenantRequestContext(c), *p)
+	users, total, err := h.service.List(c.Request.Context(), *p)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -213,13 +210,4 @@ func (h *UserHandler) ExportCSV(c *gin.Context) {
 	}
 	w.Flush()
 	c.String(200, buf.String())
-}
-
-// tenantRequestContext 从 gin 上下文注入租户 ID 到请求 context
-func tenantRequestContext(c *gin.Context) context.Context {
-	ctx := c.Request.Context()
-	if t, ok := tenant.FromContext(c); ok && t.ID != "" {
-		ctx = application.WithTenantID(ctx, t.ID)
-	}
-	return ctx
 }

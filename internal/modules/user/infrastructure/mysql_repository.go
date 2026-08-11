@@ -19,7 +19,7 @@ func NewMysqlRepository(db *gorm.DB) domain.UserRepository {
 
 func (r *mysqlRepository) FindByID(ctx context.Context, id uint64) (*domain.User, error) {
 	var user domain.User
-	err := r.db.WithContext(ctx).First(&user, id).Error
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&user).Error
 	if err != nil {
 		return nil, err
 	}

@@ -57,8 +57,34 @@ func TestFailHidesInternalCauseAndIncludesRequestID(t *testing.T) {
 	if strings.Contains(body, "database failed") || strings.Contains(body, "secret DSN") {
 		t.Fatalf("response leaked internal error: %s", body)
 	}
-	if !strings.Contains(body, "request-123") || !strings.Contains(body, "internal error") {
+	if !strings.Contains(body, "request-123") || !strings.Contains(body, "服务器内部错误") {
 		t.Fatalf("response missing safe diagnostics: %s", body)
+	}
+}
+
+func TestFailTranslatesByLocale(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name   string
+		locale string
+		want   string
+	}{
+		{"zh", "zh", "服务器内部错误"},
+		{"en", "en", "internal server error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := gin.New()
+			r.GET("/", func(c *gin.Context) {
+				c.Set("locale", tt.locale)
+				Fail(c, appErrs.New(appErrs.CodeInternalError, "db down"))
+			})
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+			if !strings.Contains(w.Body.String(), tt.want) {
+				t.Fatalf("body = %s, want %q", w.Body.String(), tt.want)
+			}
+		})
 	}
 }
 

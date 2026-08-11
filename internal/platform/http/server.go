@@ -81,6 +81,10 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 	r.Use(
 		middleware.RequestID(),
 	)
+	// 语言解析：从 Accept-Language 注入 locale，供响应与校验翻译使用
+	r.Use(middleware.Locale())
+	// HTTP 指标中间件（在路由处理前注册，测量完整延迟）
+	r.Use(middleware.Metrics())
 	// OpenTelemetry 追踪中间件（在 Logger 之前，确保 span 可记录到日志）
 	if otelCfg.Enabled {
 		serviceName := otelCfg.ServiceName

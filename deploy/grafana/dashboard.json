@@ -13,7 +13,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "sum(rate(http_requests_total{job=\"jimu-server\"}[5m])) by (status)",
+          "expr": "sum(rate(jimu_http_requests_total{job=\"jimu-server\"}[5m])) by (status)",
           "legendFormat": "{{status}}"
         }
       ]
@@ -24,11 +24,11 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"jimu-server\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(jimu_http_request_duration_seconds_bucket{job=\"jimu-server\"}[5m])) by (le))",
           "legendFormat": "P95"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"jimu-server\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(jimu_http_request_duration_seconds_bucket{job=\"jimu-server\"}[5m])) by (le))",
           "legendFormat": "P99"
         }
       ]
@@ -39,7 +39,7 @@
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
       "targets": [
         {
-          "expr": "sum(rate(http_requests_total{job=\"jimu-server\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"jimu-server\"}[5m]))",
+          "expr": "sum(rate(jimu_http_requests_total{job=\"jimu-server\",status=~\"5..\"}[5m])) / sum(rate(jimu_http_requests_total{job=\"jimu-server\"}[5m]))",
           "legendFormat": "Error %"
         }
       ],
@@ -62,11 +62,11 @@
       "gridPos": { "h": 8, "w": 12, "x": 6, "y": 8 },
       "targets": [
         {
-          "expr": "jimu_db_connections_in_use{job=\"jimu-server\"}",
+          "expr": "jimu_db_in_use_connections{job=\"jimu-server\"}",
           "legendFormat": "In Use"
         },
         {
-          "expr": "jimu_db_connections_max{job=\"jimu-server\"}",
+          "expr": "jimu_db_max_open_connections{job=\"jimu-server\"}",
           "legendFormat": "Max"
         }
       ]
@@ -92,7 +92,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
       "targets": [
         {
-          "expr": "sum by (status) (http_requests_total{job=\"jimu-server\"})",
+          "expr": "sum by (status) (jimu_http_requests_total{job=\"jimu-server\"})",
           "legendFormat": "{{status}}"
         }
       ]
@@ -106,7 +106,7 @@
       {
         "name": "job",
         "type": "query",
-        "query": "label_values(http_requests_total, job)",
+        "query": "label_values(jimu_http_requests_total, job)",
         "current": { "text": "jimu-server", "value": "jimu-server" }
       }
     ]

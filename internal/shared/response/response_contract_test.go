@@ -69,7 +69,7 @@ func TestFailDoesNotLeakInfrastructureDetails(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body["code"].(float64) != appErrs.CodeInternalError || body["message"] != "internal error" || body["request_id"] != "rid-3" {
+	if body["code"].(float64) != appErrs.CodeInternalError || body["message"] != "服务器内部错误" || body["request_id"] != "rid-3" {
 		t.Fatalf("body = %#v", body)
 	}
 	if _, ok := body["cause"]; ok {
