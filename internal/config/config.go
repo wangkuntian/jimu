@@ -35,11 +35,11 @@ const (
 )
 
 var (
-	validHTTPModes         = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
-	validLogLevels         = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
-	validLogFormats        = []string{LogFormatJSON, LogFormatConsole}
-	validQueueTypes        = []string{QueueTypeRedis, QueueTypeKafka, QueueTypeRabbitMQ}
-	validOutboxPublishers  = []string{OutboxPublisherEventBus, OutboxPublisherMQ}
+	validHTTPModes        = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
+	validLogLevels        = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
+	validLogFormats       = []string{LogFormatJSON, LogFormatConsole}
+	validQueueTypes       = []string{QueueTypeRedis, QueueTypeKafka, QueueTypeRabbitMQ}
+	validOutboxPublishers = []string{OutboxPublisherEventBus, OutboxPublisherMQ}
 )
 
 // QueueConfig 队列配置
