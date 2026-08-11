@@ -8,6 +8,7 @@ import (
 
 	"jimu/internal/contract"
 	"jimu/internal/platform/logger"
+	"jimu/internal/platform/redis"
 
 	"github.com/robfig/cron/v3"
 )
@@ -30,14 +31,21 @@ type CronScheduler struct {
 	logger  *logger.Logger
 	errors  chan error
 	entries []cron.EntryID
+	store   Store
+	lock    *redis.Lock // 多实例协调（可选）
 
 	mu     sync.RWMutex
 	jobs   map[string]*JobInfo // id -> job info
 	byName map[string]string   // name -> id
 }
 
-// New 创建 CronScheduler
+// New 创建内存调度器（store 默认 MemoryStore，不持久化）
 func New(log *logger.Logger) *CronScheduler {
+	return NewWithStore(log, NewMemoryStore(), nil)
+}
+
+// NewWithStore 创建调度器，指定任务定义存储与分布式锁（锁可选，nil 时不加锁）
+func NewWithStore(log *logger.Logger, store Store, lock *redis.Lock) *CronScheduler {
 	c := cron.New(cron.WithChain(
 		cron.Recover(cron.DefaultLogger),
 		cron.SkipIfStillRunning(cron.DefaultLogger),
@@ -49,13 +57,31 @@ func New(log *logger.Logger) *CronScheduler {
 		errors: make(chan error, 16),
 		jobs:   make(map[string]*JobInfo),
 		byName: make(map[string]string),
+		store:  store,
+		lock:   lock,
 	}
 }
 
-// AddNamedFunc 注册带名称的任务（支持管理）
+// AddNamedFunc 注册带名称的任务（支持管理）；注册前将任务定义持久化到 store
 func (s *CronScheduler) AddNamedFunc(id, name, spec string, cmd func()) error {
+	if s.store != nil {
+		if err := s.store.Save(context.Background(), JobDef{ID: id, Name: name, Cron: spec, Enabled: true}); err != nil {
+			return fmt.Errorf("persist job %q: %w", id, err)
+		}
+	}
 	info := &JobInfo{ID: id, Name: name, Cron: spec, Enabled: true}
 	entryID, err := s.cron.AddFunc(spec, func() {
+		if s.lock != nil {
+			// 多实例协调：只有成功获取分布式锁的实例才执行任务
+			lockCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			result, err := s.lock.TryAcquire(lockCtx, "job:"+id, 30*time.Second)
+			cancel()
+			if err != nil {
+				s.logger.Debug("job skipped, lock not acquired", "id", id, "error", err.Error())
+				return
+			}
+			defer s.lock.Release(context.Background(), result)
+		}
 		s.recordRun(info, cmd)
 	})
 	if err != nil {
@@ -66,6 +92,27 @@ func (s *CronScheduler) AddNamedFunc(id, name, spec string, cmd func()) error {
 	s.byName[name] = id
 	s.entries = append(s.entries, entryID)
 	s.mu.Unlock()
+	return nil
+}
+
+// RestoreFromStore 从 store 加载任务并恢复注册（启动时调用）
+func (s *CronScheduler) RestoreFromStore(ctx context.Context, cmdFactory func(id string) func()) error {
+	jobs, err := s.store.List(ctx)
+	if err != nil {
+		return fmt.Errorf("list scheduled jobs: %w", err)
+	}
+	for _, job := range jobs {
+		if !job.Enabled {
+			continue
+		}
+		fn := cmdFactory(job.ID)
+		if fn == nil {
+			continue
+		}
+		if err := s.AddNamedFunc(job.ID, job.Name, job.Cron, fn); err != nil {
+			return fmt.Errorf("restore job %q: %w", job.ID, err)
+		}
+	}
 	return nil
 }
 

@@ -88,6 +88,18 @@ func TestValidateLogFormat(t *testing.T) {
 	}
 }
 
+func TestValidateSchedulerStore(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Scheduler.Store = "etcd"
+	err := cfg.Validate("prod")
+	if err == nil {
+		t.Fatal("expected error for invalid scheduler.store, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid scheduler.store") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func validProdConfig() Config {
 	return Config{
 		HTTP: HTTPConfig{
@@ -154,6 +166,9 @@ func validProdConfig() Config {
 		},
 		Outbox: OutboxConfig{
 			Publisher: OutboxPublisherEventBus,
+		},
+		Scheduler: SchedulerConfig{
+			Store: SchedulerStoreMemory,
 		},
 	}
 }

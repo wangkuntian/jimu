@@ -83,9 +83,18 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		return nil, err
 	}
 
-	sched := scheduler.New(log)
-	httpClient := httpplatform.NewClient(log)
+	var schedStore scheduler.Store = scheduler.NewMemoryStore()
+	if cfg.Scheduler.Store == config.SchedulerStoreMySQL {
+		schedStore = scheduler.NewMySQLStore(dbConn)
+	}
 	lock := redistore.NewLock(rdb, "lock")
+	var sched *scheduler.CronScheduler
+	if cfg.Scheduler.Store == config.SchedulerStoreMySQL {
+		sched = scheduler.NewWithStore(log, schedStore, lock)
+	} else {
+		sched = scheduler.NewWithStore(log, schedStore, nil)
+	}
+	httpClient := httpplatform.NewClient(log)
 
 	store, err := storage.New(storage.Config{
 		Type:    storage.StorageType(cfg.Storage.Type),
