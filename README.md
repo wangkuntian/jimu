@@ -377,7 +377,7 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `oauth.providers.{name}.client_id` | 提供商应用 Client ID | — |
 | `oauth.providers.{name}.client_secret` | 提供商应用 Client Secret（生产建议环境变量注入） | — |
 | `oauth.providers.{name}.redirect_url` | 授权回调地址 | — |
-| `captcha.enabled` | 是否启用登录/注册验证码 | `false`（开发）/ `true`（生产） |
+| `captcha.enabled` | 是否启用登录/注册验证码 | `false`（开发与生产，前端验证码流程就绪后再开启） |
 | `captcha.ttl_min` | 验证码有效期 (分钟) | `5` |
 | `otel.enabled` | 是否启用 OpenTelemetry | `false`（开发）/ `true`（生产） |
 
