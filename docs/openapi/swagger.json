@@ -471,6 +471,89 @@
                 }
             }
         },
+        "/captcha": {
+            "get": {
+                "description": "生成图形验证码，返回 captcha_id 与 base64 图片",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "验证码"
+                ],
+                "summary": "获取验证码",
+                "responses": {
+                    "200": {
+                        "description": "成功，返回 captcha_id 和 captcha_image",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/oauth/{provider}/callback": {
+            "get": {
+                "description": "处理第三方授权回调，签发 JWT",
+                "tags": [
+                    "OAuth"
+                ],
+                "summary": "OAuth 回调",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "提供商",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "授权码",
+                        "name": "code",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "状态",
+                        "name": "state",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "登录成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/oauth/{provider}/login": {
+            "get": {
+                "description": "重定向到第三方授权页",
+                "tags": [
+                    "OAuth"
+                ],
+                "summary": "OAuth 登录跳转",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "提供商 (google/github/wechat)",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "Found"
+                    }
+                }
+            }
+        },
         "/permissions": {
             "get": {
                 "security": [
@@ -1205,6 +1288,96 @@
                 }
             }
         },
+        "/users/batch-delete": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "批量软删除用户（单次最多 100 个）。返回成功/失败计数。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用户管理"
+                ],
+                "summary": "批量删除用户",
+                "parameters": [
+                    {
+                        "description": "要删除的用户 ID 列表",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/application.BatchDeleteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "操作完成，返回 success/failed 计数",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/export.csv": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "导出所有用户为 CSV 文件。列：ID、用户名、状态、创建时间。",
+                "produces": [
+                    "text/csv"
+                ],
+                "tags": [
+                    "用户管理"
+                ],
+                "summary": "导出用户列表（CSV）",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "排序字段（支持 id、username、created_at，默认 id）",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "排序方向（asc 或 desc，默认 desc）",
+                        "name": "order",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CSV 文件",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/users/{id}": {
             "get": {
                 "security": [
@@ -1376,6 +1549,22 @@
                 }
             }
         },
+        "application.BatchDeleteRequest": {
+            "type": "object",
+            "required": [
+                "ids"
+            ],
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "minItems": 1,
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
         "application.CreatePermissionRequest": {
             "type": "object",
             "required": [
@@ -1518,6 +1707,13 @@
                 "username"
             ],
             "properties": {
+                "captcha_code": {
+                    "type": "string"
+                },
+                "captcha_id": {
+                    "description": "验证码（登录时可选，注册时如果开启验证码则必填）",
+                    "type": "string"
+                },
                 "password": {
                     "description": "密码（8-32 位，必须包含字母和数字）",
                     "type": "string",
@@ -1551,6 +1747,7 @@
                     "type": "integer"
                 },
                 "data": {},
+                "details": {},
                 "message": {
                     "type": "string"
                 },

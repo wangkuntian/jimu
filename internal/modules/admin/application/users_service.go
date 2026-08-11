@@ -31,8 +31,8 @@ type ListUserFilter struct {
 	CreatedBefore string
 }
 
-// CreateUserRequest 管理员创建用户请求
-type CreateUserRequest struct {
+// AdminCreateUserRequest 管理员创建用户请求
+type AdminCreateUserRequest struct {
 	Username string   `json:"username" binding:"required,min=4,max=64"`
 	Password string   `json:"password" binding:"required,min=8,max=32"`
 	Status   int8     `json:"status"`
@@ -100,7 +100,7 @@ func (s *AdminUserService) GetUser(ctx context.Context, id uint64) (*AdminUser, 
 }
 
 // CreateUser 创建用户
-func (s *AdminUserService) CreateUser(ctx context.Context, req CreateUserRequest) (*AdminUser, error) {
+func (s *AdminUserService) CreateUser(ctx context.Context, req AdminCreateUserRequest) (*AdminUser, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.CodeInternalError, "failed to hash password", err)
@@ -126,16 +126,16 @@ func (s *AdminUserService) CreateUser(ctx context.Context, req CreateUserRequest
 
 // DisableUser 禁用用户
 func (s *AdminUserService) DisableUser(ctx context.Context, id uint64) error {
-	return s.UpdateUser(ctx, id, UpdateUserRequest{Status: int8Ptr(0)})
+	return s.UpdateUser(ctx, id, AdminUpdateUserRequest{Status: int8Ptr(0)})
 }
 
-// UpdateUserRequest 管理员更新用户请求
-type UpdateUserRequest struct {
+// AdminUpdateUserRequest 管理员更新用户请求
+type AdminUpdateUserRequest struct {
 	Status *int8 `json:"status" binding:"omitempty,oneof=0 1"`
 }
 
 // UpdateUser 更新用户状态
-func (s *AdminUserService) UpdateUser(ctx context.Context, id uint64, req UpdateUserRequest) error {
+func (s *AdminUserService) UpdateUser(ctx context.Context, id uint64, req AdminUpdateUserRequest) error {
 	user, err := s.userRepo.FindByID(ctx, id)
 	if err != nil {
 		if stderrors.Is(err, gorm.ErrRecordNotFound) {
