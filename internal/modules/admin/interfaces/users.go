@@ -62,7 +62,7 @@ func (h *AdminUserHandler) Get(c *gin.Context) {
 
 // Create 创建用户
 func (h *AdminUserHandler) Create(c *gin.Context) {
-	var req application.CreateUserRequest
+	var req application.AdminCreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
@@ -82,7 +82,7 @@ func (h *AdminUserHandler) Update(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
 		return
 	}
-	var req application.UpdateUserRequest
+	var req application.AdminUpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
