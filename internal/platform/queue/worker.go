@@ -114,7 +114,9 @@ func (p *WorkerPool) delayedJobScanner() {
 			return
 		case <-ticker.C:
 			// Consumer 接口无 MoveDueJobs，支持延迟队列的实现（如 Redis）通过断言触发
-			if m, ok := p.queue.(interface{ MoveDueJobs(context.Context) (int, error) }); ok {
+			if m, ok := p.queue.(interface {
+				MoveDueJobs(context.Context) (int, error)
+			}); ok {
 				_, _ = m.MoveDueJobs(p.ctx)
 			}
 		}
