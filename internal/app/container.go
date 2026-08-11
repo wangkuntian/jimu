@@ -99,7 +99,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	}
 	httpClient := httpplatform.NewClient(log)
 
-	store, err := storage.New(storage.Config{
+	storageSvc, err := storage.New(storage.Config{
 		Type:    storage.StorageType(cfg.Storage.Type),
 		BaseDir: cfg.Storage.BaseDir,
 		BaseURL: cfg.Storage.BaseURL,
@@ -190,7 +190,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		Scheduler:    sched,
 		HTTPClient:   httpClient,
 		Lock:         lock,
-		Storage:      store,
+		Storage:      storageSvc,
 		Notification: notifier,
 		FeatureFlag:  featureMgr,
 		WebSocketHub: wsHub,

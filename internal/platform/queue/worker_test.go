@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"jimu/internal/modules/admin/domain"
 
 	"github.com/stretchr/testify/assert"
+	"gorm.io/gorm"
 )
 
 // fakeConsumer 内存消费者，验证 WorkerPool 依赖 Consumer 接口而非具体实现
@@ -75,7 +77,7 @@ func (r *fakeJobRepo) FindByID(ctx context.Context, id uint64) (*domain.Job, err
 	defer r.mu.Unlock()
 	job, ok := r.jobs[id]
 	if !ok {
-		return nil, assert.AnError
+		return nil, gorm.ErrRecordNotFound
 	}
 	return job, nil
 }
@@ -161,6 +163,42 @@ func TestWorkerPoolSubmitRejectsConsumerOnly(t *testing.T) {
 	_, err = wp.SubmitDelayed(context.Background(), "echo", `{"x":1}`, time.Minute)
 	assert.Error(t, err)
 	assert.Len(t, jobRepo.jobs, 0)
+}
+
+func TestWorkerPoolOutboxEventFailureWritesDeadLetter(t *testing.T) {
+	// outbox 事件无 jobs 表行：执行失败应写死信，且不因状态机缺失而崩
+	deadRepo := &fakeDeadRepo{}
+	store := NewMySQLStore(newFakeJobRepo(), &fakeHistoryRepo{}, deadRepo)
+	RegisterWorker("outbox:user.created", func(ctx context.Context, payload string) error {
+		return errors.New("boom")
+	})
+
+	consumer := &fakeConsumer{jobs: make(chan *JobData, 1)}
+	consumer.jobs <- &JobData{ID: 999, Type: "outbox:user.created", Payload: `{}`}
+
+	wp := NewWorkerPool(WorkerConfig{Workers: 1, PollTimeout: 10 * time.Millisecond}, consumer, store)
+	wp.Start()
+	time.Sleep(100 * time.Millisecond)
+	wp.Stop()
+
+	deadRepo.mu.Lock()
+	defer deadRepo.mu.Unlock()
+	assert.Len(t, deadRepo.items, 1)
+	assert.Equal(t, uint64(999), deadRepo.items[0].JobID)
+}
+
+func TestWorkerPoolOutboxEventSuccessSkipsTracking(t *testing.T) {
+	// outbox 事件成功：无 jobs 行，跳过历史写入，不崩
+	store := NewMySQLStore(newFakeJobRepo(), &fakeHistoryRepo{}, &fakeDeadRepo{})
+	RegisterWorker("outbox:user.created", func(ctx context.Context, payload string) error { return nil })
+
+	consumer := &fakeConsumer{jobs: make(chan *JobData, 1)}
+	consumer.jobs <- &JobData{ID: 999, Type: "outbox:user.created", Payload: `{}`}
+
+	wp := NewWorkerPool(WorkerConfig{Workers: 1, PollTimeout: 10 * time.Millisecond}, consumer, store)
+	wp.Start()
+	time.Sleep(100 * time.Millisecond)
+	wp.Stop()
 }
 
 func TestWorkerPoolSubmitAndDelayed(t *testing.T) {

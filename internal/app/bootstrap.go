@@ -18,22 +18,29 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// outboxTypeConverters 按事件类型将 outbox 内层 Payload 还原为强类型事件
-var outboxTypeConverters = map[string]func(json.RawMessage) interface{}{
-	contract.EventUserCreated: func(p json.RawMessage) interface{} {
+// outboxTypeConverters 按事件类型将 outbox 内层 Payload 还原为强类型事件。
+// 返回 error：载荷与事件类型不匹配时拒绝发布，避免零值事件被静默发出。
+var outboxTypeConverters = map[string]func(json.RawMessage) (interface{}, error){
+	contract.EventUserCreated: func(p json.RawMessage) (interface{}, error) {
 		var e contract.UserCreatedEvent
-		_ = json.Unmarshal(p, &e)
-		return e
+		if err := json.Unmarshal(p, &e); err != nil {
+			return nil, err
+		}
+		return e, nil
 	},
-	contract.EventUserUpdated: func(p json.RawMessage) interface{} {
+	contract.EventUserUpdated: func(p json.RawMessage) (interface{}, error) {
 		var e contract.UserUpdatedEvent
-		_ = json.Unmarshal(p, &e)
-		return e
+		if err := json.Unmarshal(p, &e); err != nil {
+			return nil, err
+		}
+		return e, nil
 	},
-	contract.EventUserDeleted: func(p json.RawMessage) interface{} {
+	contract.EventUserDeleted: func(p json.RawMessage) (interface{}, error) {
 		var e contract.UserDeletedEvent
-		_ = json.Unmarshal(p, &e)
-		return e
+		if err := json.Unmarshal(p, &e); err != nil {
+			return nil, err
+		}
+		return e, nil
 	},
 }
 
@@ -48,7 +55,11 @@ func bridgeFn(c *Container) queue.WorkerFunc {
 		if !ok {
 			return fmt.Errorf("no converter for outbox event type: %s", evt.EventType)
 		}
-		c.EventBus.Publish(evt.EventType, conv(evt.Payload))
+		strong, err := conv(evt.Payload)
+		if err != nil {
+			return fmt.Errorf("convert outbox event %s: %w", evt.EventType, err)
+		}
+		c.EventBus.Publish(evt.EventType, strong)
 		return nil
 	}
 }
@@ -71,8 +82,17 @@ func registerEventBusBridge(c *Container) {
 				c.Logger.Error("outbox bridge: unexpected payload type")
 				return
 			}
-			conv := outboxTypeConverters[evt.EventType]
-			c.EventBus.Publish(evt.EventType, conv(evt.Payload))
+			conv, ok := outboxTypeConverters[evt.EventType]
+			if !ok {
+				c.Logger.Error("outbox bridge: unknown event type", "type", evt.EventType)
+				return
+			}
+			strong, err := conv(evt.Payload)
+			if err != nil {
+				c.Logger.Error("outbox bridge: convert event failed", "type", evt.EventType, "error", err.Error())
+				return
+			}
+			c.EventBus.Publish(evt.EventType, strong)
 		})
 	}
 }
@@ -160,19 +180,21 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 				observability.CollectRuntime()
 			}}
 		}
-		cleanupSvc := db.NewCleanupService(container.DB, db.DefaultCleanupConfig())
-		jobFns["cleanup"] = jobDef{name: "Data Cleanup", spec: "0 3 * * *", fn: func() {
-			results, err := cleanupSvc.Run(context.Background())
-			if err != nil {
-				container.Logger.Error("cleanup job failed", "error", err.Error())
-				return
-			}
-			for _, r := range results {
-				if r.Deleted > 0 {
-					container.Logger.Info("cleanup completed", "table", r.Table, "deleted", r.Deleted)
+		if container.DB != nil {
+			cleanupSvc := db.NewCleanupService(container.DB, db.DefaultCleanupConfig())
+			jobFns["cleanup"] = jobDef{name: "Data Cleanup", spec: "0 3 * * *", fn: func() {
+				results, err := cleanupSvc.Run(context.Background())
+				if err != nil {
+					container.Logger.Error("cleanup job failed", "error", err.Error())
+					return
 				}
-			}
-		}}
+				for _, r := range results {
+					if r.Deleted > 0 {
+						container.Logger.Info("cleanup completed", "table", r.Table, "deleted", r.Deleted)
+					}
+				}
+			}}
+		}
 
 		// 注册 WebSocket Hub 运行
 		if container.WebSocketHub != nil {
@@ -233,7 +255,7 @@ type workerPoolComponent struct {
 }
 
 func (w workerPoolComponent) Start(context.Context) error {
-	go w.pool.Start()
+	w.pool.Start()
 	return nil
 }
 

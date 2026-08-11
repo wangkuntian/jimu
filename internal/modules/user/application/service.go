@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"log"
 	"time"
 
 	"jimu/internal/contract"
 	"jimu/internal/modules/user/domain"
 	"jimu/internal/platform/cache"
-	"jimu/internal/platform/event"
 	"jimu/internal/platform/outbox"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
@@ -20,19 +20,15 @@ import (
 )
 
 type UserService struct {
-	repo     domain.UserRepository
-	cache    cache.Cache
-	eventBus *event.EventBus
-	outbox   *outbox.Outbox
+	repo   domain.UserRepository
+	cache  cache.Cache
+	outbox *outbox.Outbox
 }
 
 func NewUserService(repo domain.UserRepository, cache cache.Cache, deps ...interface{}) *UserService {
 	s := &UserService{repo: repo, cache: cache}
 	for _, dep := range deps {
-		switch d := dep.(type) {
-		case *event.EventBus:
-			s.eventBus = d
-		case *outbox.Outbox:
+		if d, ok := dep.(*outbox.Outbox); ok {
 			s.outbox = d
 		}
 	}
@@ -84,17 +80,22 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserR
 	}
 	resp := ToUserResponse(*user)
 
-	// 写入 Outbox（统一事件投递路径，确保可靠投递）
+	// 写入 Outbox（统一事件投递路径，确保可靠投递）。
+	// 业务事务已提交，outbox 写失败不回滚业务，但必须记录，避免静默丢事件。
 	if s.outbox != nil {
-		payload, _ := json.Marshal(contract.UserCreatedEvent{
+		payload, err := json.Marshal(contract.UserCreatedEvent{
 			UserID:   user.ID,
 			Username: user.Username,
 		})
-		_ = s.outbox.Add(ctx, nil, outbox.Event{
+		if err != nil {
+			log.Printf("user: marshal created event: %v", err)
+		} else if err := s.outbox.Add(ctx, nil, outbox.Event{
 			AggregateID: fmt.Sprintf("user:%d", user.ID),
 			EventType:   contract.EventUserCreated,
 			Payload:     payload,
-		})
+		}); err != nil {
+			log.Printf("user: write outbox event %s: %v", contract.EventUserCreated, err)
+		}
 	}
 
 	return &resp, nil
@@ -166,15 +167,19 @@ func (s *UserService) Update(ctx context.Context, id uint64, req UpdateUserReque
 	s.invalidateUserCache(ctx, id)
 
 	if s.outbox != nil {
-		payload, _ := json.Marshal(contract.UserUpdatedEvent{
+		payload, err := json.Marshal(contract.UserUpdatedEvent{
 			UserID:  id,
 			Changes: []string{"status"},
 		})
-		_ = s.outbox.Add(ctx, nil, outbox.Event{
+		if err != nil {
+			log.Printf("user: marshal updated event: %v", err)
+		} else if err := s.outbox.Add(ctx, nil, outbox.Event{
 			AggregateID: fmt.Sprintf("user:%d", id),
 			EventType:   contract.EventUserUpdated,
 			Payload:     payload,
-		})
+		}); err != nil {
+			log.Printf("user: write outbox event %s: %v", contract.EventUserUpdated, err)
+		}
 	}
 	return nil
 }
@@ -186,14 +191,18 @@ func (s *UserService) Delete(ctx context.Context, id uint64) error {
 	s.invalidateUserCache(ctx, id)
 
 	if s.outbox != nil {
-		payload, _ := json.Marshal(contract.UserDeletedEvent{
+		payload, err := json.Marshal(contract.UserDeletedEvent{
 			UserID: id,
 		})
-		_ = s.outbox.Add(ctx, nil, outbox.Event{
+		if err != nil {
+			log.Printf("user: marshal deleted event: %v", err)
+		} else if err := s.outbox.Add(ctx, nil, outbox.Event{
 			AggregateID: fmt.Sprintf("user:%d", id),
 			EventType:   contract.EventUserDeleted,
 			Payload:     payload,
-		})
+		}); err != nil {
+			log.Printf("user: write outbox event %s: %v", contract.EventUserDeleted, err)
+		}
 	}
 	return nil
 }
