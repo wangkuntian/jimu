@@ -30,8 +30,8 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **分布式锁** — Redis 实现的分布式锁（防并发、选主）
 - **文件存储** — 本地/S3/OSS/MinIO 统一接口
 - **通知系统** — 邮件/SMS/WebSocket/Webhook 抽象
-- **Outbox 模式** — 事件发布与数据库事务一致性保证，支持 MQ 跨服务发布（`outbox.publisher` 切换；发布端已就绪，消费者接线为后续工作）
-- **定时任务** — Cron 调度器（robfig/cron），支持 MySQL 持久化（`scheduler.store=mysql`）与多实例分布式锁协调
+- **Outbox 模式** — 事件发布与数据库事务一致性保证，支持 MQ 跨服务发布（`outbox.publisher` 切换；`mq` 模式下通过 WorkerPool 消费事件，`event_bus` 模式通过 `outbox:*` 桥接器注入事件总线）
+- **定时任务** — Cron 调度器（robfig/cron），支持 MySQL 持久化（`scheduler.store=mysql`）与多实例分布式锁协调，启动时通过 `RestoreFromStore` 恢复持久化任务（内置任务去重）
 - **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
 - **多租户** — 租户中间件 + 行级数据隔离
 - **OpenTelemetry** — 分布式追踪（OTLP gRPC）
@@ -372,7 +372,7 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `auth.refresh_expire_day` | Refresh Token 有效期 (天) | `30`（开发）/ `7`（生产） |
 | `storage.type` | 存储类型 (`local`/`s3`/`oss`/`minio`) | `local` |
 | `queue.type` | 队列类型 (`redis`/`kafka`/`rabbitmq`)，切 Kafka/RabbitMQ 时需保证 broker 可用，否则启动失败 | `redis` |
-| `outbox.publisher` | Outbox 发布器类型 (`event_bus`/`mq`) | `event_bus` |
+| `outbox.publisher` | Outbox 发布器类型 (`event_bus`/`mq`)。`mq` 仅支持 `queue.type=kafka/rabbitmq`，配 `redis` 启动报错 | `event_bus` |
 | `scheduler.store` | 任务定义存储类型 (`memory`/`mysql`)；`mysql` 需迁移表 `scheduled_jobs`（迁移 014） | `memory` |
 | `oauth.providers.{name}.enabled` | 是否启用某 OAuth 提供商 (`google`/`github`/`wechat`) | `false` |
 | `oauth.providers.{name}.client_id` | 提供商应用 Client ID | — |
