@@ -52,7 +52,11 @@ func (p *WeChatProvider) Exchange(ctx context.Context, code string) (*UserInfo, 
 	if err != nil {
 		return nil, fmt.Errorf("wechat exchange: %w", err)
 	}
-	resp, err := http.Get("https://api.weixin.qq.com/sns/userinfo?access_token=" + token.AccessToken + "&openid=" + token.Extra("openid").(string))
+	openid, ok := token.Extra("openid").(string)
+	if !ok || openid == "" {
+		return nil, fmt.Errorf("wechat openid missing")
+	}
+	resp, err := http.Get("https://api.weixin.qq.com/sns/userinfo?access_token=" + token.AccessToken + "&openid=" + openid)
 	if err != nil {
 		return nil, fmt.Errorf("wechat userinfo: %w", err)
 	}
