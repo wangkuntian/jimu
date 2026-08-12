@@ -3,7 +3,7 @@ package interfaces
 import (
 	"strconv"
 
-	"jimu/internal/modules/admin/domain"
+	"jimu/internal/platform/queue/domain"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"jimu/internal/modules/admin/domain"
+	"jimu/internal/platform/queue/domain"
 
 	"github.com/stretchr/testify/assert"
 )
