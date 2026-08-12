@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"jimu/internal/modules/admin/domain"
+	"jimu/internal/platform/queue/domain"
 
 	"gorm.io/gorm"
 )

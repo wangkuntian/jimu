@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"jimu/internal/modules/admin/domain"
+	"jimu/internal/platform/queue/domain"
 	apperrors "jimu/internal/shared/errors"
 )
 

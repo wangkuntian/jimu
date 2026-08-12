@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"jimu/internal/modules/admin/domain"
+	"jimu/internal/platform/queue/domain"
 
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
