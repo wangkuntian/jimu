@@ -115,7 +115,7 @@ func (tdb *TestDB) Migrate() error {
 		return err
 	}
 
-	return goose.Up(sqlDB, "migrations")
+	return goose.Up(sqlDB, db.MigrationDir())
 }
 
 // Reset 清空所有表数据（保留表结构）

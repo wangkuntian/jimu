@@ -3,6 +3,9 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"time"
 
 	"jimu/internal/config"
@@ -61,24 +64,56 @@ func MigrateWithRetry(cfg config.DBConfig, log *logger.Logger, direction string)
 	return fmt.Errorf("migration %s failed after %d attempts: %w", direction, maxRetries, lastErr)
 }
 
+// MigrationDir 定位迁移目录：从本文件源码路径向上找项目根的 migrations，
+// 不依赖工作目录，go test 在包目录运行也能找到。
+func MigrationDir() string {
+	if _, file, _, ok := runtime.Caller(0); ok {
+		if dir := findUp(filepath.Dir(file), "migrations"); dir != "" {
+			return dir
+		}
+	}
+	return "migrations"
+}
+
+// findUp 从 start 逐级向父目录查找包含 target 的目录
+func findUp(start, target string) string {
+	dir := start
+	for {
+		if isDir(filepath.Join(dir, target)) {
+			return filepath.Join(dir, target)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+func isDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
 func runMigration(sqlDB *sql.DB, direction string) error {
 	if err := goose.SetDialect("mysql"); err != nil {
 		return fmt.Errorf("failed to set dialect: %w", err)
 	}
 
+	dir := MigrationDir()
 	switch direction {
 	case "up":
-		return goose.Up(sqlDB, "migrations")
+		return goose.Up(sqlDB, dir)
 	case "up-by-one":
-		return goose.UpByOne(sqlDB, "migrations")
+		return goose.UpByOne(sqlDB, dir)
 	case "down":
-		return goose.Down(sqlDB, "migrations")
+		return goose.Down(sqlDB, dir)
 	case "redo":
-		return goose.Redo(sqlDB, "migrations")
+		return goose.Redo(sqlDB, dir)
 	case "status":
-		return goose.Status(sqlDB, "migrations")
+		return goose.Status(sqlDB, dir)
 	case "reset":
-		return goose.Reset(sqlDB, "migrations")
+		return goose.Reset(sqlDB, dir)
 	default:
 		return fmt.Errorf("unknown direction: %s", direction)
 	}
