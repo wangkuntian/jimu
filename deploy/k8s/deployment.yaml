@@ -20,9 +20,33 @@ spec:
       labels:
         app: jimu-server
     spec:
+      # 数据库迁移：主容器启动前执行，避免新版代码连到未迁移的库
+      # 迁移失败则 Pod 不就绪，Deployment 不滚动（maxUnavailable: 0）
+      initContainers:
+        - name: migrate
+          image: registry.example.com/jimu:1.0.0
+          imagePullPolicy: IfNotPresent
+          command: ["./jimu", "migrate", "up"]
+          envFrom:
+            - configMapRef:
+                name: jimu-config
+            - secretRef:
+                name: jimu-secrets
+          volumeMounts:
+            - name: configs
+              mountPath: /app/configs
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
       containers:
         - name: jimu
-          image: jimu:1.0.0
+          # 替换为实际镜像仓库地址；私有 registry 需认证时加 imagePullSecrets
+          image: registry.example.com/jimu:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

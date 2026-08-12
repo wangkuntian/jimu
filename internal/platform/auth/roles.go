@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"sync"
+	"time"
 
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
@@ -53,8 +54,33 @@ func (s *DBAuthorizationStore) Policies(ctx context.Context) ([]Policy, error) {
 	return policies, err
 }
 
+// policyCacheTTL 策略缓存有效期。
+// 权限变更经 TTL 后自动生效；用户角色（roles）每请求实时查询，撤销/分配角色即时反映。
+const policyCacheTTL = 30 * time.Second
+
 func AuthorizationMiddleware(store AuthorizationStore, enforcer *casbin.Enforcer) gin.HandlerFunc {
+	// mu 串行化 enforcer 重建（casbin 非并发安全）
 	var mu sync.Mutex
+	// 策略缓存：避免每请求全量 DB 查询 + 重建 enforcer
+	var cacheMu sync.Mutex
+	var cachedPolicies []Policy
+	var cachedAt time.Time
+
+	loadPolicies := func(ctx context.Context) ([]Policy, error) {
+		cacheMu.Lock()
+		defer cacheMu.Unlock()
+		if time.Since(cachedAt) < policyCacheTTL && cachedPolicies != nil {
+			return cachedPolicies, nil
+		}
+		policies, err := store.Policies(ctx)
+		if err != nil {
+			return nil, err
+		}
+		cachedPolicies = policies
+		cachedAt = time.Now()
+		return policies, nil
+	}
+
 	return func(c *gin.Context) {
 		userID, _ := c.Get("user_id")
 		id, ok := userID.(uint64)
@@ -77,7 +103,7 @@ func AuthorizationMiddleware(store AuthorizationStore, enforcer *casbin.Enforcer
 		}
 		c.Set("roles", roles)
 
-		policies, err := store.Policies(c.Request.Context())
+		policies, err := loadPolicies(c.Request.Context())
 		if err != nil {
 			response.Fail(c, errors.Wrap(errors.CodeInternalError, "failed to load policies", err))
 			c.Abort()

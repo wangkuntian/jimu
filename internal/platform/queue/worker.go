@@ -114,11 +114,17 @@ func (p *WorkerPool) delayedJobScanner() {
 		case <-p.ctx.Done():
 			return
 		case <-ticker.C:
-			// Consumer 接口无 MoveDueJobs，支持延迟队列的实现（如 Redis）通过断言触发
+			// Consumer 接口无 MoveDueJobs/RequeueExpired，支持延迟队列与
+			// 可见性超时恢复的实现（如 Redis）通过断言触发
 			if m, ok := p.queue.(interface {
 				MoveDueJobs(context.Context) (int, error)
 			}); ok {
 				_, _ = m.MoveDueJobs(p.ctx)
+			}
+			if r, ok := p.queue.(interface {
+				RequeueExpired(context.Context) (int, error)
+			}); ok {
+				_, _ = r.RequeueExpired(p.ctx)
 			}
 		}
 	}
@@ -142,6 +148,7 @@ func (p *WorkerPool) executeJob(data *JobData) {
 				log.Printf("queue: mark failed job %d: %v", data.ID, err)
 			}
 		}
+		_ = p.queue.Nack(ctx, data)
 		return
 	}
 
@@ -149,18 +156,48 @@ func (p *WorkerPool) executeJob(data *JobData) {
 	err := fn(ctx, data.Payload)
 	duration := time.Since(start).Milliseconds()
 
-	if p.store == nil {
-		return
+	if p.store != nil {
+		if err != nil {
+			if merr := p.store.MarkFailed(ctx, data.ID, data.Type, data.Payload, err, duration); merr != nil {
+				log.Printf("queue: mark failed job %d: %v", data.ID, merr)
+			}
+		} else {
+			if merr := p.store.MarkSuccess(ctx, data.ID, duration); merr != nil {
+				log.Printf("queue: mark success job %d: %v", data.ID, merr)
+			}
+		}
 	}
+
+	// 任务语义：成功 Ack；失败时按 store 决策是否重试。
+	// store 在失败且未耗尽重试次数时返回 requeue=true，worker 对 Redis 重新入队；
+	// Kafka/RabbitMQ 的 Nack 为 no-op，但 store 已把 job 状态置回 pending，
+	// 重试提交由 Submit/SubmitDelayed 的下次调用驱动。
 	if err != nil {
-		if err := p.store.MarkFailed(ctx, data.ID, data.Type, data.Payload, err, duration); err != nil {
-			log.Printf("queue: mark failed job %d: %v", data.ID, err)
+		if p.store != nil {
+			// store 判定是否需要重试（看 Attempts vs MaxAttempts）
+			requeue := p.needRetry(ctx, data)
+			if requeue {
+				_ = p.queue.Nack(ctx, data)
+			} else {
+				_ = p.queue.Ack(ctx, data)
+			}
+		} else {
+			// 无 store 时也重试，避免静默丢任务
+			_ = p.queue.Nack(ctx, data)
 		}
 	} else {
-		if err := p.store.MarkSuccess(ctx, data.ID, duration); err != nil {
-			log.Printf("queue: mark success job %d: %v", data.ID, err)
-		}
+		_ = p.queue.Ack(ctx, data)
 	}
+}
+
+// needRetry 查询 store 判断任务是否还有重试机会。
+// 无 jobs 行（outbox 事件）或查询失败时保守返回 false（不无限重试）。
+func (p *WorkerPool) needRetry(ctx context.Context, data *JobData) bool {
+	job, err := p.store.jobRepo.FindByID(ctx, data.ID)
+	if err != nil {
+		return false
+	}
+	return job.Attempts < job.MaxAttempts
 }
 
 // Submit 提交任务

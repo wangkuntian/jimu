@@ -34,6 +34,7 @@ type Module struct {
 	wsHub      *ws.ClientHub
 	wsPres     *ws.PresenceManager
 	wsChannels *ws.ChannelManager
+	jwt        *auth.JWT
 }
 
 // New 创建管理模块
@@ -53,6 +54,8 @@ func New(version, env string, rdb *redis.Client, db *gorm.DB, deps ...interface{
 			m.feature = d
 		case contract.EventBus:
 			m.eventBus = d
+		case *auth.JWT:
+			m.jwt = d
 		}
 	}
 	return m
@@ -70,9 +73,13 @@ func (m *Module) initWS() {
 }
 
 // wsHandler 创建 WebSocket 处理器
+// JWT 实例由 main 注入（真实配置），避免 WS 与 HTTP 认证签名不一致
 func (m *Module) wsHandler() http.HandlerFunc {
 	m.initWS()
-	return ws.WSHandler(m.wsHub, auth.New("dev-secret", "jimu", 30, 7), m.wsPres, m.wsChannels)
+	if m.jwt == nil {
+		return nil
+	}
+	return ws.WSHandler(m.wsHub, m.jwt, m.wsPres, m.wsChannels)
 }
 
 // Name 返回模块名称

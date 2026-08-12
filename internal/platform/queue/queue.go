@@ -16,14 +16,14 @@ type Queue interface {
 }
 
 // Consumer 消费者接口。
-// Redis 为破坏性消费（BRPop），Ack/Nack 为 no-op。
 type Consumer interface {
 	// Consume 消费任务（阻塞式，timeout 内无任务返回错误）
 	Consume(ctx context.Context, timeout time.Duration) (*JobData, error)
 	// Ack 确认任务处理成功
 	Ack(ctx context.Context, job *JobData) error
 	// Nack 否认任务处理。
-	// Redis/Kafka/RabbitMQ 当前均为 at-most-once 语义，Nack 为 no-op；
-	// 重试由 WorkerPool 的持久化存储（MySQL store）驱动，不依赖队列 Nack。
+	// Redis 为 at-least-once：Nack 将任务重新入队，可见性超时由 RequeueExpired 兜底；
+	// Kafka/RabbitMQ 为 at-most-once，Nack 为 no-op，
+	// 重试由 WorkerPool 的持久化存储（MySQL store）驱动。
 	Nack(ctx context.Context, job *JobData) error
 }

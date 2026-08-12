@@ -118,28 +118,6 @@ func CSRF(cfg CSRFConfig) gin.HandlerFunc {
 	}
 }
 
-// CSRFSigner 用于生成和校验 CSRF Token 的辅助工具
-type CSRFSigner struct {
-	secret []byte
-}
-
-// NewCSRFSigner 创建 CSRF Signer
-func NewCSRFSigner(secret []byte) *CSRFSigner {
-	return &CSRFSigner{secret: secret}
-}
-
-// Generate 生成 token + timestamp
-func (s *CSRFSigner) Generate() (token string, timestamp int64) {
-	timestamp = time.Now().Unix()
-	token = generateToken(s.secret, timestamp)
-	return
-}
-
-// Validate 校验 token
-func (s *CSRFSigner) Validate(token string, timestamp int64, maxAge time.Duration) bool {
-	return validateToken(s.secret, token, timestamp, maxAge)
-}
-
 // setCSRFCookie 设置 CSRF Cookie
 func setCSRFCookie(c *gin.Context, cfg CSRFConfig) {
 	// 如果已有有效 cookie 则不重新设置

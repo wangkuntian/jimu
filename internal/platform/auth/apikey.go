@@ -3,14 +3,15 @@ package auth
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	adminapi "jimu/internal/modules/admin/domain"
+
+	"gorm.io/gorm"
 )
 
 // APIKey API 密钥信息
@@ -45,36 +46,6 @@ func NewAPIKeyVerifier(store APIKeyStore) *APIKeyVerifier {
 	return &APIKeyVerifier{store: store}
 }
 
-// GenerateKey 生成新的 API Key
-// 返回完整 key（仅此一次）和 APIKey 元信息
-func GenerateKey(id uint64, name string, scopes []string, ttl time.Duration) (string, *APIKey, error) {
-	if name == "" {
-		return "", nil, errors.New("name is required")
-	}
-
-	// 生成 32 字节随机 key
-	raw := make([]byte, 32)
-	now := time.Now().UnixNano()
-	for i := range raw {
-		// 简化实现：实际应使用 crypto/rand
-		raw[i] = byte((now + int64(i)*7) % 256)
-	}
-	fullKey := apiKeyPrefix + hex.EncodeToString(raw)
-
-	key := &APIKey{
-		ID:        id,
-		Name:      name,
-		KeyPrefix: fullKey[:min(8+len(apiKeyPrefix), len(fullKey))],
-		Scopes:    scopes,
-		Enabled:   true,
-	}
-	if ttl > 0 {
-		key.ExpiresAt = time.Now().Add(ttl)
-	}
-
-	return fullKey, key, nil
-}
-
 // HashKey 计算 API Key 的 SHA-256 哈希（用于存储和查找）
 func HashKey(key string) string {
 	sum := sha256.Sum256([]byte(key))
@@ -105,11 +76,6 @@ func (v *APIKeyVerifier) Verify(ctx context.Context, providedKey string) (*APIKe
 	// 更新最后使用时间（异步，不影响主流程）
 	_ = v.store.UpdateLastUsed(ctx, key.ID, time.Now())
 	return key, nil
-}
-
-// ConstantTimeCompare 恒定时间比较两个 API Key（防时序攻击）
-func ConstantTimeCompare(a, b string) bool {
-	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
 // APIKeyContextKey context 中存储 API Key 的 key
@@ -153,42 +119,50 @@ func ParseScopes(s string) []string {
 	return strings.Split(s, ",")
 }
 
-// apiKeyStoreKey Redis 存储 key
-func apiKeyStoreKey(id uint64) string {
-	return fmt.Sprintf("jimu:apikey:%d", id)
+// dbAPIKeyStore 基于 api_keys 表的 API Key 存储（DB 持久化实现）
+type dbAPIKeyStore struct {
+	db *gorm.DB
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+// NewDBAPIKeyStore 创建 DB API Key 存储，复用 admin 模块 api_keys 表
+func NewDBAPIKeyStore(db *gorm.DB) APIKeyStore {
+	return &dbAPIKeyStore{db: db}
+}
+
+func (s *dbAPIKeyStore) GetByKeyHash(ctx context.Context, hash string) (*APIKey, error) {
+	var row adminapi.APIKey
+	err := s.db.WithContext(ctx).Where("key_hash = ?", hash).First(&row).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("key not found")
+		}
+		return nil, err
 	}
-	return b
+	return rowToAPIKey(&row), nil
 }
 
-// Ensure redis.Scripter satisfies APIKeyStore if needed
-var _ APIKeyStore = (*redisAPIKeyStore)(nil)
-
-// redisAPIKeyStore Redis 实现的 API Key 存储
-type redisAPIKeyStore struct {
-	client *redis.Client
+func (s *dbAPIKeyStore) UpdateLastUsed(ctx context.Context, id uint64, t time.Time) error {
+	return s.db.WithContext(ctx).Model(&adminapi.APIKey{}).
+		Where("id = ?", id).
+		Update("last_used", t).Error
 }
 
-// NewRedisAPIKeyStore 创建 Redis API Key 存储
-func NewRedisAPIKeyStore(client *redis.Client) APIKeyStore {
-	return &redisAPIKeyStore{client: client}
-}
-
-func (s *redisAPIKeyStore) GetByKeyHash(ctx context.Context, hash string) (*APIKey, error) {
-	// 从 Redis hash 中查找
-	data, err := s.client.HGetAll(ctx, "jimu:apikey:index:"+hash).Result()
-	if err != nil || len(data) == 0 {
-		return nil, errors.New("key not found")
+// rowToAPIKey 将 admin 模块实体转换为 auth.APIKey
+func rowToAPIKey(row *adminapi.APIKey) *APIKey {
+	key := &APIKey{
+		ID:        row.ID,
+		Name:      row.Name,
+		KeyPrefix: row.KeyPrefix,
+		Enabled:   row.Enabled,
+		ExpiresAt: row.ExpiresAt,
+		LastUsed:  row.LastUsed,
 	}
-	// 简化实现：实际应反序列化完整信息
-	_ = data
-	return nil, errors.New("not implemented: use database store")
+	if row.Scopes != "" {
+		var scopes []string
+		if err := json.Unmarshal([]byte(row.Scopes), &scopes); err == nil {
+			key.Scopes = scopes
+		}
+	}
+	return key
 }
 
-func (s *redisAPIKeyStore) UpdateLastUsed(ctx context.Context, id uint64, t time.Time) error {
-	return s.client.HSet(ctx, apiKeyStoreKey(id), "last_used", t.Unix()).Err()
-}

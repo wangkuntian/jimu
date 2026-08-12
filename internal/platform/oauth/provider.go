@@ -1,7 +1,13 @@
 // internal/platform/oauth/provider.go
 package oauth
 
-import "context"
+import (
+	"context"
+	"time"
+)
+
+// oauthTimeout 上游 OAuth HTTP 调用超时，防止第三方挂起导致 goroutine 泄漏
+const oauthTimeout = 10 * time.Second
 
 // UserInfo OAuth 用户信息
 type UserInfo struct {

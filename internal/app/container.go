@@ -9,11 +9,11 @@ import (
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	admininfra "jimu/internal/modules/admin/infrastructure"
+	"jimu/internal/platform/auth"
 	"jimu/internal/platform/captcha"
 	"jimu/internal/platform/db"
 	"jimu/internal/platform/event"
 	"jimu/internal/platform/feature"
-	httpplatform "jimu/internal/platform/http"
 	"jimu/internal/platform/logger"
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/observability"
@@ -36,7 +36,6 @@ type Container struct {
 	TracerProvider *sdktrace.TracerProvider
 	JobRegistry    contract.JobRegistry
 	Scheduler      *scheduler.CronScheduler
-	HTTPClient     *httpplatform.Client
 	Lock           *redistore.Lock
 	Storage        storage.Storage
 	Notification   notification.Dispatcher
@@ -47,6 +46,7 @@ type Container struct {
 	DBCollector    *observability.DBCollector
 	Captcha        *captcha.Service
 	WorkerPool     *queue.WorkerPool
+	APIKeyVerifier *auth.APIKeyVerifier
 }
 
 func (c *Container) Start(context.Context) error { return nil }
@@ -77,6 +77,10 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	log := logger.New(cfg.Log)
 	var pendingWorkerPool *queue.WorkerPool
 
+	// 雪花 ID：初始化全局生成器后再连库（hook 在 open 时注册）
+	if err := db.InitSnowflake(cfg.ID.WorkerID); err != nil {
+		return nil, err
+	}
 	dbConn, err := db.ConnectWithRetry(cfg.DB, log)
 	if err != nil {
 		return nil, err
@@ -97,20 +101,39 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	} else {
 		sched = scheduler.NewWithStore(log, schedStore, nil)
 	}
-	httpClient := httpplatform.NewClient(log)
-
 	storageSvc, err := storage.New(storage.Config{
-		Type:    storage.StorageType(cfg.Storage.Type),
-		BaseDir: cfg.Storage.BaseDir,
-		BaseURL: cfg.Storage.BaseURL,
+		Type:      storage.StorageType(cfg.Storage.Type),
+		BaseDir:   cfg.Storage.BaseDir,
+		BaseURL:   cfg.Storage.BaseURL,
+		Endpoint:  cfg.Storage.Endpoint,
+		Region:    cfg.Storage.Region,
+		Bucket:    cfg.Storage.Bucket,
+		AccessKey: cfg.Storage.AccessKey,
+		SecretKey: cfg.Storage.SecretKey,
+		PathStyle: cfg.Storage.PathStyle,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("init storage: %w", err)
 	}
 
 	notifier := notification.NewDispatcher()
+	// WebSocket Hub（通知渠道 + 实时通信共用）
+	wsHub := notification.NewHub()
+
 	// 未配置真实发送渠道时，注册日志型兜底渠道，保证通知链路不报错且可观察
-	notifier.Register(notification.ChannelEmail, notification.NewLogChannel(notification.ChannelEmail, log))
+	var emailChannel notification.Notification = notification.NewLogChannel(notification.ChannelEmail, log)
+	if cfg.Email.Enabled {
+		emailChannel = notification.NewEmail(notification.EmailConfig{
+			Host:     cfg.Email.Host,
+			Port:     cfg.Email.Port,
+			Username: cfg.Email.Username,
+			Password: cfg.Email.Password,
+			From:     cfg.Email.From,
+		})
+	}
+	notifier.Register(notification.ChannelEmail, emailChannel)
+	notifier.Register(notification.ChannelWebSocket, notification.NewWebSocket(wsHub))
+	notifier.Register(notification.ChannelWebhook, notification.NewWebhook(notification.WebhookConfig{}))
 
 	// Feature Flag
 	featureMgr := feature.NewManager()
@@ -125,9 +148,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		Enabled:    true,
 		Percentage: 10, // 10% 灰度
 	})
-
-	// WebSocket Hub
-	wsHub := notification.NewHub()
 
 	// Event Bus
 	eventBus := event.New()
@@ -155,20 +175,18 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 			return nil, fmt.Errorf("init outbox queue: %w", err)
 		}
 		outboxPublisher = outbox.NewMQPublisher(q)
-		if cfg.Queue.Type == string(queue.TypeKafka) || cfg.Queue.Type == string(queue.TypeRabbitMQ) {
-			consumer, ok := q.(queue.Consumer)
-			if !ok {
-				return nil, fmt.Errorf("queue %s does not implement consumer", cfg.Queue.Type)
-			}
-			store := queue.NewMySQLStore(
-				admininfra.NewMysqlJobRepository(dbConn),
-				admininfra.NewMysqlJobHistoryRepository(dbConn),
-				admininfra.NewMysqlDeadLetterRepository(dbConn),
-			)
-			workerPool := queue.NewWorkerPool(queue.DefaultWorkerConfig, consumer, store)
-			// 延迟到 Container 构造后赋值（见 Step 3）
-			pendingWorkerPool = workerPool
+		consumer, ok := q.(queue.Consumer)
+		if !ok {
+			return nil, fmt.Errorf("queue %s does not implement consumer", cfg.Queue.Type)
 		}
+		store := queue.NewMySQLStore(
+			admininfra.NewMysqlJobRepository(dbConn),
+			admininfra.NewMysqlJobHistoryRepository(dbConn),
+			admininfra.NewMysqlDeadLetterRepository(dbConn),
+		)
+		workerPool := queue.NewWorkerPool(queue.DefaultWorkerConfig, consumer, store)
+		// 延迟到 Container 构造后赋值（见 Step 3）
+		pendingWorkerPool = workerPool
 	default:
 		outboxPublisher = outbox.NewEventBusPublisher(eventBus)
 	}
@@ -183,6 +201,10 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	// Captcha 验证码服务（平台能力，非业务模块；auth 模块消费）
 	captchaSvc := captcha.NewService(rdb, time.Duration(cfg.Captcha.TTLMin)*time.Minute)
 
+	// API Key 验证器（服务/机器间认证，复用 admin api_keys 表）
+	// 路由组按需挂载 auth.APIKeyAuthMiddleware(c.APIKeyVerifier)
+	apiKeyVerifier := auth.NewAPIKeyVerifier(auth.NewDBAPIKeyStore(dbConn))
+
 	return &Container{
 		Config:       cfg,
 		DB:           dbConn,
@@ -190,7 +212,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		Logger:       log,
 		JobRegistry:  sched,
 		Scheduler:    sched,
-		HTTPClient:   httpClient,
 		Lock:         lock,
 		Storage:      storageSvc,
 		Notification: notifier,
@@ -199,7 +220,8 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		EventBus:     eventBus,
 		Outbox:       outboxProcessor,
 		DBCollector:  dbCollector,
-		Captcha:      captchaSvc,
-		WorkerPool:   pendingWorkerPool,
+		Captcha:        captchaSvc,
+		WorkerPool:     pendingWorkerPool,
+		APIKeyVerifier: apiKeyVerifier,
 	}, nil
 }

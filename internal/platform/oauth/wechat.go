@@ -48,6 +48,8 @@ func (p *WeChatProvider) AuthURL(state string) string {
 
 // Exchange 用授权码换取用户信息
 func (p *WeChatProvider) Exchange(ctx context.Context, code string) (*UserInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, oauthTimeout)
+	defer cancel()
 	token, err := p.config.Exchange(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("wechat exchange: %w", err)
@@ -56,7 +58,8 @@ func (p *WeChatProvider) Exchange(ctx context.Context, code string) (*UserInfo, 
 	if !ok || openid == "" {
 		return nil, fmt.Errorf("wechat openid missing")
 	}
-	resp, err := http.Get("https://api.weixin.qq.com/sns/userinfo?access_token=" + token.AccessToken + "&openid=" + openid)
+	client := &http.Client{Timeout: oauthTimeout}
+	resp, err := client.Get("https://api.weixin.qq.com/sns/userinfo?access_token=" + token.AccessToken + "&openid=" + openid)
 	if err != nil {
 		return nil, fmt.Errorf("wechat userinfo: %w", err)
 	}

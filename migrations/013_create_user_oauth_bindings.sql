@@ -1,6 +1,6 @@
 -- +goose Up
 CREATE TABLE user_oauth_bindings (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
+    id BIGINT UNSIGNED NOT NULL COMMENT '主键',
     user_id BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
     provider VARCHAR(32) NOT NULL COMMENT '提供商（google/github/wechat）',
     subject VARCHAR(128) NOT NULL COMMENT '提供商内唯一 ID',

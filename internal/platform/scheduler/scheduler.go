@@ -41,11 +41,6 @@ type CronScheduler struct {
 	entryByID map[string]cron.EntryID
 }
 
-// New 创建内存调度器（store 默认 MemoryStore，不持久化）
-func New(log *logger.Logger) *CronScheduler {
-	return NewWithStore(log, NewMemoryStore(), nil)
-}
-
 // NewWithStore 创建调度器，指定任务定义存储与分布式锁（锁可选，nil 时不加锁）
 func NewWithStore(log *logger.Logger, store Store, lock *redis.Lock) *CronScheduler {
 	c := cron.New(cron.WithChain(
@@ -124,22 +119,29 @@ func (s *CronScheduler) RestoreFromStore(ctx context.Context, cmdFactory func(id
 	return restored, nil
 }
 
-// recordRun 记录任务执行并调用命令
+// recordRun 记录任务执行并调用命令。
+// 状态字段读写均持锁，与 Jobs()/SetEnabled 并发安全。
 func (s *CronScheduler) recordRun(info *JobInfo, cmd func()) {
+	s.mu.Lock()
 	info.LastRun = time.Now()
 	info.RunCount++
+	s.mu.Unlock()
 	start := time.Now()
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
+				s.mu.Lock()
 				info.LastStatus = "failed"
 				info.LastError = fmt.Sprintf("%v", r)
+				s.mu.Unlock()
 				s.logger.Error("job panic", "name", info.Name, "panic", fmt.Sprintf("%v", r))
 			}
 		}()
 		cmd()
+		s.mu.Lock()
 		info.LastStatus = "success"
 		info.LastError = ""
+		s.mu.Unlock()
 	}()
 	s.logger.Debug("job completed", "name", info.Name, "duration", time.Since(start))
 }
@@ -171,9 +173,9 @@ func (s *CronScheduler) SetEnabled(ctx context.Context, id string, enabled bool)
 		return fmt.Errorf("job %q not found", id)
 	}
 	cmd := s.cmdByID[id]
+	info.Enabled = enabled
 	s.mu.Unlock()
 
-	info.Enabled = enabled
 	if !enabled {
 		s.mu.Lock()
 		entryID, hasEntry := s.entryByID[id]

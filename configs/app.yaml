@@ -79,6 +79,10 @@ server:
   rate_limit_rate: 0     # 全局限流速率（0 = 不限流）
   rate_limit_burst: 0    # 限流桶容量（0 = 不限流）
 
+# 雪花 ID 配置
+id:
+  worker_id: 0           # worker 编号（0-1023）；本地单实例用默认 0，多实例部署时每个副本需唯一
+
 # 缓存配置
 cache:
   prefix: "jimu_dev"     # 缓存 key 前缀（开发环境隔离）
@@ -93,6 +97,13 @@ storage:
   type: "local"           # 可选: local, s3, oss, minio
   base_dir: "storage"     # 本地存储目录
   base_url: "/files"      # 访问 URL 前缀
+  # endpoint/bucket/access_key/secret_key 用于 s3/oss/minio（本地存储不用）
+  endpoint: ""            # 例如 oss-cn-hangzhou.aliyuncs.com（oss）、http://localhost:9000（minio）
+  region: ""              # 例如 us-east-1（s3）
+  bucket: ""              # 存储桶名称
+  access_key: ""          # 访问密钥
+  secret_key: ""          # 密钥（生产建议环境变量注入）
+  path_style: false       # 路径风格（minio 必须 true）
 
 # 队列配置
 queue:
@@ -135,8 +146,19 @@ captcha:
   enabled: false           # 是否启用登录/注册验证码
   ttl_min: 5               # 验证码有效期（分钟）
 
-# 安全头配置（留空则使用默认值）
+# 邮件通知配置
+email:
+  enabled: false           # 是否启用真实 SMTP 发送；false 时回退日志渠道
+  host: ""                 # SMTP 服务器地址，如 smtp.example.com
+  port: 587                # SMTP 端口（25/465/587）
+  username: ""             # 认证用户名
+  password: ""             # 认证密码（生产建议 EMAIL_PASSWORD 环境变量注入）
+  from: ""                 # 发件人地址，如 noreply@example.com
+
+# 安全配置
 security:
+  csrf_secret: ""          # CSRF 密钥；非空时启用 CSRF 中间件（Bearer 请求自动跳过）。cookie 认证场景必配
+  # 安全头（留空则使用默认值）
   content_type_options: "nosniff"
   frame_options: "DENY"
   xss_protection: "1; mode=block"

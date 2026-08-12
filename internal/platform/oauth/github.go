@@ -49,13 +49,16 @@ func (p *GitHubProvider) AuthURL(state string) string {
 
 // Exchange 用授权码换取用户信息
 func (p *GitHubProvider) Exchange(ctx context.Context, code string) (*UserInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, oauthTimeout)
+	defer cancel()
 	token, err := p.config.Exchange(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("github exchange: %w", err)
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/user", nil)
 	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: oauthTimeout}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("github userinfo: %w", err)
 	}

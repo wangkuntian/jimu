@@ -145,17 +145,6 @@ type CORSConfig struct {
 	MaxAge           int      // 预请求缓存秒数
 }
 
-// DefaultCORSConfig 返回默认 CORS 配置
-func DefaultCORSConfig() CORSConfig {
-	return CORSConfig{
-		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Request-ID", "Idempotency-Key"},
-		AllowCredentials: false,
-		MaxAge:           86400,
-	}
-}
-
 // CORSMiddleware 基于配置的 CORS 中间件
 func CORSMiddleware(cfg CORSConfig) gin.HandlerFunc {
 	origins := cfg.AllowedOrigins
@@ -198,9 +187,4 @@ func isAllowedOrigin(origin string, allowed []string) bool {
 		}
 	}
 	return false
-}
-
-// CORS 向后兼容的简单 CORS 中间件
-func CORS() gin.HandlerFunc {
-	return CORSMiddleware(DefaultCORSConfig())
 }

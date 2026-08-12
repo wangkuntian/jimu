@@ -41,8 +41,9 @@ var (
 	validHTTPModes        = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
 	validLogLevels        = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
 	validLogFormats       = []string{LogFormatJSON, LogFormatConsole}
-	validQueueTypes       = []string{QueueTypeRedis, QueueTypeKafka, QueueTypeRabbitMQ}
-	validOutboxPublishers = []string{OutboxPublisherEventBus, OutboxPublisherMQ}
+	validQueueTypes        = []string{QueueTypeRedis, QueueTypeKafka, QueueTypeRabbitMQ}
+	validOutboxPublishers  = []string{OutboxPublisherEventBus, OutboxPublisherMQ}
+	validOutboxMQQueueTypes = []string{QueueTypeKafka, QueueTypeRabbitMQ, QueueTypeRedis}
 	validSchedulerStores  = []string{SchedulerStoreMemory, SchedulerStoreMySQL}
 )
 
@@ -82,6 +83,16 @@ type CaptchaConfig struct {
 	TTLMin  int  `mapstructure:"ttl_min"` // 验证码有效期（分钟）
 }
 
+// EmailConfig 邮件通知配置
+type EmailConfig struct {
+	Enabled  bool   `mapstructure:"enabled"`  // 是否启用真实 SMTP 发送；false 时回退日志渠道
+	Host     string `mapstructure:"host"`     // SMTP 服务器地址
+	Port     int    `mapstructure:"port"`     // SMTP 端口（通常 25/465/587）
+	Username string `mapstructure:"username"` // 认证用户名
+	Password string `mapstructure:"password"` // 认证密码（敏感，建议环境变量注入）
+	From     string `mapstructure:"from"`     // 发件人地址
+}
+
 // CaptchaResult 验证码返回
 type CaptchaResult struct {
 	CaptchaID    string `json:"captcha_id"`
@@ -102,6 +113,11 @@ type QueueRabbitMQConfig struct {
 	Exchange string `mapstructure:"exchange"` // 交换机名（留空则使用默认直连交换机）
 }
 
+// IDConfig 雪花 ID 配置
+type IDConfig struct {
+	WorkerID int64 `mapstructure:"worker_id"` // worker 编号（0-1023），多实例部署时每个副本需唯一
+}
+
 type Config struct {
 	HTTP       HTTPConfig                  `mapstructure:"http"`
 	Management ManagementConfig            `mapstructure:"management"`
@@ -110,6 +126,7 @@ type Config struct {
 	Log        LogConfig                   `mapstructure:"log"`
 	Auth       AuthConfig                  `mapstructure:"auth"`
 	Server     ServerConfig                `mapstructure:"server"`
+	ID         IDConfig                    `mapstructure:"id"`
 	Cache      CacheConfig                 `mapstructure:"cache"`
 	Audit      AuditConfig                 `mapstructure:"audit"`
 	Storage    StorageConfig               `mapstructure:"storage"`
@@ -119,6 +136,7 @@ type Config struct {
 	Scheduler  SchedulerConfig             `mapstructure:"scheduler"`
 	OAuth      OAuthConfig                 `mapstructure:"oauth"`
 	Captcha    CaptchaConfig               `mapstructure:"captcha"`
+	Email      EmailConfig                 `mapstructure:"email"`
 	OTEL       observability.TracingConfig `mapstructure:"otel"`
 	// 元数据（非 YAML 配置，运行时注入）
 	Version     string `mapstructure:"-"`
@@ -141,6 +159,9 @@ type SecurityConfig struct {
 	ContentSecurityPolicy string `mapstructure:"content_security_policy"` // Content-Security-Policy
 	ReferrerPolicy        string `mapstructure:"referrer_policy"`         // Referrer-Policy
 	PermissionsPolicy     string `mapstructure:"permissions_policy"`      // Permissions-Policy
+
+	// CSRF 防护密钥。非空时启用 CSRF 中间件（Bearer 认证请求自动跳过，不影响 JWT API）
+	CSRFSecret string `mapstructure:"csrf_secret"`
 }
 
 // DefaultSecurityConfig 返回默认安全配置
@@ -178,6 +199,14 @@ type StorageConfig struct {
 	Type    string `mapstructure:"type"`     // local, s3, oss, minio
 	BaseDir string `mapstructure:"base_dir"` // 本地存储目录
 	BaseURL string `mapstructure:"base_url"` // 访问 URL 前缀
+
+	// S3/OSS/MinIO 通用（local 不用）
+	Endpoint  string `mapstructure:"endpoint"`   // 如 oss-cn-hangzhou.aliyuncs.com、http://localhost:9000
+	Region    string `mapstructure:"region"`     // 如 us-east-1
+	Bucket    string `mapstructure:"bucket"`     // 存储桶
+	AccessKey string `mapstructure:"access_key"` // 访问密钥
+	SecretKey string `mapstructure:"secret_key"` // 密钥
+	PathStyle bool   `mapstructure:"path_style"` // 路径风格（MinIO 必须 true）
 }
 
 type HTTPConfig struct {
