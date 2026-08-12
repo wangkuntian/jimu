@@ -165,4 +165,3 @@ func rowToAPIKey(row *adminapi.APIKey) *APIKey {
 	}
 	return key
 }
-

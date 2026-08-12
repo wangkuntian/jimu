@@ -69,4 +69,3 @@ func isAlreadyCompressed(contentType string) bool {
 	}
 	return false
 }
-

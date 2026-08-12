@@ -90,7 +90,7 @@ func translateValidationDetails(err error, locale string) []fieldError {
 // translateValidationMessage 将单个 validator 字段错误按语言翻译为友好消息
 func translateValidationMessage(e validator.FieldError, locale string) string {
 	field := e.Field()
-	key := "validation_default"
+	var key string
 	switch e.Tag() {
 	case "required":
 		key = "validation_required"

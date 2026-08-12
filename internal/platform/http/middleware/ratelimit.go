@@ -89,4 +89,3 @@ func GlobalRateLimit(rps, burst int) gin.HandlerFunc {
 
 	return limiter.Limit()
 }
-

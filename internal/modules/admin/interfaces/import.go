@@ -96,7 +96,7 @@ func bindImportFile(c *gin.Context) (importer.Format, *bytes.Buffer, error) {
 	if err != nil {
 		return "", nil, errors.New(errors.CodeInvalidParam, "open file failed")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(file); err != nil {
 		return "", nil, errors.New(errors.CodeInvalidParam, "read file failed")

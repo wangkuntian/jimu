@@ -132,6 +132,19 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		})
 	}
 	notifier.Register(notification.ChannelEmail, emailChannel)
+
+	// 短信：未配置真实发送时注册日志型兜底渠道，保证通知链路不报错且可观察
+	var smsChannel notification.Notification = notification.NewLogChannel(notification.ChannelSMS, log)
+	if cfg.SMS.Enabled {
+		smsChannel = notification.NewSMS(notification.SMSConfig{
+			Provider:  cfg.SMS.Provider,
+			APIKey:    cfg.SMS.APIKey,
+			APISecret: cfg.SMS.APISecret,
+			SignName:  cfg.SMS.SignName,
+		})
+	}
+	notifier.Register(notification.ChannelSMS, smsChannel)
+
 	notifier.Register(notification.ChannelWebSocket, notification.NewWebSocket(wsHub))
 	notifier.Register(notification.ChannelWebhook, notification.NewWebhook(notification.WebhookConfig{}))
 
@@ -206,20 +219,20 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	apiKeyVerifier := auth.NewAPIKeyVerifier(auth.NewDBAPIKeyStore(dbConn))
 
 	return &Container{
-		Config:       cfg,
-		DB:           dbConn,
-		Redis:        rdb,
-		Logger:       log,
-		JobRegistry:  sched,
-		Scheduler:    sched,
-		Lock:         lock,
-		Storage:      storageSvc,
-		Notification: notifier,
-		FeatureFlag:  featureMgr,
-		WebSocketHub: wsHub,
-		EventBus:     eventBus,
-		Outbox:       outboxProcessor,
-		DBCollector:  dbCollector,
+		Config:         cfg,
+		DB:             dbConn,
+		Redis:          rdb,
+		Logger:         log,
+		JobRegistry:    sched,
+		Scheduler:      sched,
+		Lock:           lock,
+		Storage:        storageSvc,
+		Notification:   notifier,
+		FeatureFlag:    featureMgr,
+		WebSocketHub:   wsHub,
+		EventBus:       eventBus,
+		Outbox:         outboxProcessor,
+		DBCollector:    dbCollector,
 		Captcha:        captchaSvc,
 		WorkerPool:     pendingWorkerPool,
 		APIKeyVerifier: apiKeyVerifier,

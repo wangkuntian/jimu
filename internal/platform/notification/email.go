@@ -75,7 +75,7 @@ func (e *Email) sendSMTP(ctx context.Context, msg Message) error {
 		_ = conn.Close()
 		return fmt.Errorf("create smtp client: %w", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	// STARTTLS 加密（端口 587 常用）
 	if ok, _ := c.Extension("STARTTLS"); ok {

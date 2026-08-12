@@ -113,9 +113,11 @@ func (q *RedisQueue) Nack(ctx context.Context, job *JobData) error {
 // 可见性超时兜底：worker 崩溃或处理超时后任务不会丢失。
 func (q *RedisQueue) RequeueExpired(ctx context.Context) (int, error) {
 	now := time.Now().Unix()
-	members, err := q.client.ZRangeByScore(ctx, InFlightKey, &redis.ZRangeBy{
-		Min: "-inf",
-		Max: fmt.Sprintf("%d", now),
+	members, err := q.client.ZRangeArgs(ctx, redis.ZRangeArgs{
+		Key:     InFlightKey,
+		ByScore: true,
+		Start:   "-inf",
+		Stop:    fmt.Sprintf("%d", now),
 	}).Result()
 	if err != nil {
 		return 0, err

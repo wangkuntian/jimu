@@ -38,13 +38,13 @@ const (
 )
 
 var (
-	validHTTPModes        = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
-	validLogLevels        = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
-	validLogFormats       = []string{LogFormatJSON, LogFormatConsole}
-	validQueueTypes        = []string{QueueTypeRedis, QueueTypeKafka, QueueTypeRabbitMQ}
-	validOutboxPublishers  = []string{OutboxPublisherEventBus, OutboxPublisherMQ}
+	validHTTPModes          = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
+	validLogLevels          = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
+	validLogFormats         = []string{LogFormatJSON, LogFormatConsole}
+	validQueueTypes         = []string{QueueTypeRedis, QueueTypeKafka, QueueTypeRabbitMQ}
+	validOutboxPublishers   = []string{OutboxPublisherEventBus, OutboxPublisherMQ}
 	validOutboxMQQueueTypes = []string{QueueTypeKafka, QueueTypeRabbitMQ, QueueTypeRedis}
-	validSchedulerStores  = []string{SchedulerStoreMemory, SchedulerStoreMySQL}
+	validSchedulerStores    = []string{SchedulerStoreMemory, SchedulerStoreMySQL}
 )
 
 // QueueConfig 队列配置
@@ -93,6 +93,15 @@ type EmailConfig struct {
 	From     string `mapstructure:"from"`     // 发件人地址
 }
 
+// SMSConfig 短信通知配置
+type SMSConfig struct {
+	Enabled   bool   `mapstructure:"enabled"`    // 是否启用真实短信发送；false 时回退日志渠道
+	Provider  string `mapstructure:"provider"`   // 短信服务商：aliyun
+	APIKey    string `mapstructure:"api_key"`    // AccessKey ID（敏感，建议环境变量注入）
+	APISecret string `mapstructure:"api_secret"` // AccessKey Secret（敏感，建议环境变量注入）
+	SignName  string `mapstructure:"sign_name"`  // 短信签名
+}
+
 // CaptchaResult 验证码返回
 type CaptchaResult struct {
 	CaptchaID    string `json:"captcha_id"`
@@ -137,6 +146,7 @@ type Config struct {
 	OAuth      OAuthConfig                 `mapstructure:"oauth"`
 	Captcha    CaptchaConfig               `mapstructure:"captcha"`
 	Email      EmailConfig                 `mapstructure:"email"`
+	SMS        SMSConfig                   `mapstructure:"sms"`
 	OTEL       observability.TracingConfig `mapstructure:"otel"`
 	// 元数据（非 YAML 配置，运行时注入）
 	Version     string `mapstructure:"-"`

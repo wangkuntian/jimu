@@ -1,0 +1,1 @@
+{"nodes": [{"id": "deploy_prometheus_config", "label": "Prometheus Scrape Config", "file_type": "document", "source_file": "deploy/prometheus.yml", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null, "rationale": "\u6293\u53d6 server:9090 /metrics\uff0c15s \u95f4\u9694"}], "edges": [], "hyperedges": []}

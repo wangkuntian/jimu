@@ -30,7 +30,7 @@ func RegisterSnowflakeHook(g *gorm.DB) {
 	if g == nil {
 		return
 	}
-	g.Callback().Create().Before("gorm:create").Register("snowflake:assign_id", func(d *gorm.DB) {
+	_ = g.Callback().Create().Before("gorm:create").Register("snowflake:assign_id", func(d *gorm.DB) {
 		gen := snowflakeGen
 		if gen == nil || d.Statement.Schema == nil {
 			return
@@ -50,7 +50,7 @@ func RegisterSnowflakeHook(g *gorm.DB) {
 			}
 			nid, err := gen.NextID()
 			if err != nil {
-				d.AddError(err)
+				_ = d.AddError(err)
 				return
 			}
 			fv.Set(reflect.ValueOf(nid).Convert(fv.Type()))
@@ -58,7 +58,7 @@ func RegisterSnowflakeHook(g *gorm.DB) {
 
 		rv := d.Statement.ReflectValue
 		switch rv.Kind() {
-		case reflect.Struct, reflect.Ptr:
+		case reflect.Struct, reflect.Pointer:
 			assign(rv)
 		case reflect.Slice, reflect.Array:
 			for i := 0; i < rv.Len(); i++ {
@@ -80,7 +80,7 @@ func isIntegerID(f *schema.Field) bool {
 
 // indirect 解引用指针/接口，返回底层值（与 gorm 内部一致）
 func indirect(v reflect.Value) reflect.Value {
-	for v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
 		if v.IsNil() {
 			return v
 		}

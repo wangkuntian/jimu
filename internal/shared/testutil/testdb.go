@@ -63,7 +63,10 @@ func mysqlEnvDBConfig() config.DBConfig {
 
 // mysqlReachable 探测 MySQL 端口是否可连接
 func mysqlReachable(host string, port int) bool {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, port), 2*time.Second)
+	d := net.Dialer{Timeout: 2 * time.Second}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	conn, err := d.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		return false
 	}

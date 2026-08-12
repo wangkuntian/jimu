@@ -109,7 +109,33 @@ func (c *RedisCache) Exists(ctx context.Context, key string) (bool, error) {
 // 防击穿：并发未命中时，只有一个请求执行 fetch，其余请求短暂等待后重读缓存；
 // 等待超时则直接 fetch 兜底，不阻塞调用方。锁带 TTL 防死锁。
 func (c *RedisCache) GetOrSet(ctx context.Context, key string, dest interface{}, ttl time.Duration, fetch func() (interface{}, error)) error {
-	for {
+	found, err := c.Get(ctx, key, dest)
+	if err != nil {
+		return err
+	}
+	if found {
+		return nil
+	}
+
+	token, ok, err := c.acquireLock(ctx, key)
+	if err != nil {
+		// 锁服务异常时直接 fetch，保证可用性
+		return c.fetchAndSet(ctx, key, dest, ttl, fetch)
+	}
+	if ok {
+		// 拿到锁，成为回源者
+		err := c.fetchAndSet(ctx, key, dest, ttl, fetch)
+		c.releaseLock(ctx, key, token)
+		return err
+	}
+
+	// 未拿到锁：等待持锁者写缓存后重读
+	for i := 0; i < lockRetry; i++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(lockWaitTime):
+		}
 		found, err := c.Get(ctx, key, dest)
 		if err != nil {
 			return err
@@ -117,37 +143,9 @@ func (c *RedisCache) GetOrSet(ctx context.Context, key string, dest interface{},
 		if found {
 			return nil
 		}
-
-		token, ok, err := c.acquireLock(ctx, key)
-		if err != nil {
-			// 锁服务异常时直接 fetch，保证可用性
-			return c.fetchAndSet(ctx, key, dest, ttl, fetch)
-		}
-		if ok {
-			// 拿到锁，成为回源者
-			err := c.fetchAndSet(ctx, key, dest, ttl, fetch)
-			c.releaseLock(ctx, key, token)
-			return err
-		}
-
-		// 未拿到锁：等待持锁者写缓存后重读
-		for i := 0; i < lockRetry; i++ {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(lockWaitTime):
-			}
-			found, err := c.Get(ctx, key, dest)
-			if err != nil {
-				return err
-			}
-			if found {
-				return nil
-			}
-		}
-		// 等待超时仍无缓存：本请求直接 fetch，避免雪崩下所有请求无限等待
-		return c.fetchAndSet(ctx, key, dest, ttl, fetch)
 	}
+	// 等待超时仍无缓存：本请求直接 fetch，避免雪崩下所有请求无限等待
+	return c.fetchAndSet(ctx, key, dest, ttl, fetch)
 }
 
 // acquireLock 获取 key 对应的防击穿锁，返回锁 token。

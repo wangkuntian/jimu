@@ -155,6 +155,13 @@ email:
   password: ""             # 认证密码（生产建议 EMAIL_PASSWORD 环境变量注入）
   from: ""                 # 发件人地址，如 noreply@example.com
 
+sms:
+  enabled: false           # 是否启用真实短信发送；false 时回退日志渠道
+  provider: ""             # 短信服务商：aliyun
+  api_key: ""              # AccessKey ID（生产建议 SMS_API_KEY 环境变量注入）
+  api_secret: ""           # AccessKey Secret（生产建议 SMS_API_SECRET 环境变量注入）
+  sign_name: ""            # 短信签名
+
 # 安全配置
 security:
   csrf_secret: ""          # CSRF 密钥；非空时启用 CSRF 中间件（Bearer 请求自动跳过）。cookie 认证场景必配
