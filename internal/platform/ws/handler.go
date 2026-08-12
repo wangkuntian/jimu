@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -56,7 +57,7 @@ type Client struct {
 // ReadPump 处理来自客户端的消息
 func (c *Client) ReadPump(ctx context.Context, jwtUtil *auth.JWT, presence *PresenceManager, channels *ChannelManager, onRegister func(*Client)) {
 	defer func() {
-		c.hub.unregister <- c
+		c.hub.safeUnregister(c)
 		_ = c.conn.Close()
 	}()
 
@@ -116,12 +117,21 @@ func (c *Client) handleMessage(ctx context.Context, jwtUtil *auth.JWT, presence 
 			c.sendError("invalid subscribe payload")
 			return
 		}
+		var denied []string
 		c.mu.Lock()
 		for _, ch := range sub.Channels {
+			if !c.canSubscribe(ch) {
+				denied = append(denied, ch)
+				continue
+			}
 			c.channels[ch] = true
 			channels.Subscribe(c.connID, ch)
 		}
 		c.mu.Unlock()
+		// 锁外发送拒绝提示，避免与 sendError 竞争
+		for _, ch := range denied {
+			c.sendError("subscribe denied: " + ch)
+		}
 
 	case TypeUnsubscribe:
 		var sub SubscribePayload
@@ -156,6 +166,19 @@ func (c *Client) handleMessage(ctx context.Context, jwtUtil *auth.JWT, presence 
 	default:
 		c.sendError("unknown message type: " + msg.Type)
 	}
+}
+
+// canSubscribe 校验频道订阅权限：
+// user:<id> 私有频道仅属主可订阅（防 IDOR 窃听他人实时通知）；room/broadcast 等公开频道不限制
+func (c *Client) canSubscribe(channel string) bool {
+	if !strings.HasPrefix(channel, ChannelUserPrefix) {
+		return true
+	}
+	id, err := strconv.ParseUint(strings.TrimPrefix(channel, ChannelUserPrefix), 10, 64)
+	if err != nil {
+		return false
+	}
+	return id == c.userID
 }
 
 // WritePump 向客户端发送消息
@@ -211,8 +234,8 @@ func (c *Client) sendMessage(msg *WSMessage) {
 	select {
 	case c.send <- data:
 	default:
-		// 发送缓冲区满，关闭连接
-		c.hub.unregister <- c
+		// 发送缓冲区满，非阻塞注销连接
+		c.hub.safeUnregister(c)
 	}
 }
 
@@ -264,6 +287,28 @@ type ClientHub struct {
 type broadcastMsg struct {
 	channel string
 	message *WSMessage
+}
+
+// safeUnregister 非阻塞注销客户端。hub 未运行或通道满时直接关闭连接，不阻塞调用方。
+func (h *ClientHub) safeUnregister(c *Client) {
+	select {
+	case h.unregister <- c:
+	default:
+		// hub 主循环未启动或繁忙，直接清理连接
+		h.mu.Lock()
+		if _, ok := h.clients[c.connID]; ok {
+			delete(h.clients, c.connID)
+			close(c.send)
+			if conns, ok := h.userIndex[c.userID]; ok {
+				delete(conns, c.connID)
+				if len(conns) == 0 {
+					delete(h.userIndex, c.userID)
+				}
+			}
+		}
+		h.mu.Unlock()
+		_ = c.conn.Close()
+	}
 }
 
 // NewClientHub 创建 ClientHub
@@ -367,10 +412,8 @@ func (h *ClientHub) handleBroadcast(bm *broadcastMsg) {
 			select {
 			case client.send <- mustEncode(bm.message):
 			default:
-				// 发送缓冲区满，准备关闭
-				go func(c *Client) {
-					h.unregister <- c
-				}(client)
+				// 发送缓冲区满，非阻塞注销连接
+				h.safeUnregister(client)
 			}
 		}
 	}
@@ -487,8 +530,13 @@ func WSHandler(hub *ClientHub, jwtUtil *auth.JWT, presence *PresenceManager, cha
 			lastActive: time.Now(),
 		}
 
-		// 5. 注册到 hub
-		hub.register <- client
+		// 5. 注册到 hub（非阻塞，hub 未启动或通道满时直接关闭连接，避免 HTTP handler 挂死）
+		select {
+		case hub.register <- client:
+		default:
+			_ = conn.Close()
+			return
+		}
 
 		// 6. 启动读写 goroutine
 		ctx := r.Context()

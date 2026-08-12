@@ -68,6 +68,22 @@ func TestEventBus_PublishAsync(t *testing.T) {
 	}
 }
 
+func TestEventBus_HandlerPanicRecovered(t *testing.T) {
+	// handler panic 应被恢复，不影响进程继续发布其他事件
+	bus := New()
+	bus.Subscribe("boom", func(payload interface{}) { panic("boom!") })
+
+	done := make(chan struct{})
+	bus.Subscribe("boom", func(payload interface{}) { close(done) })
+
+	bus.PublishAsync("boom", nil)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("panic handler blocked subsequent handler")
+	}
+}
+
 func TestEventBus_Clear(t *testing.T) {
 	bus := New()
 	var called bool

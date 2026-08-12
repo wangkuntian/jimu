@@ -1,6 +1,6 @@
 -- +goose Up
 CREATE TABLE IF NOT EXISTS jobs (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Job ID',
+    id BIGINT UNSIGNED NOT NULL COMMENT 'Job ID',
     type VARCHAR(64) NOT NULL COMMENT 'Job type (send_email, etc)',
     payload TEXT COMMENT 'JSON payload',
     status VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending/running/success/failed/dead',
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Job queue';
 
 CREATE TABLE IF NOT EXISTS job_history (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'History ID',
+    id BIGINT UNSIGNED NOT NULL COMMENT 'History ID',
     job_id BIGINT UNSIGNED NOT NULL COMMENT 'Job ID',
     status VARCHAR(16) NOT NULL COMMENT 'success/failed',
     error TEXT COMMENT 'Error message',
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS job_history (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Job execution history';
 
 CREATE TABLE IF NOT EXISTS dead_letters (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Dead letter ID',
+    id BIGINT UNSIGNED NOT NULL COMMENT 'Dead letter ID',
     job_id BIGINT UNSIGNED NOT NULL COMMENT 'Original job ID',
     type VARCHAR(64) NOT NULL COMMENT 'Job type',
     payload TEXT COMMENT 'JSON payload',

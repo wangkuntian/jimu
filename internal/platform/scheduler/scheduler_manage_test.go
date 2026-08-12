@@ -8,7 +8,7 @@ import (
 )
 
 func TestTriggerJobRunsCommand(t *testing.T) {
-	s := New(newTestLogger())
+	s := NewWithStore(newTestLogger(), NewMemoryStore(), nil)
 	var ran int64
 	if err := s.AddNamedFunc("j1", "Job One", "@every 10s", func() {
 		atomic.AddInt64(&ran, 1)
@@ -29,14 +29,14 @@ func TestTriggerJobRunsCommand(t *testing.T) {
 }
 
 func TestTriggerJobNotFound(t *testing.T) {
-	s := New(newTestLogger())
+	s := NewWithStore(newTestLogger(), NewMemoryStore(), nil)
 	if err := s.TriggerJob(context.Background(), "nope"); err == nil {
 		t.Fatal("expected error for unknown job, got nil")
 	}
 }
 
 func TestSetEnabledToggle(t *testing.T) {
-	s := New(newTestLogger())
+	s := NewWithStore(newTestLogger(), NewMemoryStore(), nil)
 	if err := s.AddNamedFunc("j1", "Job One", "@every 10s", func() {}); err != nil {
 		t.Fatalf("AddNamedFunc() error: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestSetEnabledToggle(t *testing.T) {
 }
 
 func TestSetEnabledNotFound(t *testing.T) {
-	s := New(newTestLogger())
+	s := NewWithStore(newTestLogger(), NewMemoryStore(), nil)
 	if err := s.SetEnabled(context.Background(), "nope", false); err == nil {
 		t.Fatal("expected error for unknown job, got nil")
 	}

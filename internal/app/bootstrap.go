@@ -15,7 +15,9 @@ import (
 	"jimu/internal/platform/outbox"
 	"jimu/internal/platform/queue"
 
+	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/gin-gonic/gin"
+	gormotel "gorm.io/plugin/opentelemetry/tracing"
 )
 
 // outboxTypeConverters 按事件类型将 outbox 内层 Payload 还原为强类型事件。
@@ -114,6 +116,18 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	}
 	container.TracerProvider = tp
 
+	// 启用 OTel 时插桩 DB/Redis，捕获查询子 span。
+	// 必须在 InitTracing 之后：插件创建时固化全局 TracerProvider，
+	// 提前实例化会绑定 NoOp provider 导致 span 永不产生。
+	if cfg.OTEL.Enabled {
+		if err := container.DB.Use(gormotel.NewPlugin()); err != nil {
+			return nil, fmt.Errorf("init gorm otel plugin: %w", err)
+		}
+		if err := redisotel.InstrumentTracing(container.Redis); err != nil {
+			return nil, fmt.Errorf("init redis otel tracing: %w", err)
+		}
+	}
+
 	router := platformhttp.SetupRouter(container.Logger, cfg.HTTP, cfg.Server, cfg.Security, cfg.OTEL)
 	if err := platformhttp.ConfigureTrustedProxies(router, cfg.HTTP.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
@@ -139,7 +153,10 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		cfg.Management,
 		platformhttp.HealthRouter(readiness, cfg.Management.EnablePprof),
 	)
-	public := platformhttp.NewServer(cfg.HTTP, router)
+	public, err := platformhttp.NewServer(cfg.HTTP, router)
+	if err != nil {
+		return nil, fmt.Errorf("create http server: %w", err)
+	}
 
 	// 注册各模块的事件处理器（在定时任务之前，确保事件订阅就绪）
 	for _, module := range modules {

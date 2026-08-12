@@ -3,6 +3,8 @@ package config
 import (
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 func TestLoad(t *testing.T) {
@@ -12,6 +14,36 @@ func TestLoad(t *testing.T) {
 	}
 	if cfg.HTTP.Port == 0 {
 		t.Error("expected HTTP.Port to be set")
+	}
+}
+
+func TestStorageConfigFieldMapping(t *testing.T) {
+	// 验证 storage 的 S3/OSS/MinIO 字段可从 YAML 映射到结构体
+	// （直接驱动 viper，避免依赖项目 configs/ 目录的实际值）
+	v := viper.New()
+	v.SetConfigType("yaml")
+	conf := `
+storage:
+  type: "oss"
+  endpoint: "oss-cn-hangzhou.aliyuncs.com"
+  region: "cn-hangzhou"
+  bucket: "my-bucket"
+  access_key: "ak"
+  secret_key: "sk"
+  path_style: true
+`
+	if err := v.ReadConfig(strings.NewReader(conf)); err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if cfg.Storage.Type != "oss" || cfg.Storage.Endpoint != "oss-cn-hangzhou.aliyuncs.com" {
+		t.Errorf("storage type/endpoint not mapped: %+v", cfg.Storage)
+	}
+	if cfg.Storage.Bucket != "my-bucket" || !cfg.Storage.PathStyle || cfg.Storage.Region != "cn-hangzhou" {
+		t.Errorf("storage bucket/region/path_style not mapped: %+v", cfg.Storage)
 	}
 }
 
@@ -73,6 +105,15 @@ func TestValidateOutboxPublisher(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid outbox.publisher") {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateOutboxMQWithRedisQueue(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Outbox.Publisher = OutboxPublisherMQ
+	cfg.Queue.Type = QueueTypeRedis
+	if err := cfg.Validate("prod"); err != nil {
+		t.Errorf("mq + redis should be valid, got: %v", err)
 	}
 }
 

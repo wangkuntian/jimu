@@ -23,4 +23,5 @@ spec:
   tls:
     - hosts:
         - api.example.com
+      # TLS 证书 secret 需先创建（kubectl create secret tls jimu-tls --cert=tls.crt --key=tls.key）
       secretName: jimu-tls

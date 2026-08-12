@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"compress/gzip"
-	"io"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -71,28 +70,3 @@ func isAlreadyCompressed(contentType string) bool {
 	return false
 }
 
-// gzipReaderCloser 用于读取 gzip 请求体
-type gzipReaderCloser struct {
-	io.Reader
-	io.Closer
-}
-
-// GzipDecompression 解压 gzip 请求体中间件
-func GzipDecompression() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if c.GetHeader("Content-Encoding") != "gzip" {
-			c.Next()
-			return
-		}
-
-		gz, err := gzip.NewReader(c.Request.Body)
-		if err != nil {
-			c.Next()
-			return
-		}
-		defer func() { _ = gz.Close() }()
-
-		c.Request.Body = gzipReaderCloser{Reader: gz, Closer: gz}
-		c.Next()
-	}
-}

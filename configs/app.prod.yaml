@@ -18,11 +18,12 @@ http:
   # TLS 配置（通过反向代理终止 TLS 时保持禁用）
   tls:
     enabled: false
-    cert_path: "/app/certs/tls.crt"
-    key_path: "/app/certs/tls.key"
+    cert_file: "/app/certs/tls.crt"
+    key_file: "/app/certs/tls.key"
 
 # 安全头配置（生产环境严格配置）
 security:
+  csrf_secret: ""          # CSRF 密钥；非空时启用 CSRF 中间件（cookie 认证场景必配，推荐 CSRF_SECRET 环境变量注入）
   content_type_options: "nosniff"
   frame_options: "DENY"
   xss_protection: "0"  # 现代浏览器已弃用，靠 CSP
@@ -94,6 +95,10 @@ server:
   rate_limit_rate: 100   # 全局限流速率（每秒请求数）
   rate_limit_burst: 200  # 限流桶容量（允许的突发请求数）
 
+# 雪花 ID 配置
+id:
+  worker_id: 0           # worker 编号（0-1023）；多副本部署需为每个副本分配唯一值（可用 POD_NAME 序号）
+
 # 缓存配置
 cache:
   prefix: "jimu"         # 缓存 key 前缀
@@ -149,6 +154,15 @@ oauth:
 captcha:
   enabled: false           # 生产环境待前端验证码流程就绪后再开启；开启后登录/注册需携带 captcha_id/captcha_code
   ttl_min: 5               # 验证码有效期（分钟）
+
+# 邮件通知配置
+email:
+  enabled: false           # 是否启用真实 SMTP 发送；false 时回退日志渠道
+  host: ""                 # SMTP 服务器地址
+  port: 587                # SMTP 端口（25/465/587）
+  username: ""             # 认证用户名（推荐 EMAIL_USERNAME 环境变量注入）
+  password: ""             # 认证密码（推荐 EMAIL_PASSWORD 环境变量注入）
+  from: ""                 # 发件人地址
 
 # OpenTelemetry 追踪配置
 otel:

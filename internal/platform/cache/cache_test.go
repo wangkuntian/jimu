@@ -2,29 +2,24 @@ package cache
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
 )
 
 func setupTestCache(t *testing.T) *RedisCache {
-	client := redis.NewClient(&redis.Options{
-		Addr: "127.0.0.1:6379",
-		DB:   15, // 使用 DB 15 避免污染其他数据
-	})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	if err := client.Ping(ctx).Err(); err != nil {
-		t.Skip("Redis not available, skipping test")
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run failed: %v", err)
 	}
+	t.Cleanup(mr.Close)
 
-	// 清理测试数据
-	if err := client.FlushDB(ctx).Err(); err != nil {
-		t.Fatalf("FlushDB failed: %v", err)
-	}
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
 
 	return NewRedisCache(client, "test")
 }
@@ -107,6 +102,43 @@ func TestRedisCache_GetOrSet(t *testing.T) {
 	if callCount != 1 {
 		t.Errorf("expected fetch to still be called once (from cache), got %d", callCount)
 	}
+}
+
+func TestRedisCache_GetOrSetStampede(t *testing.T) {
+	// 并发 GetOrSet 防击穿：锁保证只有一个请求执行 fetch
+	cache := setupTestCache(t)
+	ctx := context.Background()
+
+	type Config struct {
+		Value string `json:"value"`
+	}
+
+	var mu sync.Mutex
+	callCount := 0
+	fetch := func() (interface{}, error) {
+		mu.Lock()
+		callCount++
+		mu.Unlock()
+		time.Sleep(30 * time.Millisecond) // 模拟慢回源
+		return Config{Value: "fetched"}, nil
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var cfg Config
+			err := cache.GetOrSet(ctx, "config", &cfg, time.Minute, fetch)
+			assert.NoError(t, err)
+			assert.Equal(t, "fetched", cfg.Value)
+		}()
+	}
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 1, callCount, "并发防击穿应只回源一次")
 }
 
 func TestRedisCache_DeletePattern(t *testing.T) {

@@ -49,8 +49,11 @@ func (c *Config) validateCommon() error {
 	if !contains(validSchedulerStores, c.Scheduler.Store) {
 		return fmt.Errorf("invalid scheduler.store: %q, must be one of %v", c.Scheduler.Store, validSchedulerStores)
 	}
-	if c.Outbox.Publisher == OutboxPublisherMQ && c.Queue.Type != QueueTypeKafka && c.Queue.Type != QueueTypeRabbitMQ {
-		return fmt.Errorf("invalid queue.type %q for outbox.publisher %q, must be kafka or rabbitmq", c.Queue.Type, c.Outbox.Publisher)
+	if c.Outbox.Publisher == OutboxPublisherMQ && !contains(validOutboxMQQueueTypes, c.Queue.Type) {
+		return fmt.Errorf("invalid queue.type %q for outbox.publisher %q, must be one of %v", c.Queue.Type, c.Outbox.Publisher, validOutboxMQQueueTypes)
+	}
+	if c.ID.WorkerID < 0 || c.ID.WorkerID > 1023 {
+		return errors.New("invalid id.worker_id, must be 0-1023")
 	}
 	if c.HTTP.Port < 1 || c.HTTP.Port > 65535 {
 		return errors.New("invalid http.port")

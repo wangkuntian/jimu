@@ -17,11 +17,13 @@ func NewMySQLStore(db *gorm.DB) *MySQLStore {
 	return &MySQLStore{db: db}
 }
 
-// Add 在事务中添加事件
+// Add 在事务中添加事件。
+// tx 为 nil 时使用 store 自身连接独立落库（业务事务已提交的场景，可靠性优先于原子性）；
+// 业务事务内调用时传入 *gorm.DB 保证事件与业务同事务。
 func (s *MySQLStore) Add(ctx context.Context, tx interface{}, events ...Event) error {
-	db, ok := tx.(*gorm.DB)
-	if !ok {
-		return gorm.ErrInvalidTransaction
+	db := s.db
+	if t, ok := tx.(*gorm.DB); ok && t != nil {
+		db = t
 	}
 
 	now := time.Now()

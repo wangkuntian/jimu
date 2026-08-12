@@ -46,11 +46,14 @@ func (p *GoogleProvider) AuthURL(state string) string {
 
 // Exchange 用授权码换取用户信息
 func (p *GoogleProvider) Exchange(ctx context.Context, code string) (*UserInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, oauthTimeout)
+	defer cancel()
 	token, err := p.config.Exchange(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("google exchange: %w", err)
 	}
 	client := p.config.Client(ctx, token)
+	client.Timeout = oauthTimeout
 	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
 	if err != nil {
 		return nil, fmt.Errorf("google userinfo: %w", err)

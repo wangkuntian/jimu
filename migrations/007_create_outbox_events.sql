@@ -1,6 +1,6 @@
 -- +goose Up
 CREATE TABLE IF NOT EXISTS outbox_events (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '事件ID',
+    id BIGINT UNSIGNED NOT NULL COMMENT '事件ID',
     aggregate_id VARCHAR(128) NOT NULL COMMENT '聚合根ID',
     event_type VARCHAR(128) NOT NULL COMMENT '事件类型',
     payload JSON NOT NULL COMMENT '事件数据',

@@ -54,7 +54,8 @@ func New(cfg Config) (Storage, error) {
 	}
 }
 
-// newOSSStorage 创建 OSS 存储（占位，需要引入 aliyun-oss-go-sdk）
+// newOSSStorage 创建阿里云 OSS 存储。
+// OSS 兼容 S3 协议，复用 S3 SDK（path style + endpoint），无需引入 aliyun-oss-go-sdk。
 func newOSSStorage(cfg Config) (Storage, error) {
-	return nil, fmt.Errorf("OSS storage not implemented yet")
+	return newS3CompatibleStorage(cfg, false)
 }

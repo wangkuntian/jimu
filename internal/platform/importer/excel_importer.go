@@ -20,11 +20,6 @@ func NewExcelImporter() *ExcelImporter {
 	return &ExcelImporter{}
 }
 
-// NewExcelImporterWithSheet creates an Excel importer for a specific sheet.
-func NewExcelImporterWithSheet(sheet string) *ExcelImporter {
-	return &ExcelImporter{Sheet: sheet}
-}
-
 // Parse reads an Excel file and returns rows as maps keyed by header names.
 func (e *ExcelImporter) Parse(ctx context.Context, file io.Reader) ([]map[string]string, error) {
 	data, err := io.ReadAll(file)

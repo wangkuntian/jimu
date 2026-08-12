@@ -87,6 +87,8 @@ func open(cfg config.DBConfig, log ...*logger.Logger) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 雪花 ID 主键注入（InitSnowflake 未调用时 no-op，回退数据库自增）
+	RegisterSnowflakeHook(db)
 
 	// 配置读写分离（如果有从库）
 	if len(cfg.ReadHosts) > 0 {

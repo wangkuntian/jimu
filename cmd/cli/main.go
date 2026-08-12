@@ -143,6 +143,9 @@ var seedCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 		log := logger.New(cfg.Log)
+		if err := db.InitSnowflake(cfg.ID.WorkerID); err != nil {
+			return fmt.Errorf("failed to init snowflake: %w", err)
+		}
 		dbConn, err := db.ConnectWithRetry(cfg.DB, log)
 		if err != nil {
 			return fmt.Errorf("failed to connect database: %w", err)

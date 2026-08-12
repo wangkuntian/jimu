@@ -1,6 +1,6 @@
 -- +goose Up
 CREATE TABLE IF NOT EXISTS import_jobs (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '导入任务ID',
+    id BIGINT UNSIGNED NOT NULL COMMENT '导入任务ID',
     type VARCHAR(64) NOT NULL COMMENT '导入类型（users 等）',
     filename VARCHAR(255) NOT NULL COMMENT '文件名',
     status VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT '状态：pending/processing/completed/failed',

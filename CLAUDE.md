@@ -42,6 +42,14 @@ type Module interface {
 
 HTTP 路由统一注册在 `/api/v1` 前缀下。
 
+### 设计边界（非目标）
+
+以下能力**明确不做**，新增需求不得为其引入抽象：
+
+- **租户隔离** — 不做多租户（tenant）概念。项目定位单租户/单组织部署；用户体系全局唯一，数据表不预留 `tenant_id`、`tenant` 字段或租户中间件。若后续产品出现多租户需求，需重新设计数据模型，不应在现有表上打补丁。
+
+添加任何新表、接口或中间件前，先对照本清单确认不会引入非目标能力。
+
 ## 配置约束
 
 ### 枚举值
@@ -135,6 +143,7 @@ HTTP 状态码始终 200，业务错误通过 `body.code` 体现：
 
 - Gorm + `gorm.io/driver/mysql`
 - 所有基础表包含字段：`id`、`created_at`、`updated_at`、`deleted_at`
+- 主键 `id` 由应用生成雪花 ID（`internal/shared/id` + gorm hook），建表不使用 `AUTO_INCREMENT`；多实例部署通过 `id.worker_id` 保证唯一
 - 迁移使用 Goose，命名 `{seq}_create_{table}s.sql`
 - 迁移文件需为每个字段和表添加 COMMENT（中文说明）
 - 支持读写分离（通过 `read_hosts`、`read_ports` 配置）

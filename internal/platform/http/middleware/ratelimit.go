@@ -29,6 +29,9 @@ func NewRateLimiter(r rate.Limit, b int) *RateLimiter {
 	}
 }
 
+// cleanupThreshold 触发惰性清理的 visitor 数量上限（内存有界）
+const cleanupThreshold = 10000
+
 // getLimiter 获取或创建 IP 对应的限流器
 func (rl *RateLimiter) getLimiter(ip string) *rate.Limiter {
 	rl.mu.Lock()
@@ -38,8 +41,21 @@ func (rl *RateLimiter) getLimiter(ip string) *rate.Limiter {
 	if !exists {
 		limiter = rate.NewLimiter(rl.rate, rl.burst)
 		rl.visitors[ip] = limiter
+		// 超阈值时清理满桶（长时间未消费）的条目，防 map 无限增长
+		if len(rl.visitors) > cleanupThreshold {
+			rl.cleanupLocked()
+		}
 	}
 	return limiter
+}
+
+// cleanupLocked 删除满桶条目（满桶 = 未消费 = IP 已空闲）
+func (rl *RateLimiter) cleanupLocked() {
+	for ip, l := range rl.visitors {
+		if l.Tokens() >= float64(rl.burst) {
+			delete(rl.visitors, ip)
+		}
+	}
 }
 
 // Limit 限流中间件（带 RFC 6585 标准响应头）
@@ -74,8 +90,3 @@ func GlobalRateLimit(rps, burst int) gin.HandlerFunc {
 	return limiter.Limit()
 }
 
-// StrictRateLimit 严格限流（每秒 10 次，突发 20）
-func StrictRateLimit() gin.HandlerFunc {
-	limiter := NewRateLimiter(10, 20)
-	return limiter.Limit()
-}

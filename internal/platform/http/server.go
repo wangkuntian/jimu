@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -22,15 +23,26 @@ type Server struct {
 	errors chan error
 }
 
-func NewServer(cfg config.HTTPConfig, r *gin.Engine) *Server {
-	return newServer(&http.Server{
+func NewServer(cfg config.HTTPConfig, r *gin.Engine) (*Server, error) {
+	srv := &http.Server{
 		Addr:              formatAddr(cfg.Host, cfg.Port),
 		Handler:           r,
 		ReadHeaderTimeout: time.Duration(cfg.ReadHeaderTimeoutSec) * time.Second,
 		ReadTimeout:       time.Duration(cfg.ReadTimeoutSec) * time.Second,
 		WriteTimeout:      time.Duration(cfg.WriteTimeoutSec) * time.Second,
 		IdleTimeout:       time.Duration(cfg.IdleTimeoutSec) * time.Second,
-	})
+	}
+	if cfg.TLS.Enabled {
+		cert, err := tls.LoadX509KeyPair(cfg.TLS.CertFile, cfg.TLS.KeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("load tls key pair: %w", err)
+		}
+		srv.TLSConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS12,
+		}
+	}
+	return newServer(srv), nil
 }
 
 func newServer(server *http.Server) *Server {
@@ -106,6 +118,11 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 		middleware.Timeout(time.Duration(serverCfg.TimeoutSec)*time.Second),
 		middleware.GlobalRateLimit(serverCfg.RateLimitRate, serverCfg.RateLimitBurst),
 	)
+
+	// CSRF 防护：配置了密钥才启用。Bearer 认证请求自动跳过，不影响 JWT API。
+	if securityCfg.CSRFSecret != "" {
+		r.Use(middleware.CSRF(middleware.DefaultCSRFConfig([]byte(securityCfg.CSRFSecret))))
+	}
 
 	return r
 }

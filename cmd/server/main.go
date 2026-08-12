@@ -16,6 +16,7 @@ import (
 	"jimu/internal/modules/permission"
 	"jimu/internal/modules/role"
 	"jimu/internal/modules/user"
+	"jimu/internal/platform/auth"
 )
 
 // @title           Jimu API
@@ -59,7 +60,8 @@ func run() error {
 		role.New(container.DB),
 		permission.New(container.DB),
 		auditmodule.New(container.DB, cfg.Audit, container.Logger),
-		adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, container.Scheduler, container.Storage, container.FeatureFlag, container.EventBus),
+		adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, container.Scheduler, container.Storage, container.FeatureFlag, container.EventBus,
+			auth.NewWithRotation(cfg.Auth.JWTSecret, cfg.Auth.JWTPreviousSecret, cfg.Auth.Issuer, cfg.Auth.AccessExpireMin, cfg.Auth.RefreshExpireDay)),
 		oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth),
 	)
 	if err != nil {

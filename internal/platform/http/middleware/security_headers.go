@@ -6,31 +6,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SecurityHeadersConfig 安全头配置（向后兼容）
-type SecurityHeadersConfig struct {
-	ContentTypeOptions    string
-	FrameOptions          string
-	XSSProtection         string
-	StrictTransport       string
-	ContentSecurityPolicy string
-	ReferrerPolicy        string
-	PermissionsPolicy     string
-}
-
-// DefaultSecurityHeadersConfig 返回默认安全头配置
-func DefaultSecurityHeadersConfig() SecurityHeadersConfig {
-	d := config.DefaultSecurityConfig()
-	return SecurityHeadersConfig{
-		ContentTypeOptions:    d.ContentTypeOptions,
-		FrameOptions:          d.FrameOptions,
-		XSSProtection:         d.XSSProtection,
-		StrictTransport:       d.StrictTransport,
-		ContentSecurityPolicy: d.ContentSecurityPolicy,
-		ReferrerPolicy:        d.ReferrerPolicy,
-		PermissionsPolicy:     d.PermissionsPolicy,
-	}
-}
-
 // SecurityHeadersFromConfig 从项目配置创建安全头中间件
 func SecurityHeadersFromConfig(cfg config.SecurityConfig) gin.HandlerFunc {
 	// 空值填充默认值
@@ -59,22 +34,6 @@ func SecurityHeadersFromConfig(cfg config.SecurityConfig) gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 		writeSecurityHeaders(c, cfg)
-		c.Next()
-	}
-}
-
-// SecurityHeaders 设置安全响应头（向后兼容）
-func SecurityHeaders(cfg SecurityHeadersConfig) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		writeSecurityHeaders(c, config.SecurityConfig{
-			ContentTypeOptions:    cfg.ContentTypeOptions,
-			FrameOptions:          cfg.FrameOptions,
-			XSSProtection:         cfg.XSSProtection,
-			StrictTransport:       cfg.StrictTransport,
-			ContentSecurityPolicy: cfg.ContentSecurityPolicy,
-			ReferrerPolicy:        cfg.ReferrerPolicy,
-			PermissionsPolicy:     cfg.PermissionsPolicy,
-		})
 		c.Next()
 	}
 }
