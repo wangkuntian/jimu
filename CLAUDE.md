@@ -79,6 +79,36 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 
 优先级：`环境变量 > app.{env}.yaml > app.yaml`
 
+### 本地数据库集成测试
+
+集成测试（`internal/**/integration_test.go`）用真实 MySQL，通过 `testutil.SkipUnlessMysql`
+自动检测：数据库不可达时跳过，CI 的 mariadb service 满足条件。
+
+本地运行方式（临时 mariadb 容器，用完即删）：
+
+```bash
+# 1. 启动临时 mariadb（root 密码 root，建 jimu_test 库）
+docker run -d --rm --name jimu-test-mysql \
+  -e MARIADB_ROOT_PASSWORD=root \
+  -e MARIADB_DATABASE=jimu_test \
+  -p 3306:3306 \
+  mariadb:12.1.2-noble
+
+# 2. 跑集成测试（连接参数与 CI 一致）
+DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root DB_PASSWORD=root DB_NAME=jimu_test \
+  go test ./internal/modules/user/... -run Integration -v
+
+# 3. 结束删除容器
+docker rm -f jimu-test-mysql
+```
+
+注意：
+
+- 若本地 `3306` 已被占用（如已有 mariadb 容器），换映射端口：
+  `-p 3307:3306`，测试命令里 `DB_PORT=3307`。
+- `MARIADB_DATABASE=jimu_test` 已自动建库，测试直接连接，无需手动建。
+- 普通单元测试（sqlite/in-memory）不需要此容器。
+
 ## 编码约束
 
 ### 统一响应
