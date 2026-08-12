@@ -39,3 +39,6 @@ secrets/
 bin/
 .codegraph/
 logs/
+
+# Claude AI
+.claude/
