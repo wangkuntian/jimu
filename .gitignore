@@ -37,7 +37,6 @@ secrets/
 
 # Build artifacts
 bin/
-.codegraph/
 logs/
 
 # Claude AI

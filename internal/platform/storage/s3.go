@@ -18,10 +18,9 @@ import (
 // S3Storage S3/MinIO 对象存储实现
 // MinIO 使用 S3 兼容协议，同一套代码覆盖 S3 与 MinIO（通过 PathStyle + Endpoint 区分）
 type S3Storage struct {
-	client    *s3.Client
-	bucket    string
-	baseURL   string
-	pathStyle bool
+	client  *s3.Client
+	bucket  string
+	baseURL string
 }
 
 // newS3Storage 创建 S3 存储（MinIO 复用，S3 兼容协议）
@@ -39,13 +38,6 @@ func newS3CompatibleStorage(cfg Config, isS3 bool) (Storage, error) {
 		return nil, fmt.Errorf("storage bucket is required")
 	}
 	optFns := []func(*awsconfig.LoadOptions) error{}
-	if cfg.Endpoint != "" {
-		optFns = append(optFns, awsconfig.WithEndpointResolverWithOptions(
-			aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-				return aws.Endpoint{URL: cfg.Endpoint, SigningRegion: cfg.Region}, nil
-			}),
-		))
-	}
 	if cfg.AccessKey != "" && cfg.SecretKey != "" {
 		optFns = append(optFns, awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, ""),
@@ -59,6 +51,10 @@ func newS3CompatibleStorage(cfg Config, isS3 bool) (Storage, error) {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
 	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		if cfg.Endpoint != "" {
+			// 自定义端点（MinIO/OSS 等兼容 S3 的服务），替代已废弃的 EndpointResolver
+			o.BaseEndpoint = aws.String(cfg.Endpoint)
+		}
 		// MinIO 需路径风格；S3 默认虚拟主机风格
 		if !isS3 || cfg.PathStyle {
 			o.UsePathStyle = true

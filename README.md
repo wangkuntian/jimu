@@ -30,7 +30,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **优雅停机** — 显式 Application 生命周期，反向停止组件
 - **分布式锁** — Redis 实现的分布式锁（防并发、选主）
 - **文件存储** — 本地/S3/OSS/MinIO 统一接口
-- **通知系统** — 邮件/SMS/WebSocket/Webhook 抽象
+- **通知系统** — 邮件/短信(SMS)/WebSocket/Webhook 抽象；短信支持阿里云（dysmsapi SDK，`sms.enabled` 配置开关）
 - **Outbox 模式** — 事件发布与数据库事务一致性保证，支持 MQ 跨服务发布（`outbox.publisher` 切换；`mq` 模式下通过 WorkerPool 消费事件，`event_bus` 模式通过 `outbox:*` 桥接器注入事件总线）
 - **定时任务** — Cron 调度器（robfig/cron），支持 MySQL 持久化（`scheduler.store=mysql`）与多实例分布式锁协调，启动时通过 `RestoreFromStore` 恢复持久化任务（内置任务去重）
 - **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
@@ -41,7 +41,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **Docker Secrets** — 敏感配置通过文件注入（`_FILE` 后缀）
 - **K8s 部署** — Deployment/Service/HPA/Ingress manifests
 - **CI/CD** — GitHub Actions + Dependabot 自动化 + 测试覆盖率门禁
-- **安全扫描** — CI 执行 govulncheck 依赖漏洞扫描、Trivy 镜像扫描、SBOM 生成与镜像 smoke test
+- **安全扫描** — govulncheck 依赖漏洞扫描（纳入 `make release-check` 与 CI）、Trivy 镜像扫描、SBOM 生成与镜像 smoke test
 - **静态检查** — golangci-lint + pre-commit 钩子（fmt / vet / lint）
 - **追踪关联** — 访问日志自动注入 trace_id / span_id，关联 OpenTelemetry 追踪
 
@@ -434,6 +434,11 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `email.username` | SMTP 认证用户名 | — |
 | `email.password` | SMTP 认证密码（生产建议 `EMAIL_PASSWORD` 环境变量注入） | — |
 | `email.from` | 发件人地址（如 `noreply@example.com`） | — |
+| `sms.enabled` | 是否启用真实短信发送；`false` 时短信通知回退日志渠道 | `false` |
+| `sms.provider` | 短信服务商（当前支持 `aliyun`） | — |
+| `sms.api_key` | 阿里云 AccessKey ID（生产建议 `SMS_API_KEY` 环境变量注入） | — |
+| `sms.api_secret` | 阿里云 AccessKey Secret（生产建议 `SMS_API_SECRET` 环境变量注入） | — |
+| `sms.sign_name` | 短信签名 | — |
 | `security.csrf_secret` | CSRF 密钥；非空时启用 CSRF 中间件（Bearer 认证请求自动跳过） | — |
 | `security.content_type_options` / `frame_options` / `xss_protection` | HTTP 安全响应头（`X-Content-Type-Options` 等，留空用默认值） | 见 `DefaultSecurityConfig` |
 | `security.strict_transport` | `Strict-Transport-Security` 头 | `max-age=31536000; includeSubDomains` |
@@ -471,7 +476,7 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `make compose-seed` | Compose 环境插入初始数据 |
 | `make compose-observability` | 启动监控栈（Prometheus + Grafana） |
 | `make compose-observability-down` | 停止监控栈 |
-| `make release-check` | 发布前检查 |
+| `make release-check` | 发布前检查（fmt-check + vet + test + govulncheck） |
 | `make clean` | 清理构建产物 |
 | `make hooks` | 安装 pre-commit 钩子 |
 

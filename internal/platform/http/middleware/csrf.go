@@ -43,19 +43,6 @@ func generateToken(secret []byte, timestamp int64) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// validateToken 校验 CSRF Token
-func validateToken(secret []byte, token string, timestamp int64, maxAge time.Duration) bool {
-	if token == "" {
-		return false
-	}
-	// 检查时间戳是否过期
-	if time.Since(time.Unix(timestamp, 0)) > maxAge {
-		return false
-	}
-	expected := generateToken(secret, timestamp)
-	return hmac.Equal([]byte(token), []byte(expected))
-}
-
 // CSRF CSRF 防护中间件
 // 使用 double-submit cookie pattern：token 同时存在于 cookie 和 header/form 中
 func CSRF(cfg CSRFConfig) gin.HandlerFunc {

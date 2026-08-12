@@ -164,6 +164,13 @@ email:
   password: ""             # 认证密码（推荐 EMAIL_PASSWORD 环境变量注入）
   from: ""                 # 发件人地址
 
+sms:
+  enabled: false           # 是否启用真实短信发送；false 时回退日志渠道
+  provider: ""             # 短信服务商：aliyun
+  api_key: ""              # AccessKey ID（推荐 SMS_API_KEY 环境变量注入）
+  api_secret: ""           # AccessKey Secret（推荐 SMS_API_SECRET 环境变量注入）
+  sign_name: ""            # 短信签名
+
 # OpenTelemetry 追踪配置
 otel:
   enabled: true                     # 生产环境启用

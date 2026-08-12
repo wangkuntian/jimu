@@ -1,4 +1,4 @@
-.PHONY: run build test vet fmt fmt-check lint clean migrate migrate-down migrate-status seed help
+.PHONY: run build test vet fmt fmt-check lint clean migrate migrate-down migrate-status seed help govulncheck
 .PHONY: docker-build docker-run docker-stop docker-logs
 .PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
 .PHONY: compose-observability compose-observability-down
@@ -8,8 +8,8 @@
 
 # 变量
 BIN_DIR := bin
-SERVER_BIN := $(BIN_DIR)/server
-CLI_BIN := $(BIN_DIR)/jimu
+SERVER_BIN := $(BIN_DIR)/jimu-server
+CLI_BIN := $(BIN_DIR)/jimu-manage
 SERVER_CMD := cmd/server/main.go
 CLI_CMD := cmd/cli/main.go
 VERSION ?= dev
@@ -223,8 +223,12 @@ cli: build-cli
 ## all: 格式化 -> 静态检查 -> 测试 -> 编译
 all: fmt vet test build
 
-## release-check: 发布前检查（fmt-check + vet + test）
-release-check: fmt-check vet test
+## govulncheck: 依赖漏洞扫描（go run 免安装，与 CI 命令一致）
+govulncheck:
+	@go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+## release-check: 发布前检查（fmt-check + vet + test + govulncheck）
+release-check: fmt-check vet test govulncheck
 	@echo "All checks passed"
 
 ## hooks: 安装 pre-commit 钩子（需 pip install pre-commit）

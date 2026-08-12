@@ -15,8 +15,8 @@ import (
 	"jimu/internal/platform/outbox"
 	"jimu/internal/platform/queue"
 
-	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/gin-gonic/gin"
+	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
 	gormotel "gorm.io/plugin/opentelemetry/tracing"
 )
 

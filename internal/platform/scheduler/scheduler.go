@@ -79,7 +79,7 @@ func (s *CronScheduler) AddNamedFunc(id, name, spec string, cmd func()) error {
 				s.logger.Debug("job skipped, lock not acquired", "id", id, "error", err.Error())
 				return
 			}
-			defer s.lock.Release(context.Background(), result)
+			defer func() { _ = s.lock.Release(context.Background(), result) }()
 		}
 		s.recordRun(info, cmd)
 	})
