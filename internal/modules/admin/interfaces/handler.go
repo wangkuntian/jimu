@@ -24,7 +24,7 @@ func NewHandler(service *application.Service) *Handler {
 // @Tags         系统管理
 // @Produce      json
 // @Success      200  {object}  response.Body  "成功，返回错误码列表"
-// @Router       /admin/error-codes [get]
+// @Router       /api/v1/admin/error-codes [get]
 func (h *Handler) GetErrorCodes(c *gin.Context) {
 	response.OK(c, errors.AllErrorCodes())
 }

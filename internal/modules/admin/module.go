@@ -80,8 +80,8 @@ func (m *Module) Name() string { return "admin" }
 
 // RegisterHTTP 注册管理端路由
 func (m *Module) RegisterHTTP(r contract.Router) {
-	// 管理员权限中间件
-	admin := r.Group("")
+	// 管理员权限中间件，统一挂载在 /api/v1/admin 前缀下
+	admin := r.Group("/api/v1/admin")
 	admin.Use(middleware.AdminAuth())
 
 	// 公开端点（错误码文档）

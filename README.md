@@ -330,7 +330,7 @@ curl -X POST http://localhost:8080/api/v1/users \
 ### 获取系统状态
 
 ```bash
-curl http://localhost:8080/api/v1/admin/status
+curl http://localhost:8080/api/v1/admin/monitoring/status
 ```
 
 ### 健康检查
