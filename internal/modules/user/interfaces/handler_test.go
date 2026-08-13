@@ -104,3 +104,10 @@ func (r *fakeUserRepository) Create(_ context.Context, user *domain.User) error 
 
 func (r *fakeUserRepository) Update(context.Context, *domain.User) error { return nil }
 func (r *fakeUserRepository) Delete(context.Context, uint64) error       { return nil }
+func (r *fakeUserRepository) FindByEmailHash(context.Context, string) (*domain.User, error) {
+	return nil, gorm.ErrRecordNotFound
+}
+func (r *fakeUserRepository) FindByPhoneHash(context.Context, string) (*domain.User, error) {
+	return nil, gorm.ErrRecordNotFound
+}
+func (r *fakeUserRepository) UpdatePassword(context.Context, uint64, string) error { return nil }

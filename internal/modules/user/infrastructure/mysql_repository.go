@@ -35,6 +35,24 @@ func (r *mysqlRepository) FindByUsername(ctx context.Context, username string) (
 	return &user, nil
 }
 
+func (r *mysqlRepository) FindByEmailHash(ctx context.Context, hash string) (*domain.User, error) {
+	var user domain.User
+	err := r.db.WithContext(ctx).Where("email_hash = ?", hash).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *mysqlRepository) FindByPhoneHash(ctx context.Context, hash string) (*domain.User, error) {
+	var user domain.User
+	err := r.db.WithContext(ctx).Where("phone_hash = ?", hash).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 func (r *mysqlRepository) List(ctx context.Context, offset, limit int, sort, order string) ([]domain.User, int64, error) {
 	var users []domain.User
 	var total int64
@@ -55,6 +73,10 @@ func (r *mysqlRepository) Create(ctx context.Context, user *domain.User) error {
 
 func (r *mysqlRepository) Update(ctx context.Context, user *domain.User) error {
 	return r.db.WithContext(ctx).Save(user).Error
+}
+
+func (r *mysqlRepository) UpdatePassword(ctx context.Context, id uint64, hashedPassword string) error {
+	return r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", id).Update("password", hashedPassword).Error
 }
 
 func (r *mysqlRepository) Delete(ctx context.Context, id uint64) error {

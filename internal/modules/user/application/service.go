@@ -11,6 +11,7 @@ import (
 	"jimu/internal/contract"
 	"jimu/internal/modules/user/domain"
 	"jimu/internal/platform/cache"
+	"jimu/internal/platform/encryption"
 	"jimu/internal/platform/outbox"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
@@ -23,13 +24,17 @@ type UserService struct {
 	repo   domain.UserRepository
 	cache  cache.Cache
 	outbox *outbox.Outbox
+	cipher *encryption.Cipher
 }
 
 func NewUserService(repo domain.UserRepository, cache cache.Cache, deps ...interface{}) *UserService {
 	s := &UserService{repo: repo, cache: cache}
 	for _, dep := range deps {
-		if d, ok := dep.(*outbox.Outbox); ok {
+		switch d := dep.(type) {
+		case *outbox.Outbox:
 			s.outbox = d
+		case *encryption.Cipher:
+			s.cipher = d
 		}
 	}
 	return s
@@ -46,6 +51,17 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserR
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to find user", err)
 	}
 
+	// 邮箱查重（盲索引精确查询）；空邮箱跳过，DB unique 索引兜底
+	if req.Email != "" && s.cipher != nil {
+		existing, err := s.repo.FindByEmailHash(ctx, s.cipher.BlindIndex(req.Email))
+		if err == nil && existing != nil {
+			return nil, errors.New(errors.CodeConflict, "email already exists")
+		}
+		if err != nil && !stderrors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.Wrap(errors.CodeInternalError, "failed to find user by email", err)
+		}
+	}
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to hash password", err)
@@ -54,6 +70,8 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserR
 	user := &domain.User{
 		Username: req.Username,
 		Password: string(hashedPassword),
+		Email:    req.Email,
+		Phone:    req.Phone,
 		Status:   1,
 	}
 	if err := s.repo.Create(ctx, user); err != nil {
@@ -67,6 +85,7 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserR
 		payload, err := json.Marshal(contract.UserCreatedEvent{
 			UserID:   user.ID,
 			Username: user.Username,
+			Email:    user.Email,
 		})
 		if err != nil {
 			log.Printf("user: marshal created event: %v", err)

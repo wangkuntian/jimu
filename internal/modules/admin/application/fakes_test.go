@@ -86,6 +86,16 @@ func (f *fakeUserRepository) Update(ctx context.Context, user *userdomain.User) 
 
 func (f *fakeUserRepository) Delete(ctx context.Context, id uint64) error { return nil }
 
+func (f *fakeUserRepository) FindByEmailHash(context.Context, string) (*userdomain.User, error) {
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (f *fakeUserRepository) FindByPhoneHash(context.Context, string) (*userdomain.User, error) {
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (f *fakeUserRepository) UpdatePassword(context.Context, uint64, string) error { return nil }
+
 // fakeImportJobRepo 可配置的导入任务仓储 mock
 type fakeImportJobRepo struct {
 	create   func(ctx context.Context, job *admindomain.ImportJob) error
