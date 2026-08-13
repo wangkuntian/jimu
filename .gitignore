@@ -41,3 +41,6 @@ logs/
 
 # Claude AI
 .claude/
+
+# Graphify
+graphify-out/cost.json
