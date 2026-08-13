@@ -30,8 +30,9 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **优雅停机** — 显式 Application 生命周期，反向停止组件
 - **分布式锁** — Redis 实现的分布式锁（防并发、选主）
 - **文件存储** — 本地/S3/OSS/MinIO 统一接口
+- **数据导入/导出** — CSV/Excel 模板导入与导出（`internal/platform/importer` / `internal/platform/exporter`），导出结果可被导入器回读验证，格式互通
 - **通知系统** — 邮件/短信(SMS)/WebSocket/Webhook 抽象；短信支持阿里云（dysmsapi SDK，`sms.enabled` 配置开关）
-- **统一出站 HTTP client** — 封装 timeout + retry/backoff（仅网络错误与 5xx）+ 熔断（连续失败自动开启，冷却后探测恢复）+ OTel `traceparent` 注入（`internal/platform/httpclient`），OAuth 提供商与 Webhook 共用
+- **统一出站 HTTP client** — 封装 timeout + retry/backoff（仅网络错误与 5xx）+ 熔断（连续失败自动开启，冷却后探测恢复）+ 按目标 host 独立限流（令牌桶）+ OTel `traceparent` 注入（`internal/platform/httpclient`），OAuth 提供商与 Webhook 共用
 - **Outbox 模式** — 事件发布与数据库事务一致性保证，支持 MQ 跨服务发布（`outbox.publisher` 切换；`mq` 模式下通过 WorkerPool 消费事件，`event_bus` 模式通过 `outbox:*` 桥接器注入事件总线）
 - **定时任务** — Cron 调度器（robfig/cron），支持 MySQL 持久化（`scheduler.store=mysql`）与多实例分布式锁协调，启动时通过 `RestoreFromStore` 恢复持久化任务（内置任务去重）
 - **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
@@ -452,6 +453,8 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `http_client.retry_interval_ms` | 出站 HTTP 重试基础间隔（毫秒，指数退避），0 用默认 | `200` |
 | `http_client.max_failures` | 出站 HTTP 熔断阈值：连续失败次数达此值开启熔断，0 用默认 | `5` |
 | `http_client.reset_timeout_ms` | 出站 HTTP 熔断冷却时长（毫秒），到期后放行探测，0 用默认 | `30000` |
+| `http_client.rate_limit_rate` | 出站 HTTP 每秒请求数（按目标 host 独立限流），0 不限流 | `0` |
+| `http_client.rate_limit_burst` | 出站 HTTP 令牌桶容量，0 用 rate（桶=平均速率） | `0` |
 
 ## Makefile 命令
 
