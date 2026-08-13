@@ -286,6 +286,9 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			components = append(components, provider.Components()...)
 		}
 	}
+	if cfg.GRPC.Enabled && container.GRPCServer != nil {
+		components = append(components, container.GRPCServer)
+	}
 	components = append(components, management, public)
 	return NewApplication(time.Duration(cfg.HTTP.ShutdownTimeoutSec)*time.Second, components...), nil
 }
