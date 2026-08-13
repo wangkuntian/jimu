@@ -201,6 +201,10 @@ type SecurityConfig struct {
 
 	// CSRF 防护密钥。非空时启用 CSRF 中间件（Bearer 认证请求自动跳过，不影响 JWT API）
 	CSRFSecret string `mapstructure:"csrf_secret"`
+
+	// 字段级加密密钥（AES-256-GCM，≥32 字节）。空则明文模式（email/phone 不加密存储，仍计算盲索引）。
+	// 建议 ENCRYPTION_KEY 环境变量注入；启用后存量明文行可正常解密读回。
+	EncryptionKey string `mapstructure:"encryption_key"`
 }
 
 // DefaultSecurityConfig 返回默认安全配置
@@ -320,6 +324,7 @@ type AuthConfig struct {
 	LoginRateWindowSec    int    `mapstructure:"login_rate_window_sec"`
 	RegisterRateLimit     int    `mapstructure:"register_rate_limit"`
 	RegisterRateWindowSec int    `mapstructure:"register_rate_window_sec"`
+	ResetCodeTTLMin       int    `mapstructure:"reset_code_ttl_min"` // 密码重置验证码有效期（分钟）
 }
 
 // Load 加载配置
@@ -423,6 +428,10 @@ func applyEnvOverrides(cfg *Config) {
 	// Management 端点监听地址（容器内需暴露给 Prometheus 抓取）
 	if v := os.Getenv("MANAGEMENT_HOST"); v != "" {
 		cfg.Management.Host = v
+	}
+	// 字段级加密密钥
+	if v := getEnvOrFile("ENCRYPTION_KEY_FILE", "ENCRYPTION_KEY"); v != "" {
+		cfg.Security.EncryptionKey = v
 	}
 }
 

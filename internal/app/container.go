@@ -12,6 +12,7 @@ import (
 	"jimu/internal/platform/auth"
 	"jimu/internal/platform/captcha"
 	"jimu/internal/platform/db"
+	"jimu/internal/platform/encryption"
 	"jimu/internal/platform/event"
 	"jimu/internal/platform/feature"
 	grpcpkg "jimu/internal/platform/grpc"
@@ -48,6 +49,7 @@ type Container struct {
 	DBCollector    *observability.DBCollector
 	HTTPClient     *httpclient.Client
 	Captcha        *captcha.Service
+	Cipher         *encryption.Cipher
 	WorkerPool     *queue.WorkerPool
 	APIKeyVerifier *auth.APIKeyVerifier
 	GRPCServer     *grpcpkg.Server
@@ -89,6 +91,9 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 字段级加密：注册全局 gorm hook（加密 email/phone 写入 + 盲索引 + 读取解密）
+	cipher := encryption.New(cfg.Security.EncryptionKey)
+	db.RegisterEncryptionHooks(dbConn, cipher)
 	rdb, err := redistore.ConnectWithRetry(cfg.Redis, log)
 	if err != nil {
 		return nil, err
@@ -258,6 +263,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		DBCollector:    dbCollector,
 		HTTPClient:     httpClient,
 		Captcha:        captchaSvc,
+		Cipher:         cipher,
 		WorkerPool:     pendingWorkerPool,
 		APIKeyVerifier: apiKeyVerifier,
 		GRPCServer:     grpcServer,

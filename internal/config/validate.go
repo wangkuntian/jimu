@@ -27,6 +27,9 @@ func (c *Config) Validate(env string) error {
 			return errors.New("invalid http.allowed_origins")
 		}
 	}
+	if c.Security.EncryptionKey != "" && len(c.Security.EncryptionKey) < 32 {
+		return errors.New("invalid security.encryption_key, must be at least 32 bytes when set")
+	}
 	return nil
 }
 
@@ -69,6 +72,9 @@ func (c *Config) validateCommon() error {
 	}
 	if c.Auth.Issuer == "" || c.Auth.AccessExpireMin <= 0 || c.Auth.RefreshExpireDay <= 0 {
 		return errors.New("invalid auth configuration")
+	}
+	if c.Auth.ResetCodeTTLMin <= 0 {
+		return errors.New("invalid auth.reset_code_ttl_min")
 	}
 	if c.Auth.LoginRateLimit <= 0 || c.Auth.LoginRateWindowSec <= 0 || c.Auth.RegisterRateLimit <= 0 || c.Auth.RegisterRateWindowSec <= 0 {
 		return errors.New("invalid auth rate limit")
