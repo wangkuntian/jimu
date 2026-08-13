@@ -4,7 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"jimu/internal/platform/observability"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
+
+var outboxEventsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "jimu",
+	Subsystem: "outbox",
+	Name:      "events_total",
+	Help:      "Total number of outbox events published",
+}, []string{"result"})
 
 // Event 待发布事件
 type Event struct {
@@ -58,9 +70,43 @@ func New(store Store, publisher Publisher) *Outbox {
 	}
 }
 
-// Add 记录业务事件到 Outbox（供业务模块调用）
+// Add 记录业务事件到 Outbox（供业务模块调用）。
+// 将调用方 ctx 的 trace 上下文注入事件 Metadata（traceparent/tracestate），
+// 供发布时跨服务透传；已有同名 key 不覆盖。
 func (o *Outbox) Add(ctx context.Context, tx interface{}, events ...Event) error {
-	return o.store.Add(ctx, tx, events...)
+	if len(events) == 0 {
+		return nil
+	}
+	injected := make([]Event, len(events))
+	copy(injected, events)
+	tp, ts := observability.TraceFromContext(ctx)
+	if tp != "" || ts != "" {
+		for i := range injected {
+			mergeTrace(&injected[i], tp, ts)
+		}
+	}
+	return o.store.Add(ctx, tx, injected...)
+}
+
+// mergeTrace 将 traceparent/tracestate 合并进事件 Metadata（保留原有字段）。
+func mergeTrace(e *Event, traceparent, tracestate string) {
+	meta := map[string]interface{}{}
+	if len(e.Metadata) > 0 {
+		if err := json.Unmarshal(e.Metadata, &meta); err != nil {
+			meta = map[string]interface{}{}
+		}
+	}
+	if _, ok := meta["traceparent"]; !ok && traceparent != "" {
+		meta["traceparent"] = traceparent
+	}
+	if _, ok := meta["tracestate"]; !ok && tracestate != "" {
+		meta["tracestate"] = tracestate
+	}
+	b, err := json.Marshal(meta)
+	if err != nil {
+		return
+	}
+	e.Metadata = b
 }
 
 // Store 返回底层存储（供需要直接操作时使用）
@@ -85,8 +131,10 @@ func (o *Outbox) Process(ctx context.Context, batchSize int) (int, error) {
 		for _, e := range events {
 			_ = o.store.MarkFailed(ctx, e.ID, err)
 		}
+		outboxEventsTotal.WithLabelValues("failed").Add(float64(len(events)))
 		return 0, err
 	}
+	outboxEventsTotal.WithLabelValues("published").Add(float64(len(events)))
 
 	// 标记已发布
 	ids := make([]uint64, len(events))
