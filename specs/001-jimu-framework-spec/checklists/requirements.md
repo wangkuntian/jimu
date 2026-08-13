@@ -37,4 +37,6 @@
 - 2026-08-13 异步韧性补齐：FR-036 补熔断（max_failures/reset_timeout_ms）；FR-029 补异步边界 trace 透传（队列/Outbox 注入与恢复）与异步维度指标（jimu_queue_*/jimu_outbox_*/jimu_httpclient_*）。全部清单项复查通过。
 - 2026-08-13 批量导出与出站限流补齐：新增 FR-038（批量导出，CSV/Excel，与 FR-037 导入格式互通可回读）；FR-036 补按目标 host 独立限流（rate_limit_rate/rate_limit_burst，0 禁用）；FR-034 补关键解析逻辑模糊测试（importer/validator/jwt/snowflake 四目标）。全部清单项复查通过。
 - 2026-08-13 观测与双栈补齐：新增 FR-039（gRPC server，可选双栈，内置健康检查 + 反射）；FR-028 补 Webhook 载荷 HMAC-SHA256 签名（sign_secret，X-Jimu-Timestamp/Signature 防重放）；FR-029 补定时任务执行指标（jimu_scheduler_*，成功/失败计数 + 耗时分布）与任务级 trace span。全部清单项复查通过。
+- 2026-08-13 安全闭环补齐：新增 FR-040（自助密码重置：邮箱一次性验证码，防枚举，重置后登出全部会话）、FR-041（敏感字段 email/phone 字段级加密：AES-GCM + 盲索引，可选字段空值不冲突，未配置密钥明文等价可用）。Key Entities「用户」同步补敏感字段说明。全部清单项复查通过。
+- 2026-08-13 覆盖率门禁提升：FR-034 门禁由 ≥ 50% 提升至 ≥ 70%（当前全量实测 70.1%），CI 阈值同步调整。全部清单项复查通过。
 - 全部清单项通过，无需进入 `/speckit-clarify`。

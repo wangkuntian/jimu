@@ -6,6 +6,8 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 
 - **模块化架构** — Clean Architecture 分层，业务逻辑依赖接口不依赖实现
 - **统一认证** — typed JWT + Redis refresh session + Casbin RBAC v3 权限模型；API Key 认证（服务/机器间调用，`X-API-Key` 头 + `auth.APIKeyAuthMiddleware`，复用 `api_keys` 表）
+- **密码重置** — 邮箱验证码自助重置（`POST /api/v1/auth/forgot-password` + `reset-password`），6 位数字码 Redis 一次性存储，防用户枚举，重置后强制登出全部会话
+- **敏感字段加密** — AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引（email/phone，`security.encryption_key` 配置后启用；未配置时明文模式，功能不受影响）
 - **OAuth 登录** — Google/GitHub/微信第三方登录，`oauth.providers` 配置开关
 - **图形验证码** — 登录/注册验证码，Redis 存储一次性校验，`captcha.enabled` 配置开关
 - **统一响应** — 标准 `{code, message, data}` 格式 + 分页
@@ -337,8 +339,30 @@ curl -X POST http://localhost:8080/api/v1/users \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: <uuid>" \
-  -d '{"username": "newuser", "password": "pass1234"}'
+  -d '{"username": "newuser", "password": "pass1234", "email": "newuser@example.com", "phone": "13800138000"}'
 ```
+
+`email`/`phone` 可选，入库前 AES-256-GCM 加密（配置 `security.encryption_key` 时），重复校验走盲索引。
+
+### 忘记密码（发送验证码）
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com"}'
+```
+
+邮箱不存在时同样返回成功（防枚举）。验证码 15 分钟内有效。
+
+### 重置密码
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/reset-password \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "code": "123456", "new_password": "newpass123"}'
+```
+
+验证码一次性，成功后强制登出该用户全部会话。
 
 ### 获取系统状态
 
@@ -387,7 +411,10 @@ DB_PASSWORD=secret
 # 或从文件读取（推荐生产环境）
 DB_PASSWORD_FILE=/run/secrets/db_password
 JWT_SECRET_FILE=/run/secrets/jwt_secret
+ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 ```
+
+`ENCRYPTION_KEY` 不注入时字段加密退化为明文模式（功能可用，email/phone 明文落库）。
 
 ### 配置项
 
@@ -419,6 +446,7 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `auth.jwt_secret` | JWT 签名密钥（生产必须 `JWT_SECRET` 环境变量注入） | — |
 | `auth.access_expire_min` | Access Token 有效期 (分钟) | `60`（开发）/ `15`（生产） |
 | `auth.refresh_expire_day` | Refresh Token 有效期 (天) | `30`（开发）/ `7`（生产） |
+| `auth.reset_code_ttl_min` | 密码重置验证码有效期 (分钟) | `15` |
 | `server.timeout_sec` | 请求超时（秒），0 不限 | `30` |
 | `server.rate_limit_rate` / `server.rate_limit_burst` | 全局限流速率（每秒）/ 桶容量 | `100` / `200` |
 | `id.worker_id` | 雪花 ID worker 编号（0-1023）；多实例部署时每个副本需唯一，避免 ID 冲突 | `0` |
@@ -443,6 +471,7 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `sms.api_key` | 阿里云 AccessKey ID（生产建议 `SMS_API_KEY` 环境变量注入） | — |
 | `sms.api_secret` | 阿里云 AccessKey Secret（生产建议 `SMS_API_SECRET` 环境变量注入） | — |
 | `sms.sign_name` | 短信签名 | — |
+| `security.encryption_key` | 字段级加密密钥（≥32 字符，AES-256-GCM）；生产必须 `ENCRYPTION_KEY` 环境变量注入，否则 email/phone 明文存储 | — |
 | `security.csrf_secret` | CSRF 密钥；非空时启用 CSRF 中间件（Bearer 认证请求自动跳过） | — |
 | `security.content_type_options` / `frame_options` / `xss_protection` | HTTP 安全响应头（`X-Content-Type-Options` 等，留空用默认值） | 见 `DefaultSecurityConfig` |
 | `security.strict_transport` | `Strict-Transport-Security` 头 | `max-age=31536000; includeSubDomains` |
