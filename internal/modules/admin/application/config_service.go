@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"jimu/internal/contract"
 
@@ -30,7 +31,7 @@ func (s *AdminConfigService) GetAllConfig(ctx context.Context) (map[string]strin
 		key := iter.Val()
 		val, err := s.redis.Get(ctx, key).Result()
 		if err == nil {
-			shortKey := key[len(s.prefix)+1:] // strip "jimu:config:"
+			shortKey := strings.TrimPrefix(key, s.configKey("")) // strip "jimu:config:"
 			result[shortKey] = val
 		}
 	}
@@ -74,5 +75,5 @@ func (s *AdminConfigService) IsValidKey(key string) bool {
 }
 
 func (s *AdminConfigService) configKey(key string) string {
-	return fmt.Sprintf("jimu:config:%s", key)
+	return fmt.Sprintf("%s:config:%s", s.prefix, key)
 }
