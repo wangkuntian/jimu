@@ -20,8 +20,8 @@
     "semantic_hash": "8bd836df0def0863e7b1ac73ef1663df"
   },
   "go.mod": {
-    "mtime": 1786530763.035133,
-    "ast_hash": "8890299bd9b8a8e1f296135792ad13b4",
+    "mtime": 1786610044.4493613,
+    "ast_hash": "701312fbad2ead976c2460cc99ae218e",
     "semantic_hash": ""
   },
   "internal/app/application.go": {
@@ -40,18 +40,18 @@
     "semantic_hash": "55e6aa0a6eda25ef5b75706b2f6acd1f"
   },
   "internal/app/bootstrap.go": {
-    "mtime": 1786528283.673123,
-    "ast_hash": "056d08d160a28ec9b83788a3090093a2",
+    "mtime": 1786610086.1181855,
+    "ast_hash": "a493a74b6c00a8dfae68d443624f1591",
     "semantic_hash": ""
   },
   "internal/app/container.go": {
-    "mtime": 1786529879.5825863,
-    "ast_hash": "b5f06eabcd13fc3a04131091a9adc9f2",
+    "mtime": 1786610082.1078045,
+    "ast_hash": "3c5663c8f23882ac14a9fe9973e47f71",
     "semantic_hash": ""
   },
   "internal/config/config.go": {
-    "mtime": 1786529835.3106897,
-    "ast_hash": "b51a93f525f8544d3fefdcedb8bc9c6d",
+    "mtime": 1786610146.3433447,
+    "ast_hash": "972e4f2a7f9e2d3d30c51630442a33b2",
     "semantic_hash": ""
   },
   "internal/config/config_test.go": {
@@ -670,18 +670,18 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786608399.3008435,
-    "ast_hash": "39775f451525a3bb97f6cd4d0793f693",
+    "mtime": 1786610447.3739917,
+    "ast_hash": "d1e2f19399a61cff26721fbd91e42a7d",
     "semantic_hash": ""
   },
   "configs/app.prod.yaml": {
-    "mtime": 1786607992.4187899,
-    "ast_hash": "2554ee6d45e870481692e1e57b0bce7f",
+    "mtime": 1786610102.6372168,
+    "ast_hash": "2012b3b76869abf3208649a4f79b82d5",
     "semantic_hash": ""
   },
   "configs/app.yaml": {
-    "mtime": 1786607988.740909,
-    "ast_hash": "0944129fbeea3b43b048b74e90f18931",
+    "mtime": 1786610095.595917,
+    "ast_hash": "0f260a66576f704d43a9e816f59da49f",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -1190,8 +1190,8 @@
     "semantic_hash": ""
   },
   "internal/platform/notification/webhook.go": {
-    "mtime": 1786529840.7293544,
-    "ast_hash": "7828ddfae5d3c74e7c4563cc27d87e03",
+    "mtime": 1786609991.020478,
+    "ast_hash": "8e7f041c30ba54fb5b711e2d030cf63a",
     "semantic_hash": ""
   },
   "internal/platform/notification/websocket.go": {
@@ -1385,8 +1385,8 @@
     "semantic_hash": "eabe8fd1d12995397956a32073d7886d"
   },
   "internal/platform/scheduler/scheduler.go": {
-    "mtime": 1786528779.510305,
-    "ast_hash": "778a733ecb567367d5cb9e3e5f736ab9",
+    "mtime": 1786609910.4688866,
+    "ast_hash": "500a44ae48a01685d9c312501b755999",
     "semantic_hash": ""
   },
   "internal/platform/scheduler/scheduler_manage_test.go": {
@@ -1710,8 +1710,8 @@
     "semantic_hash": ""
   },
   "specs/001-jimu-framework-spec/checklists/requirements.md": {
-    "mtime": 1786608412.0014248,
-    "ast_hash": "b6be0f70f7de1165044b697c721aa795",
+    "mtime": 1786610452.9317448,
+    "ast_hash": "53504953dfe4dd0ebfd4e417aea75e97",
     "semantic_hash": ""
   },
   "specs/001-jimu-framework-spec/contracts/api.md": {
@@ -1725,8 +1725,8 @@
     "semantic_hash": ""
   },
   "specs/001-jimu-framework-spec/contracts/config.md": {
-    "mtime": 1786608410.332628,
-    "ast_hash": "41c2d630d7186d54022a9c49a46e469c",
+    "mtime": 1786610451.0747304,
+    "ast_hash": "93a48b9d30fbb403c795af70d58c89e2",
     "semantic_hash": ""
   },
   "specs/001-jimu-framework-spec/contracts/module.md": {
@@ -1760,8 +1760,8 @@
     "semantic_hash": ""
   },
   "specs/001-jimu-framework-spec/spec.md": {
-    "mtime": 1786608404.9669132,
-    "ast_hash": "fbe9cada4553eea2f4cc931aba6dbfa7",
+    "mtime": 1786610440.2219288,
+    "ast_hash": "3ffc8192178644323760da54856e4b70",
     "semantic_hash": ""
   },
   "specs/001-jimu-framework-spec/tasks.md": {
@@ -2040,8 +2040,8 @@
     "semantic_hash": ""
   },
   "internal/platform/notification/webhook_test.go": {
-    "mtime": 1786530454.1801505,
-    "ast_hash": "a54e1134a7a579508818a0ed7ed1adf2",
+    "mtime": 1786609999.6342094,
+    "ast_hash": "ea2c26447085df8fccbdc7f816c0aa2e",
     "semantic_hash": ""
   },
   "internal/platform/notification/websocket_test.go": {
@@ -2137,6 +2137,26 @@
   "internal/shared/validator/fuzz_test.go": {
     "mtime": 1786608219.4811382,
     "ast_hash": "baefd2dc8c9ec94094e52971c8365834",
+    "semantic_hash": ""
+  },
+  "internal/platform/grpc/ping.go": {
+    "mtime": 1786610338.4517922,
+    "ast_hash": "f9f572899a4b861735e78532fec4aa13",
+    "semantic_hash": ""
+  },
+  "internal/platform/grpc/server.go": {
+    "mtime": 1786610242.4335127,
+    "ast_hash": "b443bb15b57e6a2f927903c996381183",
+    "semantic_hash": ""
+  },
+  "internal/platform/grpc/server_test.go": {
+    "mtime": 1786610245.8507235,
+    "ast_hash": "be881ac88295a867a4ff21109a6b0f4d",
+    "semantic_hash": ""
+  },
+  "internal/platform/scheduler/observability_test.go": {
+    "mtime": 1786609944.2385886,
+    "ast_hash": "b05fdf8d9e7d78d6fb3d9078eed6d6a0",
     "semantic_hash": ""
   }
 }
