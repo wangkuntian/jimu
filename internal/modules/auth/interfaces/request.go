@@ -6,6 +6,10 @@ type loginRequest struct {
 	Username string `json:"username" binding:"required,min=4,max=20"`
 	// 密码（8-32 位，必须包含字母和数字）
 	Password string `json:"password" binding:"required,min=8,max=32"`
+	// 邮箱（注册时可选收集，用于密码重置与通知；登录忽略）
+	Email string `json:"email,omitempty" binding:"omitempty,email"`
+	// 手机号（注册时可选收集；登录忽略）
+	Phone string `json:"phone,omitempty" binding:"omitempty"`
 	// 验证码（登录时可选，注册时如果开启验证码则必填）
 	CaptchaID   string `json:"captcha_id,omitempty"`
 	CaptchaCode string `json:"captcha_code,omitempty"`
@@ -15,4 +19,16 @@ type loginRequest struct {
 type refreshRequest struct {
 	// 刷新令牌（从登录或刷新接口获取）
 	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+// forgotPasswordRequest 忘记密码请求参数
+type forgotPasswordRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+// resetPasswordRequest 重置密码请求参数
+type resetPasswordRequest struct {
+	Email       string `json:"email" binding:"required,email"`
+	Code        string `json:"code" binding:"required,len=6"`
+	NewPassword string `json:"new_password" binding:"required,min=8,max=32"`
 }

@@ -26,6 +26,7 @@ import "fmt"
 //	2002 -> 409 Conflict
 //	2003 -> 401 Unauthorized
 //	2004 -> 404 Not Found
+//	2005 -> 400 Bad Request
 //	4001 -> 400 Bad Request
 //	4002 -> 400 Bad Request
 const (
@@ -42,10 +43,11 @@ const (
 	CodeConflict           = 1009 // 资源冲突
 
 	// 用户/认证模块 (2xxx)
-	CodeUserNotFound    = 2001 // 用户不存在
-	CodeUserExists      = 2002 // 用户已存在
-	CodeInvalidPassword = 2003 // 密码错误
-	CodeRoleNotFound    = 2004 // 角色不存在
+	CodeUserNotFound     = 2001 // 用户不存在
+	CodeUserExists       = 2002 // 用户已存在
+	CodeInvalidPassword  = 2003 // 密码错误
+	CodeRoleNotFound     = 2004 // 角色不存在
+	CodeInvalidResetCode = 2005 // 密码重置验证码无效或已过期
 
 	// OAuth 模块 (3xxx)
 	CodeOAuthProviderNotFound = 3001 // 第三方登录提供商不存在
@@ -95,7 +97,7 @@ func HTTPStatus(code int) int {
 		return 404
 	case CodeConflict, CodeUserExists:
 		return 409
-	case CodeCaptchaRequired, CodeCaptchaInvalid:
+	case CodeCaptchaRequired, CodeCaptchaInvalid, CodeInvalidResetCode:
 		return 400
 	case CodeRateLimited:
 		return 429
@@ -159,6 +161,7 @@ func AllErrorCodes() []ErrorInfo {
 		{CodeUserExists, "用户已存在", 409, "用户"},
 		{CodeInvalidPassword, "密码错误", 401, "用户"},
 		{CodeRoleNotFound, "角色不存在", 404, "角色"},
+		{CodeInvalidResetCode, "密码重置验证码无效或已过期", 400, "用户"},
 		{CodeOAuthProviderNotFound, "第三方登录提供商不存在", 404, "OAuth"},
 		{CodeCaptchaRequired, "缺少验证码", 400, "验证码"},
 		{CodeCaptchaInvalid, "验证码无效", 400, "验证码"},
