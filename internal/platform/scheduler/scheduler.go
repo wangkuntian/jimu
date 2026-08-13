@@ -10,7 +10,28 @@ import (
 	"jimu/internal/platform/logger"
 	"jimu/internal/platform/redis"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/robfig/cron/v3"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+)
+
+var (
+	schedulerJobsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "jimu",
+		Subsystem: "scheduler",
+		Name:      "jobs_total",
+		Help:      "Total number of scheduled job executions by name and result",
+	}, []string{"name", "result"})
+	schedulerJobDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "jimu",
+		Subsystem: "scheduler",
+		Name:      "job_duration_seconds",
+		Help:      "Scheduled job execution duration in seconds by name",
+		Buckets:   prometheus.DefBuckets,
+	}, []string{"name"})
+	schedulerTracer = otel.Tracer("jimu.scheduler")
 )
 
 // JobInfo 注册的任务信息
@@ -119,6 +140,29 @@ func (s *CronScheduler) RestoreFromStore(ctx context.Context, cmdFactory func(id
 	return restored, nil
 }
 
+// observe 执行任务并采集指标与 trace span（成功/失败/耗时）。
+// 任务 panic 时记录失败后重新抛出，交由调用方已有的 recover 处理（状态追踪、错误通道）。
+func (s *CronScheduler) observe(name string, cmd func()) {
+	_, span := schedulerTracer.Start(context.Background(), "scheduler.run "+name)
+	defer span.End()
+	span.SetAttributes(attribute.String("jimu.job.name", name))
+	start := time.Now()
+	defer func() {
+		result := "success"
+		if r := recover(); r != nil {
+			result = "failed"
+			span.RecordError(fmt.Errorf("%v", r))
+			schedulerJobsTotal.WithLabelValues(name, result).Inc()
+			schedulerJobDuration.WithLabelValues(name).Observe(time.Since(start).Seconds())
+			panic(r)
+		}
+		span.SetAttributes(attribute.String("jimu.job.result", result))
+		schedulerJobsTotal.WithLabelValues(name, result).Inc()
+		schedulerJobDuration.WithLabelValues(name).Observe(time.Since(start).Seconds())
+	}()
+	cmd()
+}
+
 // recordRun 记录任务执行并调用命令。
 // 状态字段读写均持锁，与 Jobs()/SetEnabled 并发安全。
 func (s *CronScheduler) recordRun(info *JobInfo, cmd func()) {
@@ -137,7 +181,7 @@ func (s *CronScheduler) recordRun(info *JobInfo, cmd func()) {
 				s.logger.Error("job panic", "name", info.Name, "panic", fmt.Sprintf("%v", r))
 			}
 		}()
-		cmd()
+		s.observe(info.Name, cmd)
 		s.mu.Lock()
 		info.LastStatus = "success"
 		info.LastError = ""
@@ -235,7 +279,7 @@ func (s *CronScheduler) AddFunc(spec string, cmd func()) error {
 			}
 		}()
 		s.logger.Debug("job starting", "spec", spec)
-		cmd()
+		s.observe(spec, cmd)
 		s.logger.Debug("job completed", "spec", spec)
 	})
 	if err != nil {
