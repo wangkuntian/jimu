@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 
+	"jimu/internal/platform/httpclient"
+
 	"golang.org/x/oauth2"
 )
 
@@ -20,11 +22,13 @@ type WeChatConfig struct {
 
 // WeChatProvider 微信 OAuth 实现
 type WeChatProvider struct {
-	config *oauth2.Config
+	config      *oauth2.Config
+	client      *httpclient.Client
+	userInfoURL string // 未导出，测试可覆盖
 }
 
 // NewWeChatProvider 创建微信 Provider
-func NewWeChatProvider(cfg WeChatConfig) *WeChatProvider {
+func NewWeChatProvider(cfg WeChatConfig, client *httpclient.Client) *WeChatProvider {
 	return &WeChatProvider{
 		config: &oauth2.Config{
 			ClientID:     cfg.ClientID,
@@ -35,6 +39,8 @@ func NewWeChatProvider(cfg WeChatConfig) *WeChatProvider {
 				TokenURL: "https://api.weixin.qq.com/sns/oauth2/access_token",
 			},
 		},
+		client:      client,
+		userInfoURL: "https://api.weixin.qq.com/sns/userinfo",
 	}
 }
 
@@ -58,12 +64,11 @@ func (p *WeChatProvider) Exchange(ctx context.Context, code string) (*UserInfo, 
 	if !ok || openid == "" {
 		return nil, fmt.Errorf("wechat openid missing")
 	}
-	client := &http.Client{Timeout: oauthTimeout}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.weixin.qq.com/sns/userinfo?access_token="+token.AccessToken+"&openid="+openid, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.userInfoURL+"?access_token="+token.AccessToken+"&openid="+openid, nil)
 	if err != nil {
 		return nil, fmt.Errorf("wechat userinfo req: %w", err)
 	}
-	resp, err := client.Do(req)
+	resp, err := p.client.Do(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("wechat userinfo: %w", err)
 	}

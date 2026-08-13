@@ -148,9 +148,17 @@ type Config struct {
 	Email      EmailConfig                 `mapstructure:"email"`
 	SMS        SMSConfig                   `mapstructure:"sms"`
 	OTEL       observability.TracingConfig `mapstructure:"otel"`
+	HTTPClient HTTPClientConfig            `mapstructure:"http_client"`
 	// 元数据（非 YAML 配置，运行时注入）
 	Version     string `mapstructure:"-"`
 	Environment string `mapstructure:"-"`
+}
+
+// HTTPClientConfig 出站 HTTP client 配置
+type HTTPClientConfig struct {
+	TimeoutSec      int `mapstructure:"timeout_sec"`       // 单次请求超时（秒），0 用默认 10
+	MaxRetries      int `mapstructure:"max_retries"`       // 失败重试次数，0 用默认 2
+	RetryIntervalMS int `mapstructure:"retry_interval_ms"` // 重试基础间隔（毫秒），0 用默认 200
 }
 
 // ServerConfig 服务运行时配置

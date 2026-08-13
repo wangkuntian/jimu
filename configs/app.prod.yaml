@@ -178,3 +178,9 @@ otel:
   service_name: "jimu"
   service_version: "1.0.0"
   sample_rate: 1.0                  # 采样率（1.0 = 全量）
+
+# 出站 HTTP client 配置（oauth/webhook 等外部调用统一使用）
+http_client:
+  timeout_sec: 10         # 单次请求超时（秒）
+  max_retries: 2          # 失败重试次数（仅网络错误与 5xx）
+  retry_interval_ms: 200  # 重试基础间隔（毫秒），指数退避

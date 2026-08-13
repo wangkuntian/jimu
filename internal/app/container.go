@@ -14,6 +14,7 @@ import (
 	"jimu/internal/platform/db"
 	"jimu/internal/platform/event"
 	"jimu/internal/platform/feature"
+	"jimu/internal/platform/httpclient"
 	"jimu/internal/platform/logger"
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/observability"
@@ -44,6 +45,7 @@ type Container struct {
 	EventBus       *event.EventBus
 	Outbox         *outbox.Outbox
 	DBCollector    *observability.DBCollector
+	HTTPClient     *httpclient.Client
 	Captcha        *captcha.Service
 	WorkerPool     *queue.WorkerPool
 	APIKeyVerifier *auth.APIKeyVerifier
@@ -116,6 +118,13 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		return nil, fmt.Errorf("init storage: %w", err)
 	}
 
+	// 统一出站 HTTP client（oauth/webhook 等外部调用复用）
+	httpClient := httpclient.New(httpclient.Config{
+		TimeoutSec:      cfg.HTTPClient.TimeoutSec,
+		MaxRetries:      cfg.HTTPClient.MaxRetries,
+		RetryIntervalMS: cfg.HTTPClient.RetryIntervalMS,
+	})
+
 	notifier := notification.NewDispatcher()
 	// WebSocket Hub（通知渠道 + 实时通信共用）
 	wsHub := notification.NewHub()
@@ -146,7 +155,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	notifier.Register(notification.ChannelSMS, smsChannel)
 
 	notifier.Register(notification.ChannelWebSocket, notification.NewWebSocket(wsHub))
-	notifier.Register(notification.ChannelWebhook, notification.NewWebhook(notification.WebhookConfig{}))
+	notifier.Register(notification.ChannelWebhook, notification.NewWebhook(notification.WebhookConfig{}, httpClient))
 
 	// Feature Flag
 	featureMgr := feature.NewManager()
@@ -233,6 +242,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		EventBus:       eventBus,
 		Outbox:         outboxProcessor,
 		DBCollector:    dbCollector,
+		HTTPClient:     httpClient,
 		Captcha:        captchaSvc,
 		WorkerPool:     pendingWorkerPool,
 		APIKeyVerifier: apiKeyVerifier,

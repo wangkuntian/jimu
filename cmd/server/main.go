@@ -62,7 +62,7 @@ func run() error {
 		auditmodule.New(container.DB, cfg.Audit, container.Logger),
 		adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, container.Scheduler, container.Storage, container.FeatureFlag, container.EventBus,
 			auth.NewWithRotation(cfg.Auth.JWTSecret, cfg.Auth.JWTPreviousSecret, cfg.Auth.Issuer, cfg.Auth.AccessExpireMin, cfg.Auth.RefreshExpireDay)),
-		oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth),
+		oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth, container.HTTPClient),
 	)
 	if err != nil {
 		_ = container.Stop(context.Background())

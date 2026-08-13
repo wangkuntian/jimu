@@ -6,13 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
+
+	"jimu/internal/platform/httpclient"
 )
 
 // WebhookConfig Webhook 配置
 type WebhookConfig struct {
-	Timeout    time.Duration `mapstructure:"timeout"`
-	MaxRetries int           `mapstructure:"max_retries"`
 	// 默认 Headers
 	Headers map[string]string `mapstructure:"headers"`
 }
@@ -20,25 +19,19 @@ type WebhookConfig struct {
 // Webhook Webhook 通知实现
 type Webhook struct {
 	config WebhookConfig
-	client *http.Client
+	client *httpclient.Client
 }
 
-// NewWebhook 创建 Webhook 通知
-func NewWebhook(config WebhookConfig) *Webhook {
-	if config.Timeout == 0 {
-		config.Timeout = 10 * time.Second
-	}
-	if config.MaxRetries == 0 {
-		config.MaxRetries = 3
-	}
-
-	return &Webhook{
-		config: config,
-		client: &http.Client{Timeout: config.Timeout},
-	}
+// NewWebhook 创建 Webhook 通知（复用统一出站 client：超时/重试/trace 注入）
+func NewWebhook(config WebhookConfig, client *httpclient.Client) *Webhook {
+	return &Webhook{config: config, client: client}
 }
 
 func (w *Webhook) Send(ctx context.Context, msg Message) error {
+	if w.client == nil {
+		return fmt.Errorf("webhook http client not configured")
+	}
+
 	payload := map[string]interface{}{
 		"to":      msg.To,
 		"subject": msg.Subject,
@@ -51,37 +44,25 @@ func (w *Webhook) Send(ctx context.Context, msg Message) error {
 		return fmt.Errorf("marshal webhook payload: %w", err)
 	}
 
-	var lastErr error
-	for attempt := 0; attempt <= w.config.MaxRetries; attempt++ {
-		if attempt > 0 {
-			time.Sleep(time.Duration(1<<uint(attempt-1)) * time.Second)
-		}
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, msg.To, bytes.NewReader(body))
-		if err != nil {
-			return fmt.Errorf("create request: %w", err)
-		}
-
-		req.Header.Set("Content-Type", "application/json")
-		for k, v := range w.config.Headers {
-			req.Header.Set(k, v)
-		}
-
-		resp, err := w.client.Do(req)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		resp.Body.Close()
-
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return nil
-		}
-
-		lastErr = fmt.Errorf("webhook returned %d", resp.StatusCode)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, msg.To, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range w.config.Headers {
+		req.Header.Set(k, v)
 	}
 
-	return fmt.Errorf("webhook failed after %d retries: %w", w.config.MaxRetries+1, lastErr)
+	// 统一 client 负责网络错误与 5xx 重试；4xx 不重试，此处转业务错误
+	resp, err := w.client.Do(ctx, req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("webhook returned %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func (w *Webhook) SendBatch(ctx context.Context, msgs []Message) error {
