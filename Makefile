@@ -2,6 +2,7 @@
 .PHONY: docker-build docker-run docker-stop docker-logs
 .PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
 .PHONY: compose-observability compose-observability-down
+.PHONY: bench loadtest
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -9,7 +10,7 @@
 # 变量
 BIN_DIR := bin
 SERVER_BIN := $(BIN_DIR)/jimu-server
-CLI_BIN := $(BIN_DIR)/jimu-manage
+CLI_BIN := $(BIN_DIR)/jimu-cli
 SERVER_CMD := cmd/server/main.go
 CLI_CMD := cmd/cli/main.go
 VERSION ?= dev
@@ -70,6 +71,8 @@ help:
 	@echo "工具:"
 	@echo "  make clean                清理构建产物"
 	@echo "  make swagger              生成 API 文档"
+	@echo "  make bench                运行性能基准测试"
+	@echo "  make loadtest             本地 HTTP 压测（需 hey）"
 	@echo "  make release-check        发布前检查"
 
 # ========== 本地运行 ==========
@@ -222,6 +225,14 @@ cli: build-cli
 
 ## all: 格式化 -> 静态检查 -> 测试 -> 编译
 all: fmt vet test build
+
+## bench: 运行性能基准测试
+bench:
+	go test -bench=. -benchmem -run='^$$' ./internal/shared/id/... ./internal/modules/auth/application/... ./internal/platform/notification/...
+
+## loadtest: 本地 HTTP 压测（需 hey，默认打健康检查）
+loadtest:
+	@./scripts/loadtest.sh
 
 ## govulncheck: 依赖漏洞扫描（go run 免安装，与 CI 命令一致）
 govulncheck:
