@@ -31,6 +31,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **分布式锁** — Redis 实现的分布式锁（防并发、选主）
 - **文件存储** — 本地/S3/OSS/MinIO 统一接口
 - **通知系统** — 邮件/短信(SMS)/WebSocket/Webhook 抽象；短信支持阿里云（dysmsapi SDK，`sms.enabled` 配置开关）
+- **统一出站 HTTP client** — 封装 retry/backoff/timeout 与 OTel `traceparent` 注入（`internal/platform/httpclient`），OAuth 提供商与 Webhook 共用
 - **Outbox 模式** — 事件发布与数据库事务一致性保证，支持 MQ 跨服务发布（`outbox.publisher` 切换；`mq` 模式下通过 WorkerPool 消费事件，`event_bus` 模式通过 `outbox:*` 桥接器注入事件总线）
 - **定时任务** — Cron 调度器（robfig/cron），支持 MySQL 持久化（`scheduler.store=mysql`）与多实例分布式锁协调，启动时通过 `RestoreFromStore` 恢复持久化任务（内置任务去重）
 - **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
@@ -446,6 +447,9 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `cache.prefix` | 缓存 key 前缀 | `jimu` |
 | `audit.queue_size` / `batch_size` / `flush_interval_ms` | 审计日志队列容量 / 批量写入条数 / 刷新间隔（ms） | `1024` / `100` / `500` |
 | `otel.enabled` | 是否启用 OpenTelemetry | `false`（开发）/ `true`（生产） |
+| `http_client.timeout_sec` | 出站 HTTP 单次请求超时（秒），0 用默认 | `10` |
+| `http_client.max_retries` | 出站 HTTP 失败重试次数（仅网络错误与 5xx），0 用默认 | `2` |
+| `http_client.retry_interval_ms` | 出站 HTTP 重试基础间隔（毫秒，指数退避），0 用默认 | `200` |
 
 ## Makefile 命令
 
@@ -460,6 +464,8 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `make seed` | 插入初始数据 |
 | `make test` | 运行测试 |
 | `make test-coverage` | 测试 + 覆盖率报告 |
+| `make bench` | 运行性能基准测试（ID 生成 / 登录 / Webhook 发送） |
+| `make loadtest` | 本地 HTTP 压测（需 hey：`go install github.com/rakyll/hey@latest`） |
 | `make vet` | 静态分析 |
 | `make fmt` | 格式化代码 |
 | `make fmt-check` | 检查代码格式 |
