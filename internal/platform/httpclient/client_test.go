@@ -2,6 +2,7 @@ package httpclient
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -111,4 +112,101 @@ func TestDoInjectsTraceParent(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.NotEmpty(t, gotTrace)
+}
+
+func TestCircuitOpensAfterConsecutiveFailures(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	c := New(Config{MaxRetries: -1, MaxFailures: 2, RetryIntervalMS: 1})
+	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+
+	// 连续 2 次失败触发熔断
+	for i := 0; i < 2; i++ {
+		_, err := c.Do(context.Background(), req)
+		require.Error(t, err)
+	}
+
+	// 熔断开启：第三次快速失败，不触达服务端
+	_, err := c.Do(context.Background(), req)
+	require.ErrorIs(t, err, ErrCircuitOpen)
+	assert.Equal(t, int32(2), calls.Load())
+}
+
+func TestCircuitRecoversAfterCooldown(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) <= 2 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := New(Config{MaxRetries: -1, MaxFailures: 2, RetryIntervalMS: 1, ResetTimeoutMS: 50})
+	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+
+	// 2 次失败触发熔断
+	for i := 0; i < 2; i++ {
+		_, err := c.Do(context.Background(), req)
+		require.Error(t, err)
+	}
+	_, err := c.Do(context.Background(), req)
+	require.ErrorIs(t, err, ErrCircuitOpen)
+
+	// 冷却结束后 half-open 放行单次探测，下游恢复则重新闭合
+	time.Sleep(60 * time.Millisecond)
+	resp, err := c.Do(context.Background(), req)
+	require.NoError(t, err)
+	resp.Body.Close()
+
+	resp2, err := c.Do(context.Background(), req)
+	require.NoError(t, err)
+	resp2.Body.Close()
+
+	assert.Equal(t, int32(4), calls.Load()) // 2 失败 + 探测 + 恢复后
+}
+
+func TestCircuitHalfOpenOnlyAllowsProbe(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	c := New(Config{MaxRetries: -1, MaxFailures: 1, RetryIntervalMS: 1, ResetTimeoutMS: 10})
+	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+
+	_, err := c.Do(context.Background(), req)
+	require.Error(t, err)
+
+	// 冷却后进入 half-open：放行单次探测，其余并发请求被拒绝
+	time.Sleep(20 * time.Millisecond)
+	var rejected, allowed atomic.Int32
+	done := make(chan struct{})
+	for i := 0; i < 8; i++ {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			_, err := c.Do(context.Background(), req)
+			if err != nil {
+				if errors.Is(err, ErrCircuitOpen) {
+					rejected.Add(1)
+				}
+			} else {
+				allowed.Add(1)
+			}
+		}()
+	}
+	for i := 0; i < 8; i++ {
+		<-done
+	}
+	assert.GreaterOrEqual(t, rejected.Load(), int32(1)) // 至少一个被熔断拒绝
+	// 探测请求（1 次）触达服务端：之前 1 次失败 + 探测 = 2
+	assert.Equal(t, int32(2), calls.Load())
 }
