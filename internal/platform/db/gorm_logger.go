@@ -38,15 +38,18 @@ func NewGormLogger(log *logger.Logger, slowThreshold time.Duration) gormlogger.I
 func (l *gormLogger) LogMode(gormlogger.LogLevel) gormlogger.Interface { return l }
 
 func (l *gormLogger) Info(ctx context.Context, msg string, data ...interface{}) {
-	l.Logger.WithContext(ctx).Info(sanitizeArgs(msg, data)...)
+	args := append([]interface{}{msg}, sanitizeArgs(data)...)
+	l.Logger.WithContext(ctx).Info(args...)
 }
 
 func (l *gormLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
-	l.Logger.WithContext(ctx).Warn(sanitizeArgs(msg, data)...)
+	args := append([]interface{}{msg}, sanitizeArgs(data)...)
+	l.Logger.WithContext(ctx).Warn(args...)
 }
 
 func (l *gormLogger) Error(ctx context.Context, msg string, data ...interface{}) {
-	l.Logger.WithContext(ctx).Error(sanitizeArgs(msg, data)...)
+	args := append([]interface{}{msg}, sanitizeArgs(data)...)
+	l.Logger.WithContext(ctx).Error(args...)
 }
 
 func (l *gormLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
@@ -71,7 +74,7 @@ func (l *gormLogger) Trace(ctx context.Context, begin time.Time, fc func() (stri
 }
 
 // sanitizeArgs 脱敏日志参数中的敏感字段
-func sanitizeArgs(msg string, args []interface{}) []interface{} {
+func sanitizeArgs(args []interface{}) []interface{} {
 	for i := 0; i+1 < len(args); i += 2 {
 		if key, ok := args[i].(string); ok {
 			if isSensitiveField(key) {
