@@ -14,6 +14,7 @@ import (
 	"jimu/internal/platform/db"
 	"jimu/internal/platform/event"
 	"jimu/internal/platform/feature"
+	grpcpkg "jimu/internal/platform/grpc"
 	"jimu/internal/platform/httpclient"
 	"jimu/internal/platform/logger"
 	"jimu/internal/platform/notification"
@@ -49,6 +50,7 @@ type Container struct {
 	Captcha        *captcha.Service
 	WorkerPool     *queue.WorkerPool
 	APIKeyVerifier *auth.APIKeyVerifier
+	GRPCServer     *grpcpkg.Server
 }
 
 func (c *Container) Start(context.Context) error { return nil }
@@ -123,6 +125,8 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		TimeoutSec:      cfg.HTTPClient.TimeoutSec,
 		MaxRetries:      cfg.HTTPClient.MaxRetries,
 		RetryIntervalMS: cfg.HTTPClient.RetryIntervalMS,
+		RateLimitRate:   cfg.HTTPClient.RateLimitRate,
+		RateLimitBurst:  cfg.HTTPClient.RateLimitBurst,
 	})
 
 	notifier := notification.NewDispatcher()
@@ -155,7 +159,10 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	notifier.Register(notification.ChannelSMS, smsChannel)
 
 	notifier.Register(notification.ChannelWebSocket, notification.NewWebSocket(wsHub))
-	notifier.Register(notification.ChannelWebhook, notification.NewWebhook(notification.WebhookConfig{}, httpClient))
+	notifier.Register(notification.ChannelWebhook, notification.NewWebhook(notification.WebhookConfig{
+		Headers:    map[string]string{},
+		SignSecret: cfg.Notification.Webhook.SignSecret,
+	}, httpClient))
 
 	// Feature Flag
 	featureMgr := feature.NewManager()
@@ -227,6 +234,13 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	// 路由组按需挂载 auth.APIKeyAuthMiddleware(c.APIKeyVerifier)
 	apiKeyVerifier := auth.NewAPIKeyVerifier(auth.NewDBAPIKeyStore(dbConn))
 
+	// gRPC server（与 HTTP 双栈；bootstrap 在 grpc.enabled 时纳入生命周期）
+	grpcServer := grpcpkg.New(grpcpkg.Config{
+		Enabled: cfg.GRPC.Enabled,
+		Host:    cfg.GRPC.Host,
+		Port:    cfg.GRPC.Port,
+	}, log)
+
 	return &Container{
 		Config:         cfg,
 		DB:             dbConn,
@@ -246,5 +260,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		Captcha:        captchaSvc,
 		WorkerPool:     pendingWorkerPool,
 		APIKeyVerifier: apiKeyVerifier,
+		GRPCServer:     grpcServer,
 	}, nil
 }

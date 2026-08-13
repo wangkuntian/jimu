@@ -162,6 +162,11 @@ sms:
   api_secret: ""           # AccessKey Secret（生产建议 SMS_API_SECRET 环境变量注入）
   sign_name: ""            # 短信签名
 
+# 通知渠道配置
+notification:
+  webhook:
+    sign_secret: ""        # Webhook 回调载荷签名密钥（HMAC-SHA256，X-Jimu-Signature）；空则不签名
+
 # 安全配置
 security:
   csrf_secret: ""          # CSRF 密钥；非空时启用 CSRF 中间件（Bearer 请求自动跳过）。cookie 认证场景必配
@@ -191,3 +196,9 @@ http_client:
   reset_timeout_ms: 30000 # 熔断后冷却时长（毫秒），0 用默认 30000
   rate_limit_rate: 0      # 每秒请求数（按目标 host 独立限流），0 不限流
   rate_limit_burst: 0     # 令牌桶容量，0 用 rate（桶=平均速率）
+
+# gRPC server 配置（可选；与 HTTP 双栈并存，默认关闭）
+grpc:
+  enabled: false           # 是否启用 gRPC server
+  host: "127.0.0.1"        # 监听地址
+  port: 9091               # 监听端口
