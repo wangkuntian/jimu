@@ -9,9 +9,11 @@ import (
 	authdomain "jimu/internal/modules/auth/domain"
 	userdomain "jimu/internal/modules/user/domain"
 	"jimu/internal/platform/auth"
+	"jimu/internal/platform/encryption"
 	apperrors "jimu/internal/shared/errors"
 
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 func TestLoginHidesCredentialFailures(t *testing.T) {
@@ -83,7 +85,21 @@ func TestRegisterRejectsDuplicateUsername(t *testing.T) {
 	}}
 	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30)
 
-	_, err := service.Register(context.Background(), " Alice ", "secret123")
+	_, err := service.Register(context.Background(), " Alice ", "secret123", "", "")
+	if appCode(err) != apperrors.CodeUserExists {
+		t.Fatalf("code = %d, want %d", appCode(err), apperrors.CodeUserExists)
+	}
+}
+
+func TestRegisterRejectsDuplicateEmail(t *testing.T) {
+	repo := &fakeUserRepo{users: map[string]*userdomain.User{
+		"alice": userWithPassword(t, 42, "alice", "correct", 1),
+	}}
+	repo.findByEmailHash = func(_ context.Context, hash string) (*userdomain.User, error) {
+		return repo.users["alice"], nil
+	}
+	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, encryption.New("01234567890123456789012345678901"))
+	_, err := service.Register(context.Background(), "bob", "secret123", "alice@example.com", "")
 	if appCode(err) != apperrors.CodeUserExists {
 		t.Fatalf("code = %d, want %d", appCode(err), apperrors.CodeUserExists)
 	}
@@ -144,9 +160,11 @@ func TestLogoutRevokesSessions(t *testing.T) {
 }
 
 type fakeUserRepo struct {
-	users   map[string]*userdomain.User
-	lookups []string
-	created []string
+	users           map[string]*userdomain.User
+	lookups         []string
+	created         []string
+	findByEmailHash func(ctx context.Context, hash string) (*userdomain.User, error)
+	updatePassword  func(ctx context.Context, id uint64, hashed string) error
 }
 
 func (r *fakeUserRepo) FindByID(context.Context, uint64) (*userdomain.User, error) {
@@ -182,6 +200,24 @@ func (r *fakeUserRepo) Update(context.Context, *userdomain.User) error {
 }
 
 func (r *fakeUserRepo) Delete(context.Context, uint64) error {
+	return nil
+}
+
+func (r *fakeUserRepo) FindByEmailHash(ctx context.Context, hash string) (*userdomain.User, error) {
+	if r.findByEmailHash != nil {
+		return r.findByEmailHash(ctx, hash)
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (r *fakeUserRepo) FindByPhoneHash(context.Context, string) (*userdomain.User, error) {
+	return nil, stderrors.New("not found")
+}
+
+func (r *fakeUserRepo) UpdatePassword(ctx context.Context, id uint64, hashed string) error {
+	if r.updatePassword != nil {
+		return r.updatePassword(ctx, id, hashed)
+	}
 	return nil
 }
 

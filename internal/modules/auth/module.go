@@ -1,6 +1,8 @@
 package authmodule
 
 import (
+	"time"
+
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/modules/auth/application"
@@ -32,7 +34,10 @@ func New(db *gorm.DB, rdb *redis.Client, cfg config.AuthConfig, failClosed bool,
 	sessionStore := auth.NewRedisSessionStore(rdb)
 	limiter := auth.NewLimiter(rdb, failClosed)
 	lockoutTracker := auth.NewLoginFailureTracker(rdb, auth.DefaultLockoutConfig())
-	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin, deps...)
+	// 密码重置验证码存储：redis 一次性码，TTL 取配置
+	resetStore := application.NewResetStore(rdb, time.Duration(cfg.ResetCodeTTLMin)*time.Minute)
+	allDeps := append(deps, resetStore)
+	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin, allDeps...)
 	m := &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaSvc, captchaCfg: captchaCfg}
 	for _, dep := range deps {
 		if ob, ok := dep.(*outbox.Outbox); ok {

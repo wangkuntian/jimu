@@ -77,12 +77,58 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	if !h.verifyCaptcha(c, req) {
 		return
 	}
-	user, err := h.service.Register(c.Request.Context(), req.Username, req.Password)
+	user, err := h.service.Register(c.Request.Context(), req.Username, req.Password, req.Email, req.Phone)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
 	response.OK(c, user)
+}
+
+// ForgotPassword godoc
+// @Summary      发送密码重置验证码
+// @Description  向指定邮箱发送 6 位数字验证码。用户不存在也返回成功，防止邮箱枚举探测。
+// @Tags         认证
+// @Accept       json
+// @Produce      json
+// @Param        body  body      forgotPasswordRequest  true  "邮箱"
+// @Success      200   {object}  response.Body  "成功（无论邮箱是否存在）"
+// @Failure      400   {object}  contract.ErrorResponse  "参数错误"
+// @Failure      429   {object}  contract.ErrorResponse  "请求过于频繁"
+// @Router       /auth/forgot-password [post]
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	req, _ := c.MustGet("validated_req").(*forgotPasswordRequest)
+	if !h.allow(c, "forgot-password", "ip:"+c.ClientIP(), h.cfg.LoginRateLimit, time.Duration(h.cfg.LoginRateWindowSec)*time.Second) {
+		return
+	}
+	if err := h.service.ForgotPassword(c.Request.Context(), req.Email); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{})
+}
+
+// ResetPassword godoc
+// @Summary      重置密码
+// @Description  用邮箱验证码设置新密码。验证码一次性，重置成功后强制登出该用户全部会话。
+// @Tags         认证
+// @Accept       json
+// @Produce      json
+// @Param        body  body      resetPasswordRequest  true  "邮箱、验证码、新密码"
+// @Success      200   {object}  response.Body  "成功"
+// @Failure      400   {object}  contract.ErrorResponse  "参数错误或验证码无效/已过期"
+// @Failure      429   {object}  contract.ErrorResponse  "请求过于频繁"
+// @Router       /auth/reset-password [post]
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	req, _ := c.MustGet("validated_req").(*resetPasswordRequest)
+	if !h.allow(c, "reset-password", "ip:"+c.ClientIP(), h.cfg.LoginRateLimit, time.Duration(h.cfg.LoginRateWindowSec)*time.Second) {
+		return
+	}
+	if err := h.service.ResetPassword(c.Request.Context(), req.Email, req.Code, req.NewPassword); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{})
 }
 
 // RefreshToken godoc

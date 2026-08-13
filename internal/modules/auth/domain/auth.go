@@ -14,7 +14,7 @@ type TokenPair struct {
 
 type AuthServiceInterface interface {
 	Login(ctx context.Context, username, password string) (*TokenPair, error)
-	Register(ctx context.Context, username, password string) (*domain.User, error)
+	Register(ctx context.Context, username, password, email, phone string) (*domain.User, error)
 	Refresh(ctx context.Context, refreshToken string) (*TokenPair, error)
 	Logout(ctx context.Context, userID uint64, sessionID string) error
 	LogoutAll(ctx context.Context, userID uint64) error
