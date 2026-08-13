@@ -1,70 +1,70 @@
 # Graph Report - jimu  (2026-08-13)
 
 ## Corpus Check
-- 396 files · ~125,985 words
+- 407 files · ~130,911 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3375 nodes · 7386 edges · 240 communities (191 shown, 49 thin omitted)
-- Extraction: 81% EXTRACTED · 19% INFERRED · 0% AMBIGUOUS · INFERRED: 1367 edges (avg confidence: 0.8)
+- 3514 nodes · 7721 edges · 255 communities (202 shown, 53 thin omitted)
+- Extraction: 82% EXTRACTED · 18% INFERRED · 0% AMBIGUOUS · INFERRED: 1428 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1de510c6`
+- Built from commit: `1a74737d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- mysqlPermissionRepository
+- Role
 - ImportResult
 - RegisterAuthRoutes
-- LocalStorage
+- JobData
 - fakeRedis
 - auth/apikey.go
 - common.sh
 - Jimu Helm Chart Values
 - NewAdminAPIKeyService
 - T
-- New
-- message.go
+- Page
+- SessionStore
 - generator/module.go
-- JobData
+- RedisQueue
 - PermissionService
 - WorkerPool
-- New
-- mysqlAPIKeyRepository
+- Fail
+- mysqlRepository
 - Router
 - Hub
-- NewSnowflake
-- fakeAuthzModule
+- InitSnowflake
+- JobRegistry
 - AdminUserService
 - Wrap
 - config/config.go
 - Worker
-- RateLimiter
+- New
 - RedisCache
 - CronScheduler
 - health.go
 - AuditLog
-- Fail
+- newTaskHandler
 - Job
-- Permission
+- ClientHub
 - User
 - OAuthService
 - PresenceManager
-- newLock
-- InitSnowflake
+- ConnectWithRetry
+- message.go
 - Message
 - NewWithStore
-- New
+- As
 - Context
 - JWT
 - gorm_logger_test.go
 - DeadLetter
 - JobHistory
 - Manager
-- Limiter
-- MySQLStore
+- Permission
+- fakeRoleRepository
 - ChannelManager
 - Application
 - RedisStore
@@ -75,13 +75,13 @@
 - ws_integration_test.go
 - oauth/application/service_test.go
 - AuditService
-- Security
+- securityRouter
 - Logger
 - mysqlAuditRepository
 - Data Model: Jimu 框架持久化实体
 - config/config_test.go
 - NewUserRateLimiter
-- ImportJob
+- fakeStorage
 - NewCSVExporter
 - JobDef
 - NewService
@@ -90,50 +90,50 @@
 - ValidateJSON
 - NewMysqlRepository
 - dispatcher
-- KafkaQueue
+- New
 - RabbitMQQueue
 - Lock
-- ClientHub
+- Client
 - routerLimiterRedis
 - auth/application/service_test.go
 - i18n.go
 - Outbox
 - .Consume
-- JobRegistry
+- contract/module.go
 - .RegisterHTTP
-- NewContainer
-- newTestScheduler
+- Container
+- AdminTaskService
 - SetupRouter
-- S3Storage
+- LocalStorage
 - LoginFailureTracker
 - New
 - OAuthBinding
-- Server
+- NewManagementServer
 - Implementation Plan: Jimu 后端框架能力规格
 - New
 - AuditMiddleware
 - adminAuthRouter
 - responseBodyWriter
 - DefaultCSRFConfig
-- MySQLStore
-- NewAuditService
+- mysqlAPIKeyRepository
+- Module
 - CI Workflow
 - Jimu Constitution
-- New
+- newMockGormDB
 - AdminMonitoringService
 - .Validate
-- DBConfig
+- ConnectWithRetry
 - Jimu API Swagger Definition
-- RegisterRoleRoutes
+- newEncryptionTestDB
 - bindImportFile
-- Role
+- RoleService
 - fakeContainer
 - Tasks: Jimu 后端框架能力规格
 - fakeUserRepository
 - signature_test.go
 - NewWebhook
 - NewAdminConfigService
-- NewAdminUserService
+- NewChannelManager
 - Now
 - Jimu Collaboration Rules (CLAUDE.md)
 - UserService
@@ -144,10 +144,10 @@
 - gzipRouter
 - NewWeChatProvider
 - New
-- fakeComponent
+- newWSHandler
 - validator/validator.go
+- DBConfig
 - fakePermissionRepository
-- tracing.go
 - oauth/interfaces/handler_test.go
 - Context
 - NewEmail
@@ -157,33 +157,33 @@
 - Redis Service
 - AuthorizationMiddleware
 - newMockGormDB
-- SMS
+- NewSMS
 - queue/worker_test.go
-- newMockGormDB
-- setupTestCache
+- New
+- KafkaQueue
 - EventBus
 - Timeout
-- GitHubProvider
 - UserInfo
+- NewGoogleProvider
 - NewDBAPIKeyStore
-- Bootstrap
+- NewUserService
 - Registry
 - Duration
-- newSqliteDB
-- IdempotencyMiddleware
-- Metrics
-- New
+- Server
+- idempotencyRouter
+- setupMetricsEngine
+- NewAuditService
 - NewServer
 - Release Workflow
 - Module Layering & contract.Module
-- NewPermissionService
+- AdminUserHandler
 - 配置契约
 - Module 契约
 - workerPoolComponent
 - events.go
 - Prometheus Service
 - CLI 契约
-- NewLogChannel
+- newResetService
 - circuit
 - Context
 - 010_create_jobs.sql
@@ -192,12 +192,12 @@
 - CaptchaHandler
 - .validateCommon
 - 002_create_roles.sql
-- Module
-- securityRouter
+- AdminJobHandler
+- ResetStore
 - 003_create_permissions.sql
 - openapi.go
 - 004_create_user_roles.sql
-- ImportService
+- NewAdminAuditHandler
 - smoke_api_contract.sh
 - test_runtime_security.sh
 - LoginRequest
@@ -224,17 +224,19 @@
 - 014_create_scheduled_jobs.sql
 - mockTokenServer
 - mysqlRepository
-- TestReadinessBoundsCheckerDuration
-- AdminJobHandler
+- RegisterUserRoutes
+- New
 - TestWebSocketNotification
-- As
-- DBCollector
+- NewRoleService
+- tracing.go
 - Format
 - importer_test.go
-- TestValidateJSONTranslatesFieldErrors
+- newRedisTestQueue
 - mockNotification
-- NewPathEnforcer
-- PermissionMiddleware
+- MySQLStore
+- fakeEventBus
+- newLock
+- Bootstrap
 - loadtest.sh
 - jimu
 - Audit Logging
@@ -246,23 +248,36 @@
 - OAuth Login (Google/GitHub/WeChat)
 - HTTP Security Boundary
 - Technology Stack
+- newTestScheduler
+- fakeAuditRepository
 - newRepoTestDB
+- AdminAPIKeyHandler
 - Pagination
+- testWorker
+- testEnforcer
 - New
 - TestGeneratedModuleCompiles
+- NewPathEnforcer
+- Module
+- TestReadinessBoundsCheckerDuration
+- DBCollector
+- fakeComponent
 - Policy
+- request.go
+- TestOpenAPIIncludesCRUDContract
+- 015_add_user_contact_encrypted.sql
 
 ## God Nodes (most connected - your core abstractions)
-1. `T()` - 655 edges
+1. `T()` - 689 edges
 2. `New()` - 85 edges
-3. `Fail()` - 80 edges
-4. `Now()` - 80 edges
-5. `OK()` - 53 edges
-6. `User` - 50 edges
-7. `Wrap()` - 47 edges
-8. `New()` - 38 edges
-9. `JobData` - 33 edges
-10. `newService()` - 32 edges
+3. `Now()` - 83 edges
+4. `Fail()` - 82 edges
+5. `User` - 64 edges
+6. `OK()` - 55 edges
+7. `Wrap()` - 49 edges
+8. `New()` - 47 edges
+9. `NewServer()` - 35 edges
+10. `JobData` - 33 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Principle III: Composable Modules` --semantically_similar_to--> `Module Layering & contract.Module`  [INFERRED] [semantically similar]
@@ -287,11 +302,11 @@
 - **jimu-server Kubernetes Resource Set** — deploy_k8s_configmap, deploy_k8s_config_files, deploy_k8s_deployment, deploy_k8s_hpa, deploy_k8s_ingress, deploy_k8s_networkpolicy, deploy_k8s_pdb, deploy_k8s_prometheusrule, deploy_k8s_service [EXTRACTED 1.00]
 - **Jimu Prometheus Alert Rules** — deploy_k8s_prometheusrule_jimuhigherrorrate, deploy_k8s_prometheusrule_jimuhighlatency, deploy_k8s_prometheusrule_jimupodcrashlooping, deploy_k8s_prometheusrule_jimupoddown, deploy_k8s_prometheusrule_jimudbpoolhigh, deploy_k8s_prometheusrule_jimureadinessfailing [EXTRACTED 1.00]
 
-## Communities (240 total, 49 thin omitted)
+## Communities (255 total, 53 thin omitted)
 
-### Community 0 - "mysqlPermissionRepository"
-Cohesion: 0.31
-Nodes (4): mysqlPermissionRepository, Context, DB, NewMysqlPermissionRepository()
+### Community 0 - "Role"
+Cohesion: 0.28
+Nodes (5): fakeRoleRepository, Role, Context, DeletedAt, Time
 
 ### Community 1 - "ImportResult"
 Cohesion: 0.19
@@ -301,17 +316,17 @@ Nodes (8): ExcelImporter, ImportError, ImportResult, Context, Reader, NewExcelIm
 Cohesion: 0.29
 Nodes (14): RouterGroup, Service, RegisterAuthRoutes(), RegisterCaptchaRoute(), Engine, newRouterLimiter(), testAuthConfig(), TestLoginRateLimitUsesIPScope() (+6 more)
 
-### Community 3 - "LocalStorage"
-Cohesion: 0.09
-Nodes (25): New(), newOSSStorage(), Context, Duration, ReadCloser, Reader, NewLocalStorage(), TestLocalStorageFilePersisted() (+17 more)
+### Community 3 - "JobData"
+Cohesion: 0.16
+Nodes (9): Context, Duration, Context, Duration, errorQueue, fakeQueue, fakeConsumer, fakeProducer (+1 more)
 
 ### Community 4 - "fakeRedis"
-Cohesion: 0.08
-Nodes (25): fakePipeline, fakeRedis, redisClientAdapter, RedisSessionStore, sessionPipeline, sessionRedis, SessionStore, BoolCmd (+17 more)
+Cohesion: 0.05
+Nodes (42): fakePipeline, fakeRedis, Limiter, BoolCmd, Cmder, IntCmd, Context, Duration (+34 more)
 
 ### Community 5 - "auth/apikey.go"
-Cohesion: 0.23
-Nodes (9): APIKey, APIKeyContextKey, dbAPIKeyStore, APIKeyFromContext(), ContextWithAPIKey(), Context, DB, Time (+1 more)
+Cohesion: 0.16
+Nodes (14): APIKey, APIKeyContextKey, APIKeyStore, APIKeyVerifier, dbAPIKeyStore, APIKeyFromContext(), ContextWithAPIKey(), Context (+6 more)
 
 ### Community 6 - "common.sh"
 Cohesion: 0.08
@@ -322,80 +337,80 @@ Cohesion: 0.12
 Nodes (35): Grafana Prometheus Datasource, Jimu Helm Chart, Helm ConfigMap Template, Helm Deployment Template, Helm HorizontalPodAutoscaler Template, Helm Ingress Template, Helm NetworkPolicy Template, Helm PodDisruptionBudget Template (+27 more)
 
 ### Community 8 - "NewAdminAPIKeyService"
-Cohesion: 0.13
-Nodes (16): AdminAPIKeyService, CreateKeyInput, AdminAPIKeyHandler, APIKey, Context, NewAdminAPIKeyService(), TestAdminAPIKeyServiceCreateKey(), TestAdminAPIKeyServiceGetKey() (+8 more)
+Cohesion: 0.12
+Nodes (18): AdminAPIKeyService, CreateKeyInput, APIKey, APIKeyRepository, APIKey, Context, NewAdminAPIKeyService(), TestAdminAPIKeyServiceCreateKey() (+10 more)
 
 ### Community 9 - "T"
-Cohesion: 0.05
-Nodes (47): assertQueryParams(), readOpenAPI(), TestOpenAPIIncludesCRUDContract(), TestAPIKeyTableName(), TestHashKey(), TestImportJobTableNameAndStatus(), TestOAuthBindingTableName(), TestEntityValues() (+39 more)
+Cohesion: 0.06
+Nodes (39): TestAPIKeyTableName(), TestHashKey(), TestImportJobTableNameAndStatus(), TestModuleInitWSIdempotent(), TestModuleNameAndNew(), TestModuleWSHandler(), TestOAuthBindingTableName(), TestEntityValues() (+31 more)
 
-### Community 10 - "New"
-Cohesion: 0.20
-Nodes (14): RoleHandler, Context, DB, New(), Created(), FailWithDetails(), Context, localeFrom() (+6 more)
+### Community 10 - "Page"
+Cohesion: 0.14
+Nodes (16): PermissionHandler, Context, DB, EventBus, New(), Created(), FailWithDetails(), Context (+8 more)
 
-### Community 11 - "message.go"
-Cohesion: 0.16
-Nodes (11): Conn, Duration, Mutex, newTestConn(), ChatPayload, NotificationPayload, PingPayload, PongPayload (+3 more)
+### Community 11 - "SessionStore"
+Cohesion: 0.22
+Nodes (12): redisClientAdapter, RedisSessionStore, sessionPipeline, sessionRedis, SessionStore, Client, Context, Duration (+4 more)
 
 ### Community 12 - "generator/module.go"
 Cohesion: 0.20
 Nodes (20): targetFile, templateData, camel(), GenerateModule(), GenerateModuleAt(), lowerCamel(), mkdirAllTracked(), nextMigrationNumber() (+12 more)
 
-### Community 13 - "JobData"
-Cohesion: 0.15
-Nodes (11): Context, Duration, Client, Context, Duration, NewRedisQueue(), errorQueue, fakeQueue (+3 more)
+### Community 13 - "RedisQueue"
+Cohesion: 0.27
+Nodes (5): Client, Context, Duration, NewRedisQueue(), RedisQueue
 
 ### Community 14 - "PermissionService"
-Cohesion: 0.17
-Nodes (11): CreatePermissionRequest, PermissionService, UpdatePermissionRequest, PermissionRepository, PermissionResponse, Time, ToPermissionResponse(), ToPermissionResponses() (+3 more)
+Cohesion: 0.22
+Nodes (10): fakePermissionRepository, PermissionService, PermissionRepository, NewPermissionService(), Context, permissionAppCode(), TestPermissionServiceCreateMapsDuplicateNameToConflict(), TestPermissionServiceDeleteWrapsRepositoryError() (+2 more)
 
 ### Community 15 - "WorkerPool"
 Cohesion: 0.15
 Nodes (12): CancelFunc, TraceFromContext(), GetWorker(), Context, Duration, MySQLStore, Consumer, Queue (+4 more)
 
-### Community 16 - "New"
-Cohesion: 0.15
-Nodes (18): Module, AuthConfig, CaptchaConfig, AuthHandler, loginRequest, refreshRequest, authContext(), Context (+10 more)
+### Community 16 - "Fail"
+Cohesion: 0.14
+Nodes (16): CaptchaConfig, AuthHandler, Context, Context, Context, authContext(), Context, Duration (+8 more)
 
-### Community 17 - "mysqlAPIKeyRepository"
-Cohesion: 0.17
-Nodes (9): APIKey, APIKeyRepository, mysqlAPIKeyRepository, Time, HashKey(), APIKey, Context, DB (+1 more)
+### Community 17 - "mysqlRepository"
+Cohesion: 0.20
+Nodes (6): RoleRepository, rolePermission, Context, DB, mysqlRepository, NewMysqlRepository()
 
 ### Community 18 - "Router"
-Cohesion: 0.20
-Nodes (5): Router, RouterGroup, RegisterAuditRoutes(), RouterGroup, RegisterUserRoutes()
+Cohesion: 0.18
+Nodes (5): Router, RouterGroup, RegisterPermissionRoutes(), RouterGroup, RegisterRoleRoutes()
 
 ### Community 19 - "Hub"
 Cohesion: 0.17
 Nodes (9): Channel, Context, RWMutex, NewWebSocket(), Connection, Hub, Registration, WebSocket (+1 more)
 
-### Community 20 - "NewSnowflake"
-Cohesion: 0.11
-Nodes (18): Generator, snowflake, uuidGenerator, BenchmarkSnowflakeNextID(), BenchmarkUUIDNextID(), B, FuzzSnowflakeWorkerID(), F (+10 more)
+### Community 20 - "InitSnowflake"
+Cohesion: 0.06
+Nodes (47): snowflakeModel, stringKeyModel, Generator, snowflake, uuidGenerator, applyBlindIndexFields(), applyEncryptedFields(), DB (+39 more)
 
-### Community 21 - "fakeAuthzModule"
-Cohesion: 0.15
-Nodes (5): fakeAuthzModule, fakeBusinessModule, EventBus, HandlerFunc, TestBusinessRoutesRequireProtectedMiddleware()
+### Community 21 - "JobRegistry"
+Cohesion: 0.12
+Nodes (6): fakeAuthzModule, fakeBusinessModule, JobRegistry, EventBus, HandlerFunc, TestBusinessRoutesRequireProtectedMiddleware()
 
 ### Community 22 - "AdminUserService"
-Cohesion: 0.23
-Nodes (8): AdminCreateUserRequest, AdminUpdateUserRequest, AdminUser, AdminUserService, ListUserFilter, userRole, Context, DB
+Cohesion: 0.21
+Nodes (9): AdminCreateUserRequest, AdminUpdateUserRequest, AdminUser, AdminUserService, ListUserFilter, userRole, Context, DB (+1 more)
 
 ### Community 23 - "Wrap"
-Cohesion: 0.23
+Cohesion: 0.20
 Nodes (10): AuthService, AuthServiceInterface, TokenPair, ErrAccountLocked(), Context, Duration, invalidCredentials(), normalizeUsername() (+2 more)
 
 ### Community 24 - "config/config.go"
-Cohesion: 0.15
-Nodes (23): CacheConfig, CaptchaResult, EmailConfig, HTTPClientConfig, HTTPConfig, IDConfig, LogConfig, ManagementConfig (+15 more)
+Cohesion: 0.14
+Nodes (26): CacheConfig, CaptchaResult, EmailConfig, GRPCConfig, HTTPClientConfig, HTTPConfig, IDConfig, LogConfig (+18 more)
 
 ### Community 25 - "Worker"
-Cohesion: 0.16
-Nodes (13): Worker, AuditConfig, AuditRepository, Change, Context, RWMutex, NewWorker(), Duration (+5 more)
+Cohesion: 0.27
+Nodes (9): Worker, AuditConfig, AuditRepository, Context, RWMutex, NewWorker(), DB, New() (+1 more)
 
-### Community 26 - "RateLimiter"
+### Community 26 - "New"
 Cohesion: 0.20
-Nodes (16): GlobalRateLimit(), HandlerFunc, Limit, RWMutex, NewRateLimiter(), Engine, Request, ratelimitRequest() (+8 more)
+Nodes (13): Cipher, New(), TestBlindIndexDeterministicAndDistinct(), TestBlindIndexEmpty(), TestBlindIndexWithoutKey(), TestDecryptTamperedFails(), TestDecryptWrongKeyFails(), TestEmptyValuePassthrough() (+5 more)
 
 ### Community 27 - "RedisCache"
 Cohesion: 0.23
@@ -410,88 +425,88 @@ Cohesion: 0.19
 Nodes (15): Client, Context, DB, Duration, ResponseWriter, NewReadiness(), NewRedisChecker(), NewSQLChecker() (+7 more)
 
 ### Community 30 - "AuditLog"
-Cohesion: 0.20
-Nodes (8): fakeBatchRepository, AuditLog, fakeAuditRepository, fakeQueue, Context, Mutex, Time, Context
+Cohesion: 0.17
+Nodes (9): fakeAuditRepository, fakeBatchRepository, AuditLog, fakeQueue, Context, Context, Mutex, Time (+1 more)
 
-### Community 31 - "Fail"
-Cohesion: 0.09
-Nodes (17): AdminTaskHandler, AdminUserHandler, Context, Context, Context, Context, NewAdminTaskHandler(), Context (+9 more)
+### Community 31 - "newTaskHandler"
+Cohesion: 0.24
+Nodes (8): AdminTaskHandler, Context, NewAdminTaskHandler(), newTaskHandler(), TestAdminTaskHandlerHistory(), TestAdminTaskHandlerList(), TestAdminTaskHandlerToggle(), TestAdminTaskHandlerTrigger()
 
 ### Community 32 - "Job"
-Cohesion: 0.12
-Nodes (11): Job, mysqlJobRepository, fakeJobRepo, Context, DB, NewMysqlJobRepository(), Time, Context (+3 more)
+Cohesion: 0.15
+Nodes (9): Job, JobRepository, mysqlJobRepository, fakeJobRepo, Context, DB, NewMysqlJobRepository(), Time (+1 more)
 
-### Community 33 - "Permission"
-Cohesion: 0.38
-Nodes (4): fakePermissionRepository, Permission, Context, Time
+### Community 33 - "ClientHub"
+Cohesion: 0.16
+Nodes (6): mustEncode(), RawMessage, Time, broadcastMsg, ClientHub, WSMessage
 
 ### Community 34 - "User"
-Cohesion: 0.12
-Nodes (14): fakeOutboxUserRepo, recordingOutboxStore, User, appCode(), createOutboxUserService(), fakeUserRepository, Context, TestCreateWritesOutbox() (+6 more)
+Cohesion: 0.13
+Nodes (8): fakeOutboxUserRepo, recordingOutboxStore, User, fakeUserRepository, Context, TestUpdateAndDeleteWriteOutbox(), DeletedAt, Time
 
 ### Community 35 - "OAuthService"
 Cohesion: 0.27
 Nodes (7): OAuthService, BindingRepository, Client, Context, DB, NewOAuthService(), Provider
 
 ### Community 36 - "PresenceManager"
-Cohesion: 0.15
-Nodes (10): AdminWSHandler, NewAdminWSHandler(), newWSHandler(), TestAdminWSHandlerOnlineUsers(), TestAdminWSHandlerPresence(), TestAdminWSHandlerPush(), RWMutex, Time (+2 more)
+Cohesion: 0.19
+Nodes (4): RWMutex, Time, Presence, PresenceManager
 
-### Community 37 - "newLock"
-Cohesion: 0.18
-Nodes (16): RedisConfig, Client, newLock(), TestLock_AcquireRelease(), TestLock_ConcurrentAcquire(), TestLock_Extend(), TestLock_ReleaseOnlyOwnToken(), TestLock_WithLock() (+8 more)
+### Community 37 - "ConnectWithRetry"
+Cohesion: 0.29
+Nodes (9): RedisConfig, ConnectWithRetry(), Client, New(), Miniredis, newTestClient(), TestConnectWithRetry_Exhausted(), TestConnectWithRetry_Success() (+1 more)
 
-### Community 38 - "InitSnowflake"
+### Community 38 - "message.go"
 Cohesion: 0.14
-Nodes (22): snowflakeModel, stringKeyModel, Field, TestIndirect(), TestInitSnowflake_InvalidWorkerID(), TestIsIntegerID(), TestRegisterSnowflakeHook_NilDB(), TestSnowflakeHook_NonIntegerPK() (+14 more)
+Nodes (14): BuildRoomChannel(), BuildUserChannel(), TestBuildRoomChannel(), TestBuildUserChannel(), TestNewMessage(), TestNewMessageMarshalError(), TestWSMessageDecodePayload(), TestWSMessageDecodePayloadError() (+6 more)
 
 ### Community 39 - "Message"
-Cohesion: 0.24
-Nodes (7): Dispatcher, Context, Context, Channel, Message, fakeKafkaReader, fakeKafkaWriter
+Cohesion: 0.14
+Nodes (12): fakeDispatcher, Context, Mutex, Dispatcher, Channel, Context, Context, Channel (+4 more)
 
 ### Community 40 - "NewWithStore"
-Cohesion: 0.27
-Nodes (12): NewMemoryStore(), TestSetEnabledNotFound(), TestSetEnabledToggle(), TestTriggerJobNotFound(), TestTriggerJobRunsCommand(), NewWithStore(), newTestLogger(), TestAddNamedFuncPersistsAndRuns() (+4 more)
+Cohesion: 0.23
+Nodes (14): NewMemoryStore(), TestObserveCountsPanicAsFailure(), TestObserveEmitsSuccessMetrics(), TestSetEnabledNotFound(), TestSetEnabledToggle(), TestTriggerJobNotFound(), TestTriggerJobRunsCommand(), NewWithStore() (+6 more)
 
-### Community 41 - "New"
-Cohesion: 0.19
-Nodes (12): New(), TestAppError(), TestAppErrorWithCause(), TestFailDoesNotLeakInfrastructureDetails(), TestOKIncludesStableEnvelopeAndRequestID(), TestPageIncludesStableEnvelopeAndPagination(), TestCreatedUsesStandardEnvelope(), TestFailHidesInternalCauseAndIncludesRequestID() (+4 more)
+### Community 41 - "As"
+Cohesion: 0.13
+Nodes (17): AppError, ErrorInfo, AllErrorCodes(), As(), HTTPStatus(), New(), TestAppError(), TestAppErrorWithCause() (+9 more)
+
+### Community 42 - "Context"
+Cohesion: 0.20
+Nodes (5): fakeUserRepo, fakeSessionStore, sessionRecord, Context, Duration
 
 ### Community 43 - "JWT"
-Cohesion: 0.16
-Nodes (12): Claims, JWT, FuzzJWTParse(), F, Duration, New(), NewWithRotation(), TestJWTPopulatesTypedClaims() (+4 more)
+Cohesion: 0.13
+Nodes (15): Claims, JWT, FuzzJWTParse(), F, Duration, New(), NewWithRotation(), TestJWTPopulatesTypedClaims() (+7 more)
 
 ### Community 44 - "gorm_logger_test.go"
 Cohesion: 0.11
-Nodes (26): gormLogger, Interface, Context, Duration, Time, isSensitiveField(), NewGormLogger(), sanitizeArgs() (+18 more)
+Nodes (27): gormLogger, Interface, Context, Duration, Time, isSensitiveField(), NewGormLogger(), sanitizeArgs() (+19 more)
 
 ### Community 45 - "DeadLetter"
-Cohesion: 0.17
-Nodes (7): DeadLetter, mysqlDeadLetterRepository, Context, DB, NewMysqlDeadLetterRepository(), Time, fakeDeadRepo
+Cohesion: 0.16
+Nodes (9): DeadLetter, DeadLetterRepository, mysqlDeadLetterRepository, Context, DB, NewMysqlDeadLetterRepository(), Time, Mutex (+1 more)
 
 ### Community 46 - "JobHistory"
-Cohesion: 0.12
-Nodes (12): JobHistory, mysqlJobHistoryRepository, TestMysqlDeadLetterRepositoryCRUD(), Context, DB, NewMysqlJobHistoryRepository(), DB, newHistoryTestDB() (+4 more)
+Cohesion: 0.13
+Nodes (12): JobHistory, JobHistoryRepository, mysqlJobHistoryRepository, TestMysqlDeadLetterRepositoryCRUD(), Context, DB, NewMysqlJobHistoryRepository(), DB (+4 more)
 
 ### Community 47 - "Manager"
-Cohesion: 0.07
-Nodes (25): fakeEventBus, fakeStorage, contextKey, Flag, Manager, AdminFeatureHandler, NewAdminFeatureHandler(), TestAdminFeatureHandlerList() (+17 more)
+Cohesion: 0.14
+Nodes (16): contextKey, Flag, Manager, AdminFeatureHandler, NewAdminFeatureHandler(), TestAdminFeatureHandlerList(), TestAdminFeatureHandlerUpdate(), FromContext() (+8 more)
 
-### Community 48 - "Limiter"
-Cohesion: 0.18
-Nodes (13): Limiter, Context, Duration, Scripter, limitKey(), NewLimiter(), newTestLimiter(), TestLimiterAllowsOnlyConfiguredWindow() (+5 more)
-
-### Community 49 - "MySQLStore"
-Cohesion: 0.28
-Nodes (6): DeadLetterRepository, JobHistoryRepository, JobRepository, Context, NewMySQLStore(), MySQLStore
+### Community 48 - "Permission"
+Cohesion: 0.26
+Nodes (6): Permission, mysqlPermissionRepository, Context, DB, NewMysqlPermissionRepository(), Time
 
 ### Community 50 - "ChannelManager"
-Cohesion: 0.11
-Nodes (18): RWMutex, NewChannel(), NewChannelManager(), TestChannelManagerGetChannelMissing(), TestChannelManagerGetSubscribers(), TestChannelManagerPreCreatedBroadcast(), TestChannelManagerSubscribeCreatesWithType(), TestChannelManagerSubscribeExisting() (+10 more)
+Cohesion: 0.15
+Nodes (6): RWMutex, Server, Time, Channel, ChannelManager, wsFixture
 
 ### Community 51 - "Application"
-Cohesion: 0.23
-Nodes (9): Application, Component, forwardError(), Context, Duration, NewApplication(), TestApplicationReturnsComponentRuntimeError(), TestApplicationRollsBackStartedComponents() (+1 more)
+Cohesion: 0.21
+Nodes (10): Application, main(), run(), forwardError(), Context, Duration, NewApplication(), TestApplicationReturnsComponentRuntimeError() (+2 more)
 
 ### Community 52 - "RedisStore"
 Cohesion: 0.22
@@ -506,32 +521,32 @@ Cohesion: 0.09
 Nodes (38): FileHeader, fakeStorage, UploadConfig, UploadHandler, UploadResponse, Context, HandlerFunc, Reader (+30 more)
 
 ### Community 55 - "middleware/middleware_test.go"
-Cohesion: 0.15
-Nodes (23): CORSMiddleware(), DefaultLogConfig(), HandlerFunc, isAllowedOrigin(), Logger(), Recovery(), RequestID(), shouldLogBody() (+15 more)
+Cohesion: 0.14
+Nodes (25): CORSMiddleware(), DefaultLogConfig(), HandlerFunc, isAllowedOrigin(), Logger(), Recovery(), RequestID(), shouldLogBody() (+17 more)
 
 ### Community 56 - "NewEventBusPublisher"
 Cohesion: 0.32
 Nodes (6): Context, EventBus, RawMessage, NewEventBusPublisher(), EventBusPublisher, EventPayload
 
 ### Community 57 - "ws_integration_test.go"
-Cohesion: 0.23
-Nodes (29): NewMessage(), connID(), Time, mustDecodeTitle(), newWSFixture(), TestClientChannels(), TestWSBroadcastAll(), TestWSChatBroadcast() (+21 more)
+Cohesion: 0.18
+Nodes (32): NewMessage(), connID(), Conn, Duration, Mutex, mustDecodeTitle(), newTestConn(), newWSFixture() (+24 more)
 
 ### Community 58 - "oauth/application/service_test.go"
-Cohesion: 0.24
-Nodes (32): oauthStateKey(), dupSubjectProviders(), githubProviders(), Client, DB, Miniredis, newRedisClient(), newRepoResult() (+24 more)
+Cohesion: 0.23
+Nodes (33): oauthStateKey(), dupSubjectProviders(), githubProviders(), Client, DB, Miniredis, newRedisClient(), newRepoResult() (+25 more)
 
 ### Community 59 - "AuditService"
-Cohesion: 0.28
-Nodes (7): AuditLogResponse, AuditService, Time, ToAuditLogResponse(), ToAuditLogResponses(), Context, serializeChanges()
+Cohesion: 0.23
+Nodes (8): AuditLogResponse, AuditService, Change, Time, ToAuditLogResponse(), ToAuditLogResponses(), Context, serializeChanges()
 
-### Community 60 - "Security"
-Cohesion: 0.40
-Nodes (5): TestSecurityAddVary(), addVary(), Context, HandlerFunc, Security()
+### Community 60 - "securityRouter"
+Cohesion: 0.23
+Nodes (10): TestSecurityAddVary(), addVary(), Context, HandlerFunc, Security(), Engine, securityRouter(), TestSecurityHandlesAllowedPreflight() (+2 more)
 
 ### Community 61 - "Logger"
-Cohesion: 0.17
-Nodes (11): AtomicLevel, Context, LogConfig, New(), TestFileOutput(), TestNewConsoleStdout(), TestNewJSONLevels(), TestSetLevel() (+3 more)
+Cohesion: 0.05
+Nodes (38): AtomicLevel, ClientConn, Config, PingServer, pingService, Server, Context, Server (+30 more)
 
 ### Community 62 - "mysqlAuditRepository"
 Cohesion: 0.36
@@ -549,9 +564,9 @@ Nodes (14): Load(), Config, TestDBPasswordOverride(), TestJWTSecretOverride(), T
 Cohesion: 0.19
 Nodes (19): defaultKeyFunc(), Client, Context, Duration, HandlerFunc, Time, NewUserRateLimiter(), Engine (+11 more)
 
-### Community 66 - "ImportJob"
-Cohesion: 0.15
-Nodes (9): fakeImportJobRepo, ImportJob, ImportJobRepository, mysqlImportJobRepository, fakeImportJobRepo, Time, Context, DB (+1 more)
+### Community 66 - "fakeStorage"
+Cohesion: 0.22
+Nodes (5): fakeStorage, Context, Duration, ReadCloser, Reader
 
 ### Community 67 - "NewCSVExporter"
 Cohesion: 0.15
@@ -562,116 +577,116 @@ Cohesion: 0.18
 Nodes (8): Context, RWMutex, Context, Time, failStore, JobDef, MemoryStore, Store
 
 ### Community 69 - "NewService"
-Cohesion: 0.12
-Nodes (14): fakeRouter, Service, Handler, Client, Time, NewService(), TestService(), Service (+6 more)
+Cohesion: 0.16
+Nodes (10): fakeRouter, Service, Client, Time, NewService(), TestService(), Engine, RouterGroup (+2 more)
 
 ### Community 70 - "NewCleanupService"
-Cohesion: 0.15
-Nodes (18): CleanupConfig, cleanupModel, CleanupResult, CleanupService, CleanupTable, noTableNameModel, DefaultCleanupConfig(), Context (+10 more)
+Cohesion: 0.14
+Nodes (19): CleanupConfig, cleanupModel, CleanupResult, CleanupService, CleanupTable, noTableNameModel, DefaultCleanupConfig(), Context (+11 more)
 
 ### Community 71 - "MySQLStore"
 Cohesion: 0.17
 Nodes (10): Context, DB, DeletedAt, Time, NewMySQLStore(), DB, testDB(), TestMySQLStore() (+2 more)
 
 ### Community 72 - "ValidateJSON"
-Cohesion: 0.27
-Nodes (10): RouterGroup, RegisterPermissionRoutes(), Context, HandlerFunc, localeOf(), translateValidationDetails(), translateValidationMessage(), ValidateJSON() (+2 more)
+Cohesion: 0.29
+Nodes (10): Context, HandlerFunc, localeOf(), TestValidateJSONTranslatesFieldErrors(), translateValidationDetails(), translateValidationMessage(), ValidateJSON(), ValidateQuery() (+2 more)
 
 ### Community 73 - "NewMysqlRepository"
-Cohesion: 0.13
-Nodes (19): TestMysqlRepositoryMySQLIntegration(), NewMysqlRepository(), DB, newTestUser(), newUserTestDB(), TestMysqlRepositoryCreateAndFindByID(), TestMysqlRepositoryFindByUsername(), TestMysqlRepositoryListCountAndPagination() (+11 more)
+Cohesion: 0.22
+Nodes (12): TestMysqlRepositoryMySQLIntegration(), NewMysqlRepository(), DB, newTestUser(), newUserTestDB(), TestMysqlRepositoryCreateAndFindByID(), TestMysqlRepositoryFindByUsername(), TestMysqlRepositoryListCountAndPagination() (+4 more)
 
 ### Community 74 - "dispatcher"
-Cohesion: 0.22
-Nodes (8): Channel, Context, dispatcher, RWMutex, NewDispatcher(), TestDispatcherDispatch(), TestDispatcherDispatchBatch(), Notification
+Cohesion: 0.18
+Nodes (9): Channel, Channel, Context, dispatcher, RWMutex, NewDispatcher(), TestDispatcherDispatch(), TestDispatcherDispatchBatch() (+1 more)
 
-### Community 75 - "KafkaQueue"
-Cohesion: 0.30
-Nodes (5): Context, Duration, KafkaMessageReader, KafkaMessageWriter, KafkaQueue
+### Community 75 - "New"
+Cohesion: 0.23
+Nodes (9): Client, Queue, New(), TestNew_InvalidType(), TestNew_Redis(), NewKafkaQueue(), Config, KafkaConfig (+1 more)
 
 ### Community 76 - "RabbitMQQueue"
-Cohesion: 0.28
-Nodes (6): Context, Delivery, Duration, NewRabbitMQQueue(), RabbitMQChannel, RabbitMQQueue
+Cohesion: 0.23
+Nodes (7): Context, Delivery, Duration, NewRabbitMQQueue(), RabbitMQChannel, RabbitMQConfig, RabbitMQQueue
 
 ### Community 77 - "Lock"
 Cohesion: 0.33
 Nodes (8): generateToken(), Client, Context, Duration, Time, NewLock(), AcquireResult, Lock
 
-### Community 78 - "ClientHub"
-Cohesion: 0.12
-Nodes (14): Conn, Context, HandlerFunc, RWMutex, Time, mustEncode(), WSHandler(), BuildUserChannel() (+6 more)
+### Community 78 - "Client"
+Cohesion: 0.26
+Nodes (7): Conn, Context, HandlerFunc, RWMutex, Time, WSHandler(), Client
 
 ### Community 79 - "routerLimiterRedis"
 Cohesion: 0.29
 Nodes (6): routerLimiterRedis, BoolSliceCmd, Cmd, Context, StringCmd, routerLimiterInt()
 
 ### Community 80 - "auth/application/service_test.go"
-Cohesion: 0.21
-Nodes (17): BenchmarkLogin(), benchUser(), B, NewAuthService(), appCode(), fakeSessionStore, sessionRecord, Duration (+9 more)
+Cohesion: 0.33
+Nodes (14): BenchmarkLogin(), benchUser(), B, NewAuthService(), appCode(), newFakeSessionStore(), newTestService(), TestLoginCreatesRefreshSession() (+6 more)
 
 ### Community 81 - "i18n.go"
 Cohesion: 0.18
 Nodes (7): HandlerFunc, Locale(), ParseAcceptLanguage(), TestParseAcceptLanguage(), TestTDefaultsToChinese(), TestTfFormatsArgs(), Tf()
 
 ### Community 82 - "Outbox"
-Cohesion: 0.09
-Nodes (22): Context, Queue, RawMessage, NewMQPublisher(), TestMQPublisher_Publish(), TestMQPublisher_PublishError(), traceFromMetadata(), Context (+14 more)
+Cohesion: 0.07
+Nodes (28): Context, Queue, RawMessage, NewMQPublisher(), TestMQPublisher_Publish(), TestMQPublisher_PublishError(), traceFromMetadata(), Context (+20 more)
 
 ### Community 83 - ".Consume"
 Cohesion: 0.24
 Nodes (9): Context, Delivery, TestRabbitMQQueue_ConsumeTimeout(), TestRabbitMQQueue_ConsumeUnmarshalError(), TestRabbitMQQueue_SubmitConsume(), TestRabbitMQQueueImplementsInterfaces(), Publishing, fakeRabbitMQChannel (+1 more)
 
-### Community 84 - "JobRegistry"
-Cohesion: 0.17
-Nodes (7): ComponentProvider, ErrorSource, EventBus, HTTPMiddlewareProvider, JobRegistry, Module, ProtectedHTTPMiddlewareProvider
+### Community 84 - "contract/module.go"
+Cohesion: 0.20
+Nodes (7): Component, ComponentProvider, ErrorSource, EventBus, HTTPMiddlewareProvider, Module, ProtectedHTTPMiddlewareProvider
 
 ### Community 85 - ".RegisterHTTP"
-Cohesion: 0.14
-Nodes (10): Module, AdminAuditHandler, DB, NewAdminAuditHandler(), TestAdminAuditHandlerList(), Client, DB, EventBus (+2 more)
+Cohesion: 0.13
+Nodes (11): Module, Handler, Context, Service, NewHandler(), TestHandlerGetErrorCodes(), Client, DB (+3 more)
 
-### Community 86 - "NewContainer"
-Cohesion: 0.19
-Nodes (11): Container, main(), run(), Client, Config, Context, DB, EventBus (+3 more)
+### Community 86 - "Container"
+Cohesion: 0.22
+Nodes (10): Container, Client, Config, Context, DB, EventBus, Server, Service (+2 more)
 
-### Community 87 - "newTestScheduler"
-Cohesion: 0.21
-Nodes (11): AdminTaskService, TaskExecution, TaskInfo, Context, Time, NewAdminTaskService(), newTestScheduler(), TestAdminTaskServiceGetHistory() (+3 more)
+### Community 87 - "AdminTaskService"
+Cohesion: 0.29
+Nodes (5): AdminTaskService, TaskExecution, TaskInfo, Context, Time
 
 ### Community 88 - "SetupRouter"
-Cohesion: 0.16
-Nodes (18): ConfigureTrustedProxies(), formatAddr(), Engine, SetupRouter(), freeAddr(), TestConfigureTrustedProxies(), TestFormatAddr(), testLogger() (+10 more)
+Cohesion: 0.13
+Nodes (20): HandlerFunc, Metrics(), ConfigureTrustedProxies(), formatAddr(), Engine, SetupRouter(), freeAddr(), TestConfigureTrustedProxies() (+12 more)
 
-### Community 89 - "S3Storage"
-Cohesion: 0.20
-Nodes (6): Client, Context, Duration, ReadCloser, Reader, S3Storage
+### Community 89 - "LocalStorage"
+Cohesion: 0.06
+Nodes (31): New(), newOSSStorage(), Context, Duration, ReadCloser, Reader, NewLocalStorage(), TestLocalStorageFilePersisted() (+23 more)
 
 ### Community 90 - "LoginFailureTracker"
 Cohesion: 0.33
 Nodes (8): LockoutConfig, LoginFailureTracker, DefaultLockoutConfig(), Client, Context, Duration, lockKey(), NewLoginFailureTracker()
 
 ### Community 91 - "New"
-Cohesion: 0.19
+Cohesion: 0.21
 Nodes (11): buildProviders(), Client, DB, EventBus, New(), newTestModule(), TestBuildProvidersFiltersEnabled(), TestModuleNameAndContract() (+3 more)
 
 ### Community 92 - "OAuthBinding"
 Cohesion: 0.18
 Nodes (7): OAuthBinding, fakeBindingRepo, fakeSessionStore, Time, Context, Context, Duration
 
-### Community 93 - "Server"
-Cohesion: 0.15
-Nodes (9): Handler, passingChecker, Server, HealthRouter(), NewManagementServer(), Context, TestManagementRouterExposure(), Context (+1 more)
+### Community 93 - "NewManagementServer"
+Cohesion: 0.20
+Nodes (8): Handler, passingChecker, Server, HealthRouter(), NewManagementServer(), Context, TestManagementRouterExposure(), TestNewManagementServer()
 
 ### Community 94 - "Implementation Plan: Jimu 后端框架能力规格"
 Cohesion: 0.07
 Nodes (26): Content Quality, Feature Readiness, Notes, Requirement Completeness, Specification Quality Checklist: Jimu 后端框架能力规格, Complexity Tracking, Constitution Check, Documentation (this feature) (+18 more)
 
 ### Community 95 - "New"
-Cohesion: 0.30
-Nodes (6): PermissionHandler, Context, NewPermissionHandler(), TestPermissionDeleteReturnsNoContent(), DB, New()
+Cohesion: 0.29
+Nodes (7): Module, AuthConfig, Client, DB, EventBus, Service, New()
 
 ### Community 96 - "AuditMiddleware"
-Cohesion: 0.24
-Nodes (9): Queue, AuditMiddleware(), Context, HandlerFunc, isManagementPath(), optionalString(), optionalUint64(), TestAuditMiddlewareAllowsAnonymousRequest() (+1 more)
+Cohesion: 0.43
+Nodes (7): Queue, AuditMiddleware(), Context, HandlerFunc, isManagementPath(), optionalString(), optionalUint64()
 
 ### Community 97 - "adminAuthRouter"
 Cohesion: 0.27
@@ -685,13 +700,13 @@ Nodes (10): Buffer, ResponseWriter, newResponseBodyWriter(), sanitizeBody(), san
 Cohesion: 0.18
 Nodes (23): CSRF(), DefaultCSRFConfig(), generateToken(), Context, HandlerFunc, isSafeMethod(), setCSRFCookie(), csrfRouter() (+15 more)
 
-### Community 100 - "MySQLStore"
-Cohesion: 0.26
-Nodes (6): Context, DB, NewMySQLStore(), TestMySQLStore_AddWithinTx(), TestMySQLStore_AddWithNilTx(), MySQLStore
-
-### Community 101 - "NewAuditService"
+### Community 100 - "mysqlAPIKeyRepository"
 Cohesion: 0.29
-Nodes (6): fakeAuditRepository, NewAuditService(), auditAppCode(), Context, TestAuditServiceGetMapsNotFound(), TestAuditServiceListReturnsDTOAndPassesPagination()
+Nodes (5): mysqlAPIKeyRepository, APIKey, Context, DB, NewMysqlAPIKeyRepository()
+
+### Community 101 - "Module"
+Cohesion: 0.17
+Nodes (5): Module, RouterGroup, RegisterAuditRoutes(), EventBus, HandlerFunc
 
 ### Community 102 - "CI Workflow"
 Cohesion: 0.27
@@ -701,9 +716,9 @@ Nodes (11): CI Build Job, CI Docker Build Job, CI Lint Job, CI Security Scan Job
 Cohesion: 0.20
 Nodes (10): Principle II: API Stability & SemVer, Principle I: Business-Agnostic, Jimu Constitution, Principle VI: Documentation & Examples, Governance & Revision Process, Principle IV: Simplicity & Minimal Dependencies, Principle V: Verification & Quality, Constitution Template (+2 more)
 
-### Community 104 - "New"
-Cohesion: 0.19
-Nodes (10): Client, Queue, New(), TestNew_InvalidType(), TestNew_Redis(), NewKafkaQueue(), Config, KafkaConfig (+2 more)
+### Community 104 - "newMockGormDB"
+Cohesion: 0.29
+Nodes (11): Sqlmock, newMockGormDB(), DB, TestTransaction_Commit(), TestTransaction_Rollback(), TestWithTx_BeginError(), TestWithTx_Commit(), TestWithTx_PanicRollsBack() (+3 more)
 
 ### Community 105 - "AdminMonitoringService"
 Cohesion: 0.13
@@ -713,25 +728,25 @@ Nodes (17): AdminMonitoringService, HealthStatus, MemoryStats, SystemStatus, Adm
 Cohesion: 0.33
 Nodes (8): FieldRule, FieldType, ValidationRules, Validator, TestValidateUnique(), checkType(), Context, NewValidator()
 
-### Community 107 - "DBConfig"
-Cohesion: 0.21
-Nodes (15): DBConfig, configurePool(), ConnectWithRetry(), dsn(), Context, DB, open(), pingDB() (+7 more)
+### Community 107 - "ConnectWithRetry"
+Cohesion: 0.22
+Nodes (13): configurePool(), ConnectWithRetry(), dsn(), Context, DB, open(), pingDB(), DB (+5 more)
 
 ### Community 108 - "Jimu API Swagger Definition"
 Cohesion: 0.33
 Nodes (10): Jimu API Swagger Definition, Audit Log Endpoints, Auth Flow Endpoints (login/refresh/logout/register), BearerAuth Security (API Key JWT), Captcha Endpoint, contract.ErrorResponse, OAuth Endpoints, contract.PageResponse (+2 more)
 
-### Community 109 - "RegisterRoleRoutes"
-Cohesion: 0.20
-Nodes (4): RouterGroup, RegisterRoleRoutes(), EventBus, Module
+### Community 109 - "newEncryptionTestDB"
+Cohesion: 0.24
+Nodes (9): contact, contactPtr, DB, newEncryptionTestDB(), TestEncryptionHookBatchCreate(), TestEncryptionHookEmptySourceStoresNullAndCoexists(), TestEncryptionHookEncryptsOnWriteDecryptsOnRead(), TestEncryptionHookNoKeyStoresPlaintextButHashes() (+1 more)
 
 ### Community 110 - "bindImportFile"
 Cohesion: 0.17
 Nodes (17): AdminImportHandler, DB, newSqliteDB(), bindImportFile(), Buffer, Context, Format, NewAdminImportHandler() (+9 more)
 
-### Community 111 - "Role"
-Cohesion: 0.05
-Nodes (37): AssignPermissionsRequest, CreateRoleRequest, fakeRoleRepository, RoleResponse, RoleService, UpdateRoleRequest, Role, RoleRepository (+29 more)
+### Community 111 - "RoleService"
+Cohesion: 0.15
+Nodes (15): AssignPermissionsRequest, CreateRoleRequest, RoleResponse, RoleService, UpdateRoleRequest, PermissionResponse, Time, TestRoleResponseUsesDTO() (+7 more)
 
 ### Community 112 - "fakeContainer"
 Cohesion: 0.44
@@ -746,16 +761,16 @@ Cohesion: 0.19
 Nodes (20): buildSignString(), DefaultSignatureConfig(), Context, Duration, HandlerFunc, hmacSign(), Signature(), SignRequest() (+12 more)
 
 ### Community 116 - "NewWebhook"
-Cohesion: 0.17
-Nodes (12): BenchmarkWebhookSend(), B, Channel, Client, Context, NewWebhook(), TestWebhookSendBatch(), TestWebhookSendNilClient() (+4 more)
+Cohesion: 0.16
+Nodes (15): BenchmarkWebhookSend(), B, Channel, Client, Context, NewWebhook(), signPayload(), TestWebhookNoSignatureWhenNoSecret() (+7 more)
 
 ### Community 117 - "NewAdminConfigService"
 Cohesion: 0.13
 Nodes (21): AdminConfigService, AdminConfigHandler, Client, Context, EventBus, NewAdminConfigService(), Miniredis, newConfigTestService() (+13 more)
 
-### Community 118 - "NewAdminUserService"
-Cohesion: 0.26
-Nodes (10): testRole, int8Ptr(), NewAdminUserService(), TestAdminUserServiceAssignRoles(), TestAdminUserServiceAssignRolesRoleQueryError(), TestAdminUserServiceCreateUser(), TestAdminUserServiceDisableUser(), TestAdminUserServiceGetUser() (+2 more)
+### Community 118 - "NewChannelManager"
+Cohesion: 0.18
+Nodes (15): NewChannel(), NewChannelManager(), TestChannelManagerGetChannelMissing(), TestChannelManagerGetSubscribers(), TestChannelManagerPreCreatedBroadcast(), TestChannelManagerSubscribeCreatesWithType(), TestChannelManagerSubscribeExisting(), TestChannelManagerUnsubscribe() (+7 more)
 
 ### Community 119 - "Now"
 Cohesion: 0.16
@@ -790,76 +805,80 @@ Cohesion: 0.17
 Nodes (12): HandlerFunc, ResponseWriter, Writer, GzipCompression(), isAlreadyCompressed(), Engine, gzipRouter(), TestGzipCompressionEncodesBody() (+4 more)
 
 ### Community 127 - "NewWeChatProvider"
-Cohesion: 0.36
-Nodes (5): Client, Config, NewWeChatProvider(), WeChatConfig, WeChatProvider
+Cohesion: 0.27
+Nodes (6): Client, Config, Context, NewWeChatProvider(), WeChatConfig, WeChatProvider
 
 ### Community 128 - "New"
 Cohesion: 0.13
-Nodes (14): UserHandler, NewUserService(), Context, NewUserHandler(), TestUserCreateReturnsCreatedDTO(), TestUserDeleteReturnsNoContent(), TestUserListRejectsInvalidPaginationContract(), TestUserListUsesDefaultPaginationBeforeService() (+6 more)
+Nodes (13): UserHandler, Context, NewUserHandler(), TestUserCreateReturnsCreatedDTO(), TestUserDeleteReturnsNoContent(), TestUserListRejectsInvalidPaginationContract(), TestUserListUsesDefaultPaginationBeforeService(), Client (+5 more)
+
+### Community 129 - "newWSHandler"
+Cohesion: 0.54
+Nodes (6): AdminWSHandler, NewAdminWSHandler(), newWSHandler(), TestAdminWSHandlerOnlineUsers(), TestAdminWSHandlerPresence(), TestAdminWSHandlerPush()
 
 ### Community 130 - "validator/validator.go"
 Cohesion: 0.25
 Nodes (8): FieldLevel, FuzzValidateRules(), F, Validate(), validateIDCard(), validateMobile(), validatePassword(), validateUsername()
 
-### Community 131 - "fakePermissionRepository"
-Cohesion: 0.36
-Nodes (3): fakePermissionRepository, Context, TestPermissionCreateReturnsCreated()
+### Community 131 - "DBConfig"
+Cohesion: 0.31
+Nodes (8): DBConfig, DB, mysqlEnvDBConfig(), mysqlReachable(), NewTestDB(), NewTestDBWithPool(), SkipUnlessMysql(), TestDB
 
-### Community 132 - "tracing.go"
-Cohesion: 0.43
-Nodes (7): ContextWithTrace(), DefaultTracingConfig(), Context, TracerProvider, InitTracing(), ShutdownTracing(), TracingConfig
+### Community 132 - "fakePermissionRepository"
+Cohesion: 0.26
+Nodes (5): fakePermissionRepository, NewPermissionHandler(), Context, TestPermissionCreateReturnsCreated(), TestPermissionDeleteReturnsNoContent()
 
 ### Community 133 - "oauth/interfaces/handler_test.go"
 Cohesion: 0.23
 Nodes (17): OAuthHandler, NewOAuthHandler(), assertCode(), doRequest(), githubProvider(), Engine, newTestHandler(), newTestRouter() (+9 more)
 
 ### Community 134 - "Context"
-Cohesion: 0.16
-Nodes (6): fakeAPIKeyRepo, fakeEventBus, APIKey, fakeUserRepository, Context, Mutex
+Cohesion: 0.06
+Nodes (32): fakeAPIKeyRepo, fakeEventBus, fakeImportJobRepo, ImportService, ImportJob, ImportJobRepository, mysqlImportJobRepository, fakeImportJobRepo (+24 more)
 
 ### Community 135 - "NewEmail"
 Cohesion: 0.16
-Nodes (14): buildEmailHeaders(), Channel, Context, NewEmail(), Conn, newFakeSMTPServer(), TestBuildEmailHeaders(), TestEmailSendEmptyRecipient() (+6 more)
+Nodes (14): buildEmailHeaders(), Channel, Context, NewEmail(), Conn, Listener, newFakeSMTPServer(), TestBuildEmailHeaders() (+6 more)
 
 ### Community 136 - "New"
-Cohesion: 0.14
-Nodes (24): fakeUserRepository, NewAdminJobHandler(), TestAdminJobHandlerGet(), TestAdminJobHandlerList(), TestAdminJobHandlerListDeadLetters(), TestAdminJobHandlerResolveDeadLetter(), TestAdminJobHandlerRetry(), TestAdminJobHandlerSubmit() (+16 more)
+Cohesion: 0.12
+Nodes (28): testRole, fakeUserRepository, NewAdminUserService(), TestAdminUserServiceAssignRoles(), TestAdminUserServiceAssignRolesRoleQueryError(), TestAdminUserServiceCreateUser(), TestAdminUserServiceDisableUser(), TestAdminUserServiceGetUser() (+20 more)
 
 ### Community 137 - "Context"
-Cohesion: 0.16
-Nodes (11): fakeBindingRepo, Duration, refreshTTL(), fakeSessionStore, sessionRecord, Context, Duration, TestCreateUserWithBindingTransactionFailure() (+3 more)
+Cohesion: 0.17
+Nodes (10): fakeBindingRepo, Duration, refreshTTL(), fakeSessionStore, sessionRecord, Context, Duration, TestRefreshTTLNilExpiry() (+2 more)
 
 ### Community 138 - "SecurityHeadersFromConfig"
-Cohesion: 0.27
-Nodes (9): SecurityConfig, DefaultSecurityConfig(), TestSecurityHeadersMiddleware(), TestSecurityHeadersNilValuesSkipped(), TestSecurityHeadersRespectsCustomValues(), Context, HandlerFunc, SecurityHeadersFromConfig() (+1 more)
+Cohesion: 0.36
+Nodes (7): SecurityConfig, DefaultSecurityConfig(), TestSecurityHeadersNilValuesSkipped(), Context, HandlerFunc, SecurityHeadersFromConfig(), writeSecurityHeaders()
 
 ### Community 139 - "Redis Service"
 Cohesion: 0.20
 Nodes (12): Development Environment, Adminer Service, MariaDB Service, Redis Service, Server Service, Graphical Captcha, Docker & K8s Deployment, Redis Distributed Lock (+4 more)
 
 ### Community 140 - "AuthorizationMiddleware"
-Cohesion: 0.14
-Nodes (17): AuthorizationStore, DBAuthorizationStore, Enforcer, HandlerFunc, ProtectedMiddleware(), HandlerFunc, AuthorizationMiddleware(), Context (+9 more)
+Cohesion: 0.18
+Nodes (12): AuthorizationStore, DBAuthorizationStore, Enforcer, HandlerFunc, ProtectedMiddleware(), HandlerFunc, AuthorizationMiddleware(), Context (+4 more)
 
 ### Community 141 - "newMockGormDB"
 Cohesion: 0.24
 Nodes (14): MySQLBindingRepository, DB, NewMySQLBindingRepository(), bindingRows(), DB, Sqlmock, newMockGormDB(), TestCreateError() (+6 more)
 
-### Community 142 - "SMS"
-Cohesion: 0.27
-Nodes (7): Channel, NewSMS(), TestSMSAliyunReject(), TestSMSAliyunSend(), TestSMSUnknownProvider(), SMS, SMSConfig
+### Community 142 - "NewSMS"
+Cohesion: 0.43
+Nodes (5): NewSMS(), TestSMSAliyunReject(), TestSMSAliyunSend(), TestSMSUnknownProvider(), SMSConfig
 
 ### Community 143 - "queue/worker_test.go"
-Cohesion: 0.32
-Nodes (12): NewWorkerPool(), RegisterWorker(), fakeStore(), MySQLStore, newFakeJobRepo(), TestWorkerPoolConsumeJob(), TestWorkerPoolConsumeRestoresTrace(), TestWorkerPoolOutboxEventFailureWritesDeadLetter() (+4 more)
+Cohesion: 0.34
+Nodes (13): NewMySQLStore(), NewWorkerPool(), RegisterWorker(), fakeStore(), MySQLStore, newFakeJobRepo(), TestWorkerPoolConsumeJob(), TestWorkerPoolConsumeRestoresTrace() (+5 more)
 
-### Community 144 - "newMockGormDB"
-Cohesion: 0.13
-Nodes (34): TestCleanupService_RunError(), New(), Sqlmock, newMockGormDB(), basePermissions(), DB, RunSeed(), RunSeedWithCasbin() (+26 more)
+### Community 144 - "New"
+Cohesion: 0.19
+Nodes (22): New(), basePermissions(), DB, RunSeed(), RunSeedWithCasbin(), SeedCasbinPolicies(), expectRunSeedQueries(), DB (+14 more)
 
-### Community 145 - "setupTestCache"
-Cohesion: 0.52
-Nodes (6): setupTestCache(), TestRedisCache_Delete(), TestRedisCache_DeletePattern(), TestRedisCache_GetOrSet(), TestRedisCache_GetOrSetStampede(), TestRedisCache_SetAndGet()
+### Community 145 - "KafkaQueue"
+Cohesion: 0.30
+Nodes (5): Context, Duration, KafkaMessageReader, KafkaMessageWriter, KafkaQueue
 
 ### Community 146 - "EventBus"
 Cohesion: 0.29
@@ -869,21 +888,21 @@ Nodes (3): EventBus, Handler, RWMutex
 Cohesion: 0.22
 Nodes (6): Duration, HandlerFunc, TestTimeoutOnlyPropagatesContextDeadline(), Timeout(), RouterGroup, RegisterSwagger()
 
-### Community 148 - "GitHubProvider"
-Cohesion: 0.27
-Nodes (6): Client, Config, Context, NewGitHubProvider(), GitHubConfig, GitHubProvider
+### Community 148 - "UserInfo"
+Cohesion: 0.14
+Nodes (9): fakeProvider, fakeProvider, Client, Config, Context, NewGitHubProvider(), GitHubConfig, GitHubProvider (+1 more)
 
-### Community 149 - "UserInfo"
-Cohesion: 0.20
-Nodes (5): fakeProvider, fakeProvider, Context, Context, UserInfo
+### Community 149 - "NewGoogleProvider"
+Cohesion: 0.27
+Nodes (6): Client, Config, Context, NewGoogleProvider(), GoogleConfig, GoogleProvider
 
 ### Community 150 - "NewDBAPIKeyStore"
-Cohesion: 0.22
-Nodes (17): APIKeyStore, APIKeyVerifier, createKey(), APIKey, DB, newTestDB(), TestDBAPIKeyStore_GetByKeyHash(), TestDBAPIKeyStore_GetByKeyHashNotFound() (+9 more)
+Cohesion: 0.33
+Nodes (12): createKey(), APIKey, DB, newTestDB(), TestDBAPIKeyStore_GetByKeyHash(), TestDBAPIKeyStore_GetByKeyHashNotFound(), TestDBAPIKeyStore_UpdateLastUsed(), TestVerifyWithDBStore() (+4 more)
 
-### Community 151 - "Bootstrap"
-Cohesion: 0.52
-Nodes (6): moduleLogger, registerRouter, Bootstrap(), registerEventBusBridge(), registerHTTP(), registerOutboxWorkers()
+### Community 151 - "NewUserService"
+Cohesion: 0.25
+Nodes (8): UserRepository, NewUserService(), appCode(), createOutboxUserService(), TestCreateWritesOutbox(), TestUserResponseDoesNotContainPassword(), TestUserServiceGetMapsNotFound(), TestUserServiceListPassesPaginationAndReturnsDTO()
 
 ### Community 152 - "Registry"
 Cohesion: 0.62
@@ -893,21 +912,17 @@ Nodes (4): Exporter, Format, Registry, NewRegistry()
 Cohesion: 0.43
 Nodes (4): Duration, ExponentialBackoff, FixedRetry, RetryStrategy
 
-### Community 154 - "newSqliteDB"
-Cohesion: 0.38
-Nodes (9): DB, newSqliteDB(), DB, newImportService(), TestImportServiceGetImportJob(), TestImportServiceImport(), TestImportServiceInsertUser(), TestImportServicePreview() (+1 more)
+### Community 155 - "idempotencyRouter"
+Cohesion: 0.36
+Nodes (10): Int32, Client, Engine, idempotencyRouter(), newRedisForTest(), TestIdempotencyCachedResponseSerializes(), TestIdempotencyCachesAndReplays(), TestIdempotencyDoesNotCacheFailure() (+2 more)
 
-### Community 155 - "IdempotencyMiddleware"
+### Community 156 - "setupMetricsEngine"
+Cohesion: 0.60
+Nodes (5): gatherHTTPMetric(), Engine, setupMetricsEngine(), TestMetricsLabelsUseRouteTemplate(), TestMetricsRecordsUnmatchedPath()
+
+### Community 157 - "NewAuditService"
 Cohesion: 0.20
-Nodes (15): Int32, Client, Duration, HandlerFunc, IdempotencyMiddleware(), Client, Engine, idempotencyRouter() (+7 more)
-
-### Community 156 - "Metrics"
-Cohesion: 0.33
-Nodes (7): HandlerFunc, Metrics(), gatherHTTPMetric(), Engine, setupMetricsEngine(), TestMetricsLabelsUseRouteTemplate(), TestMetricsRecordsUnmatchedPath()
-
-### Community 157 - "New"
-Cohesion: 0.21
-Nodes (9): Module, AuditHandler, NewAuditHandler(), TestAuditGetInvalidIDReturnsStableBadRequest(), TestAuditGetReturnsLogDTO(), TestAuditListInvalidQueryReturnsStableBadRequest(), DB, EventBus (+1 more)
+Nodes (10): AuditHandler, NewAuditService(), auditAppCode(), TestAuditServiceGetMapsNotFound(), TestAuditServiceListReturnsDTOAndPassesPagination(), Context, NewAuditHandler(), TestAuditGetInvalidIDReturnsStableBadRequest() (+2 more)
 
 ### Community 158 - "NewServer"
 Cohesion: 0.38
@@ -921,9 +936,9 @@ Nodes (5): Release Workflow, Jimu Changelog, Conventional Commits, Release Note 
 Cohesion: 0.40
 Nodes (5): Principle III: Composable Modules, Module Layering & contract.Module, Module Generator CLI, Clean Architecture, Scaffold CLI
 
-### Community 161 - "NewPermissionService"
-Cohesion: 0.57
-Nodes (6): NewPermissionService(), permissionAppCode(), TestPermissionServiceCreateMapsDuplicateNameToConflict(), TestPermissionServiceDeleteWrapsRepositoryError(), TestPermissionServiceListPassesPagination(), TestPermissionServiceUpdateMapsNotFound()
+### Community 161 - "AdminUserHandler"
+Cohesion: 0.29
+Nodes (5): AdminUserHandler, Context, NewAdminUserHandler(), paginationFromQuery(), TestPaginationFromQuery()
 
 ### Community 162 - "配置契约"
 Cohesion: 0.33
@@ -945,16 +960,16 @@ Nodes (5): Grafana Dashboard Provider Config, Prometheus Scrape Config, Grafana 
 Cohesion: 0.40
 Nodes (4): CLI 契约, 命令表, 种子数据, 迁移命名
 
-### Community 168 - "NewLogChannel"
+### Community 168 - "newResetService"
 Cohesion: 0.29
-Nodes (6): Channel, Context, NewLogChannel(), TestLogChannelSendBatchNoError(), TestLogChannelSendNoError(), LogChannel
+Nodes (10): fakeSessionStore, Client, Miniredis, newResetRedis(), newResetService(), TestForgotPasswordHidesMissingUser(), TestForgotPasswordSendsCode(), TestResetPasswordCodeReuseFails() (+2 more)
 
 ### Community 169 - "circuit"
 Cohesion: 0.16
 Nodes (15): circuit, circuitState, Client, Config, hostRateLimiter, Context, Duration, Limit (+7 more)
 
 ### Community 170 - "Context"
-Cohesion: 0.12
+Cohesion: 0.11
 Nodes (9): fakeAPIKeyRepo, fakeDeadLetterRepo, fakeEventBus, testRole, testUserRole, APIKey, Context, fakeUserRepository (+1 more)
 
 ### Community 171 - "010_create_jobs.sql"
@@ -969,37 +984,41 @@ Nodes (4): No .env & Secrets Hook, Password Strength Rule, Security Policy, Vuln
 Cohesion: 0.83
 Nodes (3): CaptchaHandler, Service, NewCaptchaHandler()
 
-### Community 178 - "securityRouter"
-Cohesion: 0.53
-Nodes (5): Engine, securityRouter(), TestSecurityHandlesAllowedPreflight(), TestSecurityRejectsOversizedBody(), TestSecurityUsesOriginAllowList()
+### Community 178 - "ResetStore"
+Cohesion: 0.39
+Nodes (5): ResetStore, Client, Context, Duration, NewResetStore()
 
-### Community 183 - "ImportService"
-Cohesion: 0.24
-Nodes (9): ImportService, UserRepository, Context, DB, Format, Reader, NewImportService(), rulesFor() (+1 more)
+### Community 183 - "NewAdminAuditHandler"
+Cohesion: 0.29
+Nodes (5): AdminAuditHandler, Context, DB, NewAdminAuditHandler(), TestAdminAuditHandlerList()
 
 ### Community 210 - "mockTokenServer"
-Cohesion: 0.22
-Nodes (14): Client, mockClient(), mockTokenServer(), TestGitHubProviderExchange(), TestGoogleProviderExchange(), TestGoogleProviderExchangeBadUserInfo(), TestGoogleProviderExchangeTokenError(), TestWeChatProviderExchange() (+6 more)
+Cohesion: 0.40
+Nodes (10): Client, Server, mockClient(), mockTokenServer(), TestGitHubProviderExchange(), TestGoogleProviderExchange(), TestGoogleProviderExchangeBadUserInfo(), TestGoogleProviderExchangeTokenError() (+2 more)
 
 ### Community 211 - "mysqlRepository"
-Cohesion: 0.31
+Cohesion: 0.27
 Nodes (3): Context, DB, mysqlRepository
 
-### Community 212 - "TestReadinessBoundsCheckerDuration"
-Cohesion: 0.47
-Nodes (4): Context, TestReadinessBoundsCheckerDuration(), TestReadinessStatus(), checkerFunc
+### Community 212 - "RegisterUserRoutes"
+Cohesion: 0.22
+Nodes (7): RouterGroup, RegisterUserRoutes(), Client, Duration, HandlerFunc, IdempotencyMiddleware(), cachedResponse
+
+### Community 213 - "New"
+Cohesion: 0.26
+Nodes (7): RoleHandler, Context, NewRoleHandler(), TestRoleCreateReturnsCreated(), TestRoleDeleteReturnsNoContent(), DB, New()
 
 ### Community 214 - "TestWebSocketNotification"
 Cohesion: 0.33
 Nodes (5): NewHub(), TestHubLifecycle(), TestWebSocketNotification(), waitHub(), mockConn
 
-### Community 215 - "As"
-Cohesion: 0.27
-Nodes (6): AppError, ErrorInfo, Context, AllErrorCodes(), As(), HTTPStatus()
+### Community 215 - "NewRoleService"
+Cohesion: 0.46
+Nodes (6): NewRoleService(), roleAppCode(), TestRoleServiceCreateMapsDuplicateNameToConflict(), TestRoleServiceDeleteWrapsRepositoryError(), TestRoleServiceListPassesPagination(), TestRoleServiceUpdateMapsNotFound()
 
-### Community 216 - "DBCollector"
-Cohesion: 0.47
-Nodes (4): CollectRuntime(), DB, NewDBCollector(), DBCollector
+### Community 216 - "tracing.go"
+Cohesion: 0.43
+Nodes (7): ContextWithTrace(), DefaultTracingConfig(), Context, TracerProvider, InitTracing(), ShutdownTracing(), TracingConfig
 
 ### Community 217 - "Format"
 Cohesion: 0.54
@@ -1009,23 +1028,43 @@ Nodes (5): Format, Importer, Registry, NewRegistry(), TestRegistryGetUnsupported
 Cohesion: 0.60
 Nodes (4): csvReader(), Reader, TestCSVParseAndValidate(), TestCSVParseEmptyFile()
 
+### Community 219 - "newRedisTestQueue"
+Cohesion: 0.39
+Nodes (7): Client, newRedisTestQueue(), TestQueueContract_SubmitConsume(), TestRedisQueueAckRemovesFromProcessing(), TestRedisQueueImplementsInterfaces(), TestRedisQueueNackRequeues(), TestRedisQueueRequeueExpired()
+
 ### Community 220 - "mockNotification"
 Cohesion: 0.47
 Nodes (3): Channel, Context, mockNotification
 
-### Community 222 - "NewPathEnforcer"
-Cohesion: 0.38
-Nodes (5): TestProtectedMiddlewareRequiresAccessToken(), DB, Enforcer, NewEnforcer(), NewPathEnforcer()
+### Community 223 - "newLock"
+Cohesion: 0.43
+Nodes (7): Client, newLock(), TestLock_AcquireRelease(), TestLock_ConcurrentAcquire(), TestLock_Extend(), TestLock_ReleaseOnlyOwnToken(), TestLock_WithLock()
 
-### Community 224 - "PermissionMiddleware"
-Cohesion: 0.50
-Nodes (3): Enforcer, HandlerFunc, PermissionMiddleware()
+### Community 224 - "Bootstrap"
+Cohesion: 0.52
+Nodes (6): moduleLogger, registerRouter, Bootstrap(), registerEventBusBridge(), registerHTTP(), registerOutboxWorkers()
+
+### Community 236 - "newTestScheduler"
+Cohesion: 0.62
+Nodes (6): NewAdminTaskService(), newTestScheduler(), TestAdminTaskServiceGetHistory(), TestAdminTaskServiceListTasks(), TestAdminTaskServiceToggleTask(), TestAdminTaskServiceTriggerTask()
 
 ### Community 239 - "newRepoTestDB"
 Cohesion: 0.53
 Nodes (5): DB, newRepoTestDB(), TestMysqlAPIKeyRepository(), TestMysqlImportJobRepository(), TestMysqlJobRepository()
 
-### Community 242 - "New"
+### Community 241 - "Pagination"
+Cohesion: 0.14
+Nodes (11): CreatePermissionRequest, UpdatePermissionRequest, PermissionResponse, Time, ToPermissionResponse(), ToPermissionResponses(), isDuplicateKey(), Context (+3 more)
+
+### Community 242 - "testWorker"
+Cohesion: 0.53
+Nodes (5): Duration, testWorker(), TestWorkerFlushesConfiguredBatch(), TestWorkerRejectsWhenQueueFull(), TestWorkerStopDrainsAcceptedRecords()
+
+### Community 243 - "testEnforcer"
+Cohesion: 0.53
+Nodes (5): Enforcer, TestAuthorizationMiddlewareAllowsRolePolicy(), TestAuthorizationMiddlewareHidesStoreErrors(), TestAuthorizationMiddlewareRejectsMissingRole(), testEnforcer()
+
+### Community 244 - "New"
 Cohesion: 0.48
 Nodes (6): New(), TestEventBus_Clear(), TestEventBus_HandlerPanicRecovered(), TestEventBus_MultipleHandlers(), TestEventBus_PublishAsync(), TestEventBus_SubscribeAndPublish()
 
@@ -1033,29 +1072,49 @@ Nodes (6): New(), TestEventBus_Clear(), TestEventBus_HandlerPanicRecovered(), Te
 Cohesion: 0.73
 Nodes (5): copyGoSum(), copyRootFile(), TestGeneratedModuleCompiles(), writeFileForTest(), writeStubPackages()
 
-### Community 246 - "Policy"
-Cohesion: 0.31
-Nodes (5): fakeAuthorizationStore, Policy, fakeAuthzStore, Context, Context
+### Community 246 - "NewPathEnforcer"
+Cohesion: 0.24
+Nodes (7): fakeAuthzStore, Context, TestProtectedMiddlewareRequiresAccessToken(), DB, Enforcer, NewEnforcer(), NewPathEnforcer()
+
+### Community 248 - "TestReadinessBoundsCheckerDuration"
+Cohesion: 0.47
+Nodes (4): Context, TestReadinessBoundsCheckerDuration(), TestReadinessStatus(), checkerFunc
+
+### Community 249 - "DBCollector"
+Cohesion: 0.47
+Nodes (4): CollectRuntime(), DB, NewDBCollector(), DBCollector
+
+### Community 251 - "Policy"
+Cohesion: 0.60
+Nodes (3): fakeAuthorizationStore, Policy, Context
+
+### Community 252 - "request.go"
+Cohesion: 0.40
+Nodes (4): forgotPasswordRequest, loginRequest, refreshRequest, resetPasswordRequest
+
+### Community 253 - "TestOpenAPIIncludesCRUDContract"
+Cohesion: 0.83
+Nodes (3): assertQueryParams(), readOpenAPI(), TestOpenAPIIncludesCRUDContract()
 
 ## Knowledge Gaps
-- **202 isolated node(s):** `common.sh script`, `jimu`, `CaptchaResult`, `LogConfig`, `UserCreatedEvent` (+197 more)
+- **205 isolated node(s):** `common.sh script`, `jimu`, `CaptchaResult`, `LogConfig`, `UserCreatedEvent` (+200 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **49 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **53 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `T()` connect `T` to `RegisterAuthRoutes`, `LocalStorage`, `NewAdminAPIKeyService`, `New`, `message.go`, `generator/module.go`, `NewSnowflake`, `fakeAuthzModule`, `Worker`, `RateLimiter`, `Fail`, `User`, `PresenceManager`, `newLock`, `InitSnowflake`, `NewWithStore`, `New`, `JWT`, `gorm_logger_test.go`, `JobHistory`, `Manager`, `Limiter`, `ChannelManager`, `Application`, `RedisStore`, `upload_handler_test.go`, `middleware/middleware_test.go`, `ws_integration_test.go`, `oauth/application/service_test.go`, `Security`, `Logger`, `config/config_test.go`, `NewUserRateLimiter`, `NewCSVExporter`, `NewService`, `NewCleanupService`, `MySQLStore`, `ValidateJSON`, `NewMysqlRepository`, `dispatcher`, `auth/application/service_test.go`, `i18n.go`, `Outbox`, `.Consume`, `.RegisterHTTP`, `newTestScheduler`, `SetupRouter`, `New`, `Server`, `New`, `AuditMiddleware`, `adminAuthRouter`, `responseBodyWriter`, `DefaultCSRFConfig`, `MySQLStore`, `NewAuditService`, `New`, `AdminMonitoringService`, `.Validate`, `DBConfig`, `bindImportFile`, `Role`, `fakeContainer`, `signature_test.go`, `NewWebhook`, `NewAdminConfigService`, `NewAdminUserService`, `Now`, `migrate_test.go`, `gzipRouter`, `New`, `fakePermissionRepository`, `oauth/interfaces/handler_test.go`, `NewEmail`, `New`, `Context`, `SecurityHeadersFromConfig`, `AuthorizationMiddleware`, `newMockGormDB`, `SMS`, `queue/worker_test.go`, `newMockGormDB`, `setupTestCache`, `Timeout`, `NewDBAPIKeyStore`, `newSqliteDB`, `IdempotencyMiddleware`, `Metrics`, `New`, `NewServer`, `NewPermissionService`, `NewLogChannel`, `securityRouter`, `ImportService`, `mockTokenServer`, `TestReadinessBoundsCheckerDuration`, `TestWebSocketNotification`, `Format`, `importer_test.go`, `TestValidateJSONTranslatesFieldErrors`, `NewPathEnforcer`, `newRepoTestDB`, `New`, `TestGeneratedModuleCompiles`?**
-  _High betweenness centrality (0.569) - this node is a cross-community bridge._
-- **Why does `Now()` connect `Now` to `New`, `ImportResult`, `auth/apikey.go`, `NewAdminAPIKeyService`, `Context`, `T`, `message.go`, `AuthorizationMiddleware`, `newMockGormDB`, `JobData`, `WorkerPool`, `newMockGormDB`, `mysqlAPIKeyRepository`, `NewSnowflake`, `NewDBAPIKeyStore`, `RedisCache`, `Metrics`, `CronScheduler`, `PresenceManager`, `NewWithStore`, `circuit`, `JWT`, `gorm_logger_test.go`, `DeadLetter`, `MySQLStore`, `upload_handler_test.go`, `ImportService`, `middleware/middleware_test.go`, `ws_integration_test.go`, `NewUserRateLimiter`, `JobDef`, `NewService`, `NewCleanupService`, `NewMysqlRepository`, `Lock`, `ClientHub`, `TestReadinessBoundsCheckerDuration`, `TestWebSocketNotification`, `SetupRouter`, `AuditMiddleware`, `DefaultCSRFConfig`, `MySQLStore`, `AdminMonitoringService`, `.Validate`, `signature_test.go`, `NewAdminUserService`?**
-  _High betweenness centrality (0.065) - this node is a cross-community bridge._
-- **Why does `Wrap()` connect `Wrap` to `OAuthService`, `NewAdminAPIKeyService`, `New`, `AuthorizationMiddleware`, `PermissionService`, `Role`, `AdminJobHandler`, `AdminUserService`, `ImportService`, `upload_handler_test.go`, `UserService`, `As`, `AuditService`?**
-  _High betweenness centrality (0.059) - this node is a cross-community bridge._
+- **Why does `T()` connect `T` to `RegisterAuthRoutes`, `fakeRedis`, `NewAdminAPIKeyService`, `Page`, `generator/module.go`, `PermissionService`, `InitSnowflake`, `JobRegistry`, `New`, `AuditLog`, `newTaskHandler`, `User`, `ConnectWithRetry`, `message.go`, `NewWithStore`, `As`, `JWT`, `gorm_logger_test.go`, `JobHistory`, `Manager`, `Application`, `RedisStore`, `upload_handler_test.go`, `middleware/middleware_test.go`, `ws_integration_test.go`, `oauth/application/service_test.go`, `securityRouter`, `Logger`, `config/config_test.go`, `NewUserRateLimiter`, `NewCSVExporter`, `NewService`, `NewCleanupService`, `MySQLStore`, `ValidateJSON`, `NewMysqlRepository`, `dispatcher`, `New`, `auth/application/service_test.go`, `i18n.go`, `Outbox`, `.Consume`, `.RegisterHTTP`, `SetupRouter`, `LocalStorage`, `New`, `NewManagementServer`, `adminAuthRouter`, `responseBodyWriter`, `DefaultCSRFConfig`, `newMockGormDB`, `AdminMonitoringService`, `.Validate`, `ConnectWithRetry`, `newEncryptionTestDB`, `bindImportFile`, `RoleService`, `fakeContainer`, `signature_test.go`, `NewWebhook`, `NewAdminConfigService`, `NewChannelManager`, `Now`, `migrate_test.go`, `gzipRouter`, `New`, `newWSHandler`, `DBConfig`, `fakePermissionRepository`, `oauth/interfaces/handler_test.go`, `Context`, `NewEmail`, `New`, `Context`, `SecurityHeadersFromConfig`, `newMockGormDB`, `NewSMS`, `queue/worker_test.go`, `New`, `Timeout`, `NewDBAPIKeyStore`, `NewUserService`, `idempotencyRouter`, `setupMetricsEngine`, `NewAuditService`, `NewServer`, `AdminUserHandler`, `newResetService`, `NewAdminAuditHandler`, `mockTokenServer`, `New`, `TestWebSocketNotification`, `NewRoleService`, `Format`, `importer_test.go`, `newRedisTestQueue`, `newLock`, `newTestScheduler`, `newRepoTestDB`, `testWorker`, `testEnforcer`, `New`, `TestGeneratedModuleCompiles`, `NewPathEnforcer`, `TestReadinessBoundsCheckerDuration`, `TestOpenAPIIncludesCRUDContract`?**
+  _High betweenness centrality (0.567) - this node is a cross-community bridge._
+- **Why does `Now()` connect `Now` to `New`, `ImportResult`, `auth/apikey.go`, `Context`, `NewAdminAPIKeyService`, `New`, `Context`, `T`, `AuthorizationMiddleware`, `newMockGormDB`, `RedisQueue`, `WorkerPool`, `New`, `InitSnowflake`, `NewDBAPIKeyStore`, `Wrap`, `RedisCache`, `CronScheduler`, `ClientHub`, `PresenceManager`, `NewWithStore`, `circuit`, `JWT`, `gorm_logger_test.go`, `DeadLetter`, `upload_handler_test.go`, `middleware/middleware_test.go`, `ws_integration_test.go`, `NewUserRateLimiter`, `JobDef`, `NewService`, `NewCleanupService`, `NewMysqlRepository`, `Lock`, `Client`, `Outbox`, `TestWebSocketNotification`, `SetupRouter`, `newRedisTestQueue`, `MySQLStore`, `AuditMiddleware`, `DefaultCSRFConfig`, `mysqlAPIKeyRepository`, `AdminMonitoringService`, `.Validate`, `signature_test.go`, `NewWebhook`, `TestReadinessBoundsCheckerDuration`?**
+  _High betweenness centrality (0.113) - this node is a cross-community bridge._
+- **Why does `Wrap()` connect `Wrap` to `OAuthService`, `Context`, `NewAdminAPIKeyService`, `As`, `AuthorizationMiddleware`, `RoleService`, `Pagination`, `AdminJobHandler`, `AdminUserService`, `upload_handler_test.go`, `UserService`, `AuditService`?**
+  _High betweenness centrality (0.049) - this node is a cross-community bridge._
 - **Are the 4 inferred relationships involving `T()` (e.g. with `translateValidationDetails()` and `ValidateJSON()`) actually correct?**
   _`T()` has 4 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 81 inferred relationships involving `New()` (e.g. with `.CreateKey()` and `.ToggleTask()`) actually correct?**
   _`New()` has 81 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 78 inferred relationships involving `Fail()` (e.g. with `.Generate()` and `.HandleDelete()`) actually correct?**
-  _`Fail()` has 78 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 78 inferred relationships involving `Now()` (e.g. with `.CreateKey()` and `.Import()`) actually correct?**
-  _`Now()` has 78 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 81 inferred relationships involving `Now()` (e.g. with `.CreateKey()` and `.generateResetCode()`) actually correct?**
+  _`Now()` has 81 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 80 inferred relationships involving `Fail()` (e.g. with `.Generate()` and `.HandleDelete()`) actually correct?**
+  _`Fail()` has 80 INFERRED edges - model-reasoned connections that need verification._
