@@ -31,13 +31,14 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **分布式锁** — Redis 实现的分布式锁（防并发、选主）
 - **文件存储** — 本地/S3/OSS/MinIO 统一接口
 - **数据导入/导出** — CSV/Excel 模板导入与导出（`internal/platform/importer` / `internal/platform/exporter`），导出结果可被导入器回读验证，格式互通
-- **通知系统** — 邮件/短信(SMS)/WebSocket/Webhook 抽象；短信支持阿里云（dysmsapi SDK，`sms.enabled` 配置开关）
+- **通知系统** — 邮件/短信(SMS)/WebSocket/Webhook 抽象；短信支持阿里云（dysmsapi SDK，`sms.enabled` 配置开关）；Webhook 回调载荷支持 HMAC-SHA256 签名（`notification.webhook.sign_secret`，附加 `X-Jimu-Timestamp`/`X-Jimu-Signature` 头，防重放）
 - **统一出站 HTTP client** — 封装 timeout + retry/backoff（仅网络错误与 5xx）+ 熔断（连续失败自动开启，冷却后探测恢复）+ 按目标 host 独立限流（令牌桶）+ OTel `traceparent` 注入（`internal/platform/httpclient`），OAuth 提供商与 Webhook 共用
 - **Outbox 模式** — 事件发布与数据库事务一致性保证，支持 MQ 跨服务发布（`outbox.publisher` 切换；`mq` 模式下通过 WorkerPool 消费事件，`event_bus` 模式通过 `outbox:*` 桥接器注入事件总线）
 - **定时任务** — Cron 调度器（robfig/cron），支持 MySQL 持久化（`scheduler.store=mysql`）与多实例分布式锁协调，启动时通过 `RestoreFromStore` 恢复持久化任务（内置任务去重）
 - **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
 - **OpenTelemetry** — 分布式追踪（OTLP gRPC），HTTP/Gin + Gorm 查询 + Redis 命令全链路 span（`otel.enabled` 开启）；队列/Outbox 异步边界透传 `traceparent`/`tracestate`，消费端恢复链路
-- **Prometheus 指标** — DB 连接池 + 运行时 + HTTP 请求指标（`jimu_http_*`）+ 队列执行/死信（`jimu_queue_*`）+ Outbox 发布（`jimu_outbox_*`）+ 出站熔断（`jimu_httpclient_*`）
+- **Prometheus 指标** — DB 连接池 + 运行时 + HTTP 请求指标（`jimu_http_*`）+ 队列执行/死信（`jimu_queue_*`）+ Outbox 发布（`jimu_outbox_*`）+ 出站熔断（`jimu_httpclient_*`）+ 定时任务执行（`jimu_scheduler_*`，成功/失败计数 + 耗时分布）
+- **gRPC server** — 与 HTTP 双栈并存，内置健康检查（`grpc_health_v1`）与反射（grpcurl 可探），可选启用（`grpc.enabled`，默认端口 9091）；`internal/platform/grpc` 提供免 protoc 的 ServiceDesc 注册方式，业务模块经 `RegisterService` 接入
 - **分布式 ID** — 雪花 ID 生成器（`internal/shared/id`），所有数据库主键由应用生成，`id.worker_id` 配置多实例唯一编号
 - **Docker 支持** — Dockerfile + docker-compose 一键起服务
 - **Docker Secrets** — 敏感配置通过文件注入（`_FILE` 后缀）
@@ -220,6 +221,7 @@ jimu/
 │   │   ├── notification/       # 通知系统
 │   │   ├── outbox/             # Outbox 模式
 │   │   ├── scheduler/          # Cron 调度器
+│   │   ├── grpc/               # gRPC server（健康检查 + 反射，可选双栈）
 │   │   ├── feature/            # Feature Flag
 │   ├── shared/                 # 跨模块通用能力
 │   │   ├── errors/             # AppError + 错误码
@@ -455,6 +457,9 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `http_client.reset_timeout_ms` | 出站 HTTP 熔断冷却时长（毫秒），到期后放行探测，0 用默认 | `30000` |
 | `http_client.rate_limit_rate` | 出站 HTTP 每秒请求数（按目标 host 独立限流），0 不限流 | `0` |
 | `http_client.rate_limit_burst` | 出站 HTTP 令牌桶容量，0 用 rate（桶=平均速率） | `0` |
+| `notification.webhook.sign_secret` | Webhook 回调载荷签名密钥（HMAC-SHA256，`X-Jimu-Signature`）；空则不签名 | — |
+| `grpc.enabled` | 是否启用 gRPC server（与 HTTP 双栈并存，默认关闭） | `false` |
+| `grpc.host` / `grpc.port` | gRPC 监听地址 / 端口 | `0.0.0.0` / `9091` |
 
 ## Makefile 命令
 

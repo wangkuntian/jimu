@@ -55,3 +55,5 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `sms` | provider（aliyun）/api_key/api_secret/sign_name |
 | `otel` | enabled + OTLP 端点 |
 | `http_client` | 统一出站 HTTP：timeout_sec/max_retries/retry_interval_ms/max_failures/reset_timeout_ms/rate_limit_rate/rate_limit_burst（仅网络错误与 5xx 重试，指数退避，熔断 + 按 host 独立限流 + traceparent 注入） |
+| `notification.webhook` | Webhook 回调载荷签名：sign_secret（HMAC-SHA256，空则不签名） |
+| `grpc` | gRPC server：enabled/host/port（可选双栈，默认关闭，内置 grpc_health_v1 + 反射） |
