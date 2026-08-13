@@ -3,9 +3,14 @@ package notification
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"jimu/internal/platform/httpclient"
 )
@@ -14,6 +19,9 @@ import (
 type WebhookConfig struct {
 	// 默认 Headers
 	Headers map[string]string `mapstructure:"headers"`
+	// SignSecret HMAC-SHA256 载荷签名密钥；非空时发送 X-Jimu-Timestamp + X-Jimu-Signature，
+	// 供回调消费者验真与防篡改。为空则不签名。
+	SignSecret string `mapstructure:"sign_secret"`
 }
 
 // Webhook Webhook 通知实现
@@ -52,6 +60,11 @@ func (w *Webhook) Send(ctx context.Context, msg Message) error {
 	for k, v := range w.config.Headers {
 		req.Header.Set(k, v)
 	}
+	if w.config.SignSecret != "" {
+		ts := strconv.FormatInt(time.Now().Unix(), 10)
+		req.Header.Set("X-Jimu-Timestamp", ts)
+		req.Header.Set("X-Jimu-Signature", signPayload(w.config.SignSecret, ts, body))
+	}
 
 	// 统一 client 负责网络错误与 5xx 重试；4xx 不重试，此处转业务错误
 	resp, err := w.client.Do(ctx, req)
@@ -76,6 +89,16 @@ func (w *Webhook) SendBatch(ctx context.Context, msgs []Message) error {
 
 func (w *Webhook) Channel() Channel {
 	return ChannelWebhook
+}
+
+// signPayload 计算 HMAC-SHA256 签名：hex(hmac(secret, timestamp + "." + body))。
+// 时间戳纳入签名防止重放，消费者按 X-Jimu-Timestamp 限时校验。
+func signPayload(secret, timestamp string, body []byte) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(timestamp))
+	mac.Write([]byte("."))
+	mac.Write(body)
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
 
 var _ Notification = (*Webhook)(nil)
