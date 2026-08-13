@@ -4,6 +4,8 @@
 
 **Input**: Feature specification from `/specs/001-jimu-framework-spec/spec.md`
 
+**状态**: 历史实现记录（已完成特性：SMS + 发布门禁）。spec.md 已随代码刷新至 37 条 FR（新增 FR-036 出站 HTTP、FR-037 批量导入），本 plan 保持当时决策不变。
+
 ## Summary
 
 从现有代码反推框架能力契约（35 条 FR）。代码审计（research.md）显示 32/35 已真实实现；存在 **2 处规格与实现不一致** 需收敛：
