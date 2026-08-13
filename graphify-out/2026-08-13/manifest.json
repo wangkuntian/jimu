@@ -670,18 +670,18 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786530929.0204263,
-    "ast_hash": "d637d27567b2c5c978addbe7c1a7710b",
+    "mtime": 1786606961.9195106,
+    "ast_hash": "8a44d66d296ec7136b9c539337503c12",
     "semantic_hash": ""
   },
   "configs/app.prod.yaml": {
-    "mtime": 1786529893.204495,
-    "ast_hash": "4a0723552cedf96facfbe523a5b069c0",
+    "mtime": 1786606610.631073,
+    "ast_hash": "61f0a366d40f8073e668fbd2cb22f54f",
     "semantic_hash": ""
   },
   "configs/app.yaml": {
-    "mtime": 1786529891.8441472,
-    "ast_hash": "93fc52ac8c396decad2ea88188884ce3",
+    "mtime": 1786606607.0234246,
+    "ast_hash": "647bba5f0e8fe4bb47ec019aacecb681",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -1230,14 +1230,14 @@
     "semantic_hash": "450808797e14c956fd0005290093191f"
   },
   "internal/platform/observability/tracing.go": {
-    "mtime": 1785979856.0617018,
-    "ast_hash": "e05d849ea5c1714aea52e63d4ceeed6e",
-    "semantic_hash": "e05d849ea5c1714aea52e63d4ceeed6e"
+    "mtime": 1786606526.1740422,
+    "ast_hash": "4f77198d3bcef6a291c843ea81de6c79",
+    "semantic_hash": ""
   },
   "internal/platform/outbox/mq_publisher.go": {
-    "mtime": 1786411358.9215014,
-    "ast_hash": "b050faa82ce62785221b11ac33ed19cd",
-    "semantic_hash": "b050faa82ce62785221b11ac33ed19cd"
+    "mtime": 1786606581.7528615,
+    "ast_hash": "2ac1003ba5d9a3443b6bd56e75800fd3",
+    "semantic_hash": ""
   },
   "internal/platform/outbox/mq_publisher_test.go": {
     "mtime": 1786411363.5351028,
@@ -1255,9 +1255,9 @@
     "semantic_hash": "e244c4e53f6cb9dac564eb12a314ebc8"
   },
   "internal/platform/outbox/outbox.go": {
-    "mtime": 1786095953.8342032,
-    "ast_hash": "6ddd3bf760586c4245f2d90ef82e890d",
-    "semantic_hash": "6ddd3bf760586c4245f2d90ef82e890d"
+    "mtime": 1786606575.3157206,
+    "ast_hash": "4e939365dbeb30b97c28a7161a8d194f",
+    "semantic_hash": ""
   },
   "internal/platform/outbox/publisher.go": {
     "mtime": 1786413060.1511905,
@@ -1335,8 +1335,8 @@
     "semantic_hash": "5c8e5efd9f119310ac3b4ac3d1696853"
   },
   "internal/platform/queue/redis_queue.go": {
-    "mtime": 1786528548.5305107,
-    "ast_hash": "e4e08ec1ee6ba09c990d2a0260536aed",
+    "mtime": 1786606882.2527204,
+    "ast_hash": "f94a8f1f8916992743b4bc826fdfff7b",
     "semantic_hash": ""
   },
   "internal/platform/queue/retry.go": {
@@ -1345,14 +1345,14 @@
     "semantic_hash": "acde3057e49ebc1be2da531f49543731"
   },
   "internal/platform/queue/worker.go": {
-    "mtime": 1786522354.3691928,
-    "ast_hash": "52571d01b1ecbd773d7cff9cfc6e13b3",
-    "semantic_hash": "52571d01b1ecbd773d7cff9cfc6e13b3"
+    "mtime": 1786606562.8045766,
+    "ast_hash": "d2220a919f18d97e06b34b1ea70cd206",
+    "semantic_hash": ""
   },
   "internal/platform/queue/worker_test.go": {
-    "mtime": 1786522374.559795,
-    "ast_hash": "e5911ece9b73a399d5145be8bc09eb90",
-    "semantic_hash": "e5911ece9b73a399d5145be8bc09eb90"
+    "mtime": 1786606776.8322694,
+    "ast_hash": "70c5b574f8c21f844627ef971ca3c82f",
+    "semantic_hash": ""
   },
   "internal/platform/redis/lock.go": {
     "mtime": 1785987437.3614938,
@@ -1710,8 +1710,8 @@
     "semantic_hash": ""
   },
   "specs/001-jimu-framework-spec/checklists/requirements.md": {
-    "mtime": 1786528070.0169861,
-    "ast_hash": "d0357242ee27976b4aea9df90f2b26d3",
+    "mtime": 1786606979.1329212,
+    "ast_hash": "df24336ef6bcb9458cfd829429e891ef",
     "semantic_hash": ""
   },
   "specs/001-jimu-framework-spec/contracts/api.md": {
@@ -1725,8 +1725,8 @@
     "semantic_hash": ""
   },
   "specs/001-jimu-framework-spec/contracts/config.md": {
-    "mtime": 1786526150.5799186,
-    "ast_hash": "97582ea03f5f9a9849405cfb12e480f0",
+    "mtime": 1786606965.2353106,
+    "ast_hash": "dc4ed8997ac35b65abd98fe2c70ee151",
     "semantic_hash": ""
   },
   "specs/001-jimu-framework-spec/contracts/module.md": {
@@ -1745,8 +1745,8 @@
     "semantic_hash": ""
   },
   "specs/001-jimu-framework-spec/plan.md": {
-    "mtime": 1786526397.0495973,
-    "ast_hash": "9dee5054f9bf183e2f54df2216d380bb",
+    "mtime": 1786592172.083726,
+    "ast_hash": "9a2f6124256a525442b9feea0abcae05",
     "semantic_hash": ""
   },
   "specs/001-jimu-framework-spec/quickstart.md": {
@@ -1760,8 +1760,8 @@
     "semantic_hash": ""
   },
   "specs/001-jimu-framework-spec/spec.md": {
-    "mtime": 1786528058.993775,
-    "ast_hash": "4c52c0ef85a34c6475f4e5905155b006",
+    "mtime": 1786606973.6362255,
+    "ast_hash": "71bf80afc2cc395e45b2f086e68423a7",
     "semantic_hash": ""
   },
   "specs/001-jimu-framework-spec/tasks.md": {
@@ -2015,13 +2015,13 @@
     "semantic_hash": ""
   },
   "internal/platform/httpclient/client.go": {
-    "mtime": 1786530308.7205324,
-    "ast_hash": "9c553f7a5e0ce2b106c2305ad617b370",
+    "mtime": 1786606602.9534364,
+    "ast_hash": "0102570bf2b0682cf1a1ab52cc965fc0",
     "semantic_hash": ""
   },
   "internal/platform/httpclient/client_test.go": {
-    "mtime": 1786530315.8748908,
-    "ast_hash": "3dcf1e043c370e729e410c2b9b3310d9",
+    "mtime": 1786606798.2995074,
+    "ast_hash": "9a5ad56330d8a4b3c99bb963c1947dd6",
     "semantic_hash": ""
   },
   "internal/platform/logger/zap_test.go": {
@@ -2092,6 +2092,11 @@
   "internal/modules/admin/infrastructure/repository_test.go": {
     "mtime": 1786531449.5558066,
     "ast_hash": "43187a4644f12e65b143951f775da905",
+    "semantic_hash": ""
+  },
+  "internal/platform/outbox/outbox_test.go": {
+    "mtime": 1786606882.252653,
+    "ast_hash": "9356bdf26eb7a154f42609a43f0f3e8e",
     "semantic_hash": ""
   }
 }
