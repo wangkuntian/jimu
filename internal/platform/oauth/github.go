@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 
+	"jimu/internal/platform/httpclient"
+
 	"golang.org/x/oauth2"
 )
 
@@ -20,11 +22,13 @@ type GitHubConfig struct {
 
 // GitHubProvider GitHub OAuth 实现
 type GitHubProvider struct {
-	config *oauth2.Config
+	config      *oauth2.Config
+	client      *httpclient.Client
+	userInfoURL string // 未导出，测试可覆盖
 }
 
 // NewGitHubProvider 创建 GitHub Provider
-func NewGitHubProvider(cfg GitHubConfig) *GitHubProvider {
+func NewGitHubProvider(cfg GitHubConfig, client *httpclient.Client) *GitHubProvider {
 	return &GitHubProvider{
 		config: &oauth2.Config{
 			ClientID:     cfg.ClientID,
@@ -36,6 +40,8 @@ func NewGitHubProvider(cfg GitHubConfig) *GitHubProvider {
 				TokenURL: "https://github.com/login/oauth/access_token",
 			},
 		},
+		client:      client,
+		userInfoURL: "https://api.github.com/user",
 	}
 }
 
@@ -55,10 +61,12 @@ func (p *GitHubProvider) Exchange(ctx context.Context, code string) (*UserInfo, 
 	if err != nil {
 		return nil, fmt.Errorf("github exchange: %w", err)
 	}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/user", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.userInfoURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("github userinfo req: %w", err)
+	}
 	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
-	client := &http.Client{Timeout: oauthTimeout}
-	resp, err := client.Do(req)
+	resp, err := p.client.Do(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("github userinfo: %w", err)
 	}

@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 
+	"jimu/internal/platform/httpclient"
+
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
@@ -21,11 +23,13 @@ type GoogleConfig struct {
 
 // GoogleProvider Google OAuth 实现
 type GoogleProvider struct {
-	config *oauth2.Config
+	config      *oauth2.Config
+	client      *httpclient.Client
+	userInfoURL string // 未导出，测试可覆盖
 }
 
 // NewGoogleProvider 创建 Google Provider
-func NewGoogleProvider(cfg GoogleConfig) *GoogleProvider {
+func NewGoogleProvider(cfg GoogleConfig, client *httpclient.Client) *GoogleProvider {
 	return &GoogleProvider{
 		config: &oauth2.Config{
 			ClientID:     cfg.ClientID,
@@ -34,6 +38,8 @@ func NewGoogleProvider(cfg GoogleConfig) *GoogleProvider {
 			Scopes:       []string{"openid", "email", "profile"},
 			Endpoint:     google.Endpoint,
 		},
+		client:      client,
+		userInfoURL: "https://www.googleapis.com/oauth2/v2/userinfo",
 	}
 }
 
@@ -53,13 +59,12 @@ func (p *GoogleProvider) Exchange(ctx context.Context, code string) (*UserInfo, 
 	if err != nil {
 		return nil, fmt.Errorf("google exchange: %w", err)
 	}
-	client := p.config.Client(ctx, token)
-	client.Timeout = oauthTimeout
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.googleapis.com/oauth2/v2/userinfo", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.userInfoURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("google userinfo req: %w", err)
 	}
-	resp, err := client.Do(req)
+	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
+	resp, err := p.client.Do(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("google userinfo: %w", err)
 	}
