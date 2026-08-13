@@ -128,27 +128,29 @@ type IDConfig struct {
 }
 
 type Config struct {
-	HTTP       HTTPConfig                  `mapstructure:"http"`
-	Management ManagementConfig            `mapstructure:"management"`
-	DB         DBConfig                    `mapstructure:"db"`
-	Redis      RedisConfig                 `mapstructure:"redis"`
-	Log        LogConfig                   `mapstructure:"log"`
-	Auth       AuthConfig                  `mapstructure:"auth"`
-	Server     ServerConfig                `mapstructure:"server"`
-	ID         IDConfig                    `mapstructure:"id"`
-	Cache      CacheConfig                 `mapstructure:"cache"`
-	Audit      AuditConfig                 `mapstructure:"audit"`
-	Storage    StorageConfig               `mapstructure:"storage"`
-	Security   SecurityConfig              `mapstructure:"security"`
-	Queue      QueueConfig                 `mapstructure:"queue"`
-	Outbox     OutboxConfig                `mapstructure:"outbox"`
-	Scheduler  SchedulerConfig             `mapstructure:"scheduler"`
-	OAuth      OAuthConfig                 `mapstructure:"oauth"`
-	Captcha    CaptchaConfig               `mapstructure:"captcha"`
-	Email      EmailConfig                 `mapstructure:"email"`
-	SMS        SMSConfig                   `mapstructure:"sms"`
-	OTEL       observability.TracingConfig `mapstructure:"otel"`
-	HTTPClient HTTPClientConfig            `mapstructure:"http_client"`
+	HTTP         HTTPConfig                  `mapstructure:"http"`
+	Management   ManagementConfig            `mapstructure:"management"`
+	DB           DBConfig                    `mapstructure:"db"`
+	Redis        RedisConfig                 `mapstructure:"redis"`
+	Log          LogConfig                   `mapstructure:"log"`
+	Auth         AuthConfig                  `mapstructure:"auth"`
+	Server       ServerConfig                `mapstructure:"server"`
+	ID           IDConfig                    `mapstructure:"id"`
+	Cache        CacheConfig                 `mapstructure:"cache"`
+	Audit        AuditConfig                 `mapstructure:"audit"`
+	Storage      StorageConfig               `mapstructure:"storage"`
+	Security     SecurityConfig              `mapstructure:"security"`
+	Queue        QueueConfig                 `mapstructure:"queue"`
+	Outbox       OutboxConfig                `mapstructure:"outbox"`
+	Scheduler    SchedulerConfig             `mapstructure:"scheduler"`
+	OAuth        OAuthConfig                 `mapstructure:"oauth"`
+	Captcha      CaptchaConfig               `mapstructure:"captcha"`
+	Email        EmailConfig                 `mapstructure:"email"`
+	SMS          SMSConfig                   `mapstructure:"sms"`
+	Notification NotificationConfig          `mapstructure:"notification"`
+	OTEL         observability.TracingConfig `mapstructure:"otel"`
+	HTTPClient   HTTPClientConfig            `mapstructure:"http_client"`
+	GRPC         GRPCConfig                  `mapstructure:"grpc"`
 	// 元数据（非 YAML 配置，运行时注入）
 	Version     string `mapstructure:"-"`
 	Environment string `mapstructure:"-"`
@@ -159,6 +161,25 @@ type HTTPClientConfig struct {
 	TimeoutSec      int `mapstructure:"timeout_sec"`       // 单次请求超时（秒），0 用默认 10
 	MaxRetries      int `mapstructure:"max_retries"`       // 失败重试次数，0 用默认 2
 	RetryIntervalMS int `mapstructure:"retry_interval_ms"` // 重试基础间隔（毫秒），0 用默认 200
+	RateLimitRate   int `mapstructure:"rate_limit_rate"`   // 每秒请求数（按目标 host 独立限流），0 不限流
+	RateLimitBurst  int `mapstructure:"rate_limit_burst"`  // 令牌桶容量，0 用 rate（桶=平均速率）
+}
+
+// NotificationConfig 通知渠道配置
+type NotificationConfig struct {
+	Webhook WebhookNotificationConfig `mapstructure:"webhook"` // Webhook 渠道配置
+}
+
+// WebhookNotificationConfig Webhook 通知配置
+type WebhookNotificationConfig struct {
+	SignSecret string `mapstructure:"sign_secret"` // 载荷签名密钥（HMAC-SHA256）；空则不签名
+}
+
+// GRPCConfig gRPC server 配置（与 HTTP 双栈并存，可选启用）
+type GRPCConfig struct {
+	Enabled bool   `mapstructure:"enabled"` // 是否启用 gRPC server
+	Host    string `mapstructure:"host"`    // 监听地址
+	Port    int    `mapstructure:"port"`    // 监听端口
 }
 
 // ServerConfig 服务运行时配置
