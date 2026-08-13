@@ -186,3 +186,5 @@ http_client:
   retry_interval_ms: 200  # 重试基础间隔（毫秒），指数退避
   max_failures: 5         # 连续失败次数达此值熔断，0 用默认 5
   reset_timeout_ms: 30000 # 熔断后冷却时长（毫秒），0 用默认 30000
+  rate_limit_rate: 0      # 每秒请求数（按目标 host 独立限流），0 不限流
+  rate_limit_burst: 0     # 令牌桶容量，0 用 rate（桶=平均速率）

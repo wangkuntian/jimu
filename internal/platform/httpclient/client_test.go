@@ -210,3 +210,54 @@ func TestCircuitHalfOpenOnlyAllowsProbe(t *testing.T) {
 	// 探测请求（1 次）触达服务端：之前 1 次失败 + 探测 = 2
 	assert.Equal(t, int32(2), calls.Load())
 }
+
+func TestDoRateLimitsPerHost(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	// rate=1/s, burst=1：首个请求消费唯一令牌，第二个请求等待被 ctx 超时打断
+	c := New(Config{MaxRetries: -1, RateLimitRate: 1, RateLimitBurst: 1})
+	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+
+	resp, err := c.Do(context.Background(), req)
+	require.NoError(t, err)
+	resp.Body.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err = c.Do(ctx, req)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "would exceed context deadline")
+	assert.Equal(t, int32(1), calls.Load())
+}
+
+func TestDoRateLimitIndependentPerHost(t *testing.T) {
+	srv1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv1.Close()
+	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv2.Close()
+
+	// 两个 host 各自独立限流：host1 消费令牌不影响 host2
+	c := New(Config{MaxRetries: -1, RateLimitRate: 1, RateLimitBurst: 1})
+
+	req1, _ := http.NewRequest(http.MethodGet, srv1.URL, nil)
+	resp, err := c.Do(context.Background(), req1)
+	require.NoError(t, err)
+	resp.Body.Close()
+
+	// host2 首次请求不受 host1 已消费令牌影响
+	req2, _ := http.NewRequest(http.MethodGet, srv2.URL, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	resp2, err := c.Do(ctx, req2)
+	require.NoError(t, err)
+	resp2.Body.Close()
+}
