@@ -54,4 +54,4 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `email` | SMTP host/port/username/from（enabled=false 回退日志渠道） |
 | `sms` | provider（aliyun）/api_key/api_secret/sign_name |
 | `otel` | enabled + OTLP 端点 |
-| `http_client` | 统一出站 HTTP：timeout_sec/max_retries/retry_interval_ms（仅网络错误与 5xx 重试，指数退避，traceparent 注入） |
+| `http_client` | 统一出站 HTTP：timeout_sec/max_retries/retry_interval_ms/max_failures/reset_timeout_ms（仅网络错误与 5xx 重试，指数退避，熔断 + traceparent 注入） |

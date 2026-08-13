@@ -34,4 +34,5 @@
 - 本 spec 定位为"现状能力契约"（由现有代码反推），因此个别能力条目（FR-009 令牌认证、FR-022 队列中间件）保留了技术名词作为能力契约的一部分，这属于框架类 spec 的刻意取舍，不视为实现细节泄漏。
 - 2026-08-12 实现阶段收敛两处缺口：FR-028 阿里云短信（dysmsapi v5 SDK + 契约测试）、FR-034 发布门禁（release-check 含 govulncheck、tag 触发 CI）。见 research.md 审计矩阵更新。
 - 2026-08-13 随代码刷新：新增 FR-036（统一出站 HTTP client）、FR-037（批量导入，CSV/Excel）；FR-034 补覆盖率门禁 ≥ 50%；Assumptions 补性能基准（make bench/loadtest）。全部清单项复查通过。
+- 2026-08-13 异步韧性补齐：FR-036 补熔断（max_failures/reset_timeout_ms）；FR-029 补异步边界 trace 透传（队列/Outbox 注入与恢复）与异步维度指标（jimu_queue_*/jimu_outbox_*/jimu_httpclient_*）。全部清单项复查通过。
 - 全部清单项通过，无需进入 `/speckit-clarify`。
