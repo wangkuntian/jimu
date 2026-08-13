@@ -191,6 +191,7 @@ func validProdConfig() Config {
 			LoginRateWindowSec:    60,
 			RegisterRateLimit:     5,
 			RegisterRateWindowSec: 300,
+			ResetCodeTTLMin:       15,
 		},
 		Server: ServerConfig{
 			TimeoutSec:     30,

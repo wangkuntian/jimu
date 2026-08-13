@@ -154,7 +154,7 @@ func TestIsSensitiveField(t *testing.T) {
 		{"credit_card_number", true},
 		{"mobile_phone", true},
 		{"username", false},
-		{"email", false},
+		{"email", true},
 		{"created_at", false},
 	}
 	for _, c := range cases {

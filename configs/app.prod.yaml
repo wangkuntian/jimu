@@ -24,6 +24,7 @@ http:
 # 安全头配置（生产环境严格配置）
 security:
   csrf_secret: ""          # CSRF 密钥；非空时启用 CSRF 中间件（cookie 认证场景必配，推荐 CSRF_SECRET 环境变量注入）
+  encryption_key: ""       # 字段级加密密钥（AES-256-GCM，≥32 字节；必须通过 ENCRYPTION_KEY 环境变量注入，否则 email/phone 明文存储）
   content_type_options: "nosniff"
   frame_options: "DENY"
   xss_protection: "0"  # 现代浏览器已弃用，靠 CSP
@@ -88,6 +89,7 @@ auth:
   login_rate_window_sec: 60    # 登录限流窗口（秒）
   register_rate_limit: 3       # 注册限流（次/窗口）
   register_rate_window_sec: 300 # 注册限流窗口（秒）
+  reset_code_ttl_min: 15       # 密码重置验证码有效期（分钟）
 
 # 服务运行时配置
 server:

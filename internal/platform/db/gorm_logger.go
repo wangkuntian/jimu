@@ -19,6 +19,7 @@ const SlowQueryThreshold = 200 * time.Millisecond
 var sensitiveFields = []string{
 	"password", "secret", "token", "access_token", "refresh_token",
 	"idcard", "id_card", "mobile", "phone", "credit_card",
+	"email",
 }
 
 // gormLogger 自定义 Gorm 日志：慢查询告警 + 敏感字段脱敏

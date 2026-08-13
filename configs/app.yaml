@@ -72,6 +72,7 @@ auth:
   login_rate_window_sec: 60  # 登录限流窗口（秒）
   register_rate_limit: 100   # 注册限流（次/窗口）
   register_rate_window_sec: 60 # 注册限流窗口（秒）
+  reset_code_ttl_min: 15     # 密码重置验证码有效期（分钟）
 
 # 服务运行时配置
 server:
@@ -170,6 +171,7 @@ notification:
 # 安全配置
 security:
   csrf_secret: ""          # CSRF 密钥；非空时启用 CSRF 中间件（Bearer 请求自动跳过）。cookie 认证场景必配
+  encryption_key: "dev-encryption-key-change-in-production"  # 字段级加密密钥（AES-256-GCM，≥32 字节；建议 ENCRYPTION_KEY 环境变量注入）；空则明文模式
   # 安全头（留空则使用默认值）
   content_type_options: "nosniff"
   frame_options: "DENY"
