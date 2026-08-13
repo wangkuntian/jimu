@@ -87,6 +87,26 @@ func InitTracing(ctx context.Context, cfg TracingConfig) (*sdktrace.TracerProvid
 	return tp, nil
 }
 
+// TraceFromContext 从 context 提取 W3C traceparent/tracestate，供跨异步边界透传
+// （队列消息、Outbox 事件元数据）。追踪禁用时返回空串，零开销。
+func TraceFromContext(ctx context.Context) (traceparent, tracestate string) {
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	return carrier.Get("traceparent"), carrier.Get("tracestate")
+}
+
+// ContextWithTrace 从 traceparent/tracestate 恢复追踪上下文，链接上游 span。
+// 两者为空时原样返回 ctx。
+func ContextWithTrace(ctx context.Context, traceparent, tracestate string) context.Context {
+	if traceparent == "" && tracestate == "" {
+		return ctx
+	}
+	return otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier{
+		"traceparent": traceparent,
+		"tracestate":  tracestate,
+	})
+}
+
 // ShutdownTracing 优雅关闭追踪，flush 剩余 span
 func ShutdownTracing(ctx context.Context, tp *sdktrace.TracerProvider) error {
 	if tp == nil {
