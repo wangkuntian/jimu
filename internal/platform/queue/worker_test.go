@@ -10,6 +10,11 @@ import (
 	"jimu/internal/platform/queue/domain"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
 
@@ -214,4 +219,53 @@ func TestWorkerPoolSubmitAndDelayed(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, delayed)
 	assert.Len(t, producer.submittedDels, 1)
+}
+
+// TestWorkerPoolSubmitInjectsTrace 验证 Submit 将调用方 trace 上下文注入 JobData
+func TestWorkerPoolSubmitInjectsTrace(t *testing.T) {
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	producer := &fakeProducer{}
+	wp := NewWorkerPool(DefaultWorkerConfig, producer, fakeStore())
+
+	sc := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    trace.TraceID{0x01},
+		SpanID:     trace.SpanID{0x01},
+		TraceFlags: trace.FlagsSampled,
+	})
+	ctx := trace.ContextWithSpanContext(context.Background(), sc)
+
+	_, err := wp.Submit(ctx, "echo", `{"x":1}`)
+	assert.NoError(t, err)
+	require.Len(t, producer.submitted, 1)
+	assert.NotEmpty(t, producer.submitted[0].Traceparent)
+}
+
+// TestWorkerPoolConsumeRestoresTrace 验证消费者从 JobData 恢复上游 trace，链路延续
+func TestWorkerPoolConsumeRestoresTrace(t *testing.T) {
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	otel.SetTracerProvider(sdktrace.NewTracerProvider())
+
+	var gotTraceID trace.TraceID
+	RegisterWorker("trace:echo", func(ctx context.Context, payload string) error {
+		gotTraceID = trace.SpanContextFromContext(ctx).TraceID()
+		return nil
+	})
+
+	sc := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    trace.TraceID{0x01},
+		SpanID:     trace.SpanID{0x01},
+		TraceFlags: trace.FlagsSampled,
+	})
+	carrier := propagation.MapCarrier{}
+	propagation.TraceContext{}.Inject(trace.ContextWithSpanContext(context.Background(), sc), carrier)
+
+	consumer := &fakeConsumer{jobs: make(chan *JobData, 1)}
+	consumer.jobs <- &JobData{ID: 1, Type: "trace:echo", Payload: "hello", Traceparent: carrier.Get("traceparent")}
+
+	wp := NewWorkerPool(WorkerConfig{Workers: 1, PollTimeout: 10 * time.Millisecond}, consumer, fakeStore())
+	wp.Start()
+	time.Sleep(100 * time.Millisecond)
+	wp.Stop()
+
+	assert.Equal(t, sc.TraceID(), gotTraceID)
 }

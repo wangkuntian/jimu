@@ -6,8 +6,14 @@ import (
 	"sync"
 	"time"
 
+	"jimu/internal/platform/observability"
 	"jimu/internal/platform/queue/domain"
 	apperrors "jimu/internal/shared/errors"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 var (
@@ -32,6 +38,24 @@ func GetWorker(jobType string) (WorkerFunc, bool) {
 	fn, ok := jobWorkerMap[jobType]
 	return fn, ok
 }
+
+var (
+	queueTracer = otel.Tracer("jimu.queue")
+
+	queueJobsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "jimu",
+		Subsystem: "queue",
+		Name:      "jobs_total",
+		Help:      "Total number of queue jobs executed",
+	}, []string{"type", "result"})
+
+	queueDeadLettersTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "jimu",
+		Subsystem: "queue",
+		Name:      "deadletters_total",
+		Help:      "Total number of jobs moved to dead letter after retries exhausted",
+	}, []string{"type"})
+)
 
 // WorkerConfig Worker 池配置
 type WorkerConfig struct {
@@ -133,6 +157,14 @@ func (p *WorkerPool) delayedJobScanner() {
 func (p *WorkerPool) executeJob(data *JobData) {
 	ctx, cancel := context.WithTimeout(p.ctx, 5*time.Minute)
 	defer cancel()
+	// 恢复生产者注入的 trace 上下文，跨 MQ 延续分布式链路
+	ctx = observability.ContextWithTrace(ctx, data.Traceparent, data.Tracestate)
+	ctx, span := queueTracer.Start(ctx, "queue.consume "+data.Type)
+	defer span.End()
+	span.SetAttributes(
+		attribute.Int64("jimu.job.id", int64(data.ID)),
+		attribute.String("jimu.job.type", data.Type),
+	)
 
 	if p.store != nil {
 		if err := p.store.MarkRunning(ctx, data.ID); err != nil {
@@ -142,6 +174,7 @@ func (p *WorkerPool) executeJob(data *JobData) {
 
 	fn, ok := GetWorker(data.Type)
 	if !ok {
+		queueJobsTotal.WithLabelValues(data.Type, "failure").Inc()
 		if p.store != nil {
 			if err := p.store.MarkFailed(ctx, data.ID, data.Type, data.Payload,
 				apperrors.New(apperrors.CodeInternalError, "no worker for type: "+data.Type), 0); err != nil {
@@ -155,6 +188,9 @@ func (p *WorkerPool) executeJob(data *JobData) {
 	start := time.Now()
 	err := fn(ctx, data.Payload)
 	duration := time.Since(start).Milliseconds()
+	if err != nil {
+		span.RecordError(err)
+	}
 
 	if p.store != nil {
 		if err != nil {
@@ -173,12 +209,14 @@ func (p *WorkerPool) executeJob(data *JobData) {
 	// Kafka/RabbitMQ 的 Nack 为 no-op，但 store 已把 job 状态置回 pending，
 	// 重试提交由 Submit/SubmitDelayed 的下次调用驱动。
 	if err != nil {
+		queueJobsTotal.WithLabelValues(data.Type, "failure").Inc()
 		if p.store != nil {
 			// store 判定是否需要重试（看 Attempts vs MaxAttempts）
 			requeue := p.needRetry(ctx, data)
 			if requeue {
 				_ = p.queue.Nack(ctx, data)
 			} else {
+				queueDeadLettersTotal.WithLabelValues(data.Type).Inc()
 				_ = p.queue.Ack(ctx, data)
 			}
 		} else {
@@ -186,6 +224,7 @@ func (p *WorkerPool) executeJob(data *JobData) {
 			_ = p.queue.Nack(ctx, data)
 		}
 	} else {
+		queueJobsTotal.WithLabelValues(data.Type, "success").Inc()
 		_ = p.queue.Ack(ctx, data)
 	}
 }
@@ -210,7 +249,8 @@ func (p *WorkerPool) Submit(ctx context.Context, jobType, payload string) (*doma
 	if err != nil {
 		return nil, err
 	}
-	if err := producer.Submit(ctx, &JobData{ID: job.ID, Type: jobType, Payload: payload}); err != nil {
+	tp, ts := observability.TraceFromContext(ctx)
+	if err := producer.Submit(ctx, &JobData{ID: job.ID, Type: jobType, Payload: payload, Traceparent: tp, Tracestate: ts}); err != nil {
 		return nil, err
 	}
 	return job, nil
@@ -226,7 +266,8 @@ func (p *WorkerPool) SubmitDelayed(ctx context.Context, jobType, payload string,
 	if err != nil {
 		return nil, err
 	}
-	if err := producer.SubmitDelayed(ctx, &JobData{ID: job.ID, Type: jobType, Payload: payload}, delay); err != nil {
+	tp, ts := observability.TraceFromContext(ctx)
+	if err := producer.SubmitDelayed(ctx, &JobData{ID: job.ID, Type: jobType, Payload: payload, Traceparent: tp, Tracestate: ts}, delay); err != nil {
 		return nil, err
 	}
 	return job, nil

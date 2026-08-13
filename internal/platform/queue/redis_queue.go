@@ -163,9 +163,11 @@ func (q *RedisQueue) MoveDueJobs(ctx context.Context) (int, error) {
 
 // JobData Redis 中的任务数据
 type JobData struct {
-	ID       uint64 `json:"id"`
-	Type     string `json:"type"`
-	Payload  string `json:"payload"`
-	Token    string `json:"token,omitempty"`    // 单次消费唯一标识，区分重复入队的同名任务
-	Deadline int64  `json:"deadline,omitempty"` // 可见性超时时间戳（unix 秒）
+	ID          uint64 `json:"id"`
+	Type        string `json:"type"`
+	Payload     string `json:"payload"`
+	Token       string `json:"token,omitempty"`       // 单次消费唯一标识，区分重复入队的同名任务
+	Deadline    int64  `json:"deadline,omitempty"`    // 可见性超时时间戳（unix 秒）
+	Traceparent string `json:"traceparent,omitempty"` // W3C 追踪上下文，跨 MQ 透传
+	Tracestate  string `json:"tracestate,omitempty"`  // W3C 追踪状态，跨 MQ 透传
 }
