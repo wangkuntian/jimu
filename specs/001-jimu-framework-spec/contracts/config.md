@@ -38,6 +38,7 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `redis` | 地址、密码（缓存/会话/限流/锁共用） |
 | `auth` | JWT 密钥/有效期、APIKey 中间件、限流参数 |
 | `oauth.providers` | `google`/`github`/`wechat` 各含 client_id/secret/redirect_url/enabled |
+| `http_client` | 统一出站 HTTP：timeout_sec/max_retries/retry_interval_ms（仅网络错误与 5xx 重试，指数退避，traceparent 注入） |
 | `captcha` | enabled 开关 |
 | `queue` | type + 各中间件连接 |
 | `outbox` | publisher 切换 |
