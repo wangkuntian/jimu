@@ -19,6 +19,8 @@
 | POST | `/api/v1/auth/refresh` | 刷新令牌 |
 | POST | `/api/v1/auth/logout` | 登出 |
 | POST | `/api/v1/auth/logout-all` | 全设备登出 |
+| POST | `/api/v1/auth/forgot-password` | 邮箱申请重置验证码（IP 维度限流，防枚举） |
+| POST | `/api/v1/auth/reset-password` | 验证码 + 新密码重置（一次性，成功后登出全部会话） |
 | GET  | `/api/v1/auth/oauth/{provider}/login` | 第三方登录入口（google/github/wechat） |
 
 ## Admin 模块

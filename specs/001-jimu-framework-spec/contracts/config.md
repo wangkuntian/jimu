@@ -26,9 +26,10 @@
 ```bash
 DB_PASSWORD_FILE=/run/secrets/db_password
 JWT_SECRET_FILE=/run/secrets/jwt_secret
+ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 ```
 
-实现：`getEnvOrFile`（`config.go:343-390`），支持 `DB_PASSWORD`/`JWT_SECRET`/`REDIS_PASSWORD` 等。
+实现：`getEnvOrFile`（`config.go:343-390`），支持 `DB_PASSWORD`/`JWT_SECRET`/`REDIS_PASSWORD`/`ENCRYPTION_KEY` 等。
 
 ## 关键配置组
 
@@ -39,13 +40,13 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 | `db` | host/port/user/password/name + `read_hosts`/`read_ports`（读写分离） |
 | `redis` | 地址、密码（缓存/会话/限流/锁共用） |
 | `log` | level/format/output + lumberjack 滚动（max_size/max_backups/max_age/compress） |
-| `auth` | JWT 密钥/有效期、APIKey 中间件、限流参数 |
+| `auth` | JWT 密钥/有效期、APIKey 中间件、限流参数、`reset_code_ttl_min`（密码重置验证码有效期，默认 15） |
 | `server` | timeout_sec、rate_limit_rate/rate_limit_burst（全局限流） |
 | `id` | `worker_id`（多实例唯一，雪花 ID） |
 | `cache` | prefix（缓存 key 前缀，多实例隔离） |
 | `audit` | queue_size/batch_size/flush_interval_ms（批量落库） |
 | `storage` | type（local/s3/oss/minio）+ 对象存储连接参数 |
-| `security` | 安全响应头 + csrf_secret |
+| `security` | 安全响应头 + csrf_secret + `encryption_key`（字段级加密密钥，≥32 字符；不注入时 email/phone 明文存储） |
 | `queue` | type + 各中间件连接 |
 | `outbox` | publisher 切换 |
 | `scheduler` | store 切换 |
