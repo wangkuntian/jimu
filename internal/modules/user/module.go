@@ -9,6 +9,7 @@ import (
 	"jimu/internal/modules/user/infrastructure"
 	"jimu/internal/modules/user/interfaces"
 	"jimu/internal/platform/cache"
+	"jimu/internal/platform/encryption"
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/outbox"
 
@@ -26,15 +27,18 @@ func New(db *gorm.DB, cfg config.Config, deps ...interface{}) *Module {
 	repo := infrastructure.NewMysqlRepository(db)
 	var c cache.Cache
 	var ob *outbox.Outbox
+	var cipher *encryption.Cipher
 	for _, dep := range deps {
 		switch d := dep.(type) {
 		case *redis.Client:
 			c = cache.NewRedisCache(d, cfg.Cache.Prefix)
 		case *outbox.Outbox:
 			ob = d
+		case *encryption.Cipher:
+			cipher = d
 		}
 	}
-	service := application.NewUserService(repo, c, ob)
+	service := application.NewUserService(repo, c, ob, cipher)
 	m := &Module{service: service, outbox: ob}
 	for _, dep := range deps {
 		if rdb, ok := dep.(*redis.Client); ok {
@@ -62,7 +66,7 @@ func (m *Module) RegisterEvents(e contract.EventBus) {
 		if evt, ok := payload.(contract.UserCreatedEvent); ok {
 			e.Publish(contract.UserCreatedEmailNotification, notification.Message{
 				Channel: notification.ChannelEmail,
-				To:      "", // 实际应从用户服务获取邮箱
+				To:      evt.Email,
 				Subject: "Welcome to Jimu",
 				Body:    fmt.Sprintf("Hi %s, your account has been created successfully.", evt.Username),
 				Data: map[string]string{

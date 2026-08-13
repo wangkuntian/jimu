@@ -77,6 +77,56 @@ func TestMysqlRepositoryListCountAndPagination(t *testing.T) {
 	assert.True(t, users[0].ID > users[1].ID)
 }
 
+func TestMysqlRepositoryFindByEmailHash(t *testing.T) {
+	db := newUserTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+
+	u := newTestUser()
+	hash := testutil.RandomString(32)
+	u.EmailHash = &hash
+	require.NoError(t, repo.Create(ctx, u))
+
+	got, err := repo.FindByEmailHash(ctx, hash)
+	assert.NoError(t, err)
+	assert.Equal(t, u.ID, got.ID)
+
+	_, err = repo.FindByEmailHash(ctx, "missing-hash")
+	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestMysqlRepositoryFindByPhoneHash(t *testing.T) {
+	db := newUserTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+
+	u := newTestUser()
+	hash := testutil.RandomString(32)
+	u.PhoneHash = &hash
+	require.NoError(t, repo.Create(ctx, u))
+
+	got, err := repo.FindByPhoneHash(ctx, hash)
+	assert.NoError(t, err)
+	assert.Equal(t, u.ID, got.ID)
+
+	_, err = repo.FindByPhoneHash(ctx, "missing-hash")
+	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestMysqlRepositoryUpdatePassword(t *testing.T) {
+	db := newUserTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+
+	u := newTestUser()
+	require.NoError(t, repo.Create(ctx, u))
+
+	require.NoError(t, repo.UpdatePassword(ctx, u.ID, "new-hash"))
+	got, err := repo.FindByID(ctx, u.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "new-hash", got.Password)
+}
+
 func TestMysqlRepositoryUpdateAndDelete(t *testing.T) {
 	db := newUserTestDB(t)
 	repo := NewMysqlRepository(db)

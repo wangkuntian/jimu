@@ -47,6 +47,34 @@ func TestUserServiceListPassesPaginationAndReturnsDTO(t *testing.T) {
 	}
 }
 
+func TestUserServiceBatchDelete(t *testing.T) {
+	ctx := context.Background()
+
+	// 全部失败：每个 id 找不到用户
+	_, err := NewUserService(&fakeUserRepository{
+		user:    &domain.User{ID: 1},
+		findErr: gorm.ErrRecordNotFound,
+	}, nil).BatchDelete(ctx, []uint64{1, 2})
+	if appCode(err) != apperrors.CodeInternalError {
+		t.Fatalf("all-fail code = %d, want %d", appCode(err), apperrors.CodeInternalError)
+	}
+
+	// 全部失败：找到但删除报错
+	_, err = NewUserService(&fakeUserRepository{
+		user:      &domain.User{ID: 1},
+		deleteErr: stderrors.New("boom"),
+	}, nil).BatchDelete(ctx, []uint64{1})
+	if appCode(err) != apperrors.CodeInternalError {
+		t.Fatalf("delete-fail code = %d, want %d", appCode(err), apperrors.CodeInternalError)
+	}
+
+	// 全部成功
+	res, err := NewUserService(&fakeUserRepository{user: &domain.User{ID: 1}}, nil).BatchDelete(ctx, []uint64{1})
+	if err != nil || res.Success != 1 || res.Failed != 0 {
+		t.Fatalf("success res = %#v err = %v", res, err)
+	}
+}
+
 func TestUserServiceGetMapsNotFound(t *testing.T) {
 	service := NewUserService(&fakeUserRepository{findErr: gorm.ErrRecordNotFound}, nil)
 
@@ -57,15 +85,16 @@ func TestUserServiceGetMapsNotFound(t *testing.T) {
 }
 
 type fakeUserRepository struct {
-	user    *domain.User
-	users   []domain.User
-	total   int64
-	findErr error
-	listErr error
-	offset  int
-	limit   int
-	sort    string
-	order   string
+	user      *domain.User
+	users     []domain.User
+	total     int64
+	findErr   error
+	listErr   error
+	deleteErr error
+	offset    int
+	limit     int
+	sort      string
+	order     string
 }
 
 func (r *fakeUserRepository) FindByID(context.Context, uint64) (*domain.User, error) {
@@ -86,7 +115,14 @@ func (r *fakeUserRepository) List(_ context.Context, offset, limit int, sort, or
 
 func (r *fakeUserRepository) Create(context.Context, *domain.User) error { return nil }
 func (r *fakeUserRepository) Update(context.Context, *domain.User) error { return nil }
-func (r *fakeUserRepository) Delete(context.Context, uint64) error       { return nil }
+func (r *fakeUserRepository) Delete(context.Context, uint64) error       { return r.deleteErr }
+func (r *fakeUserRepository) FindByEmailHash(context.Context, string) (*domain.User, error) {
+	return nil, gorm.ErrRecordNotFound
+}
+func (r *fakeUserRepository) FindByPhoneHash(context.Context, string) (*domain.User, error) {
+	return nil, gorm.ErrRecordNotFound
+}
+func (r *fakeUserRepository) UpdatePassword(context.Context, uint64, string) error { return nil }
 
 func appCode(err error) int {
 	var appErr *apperrors.AppError
@@ -136,6 +172,13 @@ func (r *fakeOutboxUserRepo) Create(_ context.Context, u *domain.User) error {
 }
 func (r *fakeOutboxUserRepo) Update(context.Context, *domain.User) error { return nil }
 func (r *fakeOutboxUserRepo) Delete(context.Context, uint64) error       { return nil }
+func (r *fakeOutboxUserRepo) FindByEmailHash(context.Context, string) (*domain.User, error) {
+	return nil, gorm.ErrRecordNotFound
+}
+func (r *fakeOutboxUserRepo) FindByPhoneHash(context.Context, string) (*domain.User, error) {
+	return nil, gorm.ErrRecordNotFound
+}
+func (r *fakeOutboxUserRepo) UpdatePassword(context.Context, uint64, string) error { return nil }
 
 func TestCreateWritesOutbox(t *testing.T) {
 	svc, store := createOutboxUserService()

@@ -18,6 +18,7 @@ const (
 type UserCreatedEvent struct {
 	UserID   uint64 `json:"user_id"`
 	Username string `json:"username"`
+	Email    string `json:"email"` // 创建时提交的邮箱（明文，供通知渠道使用）
 }
 
 // UserUpdatedEvent 用户更新事件

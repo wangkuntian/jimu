@@ -43,6 +43,8 @@ type ListUserFilter struct {
 type AdminCreateUserRequest struct {
 	Username string   `json:"username" binding:"required,min=4,max=64"`
 	Password string   `json:"password" binding:"required,min=8,max=32"`
+	Email    string   `json:"email" binding:"omitempty,email"`
+	Phone    string   `json:"phone" binding:"omitempty"`
 	Status   int8     `json:"status"`
 	Roles    []string `json:"roles"`
 }
@@ -157,6 +159,8 @@ func (s *AdminUserService) CreateUser(ctx context.Context, req AdminCreateUserRe
 	user := &domain.User{
 		Username: req.Username,
 		Password: string(hashedPassword),
+		Email:    req.Email,
+		Phone:    req.Phone,
 		Status:   req.Status,
 	}
 	if req.Status == 0 {
@@ -180,10 +184,12 @@ func (s *AdminUserService) DisableUser(ctx context.Context, id uint64) error {
 
 // AdminUpdateUserRequest 管理员更新用户请求
 type AdminUpdateUserRequest struct {
-	Status *int8 `json:"status" binding:"omitempty,oneof=0 1"`
+	Status *int8   `json:"status" binding:"omitempty,oneof=0 1"`
+	Email  *string `json:"email" binding:"omitempty,email"`
+	Phone  *string `json:"phone" binding:"omitempty"`
 }
 
-// UpdateUser 更新用户状态
+// UpdateUser 更新用户状态/联系方式（Save 全字段保存，hook 重新加密并刷新盲索引）
 func (s *AdminUserService) UpdateUser(ctx context.Context, id uint64, req AdminUpdateUserRequest) error {
 	user, err := s.userRepo.FindByID(ctx, id)
 	if err != nil {
@@ -194,6 +200,12 @@ func (s *AdminUserService) UpdateUser(ctx context.Context, id uint64, req AdminU
 	}
 	if req.Status != nil {
 		user.Status = *req.Status
+	}
+	if req.Email != nil {
+		user.Email = *req.Email
+	}
+	if req.Phone != nil {
+		user.Phone = *req.Phone
 	}
 	return s.userRepo.Update(ctx, user)
 }
