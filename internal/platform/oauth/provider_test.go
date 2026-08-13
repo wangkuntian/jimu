@@ -4,6 +4,8 @@ package oauth
 import (
 	"testing"
 
+	"jimu/internal/platform/httpclient"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,7 +20,7 @@ func TestGoogleAuthURL(t *testing.T) {
 		ClientID:     "id",
 		ClientSecret: "secret",
 		RedirectURL:  "http://localhost:8080/api/v1/oauth/google/callback",
-	})
+	}, httpclient.New(httpclient.Config{}))
 	url := p.AuthURL("state123")
 	assert.Contains(t, url, "state=state123")
 	assert.Contains(t, url, "client_id=id")
