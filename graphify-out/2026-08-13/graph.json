@@ -944,7 +944,7 @@
       "_origin": "ast",
       "id": "internal_app_authz_bootstrap_test",
       "community": 21,
-      "community_name": "JobRegistry",
+      "community_name": "Router",
       "norm_label": "authz_bootstrap_test.go"
     },
     {
@@ -955,7 +955,7 @@
       "_origin": "ast",
       "id": "internal_app_authz_bootstrap_test_testbusinessroutesrequireprotectedmiddleware",
       "community": 21,
-      "community_name": "JobRegistry",
+      "community_name": "Router",
       "norm_label": "testbusinessroutesrequireprotectedmiddleware()"
     },
     {
@@ -966,7 +966,7 @@
       "_origin": "ast",
       "id": "app_fakeauthzmodule",
       "community": 21,
-      "community_name": "JobRegistry",
+      "community_name": "Router",
       "norm_label": "fakeauthzmodule"
     },
     {
@@ -977,7 +977,7 @@
       "_origin": "ast",
       "id": "app_fakeauthzmodule_name",
       "community": 21,
-      "community_name": "JobRegistry",
+      "community_name": "Router",
       "norm_label": ".name()"
     },
     {
@@ -987,7 +987,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "app_fakeauthzmodule_registerhttp",
-      "community": 18,
+      "community": 21,
       "community_name": "Router",
       "norm_label": ".registerhttp()"
     },
@@ -998,7 +998,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "app_fakeauthzmodule_registerjobs",
-      "community": 21,
+      "community": 18,
       "community_name": "JobRegistry",
       "norm_label": ".registerjobs()"
     },
@@ -1010,7 +1010,7 @@
       "_origin": "ast",
       "id": "app_fakeauthzmodule_registerevents",
       "community": 21,
-      "community_name": "JobRegistry",
+      "community_name": "Router",
       "norm_label": ".registerevents()"
     },
     {
@@ -1021,7 +1021,7 @@
       "_origin": "ast",
       "id": "internal_app_authz_bootstrap_test_go_eventbus",
       "community": 21,
-      "community_name": "JobRegistry",
+      "community_name": "Router",
       "norm_label": "eventbus"
     },
     {
@@ -1032,7 +1032,7 @@
       "_origin": "ast",
       "id": "app_fakeauthzmodule_httpmiddleware",
       "community": 21,
-      "community_name": "JobRegistry",
+      "community_name": "Router",
       "norm_label": ".httpmiddleware()"
     },
     {
@@ -1043,7 +1043,7 @@
       "_origin": "ast",
       "id": "internal_app_authz_bootstrap_test_go_handlerfunc",
       "community": 21,
-      "community_name": "JobRegistry",
+      "community_name": "Router",
       "norm_label": "handlerfunc"
     },
     {
@@ -1065,7 +1065,7 @@
       "_origin": "ast",
       "id": "app_fakeauthzmodule_protectedhttpmiddleware",
       "community": 21,
-      "community_name": "JobRegistry",
+      "community_name": "Router",
       "norm_label": ".protectedhttpmiddleware()"
     },
     {
@@ -1076,7 +1076,7 @@
       "_origin": "ast",
       "id": "app_fakebusinessmodule",
       "community": 21,
-      "community_name": "JobRegistry",
+      "community_name": "Router",
       "norm_label": "fakebusinessmodule"
     },
     {
@@ -1087,7 +1087,7 @@
       "_origin": "ast",
       "id": "app_fakebusinessmodule_name",
       "community": 21,
-      "community_name": "JobRegistry",
+      "community_name": "Router",
       "norm_label": ".name()"
     },
     {
@@ -1098,7 +1098,7 @@
       "_origin": "ast",
       "id": "app_fakebusinessmodule_registerhttp",
       "community": 21,
-      "community_name": "JobRegistry",
+      "community_name": "Router",
       "norm_label": ".registerhttp()"
     },
     {
@@ -1109,7 +1109,7 @@
       "_origin": "ast",
       "id": "app_fakebusinessmodule_registerjobs",
       "community": 21,
-      "community_name": "JobRegistry",
+      "community_name": "Router",
       "norm_label": ".registerjobs()"
     },
     {
@@ -1120,7 +1120,7 @@
       "_origin": "ast",
       "id": "app_fakebusinessmodule_registerevents",
       "community": 21,
-      "community_name": "JobRegistry",
+      "community_name": "Router",
       "norm_label": ".registerevents()"
     },
     {
@@ -1549,7 +1549,7 @@
       "_origin": "ast",
       "id": "config_captchaconfig",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": "captchaconfig"
     },
     {
@@ -1757,7 +1757,7 @@
       "source_location": "L252",
       "_origin": "ast",
       "id": "config_dbconfig",
-      "community": 107,
+      "community": 84,
       "community_name": "DBConfig",
       "norm_label": "dbconfig"
     },
@@ -1790,7 +1790,7 @@
       "source_location": "L291",
       "_origin": "ast",
       "id": "config_authconfig",
-      "community": 16,
+      "community": 2,
       "community_name": "New",
       "norm_label": "authconfig"
     },
@@ -2099,7 +2099,7 @@
       "_origin": "ast",
       "id": "internal_contract_module",
       "community": 18,
-      "community_name": "Router",
+      "community_name": "JobRegistry",
       "norm_label": "contract/module.go"
     },
     {
@@ -2121,7 +2121,7 @@
       "_origin": "ast",
       "id": "contract_errorsource",
       "community": 18,
-      "community_name": "Router",
+      "community_name": "JobRegistry",
       "norm_label": "errorsource"
     },
     {
@@ -2132,7 +2132,7 @@
       "_origin": "ast",
       "id": "contract_componentprovider",
       "community": 18,
-      "community_name": "Router",
+      "community_name": "JobRegistry",
       "norm_label": "componentprovider"
     },
     {
@@ -2143,7 +2143,7 @@
       "_origin": "ast",
       "id": "contract_httpmiddlewareprovider",
       "community": 18,
-      "community_name": "Router",
+      "community_name": "JobRegistry",
       "norm_label": "httpmiddlewareprovider"
     },
     {
@@ -2154,7 +2154,7 @@
       "_origin": "ast",
       "id": "contract_protectedhttpmiddlewareprovider",
       "community": 18,
-      "community_name": "Router",
+      "community_name": "JobRegistry",
       "norm_label": "protectedhttpmiddlewareprovider"
     },
     {
@@ -2164,7 +2164,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "contract_router",
-      "community": 18,
+      "community": 21,
       "community_name": "Router",
       "norm_label": "router"
     },
@@ -2175,7 +2175,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "contract_jobregistry",
-      "community": 21,
+      "community": 18,
       "community_name": "JobRegistry",
       "norm_label": "jobregistry"
     },
@@ -2187,7 +2187,7 @@
       "_origin": "ast",
       "id": "contract_eventbus",
       "community": 18,
-      "community_name": "Router",
+      "community_name": "JobRegistry",
       "norm_label": "eventbus"
     },
     {
@@ -2198,7 +2198,7 @@
       "_origin": "ast",
       "id": "contract_module",
       "community": 18,
-      "community_name": "Router",
+      "community_name": "JobRegistry",
       "norm_label": "module"
     },
     {
@@ -2241,8 +2241,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_contract_openapi_test",
-      "community": 131,
-      "community_name": "TestOpenAPIIncludesCRUDContract",
+      "community": 9,
+      "community_name": "T",
       "norm_label": "openapi_test.go"
     },
     {
@@ -2252,8 +2252,8 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "internal_contract_openapi_test_testopenapiincludescrudcontract",
-      "community": 131,
-      "community_name": "TestOpenAPIIncludesCRUDContract",
+      "community": 9,
+      "community_name": "T",
       "norm_label": "testopenapiincludescrudcontract()"
     },
     {
@@ -2263,8 +2263,8 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "internal_contract_openapi_test_readopenapi",
-      "community": 131,
-      "community_name": "TestOpenAPIIncludesCRUDContract",
+      "community": 9,
+      "community_name": "T",
       "norm_label": "readopenapi()"
     },
     {
@@ -2274,8 +2274,8 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "internal_contract_openapi_test_assertqueryparams",
-      "community": 131,
-      "community_name": "TestOpenAPIIncludesCRUDContract",
+      "community": 9,
+      "community_name": "T",
       "norm_label": "assertqueryparams()"
     },
     {
@@ -2469,7 +2469,7 @@
       "label": "AdminConfigService",
       "file_type": "code",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L13",
+      "source_location": "L14",
       "_origin": "ast",
       "id": "application_adminconfigservice",
       "community": 117,
@@ -2502,7 +2502,7 @@
       "label": "NewAdminConfigService()",
       "file_type": "code",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L20",
+      "source_location": "L21",
       "_origin": "ast",
       "id": "internal_modules_admin_application_config_service_newadminconfigservice",
       "community": 117,
@@ -2513,7 +2513,7 @@
       "label": ".GetAllConfig()",
       "file_type": "code",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L25",
+      "source_location": "L26",
       "_origin": "ast",
       "id": "application_adminconfigservice_getallconfig",
       "community": 117,
@@ -2535,7 +2535,7 @@
       "label": ".UpdateConfig()",
       "file_type": "code",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L44",
+      "source_location": "L45",
       "_origin": "ast",
       "id": "application_adminconfigservice_updateconfig",
       "community": 117,
@@ -2546,7 +2546,7 @@
       "label": ".ReloadConfig()",
       "file_type": "code",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L54",
+      "source_location": "L55",
       "_origin": "ast",
       "id": "application_adminconfigservice_reloadconfig",
       "community": 117,
@@ -2557,7 +2557,7 @@
       "label": ".IsValidKey()",
       "file_type": "code",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L66",
+      "source_location": "L67",
       "_origin": "ast",
       "id": "application_adminconfigservice_isvalidkey",
       "community": 117,
@@ -2568,7 +2568,7 @@
       "label": ".configKey()",
       "file_type": "code",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L76",
+      "source_location": "L77",
       "_origin": "ast",
       "id": "application_adminconfigservice_configkey",
       "community": 117,
@@ -3748,8 +3748,8 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "internal_modules_admin_application_users_service_newadminuserservice",
-      "community": 154,
-      "community_name": "NewAdminUserService",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "newadminuserservice()"
     },
     {
@@ -3858,8 +3858,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_admin_application_users_service_test",
-      "community": 154,
-      "community_name": "NewAdminUserService",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "users_service_test.go"
     },
     {
@@ -3869,8 +3869,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "application_testrole",
-      "community": 154,
-      "community_name": "NewAdminUserService",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "testrole"
     },
     {
@@ -3880,8 +3880,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "application_testrole_tablename",
-      "community": 154,
-      "community_name": "NewAdminUserService",
+      "community": 136,
+      "community_name": "New",
       "norm_label": ".tablename()"
     },
     {
@@ -3891,8 +3891,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "internal_modules_admin_application_users_service_test_testadminuserservicelistusers",
-      "community": 154,
-      "community_name": "NewAdminUserService",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "testadminuserservicelistusers()"
     },
     {
@@ -3902,8 +3902,8 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "internal_modules_admin_application_users_service_test_testadminuserservicegetuser",
-      "community": 154,
-      "community_name": "NewAdminUserService",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "testadminuserservicegetuser()"
     },
     {
@@ -3913,8 +3913,8 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "internal_modules_admin_application_users_service_test_testadminuserservicecreateuser",
-      "community": 154,
-      "community_name": "NewAdminUserService",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "testadminuserservicecreateuser()"
     },
     {
@@ -3924,8 +3924,8 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "internal_modules_admin_application_users_service_test_testadminuserserviceupdateuser",
-      "community": 154,
-      "community_name": "NewAdminUserService",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "testadminuserserviceupdateuser()"
     },
     {
@@ -3935,8 +3935,8 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "internal_modules_admin_application_users_service_test_testadminuserservicedisableuser",
-      "community": 154,
-      "community_name": "NewAdminUserService",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "testadminuserservicedisableuser()"
     },
     {
@@ -3946,8 +3946,8 @@
       "source_location": "L143",
       "_origin": "ast",
       "id": "internal_modules_admin_application_users_service_test_testadminuserserviceassignroles",
-      "community": 154,
-      "community_name": "NewAdminUserService",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "testadminuserserviceassignroles()"
     },
     {
@@ -3957,8 +3957,8 @@
       "source_location": "L186",
       "_origin": "ast",
       "id": "internal_modules_admin_application_users_service_test_testadminuserserviceassignrolesrolequeryerror",
-      "community": 154,
-      "community_name": "NewAdminUserService",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "testadminuserserviceassignrolesrolequeryerror()"
     },
     {
@@ -4486,7 +4486,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_infrastructure_job_history_repository",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": "job_history_repository.go"
     },
     {
@@ -4497,7 +4497,7 @@
       "_origin": "ast",
       "id": "infrastructure_mysqljobhistoryrepository",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": "mysqljobhistoryrepository"
     },
     {
@@ -4508,7 +4508,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_infrastructure_job_history_repository_go_db",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": "db"
     },
     {
@@ -4519,7 +4519,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_infrastructure_job_history_repository_newmysqljobhistoryrepository",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": "newmysqljobhistoryrepository()"
     },
     {
@@ -4530,7 +4530,7 @@
       "_origin": "ast",
       "id": "infrastructure_mysqljobhistoryrepository_create",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": ".create()"
     },
     {
@@ -4541,7 +4541,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_infrastructure_job_history_repository_go_context",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": "context"
     },
     {
@@ -4552,7 +4552,7 @@
       "_origin": "ast",
       "id": "infrastructure_mysqljobhistoryrepository_listbyjobid",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": ".listbyjobid()"
     },
     {
@@ -4771,8 +4771,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_apikeys",
-      "community": 221,
-      "community_name": "AdminAPIKeyHandler",
+      "community": 31,
+      "community_name": "Fail",
       "norm_label": "apikeys.go"
     },
     {
@@ -4782,8 +4782,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "interfaces_adminapikeyhandler",
-      "community": 221,
-      "community_name": "AdminAPIKeyHandler",
+      "community": 31,
+      "community_name": "Fail",
       "norm_label": "adminapikeyhandler"
     },
     {
@@ -4804,8 +4804,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "interfaces_adminapikeyhandler_list",
-      "community": 221,
-      "community_name": "AdminAPIKeyHandler",
+      "community": 31,
+      "community_name": "Fail",
       "norm_label": ".list()"
     },
     {
@@ -4815,8 +4815,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_apikeys_go_context",
-      "community": 221,
-      "community_name": "AdminAPIKeyHandler",
+      "community": 31,
+      "community_name": "Fail",
       "norm_label": "context"
     },
     {
@@ -4826,8 +4826,8 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "interfaces_adminapikeyhandler_create",
-      "community": 221,
-      "community_name": "AdminAPIKeyHandler",
+      "community": 31,
+      "community_name": "Fail",
       "norm_label": ".create()"
     },
     {
@@ -4837,8 +4837,8 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "interfaces_adminapikeyhandler_get",
-      "community": 221,
-      "community_name": "AdminAPIKeyHandler",
+      "community": 31,
+      "community_name": "Fail",
       "norm_label": ".get()"
     },
     {
@@ -4848,8 +4848,8 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "interfaces_adminapikeyhandler_revoke",
-      "community": 221,
-      "community_name": "AdminAPIKeyHandler",
+      "community": 31,
+      "community_name": "Fail",
       "norm_label": ".revoke()"
     },
     {
@@ -4915,7 +4915,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_audit",
       "community": 236,
-      "community_name": "NewAdminAuditHandler",
+      "community_name": "AuditRepository",
       "norm_label": "interfaces/audit.go"
     },
     {
@@ -4926,7 +4926,7 @@
       "_origin": "ast",
       "id": "interfaces_adminaudithandler",
       "community": 236,
-      "community_name": "NewAdminAuditHandler",
+      "community_name": "AuditRepository",
       "norm_label": "adminaudithandler"
     },
     {
@@ -4937,7 +4937,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_audit_newadminaudithandler",
       "community": 236,
-      "community_name": "NewAdminAuditHandler",
+      "community_name": "AuditRepository",
       "norm_label": "newadminaudithandler()"
     },
     {
@@ -4948,7 +4948,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_audit_go_db",
       "community": 236,
-      "community_name": "NewAdminAuditHandler",
+      "community_name": "AuditRepository",
       "norm_label": "db"
     },
     {
@@ -4981,7 +4981,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_audit_test",
       "community": 236,
-      "community_name": "NewAdminAuditHandler",
+      "community_name": "AuditRepository",
       "norm_label": "audit_test.go"
     },
     {
@@ -4992,7 +4992,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_audit_test_testadminaudithandlerlist",
       "community": 236,
-      "community_name": "NewAdminAuditHandler",
+      "community_name": "AuditRepository",
       "norm_label": "testadminaudithandlerlist()"
     },
     {
@@ -5234,7 +5234,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_fakes_test_go_interfaces_fakeuserrepository",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": "fakeuserrepository"
     },
     {
@@ -5245,7 +5245,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_fakes_test_go_context",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": "context"
     },
     {
@@ -5256,7 +5256,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_fakes_test_go_interfaces_fakeuserrepository_findbyid",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": ".findbyid()"
     },
     {
@@ -5267,7 +5267,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_fakes_test_go_interfaces_fakeuserrepository_findbyusername",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": ".findbyusername()"
     },
     {
@@ -5278,7 +5278,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_fakes_test_go_interfaces_fakeuserrepository_list",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": ".list()"
     },
     {
@@ -5289,7 +5289,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_fakes_test_go_interfaces_fakeuserrepository_create",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": ".create()"
     },
     {
@@ -5300,7 +5300,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_fakes_test_go_interfaces_fakeuserrepository_update",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": ".update()"
     },
     {
@@ -5311,7 +5311,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_fakes_test_go_interfaces_fakeuserrepository_delete",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": ".delete()"
     },
     {
@@ -5322,7 +5322,7 @@
       "_origin": "ast",
       "id": "interfaces_fakeapikeyrepo",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": "fakeapikeyrepo"
     },
     {
@@ -5333,7 +5333,7 @@
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_fakes_test_go_apikey",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": "apikey"
     },
     {
@@ -5344,7 +5344,7 @@
       "_origin": "ast",
       "id": "interfaces_fakeapikeyrepo_create",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": ".create()"
     },
     {
@@ -5355,7 +5355,7 @@
       "_origin": "ast",
       "id": "interfaces_fakeapikeyrepo_findbyid",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": ".findbyid()"
     },
     {
@@ -5366,7 +5366,7 @@
       "_origin": "ast",
       "id": "interfaces_fakeapikeyrepo_findbykeyhash",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": ".findbykeyhash()"
     },
     {
@@ -5377,7 +5377,7 @@
       "_origin": "ast",
       "id": "interfaces_fakeapikeyrepo_list",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": ".list()"
     },
     {
@@ -5388,7 +5388,7 @@
       "_origin": "ast",
       "id": "interfaces_fakeapikeyrepo_update",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": ".update()"
     },
     {
@@ -5399,7 +5399,7 @@
       "_origin": "ast",
       "id": "interfaces_fakeapikeyrepo_delete",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": ".delete()"
     },
     {
@@ -5410,7 +5410,7 @@
       "_origin": "ast",
       "id": "interfaces_fakeapikeyrepo_incrementusecount",
       "community": 170,
-      "community_name": "User",
+      "community_name": "Context",
       "norm_label": ".incrementusecount()"
     },
     {
@@ -6201,8 +6201,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_middleware",
-      "community": 136,
-      "community_name": "New",
+      "community": 154,
+      "community_name": "AdminAuthMiddleware",
       "norm_label": "admin/interfaces/middleware.go"
     },
     {
@@ -6212,8 +6212,8 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_middleware_adminauthmiddleware",
-      "community": 136,
-      "community_name": "New",
+      "community": 154,
+      "community_name": "AdminAuthMiddleware",
       "norm_label": "adminauthmiddleware()"
     },
     {
@@ -6223,8 +6223,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_middleware_go_handlerfunc",
-      "community": 136,
-      "community_name": "New",
+      "community": 154,
+      "community_name": "AdminAuthMiddleware",
       "norm_label": "handlerfunc"
     },
     {
@@ -6234,8 +6234,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_middleware_test",
-      "community": 136,
-      "community_name": "New",
+      "community": 154,
+      "community_name": "AdminAuthMiddleware",
       "norm_label": "admin/interfaces/middleware_test.go"
     },
     {
@@ -6245,8 +6245,8 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_middleware_test_testadminauthmiddleware",
-      "community": 136,
-      "community_name": "New",
+      "community": 154,
+      "community_name": "AdminAuthMiddleware",
       "norm_label": "testadminauthmiddleware()"
     },
     {
@@ -6289,8 +6289,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "interfaces_adminmonitoringhandler_status",
-      "community": 105,
-      "community_name": "AdminMonitoringService",
+      "community": 31,
+      "community_name": "Fail",
       "norm_label": ".status()"
     },
     {
@@ -6388,8 +6388,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_tasks",
-      "community": 31,
-      "community_name": "Fail",
+      "community": 36,
+      "community_name": "newTaskHandler",
       "norm_label": "tasks.go"
     },
     {
@@ -6399,8 +6399,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "interfaces_admintaskhandler",
-      "community": 31,
-      "community_name": "Fail",
+      "community": 36,
+      "community_name": "newTaskHandler",
       "norm_label": "admintaskhandler"
     },
     {
@@ -6410,8 +6410,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_tasks_newadmintaskhandler",
-      "community": 31,
-      "community_name": "Fail",
+      "community": 36,
+      "community_name": "newTaskHandler",
       "norm_label": "newadmintaskhandler()"
     },
     {
@@ -6421,8 +6421,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "interfaces_admintaskhandler_list",
-      "community": 31,
-      "community_name": "Fail",
+      "community": 36,
+      "community_name": "newTaskHandler",
       "norm_label": ".list()"
     },
     {
@@ -6432,8 +6432,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_tasks_go_context",
-      "community": 31,
-      "community_name": "Fail",
+      "community": 36,
+      "community_name": "newTaskHandler",
       "norm_label": "context"
     },
     {
@@ -6443,8 +6443,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "interfaces_admintaskhandler_trigger",
-      "community": 31,
-      "community_name": "Fail",
+      "community": 36,
+      "community_name": "newTaskHandler",
       "norm_label": ".trigger()"
     },
     {
@@ -6454,8 +6454,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "interfaces_admintaskhandler_toggle",
-      "community": 31,
-      "community_name": "Fail",
+      "community": 36,
+      "community_name": "newTaskHandler",
       "norm_label": ".toggle()"
     },
     {
@@ -6465,8 +6465,8 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "interfaces_admintaskhandler_history",
-      "community": 31,
-      "community_name": "Fail",
+      "community": 36,
+      "community_name": "newTaskHandler",
       "norm_label": ".history()"
     },
     {
@@ -6476,8 +6476,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_tasks_test",
-      "community": 136,
-      "community_name": "New",
+      "community": 36,
+      "community_name": "newTaskHandler",
       "norm_label": "tasks_test.go"
     },
     {
@@ -6487,8 +6487,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_tasks_test_newtaskhandler",
-      "community": 136,
-      "community_name": "New",
+      "community": 36,
+      "community_name": "newTaskHandler",
       "norm_label": "newtaskhandler()"
     },
     {
@@ -6498,8 +6498,8 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_tasks_test_testadmintaskhandlerlist",
-      "community": 136,
-      "community_name": "New",
+      "community": 36,
+      "community_name": "newTaskHandler",
       "norm_label": "testadmintaskhandlerlist()"
     },
     {
@@ -6509,8 +6509,8 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_tasks_test_testadmintaskhandlertrigger",
-      "community": 136,
-      "community_name": "New",
+      "community": 36,
+      "community_name": "newTaskHandler",
       "norm_label": "testadmintaskhandlertrigger()"
     },
     {
@@ -6520,8 +6520,8 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_tasks_test_testadmintaskhandlertoggle",
-      "community": 136,
-      "community_name": "New",
+      "community": 36,
+      "community_name": "newTaskHandler",
       "norm_label": "testadmintaskhandlertoggle()"
     },
     {
@@ -6531,8 +6531,8 @@
       "source_location": "L67",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_tasks_test_testadmintaskhandlerhistory",
-      "community": 136,
-      "community_name": "New",
+      "community": 36,
+      "community_name": "newTaskHandler",
       "norm_label": "testadmintaskhandlerhistory()"
     },
     {
@@ -6762,8 +6762,8 @@
       "source_location": "L174",
       "_origin": "ast",
       "id": "internal_modules_admin_interfaces_users_test_testpaginationfromquery",
-      "community": 48,
-      "community_name": "AdminUserHandler",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "testpaginationfromquery()"
     },
     {
@@ -7037,7 +7037,7 @@
       "source_location": "L196",
       "_origin": "ast",
       "id": "admin_module_registerjobs",
-      "community": 21,
+      "community": 18,
       "community_name": "JobRegistry",
       "norm_label": ".registerjobs()"
     },
@@ -7136,8 +7136,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_admin_module_test",
-      "community": 240,
-      "community_name": "admin/module_test.go",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "admin/module_test.go"
     },
     {
@@ -7147,8 +7147,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "admin_fakeeventbus",
-      "community": 240,
-      "community_name": "admin/module_test.go",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "fakeeventbus"
     },
     {
@@ -7158,8 +7158,8 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "admin_fakeeventbus_subscribe",
-      "community": 240,
-      "community_name": "admin/module_test.go",
+      "community": 136,
+      "community_name": "New",
       "norm_label": ".subscribe()"
     },
     {
@@ -7169,8 +7169,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "admin_fakeeventbus_publish",
-      "community": 240,
-      "community_name": "admin/module_test.go",
+      "community": 136,
+      "community_name": "New",
       "norm_label": ".publish()"
     },
     {
@@ -7323,8 +7323,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "internal_modules_admin_module_test_testmodulenameandnew",
-      "community": 240,
-      "community_name": "admin/module_test.go",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "testmodulenameandnew()"
     },
     {
@@ -7334,8 +7334,8 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "internal_modules_admin_module_test_testmoduleinitwsidempotent",
-      "community": 240,
-      "community_name": "admin/module_test.go",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "testmoduleinitwsidempotent()"
     },
     {
@@ -7345,8 +7345,8 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "internal_modules_admin_module_test_testmodulewshandler",
-      "community": 240,
-      "community_name": "admin/module_test.go",
+      "community": 136,
+      "community_name": "New",
       "norm_label": "testmodulewshandler()"
     },
     {
@@ -7433,8 +7433,8 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "internal_modules_audit_application_service_newauditservice",
-      "community": 59,
-      "community_name": "AuditService",
+      "community": 89,
+      "community_name": "NewAuditService",
       "norm_label": "newauditservice()"
     },
     {
@@ -7511,7 +7511,7 @@
       "_origin": "ast",
       "id": "internal_modules_audit_application_service_test",
       "community": 89,
-      "community_name": "fakeAuditRepository",
+      "community_name": "NewAuditService",
       "norm_label": "audit/application/service_test.go"
     },
     {
@@ -7522,7 +7522,7 @@
       "_origin": "ast",
       "id": "internal_modules_audit_application_service_test_testauditservicegetmapsnotfound",
       "community": 89,
-      "community_name": "fakeAuditRepository",
+      "community_name": "NewAuditService",
       "norm_label": "testauditservicegetmapsnotfound()"
     },
     {
@@ -7533,7 +7533,7 @@
       "_origin": "ast",
       "id": "internal_modules_audit_application_service_test_testauditservicelistreturnsdtoandpassespagination",
       "community": 89,
-      "community_name": "fakeAuditRepository",
+      "community_name": "NewAuditService",
       "norm_label": "testauditservicelistreturnsdtoandpassespagination()"
     },
     {
@@ -7543,8 +7543,8 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "application_fakeauditrepository",
-      "community": 89,
-      "community_name": "fakeAuditRepository",
+      "community": 30,
+      "community_name": "AuditLog",
       "norm_label": "fakeauditrepository"
     },
     {
@@ -7554,8 +7554,8 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "application_fakeauditrepository_create",
-      "community": 89,
-      "community_name": "fakeAuditRepository",
+      "community": 30,
+      "community_name": "AuditLog",
       "norm_label": ".create()"
     },
     {
@@ -7565,8 +7565,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_audit_application_service_test_go_context",
-      "community": 89,
-      "community_name": "fakeAuditRepository",
+      "community": 30,
+      "community_name": "AuditLog",
       "norm_label": "context"
     },
     {
@@ -7576,8 +7576,8 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "application_fakeauditrepository_createbatch",
-      "community": 89,
-      "community_name": "fakeAuditRepository",
+      "community": 30,
+      "community_name": "AuditLog",
       "norm_label": ".createbatch()"
     },
     {
@@ -7587,8 +7587,8 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "application_fakeauditrepository_findbyid",
-      "community": 89,
-      "community_name": "fakeAuditRepository",
+      "community": 30,
+      "community_name": "AuditLog",
       "norm_label": ".findbyid()"
     },
     {
@@ -7598,8 +7598,8 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "application_fakeauditrepository_list",
-      "community": 89,
-      "community_name": "fakeAuditRepository",
+      "community": 30,
+      "community_name": "AuditLog",
       "norm_label": ".list()"
     },
     {
@@ -7610,7 +7610,7 @@
       "_origin": "ast",
       "id": "internal_modules_audit_application_service_test_auditappcode",
       "community": 89,
-      "community_name": "fakeAuditRepository",
+      "community_name": "NewAuditService",
       "norm_label": "auditappcode()"
     },
     {
@@ -7873,8 +7873,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_audit_domain_audit",
-      "community": 59,
-      "community_name": "AuditService",
+      "community": 30,
+      "community_name": "AuditLog",
       "norm_label": "domain/audit.go"
     },
     {
@@ -7884,8 +7884,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "domain_change",
-      "community": 59,
-      "community_name": "AuditService",
+      "community": 30,
+      "community_name": "AuditLog",
       "norm_label": "change"
     },
     {
@@ -7928,8 +7928,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "domain_auditrepository",
-      "community": 59,
-      "community_name": "AuditService",
+      "community": 236,
+      "community_name": "AuditRepository",
       "norm_label": "auditrepository"
     },
     {
@@ -7972,8 +7972,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "internal_modules_audit_infrastructure_mysql_repository_newmysqlauditrepository",
-      "community": 62,
-      "community_name": "mysqlAuditRepository",
+      "community": 236,
+      "community_name": "AuditRepository",
       "norm_label": "newmysqlauditrepository()"
     },
     {
@@ -8159,8 +8159,8 @@
       "source_location": "L67",
       "_origin": "ast",
       "id": "interfaces_fakeauditrepository",
-      "community": 30,
-      "community_name": "AuditLog",
+      "community": 152,
+      "community_name": "fakeAuditRepository",
       "norm_label": "fakeauditrepository"
     },
     {
@@ -8170,8 +8170,8 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "interfaces_fakeauditrepository_create",
-      "community": 30,
-      "community_name": "AuditLog",
+      "community": 152,
+      "community_name": "fakeAuditRepository",
       "norm_label": ".create()"
     },
     {
@@ -8181,8 +8181,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_audit_interfaces_handler_test_go_context",
-      "community": 30,
-      "community_name": "AuditLog",
+      "community": 152,
+      "community_name": "fakeAuditRepository",
       "norm_label": "context"
     },
     {
@@ -8192,8 +8192,8 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "interfaces_fakeauditrepository_createbatch",
-      "community": 30,
-      "community_name": "AuditLog",
+      "community": 152,
+      "community_name": "fakeAuditRepository",
       "norm_label": ".createbatch()"
     },
     {
@@ -8203,8 +8203,8 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "interfaces_fakeauditrepository_findbyid",
-      "community": 30,
-      "community_name": "AuditLog",
+      "community": 152,
+      "community_name": "fakeAuditRepository",
       "norm_label": ".findbyid()"
     },
     {
@@ -8214,8 +8214,8 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "interfaces_fakeauditrepository_list",
-      "community": 30,
-      "community_name": "AuditLog",
+      "community": 152,
+      "community_name": "fakeAuditRepository",
       "norm_label": ".list()"
     },
     {
@@ -8313,8 +8313,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_audit_interfaces_middleware_test",
-      "community": 30,
-      "community_name": "AuditLog",
+      "community": 96,
+      "community_name": "AuditMiddleware",
       "norm_label": "audit/interfaces/middleware_test.go"
     },
     {
@@ -8346,8 +8346,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "internal_modules_audit_interfaces_middleware_test_testauditmiddlewareallowsanonymousrequest",
-      "community": 30,
-      "community_name": "AuditLog",
+      "community": 96,
+      "community_name": "AuditMiddleware",
       "norm_label": "testauditmiddlewareallowsanonymousrequest()"
     },
     {
@@ -8357,8 +8357,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_audit_interfaces_router",
-      "community": 49,
-      "community_name": "Module",
+      "community": 157,
+      "community_name": "New",
       "norm_label": "audit/interfaces/router.go"
     },
     {
@@ -8368,8 +8368,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "internal_modules_audit_interfaces_router_registerauditroutes",
-      "community": 49,
-      "community_name": "Module",
+      "community": 157,
+      "community_name": "New",
       "norm_label": "registerauditroutes()"
     },
     {
@@ -8379,8 +8379,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_audit_interfaces_router_go_routergroup",
-      "community": 49,
-      "community_name": "Module",
+      "community": 157,
+      "community_name": "New",
       "norm_label": "routergroup"
     },
     {
@@ -8390,8 +8390,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_audit_module",
-      "community": 49,
-      "community_name": "Module",
+      "community": 157,
+      "community_name": "New",
       "norm_label": "audit/module.go"
     },
     {
@@ -8401,8 +8401,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "audit_module",
-      "community": 49,
-      "community_name": "Module",
+      "community": 157,
+      "community_name": "New",
       "norm_label": "module"
     },
     {
@@ -8434,8 +8434,8 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "audit_module_name",
-      "community": 49,
-      "community_name": "Module",
+      "community": 157,
+      "community_name": "New",
       "norm_label": ".name()"
     },
     {
@@ -8445,8 +8445,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "audit_module_registerhttp",
-      "community": 49,
-      "community_name": "Module",
+      "community": 157,
+      "community_name": "New",
       "norm_label": ".registerhttp()"
     },
     {
@@ -8456,8 +8456,8 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "audit_module_httpmiddleware",
-      "community": 49,
-      "community_name": "Module",
+      "community": 96,
+      "community_name": "AuditMiddleware",
       "norm_label": ".httpmiddleware()"
     },
     {
@@ -8467,8 +8467,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_audit_module_go_handlerfunc",
-      "community": 49,
-      "community_name": "Module",
+      "community": 96,
+      "community_name": "AuditMiddleware",
       "norm_label": "handlerfunc"
     },
     {
@@ -8489,7 +8489,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "audit_module_registerjobs",
-      "community": 21,
+      "community": 18,
       "community_name": "JobRegistry",
       "norm_label": ".registerjobs()"
     },
@@ -8500,8 +8500,8 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "audit_module_registerevents",
-      "community": 49,
-      "community_name": "Module",
+      "community": 157,
+      "community_name": "New",
       "norm_label": ".registerevents()"
     },
     {
@@ -8511,8 +8511,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_audit_module_go_eventbus",
-      "community": 49,
-      "community_name": "Module",
+      "community": 157,
+      "community_name": "New",
       "norm_label": "eventbus"
     },
     {
@@ -8820,7 +8820,7 @@
       "_origin": "ast",
       "id": "application_fakeuserrepo",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": "fakeuserrepo"
     },
     {
@@ -8831,7 +8831,7 @@
       "_origin": "ast",
       "id": "application_fakeuserrepo_findbyid",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": ".findbyid()"
     },
     {
@@ -8842,7 +8842,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_application_service_test_go_context",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": "context"
     },
     {
@@ -8853,7 +8853,7 @@
       "_origin": "ast",
       "id": "application_fakeuserrepo_findbyusername",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": ".findbyusername()"
     },
     {
@@ -8864,7 +8864,7 @@
       "_origin": "ast",
       "id": "application_fakeuserrepo_list",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": ".list()"
     },
     {
@@ -8875,7 +8875,7 @@
       "_origin": "ast",
       "id": "application_fakeuserrepo_create",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": ".create()"
     },
     {
@@ -8886,7 +8886,7 @@
       "_origin": "ast",
       "id": "application_fakeuserrepo_update",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": ".update()"
     },
     {
@@ -8897,7 +8897,7 @@
       "_origin": "ast",
       "id": "application_fakeuserrepo_delete",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": ".delete()"
     },
     {
@@ -8908,7 +8908,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_application_service_test_go_application_sessionrecord",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": "sessionrecord"
     },
     {
@@ -8919,7 +8919,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_application_service_test_go_application_fakesessionstore",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": "fakesessionstore"
     },
     {
@@ -8941,7 +8941,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_application_service_test_go_application_fakesessionstore_create",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": ".create()"
     },
     {
@@ -8952,7 +8952,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_application_service_test_go_duration",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": "duration"
     },
     {
@@ -8963,7 +8963,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_application_service_test_go_application_fakesessionstore_rotate",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": ".rotate()"
     },
     {
@@ -8974,7 +8974,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_application_service_test_go_application_fakesessionstore_revoke",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": ".revoke()"
     },
     {
@@ -8985,7 +8985,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_application_service_test_go_application_fakesessionstore_revokeall",
       "community": 42,
-      "community_name": "Context",
+      "community_name": "User",
       "norm_label": ".revokeall()"
     },
     {
@@ -9062,7 +9062,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_handler",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": "auth/interfaces/handler.go"
     },
     {
@@ -9073,7 +9073,7 @@
       "_origin": "ast",
       "id": "interfaces_authhandler",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": "authhandler"
     },
     {
@@ -9084,7 +9084,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_handler_go_service",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": "service"
     },
     {
@@ -9095,7 +9095,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_handler_newauthhandler",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": "newauthhandler()"
     },
     {
@@ -9106,7 +9106,7 @@
       "_origin": "ast",
       "id": "interfaces_authhandler_login",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": ".login()"
     },
     {
@@ -9117,7 +9117,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_handler_go_context",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": "context"
     },
     {
@@ -9128,7 +9128,7 @@
       "_origin": "ast",
       "id": "interfaces_authhandler_register",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": ".register()"
     },
     {
@@ -9139,7 +9139,7 @@
       "_origin": "ast",
       "id": "interfaces_authhandler_refreshtoken",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": ".refreshtoken()"
     },
     {
@@ -9150,7 +9150,7 @@
       "_origin": "ast",
       "id": "interfaces_authhandler_logout",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": ".logout()"
     },
     {
@@ -9161,7 +9161,7 @@
       "_origin": "ast",
       "id": "interfaces_authhandler_logoutall",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": ".logoutall()"
     },
     {
@@ -9172,7 +9172,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_handler_authcontext",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": "authcontext()"
     },
     {
@@ -9183,7 +9183,7 @@
       "_origin": "ast",
       "id": "interfaces_authhandler_verifycaptcha",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": ".verifycaptcha()"
     },
     {
@@ -9194,7 +9194,7 @@
       "_origin": "ast",
       "id": "interfaces_authhandler_allow",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": ".allow()"
     },
     {
@@ -9205,7 +9205,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_handler_go_duration",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": "duration"
     },
     {
@@ -9216,7 +9216,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_handler_writeauthratelimitheaders",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": "writeauthratelimitheaders()"
     },
     {
@@ -9227,7 +9227,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_handler_normalizeusername",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": "normalizeusername()"
     },
     {
@@ -9237,8 +9237,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_protected",
-      "community": 177,
-      "community_name": "ProtectedMiddleware",
+      "community": 140,
+      "community_name": "AuthorizationMiddleware",
       "norm_label": "protected.go"
     },
     {
@@ -9248,8 +9248,8 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_protected_protectedmiddleware",
-      "community": 177,
-      "community_name": "ProtectedMiddleware",
+      "community": 140,
+      "community_name": "AuthorizationMiddleware",
       "norm_label": "protectedmiddleware()"
     },
     {
@@ -9259,8 +9259,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_protected_go_enforcer",
-      "community": 177,
-      "community_name": "ProtectedMiddleware",
+      "community": 140,
+      "community_name": "AuthorizationMiddleware",
       "norm_label": "enforcer"
     },
     {
@@ -9270,8 +9270,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_protected_go_handlerfunc",
-      "community": 177,
-      "community_name": "ProtectedMiddleware",
+      "community": 140,
+      "community_name": "AuthorizationMiddleware",
       "norm_label": "handlerfunc"
     },
     {
@@ -9281,8 +9281,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_protected_test",
-      "community": 177,
-      "community_name": "ProtectedMiddleware",
+      "community": 222,
+      "community_name": "Policy",
       "norm_label": "protected_test.go"
     },
     {
@@ -9292,8 +9292,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_protected_test_testprotectedmiddlewarerequiresaccesstoken",
-      "community": 177,
-      "community_name": "ProtectedMiddleware",
+      "community": 222,
+      "community_name": "Policy",
       "norm_label": "testprotectedmiddlewarerequiresaccesstoken()"
     },
     {
@@ -9304,7 +9304,7 @@
       "_origin": "ast",
       "id": "interfaces_fakeauthzstore",
       "community": 222,
-      "community_name": "fakeAuthzStore",
+      "community_name": "Policy",
       "norm_label": "fakeauthzstore"
     },
     {
@@ -9315,7 +9315,7 @@
       "_origin": "ast",
       "id": "interfaces_fakeauthzstore_rolesforuser",
       "community": 222,
-      "community_name": "fakeAuthzStore",
+      "community_name": "Policy",
       "norm_label": ".rolesforuser()"
     },
     {
@@ -9326,7 +9326,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_protected_test_go_context",
       "community": 222,
-      "community_name": "fakeAuthzStore",
+      "community_name": "Policy",
       "norm_label": "context"
     },
     {
@@ -9337,7 +9337,7 @@
       "_origin": "ast",
       "id": "interfaces_fakeauthzstore_policies",
       "community": 222,
-      "community_name": "fakeAuthzStore",
+      "community_name": "Policy",
       "norm_label": ".policies()"
     },
     {
@@ -9348,7 +9348,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_request",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": "request.go"
     },
     {
@@ -9359,7 +9359,7 @@
       "_origin": "ast",
       "id": "interfaces_loginrequest",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": "loginrequest"
     },
     {
@@ -9370,7 +9370,7 @@
       "_origin": "ast",
       "id": "interfaces_refreshrequest",
       "community": 16,
-      "community_name": "New",
+      "community_name": "AuthHandler",
       "norm_label": "refreshrequest"
     },
     {
@@ -9381,7 +9381,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "auth/interfaces/router.go"
     },
     {
@@ -9392,7 +9392,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_registerauthroutes",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "registerauthroutes()"
     },
     {
@@ -9403,7 +9403,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_go_routergroup",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "routergroup"
     },
     {
@@ -9414,7 +9414,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_go_service",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "service"
     },
     {
@@ -9425,7 +9425,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_registercaptcharoute",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "registercaptcharoute()"
     },
     {
@@ -9436,7 +9436,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_test",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "router_test.go"
     },
     {
@@ -9447,7 +9447,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_test_testregisterroutedependsonpublicregistration",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "testregisterroutedependsonpublicregistration()"
     },
     {
@@ -9458,7 +9458,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_test_testlogoutrouterequiresaccesstoken",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "testlogoutrouterequiresaccesstoken()"
     },
     {
@@ -9469,7 +9469,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_test_testrefreshroutestayspublic",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "testrefreshroutestayspublic()"
     },
     {
@@ -9480,7 +9480,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_test_testloginratelimitusesipscope",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "testloginratelimitusesipscope()"
     },
     {
@@ -9491,7 +9491,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_test_testloginratelimitusesnormalizedusernamescope",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "testloginratelimitusesnormalizedusernamescope()"
     },
     {
@@ -9502,7 +9502,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_test_testregisterratelimitusesipscope",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "testregisterratelimitusesipscope()"
     },
     {
@@ -9513,7 +9513,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_test_testrouter",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "testrouter()"
     },
     {
@@ -9524,7 +9524,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_test_go_engine",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "engine"
     },
     {
@@ -9535,7 +9535,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_test_testauthconfig",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "testauthconfig()"
     },
     {
@@ -9546,7 +9546,7 @@
       "_origin": "ast",
       "id": "internal_modules_auth_interfaces_router_test_newrouterlimiter",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": "newrouterlimiter()"
     },
     {
@@ -9688,7 +9688,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_auth_module",
-      "community": 16,
+      "community": 2,
       "community_name": "New",
       "norm_label": "auth/module.go"
     },
@@ -9699,7 +9699,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "auth_module",
-      "community": 16,
+      "community": 2,
       "community_name": "New",
       "norm_label": "module"
     },
@@ -9710,7 +9710,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_auth_module_go_db",
-      "community": 16,
+      "community": 2,
       "community_name": "New",
       "norm_label": "db"
     },
@@ -9721,7 +9721,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_auth_module_go_service",
-      "community": 16,
+      "community": 2,
       "community_name": "New",
       "norm_label": "service"
     },
@@ -9732,7 +9732,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "internal_modules_auth_module_new",
-      "community": 16,
+      "community": 2,
       "community_name": "New",
       "norm_label": "new()"
     },
@@ -9743,7 +9743,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_auth_module_go_client",
-      "community": 16,
+      "community": 2,
       "community_name": "New",
       "norm_label": "client"
     },
@@ -9754,7 +9754,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "auth_module_name",
-      "community": 16,
+      "community": 2,
       "community_name": "New",
       "norm_label": ".name()"
     },
@@ -9766,7 +9766,7 @@
       "_origin": "ast",
       "id": "auth_module_registerhttp",
       "community": 2,
-      "community_name": "RegisterAuthRoutes",
+      "community_name": "New",
       "norm_label": ".registerhttp()"
     },
     {
@@ -9776,8 +9776,8 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "auth_module_protectedhttpmiddleware",
-      "community": 177,
-      "community_name": "ProtectedMiddleware",
+      "community": 140,
+      "community_name": "AuthorizationMiddleware",
       "norm_label": ".protectedhttpmiddleware()"
     },
     {
@@ -9787,8 +9787,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_auth_module_go_handlerfunc",
-      "community": 177,
-      "community_name": "ProtectedMiddleware",
+      "community": 140,
+      "community_name": "AuthorizationMiddleware",
       "norm_label": "handlerfunc"
     },
     {
@@ -9798,7 +9798,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "auth_module_registerjobs",
-      "community": 21,
+      "community": 18,
       "community_name": "JobRegistry",
       "norm_label": ".registerjobs()"
     },
@@ -9809,7 +9809,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "auth_module_registerevents",
-      "community": 16,
+      "community": 2,
       "community_name": "New",
       "norm_label": ".registerevents()"
     },
@@ -9820,7 +9820,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_auth_module_go_eventbus",
-      "community": 16,
+      "community": 2,
       "community_name": "New",
       "norm_label": "eventbus"
     },
@@ -9985,8 +9985,8 @@
       "source_location": "L183",
       "_origin": "ast",
       "id": "internal_modules_oauth_application_service_refreshttl",
-      "community": 137,
-      "community_name": "Context",
+      "community": 35,
+      "community_name": "OAuthService",
       "norm_label": "refreshttl()"
     },
     {
@@ -9996,8 +9996,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_oauth_application_service_go_duration",
-      "community": 137,
-      "community_name": "Context",
+      "community": 35,
+      "community_name": "OAuthService",
       "norm_label": "duration"
     },
     {
@@ -10524,8 +10524,8 @@
       "source_location": "L422",
       "_origin": "ast",
       "id": "internal_modules_oauth_application_service_test_testrefreshttlnilexpiry",
-      "community": 137,
-      "community_name": "Context",
+      "community": 35,
+      "community_name": "OAuthService",
       "norm_label": "testrefreshttlnilexpiry()"
     },
     {
@@ -10689,8 +10689,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "infrastructure_mysqlbindingrepository_findbyprovidersubject",
-      "community": 92,
-      "community_name": "OAuthBinding",
+      "community": 141,
+      "community_name": "newMockGormDB",
       "norm_label": ".findbyprovidersubject()"
     },
     {
@@ -10700,8 +10700,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_oauth_infrastructure_mysql_repository_go_context",
-      "community": 92,
-      "community_name": "OAuthBinding",
+      "community": 141,
+      "community_name": "newMockGormDB",
       "norm_label": "context"
     },
     {
@@ -10711,8 +10711,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "infrastructure_mysqlbindingrepository_create",
-      "community": 92,
-      "community_name": "OAuthBinding",
+      "community": 141,
+      "community_name": "newMockGormDB",
       "norm_label": ".create()"
     },
     {
@@ -11449,7 +11449,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_dto",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": "permission/application/dto.go"
     },
     {
@@ -11460,7 +11460,7 @@
       "_origin": "ast",
       "id": "application_createpermissionrequest",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": "createpermissionrequest"
     },
     {
@@ -11471,7 +11471,7 @@
       "_origin": "ast",
       "id": "application_updatepermissionrequest",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": "updatepermissionrequest"
     },
     {
@@ -11482,7 +11482,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_dto_go_application_permissionresponse",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": "permissionresponse"
     },
     {
@@ -11493,7 +11493,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_dto_go_time",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": "time"
     },
     {
@@ -11504,7 +11504,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_dto_topermissionresponse",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": "topermissionresponse()"
     },
     {
@@ -11515,7 +11515,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_dto_topermissionresponses",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": "topermissionresponses()"
     },
     {
@@ -11526,7 +11526,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_errors",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": "permission/application/errors.go"
     },
     {
@@ -11537,7 +11537,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_errors_isduplicatekey",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": "isduplicatekey()"
     },
     {
@@ -11547,7 +11547,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_permission_application_service",
-      "community": 95,
+      "community": 14,
       "community_name": "PermissionService",
       "norm_label": "permission/application/service.go"
     },
@@ -11558,7 +11558,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "application_permissionservice",
-      "community": 95,
+      "community": 14,
       "community_name": "PermissionService",
       "norm_label": "permissionservice"
     },
@@ -11569,8 +11569,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "internal_modules_permission_application_service_newpermissionservice",
-      "community": 95,
-      "community_name": "PermissionService",
+      "community": 33,
+      "community_name": "Permission",
       "norm_label": "newpermissionservice()"
     },
     {
@@ -11581,7 +11581,7 @@
       "_origin": "ast",
       "id": "application_permissionservice_create",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": ".create()"
     },
     {
@@ -11592,7 +11592,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_service_go_context",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": "context"
     },
     {
@@ -11603,7 +11603,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_service_go_permissionresponse",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": "permissionresponse"
     },
     {
@@ -11614,7 +11614,7 @@
       "_origin": "ast",
       "id": "application_permissionservice_get",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": ".get()"
     },
     {
@@ -11625,7 +11625,7 @@
       "_origin": "ast",
       "id": "application_permissionservice_list",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": ".list()"
     },
     {
@@ -11636,7 +11636,7 @@
       "_origin": "ast",
       "id": "application_permissionservice_update",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": ".update()"
     },
     {
@@ -11647,7 +11647,7 @@
       "_origin": "ast",
       "id": "application_permissionservice_delete",
       "community": 14,
-      "community_name": ".Create",
+      "community_name": "PermissionService",
       "norm_label": ".delete()"
     },
     {
@@ -11658,7 +11658,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_service_test",
       "community": 33,
-      "community_name": "fakePermissionRepository",
+      "community_name": "Permission",
       "norm_label": "permission/application/service_test.go"
     },
     {
@@ -11669,7 +11669,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_service_test_testpermissionservicecreatemapsduplicatenametoconflict",
       "community": 33,
-      "community_name": "fakePermissionRepository",
+      "community_name": "Permission",
       "norm_label": "testpermissionservicecreatemapsduplicatenametoconflict()"
     },
     {
@@ -11680,7 +11680,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_service_test_testpermissionservicelistpassespagination",
       "community": 33,
-      "community_name": "fakePermissionRepository",
+      "community_name": "Permission",
       "norm_label": "testpermissionservicelistpassespagination()"
     },
     {
@@ -11691,7 +11691,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_service_test_testpermissionserviceupdatemapsnotfound",
       "community": 33,
-      "community_name": "fakePermissionRepository",
+      "community_name": "Permission",
       "norm_label": "testpermissionserviceupdatemapsnotfound()"
     },
     {
@@ -11702,7 +11702,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_service_test_testpermissionservicedeletewrapsrepositoryerror",
       "community": 33,
-      "community_name": "fakePermissionRepository",
+      "community_name": "Permission",
       "norm_label": "testpermissionservicedeletewrapsrepositoryerror()"
     },
     {
@@ -11713,7 +11713,7 @@
       "_origin": "ast",
       "id": "application_fakepermissionrepository",
       "community": 33,
-      "community_name": "fakePermissionRepository",
+      "community_name": "Permission",
       "norm_label": "fakepermissionrepository"
     },
     {
@@ -11724,7 +11724,7 @@
       "_origin": "ast",
       "id": "application_fakepermissionrepository_findbyid",
       "community": 33,
-      "community_name": "fakePermissionRepository",
+      "community_name": "Permission",
       "norm_label": ".findbyid()"
     },
     {
@@ -11735,7 +11735,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_service_test_go_context",
       "community": 33,
-      "community_name": "fakePermissionRepository",
+      "community_name": "Permission",
       "norm_label": "context"
     },
     {
@@ -11746,7 +11746,7 @@
       "_origin": "ast",
       "id": "application_fakepermissionrepository_list",
       "community": 33,
-      "community_name": "fakePermissionRepository",
+      "community_name": "Permission",
       "norm_label": ".list()"
     },
     {
@@ -11757,7 +11757,7 @@
       "_origin": "ast",
       "id": "application_fakepermissionrepository_create",
       "community": 33,
-      "community_name": "fakePermissionRepository",
+      "community_name": "Permission",
       "norm_label": ".create()"
     },
     {
@@ -11768,7 +11768,7 @@
       "_origin": "ast",
       "id": "application_fakepermissionrepository_update",
       "community": 33,
-      "community_name": "fakePermissionRepository",
+      "community_name": "Permission",
       "norm_label": ".update()"
     },
     {
@@ -11779,7 +11779,7 @@
       "_origin": "ast",
       "id": "application_fakepermissionrepository_delete",
       "community": 33,
-      "community_name": "fakePermissionRepository",
+      "community_name": "Permission",
       "norm_label": ".delete()"
     },
     {
@@ -11790,7 +11790,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_application_service_test_permissionappcode",
       "community": 33,
-      "community_name": "fakePermissionRepository",
+      "community_name": "Permission",
       "norm_label": "permissionappcode()"
     },
     {
@@ -11801,7 +11801,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_infrastructure_mysql_repository",
       "community": 0,
-      "community_name": "Permission",
+      "community_name": "mysqlPermissionRepository",
       "norm_label": "permission/infrastructure/mysql_repository.go"
     },
     {
@@ -11812,7 +11812,7 @@
       "_origin": "ast",
       "id": "infrastructure_mysqlpermissionrepository",
       "community": 0,
-      "community_name": "Permission",
+      "community_name": "mysqlPermissionRepository",
       "norm_label": "mysqlpermissionrepository"
     },
     {
@@ -11823,7 +11823,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_infrastructure_mysql_repository_go_db",
       "community": 0,
-      "community_name": "Permission",
+      "community_name": "mysqlPermissionRepository",
       "norm_label": "db"
     },
     {
@@ -11834,7 +11834,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_infrastructure_mysql_repository_newmysqlpermissionrepository",
       "community": 0,
-      "community_name": "Permission",
+      "community_name": "mysqlPermissionRepository",
       "norm_label": "newmysqlpermissionrepository()"
     },
     {
@@ -11845,7 +11845,7 @@
       "_origin": "ast",
       "id": "infrastructure_mysqlpermissionrepository_findbyid",
       "community": 0,
-      "community_name": "Permission",
+      "community_name": "mysqlPermissionRepository",
       "norm_label": ".findbyid()"
     },
     {
@@ -11856,7 +11856,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_infrastructure_mysql_repository_go_context",
       "community": 0,
-      "community_name": "Permission",
+      "community_name": "mysqlPermissionRepository",
       "norm_label": "context"
     },
     {
@@ -11867,7 +11867,7 @@
       "_origin": "ast",
       "id": "infrastructure_mysqlpermissionrepository_list",
       "community": 0,
-      "community_name": "Permission",
+      "community_name": "mysqlPermissionRepository",
       "norm_label": ".list()"
     },
     {
@@ -11878,7 +11878,7 @@
       "_origin": "ast",
       "id": "infrastructure_mysqlpermissionrepository_create",
       "community": 0,
-      "community_name": "Permission",
+      "community_name": "mysqlPermissionRepository",
       "norm_label": ".create()"
     },
     {
@@ -11889,7 +11889,7 @@
       "_origin": "ast",
       "id": "infrastructure_mysqlpermissionrepository_update",
       "community": 0,
-      "community_name": "Permission",
+      "community_name": "mysqlPermissionRepository",
       "norm_label": ".update()"
     },
     {
@@ -11900,7 +11900,7 @@
       "_origin": "ast",
       "id": "infrastructure_mysqlpermissionrepository_delete",
       "community": 0,
-      "community_name": "Permission",
+      "community_name": "mysqlPermissionRepository",
       "norm_label": ".delete()"
     },
     {
@@ -11911,7 +11911,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_interfaces_handler",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": "permission/interfaces/handler.go"
     },
     {
@@ -11922,7 +11922,7 @@
       "_origin": "ast",
       "id": "interfaces_permissionhandler",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": "permissionhandler"
     },
     {
@@ -11933,7 +11933,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_interfaces_handler_newpermissionhandler",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": "newpermissionhandler()"
     },
     {
@@ -11944,7 +11944,7 @@
       "_origin": "ast",
       "id": "interfaces_permissionhandler_create",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": ".create()"
     },
     {
@@ -11955,7 +11955,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_interfaces_handler_go_context",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": "context"
     },
     {
@@ -11966,7 +11966,7 @@
       "_origin": "ast",
       "id": "interfaces_permissionhandler_get",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": ".get()"
     },
     {
@@ -11977,7 +11977,7 @@
       "_origin": "ast",
       "id": "interfaces_permissionhandler_list",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": ".list()"
     },
     {
@@ -11988,7 +11988,7 @@
       "_origin": "ast",
       "id": "interfaces_permissionhandler_update",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": ".update()"
     },
     {
@@ -11999,7 +11999,7 @@
       "_origin": "ast",
       "id": "interfaces_permissionhandler_delete",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": ".delete()"
     },
     {
@@ -12010,7 +12010,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_interfaces_handler_test",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": "permission/interfaces/handler_test.go"
     },
     {
@@ -12021,7 +12021,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_interfaces_handler_test_testpermissioncreatereturnscreated",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": "testpermissioncreatereturnscreated()"
     },
     {
@@ -12032,7 +12032,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_interfaces_handler_test_testpermissiondeletereturnsnocontent",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": "testpermissiondeletereturnsnocontent()"
     },
     {
@@ -12042,8 +12042,8 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "interfaces_fakepermissionrepository",
-      "community": 0,
-      "community_name": "Permission",
+      "community": 131,
+      "community_name": "fakePermissionRepository",
       "norm_label": "fakepermissionrepository"
     },
     {
@@ -12053,8 +12053,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "interfaces_fakepermissionrepository_findbyid",
-      "community": 0,
-      "community_name": "Permission",
+      "community": 131,
+      "community_name": "fakePermissionRepository",
       "norm_label": ".findbyid()"
     },
     {
@@ -12064,8 +12064,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_permission_interfaces_handler_test_go_context",
-      "community": 0,
-      "community_name": "Permission",
+      "community": 131,
+      "community_name": "fakePermissionRepository",
       "norm_label": "context"
     },
     {
@@ -12075,8 +12075,8 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "interfaces_fakepermissionrepository_list",
-      "community": 0,
-      "community_name": "Permission",
+      "community": 131,
+      "community_name": "fakePermissionRepository",
       "norm_label": ".list()"
     },
     {
@@ -12086,8 +12086,8 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "interfaces_fakepermissionrepository_create",
-      "community": 0,
-      "community_name": "Permission",
+      "community": 131,
+      "community_name": "fakePermissionRepository",
       "norm_label": ".create()"
     },
     {
@@ -12097,8 +12097,8 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "interfaces_fakepermissionrepository_update",
-      "community": 0,
-      "community_name": "Permission",
+      "community": 131,
+      "community_name": "fakePermissionRepository",
       "norm_label": ".update()"
     },
     {
@@ -12108,8 +12108,8 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "interfaces_fakepermissionrepository_delete",
-      "community": 0,
-      "community_name": "Permission",
+      "community": 131,
+      "community_name": "fakePermissionRepository",
       "norm_label": ".delete()"
     },
     {
@@ -12119,8 +12119,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_permission_interfaces_router",
-      "community": 18,
-      "community_name": "Router",
+      "community": 72,
+      "community_name": "ValidateJSON",
       "norm_label": "permission/interfaces/router.go"
     },
     {
@@ -12130,8 +12130,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "internal_modules_permission_interfaces_router_registerpermissionroutes",
-      "community": 18,
-      "community_name": "Router",
+      "community": 72,
+      "community_name": "ValidateJSON",
       "norm_label": "registerpermissionroutes()"
     },
     {
@@ -12141,8 +12141,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_permission_interfaces_router_go_routergroup",
-      "community": 18,
-      "community_name": "Router",
+      "community": 72,
+      "community_name": "ValidateJSON",
       "norm_label": "routergroup"
     },
     {
@@ -12153,7 +12153,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_module",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": "permission/module.go"
     },
     {
@@ -12164,7 +12164,7 @@
       "_origin": "ast",
       "id": "permission_module",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": "module"
     },
     {
@@ -12175,7 +12175,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_module_new",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": "new()"
     },
     {
@@ -12186,7 +12186,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_module_go_db",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": "db"
     },
     {
@@ -12197,7 +12197,7 @@
       "_origin": "ast",
       "id": "permission_module_name",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": ".name()"
     },
     {
@@ -12207,8 +12207,8 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "permission_module_registerhttp",
-      "community": 18,
-      "community_name": "Router",
+      "community": 72,
+      "community_name": "ValidateJSON",
       "norm_label": ".registerhttp()"
     },
     {
@@ -12218,7 +12218,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "permission_module_registerjobs",
-      "community": 21,
+      "community": 18,
       "community_name": "JobRegistry",
       "norm_label": ".registerjobs()"
     },
@@ -12230,7 +12230,7 @@
       "_origin": "ast",
       "id": "permission_module_registerevents",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": ".registerevents()"
     },
     {
@@ -12241,7 +12241,7 @@
       "_origin": "ast",
       "id": "internal_modules_permission_module_go_eventbus",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": "eventbus"
     },
     {
@@ -12746,8 +12746,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_role_domain_permission",
-      "community": 95,
-      "community_name": "PermissionService",
+      "community": 0,
+      "community_name": "mysqlPermissionRepository",
       "norm_label": "permission.go"
     },
     {
@@ -12757,7 +12757,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "domain_permission",
-      "community": 0,
+      "community": 33,
       "community_name": "Permission",
       "norm_label": "permission"
     },
@@ -12768,7 +12768,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_role_domain_permission_go_time",
-      "community": 0,
+      "community": 33,
       "community_name": "Permission",
       "norm_label": "time"
     },
@@ -12779,7 +12779,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "domain_permission_tablename",
-      "community": 0,
+      "community": 33,
       "community_name": "Permission",
       "norm_label": ".tablename()"
     },
@@ -12790,8 +12790,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "domain_permissionrepository",
-      "community": 95,
-      "community_name": "PermissionService",
+      "community": 0,
+      "community_name": "mysqlPermissionRepository",
       "norm_label": "permissionrepository"
     },
     {
@@ -13945,7 +13945,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_user_domain_user",
-      "community": 170,
+      "community": 42,
       "community_name": "User",
       "norm_label": "user.go"
     },
@@ -13956,7 +13956,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "domain_user",
-      "community": 170,
+      "community": 42,
       "community_name": "User",
       "norm_label": "user"
     },
@@ -13967,7 +13967,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_user_domain_user_go_time",
-      "community": 170,
+      "community": 42,
       "community_name": "User",
       "norm_label": "time"
     },
@@ -13978,7 +13978,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_user_domain_user_go_deletedat",
-      "community": 170,
+      "community": 42,
       "community_name": "User",
       "norm_label": "deletedat"
     },
@@ -13989,7 +13989,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "domain_user_tablename",
-      "community": 170,
+      "community": 42,
       "community_name": "User",
       "norm_label": ".tablename()"
     },
@@ -14033,8 +14033,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_user_infrastructure_mysql_repository",
-      "community": 36,
-      "community_name": "mysqlRepository",
+      "community": 42,
+      "community_name": "User",
       "norm_label": "user/infrastructure/mysql_repository.go"
     },
     {
@@ -14044,8 +14044,8 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "internal_modules_user_infrastructure_mysql_repository_go_infrastructure_mysqlrepository",
-      "community": 36,
-      "community_name": "mysqlRepository",
+      "community": 42,
+      "community_name": "User",
       "norm_label": "mysqlrepository"
     },
     {
@@ -14055,8 +14055,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_user_infrastructure_mysql_repository_go_db",
-      "community": 36,
-      "community_name": "mysqlRepository",
+      "community": 42,
+      "community_name": "User",
       "norm_label": "db"
     },
     {
@@ -14077,8 +14077,8 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "internal_modules_user_infrastructure_mysql_repository_go_infrastructure_mysqlrepository_findbyid",
-      "community": 36,
-      "community_name": "mysqlRepository",
+      "community": 42,
+      "community_name": "User",
       "norm_label": ".findbyid()"
     },
     {
@@ -14088,8 +14088,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_user_infrastructure_mysql_repository_go_context",
-      "community": 36,
-      "community_name": "mysqlRepository",
+      "community": 42,
+      "community_name": "User",
       "norm_label": "context"
     },
     {
@@ -14099,8 +14099,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "infrastructure_mysqlrepository_findbyusername",
-      "community": 36,
-      "community_name": "mysqlRepository",
+      "community": 42,
+      "community_name": "User",
       "norm_label": ".findbyusername()"
     },
     {
@@ -14110,8 +14110,8 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "internal_modules_user_infrastructure_mysql_repository_go_infrastructure_mysqlrepository_list",
-      "community": 36,
-      "community_name": "mysqlRepository",
+      "community": 42,
+      "community_name": "User",
       "norm_label": ".list()"
     },
     {
@@ -14121,8 +14121,8 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "internal_modules_user_infrastructure_mysql_repository_go_infrastructure_mysqlrepository_create",
-      "community": 36,
-      "community_name": "mysqlRepository",
+      "community": 42,
+      "community_name": "User",
       "norm_label": ".create()"
     },
     {
@@ -14132,8 +14132,8 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "internal_modules_user_infrastructure_mysql_repository_go_infrastructure_mysqlrepository_update",
-      "community": 36,
-      "community_name": "mysqlRepository",
+      "community": 42,
+      "community_name": "User",
       "norm_label": ".update()"
     },
     {
@@ -14143,8 +14143,8 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "internal_modules_user_infrastructure_mysql_repository_go_infrastructure_mysqlrepository_delete",
-      "community": 36,
-      "community_name": "mysqlRepository",
+      "community": 42,
+      "community_name": "User",
       "norm_label": ".delete()"
     },
     {
@@ -14353,7 +14353,7 @@
       "_origin": "ast",
       "id": "interfaces_userhandler_delete",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": ".delete()"
     },
     {
@@ -14528,8 +14528,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_modules_user_interfaces_router",
-      "community": 72,
-      "community_name": "ValidateJSON",
+      "community": 155,
+      "community_name": "RegisterUserRoutes",
       "norm_label": "user/interfaces/router.go"
     },
     {
@@ -14539,8 +14539,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "internal_modules_user_interfaces_router_registeruserroutes",
-      "community": 72,
-      "community_name": "ValidateJSON",
+      "community": 155,
+      "community_name": "RegisterUserRoutes",
       "norm_label": "registeruserroutes()"
     },
     {
@@ -14550,8 +14550,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_modules_user_interfaces_router_go_routergroup",
-      "community": 72,
-      "community_name": "ValidateJSON",
+      "community": 155,
+      "community_name": "RegisterUserRoutes",
       "norm_label": "routergroup"
     },
     {
@@ -14638,8 +14638,8 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "user_module_registerhttp",
-      "community": 72,
-      "community_name": "ValidateJSON",
+      "community": 155,
+      "community_name": "RegisterUserRoutes",
       "norm_label": ".registerhttp()"
     },
     {
@@ -15079,7 +15079,7 @@
       "_origin": "ast",
       "id": "internal_platform_auth_casbin",
       "community": 177,
-      "community_name": "ProtectedMiddleware",
+      "community_name": "testEnforcer",
       "norm_label": "casbin.go"
     },
     {
@@ -15090,7 +15090,7 @@
       "_origin": "ast",
       "id": "internal_platform_auth_casbin_newenforcer",
       "community": 177,
-      "community_name": "ProtectedMiddleware",
+      "community_name": "testEnforcer",
       "norm_label": "newenforcer()"
     },
     {
@@ -15101,7 +15101,7 @@
       "_origin": "ast",
       "id": "internal_platform_auth_casbin_go_db",
       "community": 177,
-      "community_name": "ProtectedMiddleware",
+      "community_name": "testEnforcer",
       "norm_label": "db"
     },
     {
@@ -15112,7 +15112,7 @@
       "_origin": "ast",
       "id": "internal_platform_auth_casbin_go_enforcer",
       "community": 177,
-      "community_name": "ProtectedMiddleware",
+      "community_name": "testEnforcer",
       "norm_label": "enforcer"
     },
     {
@@ -15123,7 +15123,7 @@
       "_origin": "ast",
       "id": "internal_platform_auth_casbin_newpathenforcer",
       "community": 177,
-      "community_name": "ProtectedMiddleware",
+      "community_name": "testEnforcer",
       "norm_label": "newpathenforcer()"
     },
     {
@@ -16035,8 +16035,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "auth_policy",
-      "community": 140,
-      "community_name": "AuthorizationMiddleware",
+      "community": 222,
+      "community_name": "Policy",
       "norm_label": "policy"
     },
     {
@@ -16046,8 +16046,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "auth_authorizationstore",
-      "community": 177,
-      "community_name": "ProtectedMiddleware",
+      "community": 140,
+      "community_name": "AuthorizationMiddleware",
       "norm_label": "authorizationstore"
     },
     {
@@ -16156,8 +16156,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_platform_auth_roles_test",
-      "community": 140,
-      "community_name": "AuthorizationMiddleware",
+      "community": 177,
+      "community_name": "testEnforcer",
       "norm_label": "roles_test.go"
     },
     {
@@ -16167,8 +16167,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "internal_platform_auth_roles_test_testauthorizationmiddlewareallowsrolepolicy",
-      "community": 140,
-      "community_name": "AuthorizationMiddleware",
+      "community": 177,
+      "community_name": "testEnforcer",
       "norm_label": "testauthorizationmiddlewareallowsrolepolicy()"
     },
     {
@@ -16178,8 +16178,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "internal_platform_auth_roles_test_testauthorizationmiddlewarerejectsmissingrole",
-      "community": 140,
-      "community_name": "AuthorizationMiddleware",
+      "community": 177,
+      "community_name": "testEnforcer",
       "norm_label": "testauthorizationmiddlewarerejectsmissingrole()"
     },
     {
@@ -16189,8 +16189,8 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "internal_platform_auth_roles_test_testauthorizationmiddlewarehidesstoreerrors",
-      "community": 140,
-      "community_name": "AuthorizationMiddleware",
+      "community": 177,
+      "community_name": "testEnforcer",
       "norm_label": "testauthorizationmiddlewarehidesstoreerrors()"
     },
     {
@@ -16200,8 +16200,8 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "internal_platform_auth_roles_test_testenforcer",
-      "community": 140,
-      "community_name": "AuthorizationMiddleware",
+      "community": 177,
+      "community_name": "testEnforcer",
       "norm_label": "testenforcer()"
     },
     {
@@ -16211,8 +16211,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_platform_auth_roles_test_go_enforcer",
-      "community": 140,
-      "community_name": "AuthorizationMiddleware",
+      "community": 177,
+      "community_name": "testEnforcer",
       "norm_label": "enforcer"
     },
     {
@@ -16222,8 +16222,8 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "auth_fakeauthorizationstore",
-      "community": 140,
-      "community_name": "AuthorizationMiddleware",
+      "community": 222,
+      "community_name": "Policy",
       "norm_label": "fakeauthorizationstore"
     },
     {
@@ -16233,8 +16233,8 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "auth_fakeauthorizationstore_rolesforuser",
-      "community": 140,
-      "community_name": "AuthorizationMiddleware",
+      "community": 222,
+      "community_name": "Policy",
       "norm_label": ".rolesforuser()"
     },
     {
@@ -16244,8 +16244,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_platform_auth_roles_test_go_context",
-      "community": 140,
-      "community_name": "AuthorizationMiddleware",
+      "community": 222,
+      "community_name": "Policy",
       "norm_label": "context"
     },
     {
@@ -16255,8 +16255,8 @@
       "source_location": "L98",
       "_origin": "ast",
       "id": "auth_fakeauthorizationstore_policies",
-      "community": 140,
-      "community_name": "AuthorizationMiddleware",
+      "community": 222,
+      "community_name": "Policy",
       "norm_label": ".policies()"
     },
     {
@@ -16706,8 +16706,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_platform_cache_cache_test",
-      "community": 9,
-      "community_name": "T",
+      "community": 145,
+      "community_name": "setupTestCache",
       "norm_label": "cache_test.go"
     },
     {
@@ -16717,8 +16717,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "internal_platform_cache_cache_test_setuptestcache",
-      "community": 9,
-      "community_name": "T",
+      "community": 145,
+      "community_name": "setupTestCache",
       "norm_label": "setuptestcache()"
     },
     {
@@ -16728,8 +16728,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "internal_platform_cache_cache_test_testrediscache_setandget",
-      "community": 9,
-      "community_name": "T",
+      "community": 145,
+      "community_name": "setupTestCache",
       "norm_label": "testrediscache_setandget()"
     },
     {
@@ -16739,8 +16739,8 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "internal_platform_cache_cache_test_testrediscache_delete",
-      "community": 9,
-      "community_name": "T",
+      "community": 145,
+      "community_name": "setupTestCache",
       "norm_label": "testrediscache_delete()"
     },
     {
@@ -16750,8 +16750,8 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "internal_platform_cache_cache_test_testrediscache_getorset",
-      "community": 9,
-      "community_name": "T",
+      "community": 145,
+      "community_name": "setupTestCache",
       "norm_label": "testrediscache_getorset()"
     },
     {
@@ -16761,8 +16761,8 @@
       "source_location": "L107",
       "_origin": "ast",
       "id": "internal_platform_cache_cache_test_testrediscache_getorsetstampede",
-      "community": 9,
-      "community_name": "T",
+      "community": 145,
+      "community_name": "setupTestCache",
       "norm_label": "testrediscache_getorsetstampede()"
     },
     {
@@ -16772,8 +16772,8 @@
       "source_location": "L144",
       "_origin": "ast",
       "id": "internal_platform_cache_cache_test_testrediscache_deletepattern",
-      "community": 9,
-      "community_name": "T",
+      "community": 145,
+      "community_name": "setupTestCache",
       "norm_label": "testrediscache_deletepattern()"
     },
     {
@@ -17385,7 +17385,7 @@
       "label": ".Warn()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L44",
+      "source_location": "L45",
       "_origin": "ast",
       "id": "db_gormlogger_warn",
       "community": 44,
@@ -17396,7 +17396,7 @@
       "label": ".Error()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L48",
+      "source_location": "L50",
       "_origin": "ast",
       "id": "db_gormlogger_error",
       "community": 44,
@@ -17407,7 +17407,7 @@
       "label": ".Trace()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L52",
+      "source_location": "L55",
       "_origin": "ast",
       "id": "db_gormlogger_trace",
       "community": 44,
@@ -17429,7 +17429,7 @@
       "label": "sanitizeArgs()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L74",
+      "source_location": "L77",
       "_origin": "ast",
       "id": "internal_platform_db_gorm_logger_sanitizeargs",
       "community": 44,
@@ -17440,7 +17440,7 @@
       "label": "sanitizeSQL()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L86",
+      "source_location": "L89",
       "_origin": "ast",
       "id": "internal_platform_db_gorm_logger_sanitizesql",
       "community": 44,
@@ -17451,7 +17451,7 @@
       "label": "isSensitiveField()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L100",
+      "source_location": "L103",
       "_origin": "ast",
       "id": "internal_platform_db_gorm_logger_issensitivefield",
       "community": 44,
@@ -17550,7 +17550,7 @@
       "label": "TestGormLogger_WarnRedactsSensitive()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L69",
+      "source_location": "L70",
       "_origin": "ast",
       "id": "internal_platform_db_gorm_logger_test_testgormlogger_warnredactssensitive",
       "community": 44,
@@ -17561,7 +17561,7 @@
       "label": "TestGormLogger_ErrorRedactsSensitive()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L77",
+      "source_location": "L78",
       "_origin": "ast",
       "id": "internal_platform_db_gorm_logger_test_testgormlogger_errorredactssensitive",
       "community": 44,
@@ -17572,7 +17572,7 @@
       "label": "TestGormLogger_TraceError()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L85",
+      "source_location": "L86",
       "_origin": "ast",
       "id": "internal_platform_db_gorm_logger_test_testgormlogger_traceerror",
       "community": 44,
@@ -17583,7 +17583,7 @@
       "label": "TestGormLogger_TraceRecordNotFoundIsSilent()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L93",
+      "source_location": "L94",
       "_origin": "ast",
       "id": "internal_platform_db_gorm_logger_test_testgormlogger_tracerecordnotfoundissilent",
       "community": 44,
@@ -17594,7 +17594,7 @@
       "label": "TestGormLogger_TraceSlowQueryWarns()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L100",
+      "source_location": "L101",
       "_origin": "ast",
       "id": "internal_platform_db_gorm_logger_test_testgormlogger_traceslowquerywarns",
       "community": 44,
@@ -17605,7 +17605,7 @@
       "label": "TestGormLogger_TraceFastQuerySilent()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L109",
+      "source_location": "L110",
       "_origin": "ast",
       "id": "internal_platform_db_gorm_logger_test_testgormlogger_tracefastquerysilent",
       "community": 44,
@@ -17616,7 +17616,7 @@
       "label": "TestSanitizeArgs()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L116",
+      "source_location": "L117",
       "_origin": "ast",
       "id": "internal_platform_db_gorm_logger_test_testsanitizeargs",
       "community": 44,
@@ -17627,7 +17627,7 @@
       "label": "TestSanitizeSQL()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L125",
+      "source_location": "L126",
       "_origin": "ast",
       "id": "internal_platform_db_gorm_logger_test_testsanitizesql",
       "community": 44,
@@ -17638,7 +17638,7 @@
       "label": "TestIsSensitiveField()",
       "file_type": "code",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L145",
+      "source_location": "L146",
       "_origin": "ast",
       "id": "internal_platform_db_gorm_logger_test_testissensitivefield",
       "community": 44,
@@ -17862,7 +17862,7 @@
       "_origin": "ast",
       "id": "internal_platform_db_mysql",
       "community": 107,
-      "community_name": "DBConfig",
+      "community_name": "ConnectWithRetry",
       "norm_label": "mysql.go"
     },
     {
@@ -17884,7 +17884,7 @@
       "_origin": "ast",
       "id": "internal_platform_db_mysql_go_db",
       "community": 107,
-      "community_name": "DBConfig",
+      "community_name": "ConnectWithRetry",
       "norm_label": "db"
     },
     {
@@ -17895,7 +17895,7 @@
       "_origin": "ast",
       "id": "internal_platform_db_mysql_connectwithretry",
       "community": 107,
-      "community_name": "DBConfig",
+      "community_name": "ConnectWithRetry",
       "norm_label": "connectwithretry()"
     },
     {
@@ -17906,7 +17906,7 @@
       "_origin": "ast",
       "id": "internal_platform_db_mysql_dsn",
       "community": 107,
-      "community_name": "DBConfig",
+      "community_name": "ConnectWithRetry",
       "norm_label": "dsn()"
     },
     {
@@ -17917,7 +17917,7 @@
       "_origin": "ast",
       "id": "internal_platform_db_mysql_open",
       "community": 107,
-      "community_name": "DBConfig",
+      "community_name": "ConnectWithRetry",
       "norm_label": "open()"
     },
     {
@@ -17928,7 +17928,7 @@
       "_origin": "ast",
       "id": "internal_platform_db_mysql_pingdb",
       "community": 107,
-      "community_name": "DBConfig",
+      "community_name": "ConnectWithRetry",
       "norm_label": "pingdb()"
     },
     {
@@ -17939,7 +17939,7 @@
       "_origin": "ast",
       "id": "internal_platform_db_mysql_go_context",
       "community": 107,
-      "community_name": "DBConfig",
+      "community_name": "ConnectWithRetry",
       "norm_label": "context"
     },
     {
@@ -17950,7 +17950,7 @@
       "_origin": "ast",
       "id": "internal_platform_db_mysql_configurepool",
       "community": 107,
-      "community_name": "DBConfig",
+      "community_name": "ConnectWithRetry",
       "norm_label": "configurepool()"
     },
     {
@@ -17961,7 +17961,7 @@
       "_origin": "ast",
       "id": "internal_platform_db_mysql_test",
       "community": 107,
-      "community_name": "DBConfig",
+      "community_name": "ConnectWithRetry",
       "norm_label": "mysql_test.go"
     },
     {
@@ -17982,8 +17982,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_platform_db_mysql_test_go_db",
-      "community": 178,
-      "community_name": "newMockGormDB",
+      "community": 107,
+      "community_name": "ConnectWithRetry",
       "norm_label": "db"
     },
     {
@@ -18005,7 +18005,7 @@
       "_origin": "ast",
       "id": "internal_platform_db_mysql_test_testdsn",
       "community": 107,
-      "community_name": "DBConfig",
+      "community_name": "ConnectWithRetry",
       "norm_label": "testdsn()"
     },
     {
@@ -18016,7 +18016,7 @@
       "_origin": "ast",
       "id": "internal_platform_db_mysql_test_testpingdb",
       "community": 107,
-      "community_name": "DBConfig",
+      "community_name": "ConnectWithRetry",
       "norm_label": "testpingdb()"
     },
     {
@@ -18026,8 +18026,8 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "internal_platform_db_mysql_test_testconfigurepool",
-      "community": 178,
-      "community_name": "newMockGormDB",
+      "community": 107,
+      "community_name": "ConnectWithRetry",
       "norm_label": "testconfigurepool()"
     },
     {
@@ -18038,7 +18038,7 @@
       "_origin": "ast",
       "id": "internal_platform_db_mysql_test_testconnectwithretry_exhaustsretries",
       "community": 107,
-      "community_name": "DBConfig",
+      "community_name": "ConnectWithRetry",
       "norm_label": "testconnectwithretry_exhaustsretries()"
     },
     {
@@ -18049,7 +18049,7 @@
       "_origin": "ast",
       "id": "internal_platform_db_mysql_test_testconnectwithretry_withlogger",
       "community": 107,
-      "community_name": "DBConfig",
+      "community_name": "ConnectWithRetry",
       "norm_label": "testconnectwithretry_withlogger()"
     },
     {
@@ -18060,7 +18060,7 @@
       "_origin": "ast",
       "id": "internal_platform_db_mysql_test_testnew_delegatestoconnectwithretry",
       "community": 107,
-      "community_name": "DBConfig",
+      "community_name": "ConnectWithRetry",
       "norm_label": "testnew_delegatestoconnectwithretry()"
     },
     {
@@ -21865,8 +21865,8 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "internal_platform_http_server_test_testnewservertlsinvalidfiles",
-      "community": 88,
-      "community_name": "SetupRouter",
+      "community": 169,
+      "community_name": "NewServer",
       "norm_label": "testnewservertlsinvalidfiles()"
     },
     {
@@ -24648,8 +24648,8 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "internal_platform_notification_websocket_newwebsocket",
-      "community": 19,
-      "community_name": "Hub",
+      "community": 86,
+      "community_name": "NewContainer",
       "norm_label": "newwebsocket()"
     },
     {
@@ -25121,8 +25121,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_platform_oauth_provider",
-      "community": 149,
-      "community_name": "UserInfo",
+      "community": 35,
+      "community_name": "OAuthService",
       "norm_label": "provider.go"
     },
     {
@@ -26387,7 +26387,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_domain_history",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": "history.go"
     },
     {
@@ -26398,7 +26398,7 @@
       "_origin": "ast",
       "id": "domain_jobhistory",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": "jobhistory"
     },
     {
@@ -26409,7 +26409,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_domain_history_go_time",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": "time"
     },
     {
@@ -26420,7 +26420,7 @@
       "_origin": "ast",
       "id": "domain_jobhistory_tablename",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": ".tablename()"
     },
     {
@@ -26431,7 +26431,7 @@
       "_origin": "ast",
       "id": "domain_jobhistoryrepository",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": "jobhistoryrepository"
     },
     {
@@ -26497,7 +26497,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_factory",
       "community": 104,
-      "community_name": "Config",
+      "community_name": "New",
       "norm_label": "queue/factory.go"
     },
     {
@@ -26508,7 +26508,7 @@
       "_origin": "ast",
       "id": "queue_type",
       "community": 104,
-      "community_name": "Config",
+      "community_name": "New",
       "norm_label": "type"
     },
     {
@@ -26519,7 +26519,7 @@
       "_origin": "ast",
       "id": "queue_config",
       "community": 104,
-      "community_name": "Config",
+      "community_name": "New",
       "norm_label": "config"
     },
     {
@@ -26530,7 +26530,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_factory_go_client",
       "community": 104,
-      "community_name": "Config",
+      "community_name": "New",
       "norm_label": "client"
     },
     {
@@ -26540,8 +26540,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "internal_platform_queue_factory_new",
-      "community": 15,
-      "community_name": "WorkerPool",
+      "community": 104,
+      "community_name": "New",
       "norm_label": "new()"
     },
     {
@@ -26551,8 +26551,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_platform_queue_factory_go_queue",
-      "community": 15,
-      "community_name": "WorkerPool",
+      "community": 104,
+      "community_name": "New",
       "norm_label": "queue"
     },
     {
@@ -26562,8 +26562,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_platform_queue_factory_test",
-      "community": 15,
-      "community_name": "WorkerPool",
+      "community": 104,
+      "community_name": "New",
       "norm_label": "factory_test.go"
     },
     {
@@ -26573,8 +26573,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "internal_platform_queue_factory_test_testnew_redis",
-      "community": 15,
-      "community_name": "WorkerPool",
+      "community": 104,
+      "community_name": "New",
       "norm_label": "testnew_redis()"
     },
     {
@@ -26584,8 +26584,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "internal_platform_queue_factory_test_testnew_invalidtype",
-      "community": 15,
-      "community_name": "WorkerPool",
+      "community": 104,
+      "community_name": "New",
       "norm_label": "testnew_invalidtype()"
     },
     {
@@ -26596,7 +26596,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_kafka_config",
       "community": 104,
-      "community_name": "Config",
+      "community_name": "New",
       "norm_label": "kafka_config.go"
     },
     {
@@ -26607,7 +26607,7 @@
       "_origin": "ast",
       "id": "queue_kafkaconfig",
       "community": 104,
-      "community_name": "Config",
+      "community_name": "New",
       "norm_label": "kafkaconfig"
     },
     {
@@ -26618,7 +26618,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_kafka_queue",
       "community": 75,
-      "community_name": "JobData",
+      "community_name": "KafkaQueue",
       "norm_label": "kafka_queue.go"
     },
     {
@@ -26629,7 +26629,7 @@
       "_origin": "ast",
       "id": "queue_kafkamessagewriter",
       "community": 75,
-      "community_name": "JobData",
+      "community_name": "KafkaQueue",
       "norm_label": "kafkamessagewriter"
     },
     {
@@ -26640,7 +26640,7 @@
       "_origin": "ast",
       "id": "queue_kafkamessagereader",
       "community": 75,
-      "community_name": "JobData",
+      "community_name": "KafkaQueue",
       "norm_label": "kafkamessagereader"
     },
     {
@@ -26651,7 +26651,7 @@
       "_origin": "ast",
       "id": "queue_kafkaqueue",
       "community": 75,
-      "community_name": "JobData",
+      "community_name": "KafkaQueue",
       "norm_label": "kafkaqueue"
     },
     {
@@ -26662,7 +26662,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_kafka_queue_newkafkaqueue",
       "community": 75,
-      "community_name": "JobData",
+      "community_name": "KafkaQueue",
       "norm_label": "newkafkaqueue()"
     },
     {
@@ -26673,7 +26673,7 @@
       "_origin": "ast",
       "id": "queue_kafkaqueue_submit",
       "community": 75,
-      "community_name": "JobData",
+      "community_name": "KafkaQueue",
       "norm_label": ".submit()"
     },
     {
@@ -26684,7 +26684,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_kafka_queue_go_context",
       "community": 75,
-      "community_name": "JobData",
+      "community_name": "KafkaQueue",
       "norm_label": "context"
     },
     {
@@ -26695,7 +26695,7 @@
       "_origin": "ast",
       "id": "queue_kafkaqueue_submitdelayed",
       "community": 75,
-      "community_name": "JobData",
+      "community_name": "KafkaQueue",
       "norm_label": ".submitdelayed()"
     },
     {
@@ -26706,7 +26706,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_kafka_queue_go_duration",
       "community": 75,
-      "community_name": "JobData",
+      "community_name": "KafkaQueue",
       "norm_label": "duration"
     },
     {
@@ -26717,7 +26717,7 @@
       "_origin": "ast",
       "id": "queue_kafkaqueue_consume",
       "community": 75,
-      "community_name": "JobData",
+      "community_name": "KafkaQueue",
       "norm_label": ".consume()"
     },
     {
@@ -26728,7 +26728,7 @@
       "_origin": "ast",
       "id": "queue_kafkaqueue_ack",
       "community": 75,
-      "community_name": "JobData",
+      "community_name": "KafkaQueue",
       "norm_label": ".ack()"
     },
     {
@@ -26739,7 +26739,7 @@
       "_origin": "ast",
       "id": "queue_kafkaqueue_nack",
       "community": 75,
-      "community_name": "JobData",
+      "community_name": "KafkaQueue",
       "norm_label": ".nack()"
     },
     {
@@ -26750,7 +26750,7 @@
       "_origin": "ast",
       "id": "queue_kafkaqueue_moveduejobs",
       "community": 75,
-      "community_name": "JobData",
+      "community_name": "KafkaQueue",
       "norm_label": ".moveduejobs()"
     },
     {
@@ -26859,7 +26859,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_platform_queue_mysql_store",
-      "community": 46,
+      "community": 49,
       "community_name": "MySQLStore",
       "norm_label": "queue/mysql_store.go"
     },
@@ -26870,7 +26870,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "queue_mysqlstore",
-      "community": 46,
+      "community": 49,
       "community_name": "MySQLStore",
       "norm_label": "mysqlstore"
     },
@@ -26892,7 +26892,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "queue_mysqlstore_createjob",
-      "community": 46,
+      "community": 49,
       "community_name": "MySQLStore",
       "norm_label": ".createjob()"
     },
@@ -26903,7 +26903,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_platform_queue_mysql_store_go_context",
-      "community": 46,
+      "community": 49,
       "community_name": "MySQLStore",
       "norm_label": "context"
     },
@@ -26914,7 +26914,7 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "queue_mysqlstore_markrunning",
-      "community": 46,
+      "community": 49,
       "community_name": "MySQLStore",
       "norm_label": ".markrunning()"
     },
@@ -26925,7 +26925,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "queue_mysqlstore_marksuccess",
-      "community": 46,
+      "community": 49,
       "community_name": "MySQLStore",
       "norm_label": ".marksuccess()"
     },
@@ -26936,7 +26936,7 @@
       "source_location": "L86",
       "_origin": "ast",
       "id": "queue_mysqlstore_markfailed",
-      "community": 46,
+      "community": 49,
       "community_name": "MySQLStore",
       "norm_label": ".markfailed()"
     },
@@ -26947,7 +26947,7 @@
       "source_location": "L134",
       "_origin": "ast",
       "id": "queue_mysqlstore_isnotfound",
-      "community": 46,
+      "community": 49,
       "community_name": "MySQLStore",
       "norm_label": ".isnotfound()"
     },
@@ -27080,7 +27080,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_rabbitmq_config",
       "community": 104,
-      "community_name": "Config",
+      "community_name": "New",
       "norm_label": "rabbitmq_config.go"
     },
     {
@@ -27091,7 +27091,7 @@
       "_origin": "ast",
       "id": "queue_rabbitmqconfig",
       "community": 104,
-      "community_name": "Config",
+      "community_name": "New",
       "norm_label": "rabbitmqconfig"
     },
     {
@@ -27377,7 +27377,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_redis_queue",
       "community": 13,
-      "community_name": "RedisQueue",
+      "community_name": "JobData",
       "norm_label": "redis_queue.go"
     },
     {
@@ -27388,7 +27388,7 @@
       "_origin": "ast",
       "id": "queue_redisqueue",
       "community": 13,
-      "community_name": "RedisQueue",
+      "community_name": "JobData",
       "norm_label": "redisqueue"
     },
     {
@@ -27399,7 +27399,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_redis_queue_go_client",
       "community": 13,
-      "community_name": "RedisQueue",
+      "community_name": "JobData",
       "norm_label": "client"
     },
     {
@@ -27410,7 +27410,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_redis_queue_newredisqueue",
       "community": 13,
-      "community_name": "RedisQueue",
+      "community_name": "JobData",
       "norm_label": "newredisqueue()"
     },
     {
@@ -27421,7 +27421,7 @@
       "_origin": "ast",
       "id": "queue_redisqueue_submit",
       "community": 13,
-      "community_name": "RedisQueue",
+      "community_name": "JobData",
       "norm_label": ".submit()"
     },
     {
@@ -27432,7 +27432,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_redis_queue_go_context",
       "community": 13,
-      "community_name": "RedisQueue",
+      "community_name": "JobData",
       "norm_label": "context"
     },
     {
@@ -27443,7 +27443,7 @@
       "_origin": "ast",
       "id": "queue_redisqueue_submitdelayed",
       "community": 13,
-      "community_name": "RedisQueue",
+      "community_name": "JobData",
       "norm_label": ".submitdelayed()"
     },
     {
@@ -27454,7 +27454,7 @@
       "_origin": "ast",
       "id": "internal_platform_queue_redis_queue_go_duration",
       "community": 13,
-      "community_name": "RedisQueue",
+      "community_name": "JobData",
       "norm_label": "duration"
     },
     {
@@ -27465,7 +27465,7 @@
       "_origin": "ast",
       "id": "queue_redisqueue_consume",
       "community": 13,
-      "community_name": "RedisQueue",
+      "community_name": "JobData",
       "norm_label": ".consume()"
     },
     {
@@ -27476,7 +27476,7 @@
       "_origin": "ast",
       "id": "queue_redisqueue_ack",
       "community": 13,
-      "community_name": "RedisQueue",
+      "community_name": "JobData",
       "norm_label": ".ack()"
     },
     {
@@ -27487,7 +27487,7 @@
       "_origin": "ast",
       "id": "queue_redisqueue_nack",
       "community": 13,
-      "community_name": "RedisQueue",
+      "community_name": "JobData",
       "norm_label": ".nack()"
     },
     {
@@ -27498,7 +27498,7 @@
       "_origin": "ast",
       "id": "queue_redisqueue_requeueexpired",
       "community": 13,
-      "community_name": "RedisQueue",
+      "community_name": "JobData",
       "norm_label": ".requeueexpired()"
     },
     {
@@ -27509,7 +27509,7 @@
       "_origin": "ast",
       "id": "queue_redisqueue_moveduejobs",
       "community": 13,
-      "community_name": "RedisQueue",
+      "community_name": "JobData",
       "norm_label": ".moveduejobs()"
     },
     {
@@ -27519,7 +27519,7 @@
       "source_location": "L165",
       "_origin": "ast",
       "id": "queue_jobdata",
-      "community": 75,
+      "community": 13,
       "community_name": "JobData",
       "norm_label": "jobdata"
     },
@@ -27684,8 +27684,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_platform_queue_worker_go_mysqlstore",
-      "community": 143,
-      "community_name": "queue/worker_test.go",
+      "community": 15,
+      "community_name": "WorkerPool",
       "norm_label": "mysqlstore"
     },
     {
@@ -27838,7 +27838,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "queue_fakeconsumer",
-      "community": 75,
+      "community": 13,
       "community_name": "JobData",
       "norm_label": "fakeconsumer"
     },
@@ -27849,7 +27849,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "queue_fakeconsumer_consume",
-      "community": 75,
+      "community": 13,
       "community_name": "JobData",
       "norm_label": ".consume()"
     },
@@ -27860,8 +27860,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_platform_queue_worker_test_go_context",
-      "community": 32,
-      "community_name": "Job",
+      "community": 13,
+      "community_name": "JobData",
       "norm_label": "context"
     },
     {
@@ -27871,7 +27871,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_platform_queue_worker_test_go_duration",
-      "community": 75,
+      "community": 13,
       "community_name": "JobData",
       "norm_label": "duration"
     },
@@ -27882,7 +27882,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "queue_fakeconsumer_ack",
-      "community": 75,
+      "community": 13,
       "community_name": "JobData",
       "norm_label": ".ack()"
     },
@@ -27893,7 +27893,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "queue_fakeconsumer_nack",
-      "community": 75,
+      "community": 13,
       "community_name": "JobData",
       "norm_label": ".nack()"
     },
@@ -27904,7 +27904,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "queue_fakeproducer",
-      "community": 75,
+      "community": 13,
       "community_name": "JobData",
       "norm_label": "fakeproducer"
     },
@@ -27915,8 +27915,8 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "queue_fakeproducer_submit",
-      "community": 143,
-      "community_name": "queue/worker_test.go",
+      "community": 13,
+      "community_name": "JobData",
       "norm_label": ".submit()"
     },
     {
@@ -27926,8 +27926,8 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "queue_fakeproducer_submitdelayed",
-      "community": 143,
-      "community_name": "queue/worker_test.go",
+      "community": 13,
+      "community_name": "JobData",
       "norm_label": ".submitdelayed()"
     },
     {
@@ -27937,7 +27937,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "queue_fakeproducer_consume",
-      "community": 75,
+      "community": 13,
       "community_name": "JobData",
       "norm_label": ".consume()"
     },
@@ -27948,7 +27948,7 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "queue_fakeproducer_moveduejobs",
-      "community": 75,
+      "community": 13,
       "community_name": "JobData",
       "norm_label": ".moveduejobs()"
     },
@@ -27959,7 +27959,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "queue_fakeproducer_ack",
-      "community": 75,
+      "community": 13,
       "community_name": "JobData",
       "norm_label": ".ack()"
     },
@@ -27970,7 +27970,7 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "queue_fakeproducer_nack",
-      "community": 75,
+      "community": 13,
       "community_name": "JobData",
       "norm_label": ".nack()"
     },
@@ -28059,7 +28059,7 @@
       "_origin": "ast",
       "id": "queue_fakehistoryrepo",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": "fakehistoryrepo"
     },
     {
@@ -28070,7 +28070,7 @@
       "_origin": "ast",
       "id": "queue_fakehistoryrepo_create",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": ".create()"
     },
     {
@@ -28081,7 +28081,7 @@
       "_origin": "ast",
       "id": "queue_fakehistoryrepo_listbyjobid",
       "community": 46,
-      "community_name": "MySQLStore",
+      "community_name": "JobHistory",
       "norm_label": ".listbyjobid()"
     },
     {
@@ -28894,8 +28894,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "store",
-      "community": 28,
-      "community_name": "CronScheduler",
+      "community": 40,
+      "community_name": "NewWithStore",
       "norm_label": "store"
     },
     {
@@ -30599,8 +30599,8 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "ws_presencepayload",
-      "community": 57,
-      "community_name": "ws_integration_test.go",
+      "community": 119,
+      "community_name": "Now",
       "norm_label": "presencepayload"
     },
     {
@@ -31226,8 +31226,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_platform_ws_ws_integration_test_go_conn",
-      "community": 57,
-      "community_name": "ws_integration_test.go",
+      "community": 119,
+      "community_name": "Now",
       "norm_label": "conn"
     },
     {
@@ -31237,8 +31237,8 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "ws_testconn",
-      "community": 57,
-      "community_name": "ws_integration_test.go",
+      "community": 119,
+      "community_name": "Now",
       "norm_label": "testconn"
     },
     {
@@ -31248,8 +31248,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_platform_ws_ws_integration_test_go_mutex",
-      "community": 57,
-      "community_name": "ws_integration_test.go",
+      "community": 119,
+      "community_name": "Now",
       "norm_label": "mutex"
     },
     {
@@ -31259,8 +31259,8 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "internal_platform_ws_ws_integration_test_newtestconn",
-      "community": 57,
-      "community_name": "ws_integration_test.go",
+      "community": 119,
+      "community_name": "Now",
       "norm_label": "newtestconn()"
     },
     {
@@ -31270,8 +31270,8 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "ws_testconn_drain",
-      "community": 57,
-      "community_name": "ws_integration_test.go",
+      "community": 119,
+      "community_name": "Now",
       "norm_label": ".drain()"
     },
     {
@@ -31281,8 +31281,8 @@
       "source_location": "L98",
       "_origin": "ast",
       "id": "ws_testconn_readframe",
-      "community": 57,
-      "community_name": "ws_integration_test.go",
+      "community": 119,
+      "community_name": "Now",
       "norm_label": ".readframe()"
     },
     {
@@ -31303,8 +31303,8 @@
       "source_location": "L156",
       "_origin": "ast",
       "id": "ws_testconn_waitfortyping",
-      "community": 57,
-      "community_name": "ws_integration_test.go",
+      "community": 119,
+      "community_name": "Now",
       "norm_label": ".waitfortyping()"
     },
     {
@@ -31314,8 +31314,8 @@
       "source_location": "L179",
       "_origin": "ast",
       "id": "ws_testconn_assertnomessage",
-      "community": 57,
-      "community_name": "ws_integration_test.go",
+      "community": 119,
+      "community_name": "Now",
       "norm_label": ".assertnomessage()"
     },
     {
@@ -31325,8 +31325,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "internal_platform_ws_ws_integration_test_go_duration",
-      "community": 57,
-      "community_name": "ws_integration_test.go",
+      "community": 119,
+      "community_name": "Now",
       "norm_label": "duration"
     },
     {
@@ -31853,8 +31853,8 @@
       "source_location": "L116",
       "_origin": "ast",
       "id": "internal_shared_i18n_i18n_tf",
-      "community": 9,
-      "community_name": "T",
+      "community": 81,
+      "community_name": "i18n.go",
       "norm_label": "tf()"
     },
     {
@@ -31886,8 +31886,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "internal_shared_i18n_i18n_test",
-      "community": 9,
-      "community_name": "T",
+      "community": 81,
+      "community_name": "i18n.go",
       "norm_label": "i18n_test.go"
     },
     {
@@ -31897,8 +31897,8 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "internal_shared_i18n_i18n_test_testtdefaultstochinese",
-      "community": 9,
-      "community_name": "T",
+      "community": 81,
+      "community_name": "i18n.go",
       "norm_label": "testtdefaultstochinese()"
     },
     {
@@ -31908,8 +31908,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "internal_shared_i18n_i18n_test_testtfformatsargs",
-      "community": 9,
-      "community_name": "T",
+      "community": 81,
+      "community_name": "i18n.go",
       "norm_label": "testtfformatsargs()"
     },
     {
@@ -31919,8 +31919,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "internal_shared_i18n_i18n_test_testparseacceptlanguage",
-      "community": 9,
-      "community_name": "T",
+      "community": 81,
+      "community_name": "i18n.go",
       "norm_label": "testparseacceptlanguage()"
     },
     {
@@ -32327,7 +32327,7 @@
       "_origin": "ast",
       "id": "internal_shared_response_response_nocontent",
       "community": 95,
-      "community_name": "PermissionService",
+      "community_name": "New",
       "norm_label": "nocontent()"
     },
     {
@@ -32602,7 +32602,7 @@
       "_origin": "ast",
       "id": "internal_shared_testutil_testdb",
       "community": 84,
-      "community_name": "TestDB",
+      "community_name": "DBConfig",
       "norm_label": "testdb.go"
     },
     {
@@ -32613,7 +32613,7 @@
       "_origin": "ast",
       "id": "testutil_testdb",
       "community": 84,
-      "community_name": "TestDB",
+      "community_name": "DBConfig",
       "norm_label": "testdb"
     },
     {
@@ -32624,7 +32624,7 @@
       "_origin": "ast",
       "id": "internal_shared_testutil_testdb_go_db",
       "community": 84,
-      "community_name": "TestDB",
+      "community_name": "DBConfig",
       "norm_label": "db"
     },
     {
@@ -32635,7 +32635,7 @@
       "_origin": "ast",
       "id": "internal_shared_testutil_testdb_newtestdb",
       "community": 84,
-      "community_name": "TestDB",
+      "community_name": "DBConfig",
       "norm_label": "newtestdb()"
     },
     {
@@ -32646,7 +32646,7 @@
       "_origin": "ast",
       "id": "internal_shared_testutil_testdb_mysqlenvdbconfig",
       "community": 84,
-      "community_name": "TestDB",
+      "community_name": "DBConfig",
       "norm_label": "mysqlenvdbconfig()"
     },
     {
@@ -32657,7 +32657,7 @@
       "_origin": "ast",
       "id": "internal_shared_testutil_testdb_mysqlreachable",
       "community": 84,
-      "community_name": "TestDB",
+      "community_name": "DBConfig",
       "norm_label": "mysqlreachable()"
     },
     {
@@ -32668,7 +32668,7 @@
       "_origin": "ast",
       "id": "internal_shared_testutil_testdb_skipunlessmysql",
       "community": 84,
-      "community_name": "TestDB",
+      "community_name": "DBConfig",
       "norm_label": "skipunlessmysql()"
     },
     {
@@ -32679,7 +32679,7 @@
       "_origin": "ast",
       "id": "internal_shared_testutil_testdb_newtestdbwithpool",
       "community": 84,
-      "community_name": "TestDB",
+      "community_name": "DBConfig",
       "norm_label": "newtestdbwithpool()"
     },
     {
@@ -32690,7 +32690,7 @@
       "_origin": "ast",
       "id": "testutil_testdb_migrate",
       "community": 84,
-      "community_name": "TestDB",
+      "community_name": "DBConfig",
       "norm_label": ".migrate()"
     },
     {
@@ -32701,7 +32701,7 @@
       "_origin": "ast",
       "id": "testutil_testdb_reset",
       "community": 84,
-      "community_name": "TestDB",
+      "community_name": "DBConfig",
       "norm_label": ".reset()"
     },
     {
@@ -32712,7 +32712,7 @@
       "_origin": "ast",
       "id": "testutil_testdb_truncate",
       "community": 84,
-      "community_name": "TestDB",
+      "community_name": "DBConfig",
       "norm_label": ".truncate()"
     },
     {
@@ -32723,7 +32723,7 @@
       "_origin": "ast",
       "id": "testutil_testdb_close",
       "community": 84,
-      "community_name": "TestDB",
+      "community_name": "DBConfig",
       "norm_label": ".close()"
     },
     {
@@ -35863,9 +35863,9 @@
       "author": null,
       "contributor": null,
       "rationale": "GitHub Actions + Dependabot + \u8986\u76d6\u7387\u95e8\u7981\uff1bgovulncheck/Trivy/SBOM",
-      "community": 102,
+      "community": 53,
       "norm_label": "ci/cd & security scanning",
-      "community_name": "CI Workflow",
+      "community_name": "Jimu Backend Framework README",
       "id": "readme_cicd"
     },
     {
@@ -42456,7 +42456,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L13",
+      "source_location": "L14",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_modules_admin_application_config_service",
@@ -42467,7 +42467,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L20",
+      "source_location": "L21",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_modules_admin_application_config_service",
@@ -42478,7 +42478,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L76",
+      "source_location": "L77",
       "weight": 1.0,
       "_origin": "ast",
       "source": "application_adminconfigservice",
@@ -42489,7 +42489,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0,
       "_origin": "ast",
       "source": "application_adminconfigservice",
@@ -42500,7 +42500,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L66",
+      "source_location": "L67",
       "weight": 1.0,
       "_origin": "ast",
       "source": "application_adminconfigservice",
@@ -42511,7 +42511,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L54",
+      "source_location": "L55",
       "weight": 1.0,
       "_origin": "ast",
       "source": "application_adminconfigservice",
@@ -42522,7 +42522,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L44",
+      "source_location": "L45",
       "weight": 1.0,
       "_origin": "ast",
       "source": "application_adminconfigservice",
@@ -42533,7 +42533,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0,
       "context": "field",
       "_origin": "ast",
@@ -42545,7 +42545,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L15",
+      "source_location": "L16",
       "weight": 1.0,
       "context": "field",
       "_origin": "ast",
@@ -42569,7 +42569,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L20",
+      "source_location": "L21",
       "weight": 1.0,
       "context": "return_type",
       "_origin": "ast",
@@ -42605,7 +42605,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L20",
+      "source_location": "L21",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -42617,7 +42617,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L20",
+      "source_location": "L21",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -42738,7 +42738,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L26",
+      "source_location": "L27",
       "weight": 1.0,
       "_origin": "ast",
       "source": "application_adminconfigservice_getallconfig",
@@ -42749,7 +42749,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -42762,7 +42762,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L55",
+      "source_location": "L56",
       "weight": 1.0,
       "_origin": "ast",
       "source": "application_adminconfigservice_reloadconfig",
@@ -42773,7 +42773,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L54",
+      "source_location": "L55",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -42785,7 +42785,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L44",
+      "source_location": "L45",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -42798,7 +42798,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "internal/modules/admin/application/config_service.go",
-      "source_location": "L45",
+      "source_location": "L46",
       "weight": 1.0,
       "_origin": "ast",
       "source": "application_adminconfigservice_updateconfig",
@@ -81322,7 +81322,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L100",
+      "source_location": "L103",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger",
@@ -81344,7 +81344,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L74",
+      "source_location": "L77",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger",
@@ -81355,7 +81355,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L86",
+      "source_location": "L89",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger",
@@ -81366,7 +81366,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L48",
+      "source_location": "L50",
       "weight": 1.0,
       "_origin": "ast",
       "source": "db_gormlogger",
@@ -81399,7 +81399,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L52",
+      "source_location": "L55",
       "weight": 1.0,
       "_origin": "ast",
       "source": "db_gormlogger",
@@ -81410,7 +81410,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L44",
+      "source_location": "L45",
       "weight": 1.0,
       "_origin": "ast",
       "source": "db_gormlogger",
@@ -81588,7 +81588,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L48",
+      "source_location": "L50",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -81600,7 +81600,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L52",
+      "source_location": "L55",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -81612,7 +81612,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L44",
+      "source_location": "L45",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -81625,7 +81625,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L45",
+      "source_location": "L46",
       "weight": 1.0,
       "_origin": "ast",
       "source": "db_gormlogger_warn",
@@ -81637,7 +81637,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L49",
+      "source_location": "L51",
       "weight": 1.0,
       "_origin": "ast",
       "source": "db_gormlogger_error",
@@ -81648,7 +81648,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L52",
+      "source_location": "L55",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -81661,7 +81661,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L57",
+      "source_location": "L60",
       "weight": 1.0,
       "_origin": "ast",
       "source": "db_gormlogger_trace",
@@ -81673,7 +81673,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger.go",
-      "source_location": "L77",
+      "source_location": "L80",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_sanitizeargs",
@@ -81686,7 +81686,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L118",
+      "source_location": "L119",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test_testsanitizeargs",
@@ -81698,7 +81698,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L128",
+      "source_location": "L129",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test_testsanitizesql",
@@ -81710,7 +81710,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L160",
+      "source_location": "L161",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test_testissensitivefield",
@@ -81742,7 +81742,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L77",
+      "source_location": "L78",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test",
@@ -81775,7 +81775,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L85",
+      "source_location": "L86",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test",
@@ -81786,7 +81786,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L109",
+      "source_location": "L110",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test",
@@ -81797,7 +81797,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L93",
+      "source_location": "L94",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test",
@@ -81808,7 +81808,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L100",
+      "source_location": "L101",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test",
@@ -81819,7 +81819,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L69",
+      "source_location": "L70",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test",
@@ -81830,7 +81830,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L145",
+      "source_location": "L146",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test",
@@ -81863,7 +81863,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L116",
+      "source_location": "L117",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test",
@@ -81874,7 +81874,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L125",
+      "source_location": "L126",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test",
@@ -81994,7 +81994,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L78",
+      "source_location": "L79",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test_testgormlogger_errorredactssensitive",
@@ -82030,7 +82030,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L86",
+      "source_location": "L87",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test_testgormlogger_traceerror",
@@ -82042,7 +82042,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L110",
+      "source_location": "L111",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test_testgormlogger_tracefastquerysilent",
@@ -82054,7 +82054,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L94",
+      "source_location": "L95",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test_testgormlogger_tracerecordnotfoundissilent",
@@ -82066,7 +82066,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L101",
+      "source_location": "L102",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test_testgormlogger_traceslowquerywarns",
@@ -82078,7 +82078,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L70",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test_testgormlogger_warnredactssensitive",
@@ -82137,7 +82137,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L69",
+      "source_location": "L70",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -82149,7 +82149,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L77",
+      "source_location": "L78",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -82163,7 +82163,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L88",
+      "source_location": "L89",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test_testgormlogger_traceerror",
@@ -82173,7 +82173,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L85",
+      "source_location": "L86",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -82187,7 +82187,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L87",
+      "source_location": "L88",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test_testgormlogger_traceerror",
@@ -82197,7 +82197,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L93",
+      "source_location": "L94",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -82211,7 +82211,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L95",
+      "source_location": "L96",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test_testgormlogger_tracerecordnotfoundissilent",
@@ -82221,7 +82221,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L100",
+      "source_location": "L101",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -82235,7 +82235,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L102",
+      "source_location": "L103",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test_testgormlogger_traceslowquerywarns",
@@ -82245,7 +82245,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L109",
+      "source_location": "L110",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -82259,7 +82259,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L111",
+      "source_location": "L112",
       "weight": 1.0,
       "_origin": "ast",
       "source": "internal_platform_db_gorm_logger_test_testgormlogger_tracefastquerysilent",
@@ -82269,7 +82269,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L116",
+      "source_location": "L117",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -82281,7 +82281,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L125",
+      "source_location": "L126",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -82293,7 +82293,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "internal/platform/db/gorm_logger_test.go",
-      "source_location": "L145",
+      "source_location": "L146",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",

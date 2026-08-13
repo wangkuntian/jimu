@@ -780,9 +780,9 @@
     "semantic_hash": "4369ebb1436ae950bcb2a810d1bb332a"
   },
   "internal/modules/admin/application/config_service.go": {
-    "mtime": 1786438458.944573,
-    "ast_hash": "61d6cad87eb19fc00bc5804302158bb6",
-    "semantic_hash": "61d6cad87eb19fc00bc5804302158bb6"
+    "mtime": 1786583870.7910452,
+    "ast_hash": "32e90faa978a0fa359c49d9e34170103",
+    "semantic_hash": ""
   },
   "internal/modules/admin/application/import_service.go": {
     "mtime": 1786438803.9050713,
@@ -1025,9 +1025,9 @@
     "semantic_hash": "d44bd2e92c681ccaf86545368736752d"
   },
   "internal/platform/db/gorm_logger.go": {
-    "mtime": 1786021143.8628285,
-    "ast_hash": "997a6a93209ea8c02f7ec4a9cada2572",
-    "semantic_hash": "997a6a93209ea8c02f7ec4a9cada2572"
+    "mtime": 1786584331.2003384,
+    "ast_hash": "d48c95e614c375d59db6a5ac29cf4a9c",
+    "semantic_hash": ""
   },
   "internal/platform/db/snowflake.go": {
     "mtime": 1786528776.472855,
@@ -1775,8 +1775,8 @@
     "semantic_hash": ""
   },
   "internal/modules/admin/application/config_service_test.go": {
-    "mtime": 1786531138.8982995,
-    "ast_hash": "d170db8db0ca70984f709f4f2d384cc0",
+    "mtime": 1786583799.1097078,
+    "ast_hash": "394ec592c799bd5b2daee963508d5719",
     "semantic_hash": ""
   },
   "internal/modules/admin/application/fakes_test.go": {
@@ -1830,8 +1830,8 @@
     "semantic_hash": ""
   },
   "internal/modules/admin/interfaces/config_test.go": {
-    "mtime": 1786531366.798456,
-    "ast_hash": "03bcf4981f98e8946407d43ccfccdd95",
+    "mtime": 1786584372.8917408,
+    "ast_hash": "79cf6a2bcfae7ee3818e98f64bc99383",
     "semantic_hash": ""
   },
   "internal/modules/admin/interfaces/fakes_test.go": {
@@ -1935,8 +1935,8 @@
     "semantic_hash": ""
   },
   "internal/platform/db/gorm_logger_test.go": {
-    "mtime": 1786531368.23149,
-    "ast_hash": "15395e9b7bae940cab9a746b8b6700c7",
+    "mtime": 1786583765.5446754,
+    "ast_hash": "03ec649259ff58d1b87ea7dd8ace55bd",
     "semantic_hash": ""
   },
   "internal/platform/db/migrate_test.go": {
