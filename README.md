@@ -204,7 +204,9 @@ jimu/
 │       ├── dashboard.json       # Jimu 监控面板
 │       └── provisioning/        # Grafana 数据源 + 面板自动加载
 ├── docs/openapi/               # Swagger 生成的 API 文档
-├── migrations/                 # Goose 迁移脚本
+├── migrations/
+│   ├── mysql/                  # MySQL 迁移脚本（按功能合并）
+│   └── postgres/               # PostgreSQL 迁移脚本（按功能合并）
 ├── secrets/                    # Docker Secrets（gitignore）
 ├── internal/
 │   ├── app/

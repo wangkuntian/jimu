@@ -65,12 +65,12 @@ func preflight(root, name string) (templateData, []targetFile, error) {
 	if !validModuleName.MatchString(name) || goKeywords[name] {
 		return templateData{}, nil, fmt.Errorf("invalid module name: %q", name)
 	}
-	for _, rel := range []string{"go.mod", filepath.Join("internal", "modules"), "migrations"} {
+	for _, rel := range []string{"go.mod", filepath.Join("internal", "modules"), filepath.Join("migrations", "mysql")} {
 		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
 			return templateData{}, nil, fmt.Errorf("repository missing %s: %w", rel, err)
 		}
 	}
-	migrationNumber, err := nextMigrationNumber(filepath.Join(root, "migrations"))
+	migrationNumber, err := nextMigrationNumber(filepath.Join(root, "migrations", "mysql"))
 	if err != nil {
 		return templateData{}, nil, err
 	}
@@ -94,7 +94,7 @@ func preflight(root, name string) (templateData, []targetFile, error) {
 		{filepath.Join("internal", "modules", name, "interfaces", "handler.go"), handlerTemplate},
 		{filepath.Join("internal", "modules", name, "interfaces", "handler_test.go"), handlerTestTemplate},
 		{filepath.Join("internal", "modules", name, "interfaces", "router.go"), routerTemplate},
-		{filepath.Join("migrations", migrationNumber+"_create_"+data.TableName+".sql"), migrationTemplate},
+		{filepath.Join("migrations", "mysql", migrationNumber+"_create_"+data.TableName+".sql"), migrationTemplate},
 	}
 	for _, target := range targets {
 		if _, err := os.Stat(filepath.Join(root, target.path)); err == nil {

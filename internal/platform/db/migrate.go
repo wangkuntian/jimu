@@ -85,7 +85,7 @@ func MigrateWithRetry(cfg config.DBConfig, log *logger.Logger, direction string)
 // MigrationDir 定位 MySQL 迁移目录：从本文件源码路径向上找项目根的 migrations，
 // 不依赖工作目录，go test 在包目录运行也能找到。
 func MigrationDir() string {
-	return migrationDir("")
+	return migrationDir("mysql")
 }
 
 // PostgresMigrationDir 定位 PostgreSQL 迁移目录（migrations/postgres）
