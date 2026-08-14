@@ -114,7 +114,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [lint, test, bench]
     steps:
       - uses: actions/checkout@v4
 
@@ -134,6 +134,27 @@ jobs:
         with:
           name: binaries
           path: bin/
+
+  bench:
+    name: Performance Regression
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Run benchmark (absolute thresholds, machine-independent)
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          scripts/bench_ci.sh --absolute
+
 
   docker:
     name: Docker Build

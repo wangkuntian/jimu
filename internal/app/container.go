@@ -245,6 +245,8 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		Host:    cfg.GRPC.Host,
 		Port:    cfg.GRPC.Port,
 	}, log)
+	// 业务示例：注册 UserInfoService（真实业务模块可在此注入自己的 service）
+	grpcServer.RegisterUserInfoService(dbConn)
 
 	return &Container{
 		Config:         cfg,

@@ -45,4 +45,6 @@ logs/
 .agents/
 
 # Graphify
-graphify-out/cost.json
+graphify-out/cost.json-e 
+# 本地性能基线（跨机器不稳定，CI 使用绝对阈值模式）
+.benchmarks/
