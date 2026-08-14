@@ -67,6 +67,7 @@ func envDBConfig() config.DBConfig {
 	if cfg.Database == "" {
 		cfg.Database = "jimu_test"
 	}
+	cfg.Port = defaultDBPort(cfg.Driver)
 	if p := os.Getenv("DB_PORT"); p != "" {
 		if n, err := strconv.Atoi(p); err == nil {
 			cfg.Port = n
@@ -144,6 +145,31 @@ func SkipUnlessMysql(t *testing.T) *TestDB {
 	return tdb
 }
 
+// SkipUnlessPostgres 返回真实 PostgreSQL 测试连接（兼容旧调用方）。
+// 与 SkipUnlessMysql 对称，供 postgres 集成测试使用：CI 的 postgres service 满足条件，本地无 DB 时自动跳过。
+func SkipUnlessPostgres(t *testing.T) *TestDB {
+	t.Helper()
+	cfg := envDBConfig()
+	cfg.Driver = "postgres"
+	if !dbReachable(cfg.Host, cfg.Port) {
+		t.Skipf("postgres %s:%d unreachable; skipping integration test", cfg.Host, cfg.Port)
+	}
+	tdb, err := NewTestDB(cfg)
+	if err != nil {
+		t.Skipf("connect postgres failed: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	sqlDB, err := tdb.DB.DB()
+	if err != nil {
+		t.Skipf("get sql.DB failed: %v", err)
+	}
+	if err := sqlDB.PingContext(ctx); err != nil {
+		t.Skipf("postgres ping failed: %v", err)
+	}
+	return tdb
+}
+
 // NewTestDBWithPool 创建带连接池配置的测试数据库连接
 func NewTestDBWithPool(cfg config.DBConfig) (*TestDB, error) {
 	gdb, err := db.ConnectWithRetry(cfg, nil)
@@ -180,4 +206,9 @@ func (tdb *TestDB) Close() error {
 		return err
 	}
 	return sqlDB.Close()
+}
+
+// Config 返回测试连接使用的数据库配置（供迁移等复用同一连接参数）
+func (tdb *TestDB) Config() config.DBConfig {
+	return tdb.cfg
 }
