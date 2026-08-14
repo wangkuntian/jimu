@@ -501,6 +501,8 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `make migrate-down` | 回滚最后一次迁移 |
 | `make migrate-status` | 查看迁移状态 |
 | `make seed` | 插入初始数据 |
+| `make backup` | 备份数据库（`scripts/backup.sh`，mysqldump + gzip + 保留 7 天） |
+| `make restore` | 从备份恢复数据库（`scripts/restore.sh`，需 `BACKUP_FILE=...`） |
 | `make test` | 运行测试 |
 | `make test-coverage` | 测试 + 覆盖率报告 |
 | `make bench` | 运行性能基准测试（ID 生成 / 登录 / Webhook 发送） |

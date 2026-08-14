@@ -51,6 +51,8 @@ help:
 	@echo "  make migrate-down         本地回滚迁移"
 	@echo "  make migrate-status       查看迁移状态"
 	@echo "  make seed                 本地插入初始数据"
+	@echo "  make backup               备份数据库（mysqldump）"
+	@echo "  make restore              从备份恢复数据库（需 BACKUP_FILE=...）"
 	@echo ""
 	@echo "Docker 容器（单容器，需外部 DB + Redis）:"
 	@echo "  make docker-build         构建镜像"
@@ -110,6 +112,14 @@ migrate-status:
 ## seed: 本地插入初始数据
 seed:
 	APP_ENV=$(ENV) go run $(CLI_CMD) seed
+
+## backup: 备份数据库（需 mysqldump，输出到 ./backups，环境变量见 scripts/backup.sh）
+backup:
+	@./scripts/backup.sh
+
+## restore: 从备份恢复数据库（需 mysql，用法: make restore BACKUP_FILE=./backups/xxx.sql.gz）
+restore:
+	@./scripts/restore.sh $(BACKUP_FILE)
 
 # ========== Docker 单容器 ==========
 

@@ -38,9 +38,11 @@ secrets/
 # Build artifacts
 bin/
 logs/
+.VSCodeCounter/
 
-# Claude AI
+# AI
 .claude/
+.agents/
 
 # Graphify
 graphify-out/cost.json
