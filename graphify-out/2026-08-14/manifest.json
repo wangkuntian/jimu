@@ -415,9 +415,9 @@
     "semantic_hash": "e999e81aa27b5bf6794cf232371a96f5"
   },
   "internal/platform/db/migrate.go": {
-    "mtime": 1786697292.9813092,
-    "ast_hash": "62eb1c250c271010aef612c3d550ce5e",
-    "semantic_hash": ""
+    "mtime": 1786692752.7898102,
+    "ast_hash": "e8acc98269b179865f5da7041deb0b7e",
+    "semantic_hash": "e8acc98269b179865f5da7041deb0b7e"
   },
   "internal/platform/db/mysql.go": {
     "mtime": 1786689213.1882992,
@@ -430,9 +430,9 @@
     "semantic_hash": "723dd80e20fe254a9c345592d0508eee"
   },
   "internal/platform/db/seed_test.go": {
-    "mtime": 1786697320.8693628,
-    "ast_hash": "aae14ac4b7da70efe0c2b80a1c4d72a2",
-    "semantic_hash": ""
+    "mtime": 1786531890.9153292,
+    "ast_hash": "567ac8b0e875a733b6f6c8d680c36d38",
+    "semantic_hash": "567ac8b0e875a733b6f6c8d680c36d38"
   },
   "internal/platform/db/transaction.go": {
     "mtime": 1785233103.9321759,
@@ -580,14 +580,14 @@
     "semantic_hash": "6a8a63074dbb3bccfd185733a311fe89"
   },
   "tools/generator/module.go": {
-    "mtime": 1786697350.8528762,
-    "ast_hash": "ec6df79f1735dbcc5b1e8d7c6ca847e2",
-    "semantic_hash": ""
+    "mtime": 1785735410.1119535,
+    "ast_hash": "2cda8cc92fe3ea45a2b0fbcd36c29c3f",
+    "semantic_hash": "2cda8cc92fe3ea45a2b0fbcd36c29c3f"
   },
   "tools/generator/module_test.go": {
-    "mtime": 1786697849.9702084,
-    "ast_hash": "26676e79142bdf7182e99bc6f799dad5",
-    "semantic_hash": ""
+    "mtime": 1785735410.1121483,
+    "ast_hash": "629de59d34bd6e5b774c6bff04366781",
+    "semantic_hash": "629de59d34bd6e5b774c6bff04366781"
   },
   "tools/generator/templates.go": {
     "mtime": 1785910265.217461,
@@ -630,9 +630,9 @@
     "semantic_hash": "6faab46f07a517d3a64f1d8bee40f2f2"
   },
   "README.md": {
-    "mtime": 1786697850.9881043,
-    "ast_hash": "d701acd3b60ca36650faede777ca456e",
-    "semantic_hash": ""
+    "mtime": 1786692899.0276113,
+    "ast_hash": "25b9fd65ccafb864bee42d12c3f8617e",
+    "semantic_hash": "25b9fd65ccafb864bee42d12c3f8617e"
   },
   "configs/app.prod.yaml": {
     "mtime": 1786692913.9649684,
@@ -1865,9 +1865,9 @@
     "semantic_hash": "4804d0491654a57b9cb42a63fe68643b"
   },
   "internal/platform/db/migrate_test.go": {
-    "mtime": 1786697305.3830352,
-    "ast_hash": "c6f7d9a872f450ed23e026b8cff73081",
-    "semantic_hash": ""
+    "mtime": 1786689413.6330678,
+    "ast_hash": "22ed7ac1c552a23c3767302ac8ce1bb5",
+    "semantic_hash": "22ed7ac1c552a23c3767302ac8ce1bb5"
   },
   "internal/platform/db/mysql_test.go": {
     "mtime": 1786531890.9150898,
@@ -2179,44 +2179,144 @@
     "ast_hash": "f614f41a97e941643595a068ecd94d04",
     "semantic_hash": "f614f41a97e941643595a068ecd94d04"
   },
-  "migrations/mysql/001_core.sql": {
-    "mtime": 1786697241.6949456,
-    "ast_hash": "25fc1d3a17261125ca2b74e2c518db98",
-    "semantic_hash": ""
+  "migrations/001_create_users.sql": {
+    "mtime": 1786520896.0893748,
+    "ast_hash": "96563067045378c0aaa9b21b87aa870a",
+    "semantic_hash": "96563067045378c0aaa9b21b87aa870a"
   },
-  "migrations/mysql/002_audit_outbox.sql": {
-    "mtime": 1786696901.6385157,
-    "ast_hash": "28642432feadec76d6d2d6589042495c",
-    "semantic_hash": ""
+  "migrations/002_create_roles.sql": {
+    "mtime": 1786520896.0923123,
+    "ast_hash": "44f0d0c8118eb154b6741ee550b58478",
+    "semantic_hash": "44f0d0c8118eb154b6741ee550b58478"
   },
-  "migrations/mysql/003_extensions.sql": {
-    "mtime": 1786697448.059408,
-    "ast_hash": "e49485c21daada336a81d8587b8a883c",
-    "semantic_hash": ""
+  "migrations/003_create_permissions.sql": {
+    "mtime": 1786520896.0949883,
+    "ast_hash": "7906d3845b1fef23b5720510de298165",
+    "semantic_hash": "7906d3845b1fef23b5720510de298165"
   },
-  "migrations/postgres/001_core.sql": {
-    "mtime": 1786697468.7027342,
-    "ast_hash": "7b34befb09e7dc340f4827dc7ea47fcd",
-    "semantic_hash": ""
+  "migrations/004_create_user_roles.sql": {
+    "mtime": 1786004712.440602,
+    "ast_hash": "6801a073e290e2a96265ac333107346f",
+    "semantic_hash": "6801a073e290e2a96265ac333107346f"
   },
-  "migrations/postgres/002_audit_outbox.sql": {
-    "mtime": 1786697485.994037,
-    "ast_hash": "9c3e5d4f9d3bedc137fa9a4dfe0cee89",
-    "semantic_hash": ""
+  "migrations/005_create_role_permissions.sql": {
+    "mtime": 1786004725.9761386,
+    "ast_hash": "82a8031dd1d1d2117a90566381069b7e",
+    "semantic_hash": "82a8031dd1d1d2117a90566381069b7e"
   },
-  "migrations/postgres/003_extensions.sql": {
-    "mtime": 1786697520.4408839,
-    "ast_hash": "a7441d46529ea9d15bbd166657811a2a",
-    "semantic_hash": ""
+  "migrations/006_create_audit_logs.sql": {
+    "mtime": 1786520896.097978,
+    "ast_hash": "9a621b93a736aa260caf84766fa64703",
+    "semantic_hash": "9a621b93a736aa260caf84766fa64703"
   },
-  "AGENTS.md": {
-    "mtime": 1786685568.8601098,
-    "ast_hash": "75c55347cad88a46be25518802582cdb",
-    "semantic_hash": ""
+  "migrations/007_create_outbox_events.sql": {
+    "mtime": 1786520896.1007187,
+    "ast_hash": "80c97f67f51a0c9ed1774633d74cc7ef",
+    "semantic_hash": "80c97f67f51a0c9ed1774633d74cc7ef"
   },
-  "MEMORY.md": {
-    "mtime": 1786679593.6534224,
-    "ast_hash": "d4ccb033632d2d22bd02a1a14cbb588d",
-    "semantic_hash": ""
+  "migrations/008_add_audit_changes.sql": {
+    "mtime": 1786018638.2164412,
+    "ast_hash": "d2203d7205aeef0de78ebda4ddab0da4",
+    "semantic_hash": "d2203d7205aeef0de78ebda4ddab0da4"
+  },
+  "migrations/009_create_api_keys.sql": {
+    "mtime": 1786520896.1030383,
+    "ast_hash": "642dde61786e2af5cb0deeeb24fe4cde",
+    "semantic_hash": "642dde61786e2af5cb0deeeb24fe4cde"
+  },
+  "migrations/010_create_jobs.sql": {
+    "mtime": 1786520896.105495,
+    "ast_hash": "31924740ffca92e3b4324517a134681b",
+    "semantic_hash": "31924740ffca92e3b4324517a134681b"
+  },
+  "migrations/011_create_import_jobs.sql": {
+    "mtime": 1786520896.1080878,
+    "ast_hash": "41243820511c72211bb465a1b9aa7461",
+    "semantic_hash": "41243820511c72211bb465a1b9aa7461"
+  },
+  "migrations/012_create_user_oauth_bindings.sql": {
+    "mtime": 1786679569.6250613,
+    "ast_hash": "a61c1c308d1924d2baa3d2e56361b84f",
+    "semantic_hash": "a61c1c308d1924d2baa3d2e56361b84f"
+  },
+  "migrations/013_create_scheduled_jobs.sql": {
+    "mtime": 1786679569.6251657,
+    "ast_hash": "25fa8d728079d428ba148fe47091d169",
+    "semantic_hash": "25fa8d728079d428ba148fe47091d169"
+  },
+  "migrations/014_add_user_contact_encrypted.sql": {
+    "mtime": 1786679569.6252532,
+    "ast_hash": "0ffdeb403ed5ce06c18cd9df8d4cd2a0",
+    "semantic_hash": "0ffdeb403ed5ce06c18cd9df8d4cd2a0"
+  },
+  "migrations/postgres/001_create_users.sql": {
+    "mtime": 1786688880.1478653,
+    "ast_hash": "eaf9b2a78f6266e2ea85069c4d8d6996",
+    "semantic_hash": "eaf9b2a78f6266e2ea85069c4d8d6996"
+  },
+  "migrations/postgres/002_create_roles.sql": {
+    "mtime": 1786688880.148962,
+    "ast_hash": "6df80344355fe7efd5b76e7dfa748c23",
+    "semantic_hash": "6df80344355fe7efd5b76e7dfa748c23"
+  },
+  "migrations/postgres/003_create_permissions.sql": {
+    "mtime": 1786688880.1497421,
+    "ast_hash": "70accadd6e767cf3543f46a342006c0b",
+    "semantic_hash": "70accadd6e767cf3543f46a342006c0b"
+  },
+  "migrations/postgres/004_create_user_roles.sql": {
+    "mtime": 1786688880.1506467,
+    "ast_hash": "fa2c2d0cb652353e78e25487723e86be",
+    "semantic_hash": "fa2c2d0cb652353e78e25487723e86be"
+  },
+  "migrations/postgres/005_create_role_permissions.sql": {
+    "mtime": 1786688880.1514084,
+    "ast_hash": "ed90474c7485f7661ab132b400a2a13d",
+    "semantic_hash": "ed90474c7485f7661ab132b400a2a13d"
+  },
+  "migrations/postgres/006_create_audit_logs.sql": {
+    "mtime": 1786688880.1521363,
+    "ast_hash": "4f2f9c52bcd6fa32b15b86eb9d456be3",
+    "semantic_hash": "4f2f9c52bcd6fa32b15b86eb9d456be3"
+  },
+  "migrations/postgres/007_create_outbox_events.sql": {
+    "mtime": 1786688880.1528213,
+    "ast_hash": "3db3adb18e6efe9ae97c9f37e4f77212",
+    "semantic_hash": "3db3adb18e6efe9ae97c9f37e4f77212"
+  },
+  "migrations/postgres/008_add_audit_changes.sql": {
+    "mtime": 1786688880.1537597,
+    "ast_hash": "fcdfda2ec6a89f71986f72513d21fae9",
+    "semantic_hash": "fcdfda2ec6a89f71986f72513d21fae9"
+  },
+  "migrations/postgres/009_create_api_keys.sql": {
+    "mtime": 1786688880.1544611,
+    "ast_hash": "53839636893e953da8c0c4da39e5802a",
+    "semantic_hash": "53839636893e953da8c0c4da39e5802a"
+  },
+  "migrations/postgres/010_create_jobs.sql": {
+    "mtime": 1786688880.1551414,
+    "ast_hash": "511e6b4b376093c74e29dae51d79d3a6",
+    "semantic_hash": "511e6b4b376093c74e29dae51d79d3a6"
+  },
+  "migrations/postgres/011_create_import_jobs.sql": {
+    "mtime": 1786688880.1558444,
+    "ast_hash": "e00acc4a38f4d1b6db7532451185374e",
+    "semantic_hash": "e00acc4a38f4d1b6db7532451185374e"
+  },
+  "migrations/postgres/012_create_user_oauth_bindings.sql": {
+    "mtime": 1786688880.156537,
+    "ast_hash": "ea1009aecc7001d2fd893a991982027c",
+    "semantic_hash": "ea1009aecc7001d2fd893a991982027c"
+  },
+  "migrations/postgres/013_create_scheduled_jobs.sql": {
+    "mtime": 1786688880.15724,
+    "ast_hash": "e0d7c4f567b6a4fbe5fe3943f1d807de",
+    "semantic_hash": "e0d7c4f567b6a4fbe5fe3943f1d807de"
+  },
+  "migrations/postgres/014_add_user_contact_encrypted.sql": {
+    "mtime": 1786688880.1579652,
+    "ast_hash": "144ba5db18661573674a1dfaeff8a245",
+    "semantic_hash": "144ba5db18661573674a1dfaeff8a245"
   }
 }
