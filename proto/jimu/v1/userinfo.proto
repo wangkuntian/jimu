@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package jimu.v1;
+
+option go_package = "jimu/internal/platform/grpc/userinfopb";
+
+// UserInfoService 业务 gRPC 示例：
+// 演示如何定义业务服务、标准错误码映射、以及服务间调用认证。
+// 完整示例见 docs/grpc-example.md。
+service UserInfoService {
+  // GetUser 按 ID 查询用户（演示统一错误码映射）
+  rpc GetUser(GetUserRequest) returns (UserInfo);
+  // ListUsers 分页查询用户（演示分页元数据）
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+}
+
+message GetUserRequest {
+  uint64 user_id = 1;
+}
+
+message UserInfo {
+  uint64 user_id = 1;
+  string username = 2;
+  int32 status = 3;
+  string created_at = 4;
+}
+
+message ListUsersRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+}
+
+message ListUsersResponse {
+  repeated UserInfo users = 1;
+  int64 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}

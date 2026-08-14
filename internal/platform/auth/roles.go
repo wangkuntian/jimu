@@ -54,9 +54,10 @@ func (s *DBAuthorizationStore) Policies(ctx context.Context) ([]Policy, error) {
 	return policies, err
 }
 
-// policyCacheTTL 策略缓存有效期。
+// PolicyCacheTTL 策略缓存有效期。
 // 权限变更经 TTL 后自动生效；用户角色（roles）每请求实时查询，撤销/分配角色即时反映。
-const policyCacheTTL = 30 * time.Second
+// 测试可通过 PolicyCacheTTL 缩短 TTL 验证权限变更生效路径。
+var PolicyCacheTTL = 30 * time.Second
 
 func AuthorizationMiddleware(store AuthorizationStore, enforcer *casbin.Enforcer) gin.HandlerFunc {
 	// mu 串行化 enforcer 重建（casbin 非并发安全）
@@ -69,7 +70,7 @@ func AuthorizationMiddleware(store AuthorizationStore, enforcer *casbin.Enforcer
 	loadPolicies := func(ctx context.Context) ([]Policy, error) {
 		cacheMu.Lock()
 		defer cacheMu.Unlock()
-		if time.Since(cachedAt) < policyCacheTTL && cachedPolicies != nil {
+		if time.Since(cachedAt) < PolicyCacheTTL && cachedPolicies != nil {
 			return cachedPolicies, nil
 		}
 		policies, err := store.Policies(ctx)

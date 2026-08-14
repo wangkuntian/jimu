@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"net"
 
+	"jimu/internal/platform/grpc/userinfopb"
 	"jimu/internal/platform/logger"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+	"gorm.io/gorm"
 )
 
 // Config gRPC server 配置
@@ -40,6 +42,12 @@ func New(cfg Config, log *logger.Logger) *Server {
 	reflection.Register(srv)
 	RegisterPingServer(srv, &pingService{})
 	return &Server{cfg: cfg, logger: log, srv: srv, health: h}
+}
+
+// RegisterUserInfoService 注册业务示例服务 UserInfoService 到 gRPC server。
+// 业务模块仿照本函数：生成 proto 代码后用 RegisterXXXServer 注册即可。
+func (s *Server) RegisterUserInfoService(db *gorm.DB) {
+	userinfopb.RegisterUserInfoServiceServer(s.srv, NewUserInfoGRPCService(db))
 }
 
 // RegisterService 注册 gRPC 服务（grpc.ServiceDesc + 实现），供业务模块接入。

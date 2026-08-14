@@ -23,10 +23,10 @@ type RabbitMQChannel interface {
 // 处理成功 Ack 确认、失败 Nack(requeue) 重新入队；worker 崩溃时连接关闭，
 // 未确认的 delivery 由 broker 自动重投。
 type RabbitMQQueue struct {
-	conn     *amqp.Connection
-	channel  RabbitMQChannel
-	queue    string
-	msgs     <-chan amqp.Delivery // 构造时建立的一次性 consumer 订阅
+	conn    *amqp.Connection
+	channel RabbitMQChannel
+	queue   string
+	msgs    <-chan amqp.Delivery // 构造时建立的一次性 consumer 订阅
 
 	mu       sync.Mutex
 	inFlight map[string]amqp.Delivery // token -> 未确认 delivery
