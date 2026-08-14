@@ -39,10 +39,10 @@ func newSeedSqliteDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// repoRoot 项目根目录：migrations 位于根下
+// repoRoot 项目根目录：migrations 位于根下，MySQL 迁移在 migrations/mysql 子目录
 func repoRoot(t *testing.T) string {
 	t.Helper()
-	return filepath.Dir(MigrationDir())
+	return filepath.Dir(filepath.Dir(MigrationDir()))
 }
 
 // expectRunSeedQueries 为 RunSeed 全流程编排 sqlmock 预期：

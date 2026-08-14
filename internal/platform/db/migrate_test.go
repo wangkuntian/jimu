@@ -15,7 +15,7 @@ import (
 func TestMigrationDir(t *testing.T) {
 	dir := MigrationDir()
 	assert.True(t, filepath.IsAbs(dir))
-	assert.Equal(t, "migrations", filepath.Base(dir))
+	assert.Equal(t, "mysql", filepath.Base(dir))
 	info, err := os.Stat(dir)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())

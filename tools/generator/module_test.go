@@ -91,13 +91,13 @@ func TestGenerateModuleRollsBackWriteFailure(t *testing.T) {
 	if err := GenerateModuleAt(root, "product"); err == nil {
 		t.Fatal("expected write failure")
 	}
-	if _, err := os.Stat(filepath.Join(root, "migrations", "001_base.sql")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, "migrations", "mysql", "001_base.sql")); err != nil {
 		t.Fatalf("base migration changed: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "internal", "modules", "product")); !os.IsNotExist(err) {
 		t.Fatalf("module directory still exists: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "migrations", "002_create_products.sql")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "migrations", "mysql", "002_create_products.sql")); !os.IsNotExist(err) {
 		t.Fatalf("migration still exists: %v", err)
 	}
 }
@@ -107,7 +107,7 @@ func newTestRepository(t *testing.T) string {
 	root := t.TempDir()
 	for _, dir := range []string{
 		filepath.Join(root, "internal/modules"),
-		filepath.Join(root, "migrations"),
+		filepath.Join(root, "migrations", "mysql"),
 	} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -132,7 +132,7 @@ func assertNoGeneratedFiles(t *testing.T, root string) {
 
 func writeMigration(t *testing.T, root, name string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(root, "migrations", name), []byte("-- migration\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "migrations", "mysql", name), []byte("-- migration\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -149,6 +149,6 @@ func requiredFiles(name, version string) []string {
 		filepath.Join("internal", "modules", name, "interfaces", "handler.go"),
 		filepath.Join("internal", "modules", name, "interfaces", "handler_test.go"),
 		filepath.Join("internal", "modules", name, "interfaces", "router.go"),
-		filepath.Join("migrations", version+"_create_order_items.sql"),
+		filepath.Join("migrations", "mysql", version+"_create_order_items.sql"),
 	}
 }
