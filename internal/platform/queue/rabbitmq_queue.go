@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -16,12 +18,18 @@ type RabbitMQChannel interface {
 	Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error)
 }
 
-// RabbitMQQueue RabbitMQ 消息队列实现
+// RabbitMQQueue RabbitMQ 消息队列实现。
+// 消费采用 at-least-once：autoAck=false，Consume 取到 delivery 后按 token 登记，
+// 处理成功 Ack 确认、失败 Nack(requeue) 重新入队；worker 崩溃时连接关闭，
+// 未确认的 delivery 由 broker 自动重投。
 type RabbitMQQueue struct {
-	conn    *amqp.Connection
-	channel RabbitMQChannel
-	queue   string
-	msgs    <-chan amqp.Delivery // 构造时建立的一次性 consumer 订阅
+	conn     *amqp.Connection
+	channel  RabbitMQChannel
+	queue    string
+	msgs     <-chan amqp.Delivery // 构造时建立的一次性 consumer 订阅
+
+	mu       sync.Mutex
+	inFlight map[string]amqp.Delivery // token -> 未确认 delivery
 }
 
 // NewRabbitMQQueue 创建 RabbitMQ 队列
@@ -38,13 +46,20 @@ func NewRabbitMQQueue(cfg RabbitMQConfig) (*RabbitMQQueue, error) {
 	if err != nil {
 		return nil, fmt.Errorf("declare queue: %w", err)
 	}
+	// autoAck=false：消费后需显式 Ack/Nack，配合可见性重投实现 at-least-once。
 	// 构造时建立一次 Consume 订阅并持有 delivery channel，
-	// 避免 Consume 每次调用都新建 broker consumer 累积泄漏配额
-	msgs, err := ch.Consume(cfg.QueueName, "", true, false, false, false, nil)
+	// 避免 Consume 每次调用都新建 broker consumer 累积泄漏配额。
+	msgs, err := ch.Consume(cfg.QueueName, "", false, false, false, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("consume: %w", err)
 	}
-	return &RabbitMQQueue{conn: conn, channel: ch, queue: cfg.QueueName, msgs: msgs}, nil
+	return &RabbitMQQueue{
+		conn:     conn,
+		channel:  ch,
+		queue:    cfg.QueueName,
+		msgs:     msgs,
+		inFlight: make(map[string]amqp.Delivery),
+	}, nil
 }
 
 // Submit 发布任务到队列
@@ -68,7 +83,8 @@ func (q *RabbitMQQueue) SubmitDelayed(ctx context.Context, job *JobData, delay t
 	return q.Submit(ctx, job)
 }
 
-// Consume 从队列取一条消息（从构造时建立的一次性订阅读取）
+// Consume 从队列取一条消息（从构造时建立的一次性订阅读取），
+// 生成 token 并登记未确认 delivery，供 Ack/Nack 精确匹配。
 func (q *RabbitMQQueue) Consume(ctx context.Context, timeout time.Duration) (*JobData, error) {
 	select {
 	case msg, ok := <-q.msgs:
@@ -77,8 +93,17 @@ func (q *RabbitMQQueue) Consume(ctx context.Context, timeout time.Duration) (*Jo
 		}
 		var job JobData
 		if err := json.Unmarshal(msg.Body, &job); err != nil {
+			// 毒消息：拒绝且不重入队（丢弃或进 DLQ），避免死循环
+			_ = msg.Nack(false, false)
 			return nil, fmt.Errorf("unmarshal rabbitmq message: %w", err)
 		}
+		job.Token = uuid.NewString()
+		q.mu.Lock()
+		if q.inFlight == nil {
+			q.inFlight = make(map[string]amqp.Delivery)
+		}
+		q.inFlight[job.Token] = msg
+		q.mu.Unlock()
 		return &job, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -87,15 +112,32 @@ func (q *RabbitMQQueue) Consume(ctx context.Context, timeout time.Duration) (*Jo
 	}
 }
 
-// Ack 确认任务。RabbitMQ autoAck=true，显式 ack 为 no-op。
+// Ack 确认任务：向 broker 确认 delivery，任务完成。
 func (q *RabbitMQQueue) Ack(ctx context.Context, job *JobData) error {
-	return nil
+	q.mu.Lock()
+	d, ok := q.inFlight[job.Token]
+	if ok {
+		delete(q.inFlight, job.Token)
+	}
+	q.mu.Unlock()
+	if !ok {
+		return nil // 未登记（已确认/已重投），幂等
+	}
+	return d.Ack(false)
 }
 
-// Nack 否认任务。RabbitMQ at-most-once 语义下 autoAck=true，no-op；
-// 重试由 WorkerPool 的持久化存储驱动。
+// Nack 否认任务：requeue=true 将 delivery 重新入队供重试（at-least-once）。
 func (q *RabbitMQQueue) Nack(ctx context.Context, job *JobData) error {
-	return nil
+	q.mu.Lock()
+	d, ok := q.inFlight[job.Token]
+	if ok {
+		delete(q.inFlight, job.Token)
+	}
+	q.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	return d.Nack(false, true)
 }
 
 // MoveDueJobs RabbitMQ 无延迟队列，返回 0 保持接口一致

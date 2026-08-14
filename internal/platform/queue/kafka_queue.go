@@ -87,10 +87,11 @@ func (q *KafkaQueue) Ack(ctx context.Context, job *JobData) error {
 	return nil
 }
 
-// Nack 否认任务。Kafka at-most-once 语义下 offset 自动提交，no-op；
-// 重试由 WorkerPool 的持久化存储驱动。
+// Nack 否认任务：重新发布到 topic 触发重试（应用层 at-least-once）。
+// Kafka 的 offset 在 Consume（ReadMessage）时已自动提交，崩溃窗口内消息可能丢失；
+// 但处理失败的任务经此重投，配合 WorkerPool 的持久化存储保证重试直至耗尽 MaxAttempts。
 func (q *KafkaQueue) Nack(ctx context.Context, job *JobData) error {
-	return nil
+	return q.Submit(ctx, job)
 }
 
 // MoveDueJobs Kafka 无延迟队列，返回 0 保持接口一致
