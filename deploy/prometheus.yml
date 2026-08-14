@@ -3,8 +3,23 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# 告警规则文件
+rule_files:
+  - /etc/prometheus/alert_rules.yml
+
+# AlertManager 告警转发
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
 scrape_configs:
   - job_name: "jimu-server"
     metrics_path: /metrics
     static_configs:
       - targets: ["server:9090"]
+
+  # AlertManager 自身指标
+  - job_name: "alertmanager"
+    static_configs:
+      - targets: ["alertmanager:9093"]

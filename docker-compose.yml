@@ -82,12 +82,47 @@ services:
     restart: unless-stopped
     volumes:
       - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
       - jimu-prometheus-data:/prometheus
     ports:
       - "127.0.0.1:9093:9090"
     depends_on:
       server:
         condition: service_started
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    profiles: ["observability"]
+    restart: unless-stopped
+    volumes:
+      - ./deploy/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - jimu-alertmanager-data:/alertmanager
+    ports:
+      - "127.0.0.1:9094:9093"
+    depends_on:
+      - prometheus
+
+  loki:
+    image: grafana/loki:3.2.1
+    profiles: ["observability"]
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - jimu-loki-data:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    profiles: ["observability"]
+    restart: unless-stopped
+    volumes:
+      - ./deploy/promtail.yml:/etc/promtail/config.yml:ro
+      - ./logs:/app/logs:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
 
   grafana:
     image: grafana/grafana:11.3.0
@@ -111,6 +146,10 @@ volumes:
     name: jimu-redis-data
   jimu-prometheus-data:
     name: jimu-prometheus-data
+  jimu-alertmanager-data:
+    name: jimu-alertmanager-data
+  jimu-loki-data:
+    name: jimu-loki-data
   jimu-grafana-data:
     name: jimu-grafana-data
 
