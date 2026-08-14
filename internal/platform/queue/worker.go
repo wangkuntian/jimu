@@ -205,9 +205,9 @@ func (p *WorkerPool) executeJob(data *JobData) {
 	}
 
 	// 任务语义：成功 Ack；失败时按 store 决策是否重试。
-	// store 在失败且未耗尽重试次数时返回 requeue=true，worker 对 Redis 重新入队；
-	// Kafka/RabbitMQ 的 Nack 为 no-op，但 store 已把 job 状态置回 pending，
-	// 重试提交由 Submit/SubmitDelayed 的下次调用驱动。
+	// store 在失败且未耗尽重试次数时返回 requeue=true，worker 触发 Nack：
+	// Redis 重新入队、RabbitMQ requeue 重投、Kafka 重新发布到 topic；
+	// 三者均在应用层保证 at-least-once（Kafka 崩溃窗口除外，见 queue.go 接口注释）。
 	if err != nil {
 		queueJobsTotal.WithLabelValues(data.Type, "failure").Inc()
 		if p.store != nil {
