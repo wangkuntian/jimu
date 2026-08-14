@@ -37,6 +37,10 @@ const (
 
 	SchedulerStoreMemory = "memory"
 	SchedulerStoreMySQL  = "mysql"
+
+	DBDriverMySQL    = "mysql"
+	DBDriverPostgres = "postgres"
+	DBDriverMariaDB  = "mariadb"
 )
 
 var (
@@ -47,6 +51,7 @@ var (
 	validOutboxPublishers   = []string{OutboxPublisherEventBus, OutboxPublisherMQ}
 	validOutboxMQQueueTypes = []string{QueueTypeKafka, QueueTypeRabbitMQ, QueueTypeRedis}
 	validSchedulerStores    = []string{SchedulerStoreMemory, SchedulerStoreMySQL}
+	validDBDrivers          = []string{DBDriverMySQL, DBDriverPostgres, DBDriverMariaDB, ""}
 )
 
 // QueueConfig 队列配置
@@ -277,6 +282,7 @@ type TLSConfig struct {
 }
 
 type DBConfig struct {
+	Driver             string `mapstructure:"driver"` // 数据库驱动: mysql, postgres, mariadb (默认 mysql)
 	Host               string `mapstructure:"host"`
 	Port               int    `mapstructure:"port"`
 	User               string `mapstructure:"user"`
@@ -421,6 +427,23 @@ func Watch(onChange func(*Config) error) error {
 	return nil
 }
 
+// Dialect 返回用于 goose 迁移的方言名称
+func (c DBConfig) Dialect() string {
+	switch strings.ToLower(c.Driver) {
+	case "postgres", "postgresql":
+		return "postgres"
+	case "mariadb", "mysql":
+		return "mysql"
+	default:
+		return "mysql"
+	}
+}
+
+// IsPostgres 是否 PostgreSQL
+func (c DBConfig) IsPostgres() bool {
+	return c.Dialect() == "postgres"
+}
+
 // applyEnvOverrides 应用环境变量覆盖（简洁命名，无 JIMU_ 前缀）
 // 支持 _FILE 后缀从文件读取敏感值（Docker Secrets 兼容）
 func applyEnvOverrides(cfg *Config) {
@@ -433,6 +456,9 @@ func applyEnvOverrides(cfg *Config) {
 		cfg.Auth.JWTPreviousSecret = v
 	}
 	// 数据库
+	if v := os.Getenv("DB_DRIVER"); v != "" {
+		cfg.DB.Driver = v
+	}
 	if v := os.Getenv("DB_HOST"); v != "" {
 		cfg.DB.Host = v
 	}
@@ -466,6 +492,17 @@ func applyEnvOverrides(cfg *Config) {
 	// Management 端点监听地址（容器内需暴露给 Prometheus 抓取）
 	if v := os.Getenv("MANAGEMENT_HOST"); v != "" {
 		cfg.Management.Host = v
+	}
+	if v := os.Getenv("MANAGEMENT_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil {
+			cfg.Management.Port = port
+		}
+	}
+	// HTTP 监听端口（多实例/测试用）
+	if v := os.Getenv("HTTP_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil {
+			cfg.HTTP.Port = port
+		}
 	}
 	// 字段级加密密钥
 	if v := getEnvOrFile("ENCRYPTION_KEY_FILE", "ENCRYPTION_KEY"); v != "" {

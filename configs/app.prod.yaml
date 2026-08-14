@@ -41,6 +41,7 @@ management:
 
 # 数据库配置 (MariaDB)
 db:
+  driver: "mysql"           # 数据库驱动：mysql / postgres / mariadb（可通过 DB_DRIVER 覆盖）
   host: "mariadb"               # 主库地址（K8s service 名称）
   port: 3306                    # 主库端口
   user: "jimu"                  # 用户名（可通过 DB_USER 覆盖）
