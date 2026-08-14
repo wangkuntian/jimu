@@ -16,11 +16,7 @@ import (
 
 // New 创建数据库连接（带重试和连接池配置）
 func New(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {
-	db, err := ConnectWithRetry(cfg, log)
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
+	return ConnectWithRetry(cfg, log)
 }
 
 // ConnectWithRetry 带重试的数据库连接（使用自定义 logger 支持慢查询告警）
@@ -38,7 +34,7 @@ func ConnectWithRetry(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error)
 	var err error
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		db, err = open(cfg, log)
+		db, err = openByDriver(cfg, log)
 		if err == nil {
 			if pingErr := pingDB(context.Background(), db); pingErr == nil {
 				if log != nil {
@@ -76,10 +72,22 @@ func dsn(cfg config.DBConfig, host string, port int) string {
 		cfg.User, cfg.Password, host, port, cfg.Database)
 }
 
-func open(cfg config.DBConfig, log ...*logger.Logger) (*gorm.DB, error) {
+// openByDriver 根据 Driver 选择数据库实现
+func openByDriver(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {
+	switch cfg.Driver {
+	case "postgres", "postgresql":
+		return openPostgres(cfg, log)
+	case "", "mysql":
+		return openMySQL(cfg, log)
+	default:
+		return nil, fmt.Errorf("unsupported db driver: %s", cfg.Driver)
+	}
+}
+
+func openMySQL(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {
 	gormCfg := &gorm.Config{}
-	if len(log) > 0 && log[0] != nil {
-		gormCfg.Logger = NewGormLogger(log[0], SlowQueryThreshold)
+	if log != nil {
+		gormCfg.Logger = NewGormLogger(log, SlowQueryThreshold)
 	} else {
 		gormCfg.Logger = gormlogger.Default.LogMode(gormlogger.Silent)
 	}

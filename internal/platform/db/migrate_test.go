@@ -51,11 +51,12 @@ func TestRunMigration_DirectionsFailWithoutDB(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
+	cfg := config.DBConfig{}
 	// 各方向分支都会触达 goose，但对 sqlmock 无预期查询 → 返回错误。
 	// 断言有错误即覆盖 switch 各分支与 goose 调用路径。
 	for _, dir := range []string{"up", "up-by-one", "down", "redo", "status", "reset"} {
 		t.Run(dir, func(t *testing.T) {
-			err := runMigration(sqlDB, dir)
+			err := runMigration(sqlDB, cfg, dir)
 			require.Error(t, err)
 		})
 	}
@@ -66,7 +67,7 @@ func TestRunMigration_UnknownDirection(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	err = runMigration(sqlDB, "bogus")
+	err = runMigration(sqlDB, config.DBConfig{}, "bogus")
 	require.ErrorContains(t, err, "unknown direction: bogus")
 }
 

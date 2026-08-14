@@ -40,7 +40,8 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
 - **OpenTelemetry** — 分布式追踪（OTLP gRPC），HTTP/Gin + Gorm 查询 + Redis 命令全链路 span（`otel.enabled` 开启）；队列/Outbox 异步边界透传 `traceparent`/`tracestate`，消费端恢复链路
 - **Prometheus 指标** — DB 连接池 + 运行时 + HTTP 请求指标（`jimu_http_*`）+ 队列执行/死信（`jimu_queue_*`）+ Outbox 发布（`jimu_outbox_*`）+ 出站熔断（`jimu_httpclient_*`）+ 定时任务执行（`jimu_scheduler_*`，成功/失败计数 + 耗时分布）
-- **gRPC server** — 与 HTTP 双栈并存，内置健康检查（`grpc_health_v1`）与反射（grpcurl 可探），可选启用（`grpc.enabled`，默认端口 9091）；`internal/platform/grpc` 提供免 protoc 的 ServiceDesc 注册方式，业务模块经 `RegisterService` 接入
+- **gRPC server** — 与 HTTP 双栈并存，内置健康检查（`grpc_health_v1`）与反射（grpcurl 可探），可选启用（`grpc.enabled`，默认端口 9091）；业务示例 `UserInfoService` 演示 proto 定义 → `make proto` 生成 → 服务实现 → 注册全流程，业务模块经 `RegisterService` 接入
+- **PostgreSQL 支持** — `db.driver=postgres`（或 `DB_DRIVER=postgres`）切换，迁移文件独立于 `migrations/postgres/`，与 MySQL 语法（`BIGINT UNSIGNED`/`ENGINE=InnoDB`/`ON UPDATE`）完全隔离；连接、迁移、seed、JWT/RBAC 全链路已用真实 PG 17 验证
 - **分布式 ID** — 雪花 ID 生成器（`internal/shared/id`），所有数据库主键由应用生成，`id.worker_id` 配置多实例唯一编号
 - **Docker 支持** — Dockerfile + docker-compose 一键起服务
 - **Docker Secrets** — 敏感配置通过文件注入（`_FILE` 后缀）
@@ -62,7 +63,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 |------|------|
 | HTTP 框架 | Gin |
 | ORM | Gorm |
-| 数据库 | MariaDB (MySQL 协议) |
+| 数据库 | MariaDB / MySQL / PostgreSQL（`db.driver` 切换） |
 | 缓存 | Redis |
 | 配置 | Viper |
 | 日志 | Zap + lumberjack |
@@ -151,7 +152,11 @@ make compose-observability   # 或 docker compose --profile observability up -d
 ```
 
 - Prometheus: http://127.0.0.1:9093
-- Grafana: http://127.0.0.1:3000 （默认账号 admin / admin，用 GRAFANA_ADMIN_PASSWORD 覆盖）
+- AlertManager: http://127.0.0.1:9094 （告警路由配置 `deploy/alertmanager.yml`，规则 `deploy/alert_rules.yml`）
+- Grafana: http://127.0.0.1:3000 （默认账号 admin / admin，用 GRAFANA_ADMIN_PASSWORD 覆盖；已 provisioning Prometheus 与 Loki 数据源）
+- Loki: http://127.0.0.1:3100 （日志查询；Promtail 采集 `logs/*.log` 与容器 stdout，配置 `deploy/promtail.yml`）
+
+告警闭环：Prometheus 规则（错误率/延迟/连接池/队列死信/服务存活）→ AlertManager 按 severity 路由到 webhook；K8s 场景对应规则在 `deploy/k8s/prometheusrule.yaml`。触发一条测试告警：`make compose-observability-test`。
 
 停止：`make compose-observability-down`。
 
@@ -428,8 +433,9 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `http.trusted_proxies` | 可信代理 CIDR（影响 ClientIP 判定） | `127.0.0.1` |
 | `http.tls.enabled` | 是否启用 TLS（反向代理终止时保持 `false`） | `false` |
 | `http.tls.cert_file` / `http.tls.key_file` | TLS 证书 / 私钥路径 | — |
+| `db.driver` | 数据库驱动：`mysql` / `postgres` / `mariadb`（环境变量 `DB_DRIVER` 覆盖） | `mysql` |
 | `db.host` | 数据库地址 | `127.0.0.1` |
-| `db.port` | 数据库端口 | `3306` |
+| `db.port` | 数据库端口（MySQL 默认 3306，PostgreSQL 默认 5432） | `3306` |
 | `db.user` | 数据库用户名 | `jimu` |
 | `db.password` | 数据库密码（通过环境变量覆盖） | — |
 | `db.max_open` | 最大连接数 | `25`（开发）/ `100`（生产） |
@@ -489,6 +495,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `notification.webhook.sign_secret` | Webhook 回调载荷签名密钥（HMAC-SHA256，`X-Jimu-Signature`）；空则不签名 | — |
 | `grpc.enabled` | 是否启用 gRPC server（与 HTTP 双栈并存，默认关闭） | `false` |
 | `grpc.host` / `grpc.port` | gRPC 监听地址 / 端口 | `0.0.0.0` / `9091` |
+| `grpc` 业务服务 | 示例 `UserInfoService`（`internal/platform/grpc/userinfo_service.go`，proto 在 `proto/jimu/v1/userinfo.proto`，`make proto` 重新生成）；业务模块仿照 `RegisterUserInfoService` 经 `RegisterService` 接入 | — |
 
 ## Makefile 命令
 
@@ -506,6 +513,8 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `make test` | 运行测试 |
 | `make test-coverage` | 测试 + 覆盖率报告 |
 | `make bench` | 运行性能基准测试（ID 生成 / 登录 / Webhook 发送） |
+| `make bench-ci` | 性能回归门禁（绝对阈值模式，CI 用：`scripts/bench_ci.sh --absolute`） |
+| `make proto` | 重新生成 gRPC 代码（需 protoc + protoc-gen-go + protoc-gen-go-grpc） |
 | `make loadtest` | 本地 HTTP 压测（需 hey：`go install github.com/rakyll/hey@latest`） |
 | `make vet` | 静态分析 |
 | `make fmt` | 格式化代码 |
@@ -521,8 +530,9 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `make compose-logs` | 查看应用日志 |
 | `make compose-migrate` | Compose 环境执行迁移 |
 | `make compose-seed` | Compose 环境插入初始数据 |
-| `make compose-observability` | 启动监控栈（Prometheus + Grafana） |
+| `make compose-observability` | 启动监控栈（Prometheus + Grafana + AlertManager + Loki） |
 | `make compose-observability-down` | 停止监控栈 |
+| `make compose-observability-test` | 触发一条测试告警验证 AlertManager 链路 |
 | `make release-check` | 发布前检查（fmt-check + vet + test + govulncheck） |
 | `make clean` | 清理构建产物 |
 | `make hooks` | 安装 pre-commit 钩子 |

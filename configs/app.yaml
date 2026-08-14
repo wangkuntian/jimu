@@ -24,8 +24,9 @@ management:
 
 # 数据库配置 (MariaDB)
 db:
+  driver: "mysql"           # 数据库驱动：mysql / postgres / mariadb（可通过 DB_DRIVER 覆盖）
   host: "127.0.0.1"         # 数据库地址（可通过 DB_HOST 覆盖）
-  port: 3306                # 数据库端口（可通过 DB_PORT 覆盖）
+  port: 3306                # 数据库端口（可通过 DB_PORT 覆盖；postgres 默认 5432）
   user: "jimu"              # 用户名（可通过 DB_USER 覆盖）
   password: ""              # 密码（通过 DB_PASSWORD 环境变量覆盖）
   database: "jimu"          # 数据库名（可通过 DB_NAME 覆盖）

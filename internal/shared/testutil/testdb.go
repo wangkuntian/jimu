@@ -6,13 +6,13 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"jimu/internal/config"
 	"jimu/internal/platform/db"
 
-	"github.com/pressly/goose/v3"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
@@ -20,29 +20,43 @@ import (
 // TestDB 测试数据库连接
 type TestDB struct {
 	*gorm.DB
+	cfg config.DBConfig
 }
 
 // NewTestDB 创建测试数据库连接
 func NewTestDB(cfg config.DBConfig) (*TestDB, error) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
-
-	gdb, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	gdb, err := openByDriver(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect test database: %w", err)
+		return nil, err
 	}
-
-	return &TestDB{DB: gdb}, nil
+	return &TestDB{DB: gdb, cfg: cfg}, nil
 }
 
-// mysqlEnvDBConfig 从环境变量读取 MySQL 测试配置（CI 通过 services.mariadb 提供）
-func mysqlEnvDBConfig() config.DBConfig {
+func openByDriver(cfg config.DBConfig) (*gorm.DB, error) {
+	switch strings.ToLower(cfg.Driver) {
+	case "postgres", "postgresql":
+		return db.New(cfg, nil)
+	case "", "mysql", "mariadb":
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+			cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
+		return gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	default:
+		return nil, fmt.Errorf("unsupported db driver: %s", cfg.Driver)
+	}
+}
+
+// envDBConfig 从环境变量读取测试数据库配置（CI 通过 services.mariadb 提供，DB_DRIVER 可切 postgres）
+func envDBConfig() config.DBConfig {
 	cfg := config.DBConfig{
+		Driver:   os.Getenv("DB_DRIVER"),
 		Host:     os.Getenv("DB_HOST"),
 		Port:     3306,
 		User:     os.Getenv("DB_USER"),
 		Password: os.Getenv("DB_PASSWORD"),
 		Database: os.Getenv("DB_NAME"),
+	}
+	if cfg.Driver == "" {
+		cfg.Driver = "mysql"
 	}
 	if cfg.Host == "" {
 		cfg.Host = "127.0.0.1"
@@ -61,8 +75,16 @@ func mysqlEnvDBConfig() config.DBConfig {
 	return cfg
 }
 
-// mysqlReachable 探测 MySQL 端口是否可连接
-func mysqlReachable(host string, port int) bool {
+// defaultDBPort 返回 driver 对应的默认端口
+func defaultDBPort(driver string) int {
+	if strings.HasPrefix(driver, "postgres") {
+		return 5432
+	}
+	return 3306
+}
+
+// dbReachable 探测数据库端口是否可连接
+func dbReachable(host string, port int) bool {
 	d := net.Dialer{Timeout: 2 * time.Second}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -74,12 +96,36 @@ func mysqlReachable(host string, port int) bool {
 	return true
 }
 
-// SkipUnlessMysql 返回真实 MySQL 测试连接；数据库不可达时跳过测试。
-// 供 env-gated 集成测试使用：CI 的 mariadb service 满足条件，本地无 DB 时自动跳过。
+// SkipUnlessDB 返回真实数据库测试连接；数据库不可达时跳过测试。
+// 供 env-gated 集成测试使用：CI 的 mariadb/postgres service 满足条件，本地无 DB 时自动跳过。
+func SkipUnlessDB(t *testing.T) *TestDB {
+	t.Helper()
+	cfg := envDBConfig()
+	if !dbReachable(cfg.Host, cfg.Port) {
+		t.Skipf("db %s:%d unreachable; skipping integration test", cfg.Host, cfg.Port)
+	}
+	tdb, err := NewTestDB(cfg)
+	if err != nil {
+		t.Skipf("connect db failed: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	sqlDB, err := tdb.DB.DB()
+	if err != nil {
+		t.Skipf("get sql.DB failed: %v", err)
+	}
+	if err := sqlDB.PingContext(ctx); err != nil {
+		t.Skipf("db ping failed: %v", err)
+	}
+	return tdb
+}
+
+// SkipUnlessMysql 返回真实 MySQL 测试连接（兼容旧调用方）
 func SkipUnlessMysql(t *testing.T) *TestDB {
 	t.Helper()
-	cfg := mysqlEnvDBConfig()
-	if !mysqlReachable(cfg.Host, cfg.Port) {
+	cfg := envDBConfig()
+	cfg.Driver = "mysql"
+	if !dbReachable(cfg.Host, cfg.Port) {
 		t.Skipf("mysql %s:%d unreachable; skipping integration test", cfg.Host, cfg.Port)
 	}
 	tdb, err := NewTestDB(cfg)
@@ -104,21 +150,12 @@ func NewTestDBWithPool(cfg config.DBConfig) (*TestDB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect test database: %w", err)
 	}
-	return &TestDB{DB: gdb}, nil
+	return &TestDB{DB: gdb, cfg: cfg}, nil
 }
 
-// Migrate 执行迁移
+// Migrate 执行迁移（根据 cfg.Driver 选择 dialect 与迁移目录）
 func (tdb *TestDB) Migrate() error {
-	sqlDB, err := tdb.DB.DB()
-	if err != nil {
-		return err
-	}
-
-	if err := goose.SetDialect("mysql"); err != nil {
-		return err
-	}
-
-	return goose.Up(sqlDB, db.MigrationDir())
+	return db.Migrate(tdb.cfg, "up")
 }
 
 // Reset 清空所有表数据（保留表结构）

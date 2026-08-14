@@ -37,6 +37,9 @@ func (c *Config) validateCommon() error {
 	if !contains(validHTTPModes, c.HTTP.Mode) {
 		return fmt.Errorf("invalid http.mode: %q, must be one of %v", c.HTTP.Mode, validHTTPModes)
 	}
+	if !contains(validDBDrivers, c.DB.Driver) {
+		return fmt.Errorf("invalid db.driver: %q, must be one of %v", c.DB.Driver, validDBDrivers)
+	}
 	if !contains(validLogLevels, c.Log.Level) {
 		return fmt.Errorf("invalid log.level: %q, must be one of %v", c.Log.Level, validLogLevels)
 	}
