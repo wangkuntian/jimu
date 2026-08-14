@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 
 	"jimu/internal/platform/observability"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 )
 
@@ -330,6 +332,15 @@ type AuthConfig struct {
 // Load 加载配置
 // 优先级：环境变量 > .env > app.{env}.yaml > app.yaml
 func Load() (*Config, error) {
+	v, err := buildViper()
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalConfig(v)
+}
+
+// buildViper 构造并读取配置的 viper 实例（含环境覆盖文件合并）
+func buildViper() (*viper.Viper, error) {
 	env := os.Getenv("APP_ENV")
 
 	v := viper.New()
@@ -368,6 +379,11 @@ func Load() (*Config, error) {
 		}
 	}
 
+	return v, nil
+}
+
+// unmarshalConfig 从 viper 实例反序列化并校验配置
+func unmarshalConfig(v *viper.Viper) (*Config, error) {
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, err
@@ -376,11 +392,33 @@ func Load() (*Config, error) {
 	// 敏感配置环境变量覆盖（不使用 JIMU_ 前缀）
 	applyEnvOverrides(&cfg)
 
-	if err := cfg.Validate(env); err != nil {
+	if err := cfg.Validate(os.Getenv("APP_ENV")); err != nil {
 		return nil, err
 	}
 
 	return &cfg, nil
+}
+
+// Watch 监听配置文件变更，变更后重新加载并校验配置，再调用 onChange 应用。
+// 注意：仅在 onChange 中应用「运行时安全」的设置（如 log.level）；
+// DB/Redis 连接池、监听端口等结构类变更需重启进程才会生效。
+func Watch(onChange func(*Config) error) error {
+	v, err := buildViper()
+	if err != nil {
+		return err
+	}
+	v.WatchConfig()
+	v.OnConfigChange(func(e fsnotify.Event) {
+		cfg, err := unmarshalConfig(v)
+		if err != nil {
+			log.Printf("config reload failed: %v", err)
+			return
+		}
+		if err := onChange(cfg); err != nil {
+			log.Printf("apply reloaded config failed: %v", err)
+		}
+	})
+	return nil
 }
 
 // applyEnvOverrides 应用环境变量覆盖（简洁命名，无 JIMU_ 前缀）

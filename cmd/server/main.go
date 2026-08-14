@@ -53,6 +53,19 @@ func run() error {
 		return fmt.Errorf("create container: %w", err)
 	}
 
+	// 配置文件热更新：仅应用运行时安全项（log.level）。
+	// 结构类配置（DB/Redis 连接池、监听端口等）变更需重启进程生效。
+	if err := config.Watch(func(newCfg *config.Config) error {
+		container.Logger.Info("config file changed, applying runtime settings", "level", newCfg.Log.Level)
+		if err := container.Logger.SetLevel(newCfg.Log.Level); err != nil {
+			container.Logger.Error("apply new log level failed", "error", err.Error())
+			return err
+		}
+		return nil
+	}); err != nil {
+		container.Logger.Warn("config file watch disabled", "error", err.Error())
+	}
+
 	application, err := app.Bootstrap(
 		container,
 		user.New(container.DB, *cfg, container.Redis, container.Outbox),
