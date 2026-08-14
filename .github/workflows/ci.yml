@@ -99,7 +99,7 @@ jobs:
           echo "Coverage check passed (${COVERAGE}% >= ${THRESHOLD}%)"
 
       - name: Run race tests
-        run: go test -race ./internal/app ./internal/config ./internal/platform/auth ./internal/platform/http/... ./internal/modules/auth/... ./internal/modules/audit/...
+        run: go test -race ./...
 
       - name: Check OpenAPI is current
         run: |
@@ -108,8 +108,8 @@ jobs:
 
       - name: Check smoke scripts
         run: |
-          bash -n work/test_runtime_security.sh
-          bash -n work/smoke_api_contract.sh
+          bash -n scripts/test_runtime_security.sh
+          bash -n scripts/smoke_api_contract.sh
 
   build:
     name: Build
