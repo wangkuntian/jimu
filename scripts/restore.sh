@@ -32,26 +32,41 @@ echo "Database: ${DB_NAME}"
 echo "Source: ${BACKUP_FILE}"
 echo ""
 
-# 确认
-read -p "⚠️  This will OVERWRITE the database. Continue? (y/N) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborted."
-    exit 0
+# 确认（FORCE=1 跳过交互，供自动化脚本/CI 使用）
+if [[ "${FORCE:-0}" != "1" ]]; then
+    read -p "⚠️  This will OVERWRITE the database. Continue? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 0
+    fi
+fi
+
+# 选择客户端：优先 mysql，回退 mariadb（mariadb:12+ 移除了 mysql 软链接）
+CLIENT_BIN="${MYSQL:-}"
+if [ -z "$CLIENT_BIN" ]; then
+    if command -v mysql >/dev/null 2>&1; then
+        CLIENT_BIN=mysql
+    elif command -v mariadb >/dev/null 2>&1; then
+        CLIENT_BIN=mariadb
+    else
+        echo "❌ 未找到 mysql 或 mariadb 客户端，请安装 MariaDB/MySQL 客户端" >&2
+        exit 1
+    fi
 fi
 
 # 判断文件类型并恢复
 echo "Restoring..."
 if [[ "$BACKUP_FILE" == *.gz ]]; then
     if [ -n "$DB_PASSWORD" ]; then
-        gunzip < "$BACKUP_FILE" | mysql \
+        gunzip < "$BACKUP_FILE" | "$CLIENT_BIN" \
             --host="$DB_HOST" \
             --port="$DB_PORT" \
             --user="$DB_USER" \
             --password="$DB_PASSWORD" \
             "$DB_NAME"
     else
-        gunzip < "$BACKUP_FILE" | mysql \
+        gunzip < "$BACKUP_FILE" | "$CLIENT_BIN" \
             --host="$DB_HOST" \
             --port="$DB_PORT" \
             --user="$DB_USER" \
@@ -59,14 +74,14 @@ if [[ "$BACKUP_FILE" == *.gz ]]; then
     fi
 else
     if [ -n "$DB_PASSWORD" ]; then
-        mysql \
+        "$CLIENT_BIN" \
             --host="$DB_HOST" \
             --port="$DB_PORT" \
             --user="$DB_USER" \
             --password="$DB_PASSWORD" \
             "$DB_NAME" < "$BACKUP_FILE"
     else
-        mysql \
+        "$CLIENT_BIN" \
             --host="$DB_HOST" \
             --port="$DB_PORT" \
             --user="$DB_USER" \

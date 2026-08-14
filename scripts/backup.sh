@@ -26,9 +26,22 @@ echo "Host: ${DB_HOST}:${DB_PORT}"
 echo "Database: ${DB_NAME}"
 echo "Output: ${BACKUP_FILE}"
 
+# 选择 dump 客户端：优先 mysqldump，回退 mariadb-dump（mariadb:12+ 移除了 mysqldump 软链接）
+DUMP_BIN="${MYSQLDUMP:-}"
+if [ -z "$DUMP_BIN" ]; then
+    if command -v mysqldump >/dev/null 2>&1; then
+        DUMP_BIN=mysqldump
+    elif command -v mariadb-dump >/dev/null 2>&1; then
+        DUMP_BIN=mariadb-dump
+    else
+        echo "❌ 未找到 mysqldump 或 mariadb-dump，请安装 MariaDB/MySQL 客户端" >&2
+        exit 1
+    fi
+fi
+
 # 执行备份
 if [ -n "$DB_PASSWORD" ]; then
-    mysqldump \
+    "$DUMP_BIN" \
         --host="$DB_HOST" \
         --port="$DB_PORT" \
         --user="$DB_USER" \
@@ -40,7 +53,7 @@ if [ -n "$DB_PASSWORD" ]; then
         --set-gtid-purged=OFF \
         "$DB_NAME" | gzip > "$BACKUP_FILE"
 else
-    mysqldump \
+    "$DUMP_BIN" \
         --host="$DB_HOST" \
         --port="$DB_PORT" \
         --user="$DB_USER" \

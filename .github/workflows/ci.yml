@@ -8,7 +8,7 @@ on:
     branches: [master, release/*]
 
 env:
-  GO_VERSION: "1.26.5"
+  GO_VERSION: "1.26.6"
   GOLANGCI_LINT_VERSION: "v2.7.2"
 
 jobs:
@@ -56,6 +56,19 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: jimu_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d jimu_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
       redis:
         image: redis:8.4.0-alpine
         ports:
@@ -85,6 +98,16 @@ jobs:
           DB_PASSWORD: root
           DB_NAME: jimu_test
         run: go test ./... -coverprofile=coverage.out
+
+      - name: Run postgres migration smoke
+        env:
+          DB_DRIVER: postgres
+          DB_HOST: 127.0.0.1
+          DB_PORT: "5432"
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: jimu_test
+        run: go test ./internal/platform/db/... -run TestPostgresMigrationUpDown -v
 
       - name: Check coverage threshold
         run: |

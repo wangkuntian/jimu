@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -48,6 +50,8 @@ type testAppDB struct {
 func newTestAppWithDB(t *testing.T) *testAppDB {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
+	// casbin 用相对路径加载 conf/rbac_model.conf，需 cwd 位于项目根
+	t.Chdir(repoRoot(t))
 
 	gdb, err := gorm.Open(sqlite.Open("file:e2e_contract?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
@@ -377,4 +381,25 @@ func TestAPIContract(t *testing.T) {
 	w = doJSON(t, r, http.MethodGet, "/api/v1/audits", adminToken, "")
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, 0, parseResp(t, w).Code)
+}
+
+// repoRoot 定位项目根目录：从 cwd 向上找 go.mod。
+// 不依赖 cwd 深度，e2e 包移动目录后仍能稳定定位 conf/rbac_model.conf。
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	dir, _ = filepath.Abs(dir)
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("go.mod not found; project root unreachable")
+		}
+		dir = parent
+	}
 }
