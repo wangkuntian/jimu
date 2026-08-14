@@ -2,7 +2,7 @@
 .PHONY: docker-build docker-run docker-stop docker-logs
 .PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
 .PHONY: compose-observability compose-observability-down
-.PHONY: bench loadtest
+.PHONY: bench loadtest proto
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -73,6 +73,7 @@ help:
 	@echo "工具:"
 	@echo "  make clean                清理构建产物"
 	@echo "  make swagger              生成 API 文档"
+	@echo "  make proto                重新生成 gRPC 代码"
 	@echo "  make bench                运行性能基准测试"
 	@echo "  make loadtest             本地 HTTP 压测（需 hey）"
 	@echo "  make release-check        发布前检查"
@@ -173,13 +174,18 @@ compose-migrate:
 compose-seed:
 	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) run --rm server ./jimu seed
 
-## compose-observability: 启动监控栈（Prometheus + Grafana）
+## compose-observability: 启动监控栈（Prometheus + Grafana + AlertManager + Loki)
 compose-observability:
 	$(DOCKER_COMPOSE) --profile observability up -d
 
 ## compose-observability-down: 停止监控栈
 compose-observability-down:
 	$(DOCKER_COMPOSE) --profile observability down
+
+## compose-observability-test: 触发一条告警以验证 AlertManager 链路(本地测试)
+compose-observability-test:
+	$(DOCKER_COMPOSE) --profile observability exec -T alertmanager amtool --alertmanager.url=http://localhost:9093 alert add label=severity=critical label=team=jimu label=instance=localhost annotation=summary='Jimu test alert' annotation=description='This is a test alert to verify the AlertManager pipeline.'
+	@echo "Test alert fired; visit http://localhost:9093 to verify."
 
 # ========== 工具 ==========
 
@@ -230,6 +236,16 @@ clean:
 swagger:
 	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi
 
+## proto: 从 proto/ 重新生成 gRPC 代码（需 protoc + protoc-gen-go + protoc-gen-go-grpc）
+proto:
+	@command -v protoc >/dev/null 2>&1 || { echo "protoc 未安装: brew install protobuf"; exit 1; }
+	@command -v protoc-gen-go >/dev/null 2>&1 || { echo "protoc-gen-go 未安装: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"; exit 1; }
+	@command -v protoc-gen-go-grpc >/dev/null 2>&1 || { echo "protoc-gen-go-grpc 未安装: go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest"; exit 1; }
+	protoc --go_out=. --go_opt=module=jimu \
+	       --go-grpc_out=. --go-grpc_opt=module=jimu \
+	       proto/jimu/v1/*.proto
+	@echo "gRPC 代码已重新生成"
+
 ## cli: 编译 CLI
 cli: build-cli
 
@@ -239,6 +255,10 @@ all: fmt vet test build
 ## bench: 运行性能基准测试
 bench:
 	go test -bench=. -benchmem -run='^$$' ./internal/shared/id/... ./internal/modules/auth/application/... ./internal/platform/notification/...
+
+## bench-ci: 性能回归门禁（绝对阈值模式，CI 用）
+bench-ci:
+	@./scripts/bench_ci.sh --absolute
 
 ## loadtest: 本地 HTTP 压测（需 hey，默认打健康检查）
 loadtest:

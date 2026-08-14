@@ -1,0 +1,100 @@
+# 告警规则（Prometheus + AlertManager）
+# 与 deploy/k8s/prometheusrule.yaml 对应的 docker-compose 版本
+groups:
+  - name: jimu-http
+    rules:
+      # 5xx 错误率 > 5%
+      - alert: JimuHighErrorRate
+        expr: |
+          sum(rate(jimu_http_requests_total{job="jimu-server",status=~"5.."}[5m]))
+          / sum(rate(jimu_http_requests_total{job="jimu-server"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "5xx 错误率超过 5%"
+          description: "5xx 错误率 {{ $value | humanizePercentage }}，持续 5 分钟"
+
+      # P95 延迟 > 1s
+      - alert: JimuHighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(jimu_http_request_duration_seconds_bucket{job="jimu-server"}[5m])) by (le)) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 延迟超过 1 秒"
+          description: "P95 延迟 {{ $value }}s，持续 5 分钟"
+
+      # 请求量突降（可能的流量异常）
+      - alert: JimuTrafficDrop
+        expr: |
+          sum(rate(jimu_http_requests_total{job="jimu-server"}[10m]))
+          < sum(rate(jimu_http_requests_total{job="jimu-server"}[10m] offset 1h)) * 0.3
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "请求量较 1 小时前下降 70%"
+          description: "当前 QPS 仅为 1 小时前的 {{ $value | humanizePercentage }}"
+
+  - name: jimu-infra
+    rules:
+      # 数据库连接池使用率 > 80%
+      - alert: JimuDBPoolHigh
+        expr: |
+          jimu_db_in_use_connections / jimu_db_max_open_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "数据库连接池使用率超过 80%"
+          description: "连接池使用率 {{ $value | humanizePercentage }}"
+
+      # Redis 不可达
+      - alert: JimuRedisDown
+        expr: |
+          jimu_redis_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis 不可达"
+          description: "Redis 连接断开超过 2 分钟"
+
+  - name: jimu-queue
+    rules:
+      # 队列死信堆积
+      - alert: JimuQueueDeadLetters
+        expr: |
+          jimu_queue_dead_letters > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "队列死信堆积"
+          description: "死信数量 {{ $value }}，持续 10 分钟未处理"
+
+      # 队列积压
+      - alert: JimuQueueBacklog
+        expr: |
+          jimu_queue_pending > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "队列积压超过 1000"
+          description: "待处理消息 {{ $value }} 条"
+
+  - name: jimu-process
+    rules:
+      # 进程退出（compose 场景通过服务存活检测）
+      - alert: JimuServerDown
+        expr: |
+          up{job="jimu-server"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Jimu 服务不可达"
+          description: "{{ $labels.instance }} 持续 2 分钟无响应"
