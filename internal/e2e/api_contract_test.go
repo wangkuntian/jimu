@@ -383,6 +383,64 @@ func TestAPIContract(t *testing.T) {
 	require.Equal(t, 0, parseResp(t, w).Code)
 }
 
+// TestAuthRateLimit 验证登录限流：LoginRateLimit=3 时，第 4 次请求被拒绝（code=1007）。
+// miniredis 支持 EVALSHA，无需外部 Redis。
+func TestAuthRateLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Chdir(repoRoot(t))
+
+	gdb, err := gorm.Open(sqlite.Open("file:e2e_ratelimit?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	if sqlDB, err := gdb.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(1)
+	}
+	require.NoError(t, db.InitSnowflake(1))
+	db.RegisterSnowflakeHook(gdb)
+	require.NoError(t, gdb.AutoMigrate(
+		&userdomain.User{},
+		&roledomain.Role{},
+		&roledomain.Permission{},
+	))
+	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS user_roles (user_id INTEGER NOT NULL, role_id INTEGER NOT NULL)`).Error)
+	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS role_permissions (role_id INTEGER NOT NULL, permission_id INTEGER NOT NULL)`).Error)
+	t.Setenv("ADMIN_PASSWORD", "admin123")
+	require.NoError(t, db.RunSeed(gdb))
+
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	t.Cleanup(mr.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	cfg := config.Config{
+		Auth: config.AuthConfig{
+			JWTSecret:          "0123456789abcdef0123456789abcdef",
+			Issuer:             "jimu-e2e",
+			AccessExpireMin:    30,
+			RefreshExpireDay:   7,
+			PublicRegistration: true,
+			LoginRateLimit:     3,
+			LoginRateWindowSec: 60,
+		},
+	}
+	authMod := authmodule.New(gdb, rdb, cfg.Auth, false, nil, config.CaptchaConfig{})
+	router := gin.New()
+	authMod.RegisterHTTP(router)
+
+	// 前 3 次登录成功
+	for i := 0; i < 3; i++ {
+		w := doJSON(t, router, http.MethodPost, "/api/v1/auth/login", "", `{"username":"admin","password":"admin123"}`)
+		require.Equal(t, http.StatusOK, w.Code, "第 %d 次登录应成功", i+1)
+		require.Equal(t, 0, parseResp(t, w).Code, "第 %d 次登录 code=0", i+1)
+	}
+
+	// 第 4 次被限流（CodeRateLimited → HTTP 429）
+	w := doJSON(t, router, http.MethodPost, "/api/v1/auth/login", "", `{"username":"admin","password":"admin123"}`)
+	require.Equal(t, http.StatusTooManyRequests, w.Code, "限流响应应为 429")
+	resp := parseResp(t, w)
+	require.Equal(t, 1007, resp.Code, "限流错误码应为 1007")
+}
+
 // repoRoot 定位项目根目录：从 cwd 向上找 go.mod。
 // 不依赖 cwd 深度，e2e 包移动目录后仍能稳定定位 conf/rbac_model.conf。
 func repoRoot(t *testing.T) string {
