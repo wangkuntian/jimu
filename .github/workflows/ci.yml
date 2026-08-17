@@ -133,6 +133,7 @@ jobs:
         run: |
           bash -n scripts/test_runtime_security.sh
           bash -n scripts/smoke_api_contract.sh
+          bash -n scripts/test_backup_restore.sh
 
   build:
     name: Build
