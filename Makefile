@@ -1,4 +1,4 @@
-.PHONY: run build test vet fmt fmt-check lint clean migrate migrate-down migrate-status seed help govulncheck
+.PHONY: run build test vet fmt fmt-check lint clean migrate migrate-down migrate-status seed help govulncheck test-backup-restore
 .PHONY: docker-build docker-run docker-stop docker-logs
 .PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
 .PHONY: compose-observability compose-observability-down
@@ -51,8 +51,9 @@ help:
 	@echo "  make migrate-down         本地回滚迁移"
 	@echo "  make migrate-status       查看迁移状态"
 	@echo "  make seed                 本地插入初始数据"
-	@echo "  make backup               备份数据库（mysqldump）"
-	@echo "  make restore              从备份恢复数据库（需 BACKUP_FILE=...）"
+	@echo "  make backup               备份数据库（mariadb-dump/mysqldump）"
+	@echo "  make restore              从备份恢复数据库（需 BACKUP_FILE=...，FORCE=1 跳过确认）"
+	@echo "  make test-backup-restore  备份/恢复往返测试（需运行中 mariadb 容器）"
 	@echo ""
 	@echo "Docker 容器（单容器，需外部 DB + Redis）:"
 	@echo "  make docker-build         构建镜像"
@@ -121,6 +122,10 @@ backup:
 ## restore: 从备份恢复数据库（需 mysql，用法: make restore BACKUP_FILE=./backups/xxx.sql.gz）
 restore:
 	@./scripts/restore.sh $(BACKUP_FILE)
+
+## test-backup-restore: 备份/恢复往返测试（通过 docker exec 调用容器内 mariadb，用法: make test-backup-restore [CONTAINER=jimu-test-mysql]）
+test-backup-restore:
+	@./scripts/test_backup_restore.sh $(CONTAINER)
 
 # ========== Docker 单容器 ==========
 
