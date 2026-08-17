@@ -20,9 +20,9 @@
     "semantic_hash": "8bd836df0def0863e7b1ac73ef1663df"
   },
   "go.mod": {
-    "mtime": 1786679569.7860024,
-    "ast_hash": "48e5e1b9fffeeb4c195038eb71d7b6d1",
-    "semantic_hash": "48e5e1b9fffeeb4c195038eb71d7b6d1"
+    "mtime": 1786699275.6083832,
+    "ast_hash": "c1da1c5da000d059fa0444c5621ff86b",
+    "semantic_hash": "c1da1c5da000d059fa0444c5621ff86b"
   },
   "internal/app/application.go": {
     "mtime": 1785481558.0713916,
@@ -417,7 +417,7 @@
   "internal/platform/db/migrate.go": {
     "mtime": 1786697292.9813092,
     "ast_hash": "62eb1c250c271010aef612c3d550ce5e",
-    "semantic_hash": ""
+    "semantic_hash": "62eb1c250c271010aef612c3d550ce5e"
   },
   "internal/platform/db/mysql.go": {
     "mtime": 1786689213.1882992,
@@ -432,7 +432,7 @@
   "internal/platform/db/seed_test.go": {
     "mtime": 1786697320.8693628,
     "ast_hash": "aae14ac4b7da70efe0c2b80a1c4d72a2",
-    "semantic_hash": ""
+    "semantic_hash": "aae14ac4b7da70efe0c2b80a1c4d72a2"
   },
   "internal/platform/db/transaction.go": {
     "mtime": 1785233103.9321759,
@@ -555,9 +555,9 @@
     "semantic_hash": "78e9c1a3f60971a449a917b27b6935fb"
   },
   "internal/shared/testutil/testdb.go": {
-    "mtime": 1786689617.75779,
-    "ast_hash": "ce024c2b1fcaa5bd0f077d8c9ec342a9",
-    "semantic_hash": "ce024c2b1fcaa5bd0f077d8c9ec342a9"
+    "mtime": 1786699339.0870292,
+    "ast_hash": "bbac344be6f5862c1cbc48b0e1a1df69",
+    "semantic_hash": "bbac344be6f5862c1cbc48b0e1a1df69"
   },
   "internal/shared/testutil/testutil.go": {
     "mtime": 1785231382.2919943,
@@ -582,12 +582,12 @@
   "tools/generator/module.go": {
     "mtime": 1786697350.8528762,
     "ast_hash": "ec6df79f1735dbcc5b1e8d7c6ca847e2",
-    "semantic_hash": ""
+    "semantic_hash": "ec6df79f1735dbcc5b1e8d7c6ca847e2"
   },
   "tools/generator/module_test.go": {
     "mtime": 1786697849.9702084,
     "ast_hash": "26676e79142bdf7182e99bc6f799dad5",
-    "semantic_hash": ""
+    "semantic_hash": "26676e79142bdf7182e99bc6f799dad5"
   },
   "tools/generator/templates.go": {
     "mtime": 1785910265.217461,
@@ -615,9 +615,9 @@
     "semantic_hash": "d133cae0bcf64494c876a45c3316ad39"
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786692661.0204957,
-    "ast_hash": "c1d986f2140a1bf58b6a82d2c4fc5489",
-    "semantic_hash": "c1d986f2140a1bf58b6a82d2c4fc5489"
+    "mtime": 1786932598.0536458,
+    "ast_hash": "184407542ca573322edc7d0bf36a6bf4",
+    "semantic_hash": "184407542ca573322edc7d0bf36a6bf4"
   },
   ".github/workflows/release.yml": {
     "mtime": 1785997681.6877382,
@@ -630,9 +630,9 @@
     "semantic_hash": "6faab46f07a517d3a64f1d8bee40f2f2"
   },
   "README.md": {
-    "mtime": 1786697850.9881043,
-    "ast_hash": "d701acd3b60ca36650faede777ca456e",
-    "semantic_hash": ""
+    "mtime": 1786932774.0591865,
+    "ast_hash": "e9348cb275e25fb22584c26dd9fd2618",
+    "semantic_hash": "e9348cb275e25fb22584c26dd9fd2618"
   },
   "configs/app.prod.yaml": {
     "mtime": 1786692913.9649684,
@@ -1450,14 +1450,14 @@
     "semantic_hash": "325ddaba649efbeab4c484f52d9b6aa9"
   },
   "scripts/backup.sh": {
-    "mtime": 1786030857.7219613,
-    "ast_hash": "c3f1bfe528afc4b12b2219d90b0043ae",
-    "semantic_hash": "c3f1bfe528afc4b12b2219d90b0043ae"
+    "mtime": 1786701301.9935231,
+    "ast_hash": "ea59ef2d3c96ec46239f0e8d63dc7678",
+    "semantic_hash": "ea59ef2d3c96ec46239f0e8d63dc7678"
   },
   "scripts/restore.sh": {
-    "mtime": 1786030872.576392,
-    "ast_hash": "cf162a0759d4e376ff92d769a742ebe4",
-    "semantic_hash": "cf162a0759d4e376ff92d769a742ebe4"
+    "mtime": 1786701383.45119,
+    "ast_hash": "86e107dbd4456a08cfdd2f0484467873",
+    "semantic_hash": "86e107dbd4456a08cfdd2f0484467873"
   },
   ".golangci.yml": {
     "mtime": 1786017182.5834234,
@@ -1867,7 +1867,7 @@
   "internal/platform/db/migrate_test.go": {
     "mtime": 1786697305.3830352,
     "ast_hash": "c6f7d9a872f450ed23e026b8cff73081",
-    "semantic_hash": ""
+    "semantic_hash": "c6f7d9a872f450ed23e026b8cff73081"
   },
   "internal/platform/db/mysql_test.go": {
     "mtime": 1786531890.9150898,
@@ -2119,11 +2119,6 @@
     "ast_hash": "7b51da05265496355d9723aeaf658bfd",
     "semantic_hash": "7b51da05265496355d9723aeaf658bfd"
   },
-  "internal/e2e/api/api_contract_test.go": {
-    "mtime": 1786692457.3216913,
-    "ast_hash": "cf012a21aed22d48b1487f82bae39a79",
-    "semantic_hash": "cf012a21aed22d48b1487f82bae39a79"
-  },
   "internal/platform/db/postgres.go": {
     "mtime": 1786689216.2075036,
     "ast_hash": "eb2df8b6aa3eb9da66d9c7db237dcd3f",
@@ -2182,41 +2177,66 @@
   "migrations/mysql/001_core.sql": {
     "mtime": 1786697241.6949456,
     "ast_hash": "25fc1d3a17261125ca2b74e2c518db98",
-    "semantic_hash": ""
+    "semantic_hash": "25fc1d3a17261125ca2b74e2c518db98"
   },
   "migrations/mysql/002_audit_outbox.sql": {
     "mtime": 1786696901.6385157,
     "ast_hash": "28642432feadec76d6d2d6589042495c",
-    "semantic_hash": ""
+    "semantic_hash": "28642432feadec76d6d2d6589042495c"
   },
   "migrations/mysql/003_extensions.sql": {
     "mtime": 1786697448.059408,
     "ast_hash": "e49485c21daada336a81d8587b8a883c",
-    "semantic_hash": ""
+    "semantic_hash": "e49485c21daada336a81d8587b8a883c"
   },
   "migrations/postgres/001_core.sql": {
     "mtime": 1786697468.7027342,
     "ast_hash": "7b34befb09e7dc340f4827dc7ea47fcd",
-    "semantic_hash": ""
+    "semantic_hash": "7b34befb09e7dc340f4827dc7ea47fcd"
   },
   "migrations/postgres/002_audit_outbox.sql": {
     "mtime": 1786697485.994037,
     "ast_hash": "9c3e5d4f9d3bedc137fa9a4dfe0cee89",
-    "semantic_hash": ""
+    "semantic_hash": "9c3e5d4f9d3bedc137fa9a4dfe0cee89"
   },
   "migrations/postgres/003_extensions.sql": {
     "mtime": 1786697520.4408839,
     "ast_hash": "a7441d46529ea9d15bbd166657811a2a",
-    "semantic_hash": ""
+    "semantic_hash": "a7441d46529ea9d15bbd166657811a2a"
   },
   "AGENTS.md": {
     "mtime": 1786685568.8601098,
     "ast_hash": "75c55347cad88a46be25518802582cdb",
-    "semantic_hash": ""
+    "semantic_hash": "75c55347cad88a46be25518802582cdb"
   },
   "MEMORY.md": {
     "mtime": 1786679593.6534224,
     "ast_hash": "d4ccb033632d2d22bd02a1a14cbb588d",
-    "semantic_hash": ""
+    "semantic_hash": "d4ccb033632d2d22bd02a1a14cbb588d"
+  },
+  "internal/e2e/api_contract_test.go": {
+    "mtime": 1786947440.1444845,
+    "ast_hash": "c6993534e30995e98f7c88532ae309ec",
+    "semantic_hash": "c6993534e30995e98f7c88532ae309ec"
+  },
+  "internal/e2e/grpc_contract_test.go": {
+    "mtime": 1786939133.7940612,
+    "ast_hash": "17488d228a3089fa502745ffcafc6bcc",
+    "semantic_hash": "17488d228a3089fa502745ffcafc6bcc"
+  },
+  "internal/platform/db/migration_integration_test.go": {
+    "mtime": 1786699660.8355634,
+    "ast_hash": "b7f3c4d709e0289e131c48408b049cf6",
+    "semantic_hash": "b7f3c4d709e0289e131c48408b049cf6"
+  },
+  "internal/platform/outbox/e2e_test.go": {
+    "mtime": 1786700716.480914,
+    "ast_hash": "fe7d8e508d8ae8d492f03718f72ff4e9",
+    "semantic_hash": "fe7d8e508d8ae8d492f03718f72ff4e9"
+  },
+  "scripts/test_backup_restore.sh": {
+    "mtime": 1786701613.572049,
+    "ast_hash": "0c8fc3d6aab96f5343a1afe5326f6355",
+    "semantic_hash": "0c8fc3d6aab96f5343a1afe5326f6355"
   }
 }
