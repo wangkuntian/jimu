@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"jimu/internal/modules/permission/application"
 	"jimu/internal/modules/role/domain"
+	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,6 +27,87 @@ func TestPermissionCreateReturnsCreated(t *testing.T) {
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusCreated)
+	}
+}
+
+func TestPermissionGetReturnsOK(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/permissions/:id", NewPermissionHandler(application.NewPermissionService(&fakePermissionRepository{})).Get)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/permissions/7", nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestPermissionGetInvalidID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/permissions/:id", NewPermissionHandler(application.NewPermissionService(&fakePermissionRepository{})).Get)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/permissions/abc", nil))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestPermissionListReturnsOK(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/permissions", func(c *gin.Context) {
+		c.Set("validated_query", &pagination.Pagination{})
+		NewPermissionHandler(application.NewPermissionService(&fakePermissionRepository{})).List(c)
+	})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/permissions", nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestPermissionListRejectsInvalidSort(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/permissions", func(c *gin.Context) {
+		c.Set("validated_query", &pagination.Pagination{Sort: "invalid", Order: "desc"})
+		NewPermissionHandler(application.NewPermissionService(&fakePermissionRepository{})).List(c)
+	})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/permissions?sort=invalid", nil))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestPermissionUpdateInvalidID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.PUT("/permissions/:id", NewPermissionHandler(application.NewPermissionService(&fakePermissionRepository{})).Update)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/permissions/abc", nil))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestPermissionUpdateReturnsOK(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.PUT("/permissions/:id", func(c *gin.Context) {
+		c.Set("validated_req", &application.UpdatePermissionRequest{Name: "user:read", Resource: "user", Action: "read"})
+		NewPermissionHandler(application.NewPermissionService(&fakePermissionRepository{})).Update(c)
+	})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/permissions/7", strings.NewReader(`{"name":"user:read","resource":"user","action":"read"}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 }
 
@@ -54,3 +137,21 @@ func (r *fakePermissionRepository) Create(_ context.Context, permission *domain.
 }
 func (r *fakePermissionRepository) Update(context.Context, *domain.Permission) error { return nil }
 func (r *fakePermissionRepository) Delete(context.Context, uint64) error             { return nil }
+
+type errDeletePermissionRepository struct{ fakePermissionRepository }
+
+func (r *errDeletePermissionRepository) Delete(context.Context, uint64) error {
+	return errors.New("db down")
+}
+
+func TestPermissionDeleteServiceError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.DELETE("/permissions/:id", NewPermissionHandler(application.NewPermissionService(&errDeletePermissionRepository{})).Delete)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/permissions/7", nil))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+}
