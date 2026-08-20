@@ -24,7 +24,7 @@ type Consumer interface {
 	// Nack 否认任务处理。
 	// Redis：重新入队（BLMove 原子消费 + 可见性超时兜底，at-least-once）；
 	// RabbitMQ：autoAck=false + requeue 重新入队（at-least-once，连接断开时 broker 自动重投未确认消息）；
-	// Kafka：offset 自动提交，Nack 重新发布到 topic 触发重试（应用层 at-least-once，
-	// 崩溃窗口内消息可能丢失），重试上限由 WorkerPool 的持久化存储（MySQL store）驱动。
+	// Kafka：FetchMessage 不提交 offset，Nack 不提交 → broker 重新投递未提交区间（at-least-once），
+	// 消费端须幂等。重试上限由 WorkerPool 的持久化存储（MySQL store）驱动。
 	Nack(ctx context.Context, job *JobData) error
 }

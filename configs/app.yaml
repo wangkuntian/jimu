@@ -107,6 +107,13 @@ storage:
   secret_key: ""          # 密钥（生产建议环境变量注入）
   path_style: false       # 路径风格（minio 必须 true）
 
+# 文件上传安全配置
+upload:
+  clamav:
+    enabled: false            # 是否启用 ClamAV 病毒扫描（需运行 clamd）
+    address: "127.0.0.1:3310" # clamd 监听地址
+    timeout_sec: 10           # 单次扫描超时（秒）
+
 # 队列配置
 queue:
   type: "redis"           # 队列类型：redis, kafka, rabbitmq

@@ -212,9 +212,9 @@ func (p *WorkerPool) executeJob(data *JobData) {
 		queueJobsTotal.WithLabelValues(data.Type, "failure").Inc()
 		if p.store != nil {
 			// store 判定是否需要重试（看 Attempts vs MaxAttempts）
-			requeue := p.needRetry(ctx, data)
+			requeue, attempt := p.needRetry(ctx, data)
 			if requeue {
-				_ = p.queue.Nack(ctx, data)
+				p.requeueWithBackoff(ctx, data, attempt)
 			} else {
 				queueDeadLettersTotal.WithLabelValues(data.Type).Inc()
 				_ = p.queue.Ack(ctx, data)
@@ -229,14 +229,35 @@ func (p *WorkerPool) executeJob(data *JobData) {
 	}
 }
 
-// needRetry 查询 store 判断任务是否还有重试机会。
+// needRetry 查询 store 判断任务是否还有重试机会，并返回当前重试次数（用于退避计算）。
 // 无 jobs 行（outbox 事件）或查询失败时保守返回 false（不无限重试）。
-func (p *WorkerPool) needRetry(ctx context.Context, data *JobData) bool {
+func (p *WorkerPool) needRetry(ctx context.Context, data *JobData) (bool, int) {
 	job, err := p.store.jobRepo.FindByID(ctx, data.ID)
 	if err != nil {
-		return false
+		return false, 0
 	}
-	return job.Attempts < job.MaxAttempts
+	if job.Attempts >= job.MaxAttempts {
+		return false, 0
+	}
+	return true, job.Attempts
+}
+
+// requeueWithBackoff 按重试策略延迟重入队列。
+// 队列实现 SubmitDelayed（如 Redis ZSET）时按 NextDelay(attempt) 延迟重投，
+// 避免瞬态失败（DB 抖动等）立即砸队列；延迟精度受 delayedJobScanner 的 10s tick 约束。
+// 队列不支持 SubmitDelayed 或延迟投递失败时回退 Nack 立即重入队（at-least-once，不丢任务）。
+// 先投递后 Ack：Ack 失败仅导致重复投递（at-least-once 可接受），不会丢任务。
+func (p *WorkerPool) requeueWithBackoff(ctx context.Context, data *JobData, attempt int) {
+	delay, ok := p.strategy.NextDelay(attempt)
+	producer, canDelay := p.queue.(Queue)
+	if canDelay && ok && delay > 0 {
+		if err := producer.SubmitDelayed(ctx, data, delay); err == nil {
+			_ = p.queue.Ack(ctx, data) // 已延迟重投，清理原消费登记
+			return
+		}
+	}
+	// 不支持延迟或延迟投递失败：立即重入队，保证 at-least-once
+	_ = p.queue.Nack(ctx, data)
 }
 
 // Submit 提交任务

@@ -35,10 +35,12 @@ func (f *fakeConsumer) Consume(ctx context.Context, timeout time.Duration) (*Job
 func (f *fakeConsumer) Ack(ctx context.Context, j *JobData) error  { return nil }
 func (f *fakeConsumer) Nack(ctx context.Context, j *JobData) error { return nil }
 
-// fakeProducer 同时实现 Queue（Submit/SubmitDelayed/MoveDueJobs），验证 WorkerPool 生产者断言路径
+// fakeProducer 同时实现 Queue（Submit/SubmitDelayed/MoveDueJobs），验证 WorkerPool 生产者断言路径。
+// jobs 字段非空时作消费者返回任务，用于退避测试同时覆盖生产者重投路径。
 type fakeProducer struct {
 	submitted     []*JobData
 	submittedDels []*JobData
+	jobs          chan *JobData
 }
 
 func (p *fakeProducer) Submit(ctx context.Context, job *JobData) error {
@@ -52,7 +54,12 @@ func (p *fakeProducer) SubmitDelayed(ctx context.Context, job *JobData, delay ti
 }
 
 func (p *fakeProducer) Consume(ctx context.Context, timeout time.Duration) (*JobData, error) {
-	return nil, context.DeadlineExceeded
+	select {
+	case j := <-p.jobs:
+		return j, nil
+	default:
+		return nil, context.DeadlineExceeded
+	}
 }
 
 func (p *fakeProducer) MoveDueJobs(ctx context.Context) (int, error) { return 0, nil }
@@ -204,6 +211,56 @@ func TestWorkerPoolOutboxEventSuccessSkipsTracking(t *testing.T) {
 	wp.Start()
 	time.Sleep(100 * time.Millisecond)
 	wp.Stop()
+}
+
+// TestWorkerPoolRetryUsesBackoff 验证失败任务经 SubmitDelayed 延迟重投（退避激活），
+// 而非立即 Nack。job.Attempts=1 < MaxAttempts=3 → 重投，attempt=1。
+func TestWorkerPoolRetryUsesBackoff(t *testing.T) {
+	RegisterWorker("flaky", func(ctx context.Context, payload string) error {
+		return errors.New("transient")
+	})
+
+	// fakeProducer 同时是生产者+消费者：取走任务，记录延迟重投
+	producer := &fakeProducer{}
+	jobRepo := newFakeJobRepo()
+	store := NewMySQLStore(jobRepo, &fakeHistoryRepo{}, &fakeDeadRepo{})
+	// 预置 jobs 表行：Attempts=1, MaxAttempts=3 → 可重投
+	jobRepo.jobs[1] = &domain.Job{ID: 1, Type: "flaky", Status: domain.JobStatusPending, Attempts: 1, MaxAttempts: 3}
+	producer.jobs = make(chan *JobData, 1)
+	producer.jobs <- &JobData{ID: 1, Type: "flaky", Payload: `{}`}
+
+	wp := NewWorkerPool(WorkerConfig{Workers: 1, PollTimeout: 10 * time.Millisecond}, producer, store)
+	wp.Start()
+	time.Sleep(100 * time.Millisecond)
+	wp.Stop()
+
+	require.Len(t, producer.submittedDels, 1, "失败任务应经 SubmitDelayed 延迟重投")
+	assert.Len(t, producer.submitted, 0, "不应立即 Submit")
+	assert.Equal(t, uint64(1), producer.submittedDels[0].ID)
+}
+
+// TestWorkerPoolRetryExhaustedAcks 验证重试耗尽时 Ack（入死信），不重投。
+func TestWorkerPoolRetryExhaustedAcks(t *testing.T) {
+	RegisterWorker("dead", func(ctx context.Context, payload string) error {
+		return errors.New("permanent")
+	})
+
+	consumer := &fakeConsumer{jobs: make(chan *JobData, 1)}
+	jobRepo := newFakeJobRepo()
+	store := NewMySQLStore(jobRepo, &fakeHistoryRepo{}, &fakeDeadRepo{})
+	// Attempts=3 = MaxAttempts=3 → 耗尽，应 Ack 入死信
+	jobRepo.jobs[1] = &domain.Job{ID: 1, Type: "dead", Status: domain.JobStatusPending, Attempts: 3, MaxAttempts: 3}
+	consumer.jobs <- &JobData{ID: 1, Type: "dead", Payload: `{}`}
+
+	wp := NewWorkerPool(WorkerConfig{Workers: 1, PollTimeout: 10 * time.Millisecond}, consumer, store)
+	wp.Start()
+	time.Sleep(100 * time.Millisecond)
+	wp.Stop()
+
+	deadRepo := store.deadRepo.(*fakeDeadRepo)
+	deadRepo.mu.Lock()
+	defer deadRepo.mu.Unlock()
+	require.Len(t, deadRepo.items, 1, "耗尽重试应写死信")
 }
 
 func TestWorkerPoolSubmitAndDelayed(t *testing.T) {

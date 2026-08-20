@@ -16,6 +16,7 @@ import (
 	"jimu/internal/platform/event"
 	"jimu/internal/platform/feature"
 	grpcpkg "jimu/internal/platform/grpc"
+	platformhttp "jimu/internal/platform/http"
 	"jimu/internal/platform/httpclient"
 	"jimu/internal/platform/logger"
 	"jimu/internal/platform/notification"
@@ -41,6 +42,7 @@ type Container struct {
 	Scheduler      *scheduler.CronScheduler
 	Lock           *redistore.Lock
 	Storage        storage.Storage
+	UploadScanner  platformhttp.Scanner
 	Notification   notification.Dispatcher
 	FeatureFlag    *feature.Manager
 	WebSocketHub   *notification.Hub
@@ -123,6 +125,15 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("init storage: %w", err)
+	}
+
+	// 文件上传病毒扫描器：未启用时为 nil（上传不扫描，向后兼容）
+	var uploadScanner platformhttp.Scanner
+	if cfg.Upload.ClamAV.Enabled {
+		uploadScanner = platformhttp.NewClamAVScanner(platformhttp.ClamAVConfig{
+			Address:   cfg.Upload.ClamAV.Address,
+			Timeout:   time.Duration(cfg.Upload.ClamAV.TimeoutSec) * time.Second,
+		})
 	}
 
 	// 统一出站 HTTP client（oauth/webhook 等外部调用复用）
@@ -257,6 +268,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		Scheduler:      sched,
 		Lock:           lock,
 		Storage:        storageSvc,
+		UploadScanner:  uploadScanner,
 		Notification:   notifier,
 		FeatureFlag:    featureMgr,
 		WebSocketHub:   wsHub,
