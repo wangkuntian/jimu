@@ -167,6 +167,16 @@ func (p *WorkerPool) executeJob(data *JobData) {
 	)
 
 	if p.store != nil {
+		// 幂等去重：at-least-once 下重复投递不可避免（崩溃/Nack 重投），
+		// 已成功的任务直接 Ack 跳过，避免业务 handler 副作用重复执行。
+		// outbox 事件无 jobs 行（FindByID 返回 NotFound）→ 正常执行，无法去重。
+		if job, err := p.store.jobRepo.FindByID(ctx, data.ID); err == nil {
+			if job.Status == domain.JobStatusSuccess || job.Status == domain.JobStatusDead {
+				queueJobsTotal.WithLabelValues(data.Type, "deduped").Inc()
+				_ = p.queue.Ack(ctx, data)
+				return
+			}
+		}
 		if err := p.store.MarkRunning(ctx, data.ID); err != nil {
 			log.Printf("queue: mark running job %d: %v", data.ID, err)
 		}
