@@ -263,6 +263,30 @@ func TestWorkerPoolRetryExhaustedAcks(t *testing.T) {
 	require.Len(t, deadRepo.items, 1, "耗尽重试应写死信")
 }
 
+// TestWorkerPoolDedupesAlreadySuccess 验证 at-least-once 重复投递幂等：
+// jobs 表已 success 的任务重复消费时 Ack 跳过，不执行 handler 副作用。
+func TestWorkerPoolDedupesAlreadySuccess(t *testing.T) {
+	called := false
+	RegisterWorker("once", func(ctx context.Context, payload string) error {
+		called = true
+		return nil
+	})
+
+	consumer := &fakeConsumer{jobs: make(chan *JobData, 1)}
+	jobRepo := newFakeJobRepo()
+	store := NewMySQLStore(jobRepo, &fakeHistoryRepo{}, &fakeDeadRepo{})
+	// 预置已成功的任务：重复投递应跳过
+	jobRepo.jobs[1] = &domain.Job{ID: 1, Type: "once", Status: domain.JobStatusSuccess, Attempts: 1, MaxAttempts: 3}
+	consumer.jobs <- &JobData{ID: 1, Type: "once", Payload: `{}`}
+
+	wp := NewWorkerPool(WorkerConfig{Workers: 1, PollTimeout: 10 * time.Millisecond}, consumer, store)
+	wp.Start()
+	time.Sleep(100 * time.Millisecond)
+	wp.Stop()
+
+	assert.False(t, called, "已成功的任务不应重复执行 handler")
+}
+
 func TestWorkerPoolSubmitAndDelayed(t *testing.T) {
 	producer := &fakeProducer{}
 	wp := NewWorkerPool(DefaultWorkerConfig, producer, fakeStore())
