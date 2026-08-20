@@ -370,9 +370,9 @@
     "semantic_hash": "172c84ecc8cb3bd91f007f6cd377a644"
   },
   "internal/modules/admin/module.go": {
-    "mtime": 1787135451.9394383,
-    "ast_hash": "6512b67441e0b688a29aa63d8189e23e",
-    "semantic_hash": ""
+    "mtime": 1786518406.1043863,
+    "ast_hash": "6929ab8e7f91793041f04c4adb600c01",
+    "semantic_hash": "6929ab8e7f91793041f04c4adb600c01"
   },
   "internal/modules/admin/module_route_test.go": {
     "mtime": 1786498004.6872883,
@@ -800,9 +800,9 @@
     "semantic_hash": "eb4b429dffcf05d97fde89d2718e4cfc"
   },
   "internal/platform/auth/limiter.go": {
-    "mtime": 1787135372.7955592,
-    "ast_hash": "4088293e9f6476b3958e9de49beb578c",
-    "semantic_hash": ""
+    "mtime": 1785481558.0821457,
+    "ast_hash": "7f37c957a3c8c4d279f1fcc78c475fa3",
+    "semantic_hash": "7f37c957a3c8c4d279f1fcc78c475fa3"
   },
   "internal/platform/auth/limiter_test.go": {
     "mtime": 1785481558.0822947,
@@ -935,14 +935,14 @@
     "semantic_hash": "eb2df8b6aa3eb9da66d9c7db237dcd3f"
   },
   "internal/platform/db/seed.go": {
-    "mtime": 1787134542.868424,
-    "ast_hash": "40411c3c1c7508eeaccea7e1bd7f9281",
-    "semantic_hash": ""
+    "mtime": 1786519473.6042995,
+    "ast_hash": "723dd80e20fe254a9c345592d0508eee",
+    "semantic_hash": "723dd80e20fe254a9c345592d0508eee"
   },
   "internal/platform/db/seed_test.go": {
-    "mtime": 1787134581.0220563,
-    "ast_hash": "796dbd71c184e4bbfcf94fb73d47f987",
-    "semantic_hash": ""
+    "mtime": 1786697320.8693628,
+    "ast_hash": "aae14ac4b7da70efe0c2b80a1c4d72a2",
+    "semantic_hash": "aae14ac4b7da70efe0c2b80a1c4d72a2"
   },
   "internal/platform/db/snowflake.go": {
     "mtime": 1786528776.472855,
@@ -1910,8 +1910,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787134719.8378704,
-    "ast_hash": "f3f0ea56490c931e578f5f4ee73dda42",
+    "mtime": 1786932598.0536458,
+    "ast_hash": "184407542ca573322edc7d0bf36a6bf4",
     "semantic_hash": ""
   },
   ".github/workflows/release.yml": {
@@ -1935,8 +1935,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1787135937.1433342,
-    "ast_hash": "5255e6d72ab72c444a788240b06f273c",
+    "mtime": 1786679569.6248996,
+    "ast_hash": "d333145694053089a92e1f402ee9be0c",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1955,8 +1955,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1787135930.2056706,
-    "ast_hash": "7b0f6a12e61b3465d07464be66b27876",
+    "mtime": 1786932774.0591865,
+    "ast_hash": "e9348cb275e25fb22584c26dd9fd2618",
     "semantic_hash": ""
   },
   "SECURITY.md": {
@@ -2167,16 +2167,6 @@
   "specs/001-jimu-framework-spec/tasks.md": {
     "mtime": 1786528321.2304933,
     "ast_hash": "08d8560adafe2adb177993a30d7923a5",
-    "semantic_hash": ""
-  },
-  "internal/modules/admin/interfaces/ratelimit.go": {
-    "mtime": 1787135988.6146686,
-    "ast_hash": "c68c52711b4e57e03e0d1d32c95e038e",
-    "semantic_hash": ""
-  },
-  "internal/modules/admin/interfaces/ratelimit_test.go": {
-    "mtime": 1787135988.6146092,
-    "ast_hash": "45c5fc5065df5bc39e58609a08d2a6e3",
     "semantic_hash": ""
   }
 }
