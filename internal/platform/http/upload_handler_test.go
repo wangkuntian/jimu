@@ -3,10 +3,12 @@ package http
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
@@ -111,9 +113,7 @@ func TestIsAllowedType(t *testing.T) {
 }
 
 func TestReadAll(t *testing.T) {
-	r, err := readAll(strings.NewReader("hello"), 10)
-	require.NoError(t, err)
-	b, err := io.ReadAll(r)
+	b, err := readAll(strings.NewReader("hello"), 10)
 	require.NoError(t, err)
 	assert.Equal(t, "hello", string(b))
 
@@ -144,10 +144,11 @@ func TestHandleUploadSuccess(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	require.Len(t, st.uploaded, 1)
 	assert.Contains(t, w.Body.String(), `"code":0`)
-	assert.Contains(t, w.Body.String(), `"content_type":"text/plain"`)
+	// content_type 经 magic-byte 嗅探，文本附加 charset；校验真实类型前缀
+	assert.Contains(t, w.Body.String(), `"content_type":"text/plain`)
 	// key 使用默认前缀 + 扩展名
 	for key, ct := range st.uploaded {
-		assert.Equal(t, "text/plain", ct)
+		assert.True(t, strings.HasPrefix(ct, "text/plain"), "ct=%s", ct)
 		assert.True(t, strings.HasPrefix(key, "uploads/"), "key=%s", key)
 		assert.True(t, strings.HasSuffix(key, ".txt"), "key=%s", key)
 	}
@@ -312,4 +313,114 @@ func TestHandleDeleteStorageError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/delete?key=k", nil)
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// fakeScanner 内存假扫描器，按预设结果返回
+type fakeScanner struct {
+	clean bool
+	err   error
+	calls int
+}
+
+func (f *fakeScanner) Scan(_ context.Context, _ io.Reader) (bool, error) {
+	f.calls++
+	return f.clean, f.err
+}
+
+// TestHandleUploadScannerClean 验证扫描干净时放行落库
+func TestHandleUploadScannerClean(t *testing.T) {
+	st := newFakeStorage()
+	sc := &fakeScanner{clean: true}
+	h := NewUploadHandler(UploadConfig{Storage: st, Scanner: sc})
+	r := uploadEngine(h)
+	r.ServeHTTP(httptest.NewRecorder(),
+		multipartFileRequestWithType(t, "file", "a.txt", "text/plain", "hello"))
+	assert.Len(t, st.uploaded, 1, "干净文件应落库")
+	assert.Equal(t, 1, sc.calls)
+}
+
+// TestHandleUploadScannerDirty 验证检测到威胁时拒绝落库（fail-closed）
+func TestHandleUploadScannerDirty(t *testing.T) {
+	st := newFakeStorage()
+	sc := &fakeScanner{clean: false}
+	h := NewUploadHandler(UploadConfig{Storage: st, Scanner: sc})
+	w := httptest.NewRecorder()
+	uploadEngine(h).ServeHTTP(w,
+		multipartFileRequestWithType(t, "file", "mal.exe", "application/octet-stream", "X"))
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Empty(t, st.uploaded, "感染文件不应落库")
+	// CodeInvalidParam=1001（Fail 按错误码返回 i18n 消息，非原始 message）
+	assert.Contains(t, w.Body.String(), `"code":1001`)
+}
+
+// TestHandleUploadScannerUnavailable 验证扫描不可达时拒绝落库（fail-closed）
+func TestHandleUploadScannerUnavailable(t *testing.T) {
+	st := newFakeStorage()
+	sc := &fakeScanner{err: errors.New("clamd down")}
+	h := NewUploadHandler(UploadConfig{Storage: st, Scanner: sc})
+	w := httptest.NewRecorder()
+	uploadEngine(h).ServeHTTP(w,
+		multipartFileRequestWithType(t, "file", "a.txt", "text/plain", "hello"))
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Empty(t, st.uploaded, "扫描不可达时不应落库")
+}
+
+// startFakeClamd 启动一个 TCP 监听器模拟 clamd：接受连接，读 zINSTREAM 命令与分块帧，回写预设响应。
+// 返回监听地址与关闭函数。比 net.Pipe 更贴近真实路径，避开 pipe deadline 怪异。
+func startFakeClamd(t *testing.T, response string) (addr string, cleanup func()) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		_, _ = io.ReadFull(conn, make([]byte, 10)) // zINSTREAM\0 (10 字节)
+		for {
+			var sz uint32
+			if err := binary.Read(conn, binary.BigEndian, &sz); err != nil {
+				return
+			}
+			if sz == 0 {
+				break
+			}
+			_, _ = io.ReadFull(conn, make([]byte, sz))
+		}
+		_, _ = conn.Write([]byte(response))
+	}()
+	return ln.Addr().String(), func() { _ = ln.Close(); <-done }
+}
+
+// TestClamAVScannerClean 验证 INSTREAM 协议往返，干净响应
+func TestClamAVScannerClean(t *testing.T) {
+	addr, cleanup := startFakeClamd(t, "stream: OK\n")
+	defer cleanup()
+
+	s := &ClamAVScanner{address: addr, timeout: 5 * time.Second, chunkSize: 4}
+	clean, err := s.Scan(context.Background(), strings.NewReader("hello"))
+	assert.NoError(t, err)
+	assert.True(t, clean)
+}
+
+// TestClamAVScannerFound 验证检测到威胁返回 (false, nil)
+func TestClamAVScannerFound(t *testing.T) {
+	addr, cleanup := startFakeClamd(t, "stream: FOUND EICAR-Test\n")
+	defer cleanup()
+
+	s := &ClamAVScanner{address: addr, timeout: 5 * time.Second, chunkSize: 16}
+	clean, err := s.Scan(context.Background(), strings.NewReader("bad"))
+	assert.NoError(t, err)
+	assert.False(t, clean)
+}
+
+// TestClamAVScannerDialError 验证连接失败时 fail-closed（返回 false+err）
+func TestClamAVScannerDialError(t *testing.T) {
+	s := &ClamAVScanner{address: "127.0.0.1:1", timeout: time.Second, chunkSize: 16}
+	clean, err := s.Scan(context.Background(), strings.NewReader("x"))
+	assert.Error(t, err)
+	assert.False(t, clean)
 }

@@ -117,6 +117,13 @@ storage:
   base_dir: "storage"     # 本地存储目录
   base_url: "/files"      # 访问 URL 前缀
 
+# 文件上传安全配置
+upload:
+  clamav:
+    enabled: false            # 是否启用 ClamAV 病毒扫描（需运行 clamd）
+    address: "127.0.0.1:3310" # clamd 监听地址
+    timeout_sec: 10           # 单次扫描超时（秒）
+
 # 队列配置
 queue:
   type: "redis"           # 队列类型：redis, kafka, rabbitmq

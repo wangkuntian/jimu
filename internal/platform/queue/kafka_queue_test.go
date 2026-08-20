@@ -32,13 +32,15 @@ func (f *fakeKafkaWriter) WriteMessages(_ context.Context, msgs ...kafka.Message
 	return nil
 }
 
-// fakeKafkaReader 内存假 reader，按 FIFO 返回预先放入的消息
+// fakeKafkaReader 内存假 reader，按 FIFO 返回预先放入的消息。
+// FetchMessage 不自动提交，CommitMessages 记录已提交 offset。
 type fakeKafkaReader struct {
-	msgs []kafka.Message
-	err  error
+	msgs     []kafka.Message
+	err      error
+	commits  []kafka.Message // 已提交 offset 的消息
 }
 
-func (f *fakeKafkaReader) ReadMessage(context.Context) (kafka.Message, error) {
+func (f *fakeKafkaReader) FetchMessage(context.Context) (kafka.Message, error) {
 	if f.err != nil {
 		return kafka.Message{}, f.err
 	}
@@ -50,10 +52,15 @@ func (f *fakeKafkaReader) ReadMessage(context.Context) (kafka.Message, error) {
 	return msg, nil
 }
 
+func (f *fakeKafkaReader) CommitMessages(_ context.Context, msgs ...kafka.Message) error {
+	f.commits = append(f.commits, msgs...)
+	return nil
+}
+
 func TestKafkaQueue_SubmitConsume(t *testing.T) {
 	w := &fakeKafkaWriter{}
 	r := &fakeKafkaReader{}
-	q := &KafkaQueue{writer: w, reader: r}
+	q := &KafkaQueue{writer: w, reader: r, inFlight: make(map[uint64]kafka.Message)}
 
 	job := &JobData{ID: 7, Type: "test", Payload: `{"x":1}`}
 	assert.NoError(t, q.Submit(context.Background(), job))
@@ -73,14 +80,37 @@ func TestKafkaQueue_SubmitConsume(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, job, consumed)
 
+	// Ack 提交 offset，完成 at-least-once 闭环
 	assert.NoError(t, q.Ack(context.Background(), consumed))
-	assert.NoError(t, q.Nack(context.Background(), consumed))
+	require.Len(t, r.commits, 1)
+	assert.Equal(t, uint64(7), consumed.ID)
+
+	// Ack 幂等：重复 Ack 不再提交
+	assert.NoError(t, q.Ack(context.Background(), consumed))
+	assert.Len(t, r.commits, 1)
 }
 
-func TestKafkaQueue_ConsumeUnmarshalError(t *testing.T) {
+// TestKafkaQueue_NackDoesNotCommit 验证 Nack 不提交 offset，
+// broker 重启后会重新投递未提交区间（at-least-once）。
+func TestKafkaQueue_NackDoesNotCommit(t *testing.T) {
+	w := &fakeKafkaWriter{}
+	r := &fakeKafkaReader{msgs: []kafka.Message{{Key: []byte("1"), Value: []byte(`{"id":1,"type":"t","payload":""}`)}}}
+	q := &KafkaQueue{writer: w, reader: r, inFlight: make(map[uint64]kafka.Message)}
+
+	consumed, err := q.Consume(context.Background(), 100*time.Millisecond)
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(1), consumed.ID)
+
+	assert.NoError(t, q.Nack(context.Background(), consumed))
+	assert.Empty(t, r.commits, "Nack 不应提交 offset")
+}
+
+// TestKafkaQueue_ConsumeUnmarshalErrorCommits 验证 poison message 提交跳过，避免消费死循环。
+func TestKafkaQueue_ConsumeUnmarshalErrorCommits(t *testing.T) {
 	r := &fakeKafkaReader{msgs: []kafka.Message{{Value: []byte("not-json")}}}
-	q := &KafkaQueue{writer: &fakeKafkaWriter{}, reader: r}
+	q := &KafkaQueue{writer: &fakeKafkaWriter{}, reader: r, inFlight: make(map[uint64]kafka.Message)}
 
 	_, err := q.Consume(context.Background(), 100*time.Millisecond)
 	assert.Error(t, err)
+	require.Len(t, r.commits, 1, "poison message 应提交 offset 跳过")
 }

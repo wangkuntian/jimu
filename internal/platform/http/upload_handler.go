@@ -1,10 +1,12 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,6 +25,7 @@ type UploadHandler struct {
 	maxSize    int64  // 最大文件大小（字节）
 	allowTypes string // 允许的 MIME 前缀，逗号分隔，空表示允许所有
 	basePrefix string // 存储路径前缀，如 "uploads"
+	scanner    Scanner // 可选安全扫描器，nil 表示不扫描
 }
 
 // UploadConfig 上传处理器配置
@@ -31,6 +34,7 @@ type UploadConfig struct {
 	MaxSize    int64  // 默认 10MB
 	AllowTypes string // 如 "image/,application/pdf"
 	BasePrefix string // 默认 "uploads"
+	Scanner    Scanner // 可选病毒扫描器，nil 表示不扫描
 }
 
 // NewUploadHandler 创建上传处理器
@@ -46,6 +50,7 @@ func NewUploadHandler(cfg UploadConfig) *UploadHandler {
 		maxSize:    cfg.MaxSize,
 		allowTypes: cfg.AllowTypes,
 		basePrefix: cfg.BasePrefix,
+		scanner:    cfg.Scanner,
 	}
 }
 
@@ -149,8 +154,15 @@ func (h *UploadHandler) upload(ctx context.Context, file io.Reader, header *mult
 		return nil, errors.New(errors.CodeInvalidParam, "file is empty")
 	}
 
-	// 检查类型
+	// 检查类型。Content-Type 头可由客户端伪造，嗅探 magic byte 覆盖头声明。
 	contentType := header.Header.Get("Content-Type")
+	data, err := readAll(file, h.maxSize)
+	if err != nil {
+		return nil, errors.Wrap(errors.CodeInternalError, "failed to read file", err)
+	}
+	if sniffed := http.DetectContentType(data); sniffed != "" {
+		contentType = sniffed
+	}
 	if h.allowTypes != "" && !isAllowedType(contentType, h.allowTypes) {
 		return nil, errors.New(errors.CodeInvalidParam,
 			fmt.Sprintf("file type %s not allowed", contentType))
@@ -166,14 +178,20 @@ func (h *UploadHandler) upload(ctx context.Context, file io.Reader, header *mult
 		h.basePrefix, now.Year(), now.Month(), now.Day(),
 		uuid.NewString(), ext)
 
-	// 读取文件内容
-	data, err := readAll(file, h.maxSize)
-	if err != nil {
-		return nil, errors.Wrap(errors.CodeInternalError, "failed to read file", err)
+	// 安全扫描：scanner 非 nil 时落库前扫描。
+	// fail-closed：不干净或扫描不可达均拒绝落库，坏文件不持久化。
+	if h.scanner != nil {
+		clean, scanErr := h.scanner.Scan(ctx, bytes.NewReader(data))
+		if scanErr != nil {
+			return nil, errors.Wrap(errors.CodeInternalError, "file security scan unavailable", scanErr)
+		}
+		if !clean {
+			return nil, errors.New(errors.CodeInvalidParam, "file failed security scan")
+		}
 	}
 
 	// 上传到存储
-	if err := h.storage.Upload(ctx, key, data, header.Size, contentType); err != nil {
+	if err := h.storage.Upload(ctx, key, bytes.NewReader(data), header.Size, contentType); err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to upload file", err)
 	}
 
@@ -194,7 +212,7 @@ func isAllowedType(contentType, allowTypes string) bool {
 	return false
 }
 
-func readAll(r io.Reader, max int64) (io.Reader, error) {
+func readAll(r io.Reader, max int64) ([]byte, error) {
 	// 限制读取量，防止内存溢出
 	limited := io.LimitReader(r, max+1)
 	data, err := io.ReadAll(limited)
@@ -204,5 +222,5 @@ func readAll(r io.Reader, max int64) (io.Reader, error) {
 	if int64(len(data)) > max {
 		return nil, fmt.Errorf("file exceeds max size %d", max)
 	}
-	return io.NopCloser(strings.NewReader(string(data))), nil
+	return data, nil
 }

@@ -29,6 +29,7 @@ type Module struct {
 	db         *gorm.DB
 	sched      *scheduler.CronScheduler
 	storage    storage.Storage
+	scanner    platformhttp.Scanner
 	feature    *feature.Manager
 	eventBus   contract.EventBus
 	wsHub      *ws.ClientHub
@@ -50,6 +51,8 @@ func New(version, env string, rdb *redis.Client, db *gorm.DB, deps ...interface{
 			m.sched = d
 		case storage.Storage:
 			m.storage = d
+		case platformhttp.Scanner:
+			m.scanner = d
 		case *feature.Manager:
 			m.feature = d
 		case contract.EventBus:
@@ -182,6 +185,7 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 			Storage:    m.storage,
 			MaxSize:    10 * 1024 * 1024,
 			BasePrefix: "uploads",
+			Scanner:    m.scanner,
 		})
 		admin.POST("/files", uploadHandler.HandleUpload())
 		admin.DELETE("/files", uploadHandler.HandleDelete())
