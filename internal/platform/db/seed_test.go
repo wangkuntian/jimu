@@ -226,6 +226,31 @@ func TestRunSeed_AssignAdminRoleError(t *testing.T) {
 	require.ErrorContains(t, err, "assign admin role failed")
 }
 
+// TestRunSeed_RolePermissionCountError 验证 Count 查询失败时报错回滚（不再静默 count=0 导致重复插入）
+func TestRunSeed_RolePermissionCountError(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD", "secret123")
+
+	db, mock := newMockGormDB(t)
+	mock.ExpectBegin()
+	for range basePermissions() {
+		mock.ExpectQuery("SELECT \\* FROM `permissions`").
+			WillReturnRows(sqlmock.NewRows(nil))
+		mock.ExpectExec("INSERT INTO `permissions`").
+			WillReturnResult(sqlmock.NewResult(1, 1))
+	}
+	mock.ExpectQuery("SELECT \\* FROM `roles`").
+		WillReturnRows(sqlmock.NewRows(nil))
+	mock.ExpectExec("INSERT INTO `roles`").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	// 第一个 role_permissions count 查询失败
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `role_permissions`").
+		WillReturnError(errors.New("count boom"))
+	mock.ExpectRollback()
+
+	err := RunSeed(db)
+	require.ErrorContains(t, err, "check role permission failed")
+}
+
 func TestSeedCasbinPolicies_CreateEnforcerError(t *testing.T) {
 	// sqlmock DB 上 gormadapter 建表失败 → NewEnforcer 报错
 	db, _ := newMockGormDB(t)
@@ -267,8 +292,18 @@ func TestRunSeedWithCasbin(t *testing.T) {
 	require.NoError(t, db.Table("role_permissions").Count(&rpCount).Error)
 	assert.Equal(t, int64(len(basePermissions())), rpCount)
 
-	// 幂等：再次执行不报错
+	// 幂等：再次执行不报错且数据不重复（row count 不变）
+	var userCountBefore int64
+	require.NoError(t, db.Table("users").Count(&userCountBefore).Error)
 	require.NoError(t, RunSeed(db))
+
+	var permCount2, rpCount2, userCount2 int64
+	require.NoError(t, db.Table("permissions").Count(&permCount2).Error)
+	require.NoError(t, db.Table("role_permissions").Count(&rpCount2).Error)
+	require.NoError(t, db.Table("users").Count(&userCount2).Error)
+	assert.Equal(t, int64(len(basePermissions())), permCount2, "permissions 不应重复插入")
+	assert.Equal(t, int64(len(basePermissions())), rpCount2, "role_permissions 不应重复插入")
+	assert.Equal(t, userCountBefore, userCount2, "admin 用户不应重复创建")
 }
 
 func TestBasePermissionsCoverBusinessRoutes(t *testing.T) {

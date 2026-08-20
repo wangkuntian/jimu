@@ -41,7 +41,9 @@ func RunSeed(db *gorm.DB) error {
 		// 3. 为超级管理员分配所有权限
 		for _, perm := range permissions {
 			var count int64
-			tx.Table("role_permissions").Where("role_id = ? AND permission_id = ?", adminRole.ID, perm.ID).Count(&count)
+			if err := tx.Table("role_permissions").Where("role_id = ? AND permission_id = ?", adminRole.ID, perm.ID).Count(&count).Error; err != nil {
+				return fmt.Errorf("check role permission failed: %w", err)
+			}
 			if count == 0 {
 				if err := tx.Exec("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)", adminRole.ID, perm.ID).Error; err != nil {
 					return fmt.Errorf("assign permission failed: %w", err)
