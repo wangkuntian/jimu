@@ -76,6 +76,8 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 | 指标 | Prometheus client_golang |
 | 调度 | robfig/cron |
 
+> 注：`go.mod` 中的 `github.com/ClickHouse/clickhouse-go/v2` 与 `gorm.io/driver/clickhouse` 为 `gorm.io/plugin/opentelemetry`（Gorm 追踪插件）的传递依赖，框架本身未直接使用 ClickHouse。
+
 ## 快速开始
 
 ### 前置条件
@@ -380,6 +382,34 @@ curl http://localhost:8080/api/v1/admin/monitoring/status \
   -H "Authorization: Bearer <access_token>"
 ```
 
+### 查看认证限流状态
+
+只读端点，不消费令牌地查看某 `scope` + `key` 的当前计数与剩余窗口（如登录爆破防护）：
+
+```bash
+curl "http://localhost:8080/api/v1/admin/ratelimit/auth?scope=login&key=ip:1.2.3.4" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+响应：
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "scope": "login",
+    "key": "ip:1.2.3.4",
+    "count": 3,
+    "ttl_ms": 58000,
+    "reset_at": 1724047200,
+    "redis_key": "jimu:auth:limit:login:<sha256>"
+  }
+}
+```
+
+`key` 不存在时 `count`/`ttl_ms` 均为 0。`redis_key` 中存 sha256 摘要，不泄露原始 key 明文。
+
 ### 健康检查
 
 ```bash
@@ -498,6 +528,28 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `grpc.enabled` | 是否启用 gRPC server（与 HTTP 双栈并存，默认关闭） | `false` |
 | `grpc.host` / `grpc.port` | gRPC 监听地址 / 端口 | `0.0.0.0` / `9091` |
 | `grpc` 业务服务 | 示例 `UserInfoService`（`internal/platform/grpc/userinfo_service.go`，proto 在 `proto/jimu/v1/userinfo.proto`，`make proto` 重新生成）；业务模块仿照 `RegisterUserInfoService` 经 `RegisterService` 接入 | — |
+
+### 静态加密（Data at Rest）
+
+静态加密分两层，本框架只负责**字段级**，**全库透明加密**委托给数据库/存储层：
+
+**字段级加密（框架内置，`security.encryption_key`）**
+
+- AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引，实现在 `internal/platform/encryption` + `internal/platform/db/encryption.go`（Gorm hook）。
+- 带结构体 tag `encryption:"true"` 的字段写入时加密、读取时解密；带 `blind:"<source>"` 的字段用对应明文计算确定性盲索引，支撑唯一约束与精确等值查询。
+- 当前覆盖 `users.email` / `users.phone`（见 `internal/modules/user/domain/user.go`），密文落库、`email_hash`/`phone_hash` 盲索引支撑重复校验。
+- 密钥经 `ENCRYPTION_KEY` 环境变量或 `ENCRYPTION_KEY_FILE`（Docker Secrets）注入；**未注入时退化为明文模式**（功能不受影响，email/phone 明文落库）。
+- 密码字段 `users.password` 始终存 bcrypt 哈希，不参与字段级加密——不可逆，无需可解密。
+
+**全库静态加密（框架范围外，委托外部）**
+
+框架不内置也不接管数据库全库透明加密，由部署侧在数据库/存储层落实：
+
+- **MariaDB/MySQL**：`file_key_management` 插件 + 密钥文件，或使用 Percona/云厂商的透明数据加密（TDE）。
+- **PostgreSQL**：`pgcrypto`（应用侧，与字段级加密重叠）或云 RDS 的磁盘加密。
+- **磁盘层**：LUKS / 云盘加密（EBS、托管磁盘加密）作为兜底，对数据库实现无关。
+
+字段级加密面向「即便拿到数据库快照也无法直接读取 email/phone」的场景；全库加密面向「物理介质丢失」场景，二者正交、可叠加。
 
 ## Makefile 命令
 

@@ -18,6 +18,9 @@
 - **可观测性** — OpenTelemetry 分布式追踪接入
 - **请求校验** — JSON / Query 自动绑定校验中间件，中文友好错误翻译
 - **工程化** — golangci-lint 配置、CONTRIBUTING 指南、CHANGELOG
+- **限流可视化** — 管理端只读端点 `GET /api/v1/admin/ratelimit/auth`，不消费令牌查看认证限流计数与剩余窗口
+- **Seed 幂等** — 种子命令按唯一键 upsert，可安全重复执行
+- **文档** — ClickHouse 依赖说明、静态加密（字段级 + 全库边界）章节、CHANGELOG CI gate
 
 ### 变更
 

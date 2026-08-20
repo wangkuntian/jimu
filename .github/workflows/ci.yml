@@ -40,6 +40,22 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=5m
 
+      - name: CHANGELOG 更新检查
+        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        run: |
+          # PR 改动源码却未更新 CHANGELOG.md 时失败
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep -E '^(internal/|cmd/|configs/|migrations/)' \
+            | grep -qv '^$'; then
+            if ! git diff --name-only origin/${{ github.base_ref }}...HEAD \
+              | grep -q '^CHANGELOG\.md$'; then
+              echo "❌ 本 PR 改动了源码（internal/cmd/configs/migrations）但未更新 CHANGELOG.md"
+              echo "请在 CHANGELOG.md 的 [Unreleased] 段补充本次变更说明"
+              exit 1
+            fi
+          fi
+          echo "✅ CHANGELOG 检查通过"
+
   test:
     name: Test
     runs-on: ubuntu-latest

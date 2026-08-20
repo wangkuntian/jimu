@@ -102,6 +102,9 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 	admin.GET("/monitoring/health", adminSvc.Health)
 	admin.GET("/monitoring/metrics", adminSvc.Metrics)
 
+	// 限流状态可视化端点（仅读，不消费令牌；查看登录爆破防护等计数）
+	admin.GET("/ratelimit/auth", admininterfaces.NewAdminRateLimitHandler(m.rdb).AuthPeek)
+
 	// 用户管理端点
 	userHandler := admininterfaces.NewAdminUserHandler(
 		adminapp.NewAdminUserService(userinfra.NewMysqlRepository(m.db), m.db),

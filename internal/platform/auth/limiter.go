@@ -23,7 +23,7 @@ func (l *Limiter) Allow(ctx context.Context, scope, key string, limit int, windo
 	if limit <= 0 || window <= 0 {
 		return true, nil
 	}
-	res, err := limiterScript.Run(ctx, l.client, []string{limitKey(scope, key)}, int(window.Milliseconds()), limit).Int()
+	res, err := limiterScript.Run(ctx, l.client, []string{LimitKey(scope, key)}, int(window.Milliseconds()), limit).Int()
 	if err != nil {
 		return !l.failClosed, err
 	}
@@ -41,7 +41,9 @@ end
 return 1
 `)
 
-func limitKey(scope, key string) string {
+// LimitKey 返回限流计数器在 Redis 中的键名（sha256(key) 避免明文泄露）。
+// 导出供运维 peek 端点复用，保证查询与限流器写入同一 key。
+func LimitKey(scope, key string) string {
 	sum := sha256.Sum256([]byte(key))
 	return fmt.Sprintf("jimu:auth:limit:%s:%s", scope, hex.EncodeToString(sum[:]))
 }
