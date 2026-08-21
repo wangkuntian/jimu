@@ -18,15 +18,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Go
+      - name: "🔍 Set up Go"
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Run release checks
+      - name: "✅ Run release checks"
         run: make release-check
 
-      - name: Build release binaries
+      - name: "🔨 Build release binaries"
         run: |
           # Linux amd64
           GOOS=linux GOARCH=amd64 go build -o bin/jimu-linux-amd64 cmd/server/main.go
@@ -37,7 +37,7 @@ jobs:
           # Darwin arm64
           GOOS=darwin GOARCH=arm64 go build -o bin/jimu-darwin-arm64 cmd/server/main.go
 
-      - name: Read release notes
+      - name: "📝 Read release notes"
         id: notes
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
@@ -54,7 +54,7 @@ jobs:
             echo "EOF" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create Release
+      - name: "🚀 Create Release"
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.notes.outputs.version }}

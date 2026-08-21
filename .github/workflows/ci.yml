@@ -23,53 +23,55 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: gofmt check
+      - name: "🔍 gofmt check"
         run: |
           if gofmt -l . | grep -q .; then
-            echo "以下文件需要格式化:"
+            echo "❌ The following files need formatting:"
             gofmt -l .
             exit 1
           fi
+          echo "✅ All files properly formatted"
 
-      - name: go vet
-        run: go vet ./...
+      - name: "🔬 go vet"
+        run: |
+          go vet ./...
+          echo "✅ go vet passed"
 
-      - name: golangci-lint
+      - name: "🧹 golangci-lint"
         uses: golangci/golangci-lint-action@v8
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=5m
           install-mode: goinstall
 
-      - name: CHANGELOG 更新检查
+      - name: "📝 CHANGELOG check"
         if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
         run: |
-          # PR 改动源码却未更新 CHANGELOG.md 时失败
           if git diff --name-only origin/${{ github.base_ref }}...HEAD \
             | grep -E '^(internal/|cmd/|configs/|migrations/)' \
             | grep -qv '^$'; then
             if ! git diff --name-only origin/${{ github.base_ref }}...HEAD \
               | grep -q '^CHANGELOG\.md$'; then
-              echo "❌ 本 PR 改动了源码（internal/cmd/configs/migrations）但未更新 CHANGELOG.md"
-              echo "请在 CHANGELOG.md 的 [Unreleased] 段补充本次变更说明"
+              echo "❌ PR changes source files but CHANGELOG.md is not updated"
+              echo "👉 Please update the [Unreleased] section in CHANGELOG.md"
               exit 1
             fi
           fi
-          echo "✅ CHANGELOG 检查通过"
+          echo "✅ CHANGELOG check passed"
 
   test:
     name: Test
     runs-on: ubuntu-latest
     services:
       mariadb:
-        image: mariadb:12.1
+        image: mariadb:12.1.2-noble
         env:
           MARIADB_ROOT_PASSWORD: root
           MARIADB_DATABASE: jimu_test
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h localhost -u root -proot"
+          --health-cmd="mariadb-admin ping --silent"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
@@ -104,10 +106,10 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Install coverage tools
-        run: apt-get update && apt-get install -y bc
+      - name: "📦 Install coverage tools"
+        run: sudo apt-get update && sudo apt-get install -y bc
 
-      - name: Run tests with coverage
+      - name: "🧪 Run tests with coverage"
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: "3306"
@@ -116,7 +118,7 @@ jobs:
           DB_NAME: jimu_test
         run: go test ./... -coverprofile=coverage.out
 
-      - name: Run postgres migration smoke
+      - name: "🐘 Run postgres migration smoke"
         env:
           DB_DRIVER: postgres
           DB_HOST: 127.0.0.1
@@ -126,27 +128,27 @@ jobs:
           DB_NAME: jimu_test
         run: go test ./internal/platform/db/... -run TestPostgresMigrationUpDown -v
 
-      - name: Check coverage threshold
+      - name: "📊 Check coverage threshold"
         run: |
           COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
           THRESHOLD=70
-          echo "Total coverage: ${COVERAGE}%"
+          echo "📈 Total coverage: ${COVERAGE}%"
           if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
-            echo "Coverage ${COVERAGE}% is below threshold ${THRESHOLD}%"
+            echo "❌ Coverage ${COVERAGE}% is below threshold ${THRESHOLD}%"
             go tool cover -func=coverage.out
             exit 1
           fi
-          echo "Coverage check passed (${COVERAGE}% >= ${THRESHOLD}%)"
+          echo "✅ Coverage check passed (${COVERAGE}% >= ${THRESHOLD}%)"
 
-      - name: Run race tests
+      - name: "🏎️ Run race tests"
         run: go test -race ./...
 
-      - name: Check OpenAPI is current
+      - name: "📋 Check OpenAPI is current"
         run: |
           make swagger
           git diff --exit-code docs/openapi
 
-      - name: Check smoke scripts
+      - name: "📜 Check smoke scripts"
         run: |
           bash -n scripts/test_runtime_security.sh
           bash -n scripts/smoke_api_contract.sh
@@ -164,13 +166,13 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Build server
+      - name: "🔨 Build server"
         run: go build -o bin/server cmd/server/main.go
 
-      - name: Build CLI
+      - name: "🔧 Build CLI"
         run: go build -o bin/jimu cmd/cli/main.go
 
-      - name: Upload artifacts
+      - name: "📤 Upload artifacts"
         uses: actions/upload-artifact@v4
         with:
           name: binaries
@@ -188,10 +190,10 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Install benchstat
+      - name: "📈 Install benchstat"
         run: go install golang.org/x/perf/cmd/benchstat@latest
 
-      - name: Run benchmark (absolute thresholds, machine-independent)
+      - name: "⏱️ Run benchmark"
         run: |
           export PATH="$(go env GOPATH)/bin:$PATH"
           scripts/bench_ci.sh --absolute
@@ -204,7 +206,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Docker image
+      - name: "🐳 Build Docker image"
         run: docker build -t jimu:${{ github.sha }} .
 
   security:
@@ -219,13 +221,13 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: govulncheck (依赖漏洞扫描)
+      - name: "🛡️ govulncheck"
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-      - name: Build Docker image for scanning
+      - name: "🐳 Build Docker image for scanning"
         run: docker build -t jimu:${{ github.sha }} .
 
-      - name: Trivy 镜像漏洞扫描
+      - name: "🔐 Trivy image scan"
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: jimu:${{ github.sha }}
@@ -234,26 +236,26 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL,HIGH
 
-      - name: SBOM 生成
+      - name: "📋 Generate SBOM"
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: jimu:${{ github.sha }}
           format: cyclonedx
           output: jimu-sbom.json
 
-      - name: 上传 SBOM 产物
+      - name: "📤 Upload SBOM artifact"
         uses: actions/upload-artifact@v4
         with:
           name: sbom
           path: jimu-sbom.json
 
-      - name: 生成依赖许可证报告
+      - name: "📄 Generate license report"
         run: |
           go run github.com/google/go-licenses@latest report ./... > license-report.txt
-          echo "许可证报告生成完成"
+          echo "✅ License report generated"
         continue-on-error: true
 
-      - name: 上传许可证报告
+      - name: "📤 Upload license report"
         uses: actions/upload-artifact@v4
         with:
           name: license-report
@@ -266,14 +268,14 @@ jobs:
     needs: [security]
     services:
       mariadb:
-        image: mariadb:12.1
+        image: mariadb:12.1.2-noble
         env:
           MARIADB_ROOT_PASSWORD: root
           MARIADB_DATABASE: jimu_test
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h localhost -u root -proot"
+          --health-cmd="mariadb-admin ping --silent"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
@@ -289,10 +291,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Docker image
+      - name: "🐳 Build Docker image"
         run: docker build -t jimu:${{ github.sha }} .
 
-      - name: 启动容器并验证健康检查
+      - name: "🚀 Start container and verify health"
         run: |
           docker run -d --name jimu-smoke \
             -p 18080:8080 -p 19090:9090 \
@@ -305,11 +307,11 @@ jobs:
             jimu:${{ github.sha }}
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:19090/livez >/dev/null 2>&1; then
-              echo "livez OK"
+              echo "✅ livez OK"
               break
             fi
             sleep 2
           done
           curl -sf http://127.0.0.1:19090/livez
           curl -sf http://127.0.0.1:19090/readyz
-          echo "镜像 smoke test 通过"
+          echo "✅ Image smoke test passed"
