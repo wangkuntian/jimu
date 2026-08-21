@@ -36,7 +36,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.1
-	github.com/swaggo/swag v1.8.12
+	github.com/swaggo/swag v1.16.6
 	github.com/xuri/excelize/v2 v2.11.0
 	go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.70.0
 	go.opentelemetry.io/otel v1.45.0
@@ -180,6 +180,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.29.0 // indirect
 	golang.org/x/image v0.43.0 // indirect
+	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
