@@ -35,9 +35,9 @@ func (f *fakeKafkaWriter) WriteMessages(_ context.Context, msgs ...kafka.Message
 // fakeKafkaReader 内存假 reader，按 FIFO 返回预先放入的消息。
 // FetchMessage 不自动提交，CommitMessages 记录已提交 offset。
 type fakeKafkaReader struct {
-	msgs     []kafka.Message
-	err      error
-	commits  []kafka.Message // 已提交 offset 的消息
+	msgs    []kafka.Message
+	err     error
+	commits []kafka.Message // 已提交 offset 的消息
 }
 
 func (f *fakeKafkaReader) FetchMessage(context.Context) (kafka.Message, error) {
