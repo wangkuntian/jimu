@@ -267,9 +267,9 @@ type UploadConfig struct {
 
 // ClamAVConfig ClamAV 病毒扫描配置
 type ClamAVConfig struct {
-	Enabled   bool   `mapstructure:"enabled"`     // 是否启用，false 时上传不扫描
-	Address   string `mapstructure:"address"`     // clamd 监听地址，如 127.0.0.1:3310
-	TimeoutSec int   `mapstructure:"timeout_sec"` // 扫描超时（秒），0 用默认 10
+	Enabled    bool   `mapstructure:"enabled"`     // 是否启用，false 时上传不扫描
+	Address    string `mapstructure:"address"`     // clamd 监听地址，如 127.0.0.1:3310
+	TimeoutSec int    `mapstructure:"timeout_sec"` // 扫描超时（秒），0 用默认 10
 }
 
 type HTTPConfig struct {

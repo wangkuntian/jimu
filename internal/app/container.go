@@ -131,8 +131,8 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	var uploadScanner platformhttp.Scanner
 	if cfg.Upload.ClamAV.Enabled {
 		uploadScanner = platformhttp.NewClamAVScanner(platformhttp.ClamAVConfig{
-			Address:   cfg.Upload.ClamAV.Address,
-			Timeout:   time.Duration(cfg.Upload.ClamAV.TimeoutSec) * time.Second,
+			Address: cfg.Upload.ClamAV.Address,
+			Timeout: time.Duration(cfg.Upload.ClamAV.TimeoutSec) * time.Second,
 		})
 	}
 
