@@ -48,5 +48,6 @@ logs/
 
 # Graphify
 graphify-out/cost.json
+graphify-out/cache/
 # 本地性能基线（跨机器不稳定，CI 使用绝对阈值模式）
 .benchmarks/
