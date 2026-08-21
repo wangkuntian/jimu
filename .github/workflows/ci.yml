@@ -228,7 +228,7 @@ jobs:
         run: docker build -t jimu:${{ github.sha }} .
 
       - name: "🔐 Trivy image scan"
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: jimu:${{ github.sha }}
           format: table
@@ -237,7 +237,7 @@ jobs:
           severity: CRITICAL,HIGH
 
       - name: "📋 Generate SBOM"
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: jimu:${{ github.sha }}
           format: cyclonedx
