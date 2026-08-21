@@ -37,6 +37,8 @@ secrets/
 
 # Build artifacts
 bin/
+/server
+/jimu
 logs/
 .VSCodeCounter/
 
