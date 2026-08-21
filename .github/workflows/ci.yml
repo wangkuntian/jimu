@@ -39,6 +39,7 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=5m
+          install-mode: goinstall
 
       - name: CHANGELOG 更新检查
         if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
@@ -61,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mariadb:
-        image: mariadb:12.1.2-noble
+        image: mariadb:12.1
         env:
           MARIADB_ROOT_PASSWORD: root
           MARIADB_DATABASE: jimu_test
@@ -265,7 +266,7 @@ jobs:
     needs: [security]
     services:
       mariadb:
-        image: mariadb:12.1.2-noble
+        image: mariadb:12.1
         env:
           MARIADB_ROOT_PASSWORD: root
           MARIADB_DATABASE: jimu_test
