@@ -36,6 +36,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/admin/ratelimit/auth": {
+            "get": {
+                "description": "不消费令牌地返回某 scope（如 login）+ key（如 ip:1.2.3.4）当前的计数与剩余窗口",
+                "tags": [
+                    "admin/ratelimit"
+                ],
+                "summary": "查看认证限流状态",
+                "parameters": [
+                    {
+                        "enum": [
+                            "login",
+                            "register"
+                        ],
+                        "type": "string",
+                        "description": "限流作用域",
+                        "name": "scope",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "限流键（如 ip:1.2.3.4 或 username:alice）",
+                        "name": "key",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/audits": {
             "get": {
                 "security": [
@@ -144,6 +193,52 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/forgot-password": {
+            "post": {
+                "description": "向指定邮箱发送 6 位数字验证码。用户不存在也返回成功，防止邮箱枚举探测。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "发送密码重置验证码",
+                "parameters": [
+                    {
+                        "description": "邮箱",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/interfaces.forgotPasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功（无论邮箱是否存在）",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "请求过于频繁",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -344,6 +439,52 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "参数错误（如用户名已存在）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "请求过于频繁",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/reset-password": {
+            "post": {
+                "description": "用邮箱验证码设置新密码。验证码一次性，重置成功后强制登出该用户全部会话。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "重置密码",
+                "parameters": [
+                    {
+                        "description": "邮箱、验证码、新密码",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/interfaces.resetPasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误或验证码无效/已过期",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1491,10 +1632,16 @@ const docTemplate = `{
                 "username"
             ],
             "properties": {
+                "email": {
+                    "type": "string"
+                },
                 "password": {
                     "type": "string",
                     "maxLength": 32,
                     "minLength": 6
+                },
+                "phone": {
+                    "type": "string"
                 },
                 "username": {
                     "type": "string",
@@ -1586,6 +1733,17 @@ const docTemplate = `{
                 }
             }
         },
+        "interfaces.forgotPasswordRequest": {
+            "type": "object",
+            "required": [
+                "email"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                }
+            }
+        },
         "interfaces.loginRequest": {
             "type": "object",
             "required": [
@@ -1600,11 +1758,19 @@ const docTemplate = `{
                     "description": "验证码（登录时可选，注册时如果开启验证码则必填）",
                     "type": "string"
                 },
+                "email": {
+                    "description": "邮箱（注册时可选收集，用于密码重置与通知；登录忽略）",
+                    "type": "string"
+                },
                 "password": {
                     "description": "密码（8-32 位，必须包含字母和数字）",
                     "type": "string",
                     "maxLength": 32,
                     "minLength": 8
+                },
+                "phone": {
+                    "description": "手机号（注册时可选收集；登录忽略）",
+                    "type": "string"
                 },
                 "username": {
                     "description": "用户名（4-20 位字母、数字或下划线）",
@@ -1623,6 +1789,27 @@ const docTemplate = `{
                 "refresh_token": {
                     "description": "刷新令牌（从登录或刷新接口获取）",
                     "type": "string"
+                }
+            }
+        },
+        "interfaces.resetPasswordRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "email",
+                "new_password"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "new_password": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 8
                 }
             }
         },
