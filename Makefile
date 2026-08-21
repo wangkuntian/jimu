@@ -259,7 +259,7 @@ all: fmt vet test build
 
 ## bench: 运行性能基准测试
 bench:
-	go test -bench=. -benchmem -run='^$$' ./internal/shared/id/... ./internal/modules/auth/application/... ./internal/platform/notification/...
+	go test -bench=. -benchmem -run='^$$' ./internal/shared/id/... ./internal/modules/auth/application/... ./internal/platform/notification/... ./internal/platform/http/... ./internal/platform/queue/...
 
 ## bench-ci: 性能回归门禁（绝对阈值模式，CI 用）
 bench-ci:
