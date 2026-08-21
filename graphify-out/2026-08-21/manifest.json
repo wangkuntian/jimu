@@ -1840,9 +1840,9 @@
     "semantic_hash": "ea59ef2d3c96ec46239f0e8d63dc7678"
   },
   "scripts/bench_ci.sh": {
-    "mtime": 1787280704.3583596,
-    "ast_hash": "ec8dffd735a982e4d46d8b8f8511e8c5",
-    "semantic_hash": ""
+    "mtime": 1786692616.2836523,
+    "ast_hash": "e7407563d022c3adf397ff6559e5f8df",
+    "semantic_hash": "e7407563d022c3adf397ff6559e5f8df"
   },
   "scripts/loadtest.sh": {
     "mtime": 1786530857.5215592,
@@ -2182,21 +2182,6 @@
   "internal/platform/http/clamav.go": {
     "mtime": 1787198691.5786598,
     "ast_hash": "715909969e33871dcf6bfb167378e0ab",
-    "semantic_hash": ""
-  },
-  "internal/platform/http/clamav_integration_test.go": {
-    "mtime": 1787280108.1124518,
-    "ast_hash": "cf866fe41b59faad98b39c5f9f0e6fb6",
-    "semantic_hash": ""
-  },
-  "internal/platform/http/upload_handler_bench_test.go": {
-    "mtime": 1787280583.6711626,
-    "ast_hash": "02a56b7bb7098e4f4442dad815786d28",
-    "semantic_hash": ""
-  },
-  "internal/platform/queue/worker_bench_test.go": {
-    "mtime": 1787280635.494083,
-    "ast_hash": "73807a9ddc57e62955d20b323a3f4fcb",
     "semantic_hash": ""
   }
 }
