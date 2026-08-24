@@ -39,7 +39,15 @@ func openByDriver(cfg config.DBConfig) (*gorm.DB, error) {
 	case "", "mysql", "mariadb":
 		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 			cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
-		return gorm.Open(mysql.Open(dsn), &gorm.Config{})
+		gdb, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+		if err != nil {
+			return nil, err
+		}
+		// 注册雪花 ID hook：测试连接路径与生产 db.ConnectWithRetry 不同，
+		// 需显式初始化雪花生成器并注册 hook，否则 mariadb strict mode 拒绝 id 空值。
+		_ = db.InitSnowflake(0)
+		db.RegisterSnowflakeHook(gdb)
+		return gdb, nil
 	default:
 		return nil, fmt.Errorf("unsupported db driver: %s", cfg.Driver)
 	}
