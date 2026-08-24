@@ -5,6 +5,18 @@
 
 默认使用中文回复用户，除非用户明确要求使用其他语言。
 
+## 禁止自动提交
+
+**严禁在未经用户明确指令的情况下执行 `git commit`、`git add` + `git commit`、
+`git push` 或任何创建 commit 的操作。** 包括但不限于：
+
+- 完成一个改动后自动提交
+- 连续多个改动时自动分批提交
+- `graphify update` 后自动提交产物
+- 任何形式的 "顺手提交"
+
+只有用户明确说"提交"、"commit"、"推送"等指令时才可以执行。此规则优先级最高，覆盖其他所有规范。
+
 ## 开发前必读
 
 - 项目结构、技术栈、API 等见 [README.md](README.md)
@@ -335,10 +347,11 @@ fix(config): validate enum values on load
 
 ## graphify
 
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+本项目在 `graphify-out/` 下有知识图谱，包含 god 节点、社区结构和跨文件关系。
 
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+规则：
+
+- 遇到代码库问题时，如果 `graphify-out/graph.json` 存在，先运行 `graphify query "<问题>"` 查询。用 `graphify path "<A>" "<B>"` 查看关系，用 `graphify explain "<概念>"` 聚焦特定概念。这些返回范围缩小的子图，通常比 `GRAPH_REPORT.md` 或原始 grep 输出小得多。
+- 如果 `graphify-out/wiki/index.md` 存在，用它做宏观导航，而不是直接浏览源码。
+- 只在宏观架构审查或 query/path/explain 无法提供足够上下文时，才阅读 `graphify-out/GRAPH_REPORT.md`。
+- 修改代码后，运行 `graphify update .` 保持图谱最新（仅 AST 分析，无 API 费用）。
