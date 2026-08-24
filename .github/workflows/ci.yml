@@ -350,6 +350,7 @@ jobs:
             -e DB_USER=root -e DB_PASSWORD=root \
             -e DB_NAME=jimu_test \
             -e REDIS_ADDR=host.docker.internal:6379 \
+            -e MANAGEMENT_HOST=0.0.0.0 \
             -e JWT_SECRET=smoke-test-secret \
             jimu:${{ github.sha }}
           for i in $(seq 1 30); do
@@ -359,6 +360,11 @@ jobs:
             fi
             sleep 2
           done
+          if ! curl -sf http://127.0.0.1:19090/livez >/dev/null; then
+            echo "❌ livez not reachable, container logs:"
+            docker logs jimu-smoke
+            exit 1
+          fi
           curl -sf http://127.0.0.1:19090/livez
           curl -sf http://127.0.0.1:19090/readyz
           echo "✅ Image smoke test passed"
