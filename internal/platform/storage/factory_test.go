@@ -41,7 +41,7 @@ func TestLocalStoragePathTraversal(t *testing.T) {
 	require.NoError(t, err)
 
 	// 文件应落在 baseDir 内，非父目录
-	_, err = filepath.Abs(filepath.Join(dir, "../../etc/passwd"))
+	_, _ = filepath.Abs(filepath.Join(dir, "../../etc/passwd"))
 	target := filepath.Join(dir, "etc/passwd") // .. 剥离后
 	absTarget, _ := filepath.Abs(target)
 	rel, err := filepath.Rel(dir, absTarget)

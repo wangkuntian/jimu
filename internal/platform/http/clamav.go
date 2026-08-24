@@ -66,7 +66,7 @@ func (s *ClamAVScanner) Scan(ctx context.Context, r io.Reader) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("clamav dial: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// 整体扫描受 deadline 约束，防慢速上传拖垮连接
 	if err := conn.SetDeadline(time.Now().Add(s.timeout)); err != nil {
