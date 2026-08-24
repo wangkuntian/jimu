@@ -49,8 +49,10 @@ func TestTraceFromContextDisabled(t *testing.T) {
 	}
 }
 
+type ctxKey string
+
 func TestContextWithTraceEmptyPassthrough(t *testing.T) {
-	ctx := context.WithValue(context.Background(), "k", "v")
+	ctx := context.WithValue(context.Background(), ctxKey("k"), "v")
 	got := ContextWithTrace(ctx, "", "")
 	if got != ctx {
 		t.Fatal("ContextWithTrace empty should return original ctx")
