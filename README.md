@@ -593,6 +593,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `make compose-observability-down` | 停止监控栈 |
 | `make compose-observability-test` | 触发一条测试告警验证 AlertManager 链路 |
 | `make release-check` | 发布前检查（fmt-check + vet + test + govulncheck） |
+| `make ci` | 本地 CI 检查（无外部依赖：fmt-check + vet + lint + test + 覆盖率 + race + swagger + smoke + build + govulncheck，完整 CI 见 `.github/workflows/ci.yml`） |
 | `make clean` | 清理构建产物 |
 | `make hooks` | 安装 pre-commit 钩子 |
 
