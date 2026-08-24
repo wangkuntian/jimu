@@ -1,4 +1,5 @@
-.PHONY: run build test vet fmt fmt-check lint clean migrate migrate-down migrate-status seed help govulncheck test-backup-restore
+.PHONY: run build test vet fmt fmt-check lint clean migrate migrate-down migrate-status seed help govulncheck test-backup-restore ci
+.PHONY: test-cover test-coverage-check test-race swagger-check smoke-check
 .PHONY: docker-build docker-run docker-stop docker-logs
 .PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
 .PHONY: compose-observability compose-observability-down
@@ -77,6 +78,7 @@ help:
 	@echo "  make proto                重新生成 gRPC 代码"
 	@echo "  make bench                运行性能基准测试"
 	@echo "  make loadtest             本地 HTTP 压测（需 hey）"
+	@echo "  make ci                   本地 CI 检查（无外部依赖：fmt/vet/lint/test/coverage/race/swagger/smoke/build/govulncheck）"
 	@echo "  make release-check        发布前检查"
 
 # ========== 本地运行 ==========
@@ -272,6 +274,44 @@ loadtest:
 ## govulncheck: 依赖漏洞扫描（go run 免安装，与 CI 命令一致）
 govulncheck:
 	@go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+## test-cover: 运行测试并生成覆盖率（与 CI Test job 一致）
+test-cover:
+	go test ./... -coverprofile=coverage.out
+
+## test-coverage-check: 校验覆盖率阈值（默认 70%，与 CI Test job 一致）
+test-coverage-check:
+	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
+	THRESHOLD=70; \
+	echo "📈 Total coverage: $${COVERAGE}%"; \
+	if [ $$(awk "BEGIN{print ($${COVERAGE}<$${THRESHOLD})}") -eq 1 ]; then \
+		echo "❌ Coverage $${COVERAGE}% is below threshold $${THRESHOLD}%"; \
+		go tool cover -func=coverage.out; exit 1; \
+	fi; \
+	echo "✅ Coverage check passed ($${COVERAGE}% >= $${THRESHOLD}%)"
+
+## test-race: 竞争检测测试（与 CI Test job 一致）
+test-race:
+	go test -race ./...
+
+## swagger-check: 校验 OpenAPI 文档为最新（与 CI Test job 一致）
+swagger-check:
+	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi >/dev/null
+	@git diff --exit-code docs/openapi || { \
+		echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; \
+	}
+	@echo "✅ OpenAPI 文档为最新"
+
+## smoke-check: 校验 smoke 脚本语法（与 CI Test job 一致）
+smoke-check:
+	@bash -n scripts/test_runtime_security.sh
+	@bash -n scripts/smoke_api_contract.sh
+	@bash -n scripts/test_backup_restore.sh
+	@echo "✅ Smoke 脚本语法正确"
+
+## ci: 本地 CI 检查（无外部依赖部分，完整 CI 见 .github/workflows/ci.yml）
+ci: fmt-check vet lint test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck
+	@echo "✅ All local CI checks passed"
 
 ## release-check: 发布前检查（fmt-check + vet + test + govulncheck）
 release-check: fmt-check vet test govulncheck
