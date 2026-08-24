@@ -18,15 +18,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Go
+      - name: "🔍 Set up Go"
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Run release checks
+      - name: "✅ Run release checks"
         run: make release-check
 
-      - name: Build release binaries
+      - name: "🔨 Build release binaries"
         run: |
           # Linux amd64
           GOOS=linux GOARCH=amd64 go build -o bin/jimu-linux-amd64 cmd/server/main.go
@@ -37,94 +37,28 @@ jobs:
           # Darwin arm64
           GOOS=darwin GOARCH=arm64 go build -o bin/jimu-darwin-arm64 cmd/server/main.go
 
-      - name: Generate changelog
-        id: changelog
+      - name: "📝 Read release notes"
+        id: notes
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-          # 提取上一个 tag 到当前 tag 之间的提交
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-
-          if [ -n "$PREV_TAG" ]; then
-            RANGE="${PREV_TAG}..HEAD"
+          NOTES_FILE="docs/releases/${VERSION}.md"
+          if [ -f "$NOTES_FILE" ]; then
+            echo "body<<EOF" >> $GITHUB_OUTPUT
+            cat "$NOTES_FILE" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
           else
-            RANGE="HEAD"
+            echo "::warning::Release notes file not found: $NOTES_FILE, falling back to auto-generated changelog"
+            echo "body<<EOF" >> $GITHUB_OUTPUT
+            echo "See CHANGELOG.md for details." >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
           fi
 
-          # 按 conventional commits 分类
-          FEATS=$(git log --oneline --no-decorate $RANGE | grep -E "^[a-f0-9]+ feat(\([^)]+\))?:" || true)
-          FIXES=$(git log --oneline --no-decorate $RANGE | grep -E "^[a-f0-9]+ fix(\([^)]+\))?:" || true)
-          DOCS=$(git log --oneline --no-decorate $RANGE | grep -E "^[a-f0-9]+ docs(\([^)]+\))?:" || true)
-          CHORES=$(git log --oneline --no-decorate $RANGE | grep -E "^[a-f0-9]+ chore(\([^)]+\))?:" || true)
-          REFACTORS=$(git log --oneline --no-decorate $RANGE | grep -E "^[a-f0-9]+ refactor(\([^)]+\))?:" || true)
-          TESTS=$(git log --oneline --no-decorate $RANGE | grep -E "^[a-f0-9]+ test(\([^)]+\))?:" || true)
-          OTHERS=$(git log --oneline --no-decorate $RANGE | grep -vE "^[a-f0-9]+ (feat|fix|docs|chore|refactor|test)(\([^)]+\))?:" || true)
-
-          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          echo "body<<$EOF" >> $GITHUB_OUTPUT
-
-          echo "## 亮点" >> $GITHUB_OUTPUT
-          if [ -n "$FEATS" ]; then
-            echo "" >> $GITHUB_OUTPUT
-            echo "$FEATS" | sed 's/^/- /' >> $GITHUB_OUTPUT
-          fi
-
-          echo "" >> $GITHUB_OUTPUT
-          echo "## 修复" >> $GITHUB_OUTPUT
-          if [ -n "$FIXES" ]; then
-            echo "" >> $GITHUB_OUTPUT
-            echo "$FIXES" | sed 's/^/- /' >> $GITHUB_OUTPUT
-          fi
-
-          echo "" >> $GITHUB_OUTPUT
-          echo "## 变更" >> $GITHUB_OUTPUT
-          if [ -n "$REFACTORS" ]; then
-            echo "" >> $GITHUB_OUTPUT
-            echo "$REFACTORS" | sed 's/^/- /' >> $GITHUB_OUTPUT
-          fi
-
-          echo "" >> $GITHUB_OUTPUT
-          echo "## 文档" >> $GITHUB_OUTPUT
-          if [ -n "$DOCS" ]; then
-            echo "" >> $GITHUB_OUTPUT
-            echo "$DOCS" | sed 's/^/- /' >> $GITHUB_OUTPUT
-          fi
-
-          echo "" >> $GITHUB_OUTPUT
-          echo "## 维护" >> $GITHUB_OUTPUT
-          if [ -n "$CHORES" ]; then
-            echo "" >> $GITHUB_OUTPUT
-            echo "$CHORES" | sed 's/^/- /' >> $GITHUB_OUTPUT
-          fi
-
-          echo "" >> $GITHUB_OUTPUT
-          echo "## 测试" >> $GITHUB_OUTPUT
-          if [ -n "$TESTS" ]; then
-            echo "" >> $GITHUB_OUTPUT
-            echo "$TESTS" | sed 's/^/- /' >> $GITHUB_OUTPUT
-          fi
-
-          echo "" >> $GITHUB_OUTPUT
-          echo "## 其他" >> $GITHUB_OUTPUT
-          if [ -n "$OTHERS" ]; then
-            echo "" >> $GITHUB_OUTPUT
-            echo "$OTHERS" | sed 's/^/- /' >> $GITHUB_OUTPUT
-          fi
-
-          echo "" >> $GITHUB_OUTPUT
-          echo "## 校验" >> $GITHUB_OUTPUT
-          echo "" >> $GITHUB_OUTPUT
-          echo "- CI: 通过" >> $GITHUB_OUTPUT
-          echo "- 构建: 多平台二进制" >> $GITHUB_OUTPUT
-
-          echo "$EOF" >> $GITHUB_OUTPUT
-
-      - name: Create Release
+      - name: "🚀 Create Release"
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ steps.changelog.outputs.version }}
-          body: ${{ steps.changelog.outputs.body }}
+          name: ${{ steps.notes.outputs.version }}
+          body: ${{ steps.notes.outputs.body }}
           files: bin/jimu-*
           draft: false
           prerelease: false
