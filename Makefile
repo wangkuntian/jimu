@@ -1,5 +1,5 @@
 .PHONY: run build test vet fmt fmt-check lint clean migrate migrate-down migrate-status seed help govulncheck test-backup-restore ci
-.PHONY: test-cover test-coverage-check test-race swagger-check smoke-check
+.PHONY: test-cover test-coverage-check test-race swagger-check smoke-check compose-check
 .PHONY: docker-build docker-run docker-stop docker-logs
 .PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
 .PHONY: compose-observability compose-observability-down
@@ -309,12 +309,17 @@ smoke-check:
 	@bash -n scripts/test_backup_restore.sh
 	@echo "✅ Smoke 脚本语法正确"
 
+## compose-check: 隔离 Compose 运行时与 API 契约验证（不会读取或修改本地 .env、secrets、数据卷）
+compose-check:
+	@./scripts/test_runtime_security.sh
+	@./scripts/smoke_api_contract.sh
+
 ## ci: 本地 CI 检查（无外部依赖部分，完整 CI 见 .github/workflows/ci.yml）
 ci: fmt-check vet lint test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck
 	@echo "✅ All local CI checks passed"
 
-## release-check: 发布前检查（fmt-check + vet + test + govulncheck）
-release-check: fmt-check vet test govulncheck
+## release-check: 发布前检查（Go 门禁 + govulncheck + 隔离 Compose/API smoke）
+release-check: fmt-check vet test govulncheck compose-check
 	@echo "All checks passed"
 
 ## hooks: 安装 pre-commit 钩子（需 pip install pre-commit）

@@ -1,42 +1,42 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-COMPOSE=${COMPOSE:-"docker compose"}
-HTTP_PORT=${HTTP_PORT:-18081}
-BASE_URL="http://127.0.0.1:${HTTP_PORT}/api/v1"
-CREATED_ENV=0
-export HTTP_PORT
+HTTP_HOST_PORT=${HTTP_HOST_PORT:-18081}
+MANAGEMENT_HOST_PORT=${MANAGEMENT_HOST_PORT:-19091}
+BASE_URL="http://127.0.0.1:${HTTP_HOST_PORT}/api/v1"
+PROJECT_NAME="jimu-api-${RANDOM}${RANDOM}"
+WORKDIR=$(mktemp -d)
+ENV_FILE="$WORKDIR/.env"
+SECRET_DIR="$WORKDIR/secrets"
+
+compose() {
+  docker compose --project-name "$PROJECT_NAME" --env-file "$ENV_FILE" "$@"
+}
 
 cleanup() {
-  $COMPOSE down
-  if [ "$CREATED_ENV" = "1" ]; then
-    rm -f .env
-  fi
+  compose down --volumes --remove-orphans >/dev/null 2>&1 || true
+  rm -rf "$WORKDIR"
 }
 trap cleanup EXIT
 
-if [ ! -f .env ]; then
-  CREATED_ENV=1
-  cat > .env <<'ENV'
-JIMU_ENV=prod
-DB_ROOT_PASSWORD=jimu-root-change-me
-DB_USER=jimu
-DB_PASSWORD=jimu-db-change-me
-DB_DATABASE=jimu
-JIMU__DB__HOST=mariadb
-JIMU__DB__PORT=3306
-JIMU__DB__USER=jimu
-JIMU__DB__PASSWORD=jimu-db-change-me
-JIMU__REDIS__ADDR=redis:6379
-JIMU__AUTH__JWT_SECRET=01234567890123456789012345678901
-JIMU__AUTH__PUBLIC_REGISTRATION=true
-JIMU__AUTH__LOGIN_RATE_LIMIT=100
-JIMU__AUTH__REGISTER_RATE_LIMIT=100
+mkdir -p "$SECRET_DIR"
+printf '%s\n' 'jimu-api-root-password' > "$SECRET_DIR/db_root_password.txt"
+printf '%s\n' 'jimu-api-db-password' > "$SECRET_DIR/db_password.txt"
+printf '%s\n' '01234567890123456789012345678901' > "$SECRET_DIR/jwt_secret.txt"
+cat > "$ENV_FILE" <<ENV
+APP_ENV=dev
+HTTP_HOST_PORT=$HTTP_HOST_PORT
+MANAGEMENT_HOST_PORT=$MANAGEMENT_HOST_PORT
+COMPOSE_MARIADB_VOLUME=${PROJECT_NAME}-mariadb
+COMPOSE_REDIS_VOLUME=${PROJECT_NAME}-redis
+COMPOSE_DB_ROOT_PASSWORD_FILE=$SECRET_DIR/db_root_password.txt
+COMPOSE_DB_PASSWORD_FILE=$SECRET_DIR/db_password.txt
+COMPOSE_JWT_SECRET_FILE=$SECRET_DIR/jwt_secret.txt
 ENV
-fi
 
-$COMPOSE up -d --build
-$COMPOSE exec -T server ./jimu migrate up
+compose config --quiet
+compose up -d --build
+compose exec -T server ./jimu migrate up
 
 registered=0
 for _ in $(seq 1 60); do

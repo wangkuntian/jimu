@@ -2,6 +2,7 @@ package importer
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -53,4 +54,52 @@ func TestRegistryGetUnsupported(t *testing.T) {
 	r := NewRegistry()
 	_, err := r.Get(Format("yaml"))
 	require.Error(t, err)
+}
+
+func TestCSVImportPersistsRowsThroughSink(t *testing.T) {
+	var imported []string
+	imp := NewCSVImporterWithSink(func(ctx context.Context, row map[string]string) error {
+		imported = append(imported, row["username"])
+		if row["username"] == "bob" {
+			return errors.New("username already exists")
+		}
+		return nil
+	})
+
+	rows := []map[string]string{
+		{"username": "alice"},
+		{"username": "bob"},
+		{"username": "carol"},
+	}
+	result, err := imp.Import(context.Background(), rows)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"alice", "bob", "carol"}, imported)
+	assert.Equal(t, 3, result.TotalRows)
+	assert.Equal(t, 2, result.SuccessRows)
+	assert.Equal(t, 1, result.ErrorRows)
+	require.Len(t, result.Errors, 1)
+	assert.Equal(t, 2, result.Errors[0].Row)
+	assert.Equal(t, "username already exists", result.Errors[0].Message)
+}
+
+func TestExcelImportPersistsRowsThroughSink(t *testing.T) {
+	var imported []string
+	imp := NewExcelImporterWithSink(func(ctx context.Context, row map[string]string) error {
+		imported = append(imported, row["username"])
+		return nil
+	})
+
+	result, err := imp.Import(context.Background(), []map[string]string{{"username": "alice"}})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"alice"}, imported)
+	assert.Equal(t, 1, result.SuccessRows)
+}
+
+func TestImportWithoutSinkReturnsConfigurationError(t *testing.T) {
+	result, err := NewCSVImporter().Import(context.Background(), []map[string]string{{"username": "alice"}})
+
+	assert.ErrorIs(t, err, ErrImportPersistenceNotConfigured)
+	assert.Nil(t, result)
 }

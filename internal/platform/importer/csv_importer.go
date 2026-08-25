@@ -5,15 +5,21 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"time"
 )
 
 // CSVImporter parses CSV files into row maps.
-type CSVImporter struct{}
+type CSVImporter struct {
+	Sink RowSink
+}
 
 // NewCSVImporter creates a new CSV importer.
 func NewCSVImporter() *CSVImporter {
 	return &CSVImporter{}
+}
+
+// NewCSVImporterWithSink creates a CSV importer with a row persistence callback.
+func NewCSVImporterWithSink(sink RowSink) *CSVImporter {
+	return &CSVImporter{Sink: sink}
 }
 
 // Parse reads a CSV file and returns rows as maps keyed by header names.
@@ -67,10 +73,7 @@ func (c *CSVImporter) Validate(ctx context.Context, rows []map[string]string, ru
 	return NewValidator().Validate(ctx, rows, rules)
 }
 
-// Import is a stub that reports all rows as success (override with real persistence).
+// Import persists rows through the configured sink and reports per-row errors.
 func (c *CSVImporter) Import(ctx context.Context, rows []map[string]string) (*ImportResult, error) {
-	start := time.Now()
-	result := NewImportResult(len(rows))
-	result.Finalize(start)
-	return result, nil
+	return importRows(ctx, rows, c.Sink)
 }
