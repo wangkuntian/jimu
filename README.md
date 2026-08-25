@@ -33,7 +33,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **分布式锁** — Redis 实现的分布式锁（防并发、选主）
 - **文件存储** — 本地/S3/OSS/MinIO 统一接口
 - **上传安全** — 文件大小限制 + magic-byte 嗅探覆盖可伪造的 Content-Type 头 + MIME 白名单；可选 ClamAV 病毒扫描（`upload.clamav.enabled`，stdlib 实现 INSTREAM 协议，落库前同步扫描，fail-closed：不干净或扫描不可达均拒绝落库）
-- **数据导入/导出** — CSV/Excel 模板导入与导出（`internal/platform/importer` / `internal/platform/exporter`），导出结果可被导入器回读验证，格式互通
+- **数据导入/导出** — CSV/Excel 模板解析、校验与导入/导出（`internal/platform/importer` / `internal/platform/exporter`）；通用 importer 保留 `Importer.Import`，通过可选逐行 `RowSink` 注入持久化，未配置时明确报错，业务应用负责事务落库，导出结果可被导入器回读验证
 - **通知系统** — 邮件/短信(SMS)/WebSocket/Webhook 抽象；短信支持阿里云（dysmsapi SDK，`sms.enabled` 配置开关）；Webhook 回调载荷支持 HMAC-SHA256 签名（`notification.webhook.sign_secret`，附加 `X-Jimu-Timestamp`/`X-Jimu-Signature` 头，防重放）
 - **统一出站 HTTP client** — 封装 timeout + retry/backoff（仅网络错误与 5xx）+ 熔断（连续失败自动开启，冷却后探测恢复）+ 按目标 host 独立限流（令牌桶）+ OTel `traceparent` 注入（`internal/platform/httpclient`），OAuth 提供商与 Webhook 共用
 - **Outbox 模式** — 事件发布与数据库事务一致性保证，支持 MQ 跨服务发布（`outbox.publisher` 切换；`mq` 模式下通过 WorkerPool 消费事件，`event_bus` 模式通过 `outbox:*` 桥接器注入事件总线）
@@ -139,6 +139,8 @@ docker compose run --rm server ./jimu migrate up
 # 5. 初始化数据
 docker compose run --rm -e ADMIN_PASSWORD=admin123 server ./jimu seed
 ```
+
+`secrets/*.txt` 仅在 MariaDB 数据卷首次初始化时创建数据库账号。已存在数据卷时，改写 Secret 文件不会自动修改库内密码；请先轮换数据库账号密码，再重启 `server`，避免因凭据不一致反复重启。
 
 服务启动后访问：
 - API: http://localhost:8080
@@ -592,7 +594,8 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `make compose-observability` | 启动监控栈（Prometheus + Grafana + AlertManager + Loki） |
 | `make compose-observability-down` | 停止监控栈 |
 | `make compose-observability-test` | 触发一条测试告警验证 AlertManager 链路 |
-| `make release-check` | 发布前检查（fmt-check + vet + test + govulncheck） |
+| `make compose-check` | 使用临时项目、Secret 和数据卷进行 Compose 运行时/API 验证，不影响本地服务 |
+| `make release-check` | 发布前检查（fmt-check + vet + test + govulncheck + Compose 运行时/API 验证） |
 | `make ci` | 本地 CI 检查（无外部依赖：fmt-check + vet + lint + test + 覆盖率 + race + swagger + smoke + build + govulncheck，完整 CI 见 `.github/workflows/ci.yml`） |
 | `make clean` | 清理构建产物 |
 | `make hooks` | 安装 pre-commit 钩子 |
@@ -616,6 +619,8 @@ make compose-up
 docker compose run --rm server ./jimu migrate up
 docker compose run --rm -e ADMIN_PASSWORD=admin123 server ./jimu seed
 ```
+
+已有数据卷中的 MariaDB 账号密码不会因修改 `secrets/*.txt` 自动轮换。先完成数据库账号轮换，再执行 `make compose-restart`。
 
 ## K8s 部署
 

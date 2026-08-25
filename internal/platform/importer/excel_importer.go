@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -13,11 +12,17 @@ import (
 // ExcelImporter parses Excel (.xlsx) files into row maps.
 type ExcelImporter struct {
 	Sheet string // optional sheet name; empty means the active sheet
+	Sink  RowSink
 }
 
 // NewExcelImporter creates a new Excel importer targeting the active sheet.
 func NewExcelImporter() *ExcelImporter {
 	return &ExcelImporter{}
+}
+
+// NewExcelImporterWithSink creates an Excel importer with a row persistence callback.
+func NewExcelImporterWithSink(sink RowSink) *ExcelImporter {
+	return &ExcelImporter{Sink: sink}
 }
 
 // Parse reads an Excel file and returns rows as maps keyed by header names.
@@ -79,10 +84,7 @@ func (e *ExcelImporter) Validate(ctx context.Context, rows []map[string]string, 
 	return NewValidator().Validate(ctx, rows, rules)
 }
 
-// Import is a stub that reports all rows as success.
+// Import persists rows through the configured sink and reports per-row errors.
 func (e *ExcelImporter) Import(ctx context.Context, rows []map[string]string) (*ImportResult, error) {
-	start := time.Now()
-	result := NewImportResult(len(rows))
-	result.Finalize(start)
-	return result, nil
+	return importRows(ctx, rows, e.Sink)
 }
