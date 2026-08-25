@@ -3,7 +3,6 @@ name: CI
 on:
   push:
     branches: [master, release/*]
-    tags: ["v*.*.*"]
     paths-ignore:
       - "**/*.md"
       - "docs/**"
@@ -317,7 +316,7 @@ jobs:
       - name: "📄 Generate license report"
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          go run github.com/google/go-licenses@latest report ./... > license-report.txt
+          go run github.com/google/go-licenses@latest report --ignore "jimu/" ./... > license-report.txt
           echo "✅ License report generated"
 
       - name: "📤 Upload license report"
