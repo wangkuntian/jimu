@@ -4,11 +4,19 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **Redis 高可用** — `redis.mode` 支持 `single`/`sentinel`/`cluster`，哨兵自动故障转移、集群连接分片；统一客户端接口，session/缓存/队列/限流/分布式锁跨模式复用。
+- **TOTP 二次验证** — RFC 6238 自研实现；`/auth/mfa/setup|enable|disable` 自助管理，登录可携带 `totp_code`，密钥 AES-GCM 加密落库。
+- **统一 gRPC 客户端** — 出站调用封装：连接管理 + 超时 + 指数退避重试 + 恢复拦截器 + Prometheus 指标。
+- **错误追踪上报** — `error_reporting` 配置接入 Sentry，HTTP panic 自动上报（含 trace_id/span_id），优雅停机 Flush。
+
 ### 修复
 
 - 修复 Compose 持久化数据卷与 Secret 变更后数据库账号密码不一致时的排障与隔离验证流程。
 - 保留通用 `Importer.Import` 接口，改为通过逐行持久化回调导入；未配置回调时明确报错，避免伪报成功。
 - 让发布门禁覆盖隔离 Compose 运行时与 API 契约验证。
+- 运行时镜像 `apk upgrade` 升级 OpenSSL，修复 Trivy 扫描出的 CVE-2026-14456（HIGH）。
 
 ## [v0.1.0] - 2026-08-21
 
