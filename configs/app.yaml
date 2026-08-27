@@ -42,9 +42,14 @@ db:
 
 # Redis 配置
 redis:
-  addr: "127.0.0.1:6379"    # Redis 地址（可通过 REDIS_ADDR 覆盖）
+  mode: "single"            # Redis 部署模式：single / sentinel / cluster（高可用）
+  addr: "127.0.0.1:6379"    # 单机模式地址（可通过 REDIS_ADDR 覆盖）
   password: ""              # Redis 密码（可通过 REDIS_PASSWORD 覆盖）
-  db: 0                     # Redis 数据库编号（可通过 REDIS_DB 覆盖）
+  db: 0                     # Redis 数据库编号（可通过 REDIS_DB 覆盖；cluster 模式不支持）
+  master_name: ""           # 哨兵模式：master 名称
+  sentinel_addrs: []        # 哨兵模式：哨兵节点地址列表
+  sentinel_password: ""     # 哨兵模式：哨兵节点密码（可选）
+  cluster_addrs: []         # 集群模式：节点地址列表
   pool_size: 10             # 连接池大小（开发环境较小）
   min_idle_conns: 2         # 最小空闲连接数
   read_timeout_sec: 3       # 读超时（秒）
@@ -206,6 +211,13 @@ http_client:
   reset_timeout_ms: 30000 # 熔断后冷却时长（毫秒），0 用默认 30000
   rate_limit_rate: 0      # 每秒请求数（按目标 host 独立限流），0 不限流
   rate_limit_burst: 0     # 令牌桶容量，0 用 rate（桶=平均速率）
+
+# 错误追踪上报（Sentry 等；未启用时零开销）
+error_reporting:
+  enabled: false          # 是否启用错误上报
+  dsn: ""                 # Sentry DSN；留空则仅本地日志
+  environment: "dev"      # 环境标签（Sentry 事件环境；留空回退 APP_ENV）
+  sample_rate: 1.0        # 采样率 0-1，1.0 表示全部上报
 
 # gRPC server 配置（可选；与 HTTP 双栈并存，默认关闭）
 grpc:
