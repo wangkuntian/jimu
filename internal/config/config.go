@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"jimu/internal/platform/observability"
+	"jimu/internal/platform/reporter"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
@@ -162,6 +163,7 @@ type Config struct {
 	SMS          SMSConfig                   `mapstructure:"sms"`
 	Notification NotificationConfig          `mapstructure:"notification"`
 	OTEL         observability.TracingConfig `mapstructure:"otel"`
+	ErrorReport  reporter.ReporterConfig     `mapstructure:"error_reporting"`
 	HTTPClient   HTTPClientConfig            `mapstructure:"http_client"`
 	GRPC         GRPCConfig                  `mapstructure:"grpc"`
 	// 元数据（非 YAML 配置，运行时注入）

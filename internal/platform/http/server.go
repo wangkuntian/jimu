@@ -81,7 +81,7 @@ func (s *Server) Errors() <-chan error {
 	return s.errors
 }
 
-func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.ServerConfig, securityCfg config.SecurityConfig, otelCfg observability.TracingConfig) *gin.Engine {
+func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.ServerConfig, securityCfg config.SecurityConfig, otelCfg observability.TracingConfig, reporters ...middleware.Reporter) *gin.Engine {
 	switch cfg.Mode {
 	case config.HTTPModeRelease:
 		gin.SetMode(gin.ReleaseMode)
@@ -114,7 +114,7 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 		middleware.GzipCompression(),
 		middleware.Logger(log, middleware.DefaultLogConfig()),
 		middleware.Security(cfg),
-		middleware.Recovery(),
+		middleware.Recovery(reporters...),
 		middleware.Timeout(time.Duration(serverCfg.TimeoutSec)*time.Second),
 		middleware.GlobalRateLimit(serverCfg.RateLimitRate, serverCfg.RateLimitBurst),
 	)

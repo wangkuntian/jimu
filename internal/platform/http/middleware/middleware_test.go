@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -152,6 +153,35 @@ func TestRecoveryCatchesPanic(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/panic", nil))
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Contains(t, w.Body.String(), `"code":1005`)
+}
+
+func TestRecoveryReportsToReporter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	var reported []string
+	rep := reporterFunc(func(ctx context.Context, err error, attrs ...string) {
+		reported = append(reported, err.Error())
+		reported = append(reported, attrs...)
+	})
+	r := gin.New()
+	r.Use(RequestID(), Recovery(rep))
+	r.GET("/panic", func(c *gin.Context) { panic("boom") })
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/panic", nil))
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	require.Len(t, reported, 7)
+	assert.Contains(t, reported[0], "panic recovered: boom")
+	assert.Equal(t, "method", reported[1])
+	assert.Equal(t, "GET", reported[2])
+	assert.Equal(t, "path", reported[3])
+	assert.Equal(t, "/panic", reported[4])
+	assert.Equal(t, "client_ip", reported[5])
+}
+
+type reporterFunc func(ctx context.Context, err error, attrs ...string)
+
+func (f reporterFunc) Report(ctx context.Context, err error, attrs ...string) {
+	f(ctx, err, attrs...)
 }
 
 func TestSecurityHeadersMiddleware(t *testing.T) {
