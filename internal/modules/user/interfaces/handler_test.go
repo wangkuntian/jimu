@@ -211,7 +211,8 @@ func (r *fakeUserRepository) FindByEmailHash(context.Context, string) (*domain.U
 func (r *fakeUserRepository) FindByPhoneHash(context.Context, string) (*domain.User, error) {
 	return nil, gorm.ErrRecordNotFound
 }
-func (r *fakeUserRepository) UpdatePassword(context.Context, uint64, string) error { return nil }
+func (r *fakeUserRepository) UpdatePassword(context.Context, uint64, string) error   { return nil }
+func (r *fakeUserRepository) UpdateTOTP(context.Context, uint64, string, bool) error { return nil }
 
 // errDeleteRepository 覆盖 service.Delete 的 repo.Delete 错误分支
 type errDeleteRepository struct {

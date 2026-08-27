@@ -96,6 +96,8 @@ func (f *fakeUserRepository) FindByPhoneHash(context.Context, string) (*userdoma
 
 func (f *fakeUserRepository) UpdatePassword(context.Context, uint64, string) error { return nil }
 
+func (f *fakeUserRepository) UpdateTOTP(context.Context, uint64, string, bool) error { return nil }
+
 // fakeImportJobRepo 可配置的导入任务仓储 mock
 type fakeImportJobRepo struct {
 	create   func(ctx context.Context, job *admindomain.ImportJob) error

@@ -18,6 +18,7 @@ import (
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/outbox"
 	"jimu/internal/shared/errors"
+	"jimu/internal/shared/totp"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -35,6 +36,7 @@ type AuthService struct {
 	notifier   notification.Dispatcher
 	resetStore *ResetStore
 	resetGen   func() string // 验证码生成器（测试注入）
+	issuer     string        // TOTP otpauth URI 的 issuer
 }
 
 func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int, deps ...interface{}) *AuthService {
@@ -55,12 +57,27 @@ func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessi
 			s.notifier = d
 		case *ResetStore:
 			s.resetStore = d
+		case totpIssuer:
+			s.issuer = string(d)
 		}
 	}
 	return s
 }
 
+// totpIssuer 注入 TOTP otpauth URI 的 issuer（默认 jimu）。
+type totpIssuer string
+
+// WithIssuer 返回注入 issuer 的 dep，供 NewAuthService 使用。
+func WithIssuer(issuer string) interface{} { return totpIssuer(issuer) }
+
 func (s *AuthService) Login(ctx context.Context, username, password string) (*authdomain.TokenPair, error) {
+	// 兼容入口：不提供 TOTP 码。用户启用 TOTP 时返回 CodeMFARequired 提示二次验证。
+	return s.LoginWithTOTP(ctx, username, password, "")
+}
+
+// LoginWithTOTP 支持 TOTP 二次验证的登录。用户启用 TOTP 时校验验证码：
+// 码缺失返回 CodeMFARequired，码无效返回 CodeInvalidMFA；未启用 TOTP 时与旧登录等价。
+func (s *AuthService) LoginWithTOTP(ctx context.Context, username, password, totpCode string) (*authdomain.TokenPair, error) {
 	normalized := normalizeUsername(username)
 
 	// 检查账号是否被锁定
@@ -89,11 +106,27 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*au
 		return nil, invalidCredentials()
 	}
 
+	// TOTP 校验：用户启用后必须提供有效验证码
+	if user.TOTPEnabled {
+		if totpCode == "" {
+			return nil, errors.New(errors.CodeMFARequired, "TOTP code required")
+		}
+		if !totp.Validate(user.TOTPSecret, totpCode, time.Now(), totp.DefaultPeriod, totp.DefaultDigits, totp.DefaultSkew) {
+			s.recordFailure(ctx, normalized)
+			return nil, errors.New(errors.CodeInvalidMFA, "invalid TOTP code")
+		}
+	}
+
 	// 登录成功，清除失败计数
 	if s.lockout != nil {
 		_ = s.lockout.Reset(ctx, normalized)
 	}
 
+	return s.finishLogin(ctx, user)
+}
+
+// finishLogin 校验通过后的公共登录收尾：签发 token + 建会话 + Outbox 事件。
+func (s *AuthService) finishLogin(ctx context.Context, user *userdomain.User) (*authdomain.TokenPair, error) {
 	sessionID := uuid.NewString()
 	accessToken, refreshToken, refreshClaims, err := s.issueTokenPair(user.ID, sessionID)
 	if err != nil {
@@ -227,6 +260,73 @@ func (s *AuthService) ResetPassword(ctx context.Context, email, code, newPasswor
 	}
 	if s.sessions != nil {
 		_ = s.sessions.RevokeAll(ctx, user.ID)
+	}
+	return nil
+}
+
+// SetupTOTP 为用户生成新的 TOTP 密钥并返回 otpauth URI（未启用，需 EnableTOTP 确认）。
+// 重复调用会轮换密钥（旧密钥立即失效）。
+// 返回数据仅此一次全量可见，调用方应在确认启用前保存 secret。
+func (s *AuthService) SetupTOTP(ctx context.Context, userID uint64, account string) (secret string, uri string, err error) {
+	if account == "" {
+		// 未显式提供 account 时用用户名兜底（otpauth URI 的可读标识）
+		if u, loadErr := s.userRepo.FindByID(ctx, userID); loadErr == nil && u != nil {
+			account = u.Username
+		}
+	}
+	secret, err = totp.Secret()
+	if err != nil {
+		return "", "", errors.Wrap(errors.CodeInternalError, "failed to generate totp secret", err)
+	}
+	// 保存密钥但暂不启用（enabled=false），等待 EnableTOTP 用首次验证码确认
+	if err := s.userRepo.UpdateTOTP(ctx, userID, secret, false); err != nil {
+		return "", "", errors.Wrap(errors.CodeInternalError, "failed to save totp secret", err)
+	}
+	issuer := "jimu"
+	if s.issuer != "" {
+		issuer = s.issuer
+	}
+	return secret, totp.ProvisioningURI(secret, account, issuer), nil
+}
+
+// EnableTOTP 用首次生成的验证码确认启用 TOTP。码验证通过后方可开启，防误绑。
+func (s *AuthService) EnableTOTP(ctx context.Context, userID uint64, code string) error {
+	if code == "" {
+		return errors.New(errors.CodeMFARequired, "TOTP code required")
+	}
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return errors.Wrap(errors.CodeInternalError, "failed to load user", err)
+	}
+	if user.TOTPSecret == "" {
+		return errors.New(errors.CodeInvalidMFA, "TOTP not set up, call setup first")
+	}
+	if !totp.Validate(user.TOTPSecret, code, time.Now(), totp.DefaultPeriod, totp.DefaultDigits, totp.DefaultSkew) {
+		return errors.New(errors.CodeInvalidMFA, "invalid TOTP code")
+	}
+	if err := s.userRepo.UpdateTOTP(ctx, userID, user.TOTPSecret, true); err != nil {
+		return errors.Wrap(errors.CodeInternalError, "failed to enable totp", err)
+	}
+	return nil
+}
+
+// DisableTOTP 校验当前验证码后关闭 TOTP 并清除密钥。
+func (s *AuthService) DisableTOTP(ctx context.Context, userID uint64, code string) error {
+	if code == "" {
+		return errors.New(errors.CodeMFARequired, "TOTP code required")
+	}
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return errors.Wrap(errors.CodeInternalError, "failed to load user", err)
+	}
+	if !user.TOTPEnabled || user.TOTPSecret == "" {
+		return errors.New(errors.CodeInvalidMFA, "TOTP not enabled")
+	}
+	if !totp.Validate(user.TOTPSecret, code, time.Now(), totp.DefaultPeriod, totp.DefaultDigits, totp.DefaultSkew) {
+		return errors.New(errors.CodeInvalidMFA, "invalid TOTP code")
+	}
+	if err := s.userRepo.UpdateTOTP(ctx, userID, "", false); err != nil {
+		return errors.Wrap(errors.CodeInternalError, "failed to disable totp", err)
 	}
 	return nil
 }

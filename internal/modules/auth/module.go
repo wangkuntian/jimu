@@ -12,8 +12,9 @@ import (
 	"jimu/internal/platform/captcha"
 	"jimu/internal/platform/outbox"
 
+	redistore "jimu/internal/platform/redis"
+
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -28,7 +29,7 @@ type Module struct {
 	outbox     *outbox.Outbox
 }
 
-func New(db *gorm.DB, rdb *redis.Client, cfg config.AuthConfig, failClosed bool, captchaSvc *captcha.Service, captchaCfg config.CaptchaConfig, deps ...interface{}) *Module {
+func New(db *gorm.DB, rdb redistore.Client, cfg config.AuthConfig, failClosed bool, captchaSvc *captcha.Service, captchaCfg config.CaptchaConfig, deps ...interface{}) *Module {
 	userRepo := infrastructure.NewMysqlRepository(db)
 	jwtUtil := auth.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
 	sessionStore := auth.NewRedisSessionStore(rdb)
@@ -36,7 +37,7 @@ func New(db *gorm.DB, rdb *redis.Client, cfg config.AuthConfig, failClosed bool,
 	lockoutTracker := auth.NewLoginFailureTracker(rdb, auth.DefaultLockoutConfig())
 	// 密码重置验证码存储：redis 一次性码，TTL 取配置
 	resetStore := application.NewResetStore(rdb, time.Duration(cfg.ResetCodeTTLMin)*time.Minute)
-	allDeps := append(deps, resetStore)
+	allDeps := append(deps, resetStore, application.WithIssuer(cfg.Issuer))
 	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin, allDeps...)
 	m := &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaSvc, captchaCfg: captchaCfg}
 	for _, dep := range deps {

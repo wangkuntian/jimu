@@ -11,5 +11,6 @@ type UserRepository interface {
 	Create(ctx context.Context, user *User) error
 	Update(ctx context.Context, user *User) error
 	UpdatePassword(ctx context.Context, id uint64, hashedPassword string) error
+	UpdateTOTP(ctx context.Context, id uint64, secret string, enabled bool) error
 	Delete(ctx context.Context, id uint64) error
 }

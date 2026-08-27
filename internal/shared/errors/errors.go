@@ -48,6 +48,8 @@ const (
 	CodeInvalidPassword  = 2003 // 密码错误
 	CodeRoleNotFound     = 2004 // 角色不存在
 	CodeInvalidResetCode = 2005 // 密码重置验证码无效或已过期
+	CodeMFARequired      = 2006 // 需要提供 TOTP 二次验证码
+	CodeInvalidMFA       = 2007 // TOTP 验证码无效
 
 	// OAuth 模块 (3xxx)
 	CodeOAuthProviderNotFound = 3001 // 第三方登录提供商不存在

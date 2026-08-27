@@ -94,6 +94,8 @@ func (f *fakeUserRepository) FindByPhoneHash(context.Context, string) (*userdoma
 
 func (f *fakeUserRepository) UpdatePassword(context.Context, uint64, string) error { return nil }
 
+func (f *fakeUserRepository) UpdateTOTP(context.Context, uint64, string, bool) error { return nil }
+
 // fakeAPIKeyRepo 可配置的 API Key 仓储 mock
 type fakeAPIKeyRepo struct {
 	create   func(ctx context.Context, key *admindomain.APIKey) error

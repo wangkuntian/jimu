@@ -50,7 +50,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if !h.verifyCaptcha(c, req) {
 		return
 	}
-	tokenPair, err := h.service.Login(c.Request.Context(), req.Username, req.Password)
+	tokenPair, err := h.service.LoginWithTOTP(c.Request.Context(), req.Username, req.Password, req.TOTPCode)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -190,6 +190,82 @@ func (h *AuthHandler) LogoutAll(c *gin.Context) {
 		return
 	}
 	if err := h.service.LogoutAll(c.Request.Context(), userID); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{})
+}
+
+// SetupTOTP godoc
+// @Summary      生成 TOTP 绑定密钥
+// @Description  生成新的 TOTP 密钥并返回 otpauth URI（用于二维码/认证器绑定）。重复调用会轮换密钥。绑定后需调用启用接口用首次验证码确认。
+// @Tags         认证
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  response.Body  "成功，返回 secret 与 otpauth URI"
+// @Failure      401  {object}  contract.ErrorResponse  "未认证或会话无效"
+// @Router       /auth/mfa/setup [post]
+func (h *AuthHandler) SetupTOTP(c *gin.Context) {
+	userID, _, ok := authContext(c)
+	if !ok {
+		response.Fail(c, errors.New(errors.CodeUnauthorized, "invalid session"))
+		return
+	}
+	username := c.GetString("username")
+	secret, uri, err := h.service.SetupTOTP(c.Request.Context(), userID, username)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"secret": secret, "otpauth_uri": uri})
+}
+
+// EnableTOTP godoc
+// @Summary      启用 TOTP 二次验证
+// @Description  用认证器生成的首次验证码确认启用 TOTP。验证码通过后该用户登录必须提供 TOTP 码。
+// @Tags         认证
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      enableTOTPRequest  true  "首次验证码"
+// @Success      200  {object}  response.Body  "成功"
+// @Failure      400  {object}  contract.ErrorResponse  "参数错误"
+// @Failure      401  {object}  contract.ErrorResponse  "未认证或验证码无效"
+// @Router       /auth/mfa/enable [post]
+func (h *AuthHandler) EnableTOTP(c *gin.Context) {
+	req, _ := c.MustGet("validated_req").(*enableTOTPRequest)
+	userID, _, ok := authContext(c)
+	if !ok {
+		response.Fail(c, errors.New(errors.CodeUnauthorized, "invalid session"))
+		return
+	}
+	if err := h.service.EnableTOTP(c.Request.Context(), userID, req.Code); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{})
+}
+
+// DisableTOTP godoc
+// @Summary      关闭 TOTP 二次验证
+// @Description  校验当前验证码后关闭 TOTP 并清除密钥。关闭后登录不再要求 TOTP 码。
+// @Tags         认证
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      disableTOTPRequest  true  "当前验证码"
+// @Success      200  {object}  response.Body  "成功"
+// @Failure      400  {object}  contract.ErrorResponse  "参数错误"
+// @Failure      401  {object}  contract.ErrorResponse  "未认证或验证码无效"
+// @Router       /auth/mfa/disable [post]
+func (h *AuthHandler) DisableTOTP(c *gin.Context) {
+	req, _ := c.MustGet("validated_req").(*disableTOTPRequest)
+	userID, _, ok := authContext(c)
+	if !ok {
+		response.Fail(c, errors.New(errors.CodeUnauthorized, "invalid session"))
+		return
+	}
+	if err := h.service.DisableTOTP(c.Request.Context(), userID, req.Code); err != nil {
 		response.Fail(c, err)
 		return
 	}

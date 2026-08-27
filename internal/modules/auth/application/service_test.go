@@ -11,6 +11,7 @@ import (
 	"jimu/internal/platform/auth"
 	"jimu/internal/platform/encryption"
 	apperrors "jimu/internal/shared/errors"
+	"jimu/internal/shared/totp"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -167,8 +168,13 @@ type fakeUserRepo struct {
 	updatePassword  func(ctx context.Context, id uint64, hashed string) error
 }
 
-func (r *fakeUserRepo) FindByID(context.Context, uint64) (*userdomain.User, error) {
-	return nil, stderrors.New("not implemented")
+func (r *fakeUserRepo) FindByID(_ context.Context, id uint64) (*userdomain.User, error) {
+	for _, user := range r.users {
+		if user.ID == id {
+			return user, nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
 }
 
 func (r *fakeUserRepo) FindByUsername(_ context.Context, username string) (*userdomain.User, error) {
@@ -219,6 +225,17 @@ func (r *fakeUserRepo) UpdatePassword(ctx context.Context, id uint64, hashed str
 		return r.updatePassword(ctx, id, hashed)
 	}
 	return nil
+}
+
+func (r *fakeUserRepo) UpdateTOTP(_ context.Context, id uint64, secret string, enabled bool) error {
+	for _, u := range r.users {
+		if u.ID == id {
+			u.TOTPSecret = secret
+			u.TOTPEnabled = enabled
+			return nil
+		}
+	}
+	return stderrors.New("user not found")
 }
 
 type sessionRecord struct {
@@ -296,6 +313,112 @@ func appCode(err error) int {
 		return appErr.Code
 	}
 	return 0
+}
+
+func TestLoginRequiresTOTPWhenEnabled(t *testing.T) {
+	ctx := context.Background()
+	repo := &fakeUserRepo{users: map[string]*userdomain.User{}}
+	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30)
+
+	// 注册用户
+	alice := userWithPassword(t, 42, "alice", "correct", 1)
+	repo.users["alice"] = alice
+
+	// 未启用 TOTP：旧登录接口可直接登录
+	if _, err := service.Login(ctx, "alice", "correct"); err != nil {
+		t.Fatalf("Login() without TOTP enabled should succeed: %v", err)
+	}
+
+	// 生成 TOTP 密钥
+	secret, uri, err := service.SetupTOTP(ctx, 42, "alice")
+	if err != nil {
+		t.Fatalf("SetupTOTP() error: %v", err)
+	}
+	if secret == "" || uri == "" {
+		t.Fatal("SetupTOTP() should return secret and otpauth URI")
+	}
+	if alice.TOTPSecret != secret || alice.TOTPEnabled {
+		t.Fatal("SetupTOTP() should persist secret but keep TOTP disabled")
+	}
+
+	// 启用：先用错误码校验，再生成正确码启用
+	if code, _ := totpTestCode(secret, 0); code != "" {
+		// 用一个无效码验证拒绝
+		err = service.EnableTOTP(ctx, 42, "000000")
+		if appCode(err) != apperrors.CodeInvalidMFA {
+			t.Fatalf("EnableTOTP() invalid code = %d, want %d", appCode(err), apperrors.CodeInvalidMFA)
+		}
+	}
+	nowCode := totpCurrentCode(t, secret)
+	if err := service.EnableTOTP(ctx, 42, nowCode); err != nil {
+		t.Fatalf("EnableTOTP() valid code error: %v", err)
+	}
+	if !alice.TOTPEnabled {
+		t.Fatal("EnableTOTP() should mark TOTP enabled")
+	}
+
+	// 启用后：旧登录接口必须返回 MFA 要求
+	_, err = service.Login(ctx, "alice", "correct")
+	if appCode(err) != apperrors.CodeMFARequired {
+		t.Fatalf("Login() with TOTP enabled code = %d, want %d", appCode(err), apperrors.CodeMFARequired)
+	}
+	// 错误 TOTP 码被拒绝
+	_, err = service.LoginWithTOTP(ctx, "alice", "correct", "000000")
+	if appCode(err) != apperrors.CodeInvalidMFA {
+		t.Fatalf("LoginWithTOTP() wrong code = %d, want %d", appCode(err), apperrors.CodeInvalidMFA)
+	}
+	// 正确 TOTP 码可登录
+	if _, err := service.LoginWithTOTP(ctx, "alice", "correct", totpCurrentCode(t, secret)); err != nil {
+		t.Fatalf("LoginWithTOTP() valid code error: %v", err)
+	}
+}
+
+func TestDisableTOTP(t *testing.T) {
+	ctx := context.Background()
+	repo := &fakeUserRepo{users: map[string]*userdomain.User{
+		"alice": userWithPassword(t, 42, "alice", "correct", 1),
+	}}
+	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30)
+
+	alice := repo.users["alice"]
+	secret, _, err := service.SetupTOTP(ctx, 42, "alice")
+	if err != nil {
+		t.Fatalf("SetupTOTP() error: %v", err)
+	}
+	_ = secret
+	if err := service.EnableTOTP(ctx, 42, totpCurrentCode(t, alice.TOTPSecret)); err != nil {
+		t.Fatalf("EnableTOTP() error: %v", err)
+	}
+
+	// 错误的码不能关闭
+	if err := service.DisableTOTP(ctx, 42, "000000"); appCode(err) != apperrors.CodeInvalidMFA {
+		t.Fatalf("DisableTOTP() wrong code = %d, want %d", appCode(err), apperrors.CodeInvalidMFA)
+	}
+	// 正确的码关闭，密钥清除
+	if err := service.DisableTOTP(ctx, 42, totpCurrentCode(t, alice.TOTPSecret)); err != nil {
+		t.Fatalf("DisableTOTP() error: %v", err)
+	}
+	if alice.TOTPEnabled || alice.TOTPSecret != "" {
+		t.Fatal("DisableTOTP() should clear secret and mark disabled")
+	}
+	// 关闭后旧登录接口直接可用
+	if _, err := service.Login(ctx, "alice", "correct"); err != nil {
+		t.Fatalf("Login() after disable should succeed: %v", err)
+	}
+}
+
+func totpTestCode(secret string, _ int) (string, error) {
+	return totpCurrentCodeFor(time.Now(), secret), nil
+}
+
+func totpCurrentCode(t *testing.T, secret string) string {
+	t.Helper()
+	return totpCurrentCodeFor(time.Now(), secret)
+}
+
+func totpCurrentCodeFor(now time.Time, secret string) string {
+	code, _ := totp.Code(secret, now, totp.DefaultPeriod, totp.DefaultDigits)
+	return code
 }
 
 var _ authdomain.AuthServiceInterface = (*AuthService)(nil)
