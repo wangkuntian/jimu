@@ -8,14 +8,15 @@ import (
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
+	redistore "jimu/internal/platform/redis"
+
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 )
 
 // IdempotencyMiddleware 幂等性中间件
 // 客户端在请求头中携带 Idempotency-Key: <uuid>
 // 相同 key 的重复请求会返回缓存的响应，不会重复执行业务逻辑
-func IdempotencyMiddleware(redis *redis.Client, ttl time.Duration) gin.HandlerFunc {
+func IdempotencyMiddleware(redis redistore.Client, ttl time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		key := c.GetHeader("Idempotency-Key")
 		if key == "" {

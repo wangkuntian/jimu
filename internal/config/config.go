@@ -41,6 +41,10 @@ const (
 	DBDriverMySQL    = "mysql"
 	DBDriverPostgres = "postgres"
 	DBDriverMariaDB  = "mariadb"
+
+	RedisModeSingle   = "single"   // 单机模式（默认）
+	RedisModeSentinel = "sentinel" // 哨兵模式（高可用）
+	RedisModeCluster  = "cluster"  // 集群模式
 )
 
 var (
@@ -52,6 +56,7 @@ var (
 	validOutboxMQQueueTypes = []string{QueueTypeKafka, QueueTypeRabbitMQ, QueueTypeRedis}
 	validSchedulerStores    = []string{SchedulerStoreMemory, SchedulerStoreMySQL}
 	validDBDrivers          = []string{DBDriverMySQL, DBDriverPostgres, DBDriverMariaDB, ""}
+	validRedisModes         = []string{RedisModeSingle, RedisModeSentinel, RedisModeCluster}
 )
 
 // QueueConfig 队列配置
@@ -313,7 +318,19 @@ type DBConfig struct {
 }
 
 type RedisConfig struct {
-	Addr             string `mapstructure:"addr"`
+	Mode string `mapstructure:"mode"` // single / sentinel / cluster，默认 single
+
+	// 单机模式
+	Addr string `mapstructure:"addr"`
+
+	// 哨兵模式
+	MasterName       string   `mapstructure:"master_name"`       // 哨兵 master 名称
+	SentinelAddrs    []string `mapstructure:"sentinel_addrs"`    // 哨兵节点地址列表
+	SentinelPassword string   `mapstructure:"sentinel_password"` // 哨兵节点密码（可选）
+
+	// 集群模式
+	ClusterAddrs []string `mapstructure:"cluster_addrs"` // 集群节点地址列表
+
 	Password         string `mapstructure:"password"`
 	DB               int    `mapstructure:"db"`
 	PoolSize         int    `mapstructure:"pool_size"`

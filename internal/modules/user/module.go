@@ -13,13 +13,14 @@ import (
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/outbox"
 
-	"github.com/redis/go-redis/v9"
+	redistore "jimu/internal/platform/redis"
+
 	"gorm.io/gorm"
 )
 
 type Module struct {
 	service *application.UserService
-	rdb     *redis.Client
+	rdb     redistore.Client
 	outbox  *outbox.Outbox
 }
 
@@ -30,7 +31,7 @@ func New(db *gorm.DB, cfg config.Config, deps ...interface{}) *Module {
 	var cipher *encryption.Cipher
 	for _, dep := range deps {
 		switch d := dep.(type) {
-		case *redis.Client:
+		case redistore.Client:
 			c = cache.NewRedisCache(d, cfg.Cache.Prefix)
 		case *outbox.Outbox:
 			ob = d
@@ -41,7 +42,7 @@ func New(db *gorm.DB, cfg config.Config, deps ...interface{}) *Module {
 	service := application.NewUserService(repo, c, ob, cipher)
 	m := &Module{service: service, outbox: ob}
 	for _, dep := range deps {
-		if rdb, ok := dep.(*redis.Client); ok {
+		if rdb, ok := dep.(redistore.Client); ok {
 			m.rdb = rdb
 			break
 		}

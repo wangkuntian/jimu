@@ -27,7 +27,6 @@ import (
 	"jimu/internal/platform/scheduler"
 	"jimu/internal/platform/storage"
 
-	"github.com/redis/go-redis/v9"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"gorm.io/gorm"
 )
@@ -35,7 +34,7 @@ import (
 type Container struct {
 	Config         *config.Config
 	DB             *gorm.DB
-	Redis          *redis.Client
+	Redis          redistore.Client
 	Logger         *logger.Logger
 	TracerProvider *sdktrace.TracerProvider
 	JobRegistry    contract.JobRegistry

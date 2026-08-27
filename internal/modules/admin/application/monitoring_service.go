@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	redistore "jimu/internal/platform/redis"
 )
 
 // AdminMonitoringService 运维监控服务
@@ -13,11 +13,11 @@ type AdminMonitoringService struct {
 	startTime time.Time
 	version   string
 	env       string
-	redis     *redis.Client
+	redis     redistore.Client
 }
 
 // NewAdminMonitoringService 创建运维监控服务
-func NewAdminMonitoringService(version, env string, rdb *redis.Client) *AdminMonitoringService {
+func NewAdminMonitoringService(version, env string, rdb redistore.Client) *AdminMonitoringService {
 	return &AdminMonitoringService{
 		startTime: time.Now(),
 		version:   version,

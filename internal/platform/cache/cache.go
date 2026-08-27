@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	redistore "jimu/internal/platform/redis"
+
 	"github.com/redis/go-redis/v9"
 )
 
@@ -40,12 +42,12 @@ type Cache interface {
 
 // RedisCache 基于 Redis 的缓存实现
 type RedisCache struct {
-	client *redis.Client
+	client redistore.Client
 	prefix string
 }
 
 // NewRedisCache 创建 Redis 缓存
-func NewRedisCache(client *redis.Client, prefix string) *RedisCache {
+func NewRedisCache(client redistore.Client, prefix string) *RedisCache {
 	return &RedisCache{
 		client: client,
 		prefix: prefix,

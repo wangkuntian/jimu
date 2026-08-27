@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	redistore "jimu/internal/platform/redis"
+
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
@@ -24,11 +26,11 @@ const (
 // 每个 Consume 生成唯一 token 并写入 JobData，使 processing 列表中的元素可精确匹配，
 // 避免过期重试与 Ack/Nack 误删同名任务。
 type RedisQueue struct {
-	client *redis.Client
+	client redistore.Client
 }
 
 // NewRedisQueue 创建 Redis 队列
-func NewRedisQueue(client *redis.Client) *RedisQueue {
+func NewRedisQueue(client redistore.Client) *RedisQueue {
 	return &RedisQueue{client: client}
 }
 

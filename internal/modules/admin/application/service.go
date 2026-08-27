@@ -3,7 +3,7 @@ package application
 import (
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	redistore "jimu/internal/platform/redis"
 )
 
 // Service 管理端服务
@@ -11,11 +11,11 @@ type Service struct {
 	startTime time.Time
 	version   string
 	env       string
-	redis     *redis.Client
+	redis     redistore.Client
 }
 
 // NewService 创建管理端服务
-func NewService(version, env string, rdb *redis.Client) *Service {
+func NewService(version, env string, rdb redistore.Client) *Service {
 	return &Service{
 		startTime: time.Now(),
 		version:   version,

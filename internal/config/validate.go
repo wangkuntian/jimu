@@ -94,6 +94,22 @@ func (c *Config) validateCommon() error {
 	if c.Redis.MaxRetries <= 0 || c.Redis.RetryIntervalSec <= 0 {
 		return errors.New("invalid redis retry configuration")
 	}
+	if c.Redis.Mode == "" {
+		c.Redis.Mode = RedisModeSingle
+	}
+	if !contains(validRedisModes, c.Redis.Mode) {
+		return fmt.Errorf("invalid redis.mode: %q, must be one of %v", c.Redis.Mode, validRedisModes)
+	}
+	switch c.Redis.Mode {
+	case RedisModeSentinel:
+		if c.Redis.MasterName == "" || len(c.Redis.SentinelAddrs) == 0 {
+			return errors.New("invalid redis sentinel config: master_name and sentinel_addrs are required")
+		}
+	case RedisModeCluster:
+		if len(c.Redis.ClusterAddrs) == 0 {
+			return errors.New("invalid redis cluster config: cluster_addrs is required")
+		}
+	}
 	if c.Captcha.Enabled && c.Captcha.TTLMin <= 0 {
 		return errors.New("invalid captcha.ttl_min")
 	}

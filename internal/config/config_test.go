@@ -242,3 +242,52 @@ func TestValidateProdRejectsInsecureValues(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateRedisMode(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Redis.Mode = "unknown"
+	err := cfg.Validate("prod")
+	if err == nil || !strings.Contains(err.Error(), "invalid redis.mode") {
+		t.Fatalf("Validate() error = %v, want invalid redis.mode", err)
+	}
+}
+
+func TestValidateRedisSentinelRequiresConfig(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Redis.Mode = RedisModeSentinel
+	err := cfg.Validate("prod")
+	if err == nil || !strings.Contains(err.Error(), "sentinel") {
+		t.Fatalf("Validate() error = %v, want sentinel config required", err)
+	}
+
+	cfg.Redis.MasterName = "mymaster"
+	cfg.Redis.SentinelAddrs = []string{"127.0.0.1:26379"}
+	if err := cfg.Validate("prod"); err != nil {
+		t.Fatalf("Validate() with valid sentinel config, unexpected error: %v", err)
+	}
+}
+
+func TestValidateRedisClusterRequiresAddrs(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Redis.Mode = RedisModeCluster
+	err := cfg.Validate("prod")
+	if err == nil || !strings.Contains(err.Error(), "cluster") {
+		t.Fatalf("Validate() error = %v, want cluster_addrs required", err)
+	}
+
+	cfg.Redis.ClusterAddrs = []string{"127.0.0.1:7000", "127.0.0.1:7001"}
+	if err := cfg.Validate("prod"); err != nil {
+		t.Fatalf("Validate() with valid cluster config, unexpected error: %v", err)
+	}
+}
+
+func TestValidateRedisEmptyModeDefaultsSingle(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Redis.Mode = ""
+	if err := cfg.Validate("prod"); err != nil {
+		t.Fatalf("Validate() with empty redis.mode should default to single, got: %v", err)
+	}
+	if cfg.Redis.Mode != RedisModeSingle {
+		t.Fatalf("empty redis.mode should default to %q, got %q", RedisModeSingle, cfg.Redis.Mode)
+	}
+}

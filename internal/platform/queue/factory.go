@@ -3,7 +3,7 @@ package queue
 import (
 	"fmt"
 
-	"github.com/redis/go-redis/v9"
+	redistore "jimu/internal/platform/redis"
 )
 
 // Type 队列类型
@@ -18,7 +18,7 @@ const (
 // Config 队列配置
 type Config struct {
 	Type     Type
-	Redis    *redis.Client
+	Redis    redistore.Client
 	Kafka    KafkaConfig
 	RabbitMQ RabbitMQConfig
 }

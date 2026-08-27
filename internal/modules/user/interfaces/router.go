@@ -7,13 +7,14 @@ import (
 	"jimu/internal/platform/http/middleware"
 	"jimu/internal/shared/pagination"
 
+	redistore "jimu/internal/platform/redis"
+
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 )
 
 // RegisterUserRoutes 注册用户路由
 // rdb 可选：传入 Redis 客户端以启用 POST 幂等性保护 + 用户维度写操作限流
-func RegisterUserRoutes(r *gin.RouterGroup, service *application.UserService, rdb ...*redis.Client) {
+func RegisterUserRoutes(r *gin.RouterGroup, service *application.UserService, rdb ...redistore.Client) {
 	handler := NewUserHandler(service)
 	users := r.Group("/users")
 	{
