@@ -41,6 +41,7 @@ func TestGatherToOTLP_CounterAndGauge(t *testing.T) {
 	}
 	if rm == nil {
 		t.Fatal("gatherToOTLP() returned nil")
+		return
 	}
 	if len(rm.ScopeMetrics) != 1 || len(rm.ScopeMetrics[0].Metrics) != 2 {
 		t.Fatalf("unexpected metrics count: %+v", rm.ScopeMetrics)
@@ -86,6 +87,10 @@ func TestGatherToOTLP_Histogram(t *testing.T) {
 	rm, err := pusher.gatherToOTLP()
 	if err != nil {
 		t.Fatalf("gatherToOTLP() error = %v", err)
+	}
+	if rm == nil {
+		t.Fatal("gatherToOTLP() returned nil")
+		return
 	}
 	if len(rm.ScopeMetrics[0].Metrics) != 1 {
 		t.Fatalf("unexpected metrics: %+v", rm.ScopeMetrics[0].Metrics)
