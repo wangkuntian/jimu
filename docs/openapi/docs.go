@@ -86,11 +86,6 @@ const docTemplate = `{
         },
         "/audits": {
             "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
                 "description": "分页获取系统审计日志。记录用户的操作行为（如登录、创建、修改、删除等），用于安全审计和行为追踪。支持按 ID、创建时间排序。",
                 "produces": [
                     "application/json"
@@ -144,16 +139,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/audits/{id}": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/audits/{id}": {
+            "get": {
                 "description": "根据审计日志 ID 获取详细信息，包括操作用户、操作类型、资源、详情、IP 地址、HTTP 方法、请求路径和状态码。",
                 "produces": [
                     "application/json"
@@ -196,7 +191,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
             }
         },
         "/auth/forgot-password": {
@@ -299,11 +299,6 @@ const docTemplate = `{
         },
         "/auth/logout": {
             "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
                 "description": "撤销当前会话的刷新令牌，使其失效。需要有效的访问令牌进行身份验证。",
                 "produces": [
                     "application/json"
@@ -325,16 +320,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/auth/logout-all": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/auth/logout-all": {
+            "post": {
                 "description": "撤销该用户的所有刷新会话，强制所有设备重新登录。需要有效的访问令牌进行身份验证。",
                 "produces": [
                     "application/json"
@@ -356,16 +351,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/auth/mfa/disable": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/auth/mfa/disable": {
+            "post": {
                 "description": "校验当前验证码后关闭 TOTP 并清除密钥。关闭后登录不再要求 TOTP 码。",
                 "consumes": [
                     "application/json"
@@ -407,16 +402,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/auth/mfa/enable": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/auth/mfa/enable": {
+            "post": {
                 "description": "用认证器生成的首次验证码确认启用 TOTP。验证码通过后该用户登录必须提供 TOTP 码。",
                 "consumes": [
                     "application/json"
@@ -458,16 +453,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/auth/mfa/setup": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/auth/mfa/setup": {
+            "post": {
                 "description": "生成新的 TOTP 密钥并返回 otpauth URI（用于二维码/认证器绑定）。重复调用会轮换密钥。绑定后需调用启用接口用首次验证码确认。",
                 "produces": [
                     "application/json"
@@ -489,7 +484,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
             }
         },
         "/auth/refresh": {
@@ -715,11 +715,6 @@ const docTemplate = `{
         },
         "/permissions": {
             "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
                 "description": "分页获取权限列表。支持按 ID、名称、资源路径、操作类型、创建时间排序。",
                 "produces": [
                     "application/json"
@@ -773,14 +768,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "创建新权限。权限由资源路径（resource）和操作类型（action）唯一标识，用于控制 API 访问。",
                 "consumes": [
                     "application/json"
@@ -828,16 +823,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/permissions/{id}": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/permissions/{id}": {
+            "get": {
                 "description": "根据权限 ID 获取权限详细信息，包括资源路径和操作类型。",
                 "produces": [
                     "application/json"
@@ -880,14 +875,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "put": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "put": {
                 "description": "更新指定权限的名称、资源路径或操作类型。",
                 "consumes": [
                     "application/json"
@@ -948,14 +943,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "软删除指定权限。删除后权限数据仍保留在数据库中，但无法分配给角色。",
                 "produces": [
                     "application/json"
@@ -989,16 +984,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/roles": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/roles": {
+            "get": {
                 "description": "分页获取角色列表。支持按 ID、名称、创建时间排序。",
                 "produces": [
                     "application/json"
@@ -1052,14 +1047,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "创建新角色。角色名称必须唯一，用于权限管理和访问控制。",
                 "consumes": [
                     "application/json"
@@ -1107,16 +1102,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/roles/{id}": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/roles/{id}": {
+            "get": {
                 "description": "根据角色 ID 获取角色详细信息，包括关联的权限列表。",
                 "produces": [
                     "application/json"
@@ -1159,14 +1154,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "put": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "put": {
                 "description": "更新指定角色的名称或描述。",
                 "consumes": [
                     "application/json"
@@ -1227,14 +1222,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "软删除指定角色。删除后角色数据仍保留在数据库中，但无法分配给用户。",
                 "produces": [
                     "application/json"
@@ -1268,16 +1263,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/roles/{id}/permissions": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/roles/{id}/permissions": {
+            "post": {
                 "description": "为指定角色分配权限。传入权限 ID 数组，角色将被赋予这些权限。原有权限会被替换。",
                 "consumes": [
                     "application/json"
@@ -1326,16 +1321,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/users": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/users": {
+            "get": {
                 "description": "分页获取用户列表。支持按 ID、用户名、创建时间排序，可指定升序或降序。",
                 "produces": [
                     "application/json"
@@ -1389,14 +1384,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "创建新用户账户。用户名必须唯一，密码需符合强度要求（8-32位，包含字母和数字）。支持幂等性保护（通过 Idempotency-Key 请求头）。",
                 "consumes": [
                     "application/json"
@@ -1444,16 +1439,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/users/batch-delete": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/users/batch-delete": {
+            "post": {
                 "description": "批量软删除用户（单次最多 100 个）。返回成功/失败计数。",
                 "consumes": [
                     "application/json"
@@ -1489,16 +1484,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/users/export.csv": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/users/export.csv": {
+            "get": {
                 "description": "导出所有用户为 CSV 文件。列：ID、用户名、状态、创建时间。",
                 "produces": [
                     "text/csv"
@@ -1534,16 +1529,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/users/{id}": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/users/{id}": {
+            "get": {
                 "description": "根据用户 ID 获取用户详细信息。不包含密码等敏感字段。",
                 "produces": [
                     "application/json"
@@ -1586,14 +1581,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "put": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "put": {
                 "description": "更新指定用户的信息（如状态）。部分字段支持部分更新。",
                 "consumes": [
                     "application/json"
@@ -1648,14 +1643,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "软删除指定用户。删除后用户数据仍保留在数据库中，但无法登录系统。",
                 "produces": [
                     "application/json"
@@ -1689,7 +1684,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
             }
         }
     },
