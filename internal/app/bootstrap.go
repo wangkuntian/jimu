@@ -120,12 +120,17 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	// 指标推送（OTLP/gRPC → OpenObserve）：基于 Prometheus 默认 registry，
 	// 现有 promauto 采集逻辑不变，/metrics 端点继续可用。
 	if cfg.OTEL.Enabled && cfg.OTEL.MetricsEnabled {
-		pusher, err := observability.NewMetricsPusher(context.Background(), cfg.OTEL, prometheus.DefaultRegisterer.(*prometheus.Registry))
-		if err != nil {
-			container.Logger.Error("openobserve metrics pusher init failed", "error", err.Error())
+		reg, ok := prometheus.DefaultRegisterer.(*prometheus.Registry)
+		if !ok {
+			container.Logger.Error("openobserve metrics pusher init failed", "error", "default registerer type mismatch")
 		} else {
-			pusher.Start()
-			container.MetricsPusher = pusher
+			pusher, err := observability.NewMetricsPusher(context.Background(), cfg.OTEL, reg)
+			if err != nil {
+				container.Logger.Error("openobserve metrics pusher init failed", "error", err.Error())
+			} else {
+				pusher.Start()
+				container.MetricsPusher = pusher
+			}
 		}
 	}
 
