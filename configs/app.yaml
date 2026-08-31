@@ -209,7 +209,7 @@ otel:
   # OpenObserve 认证（OTLP/gRPC 要求 Basic Auth + organization header）
   # 与 compose 内 openobserve 服务的 ZO_ROOT_USER_EMAIL/ZO_ROOT_USER_PASSWORD 对应
   auth_email: "admin@jimu.local"
-  auth_password: "admin"
+  auth_password: "Admin@12345"
   org_id: "default"           # OpenObserve 组织（默认 default）
 
 # 出站 HTTP client 配置（oauth/webhook 等外部调用统一使用）

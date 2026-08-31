@@ -203,7 +203,7 @@ otel:
   metrics_interval_sec: 15          # 指标推送间隔（秒）
   # OpenObserve 认证（生产通过 OTEL_AUTH_EMAIL/OTEL_AUTH_PASSWORD 环境变量注入）
   auth_email: "admin@jimu.local"
-  auth_password: "admin"
+  auth_password: "Admin@12345"
   org_id: "default"
 
 # 出站 HTTP client 配置（oauth/webhook 等外部调用统一使用）

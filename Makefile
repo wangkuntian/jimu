@@ -185,7 +185,7 @@ compose-seed:
 compose-observability:
 	$(DOCKER_COMPOSE) --profile observability up -d openobserve
 	@echo "OpenObserve started:"
-	@echo "  UI/API:  http://localhost:5080 (admin@jimu.local / admin)"
+	@echo "  UI/API:  http://localhost:5080 (admin@jimu.local / Admin@12345)"
 	@echo "  OTLP:    localhost:5081"
 	@echo "启用应用推送：OTEL_ENABLED=true make compose-up（或对 server 容器设 OTEL_ENABLED=true）"
 

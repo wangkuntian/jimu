@@ -62,7 +62,7 @@ services:
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_ENDPOINT: ${OTEL_ENDPOINT:-openobserve:5081}
       OTEL_AUTH_EMAIL: ${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local}
-      OTEL_AUTH_PASSWORD: ${ZO_OBSERVE_ROOT_USER_PASSWORD:-admin}
+      OTEL_AUTH_PASSWORD: ${ZO_OBSERVE_ROOT_USER_PASSWORD:-Admin@12345}
       OTEL_ORG_ID: ${OTEL_ORG_ID:-default}
       # 敏感配置通过文件注入（非环境变量）
       DB_PASSWORD_FILE: /run/secrets/db_password
@@ -89,7 +89,7 @@ services:
     restart: unless-stopped
     environment:
       ZO_ROOT_USER_EMAIL: ${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local}
-      ZO_ROOT_USER_PASSWORD: ${ZO_OBSERVE_ROOT_USER_PASSWORD:-admin}
+      ZO_ROOT_USER_PASSWORD: ${ZO_OBSERVE_ROOT_USER_PASSWORD:-Admin@12345}
       ZO_DATA_DIR: /data
       ZO_HTTP_PORT: "5080"
       ZO_GRPC_PORT: "5081"

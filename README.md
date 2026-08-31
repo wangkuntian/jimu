@@ -160,7 +160,7 @@ docker compose run --rm -e ADMIN_PASSWORD=admin123 server ./jimu seed
 make compose-observability   # 或 docker compose --profile observability up -d openobserve
 ```
 
-- OpenObserve UI/API: http://127.0.0.1:5080 （默认账号 admin@jimu.local / admin，可用 `ZO_OBSERVE_ROOT_USER_EMAIL` / `ZO_OBSERVE_ROOT_USER_PASSWORD` 覆盖）
+- OpenObserve UI/API: http://127.0.0.1:5080 （默认账号 admin@jimu.local / Admin@12345，可用 `ZO_OBSERVE_ROOT_USER_EMAIL` / `ZO_OBSERVE_ROOT_USER_PASSWORD` 覆盖）
 - OTLP gRPC: `127.0.0.1:5081`（tracing / metrics / logs 统一入口）
 
 让应用接入 OpenObserve（`otel.enabled` 开启，tracing + metrics + logs 均经 OTLP gRPC 推送）：
