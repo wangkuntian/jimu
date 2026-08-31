@@ -156,7 +156,7 @@ otel:
   metricsIntervalSec: 15
   # OpenObserve 认证凭据（与 openobserve.rootEmail/rootPassword 保持一致；生产建议覆盖）
   authEmail: "admin@jimu.local"
-  authPassword: "admin"
+  authPassword: "Admin@12345"
   orgID: "default"
 
 # 数据库配置（引用外部 Secret）
@@ -198,7 +198,7 @@ openobserve:
     pullPolicy: IfNotPresent
   # 生产环境请通过 --set 覆盖或 Secret 注入
   rootEmail: "admin@jimu.local"
-  rootPassword: "admin"
+  rootPassword: "Admin@12345"
   storage: 20Gi
   resources:
     requests:

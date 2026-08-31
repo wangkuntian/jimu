@@ -24,7 +24,7 @@ spec:
             - name: ZO_ROOT_USER_EMAIL
               value: "admin@jimu.local"
             - name: ZO_ROOT_USER_PASSWORD
-              value: "admin"
+              value: "Admin@12345"
             - name: ZO_DATA_DIR
               value: /data
             - name: ZO_HTTP_PORT
