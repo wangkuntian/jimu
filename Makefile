@@ -69,7 +69,7 @@ help:
 	@echo "  make compose-logs         查看应用日志"
 	@echo "  make compose-migrate      Compose 环境执行迁移"
 	@echo "  make compose-seed         Compose 环境插入初始数据"
-	@echo "  make compose-observability      启动监控栈（OpenObserve：日志/指标/追踪/告警）"
+	@echo "  make compose-observability      启动监控栈（OpenObserve：日志/指标/追踪/告警，自动创建默认 dashboard）"
 	@echo "  make compose-observability-down 停止监控栈"
 	@echo ""
 	@echo "工具:"
@@ -181,12 +181,17 @@ compose-migrate:
 compose-seed:
 	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) run --rm server ./jimu seed
 
-## compose-observability: 启动监控栈（OpenObserve：日志/指标/追踪/告警/仪表盘）
+## compose-observability: 启动监控栈（OpenObserve：日志/指标/追踪/告警/仪表盘，自动初始化默认 dashboard）
 compose-observability:
 	$(DOCKER_COMPOSE) --profile observability up -d openobserve
+	ZO_HTTP=http://127.0.0.1:5080 \
+	ZO_EMAIL=$${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local} \
+	ZO_PASSWORD=$${ZO_OBSERVE_ROOT_USER_PASSWORD:-Admin@12345} \
+	./deploy/openobserve/init-dashboard.sh
 	@echo "OpenObserve started:"
-	@echo "  UI/API:  http://localhost:5080 (admin@jimu.local / Admin@12345)"
-	@echo "  OTLP:    localhost:5081"
+	@echo "  UI/API:      http://localhost:5080 (admin@jimu.local / Admin@12345)"
+	@echo "  默认面板:    Jimu Overview（错误日志/日志总量/DB 连接池）"
+	@echo "  OTLP:        localhost:5081"
 	@echo "启用应用推送：OTEL_ENABLED=true make compose-up（或对 server 容器设 OTEL_ENABLED=true）"
 
 ## compose-observability-down: 停止监控栈

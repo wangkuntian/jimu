@@ -162,6 +162,7 @@ make compose-observability   # 或 docker compose --profile observability up -d 
 
 - OpenObserve UI/API: http://127.0.0.1:5080 （默认账号 admin@jimu.local / Admin@12345，可用 `ZO_OBSERVE_ROOT_USER_EMAIL` / `ZO_OBSERVE_ROOT_USER_PASSWORD` 覆盖）
 - OTLP gRPC: `127.0.0.1:5081`（tracing / metrics / logs 统一入口）
+- 默认 dashboard **Jimu Overview**：`make compose-observability` 启动时自动创建（幂等），含错误日志/日志总量/DB 连接池面板；手动执行 `./deploy/openobserve/init-dashboard.sh` 可重新初始化，面板查询可在 UI 中调整
 
 让应用接入 OpenObserve（`otel.enabled` 开启，tracing + metrics + logs 均经 OTLP gRPC 推送）：
 
