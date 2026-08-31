@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -26,6 +27,12 @@ type TracingConfig struct {
 	LogsEnabled bool `mapstructure:"logs_enabled"`
 	// MetricsInterval 指标推送间隔（秒），<=0 默认 15
 	MetricsInterval int `mapstructure:"metrics_interval_sec"`
+	// AuthEmail / AuthPassword OpenObserve 账号凭据（Basic Auth，gRPC metadata authorization）。
+	// AuthEmail 为空则不携带凭据（OpenObserve 默认拒绝匿名 OTLP 写入）。
+	AuthEmail    string `mapstructure:"auth_email"`
+	AuthPassword string `mapstructure:"auth_password"`
+	// OrgID OpenObserve 组织（gRPC metadata organization；OpenObserve OTLP 默认组织 default）
+	OrgID string `mapstructure:"org_id"`
 }
 
 // DefaultTracingConfig 返回默认可观测性配置
@@ -39,7 +46,24 @@ func DefaultTracingConfig() TracingConfig {
 		MetricsEnabled:  true,
 		LogsEnabled:     true,
 		MetricsInterval: 15,
+		OrgID:           "default",
 	}
+}
+
+// otlpHeaders 构造 OpenObserve OTLP gRPC 认证与组织 metadata：
+//   - organization: 组织标识（默认 default）
+//   - authorization: Basic base64(email:password)，AuthEmail 非空时携带
+func otlpHeaders(cfg TracingConfig) map[string]string {
+	org := cfg.OrgID
+	if org == "" {
+		org = "default"
+	}
+	headers := map[string]string{"organization": org}
+	if cfg.AuthEmail != "" {
+		token := base64.StdEncoding.EncodeToString([]byte(cfg.AuthEmail + ":" + cfg.AuthPassword))
+		headers["authorization"] = "Basic " + token
+	}
+	return headers
 }
 
 // InitTracing 初始化 OpenTelemetry 追踪
@@ -55,6 +79,7 @@ func InitTracing(ctx context.Context, cfg TracingConfig) (*sdktrace.TracerProvid
 	exporter, err := otlptracegrpc.New(ctx,
 		otlptracegrpc.WithEndpoint(cfg.Endpoint),
 		otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithHeaders(otlpHeaders(cfg)),
 		otlptracegrpc.WithTimeout(10*time.Second),
 	)
 	if err != nil {
