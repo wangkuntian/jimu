@@ -94,7 +94,7 @@ PYEOF
 }
 
 add_panel "jimu-error-count" "错误日志总数" \
-  'SELECT count(*) AS count FROM "default" WHERE severity_text = '\''error'\''' \
+  'SELECT count(*) AS count FROM "default" WHERE severity = '\''error'\''' \
   "default" "logs" "count"
 
 add_panel "jimu-log-count" "日志总量" \
