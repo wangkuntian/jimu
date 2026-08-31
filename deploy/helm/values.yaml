@@ -144,13 +144,16 @@ auth:
   registerRateLimit: 3
   registerRateWindowSec: 300
 
-# OpenTelemetry 配置
+# OpenTelemetry 配置（OpenObserve：tracing/metrics/logs 统一 OTLP gRPC）
 otel:
   enabled: true
-  endpoint: "otel-collector.monitoring.svc.cluster.local:4317"
+  endpoint: "openobserve:5081"
   serviceName: jimu
   serviceVersion: "1.0.0"
   sampleRate: 1.0
+  metricsEnabled: true
+  logsEnabled: true
+  metricsIntervalSec: 15
 
 # 数据库配置（引用外部 Secret）
 db:
@@ -180,7 +183,23 @@ redis:
   maxRetries: 10
   retryIntervalSec: 5
 
-# Prometheus 告警规则
-prometheusRule:
+# OpenObserve（可观测性平台：日志/指标/追踪/告警/仪表盘）
+# jimu 的 otel.endpoint 指向 openobserve:5081（同 namespace 服务）
+openobserve:
   enabled: true
-  namespace: monitoring
+  replicaCount: 1
+  image:
+    repository: public.ecr.aws/zinclabs/openobserve
+    tag: "v0.92.2"
+    pullPolicy: IfNotPresent
+  # 生产环境请通过 --set 覆盖或 Secret 注入
+  rootEmail: "admin@jimu.local"
+  rootPassword: "admin"
+  storage: 20Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 4Gi
