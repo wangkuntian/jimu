@@ -30,6 +30,7 @@ func NewLogExporter(ctx context.Context, cfg TracingConfig) (*LogExporter, error
 	exporter, err := otlploggrpc.New(ctx,
 		otlploggrpc.WithEndpoint(cfg.Endpoint),
 		otlploggrpc.WithInsecure(),
+		otlploggrpc.WithHeaders(otlpHeaders(cfg)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create otlp logs exporter: %w", err)

@@ -57,9 +57,13 @@ services:
       # 容器内 expose management 端点（/metrics 等，供外部抓取或调试）
       MANAGEMENT_HOST: "0.0.0.0"
       # OpenObserve 接入：起 observability profile 后置 OTEL_ENABLED=true 即可
-      # （tracing/metrics/logs 统一 OTLP gRPC 推送到 openobserve:5081）
+      # （tracing/metrics/logs 统一 OTLP gRPC 推送到 openobserve:5081，
+      #   认证凭据默认与 openobserve 服务 ZO_ROOT_USER_EMAIL/PASSWORD 一致）
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_ENDPOINT: ${OTEL_ENDPOINT:-openobserve:5081}
+      OTEL_AUTH_EMAIL: ${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local}
+      OTEL_AUTH_PASSWORD: ${ZO_OBSERVE_ROOT_USER_PASSWORD:-admin}
+      OTEL_ORG_ID: ${OTEL_ORG_ID:-default}
       # 敏感配置通过文件注入（非环境变量）
       DB_PASSWORD_FILE: /run/secrets/db_password
       JWT_SECRET_FILE: /run/secrets/jwt_secret

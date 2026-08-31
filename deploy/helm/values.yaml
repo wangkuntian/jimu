@@ -154,6 +154,10 @@ otel:
   metricsEnabled: true
   logsEnabled: true
   metricsIntervalSec: 15
+  # OpenObserve 认证凭据（与 openobserve.rootEmail/rootPassword 保持一致；生产建议覆盖）
+  authEmail: "admin@jimu.local"
+  authPassword: "admin"
+  orgID: "default"
 
 # 数据库配置（引用外部 Secret）
 db:

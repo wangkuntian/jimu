@@ -105,6 +105,9 @@ data:
       metrics_enabled: {{ .Values.otel.metricsEnabled }}
       logs_enabled: {{ .Values.otel.logsEnabled }}
       metrics_interval_sec: {{ .Values.otel.metricsIntervalSec }}
+      auth_email: {{ .Values.otel.authEmail | quote }}
+      auth_password: {{ .Values.otel.authPassword | quote }}
+      org_id: {{ .Values.otel.orgID | quote }}
 
     db:
       host: {{ .Values.db.host | quote }}

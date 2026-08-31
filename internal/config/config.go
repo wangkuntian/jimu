@@ -540,12 +540,21 @@ func applyEnvOverrides(cfg *Config) {
 	if v := getEnvOrFile("ENCRYPTION_KEY_FILE", "ENCRYPTION_KEY"); v != "" {
 		cfg.Security.EncryptionKey = v
 	}
-	// OpenTelemetry（OpenObserve 接入；compose 场景通过环境变量覆盖端点/开关）
+	// OpenTelemetry（OpenObserve 接入；compose 场景通过环境变量覆盖端点/开关/凭据）
 	if v := os.Getenv("OTEL_ENABLED"); v != "" {
 		cfg.OTEL.Enabled = v == "true" || v == "1"
 	}
 	if v := os.Getenv("OTEL_ENDPOINT"); v != "" {
 		cfg.OTEL.Endpoint = v
+	}
+	if v := getEnvOrFile("OTEL_AUTH_PASSWORD_FILE", "OTEL_AUTH_PASSWORD"); v != "" {
+		cfg.OTEL.AuthPassword = v
+	}
+	if v := os.Getenv("OTEL_AUTH_EMAIL"); v != "" {
+		cfg.OTEL.AuthEmail = v
+	}
+	if v := os.Getenv("OTEL_ORG_ID"); v != "" {
+		cfg.OTEL.OrgID = v
 	}
 }
 
