@@ -53,8 +53,9 @@ echo "   dashboardId=$DASH_ID"
 
 # 逐个添加面板（与 openobserve 官方 AddPanel API 一致；每次写入返回新 hash）
 add_panel() { # $1=panel_id  $2=title  $3=sql  $4=stream  $5=stream_type  $6=x_alias
+  local pid="$1" title="$2" sql="$3" stream="$4" stype="$5" x_alias="$6"
   local panel_json
-  panel_json=$(python3 - "$1" "$2" "$3" "$4" "$5" "$6" <<'PYEOF'
+  panel_json=$(python3 - "$pid" "$title" "$sql" "$stream" "$stype" "$x_alias" <<'PYEOF'
 import json, sys
 pid, title, sql, stream, stype, x_alias = sys.argv[1:7]
 panel = {
