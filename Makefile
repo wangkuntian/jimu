@@ -69,7 +69,7 @@ help:
 	@echo "  make compose-logs         查看应用日志"
 	@echo "  make compose-migrate      Compose 环境执行迁移"
 	@echo "  make compose-seed         Compose 环境插入初始数据"
-	@echo "  make compose-observability      启动监控栈（Prometheus + Grafana）"
+	@echo "  make compose-observability      启动监控栈（OpenObserve：日志/指标/追踪/告警）"
 	@echo "  make compose-observability-down 停止监控栈"
 	@echo ""
 	@echo "工具:"
@@ -181,18 +181,17 @@ compose-migrate:
 compose-seed:
 	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) run --rm server ./jimu seed
 
-## compose-observability: 启动监控栈（Prometheus + Grafana + AlertManager + Loki)
+## compose-observability: 启动监控栈（OpenObserve：日志/指标/追踪/告警/仪表盘）
 compose-observability:
-	$(DOCKER_COMPOSE) --profile observability up -d
+	$(DOCKER_COMPOSE) --profile observability up -d openobserve
+	@echo "OpenObserve started:"
+	@echo "  UI/API:  http://localhost:5080 (admin@jimu.local / admin)"
+	@echo "  OTLP:    localhost:5081"
+	@echo "启用应用推送：OTEL_ENABLED=true make compose-up（或对 server 容器设 OTEL_ENABLED=true）"
 
 ## compose-observability-down: 停止监控栈
 compose-observability-down:
 	$(DOCKER_COMPOSE) --profile observability down
-
-## compose-observability-test: 触发一条告警以验证 AlertManager 链路(本地测试)
-compose-observability-test:
-	$(DOCKER_COMPOSE) --profile observability exec -T alertmanager amtool --alertmanager.url=http://localhost:9093 alert add label=severity=critical label=team=jimu label=instance=localhost annotation=summary='Jimu test alert' annotation=description='This is a test alert to verify the AlertManager pipeline.'
-	@echo "Test alert fired; visit http://localhost:9093 to verify."
 
 # ========== 工具 ==========
 

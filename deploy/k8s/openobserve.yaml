@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openobserve
+  namespace: jimu
+  labels:
+    app: openobserve
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openobserve
+  template:
+    metadata:
+      labels:
+        app: openobserve
+    spec:
+      containers:
+        - name: openobserve
+          image: public.ecr.aws/zinclabs/openobserve:v0.92.2
+          imagePullPolicy: IfNotPresent
+          env:
+            # 生产环境请通过 Secret 注入 ZO_ROOT_USER_EMAIL / ZO_ROOT_USER_PASSWORD
+            - name: ZO_ROOT_USER_EMAIL
+              value: "admin@jimu.local"
+            - name: ZO_ROOT_USER_PASSWORD
+              value: "admin"
+            - name: ZO_DATA_DIR
+              value: /data
+            - name: ZO_HTTP_PORT
+              value: "5080"
+            - name: ZO_GRPC_PORT
+              value: "5081"
+          ports:
+            - name: http
+              containerPort: 5080
+              protocol: TCP
+            - name: otlp
+              containerPort: 5081
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 5080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 5080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: openobserve-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openobserve
+  namespace: jimu
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 5080
+      targetPort: 5080
+      protocol: TCP
+    - name: otlp
+      port: 5081
+      targetPort: 5081
+      protocol: TCP
+  selector:
+    app: openobserve
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openobserve-data
+  namespace: jimu
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi

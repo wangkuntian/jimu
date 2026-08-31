@@ -54,8 +54,12 @@ services:
       DB_NAME: ${COMPOSE_DB_NAME:-jimu}
       REDIS_ADDR: ${COMPOSE_REDIS_ADDR:-redis:6379}
       REDIS_DB: ${COMPOSE_REDIS_DB:-0}
-      # 容器内 expose management 端点供 Prometheus 抓取（默认 app.yaml 绑定 127.0.0.1）
+      # 容器内 expose management 端点（/metrics 等，供外部抓取或调试）
       MANAGEMENT_HOST: "0.0.0.0"
+      # OpenObserve 接入：起 observability profile 后置 OTEL_ENABLED=true 即可
+      # （tracing/metrics/logs 统一 OTLP gRPC 推送到 openobserve:5081）
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_ENDPOINT: ${OTEL_ENDPOINT:-openobserve:5081}
       # 敏感配置通过文件注入（非环境变量）
       DB_PASSWORD_FILE: /run/secrets/db_password
       JWT_SECRET_FILE: /run/secrets/jwt_secret
@@ -74,83 +78,32 @@ services:
       - db_password
       - jwt_secret
 
-  # 可选的 observability profile：Prometheus 抓取 /metrics，Grafana 可视化
-  prometheus:
-    image: prom/prometheus:v2.55.1
-    profiles: ["observability"]
-    restart: unless-stopped
-    volumes:
-      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./deploy/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
-      - jimu-prometheus-data:/prometheus
-    ports:
-      - "127.0.0.1:9093:9090"
-    depends_on:
-      server:
-        condition: service_started
-
-  alertmanager:
-    image: prom/alertmanager:v0.27.0
-    profiles: ["observability"]
-    restart: unless-stopped
-    volumes:
-      - ./deploy/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-      - jimu-alertmanager-data:/alertmanager
-    ports:
-      - "127.0.0.1:9094:9093"
-    depends_on:
-      - prometheus
-
-  loki:
-    image: grafana/loki:3.2.1
-    profiles: ["observability"]
-    restart: unless-stopped
-    command: -config.file=/etc/loki/local-config.yaml
-    volumes:
-      - jimu-loki-data:/loki
-    ports:
-      - "127.0.0.1:3100:3100"
-
-  promtail:
-    image: grafana/promtail:3.2.1
-    profiles: ["observability"]
-    restart: unless-stopped
-    volumes:
-      - ./deploy/promtail.yml:/etc/promtail/config.yml:ro
-      - ./logs:/app/logs:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-    command: -config.file=/etc/promtail/config.yml
-    depends_on:
-      - loki
-
-  grafana:
-    image: grafana/grafana:11.3.0
+  # 可选的 observability profile：OpenObserve 统一承载 日志/指标/追踪/告警/仪表盘
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:v0.92.2
     profiles: ["observability"]
     restart: unless-stopped
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      ZO_ROOT_USER_EMAIL: ${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local}
+      ZO_ROOT_USER_PASSWORD: ${ZO_OBSERVE_ROOT_USER_PASSWORD:-admin}
+      ZO_DATA_DIR: /data
+      ZO_HTTP_PORT: "5080"
+      ZO_GRPC_PORT: "5081"
     volumes:
-      - jimu-grafana-data:/var/lib/grafana
-      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./deploy/grafana/dashboard.json:/var/lib/grafana/dashboards/jimu.json:ro
+      - jimu-openobserve-data:/data
     ports:
-      - "127.0.0.1:3000:3000"
-    depends_on:
-      - prometheus
+      # HTTP UI / API（日志 JSON、Prometheus remote write 等）
+      - "127.0.0.1:${ZO_OBSERVE_HTTP_PORT:-5080}:5080"
+      # OTLP/gRPC（tracing/metrics/logs 推送）
+      - "127.0.0.1:${ZO_OBSERVE_GRPC_PORT:-5081}:5081"
 
 volumes:
   jimu-mariadb-data:
     name: ${COMPOSE_MARIADB_VOLUME:-jimu-mariadb-data}
   jimu-redis-data:
     name: ${COMPOSE_REDIS_VOLUME:-jimu-redis-data}
-  jimu-prometheus-data:
-    name: ${COMPOSE_PROMETHEUS_VOLUME:-jimu-prometheus-data}
-  jimu-alertmanager-data:
-    name: ${COMPOSE_ALERTMANAGER_VOLUME:-jimu-alertmanager-data}
-  jimu-loki-data:
-    name: ${COMPOSE_LOKI_VOLUME:-jimu-loki-data}
-  jimu-grafana-data:
-    name: ${COMPOSE_GRAFANA_VOLUME:-jimu-grafana-data}
+  jimu-openobserve-data:
+    name: ${COMPOSE_OPENOBSERVE_VOLUME:-jimu-openobserve-data}
 
 secrets:
   db_root_password:
