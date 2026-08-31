@@ -194,13 +194,18 @@ security:
   referrer_policy: "strict-origin-when-cross-origin"
   permissions_policy: "camera=(), microphone=(), geolocation=()"
 
-# OpenTelemetry 追踪配置
+# OpenTelemetry 可观测性（OpenObserve：统一 日志/指标/追踪）
+# 启用后 tracing + metrics + logs 均经 OTLP gRPC 推送到 endpoint。
+# 本地起 openobserve（make compose-observability）后置 enabled: true 即可。
 otel:
-  enabled: false          # 开发环境关闭
-  endpoint: "localhost:4317"  # OTLP gRPC 端点
+  enabled: false              # 开发环境默认关闭（零开销）
+  endpoint: "localhost:5081"  # OpenObserve OTLP gRPC 端点（compose 内为 openobserve:5081）
   service_name: "jimu"
   service_version: "dev"
-  sample_rate: 0.1        # 采样率（0.1 = 10%）
+  sample_rate: 0.1            # 追踪采样率（0.1 = 10%）
+  metrics_enabled: true       # 指标推送（Prometheus 指标转 OTLP）
+  logs_enabled: true          # 日志推送（zap 转 OTLP logs）
+  metrics_interval_sec: 15    # 指标推送间隔（秒）
 
 # 出站 HTTP client 配置（oauth/webhook 等外部调用统一使用）
 http_client:
@@ -212,12 +217,9 @@ http_client:
   rate_limit_rate: 0      # 每秒请求数（按目标 host 独立限流），0 不限流
   rate_limit_burst: 0     # 令牌桶容量，0 用 rate（桶=平均速率）
 
-# 错误追踪上报（Sentry 等；未启用时零开销）
+# 错误上报（启用时输出结构化错误日志，含 trace_id；日志链路接入 OpenObserve 后错误自动汇聚）
 error_reporting:
-  enabled: false          # 是否启用错误上报
-  dsn: ""                 # Sentry DSN；留空则仅本地日志
-  environment: "dev"      # 环境标签（Sentry 事件环境；留空回退 APP_ENV）
-  sample_rate: 1.0        # 采样率 0-1，1.0 表示全部上报
+  enabled: false          # 是否启用错误上报（false 时零开销）
 
 # gRPC server 配置（可选；与 HTTP 双栈并存，默认关闭）
 grpc:

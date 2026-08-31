@@ -16,6 +16,7 @@ import (
 	"jimu/internal/platform/queue"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
 	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
 	gormotel "gorm.io/plugin/opentelemetry/tracing"
 )
@@ -115,6 +116,18 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		return nil, fmt.Errorf("init tracing: %w", err)
 	}
 	container.TracerProvider = tp
+
+	// 指标推送（OTLP/gRPC → OpenObserve）：基于 Prometheus 默认 registry，
+	// 现有 promauto 采集逻辑不变，/metrics 端点继续可用。
+	if cfg.OTEL.Enabled && cfg.OTEL.MetricsEnabled {
+		pusher, err := observability.NewMetricsPusher(context.Background(), cfg.OTEL, prometheus.DefaultRegisterer.(*prometheus.Registry))
+		if err != nil {
+			container.Logger.Error("openobserve metrics pusher init failed", "error", err.Error())
+		} else {
+			pusher.Start()
+			container.MetricsPusher = pusher
+		}
+	}
 
 	// 启用 OTel 时插桩 DB/Redis，捕获查询子 span。
 	// 必须在 InitTracing 之后：插件创建时固化全局 TracerProvider，

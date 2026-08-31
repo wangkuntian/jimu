@@ -59,7 +59,9 @@ func (l *Logger) WithContext(ctx context.Context) *Logger {
 	return l
 }
 
-func New(cfg config.LogConfig) *Logger {
+// New 创建 Logger。extraCores 为附加输出（如 OpenObserve OTLP 日志通道），
+// 与本地输出并行写入；附加 core 的失败不影响主链路。
+func New(cfg config.LogConfig, extraCores ...zapcore.Core) *Logger {
 	var level zapcore.Level
 	switch cfg.Level {
 	case "debug":
@@ -106,6 +108,12 @@ func New(cfg config.LogConfig) *Logger {
 
 	atomicLevel := zap.NewAtomicLevelAt(level)
 	core := zapcore.NewCore(encoder, writeSyncer, atomicLevel)
+	if len(extraCores) > 0 {
+		cores := make([]zapcore.Core, 0, 1+len(extraCores))
+		cores = append(cores, core)
+		cores = append(cores, extraCores...)
+		core = zapcore.NewTee(cores...)
+	}
 	zapLogger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
 
 	return &Logger{zapLogger.Sugar(), &atomicLevel}
