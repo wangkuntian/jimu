@@ -540,6 +540,13 @@ func applyEnvOverrides(cfg *Config) {
 	if v := getEnvOrFile("ENCRYPTION_KEY_FILE", "ENCRYPTION_KEY"); v != "" {
 		cfg.Security.EncryptionKey = v
 	}
+	// OpenTelemetry（OpenObserve 接入；compose 场景通过环境变量覆盖端点/开关）
+	if v := os.Getenv("OTEL_ENABLED"); v != "" {
+		cfg.OTEL.Enabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("OTEL_ENDPOINT"); v != "" {
+		cfg.OTEL.Endpoint = v
+	}
 }
 
 // getEnvOrFile 优先从 _FILE 指向的文件读取，其次直接读取环境变量

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"jimu/internal/config"
@@ -29,6 +30,7 @@ import (
 	"jimu/internal/platform/storage"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.uber.org/zap/zapcore"
 	"gorm.io/gorm"
 )
 
@@ -56,6 +58,9 @@ type Container struct {
 	APIKeyVerifier *auth.APIKeyVerifier
 	GRPCServer     *grpcpkg.Server
 	Reporter       reporter.Reporter
+	// 观测出口（OTLP → OpenObserve；未启用时为 nil）
+	MetricsPusher *observability.MetricsPusher
+	LogExporter   *observability.LogExporter
 }
 
 func (c *Container) Start(context.Context) error { return nil }
@@ -76,6 +81,12 @@ func (c *Container) Stop(ctx context.Context) error {
 	if c.TracerProvider != nil {
 		result = errors.Join(result, observability.ShutdownTracing(ctx, c.TracerProvider))
 	}
+	if c.MetricsPusher != nil {
+		result = errors.Join(result, c.MetricsPusher.Shutdown(ctx))
+	}
+	if c.LogExporter != nil {
+		result = errors.Join(result, c.LogExporter.Shutdown(ctx))
+	}
 	if c.Reporter != nil {
 		// 优雅停机：给在途错误上报一个发送窗口
 		c.Reporter.Flush(5 * time.Second)
@@ -87,7 +98,21 @@ func (c *Container) Stop(ctx context.Context) error {
 }
 
 func NewContainer(cfg *config.Config) (*Container, error) {
-	log := logger.New(cfg.Log)
+	// OpenObserve 日志通道：otel 启用时附加到 zap（初始化失败仅告警，不阻断启动）
+	var (
+		logExporter *observability.LogExporter
+		extraCores  []zapcore.Core
+	)
+	if cfg.OTEL.Enabled && cfg.OTEL.LogsEnabled {
+		var err error
+		logExporter, err = observability.NewLogExporter(context.Background(), cfg.OTEL)
+		if err != nil {
+			log.Printf("openobserve logs exporter init failed: %v", err)
+		} else {
+			extraCores = append(extraCores, logExporter.ZapCore(zapcore.DebugLevel))
+		}
+	}
+	log := logger.New(cfg.Log, extraCores...)
 	var pendingWorkerPool *queue.WorkerPool
 
 	// 雪花 ID：初始化全局生成器后再连库（hook 在 open 时注册）
@@ -264,13 +289,8 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	// 业务示例：注册 UserInfoService（真实业务模块可在此注入自己的 service）
 	grpcServer.RegisterUserInfoService(dbConn)
 
-	// 错误追踪上报（Sentry 等）：未启用时为空实现，零开销。
-	// Environment 优先取配置；未配置时回退应用元数据环境（APP_ENV）。
-	reportCfg := cfg.ErrorReport
-	if reportCfg.Environment == "" {
-		reportCfg.Environment = cfg.Environment
-	}
-	errorReporter := reporter.NewReporter(reportCfg, log.Errorw)
+	// 错误上报：启用时输出结构化错误日志（日志链路接入 OpenObserve 后自动汇聚）
+	errorReporter := reporter.NewReporter(cfg.ErrorReport, log.Errorw)
 
 	return &Container{
 		Config:         cfg,
@@ -295,5 +315,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		WorkerPool:     pendingWorkerPool,
 		APIKeyVerifier: apiKeyVerifier,
 		GRPCServer:     grpcServer,
+		LogExporter:    logExporter,
 	}, nil
 }

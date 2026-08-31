@@ -13,23 +13,32 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
 )
 
-// TracingConfig OpenTelemetry 追踪配置
+// TracingConfig OpenTelemetry 可观测性配置（追踪/指标/日志统一走 OTLP gRPC）
 type TracingConfig struct {
 	Enabled        bool    `mapstructure:"enabled"`
 	Endpoint       string  `mapstructure:"endpoint"`
 	ServiceName    string  `mapstructure:"service_name"`
 	ServiceVersion string  `mapstructure:"service_version"`
 	SampleRate     float64 `mapstructure:"sample_rate"`
+	// MetricsEnabled 是否将 Prometheus 指标转换为 OTLP 推送到 OpenObserve
+	MetricsEnabled bool `mapstructure:"metrics_enabled"`
+	// LogsEnabled 是否将结构化日志推送到 OpenObserve
+	LogsEnabled bool `mapstructure:"logs_enabled"`
+	// MetricsInterval 指标推送间隔（秒），<=0 默认 15
+	MetricsInterval int `mapstructure:"metrics_interval_sec"`
 }
 
-// DefaultTracingConfig 返回默认追踪配置
+// DefaultTracingConfig 返回默认可观测性配置
 func DefaultTracingConfig() TracingConfig {
 	return TracingConfig{
-		Enabled:        false,
-		Endpoint:       "localhost:4317",
-		ServiceName:    "jimu",
-		ServiceVersion: "dev",
-		SampleRate:     1.0,
+		Enabled:         false,
+		Endpoint:        "localhost:4317",
+		ServiceName:     "jimu",
+		ServiceVersion:  "dev",
+		SampleRate:      1.0,
+		MetricsEnabled:  true,
+		LogsEnabled:     true,
+		MetricsInterval: 15,
 	}
 }
 

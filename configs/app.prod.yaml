@@ -191,13 +191,16 @@ notification:
   webhook:
     sign_secret: ""        # Webhook 回调载荷签名密钥（HMAC-SHA256，X-Jimu-Signature）；空则不签名，建议注入
 
-# OpenTelemetry 追踪配置
+# OpenTelemetry 可观测性（OpenObserve：统一 日志/指标/追踪）
 otel:
-  enabled: true                     # 生产环境启用
-  endpoint: "otel-collector.monitoring.svc.cluster.local:4317"
+  enabled: true                     # 生产启用
+  endpoint: "openobserve:5081"      # OpenObserve OTLP gRPC（k8s 同 namespace 服务）
   service_name: "jimu"
   service_version: "1.0.0"
-  sample_rate: 1.0                  # 采样率（1.0 = 全量）
+  sample_rate: 1.0                  # 追踪采样率（1.0 = 全量）
+  metrics_enabled: true             # 指标推送
+  logs_enabled: true                # 日志推送
+  metrics_interval_sec: 15          # 指标推送间隔（秒）
 
 # 出站 HTTP client 配置（oauth/webhook 等外部调用统一使用）
 http_client:
@@ -209,12 +212,9 @@ http_client:
   rate_limit_rate: 0      # 每秒请求数（按目标 host 独立限流），0 不限流
   rate_limit_burst: 0     # 令牌桶容量，0 用 rate（桶=平均速率）
 
-# 错误追踪上报（Sentry 等；生产建议启用）
+# 错误上报（启用时输出结构化错误日志；日志链路接入 OpenObserve 后错误自动汇聚）
 error_reporting:
-  enabled: true           # 是否启用错误上报
-  dsn: ""                 # Sentry DSN（配置后上报 Sentry；留空仅本地日志）
-  environment: "production"
-  sample_rate: 1.0        # 采样率 0-1，1.0 表示全部上报
+  enabled: true           # 启用结构化错误日志输出
 
 # gRPC server 配置（可选；与 HTTP 双栈并存，默认关闭）
 grpc:

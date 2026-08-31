@@ -39,8 +39,8 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **Outbox 模式** — 事件发布与数据库事务一致性保证，支持 MQ 跨服务发布（`outbox.publisher` 切换；`mq` 模式下通过 WorkerPool 消费事件，`event_bus` 模式通过 `outbox:*` 桥接器注入事件总线）
 - **定时任务** — Cron 调度器（robfig/cron），支持 MySQL 持久化（`scheduler.store=mysql`）与多实例分布式锁协调，启动时通过 `RestoreFromStore` 恢复持久化任务（内置任务去重）
 - **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
-- **OpenTelemetry** — 分布式追踪（OTLP gRPC），HTTP/Gin + Gorm 查询 + Redis 命令全链路 span（`otel.enabled` 开启）；队列/Outbox 异步边界透传 `traceparent`/`tracestate`，消费端恢复链路
-- **Prometheus 指标** — DB 连接池 + 运行时 + HTTP 请求指标（`jimu_http_*`）+ 队列执行/死信（`jimu_queue_*`）+ Outbox 发布（`jimu_outbox_*`）+ 出站熔断（`jimu_httpclient_*`）+ 定时任务执行（`jimu_scheduler_*`，成功/失败计数 + 耗时分布）
+- **OpenTelemetry 可观测性（OpenObserve）** — 统一 OTLP gRPC 输出：分布式追踪（HTTP/Gin + Gorm 查询 + Redis 命令全链路 span，队列/Outbox 异步边界透传 `traceparent`/`tracestate`）、Prometheus 指标转 OTLP 推送、结构化日志异步推送（`otel.enabled` 开启）
+- **Prometheus 指标** — DB 连接池 + 运行时 + HTTP 请求指标（`jimu_http_*`）+ 队列执行/死信（`jimu_queue_*`）+ Outbox 发布（`jimu_outbox_*`）+ 出站熔断（`jimu_httpclient_*`）+ 定时任务执行（`jimu_scheduler_*`，成功/失败计数 + 耗时分布）；Management `/metrics` 暴露 Prometheus 格式，`otel.metrics_enabled` 时定期转 OTLP 推送 OpenObserve
 - **gRPC server** — 与 HTTP 双栈并存，内置健康检查（`grpc_health_v1`）与反射（grpcurl 可探），可选启用（`grpc.enabled`，默认端口 9091）；业务示例 `UserInfoService` 演示 proto 定义 → `make proto` 生成 → 服务实现 → 注册全流程，业务模块经 `RegisterService` 接入
 - **PostgreSQL 支持** — `db.driver=postgres`（或 `DB_DRIVER=postgres`）切换，迁移文件独立于 `migrations/postgres/`，与 MySQL 语法（`BIGINT UNSIGNED`/`ENGINE=InnoDB`/`ON UPDATE`）完全隔离；连接、迁移、seed、JWT/RBAC 全链路已用真实 PG 17 验证
 - **分布式 ID** — 雪花 ID 生成器（`internal/shared/id`），所有数据库主键由应用生成，`id.worker_id` 配置多实例唯一编号
@@ -54,7 +54,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **Redis 高可用** — `redis.mode` 支持 `single` / `sentinel` / `cluster` 三种部署模式（默认 single 行为不变）：哨兵模式通过 `master_name` + `sentinel_addrs` 自动故障转移，集群模式通过 `cluster_addrs` 连接分片；统一 `redis.Client` 接口，框架内 session/缓存/队列/限流/分布式锁全复用
 - **TOTP 二次验证** — RFC 6238 自研实现（`internal/shared/totp`，无外部依赖），用户可自助绑定/启用/关闭：`POST /auth/mfa/setup` 生成密钥与 otpauth URI（二维码绑定）、`/auth/mfa/enable` 首次验证码确认、`/auth/mfa/disable` 校验后关闭；启用后登录必须携带 `totp_code`（缺失 `2006`，错误 `2007`），密钥 AES-GCM 字段级加密落库
 - **统一 gRPC 客户端** — 出站调用封装（`internal/platform/grpc` `Client`）：连接管理 + 调用超时 + 指数退避重试（仅 Unavailable/ResourceExhausted 幂等安全码）+ panic 恢复拦截器 + Prometheus 指标（`jimu_grpc_client_*`），支持 TLS/insecure，与 HTTP client 对齐的框架风格
-- **错误追踪上报** — `internal/platform/reporter` 抽象 + 双实现：本地结构化日志（含 trace_id/span_id）+ Sentry（`error_reporting.dsn` 配置后启用，环境标签、采样率、堆栈附件）；HTTP `Recovery` 中间件 panic 自动上报，启用失败静默回退日志实现，不阻断启动
+- **错误追踪上报** — `internal/platform/reporter`：结构化错误日志（含 trace_id/span_id），HTTP `Recovery` 中间件 panic 自动上报；日志链路接入 OpenObserve 后错误自动汇聚，配合 OpenObserve 告警覆盖错误监控场景（`error_reporting.enabled` 开关）
 
 ## 非目标
 
@@ -154,18 +154,22 @@ docker compose run --rm -e ADMIN_PASSWORD=admin123 server ./jimu seed
 
 ### 可观测性（可选）
 
-启动 Prometheus + Grafana 监控栈（抓取 Management `/metrics` 端点）：
+启动 OpenObserve 监控栈（单服务统一承载 日志/指标/追踪/告警/仪表盘，替代原 Prometheus + Grafana + Loki + Promtail + AlertManager 五件套）：
 
 ```bash
-make compose-observability   # 或 docker compose --profile observability up -d
+make compose-observability   # 或 docker compose --profile observability up -d openobserve
 ```
 
-- Prometheus: http://127.0.0.1:9093
-- AlertManager: http://127.0.0.1:9094 （告警路由配置 `deploy/alertmanager.yml`，规则 `deploy/alert_rules.yml`）
-- Grafana: http://127.0.0.1:3000 （默认账号 admin / admin，用 GRAFANA_ADMIN_PASSWORD 覆盖；已 provisioning Prometheus 与 Loki 数据源）
-- Loki: http://127.0.0.1:3100 （日志查询；Promtail 采集 `logs/*.log` 与容器 stdout，配置 `deploy/promtail.yml`）
+- OpenObserve UI/API: http://127.0.0.1:5080 （默认账号 admin@jimu.local / admin，可用 `ZO_OBSERVE_ROOT_USER_EMAIL` / `ZO_OBSERVE_ROOT_USER_PASSWORD` 覆盖）
+- OTLP gRPC: `127.0.0.1:5081`（tracing / metrics / logs 统一入口）
 
-告警闭环：Prometheus 规则（错误率/延迟/连接池/队列死信/服务存活）→ AlertManager 按 severity 路由到 webhook；K8s 场景对应规则在 `deploy/k8s/prometheusrule.yaml`。触发一条测试告警：`make compose-observability-test`。
+让应用接入 OpenObserve（`otel.enabled` 开启，tracing + metrics + logs 均经 OTLP gRPC 推送）：
+
+```bash
+OTEL_ENABLED=true make compose-up   # compose 内 server 自动指向 openobserve:5081
+```
+
+应用侧：`/metrics` 端点保留 Prometheus 格式供外部工具抓取；指标另按 `metrics_interval_sec` 周期转 OTLP 推送；结构化日志异步推送（缓冲满丢弃，不影响主链路）。告警在 OpenObserve UI 内配置（VQL 告警规则 + 通知渠道）。
 
 停止：`make compose-observability-down`。
 
@@ -208,10 +212,8 @@ jimu/
 │   │   ├── service.yaml
 │   │   ├── hpa.yaml
 │   │   └── ingress.yaml
-│   ├── prometheus.yml           # Prometheus 抓取配置（observability profile）
-│   └── grafana/
-│       ├── dashboard.json       # Jimu 监控面板
-│       └── provisioning/        # Grafana 数据源 + 面板自动加载
+│   │   └── openobserve.yaml     # OpenObserve 部署（Deployment/Service/PVC）
+│   └── helm/                    # Helm Chart（含 openobserve 子图表配置）
 ├── docs/openapi/               # Swagger 生成的 API 文档
 ├── migrations/
 │   ├── mysql/                  # MySQL 迁移脚本（按功能合并）
@@ -234,8 +236,8 @@ jimu/
 │   │   ├── oauth/              # OAuth 第三方登录 Provider
 │   │   ├── captcha/            # 图形验证码（生成 + Redis 存储 + 校验）
 │   │   ├── event/              # 事件总线
-│   │   ├── observability/      # 健康检查 + Metrics + Tracing
-│   │   ├── reporter/           # 错误追踪上报（日志 + Sentry 双通道）
+│   │   ├── observability/      # 健康检查 + Metrics + Tracing + OTLP 推送（OpenObserve）
+│   │   ├── reporter/           # 错误上报（结构化错误日志，接入 OpenObserve）
 │   │   ├── storage/            # 文件存储抽象
 │   │   ├── notification/       # 通知系统
 │   │   ├── outbox/             # Outbox 模式
@@ -560,7 +562,13 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `security.content_security_policy` | `Content-Security-Policy` 头 | `default-src 'self'` |
 | `cache.prefix` | 缓存 key 前缀 | `jimu` |
 | `audit.queue_size` / `batch_size` / `flush_interval_ms` | 审计日志队列容量 / 批量写入条数 / 刷新间隔（ms） | `1024` / `100` / `500` |
-| `otel.enabled` | 是否启用 OpenTelemetry | `false`（开发）/ `true`（生产） |
+| `otel.enabled` | 是否启用 OpenTelemetry 可观测性（tracing + metrics + logs 统一 OTLP gRPC 推送 OpenObserve） | `false`（开发）/ `true`（生产） |
+| `otel.endpoint` | OTLP gRPC 端点（OpenObserve，compose 内为 `openobserve:5081`）；环境变量 `OTEL_ENDPOINT` 可覆盖 | `localhost:4317` |
+| `otel.service_name` / `otel.service_version` | 服务标识（resource 属性） | `jimu` / `dev` |
+| `otel.sample_rate` | 追踪采样率 0-1，1.0 全量 | `1.0` |
+| `otel.metrics_enabled` | 指标推送：Prometheus 指标转 OTLP 推送到 OpenObserve（`/metrics` 端点仍保留） | `true` |
+| `otel.logs_enabled` | 日志推送：zap 结构化日志异步转 OTLP logs | `true` |
+| `otel.metrics_interval_sec` | 指标推送间隔（秒），0 用默认 | `15` |
 | `http_client.timeout_sec` | 出站 HTTP 单次请求超时（秒），0 用默认 | `10` |
 | `http_client.max_retries` | 出站 HTTP 失败重试次数（仅网络错误与 5xx），0 用默认 | `2` |
 | `http_client.retry_interval_ms` | 出站 HTTP 重试基础间隔（毫秒，指数退避），0 用默认 | `200` |
@@ -572,10 +580,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `grpc.enabled` | 是否启用 gRPC server（与 HTTP 双栈并存，默认关闭） | `false` |
 | `grpc.host` / `grpc.port` | gRPC 监听地址 / 端口 | `0.0.0.0` / `9091` |
 | `grpc` 业务服务 | 示例 `UserInfoService`（`internal/platform/grpc/userinfo_service.go`，proto 在 `proto/jimu/v1/userinfo.proto`，`make proto` 重新生成）；业务模块仿照 `RegisterUserInfoService` 经 `RegisterService` 接入 | — |
-| `error_reporting.enabled` | 是否启用错误追踪上报（未启用时零开销） | `false`（开发）/ `true`（生产） |
-| `error_reporting.dsn` | Sentry DSN；留空则仅本地日志 | — |
-| `error_reporting.environment` | 上报环境标签（留空回退 `APP_ENV`） | — |
-| `error_reporting.sample_rate` | 上报采样率 0-1，1.0 全量 | `1.0` |
+| `error_reporting.enabled` | 是否启用错误上报（结构化错误日志输出，含 trace_id；未启用时零开销） | `false`（开发）/ `true`（生产） |
 | gRPC 出站客户端 | 统一封装 `internal/platform/grpc` `Client`（`NewClient`）：超时/重试/恢复/指标 `jimu_grpc_client_*`，业务经 `Conn()` 走生成的强类型客户端 | — |
 
 ### 静态加密（Data at Rest）
@@ -634,9 +639,8 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `make compose-logs` | 查看应用日志 |
 | `make compose-migrate` | Compose 环境执行迁移 |
 | `make compose-seed` | Compose 环境插入初始数据 |
-| `make compose-observability` | 启动监控栈（Prometheus + Grafana + AlertManager + Loki） |
+| `make compose-observability` | 启动监控栈（OpenObserve：日志/指标/追踪/告警/仪表盘，UI http://127.0.0.1:5080） |
 | `make compose-observability-down` | 停止监控栈 |
-| `make compose-observability-test` | 触发一条测试告警验证 AlertManager 链路 |
 | `make compose-check` | 使用临时项目、Secret 和数据卷进行 Compose 运行时/API 验证，不影响本地服务 |
 | `make release-check` | 发布前检查（fmt-check + vet + test + govulncheck + Compose 运行时/API 验证） |
 | `make ci` | 本地 CI 检查（无外部依赖：fmt-check + vet + lint + test + 覆盖率 + race + swagger + smoke + build + govulncheck，完整 CI 见 `.github/workflows/ci.yml`） |
