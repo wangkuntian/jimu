@@ -17,15 +17,16 @@ import (
 	"jimu/internal/platform/storage"
 	"jimu/internal/platform/ws"
 
+	redistore "jimu/internal/platform/redis"
+
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 // Module 管理模块
 type Module struct {
 	service    *adminapp.Service
-	rdb        *redis.Client
+	rdb        redistore.Client
 	db         *gorm.DB
 	sched      *scheduler.CronScheduler
 	storage    storage.Storage
@@ -39,7 +40,7 @@ type Module struct {
 }
 
 // New 创建管理模块
-func New(version, env string, rdb *redis.Client, db *gorm.DB, deps ...interface{}) *Module {
+func New(version, env string, rdb redistore.Client, db *gorm.DB, deps ...interface{}) *Module {
 	m := &Module{
 		service: adminapp.NewService(version, env, rdb),
 		rdb:     rdb,

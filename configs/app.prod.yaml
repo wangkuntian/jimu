@@ -59,9 +59,14 @@ db:
 
 # Redis 配置
 redis:
+  mode: "single"                # Redis 部署模式：single / sentinel / cluster（生产可用哨兵或集群）
   addr: "redis:6379"            # Redis 地址（K8s service 名称）
   password: ""                  # Redis 密码（可通过 REDIS_PASSWORD 覆盖）
-  db: 0                         # Redis 数据库编号（可通过 REDIS_DB 覆盖）
+  db: 0                         # Redis 数据库编号（可通过 REDIS_DB 覆盖；cluster 模式不支持）
+  master_name: ""               # 哨兵模式：master 名称
+  sentinel_addrs: []            # 哨兵模式：哨兵节点地址列表
+  sentinel_password: ""         # 哨兵模式：哨兵节点密码（可选）
+  cluster_addrs: []             # 集群模式：节点地址列表
   pool_size: 50                 # 连接池大小
   min_idle_conns: 10            # 最小空闲连接数
   read_timeout_sec: 3           # 读超时（秒）
@@ -203,6 +208,13 @@ http_client:
   reset_timeout_ms: 30000 # 熔断后冷却时长（毫秒），0 用默认 30000
   rate_limit_rate: 0      # 每秒请求数（按目标 host 独立限流），0 不限流
   rate_limit_burst: 0     # 令牌桶容量，0 用 rate（桶=平均速率）
+
+# 错误追踪上报（Sentry 等；生产建议启用）
+error_reporting:
+  enabled: true           # 是否启用错误上报
+  dsn: ""                 # Sentry DSN（配置后上报 Sentry；留空仅本地日志）
+  environment: "production"
+  sample_rate: 1.0        # 采样率 0-1，1.0 表示全部上报
 
 # gRPC server 配置（可选；与 HTTP 双栈并存，默认关闭）
 grpc:

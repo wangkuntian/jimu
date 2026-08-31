@@ -11,7 +11,8 @@ import (
 	"jimu/internal/platform/httpclient"
 	oauthplatform "jimu/internal/platform/oauth"
 
-	"github.com/redis/go-redis/v9"
+	redistore "jimu/internal/platform/redis"
+
 	"gorm.io/gorm"
 )
 
@@ -21,7 +22,7 @@ type Module struct {
 }
 
 // New 创建 OAuth 模块（自包含装配依赖）
-func New(db *gorm.DB, rdb *redis.Client, oauthCfg config.OAuthConfig, authCfg config.AuthConfig, httpClient *httpclient.Client) *Module {
+func New(db *gorm.DB, rdb redistore.Client, oauthCfg config.OAuthConfig, authCfg config.AuthConfig, httpClient *httpclient.Client) *Module {
 	bindingRepo := oauthinfra.NewMySQLBindingRepository(db)
 	jwtUtil := auth.NewWithRotation(authCfg.JWTSecret, authCfg.JWTPreviousSecret, authCfg.Issuer, authCfg.AccessExpireMin, authCfg.RefreshExpireDay)
 	sessionStore := auth.NewRedisSessionStore(rdb)

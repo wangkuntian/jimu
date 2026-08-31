@@ -24,10 +24,10 @@ import (
 	"jimu/internal/platform/outbox"
 	"jimu/internal/platform/queue"
 	redistore "jimu/internal/platform/redis"
+	"jimu/internal/platform/reporter"
 	"jimu/internal/platform/scheduler"
 	"jimu/internal/platform/storage"
 
-	"github.com/redis/go-redis/v9"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"gorm.io/gorm"
 )
@@ -35,7 +35,7 @@ import (
 type Container struct {
 	Config         *config.Config
 	DB             *gorm.DB
-	Redis          *redis.Client
+	Redis          redistore.Client
 	Logger         *logger.Logger
 	TracerProvider *sdktrace.TracerProvider
 	JobRegistry    contract.JobRegistry
@@ -55,6 +55,7 @@ type Container struct {
 	WorkerPool     *queue.WorkerPool
 	APIKeyVerifier *auth.APIKeyVerifier
 	GRPCServer     *grpcpkg.Server
+	Reporter       reporter.Reporter
 }
 
 func (c *Container) Start(context.Context) error { return nil }
@@ -74,6 +75,10 @@ func (c *Container) Stop(ctx context.Context) error {
 	}
 	if c.TracerProvider != nil {
 		result = errors.Join(result, observability.ShutdownTracing(ctx, c.TracerProvider))
+	}
+	if c.Reporter != nil {
+		// 优雅停机：给在途错误上报一个发送窗口
+		c.Reporter.Flush(5 * time.Second)
 	}
 	if c.Logger != nil {
 		result = errors.Join(result, c.Logger.Sync())
@@ -259,11 +264,20 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	// 业务示例：注册 UserInfoService（真实业务模块可在此注入自己的 service）
 	grpcServer.RegisterUserInfoService(dbConn)
 
+	// 错误追踪上报（Sentry 等）：未启用时为空实现，零开销。
+	// Environment 优先取配置；未配置时回退应用元数据环境（APP_ENV）。
+	reportCfg := cfg.ErrorReport
+	if reportCfg.Environment == "" {
+		reportCfg.Environment = cfg.Environment
+	}
+	errorReporter := reporter.NewReporter(reportCfg, log.Errorw)
+
 	return &Container{
 		Config:         cfg,
 		DB:             dbConn,
 		Redis:          rdb,
 		Logger:         log,
+		Reporter:       errorReporter,
 		JobRegistry:    sched,
 		Scheduler:      sched,
 		Lock:           lock,

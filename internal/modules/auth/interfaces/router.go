@@ -26,6 +26,9 @@ func RegisterAuthRoutes(r *gin.RouterGroup, service *application.AuthService, jw
 		protected.Use(auth.AuthMiddleware(jwtUtil))
 		protected.POST("/logout", handler.Logout)
 		protected.POST("/logout-all", handler.LogoutAll)
+		protected.POST("/mfa/setup", handler.SetupTOTP)
+		protected.POST("/mfa/enable", middleware.ValidateJSON(&enableTOTPRequest{}), handler.EnableTOTP)
+		protected.POST("/mfa/disable", middleware.ValidateJSON(&disableTOTPRequest{}), handler.DisableTOTP)
 	}
 }
 

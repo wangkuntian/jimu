@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -130,10 +132,31 @@ func shouldLogBody(contentType string) bool {
 	return false
 }
 
-func Recovery() gin.HandlerFunc {
+// Recovery 返回 panic 恢复中间件。传入 reporter 时，panic 会上报到错误追踪平台
+// （Sentry 等），同时返回统一 500 响应；不传则仅返回统一响应。
+func Recovery(reporters ...Reporter) gin.HandlerFunc {
+	rep := firstReporter(reporters)
 	return gin.CustomRecovery(func(c *gin.Context, err interface{}) {
+		if rep != nil {
+			rep.Report(c.Request.Context(), fmt.Errorf("panic recovered: %v", err),
+				"method", c.Request.Method, "path", c.Request.URL.Path, "client_ip", c.ClientIP())
+		}
 		response.Fail(c, errors.New(errors.CodeInternalError, "internal server error"))
 	})
+}
+
+// Reporter 错误上报接口（避免反向依赖 platform/reporter 包）。
+type Reporter interface {
+	Report(ctx context.Context, err error, attrs ...string)
+}
+
+func firstReporter(reporters []Reporter) Reporter {
+	for _, r := range reporters {
+		if r != nil {
+			return r
+		}
+	}
+	return nil
 }
 
 // CORSConfig CORS 配置

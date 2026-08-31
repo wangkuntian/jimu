@@ -107,7 +107,8 @@ func (r *handlerUserRepo) FindByEmailHash(context.Context, string) (*userdomain.
 func (r *handlerUserRepo) FindByPhoneHash(context.Context, string) (*userdomain.User, error) {
 	return nil, gorm.ErrRecordNotFound
 }
-func (r *handlerUserRepo) UpdatePassword(context.Context, uint64, string) error { return nil }
+func (r *handlerUserRepo) UpdatePassword(context.Context, uint64, string) error   { return nil }
+func (r *handlerUserRepo) UpdateTOTP(context.Context, uint64, string, bool) error { return nil }
 
 type handlerSessionStore struct{}
 

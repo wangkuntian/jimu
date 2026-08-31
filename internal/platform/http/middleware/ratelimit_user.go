@@ -9,13 +9,15 @@ import (
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
+	redistore "jimu/internal/platform/redis"
+
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
 
 // UserRateLimiter 基于用户/API Key 的限流器（Redis 滑动窗口）
 type UserRateLimiter struct {
-	client  *redis.Client
+	client  redistore.Client
 	prefix  string
 	limit   int                       // 窗口内允许的最大请求数
 	window  time.Duration             // 窗口大小
@@ -40,7 +42,7 @@ func WithKeyFunc(fn func(*gin.Context) string) UserRateLimiterOption {
 }
 
 // NewUserRateLimiter 创建用户维度限流器
-func NewUserRateLimiter(client *redis.Client, limit int, window time.Duration, opts ...UserRateLimiterOption) *UserRateLimiter {
+func NewUserRateLimiter(client redistore.Client, limit int, window time.Duration, opts ...UserRateLimiterOption) *UserRateLimiter {
 	r := &UserRateLimiter{
 		client:  client,
 		prefix:  "ratelimit:user",
@@ -132,7 +134,7 @@ func (r *UserRateLimiter) allow(ctx context.Context, key string) (bool, int, tim
 // UserRateLimitMiddleware 便捷函数：创建用户维度限流中间件
 // limit: 窗口内最大请求数
 // window: 窗口大小
-func UserRateLimitMiddleware(client *redis.Client, limit int, window time.Duration, opts ...UserRateLimiterOption) gin.HandlerFunc {
+func UserRateLimitMiddleware(client redistore.Client, limit int, window time.Duration, opts ...UserRateLimiterOption) gin.HandlerFunc {
 	limiter := NewUserRateLimiter(client, limit, window, opts...)
 	return limiter.Middleware()
 }

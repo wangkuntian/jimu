@@ -128,7 +128,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		}
 	}
 
-	router := platformhttp.SetupRouter(container.Logger, cfg.HTTP, cfg.Server, cfg.Security, cfg.OTEL)
+	router := platformhttp.SetupRouter(container.Logger, cfg.HTTP, cfg.Server, cfg.Security, cfg.OTEL, container.Reporter)
 	if err := platformhttp.ConfigureTrustedProxies(router, cfg.HTTP.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}

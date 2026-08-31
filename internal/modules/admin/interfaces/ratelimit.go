@@ -8,17 +8,19 @@ import (
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
+	redistore "jimu/internal/platform/redis"
+
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
 
 // AdminRateLimitHandler 限流状态可视化 handler（仅读，不消费令牌）
 type AdminRateLimitHandler struct {
-	rdb *redis.Client
+	rdb redistore.Client
 }
 
 // NewAdminRateLimitHandler 创建限流状态 handler
-func NewAdminRateLimitHandler(rdb *redis.Client) *AdminRateLimitHandler {
+func NewAdminRateLimitHandler(rdb redistore.Client) *AdminRateLimitHandler {
 	return &AdminRateLimitHandler{rdb: rdb}
 }
 

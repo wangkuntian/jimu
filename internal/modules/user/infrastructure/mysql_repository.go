@@ -79,6 +79,18 @@ func (r *mysqlRepository) UpdatePassword(ctx context.Context, id uint64, hashedP
 	return r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", id).Update("password", hashedPassword).Error
 }
 
+func (r *mysqlRepository) UpdateTOTP(ctx context.Context, id uint64, secret string, enabled bool) error {
+	// encryption hook 通过对 User 实体的 Create/Update 回调处理 encryption:"true" 字段，
+	// 因此这里加载完整实体再 Save，确保 totp_secret 走加密/盲索引通路。
+	user := domain.User{ID: id}
+	if err := r.db.WithContext(ctx).First(&user, id).Error; err != nil {
+		return err
+	}
+	user.TOTPSecret = secret
+	user.TOTPEnabled = enabled
+	return r.db.WithContext(ctx).Save(&user).Error
+}
+
 func (r *mysqlRepository) Delete(ctx context.Context, id uint64) error {
 	return r.db.WithContext(ctx).Delete(&domain.User{}, id).Error
 }

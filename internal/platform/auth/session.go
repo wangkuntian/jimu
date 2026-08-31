@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	redistore "jimu/internal/platform/redis"
+
 	"github.com/redis/go-redis/v9"
 )
 
@@ -26,7 +28,7 @@ type RedisSessionStore struct {
 	client sessionRedis
 }
 
-func NewRedisSessionStore(client *redis.Client) SessionStore {
+func NewRedisSessionStore(client redistore.Client) SessionStore {
 	return newRedisSessionStore(redisClientAdapter{Client: client})
 }
 
@@ -50,7 +52,7 @@ type sessionPipeline interface {
 }
 
 type redisClientAdapter struct {
-	*redis.Client
+	redistore.Client
 }
 
 func (a redisClientAdapter) TxPipeline() sessionPipeline {

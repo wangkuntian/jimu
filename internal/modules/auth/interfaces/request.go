@@ -13,6 +13,18 @@ type loginRequest struct {
 	// 验证码（登录时可选，注册时如果开启验证码则必填）
 	CaptchaID   string `json:"captcha_id,omitempty"`
 	CaptchaCode string `json:"captcha_code,omitempty"`
+	// TOTP 二次验证码（用户启用 TOTP 后登录必填，6 位数字）
+	TOTPCode string `json:"totp_code,omitempty" binding:"omitempty,len=6"`
+}
+
+// enableTOTPRequest 启用 TOTP 请求参数（先用 SetupTOTP 获取密钥，再用本接口确认）
+type enableTOTPRequest struct {
+	Code string `json:"code" binding:"required,len=6"`
+}
+
+// disableTOTPRequest 关闭 TOTP 请求参数
+type disableTOTPRequest struct {
+	Code string `json:"code" binding:"required,len=6"`
 }
 
 // refreshRequest 刷新 Token 请求参数

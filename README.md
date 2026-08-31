@@ -51,6 +51,10 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **安全扫描** — govulncheck 依赖漏洞扫描（纳入 `make release-check` 与 CI）、Trivy 镜像扫描、SBOM 生成与镜像 smoke test
 - **静态检查** — golangci-lint + pre-commit 钩子（fmt / vet / lint）
 - **追踪关联** — 访问日志自动注入 trace_id / span_id，关联 OpenTelemetry 追踪
+- **Redis 高可用** — `redis.mode` 支持 `single` / `sentinel` / `cluster` 三种部署模式（默认 single 行为不变）：哨兵模式通过 `master_name` + `sentinel_addrs` 自动故障转移，集群模式通过 `cluster_addrs` 连接分片；统一 `redis.Client` 接口，框架内 session/缓存/队列/限流/分布式锁全复用
+- **TOTP 二次验证** — RFC 6238 自研实现（`internal/shared/totp`，无外部依赖），用户可自助绑定/启用/关闭：`POST /auth/mfa/setup` 生成密钥与 otpauth URI（二维码绑定）、`/auth/mfa/enable` 首次验证码确认、`/auth/mfa/disable` 校验后关闭；启用后登录必须携带 `totp_code`（缺失 `2006`，错误 `2007`），密钥 AES-GCM 字段级加密落库
+- **统一 gRPC 客户端** — 出站调用封装（`internal/platform/grpc` `Client`）：连接管理 + 调用超时 + 指数退避重试（仅 Unavailable/ResourceExhausted 幂等安全码）+ panic 恢复拦截器 + Prometheus 指标（`jimu_grpc_client_*`），支持 TLS/insecure，与 HTTP client 对齐的框架风格
+- **错误追踪上报** — `internal/platform/reporter` 抽象 + 双实现：本地结构化日志（含 trace_id/span_id）+ Sentry（`error_reporting.dsn` 配置后启用，环境标签、采样率、堆栈附件）；HTTP `Recovery` 中间件 panic 自动上报，启用失败静默回退日志实现，不阻断启动
 
 ## 非目标
 
@@ -231,11 +235,12 @@ jimu/
 │   │   ├── captcha/            # 图形验证码（生成 + Redis 存储 + 校验）
 │   │   ├── event/              # 事件总线
 │   │   ├── observability/      # 健康检查 + Metrics + Tracing
+│   │   ├── reporter/           # 错误追踪上报（日志 + Sentry 双通道）
 │   │   ├── storage/            # 文件存储抽象
 │   │   ├── notification/       # 通知系统
 │   │   ├── outbox/             # Outbox 模式
 │   │   ├── scheduler/          # Cron 调度器
-│   │   ├── grpc/               # gRPC server（健康检查 + 反射，可选双栈）
+│   │   ├── grpc/               # gRPC server + 统一出站 Client（健康/反射/超时/重试/指标）
 │   │   ├── feature/            # Feature Flag
 │   ├── shared/                 # 跨模块通用能力
 │   │   ├── errors/             # AppError + 错误码
@@ -244,6 +249,7 @@ jimu/
 │   │   ├── validator/          # 自定义校验规则
 │   │   ├── i18n/               # 国际化翻译
 │   │   ├── id/                 # 雪花 ID 生成器
+│   │   ├── totp/               # RFC 6238 TOTP（二次验证）
 │   │   └── testutil/           # 测试工具
 │   └── modules/                # 业务模块
 │       ├── auth/               # 登录/注册/Token
@@ -376,6 +382,33 @@ curl -X POST http://localhost:8080/api/v1/auth/reset-password \
 
 验证码一次性，成功后强制登出该用户全部会话。
 
+### TOTP 二次验证
+
+用户启用 TOTP 后，登录必须附带 `totp_code`；未启用则与普通登录一致，无需该字段。
+
+```bash
+# 1. 生成绑定密钥（返回 secret 与 otpauth URI，供二维码/认证器绑定）
+curl -X POST http://localhost:8080/api/v1/auth/mfa/setup \
+  -H "Authorization: Bearer <access_token>"
+
+# 2. 用认证器的首次验证码确认启用
+curl -X POST http://localhost:8080/api/v1/auth/mfa/enable \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"code":"123456"}'
+
+# 3. 启用后的登录：携带 totp_code（缺失返回 2006，错误返回 2007）
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","password":"password123","totp_code":"123456"}'
+
+# 4. 关闭二次验证（校验当前验证码）
+curl -X POST http://localhost:8080/api/v1/auth/mfa/disable \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"code":"123456"}'
+```
+
 ### 获取系统状态
 
 管理端点统一挂载 JWT + Casbin RBAC 认证，需携带管理员 `access_token`（无有效策略默认拒绝，返回 403）：
@@ -477,9 +510,14 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `db.max_idle` | 最大空闲连接数 | `10`（开发）/ `20`（生产） |
 | `db.conn_max_lifetime_sec` | 连接最大存活时间（秒） | `3600` |
 | `db.read_hosts` / `db.read_ports` | 只读副本地址 / 端口（读写分离） | — |
-| `redis.addr` | Redis 地址 | `127.0.0.1:6379` |
+| `redis.mode` | Redis 部署模式：`single` / `sentinel` / `cluster` | `single` |
+| `redis.addr` | Redis 地址（单机模式） | `127.0.0.1:6379` |
 | `redis.password` | Redis 密码（通过环境变量覆盖） | — |
-| `redis.db` | Redis 数据库编号 | `0` |
+| `redis.db` | Redis 数据库编号（cluster 模式不支持） | `0` |
+| `redis.master_name` | 哨兵模式 master 名称（`mode=sentinel` 必填） | — |
+| `redis.sentinel_addrs` | 哨兵模式节点地址列表（`mode=sentinel` 必填） | — |
+| `redis.sentinel_password` | 哨兵节点密码（可选） | — |
+| `redis.cluster_addrs` | 集群模式节点地址列表（`mode=cluster` 必填） | — |
 | `redis.pool_size` | Redis 连接池大小 | `10`（开发）/ `50`（生产） |
 | `redis.min_idle_conns` | 最小空闲连接数 | `2`（开发）/ `10`（生产） |
 | `log.level` | 日志级别 | `debug`（开发）/ `info`（生产） |
@@ -534,6 +572,11 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `grpc.enabled` | 是否启用 gRPC server（与 HTTP 双栈并存，默认关闭） | `false` |
 | `grpc.host` / `grpc.port` | gRPC 监听地址 / 端口 | `0.0.0.0` / `9091` |
 | `grpc` 业务服务 | 示例 `UserInfoService`（`internal/platform/grpc/userinfo_service.go`，proto 在 `proto/jimu/v1/userinfo.proto`，`make proto` 重新生成）；业务模块仿照 `RegisterUserInfoService` 经 `RegisterService` 接入 | — |
+| `error_reporting.enabled` | 是否启用错误追踪上报（未启用时零开销） | `false`（开发）/ `true`（生产） |
+| `error_reporting.dsn` | Sentry DSN；留空则仅本地日志 | — |
+| `error_reporting.environment` | 上报环境标签（留空回退 `APP_ENV`） | — |
+| `error_reporting.sample_rate` | 上报采样率 0-1，1.0 全量 | `1.0` |
+| gRPC 出站客户端 | 统一封装 `internal/platform/grpc` `Client`（`NewClient`）：超时/重试/恢复/指标 `jimu_grpc_client_*`，业务经 `Conn()` 走生成的强类型客户端 | — |
 
 ### 静态加密（Data at Rest）
 

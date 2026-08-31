@@ -14,6 +14,8 @@ import (
 	oauthplatform "jimu/internal/platform/oauth"
 	"jimu/internal/shared/errors"
 
+	redistore "jimu/internal/platform/redis"
+
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
@@ -32,13 +34,13 @@ type OAuthService struct {
 	jwtUtil     *auth.JWT
 	sessions    auth.SessionStore
 	providers   map[string]oauthplatform.Provider
-	rdb         *redis.Client
+	rdb         redistore.Client
 	db          *gorm.DB
 	accessMin   int
 }
 
 // NewOAuthService 创建 OAuth 服务
-func NewOAuthService(bindingRepo oauthdomain.BindingRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, providers map[string]oauthplatform.Provider, rdb *redis.Client, db *gorm.DB, accessMin int) *OAuthService {
+func NewOAuthService(bindingRepo oauthdomain.BindingRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, providers map[string]oauthplatform.Provider, rdb redistore.Client, db *gorm.DB, accessMin int) *OAuthService {
 	return &OAuthService{
 		bindingRepo: bindingRepo,
 		jwtUtil:     jwtUtil,

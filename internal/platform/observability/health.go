@@ -43,9 +43,9 @@ func NewSQLChecker(db *sql.DB) Checker { return sqlChecker{db: db} }
 
 func (c sqlChecker) Ping(ctx context.Context) error { return c.db.PingContext(ctx) }
 
-type redisChecker struct{ client *redis.Client }
+type redisChecker struct{ client redis.Cmdable }
 
-func NewRedisChecker(client *redis.Client) Checker { return redisChecker{client: client} }
+func NewRedisChecker(client redis.Cmdable) Checker { return redisChecker{client: client} }
 
 func (c redisChecker) Ping(ctx context.Context) error { return c.client.Ping(ctx).Err() }
 

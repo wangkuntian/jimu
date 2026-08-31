@@ -7,18 +7,18 @@ import (
 
 	"jimu/internal/contract"
 
-	"github.com/redis/go-redis/v9"
+	redistore "jimu/internal/platform/redis"
 )
 
 // AdminConfigService 配置热更新服务
 type AdminConfigService struct {
-	redis    *redis.Client
+	redis    redistore.Client
 	eventBus contract.EventBus
 	prefix   string
 }
 
 // NewAdminConfigService 创建配置热更新服务
-func NewAdminConfigService(rdb *redis.Client, eb contract.EventBus, prefix string) *AdminConfigService {
+func NewAdminConfigService(rdb redistore.Client, eb contract.EventBus, prefix string) *AdminConfigService {
 	return &AdminConfigService{redis: rdb, eventBus: eb, prefix: prefix}
 }
 

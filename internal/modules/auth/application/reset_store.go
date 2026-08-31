@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	redistore "jimu/internal/platform/redis"
+
 	"github.com/redis/go-redis/v9"
 )
 
@@ -13,12 +15,12 @@ const resetKeyPrefix = "jimu:reset:"
 
 // ResetStore 密码重置验证码存储（Redis 一次性码，key 为邮箱盲索引）
 type ResetStore struct {
-	client *redis.Client
+	client redistore.Client
 	ttl    time.Duration
 }
 
 // NewResetStore 创建密码重置验证码存储
-func NewResetStore(client *redis.Client, ttl time.Duration) *ResetStore {
+func NewResetStore(client redistore.Client, ttl time.Duration) *ResetStore {
 	return &ResetStore{client: client, ttl: ttl}
 }
 

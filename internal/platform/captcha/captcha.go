@@ -5,18 +5,19 @@ import (
 	"fmt"
 	"time"
 
+	redistore "jimu/internal/platform/redis"
+
 	"github.com/mojocn/base64Captcha"
-	"github.com/redis/go-redis/v9"
 )
 
 // RedisStore 基于 go-redis 的验证码存储，实现 base64Captcha.Store 接口
 type RedisStore struct {
-	client *redis.Client
+	client redistore.Client
 	ttl    time.Duration
 }
 
 // NewRedisStore 创建 Redis 验证码存储
-func NewRedisStore(client *redis.Client, ttl time.Duration) *RedisStore {
+func NewRedisStore(client redistore.Client, ttl time.Duration) *RedisStore {
 	return &RedisStore{client: client, ttl: ttl}
 }
 
@@ -50,7 +51,7 @@ type Service struct {
 }
 
 // NewService 创建验证码服务
-func NewService(client *redis.Client, ttl time.Duration) *Service {
+func NewService(client redistore.Client, ttl time.Duration) *Service {
 	return &Service{
 		store: NewRedisStore(client, ttl),
 	}

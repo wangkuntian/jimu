@@ -7,18 +7,16 @@ import (
 	"fmt"
 	"io"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
 // Lock 基于 Redis 的分布式锁
 type Lock struct {
-	client *redis.Client
+	client Client
 	prefix string
 }
 
 // NewLock 创建分布式锁实例
-func NewLock(client *redis.Client, prefix string) *Lock {
+func NewLock(client Client, prefix string) *Lock {
 	if prefix == "" {
 		prefix = "lock"
 	}

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	redistore "jimu/internal/platform/redis"
 )
 
 // LockoutConfig 账号锁定配置
@@ -26,12 +26,12 @@ func DefaultLockoutConfig() LockoutConfig {
 
 // LoginFailureTracker 基于 Redis 的登录失败追踪与账号锁定
 type LoginFailureTracker struct {
-	client *redis.Client
+	client redistore.Client
 	cfg    LockoutConfig
 }
 
 // NewLoginFailureTracker 创建登录失败追踪器
-func NewLoginFailureTracker(client *redis.Client, cfg LockoutConfig) *LoginFailureTracker {
+func NewLoginFailureTracker(client redistore.Client, cfg LockoutConfig) *LoginFailureTracker {
 	return &LoginFailureTracker{client: client, cfg: cfg}
 }
 
