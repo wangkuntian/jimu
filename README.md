@@ -103,8 +103,13 @@ go mod download
 
 ```bash
 cp .env.example .env
-# 编辑 .env 修改数据库、Redis 连接信息
+# 编辑 .env 修改数据库、Redis、OpenObserve、OTEL 推送等连接信息
 ```
+
+`.env.example` 覆盖全部可调环境变量（镜像/端口/数据卷、OpenObserve 账号与端口、OTEL 开关与端点）：
+- **docker compose** 自动读取项目根 `.env` 做变量插值（也可用 `--env-file` 指定）
+- **make** 通过 `include .env + export` 将变量注入子进程（deploy 脚本、compose 命令）
+- docker-compose.yml 内的 `${VAR:-默认}` 均可在 `.env` 覆盖，缺省用 yml 内默认值
 
 ### 方式一：本地运行
 
