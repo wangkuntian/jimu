@@ -181,9 +181,9 @@ compose-migrate:
 compose-seed:
 	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) run --rm server ./jimu seed
 
-## compose-observability: 启动监控栈（OpenObserve：日志/指标/追踪/告警/仪表盘，自动初始化默认 dashboard）
+## compose-observability: 启动监控栈（OpenObserve + MySQL/Redis 采集，自动初始化默认 dashboard）
 compose-observability:
-	$(DOCKER_COMPOSE) --profile observability up -d openobserve
+	$(DOCKER_COMPOSE) --profile observability up -d openobserve otel-collector
 	ZO_HTTP=http://127.0.0.1:5080 \
 	ZO_EMAIL=$${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local} \
 	ZO_PASSWORD=$${ZO_OBSERVE_ROOT_USER_PASSWORD:-Admin@12345} \

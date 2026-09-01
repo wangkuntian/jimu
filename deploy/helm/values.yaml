@@ -157,6 +157,8 @@ otel:
   # OpenObserve 认证凭据（与 openobserve.rootEmail/rootPassword 保持一致；生产建议覆盖）
   authEmail: "admin@jimu.local"
   authPassword: "Admin@12345"
+  # Basic token = base64(email:password)；Otel Collector 等外部端使用
+  authToken: "YWRtaW5AamltdS5sb2NhbDpBZG1pbkAxMjM0NQ=="
   orgID: "default"
 
 # 数据库配置（引用外部 Secret）
@@ -207,3 +209,20 @@ openobserve:
     limits:
       cpu: "2"
       memory: 4Gi
+
+# OTel Collector（MySQL/Redis 指标采集 → OpenObserve；生产需为 mysql 用户授予
+# PROCESS, REPLICATION CLIENT 权限以读取 performance_schema/状态变量）
+otelCollector:
+  enabled: true
+  image:
+    repository: otel/opentelemetry-collector-contrib
+    tag: "0.115.1"
+    pullPolicy: IfNotPresent
+  mysqlUser: jimu
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

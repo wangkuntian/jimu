@@ -162,7 +162,17 @@ make compose-observability   # 或 docker compose --profile observability up -d 
 
 - OpenObserve UI/API: http://127.0.0.1:5080 （默认账号 admin@jimu.local / Admin@12345，可用 `ZO_OBSERVE_ROOT_USER_EMAIL` / `ZO_OBSERVE_ROOT_USER_PASSWORD` 覆盖）
 - OTLP gRPC: `127.0.0.1:5081`（tracing / metrics / logs 统一入口）
-- 默认 dashboard **Jimu Overview**：`make compose-observability` 启动时自动创建（幂等），含错误日志/日志总量/DB 连接池面板；手动执行 `./deploy/openobserve/init-dashboard.sh` 可重新初始化，面板查询可在 UI 中调整
+- 默认 dashboard **Jimu Overview**：`make compose-observability` 启动时自动创建（幂等），含 17 面板：stat 卡片（错误日志/日志总量/DB 连接池/Goroutines）、时间序列（DB/运行时/日志/HTTP/熔断/MySQL/Redis）、最近错误日志表格；手动执行 `./deploy/openobserve/init-dashboard.sh` 可重新初始化（先在 UI 删除旧版），面板查询可在 UI 中调整
+
+**数据库集成（MySQL/Redis 指标）**：`make compose-observability` 会同时启动 OTel Collector（`otel-collector` 服务，配置 `deploy/otel-collector.yaml`），采集 MySQL（performance_schema 指标：连接池/缓冲池/锁/慢查询相关）与 Redis（客户端/内存/命令吞吐）指标，经 OTLP/gRPC 推送到 OpenObserve（约 45 个 `mysql_*` / `redis_*` 指标流）：
+
+```bash
+docker compose --profile observability up -d otel-collector   # 单独启动采集
+```
+
+- 采集凭据：compose 内 MySQL 用 root 密码（secret `db_root_password`）；k8s/helm 生产环境默认用应用用户（`jimu`），需为其授予 `PROCESS, REPLICATION CLIENT` 权限以读取状态变量
+- PostgreSQL：`deploy/otel-collector.yaml` 已预留 `postgres` receiver 配置（取消注释并按需填 `PG_*` 环境变量）
+- 面板：dashboard 已预置 MySQL 线程数 / Redis 客户端连接 / Redis 内存 / Redis 指令吞吐 4 个时间序列面板（数据来自 collector）
 
 让应用接入 OpenObserve（`otel.enabled` 开启，tracing + metrics + logs 均经 OTLP gRPC 推送）：
 
@@ -213,8 +223,12 @@ jimu/
 │   │   ├── service.yaml
 │   │   ├── hpa.yaml
 │   │   └── ingress.yaml
-│   │   └── openobserve.yaml     # OpenObserve 部署（Deployment/Service/PVC）
-│   └── helm/                    # Helm Chart（含 openobserve 子图表配置）
+│   │   ├── openobserve.yaml     # OpenObserve 部署（Deployment/Service/PVC）
+│   │   └── otel-collector.yaml  # 数据库指标采集（MySQL/Redis → OpenObserve）
+│   ├── otel-collector.yaml      # OTel Collector 配置（receiver mysql/redis）
+│   ├── openobserve/             # OpenObserve 初始化脚本
+│   │   └── init-dashboard.sh    # 启动时自动创建默认 dashboard（幂等）
+│   └── helm/                    # Helm Chart（含 openobserve / otel-collector 配置）
 ├── docs/openapi/               # Swagger 生成的 API 文档
 ├── migrations/
 │   ├── mysql/                  # MySQL 迁移脚本（按功能合并）
@@ -642,7 +656,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `make compose-logs` | 查看应用日志 |
 | `make compose-migrate` | Compose 环境执行迁移 |
 | `make compose-seed` | Compose 环境插入初始数据 |
-| `make compose-observability` | 启动监控栈（OpenObserve：日志/指标/追踪/告警/仪表盘，UI http://127.0.0.1:5080） |
+| `make compose-observability` | 启动监控栈（OpenObserve + 数据库指标 Collector，自动创建默认 dashboard，UI http://127.0.0.1:5080） |
 | `make compose-observability-down` | 停止监控栈 |
 | `make compose-check` | 使用临时项目、Secret 和数据卷进行 Compose 运行时/API 验证，不影响本地服务 |
 | `make release-check` | 发布前检查（fmt-check + vet + test + govulncheck + Compose 运行时/API 验证） |

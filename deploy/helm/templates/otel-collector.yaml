@@ -1,0 +1,84 @@
+{{- if .Values.otelCollector.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-otel-collector
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: otel-collector
+    {{- include "jimu.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    receivers:
+      mysql:
+        endpoint: {{ printf "%s:%d" .Values.db.host .Values.db.port | quote }}
+        username: {{ .Values.otelCollector.mysqlUser | quote }}
+        password: ${file:/run/secrets/db_password}
+        collection_interval: 15s
+      redis:
+        endpoint: {{ .Values.redis.addr | quote }}
+        collection_interval: 15s
+    processors:
+      batch:
+        send_batch_size: 10000
+        timeout: 10s
+    exporters:
+      otlp/openobserve:
+        endpoint: {{ .Values.otel.endpoint | quote }}
+        tls:
+          insecure: true
+        headers:
+          authorization: "Basic {{ .Values.otel.authToken }}"
+          organization: {{ .Values.otel.orgID | quote }}
+    service:
+      pipelines:
+        metrics:
+          receivers: [mysql, redis]
+          processors: [batch]
+          exporters: [otlp/openobserve]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-otel-collector
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: otel-collector
+    {{- include "jimu.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Release.Name }}-otel-collector
+        - name: db-secret
+          secret:
+            secretName: {{ .Values.db.existingSecret }}
+            items:
+              - key: {{ .Values.db.passwordKey }}
+                path: db_password
+      containers:
+        - name: otel-collector
+          image: "{{ .Values.otelCollector.image.repository }}:{{ .Values.otelCollector.image.tag }}"
+          imagePullPolicy: {{ .Values.otelCollector.image.pullPolicy }}
+          args: ["--config=/etc/otelcol/config.yaml"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: db-secret
+              mountPath: /run/secrets/db_password
+              subPath: db_password
+              readOnly: true
+          resources:
+            {{- toYaml .Values.otelCollector.resources | nindent 12 }}
+{{- end }}

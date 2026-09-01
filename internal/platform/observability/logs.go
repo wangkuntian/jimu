@@ -10,6 +10,8 @@ import (
 	otlploggrpc "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	otelog "go.opentelemetry.io/otel/log"
 	logsdk "go.opentelemetry.io/otel/sdk/log"
+	sdkresource "go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -36,7 +38,14 @@ func NewLogExporter(ctx context.Context, cfg TracingConfig) (*LogExporter, error
 		return nil, fmt.Errorf("create otlp logs exporter: %w", err)
 	}
 
-	provider := logsdk.NewLoggerProvider(logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter)))
+	provider := logsdk.NewLoggerProvider(
+		logsdk.WithResource(sdkresource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceName(defaulted(cfg.ServiceName, "jimu")),
+			semconv.ServiceVersion(defaulted(cfg.ServiceVersion, "dev")),
+		)),
+		logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter)),
+	)
 	logger := provider.Logger(defaulted(cfg.ServiceName, "jimu"))
 	runCtx, cancel := context.WithCancel(ctx)
 	return &LogExporter{

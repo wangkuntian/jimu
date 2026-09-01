@@ -1,0 +1,41 @@
+# OpenTelemetry Collector（OpenObserve 数据库集成）
+# 采集 MySQL / Redis 指标，经 OTLP/gRPC 推送到 OpenObserve。
+# PostgreSQL 接入：启用 postgres receiver 并配置 endpoint/username/password。
+# 注意：receiver 使用 ${env:VAR} 展开；凭据需在部署环境提供（compose entrypoint 注入）。
+receivers:
+  mysql:
+    endpoint: ${env:MYSQL_ENDPOINT}
+    username: ${env:MYSQL_USER}
+    # 密码从 secret 文件读取（compose secrets / k8s secret 挂载，路径保持一致）
+    password: ${file:/run/secrets/db_root_password}
+    collection_interval: 15s
+  redis:
+    endpoint: ${env:REDIS_ENDPOINT}
+    collection_interval: 15s
+  # postgres:
+  #   endpoint: ${env:PG_ENDPOINT}
+  #   username: ${env:PG_USER}
+  #   password: ${env:PG_PASSWORD}
+  #   collection_interval: 15s
+
+processors:
+  batch:
+    send_batch_size: 10000
+    send_batch_max_size: 11000
+    timeout: 10s
+
+exporters:
+  otlp/openobserve:
+    endpoint: ${env:ZO_OTLP_ENDPOINT}
+    tls:
+      insecure: true
+    headers:
+      authorization: "Basic ${env:ZO_AUTH_TOKEN}"
+      organization: ${env:ZO_ORG}
+
+service:
+  pipelines:
+    metrics:
+      receivers: [mysql, redis]
+      processors: [batch]
+      exporters: [otlp/openobserve]

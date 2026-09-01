@@ -101,6 +101,35 @@ services:
       # OTLP/gRPC（tracing/metrics/logs 推送）
       - "127.0.0.1:${ZO_OBSERVE_GRPC_PORT:-5081}:5081"
 
+  # 可选的 observability profile：OTel Collector 采集数据库指标（MySQL/Redis）→ OpenObserve
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    profiles: ["observability"]
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./deploy/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      # MySQL root 密码由 config 以 ${file:/run/secrets/db_root_password} 读取（无需 shell）
+      ZO_EMAIL: ${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local}
+      ZO_PASSWORD: ${ZO_OBSERVE_ROOT_USER_PASSWORD:-Admin@12345}
+      # Basic token = base64(email:password)；改默认凭据时同步覆盖此变量
+      ZO_AUTH_TOKEN: ${ZO_OBSERVE_AUTH_TOKEN:-YWRtaW5AamltdS5sb2NhbDpBZG1pbkAxMjM0NQ==}
+      ZO_ORG: default
+      ZO_OTLP_ENDPOINT: openobserve:5081
+      MYSQL_ENDPOINT: mariadb:3306
+      MYSQL_USER: root
+      REDIS_ENDPOINT: redis:6379
+    secrets:
+      - db_root_password
+    depends_on:
+      openobserve:
+        condition: service_started
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   jimu-mariadb-data:
     name: ${COMPOSE_MARIADB_VOLUME:-jimu-mariadb-data}
