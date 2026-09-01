@@ -162,7 +162,16 @@ make compose-observability   # 或 docker compose --profile observability up -d 
 
 - OpenObserve UI/API: http://127.0.0.1:5080 （默认账号 admin@jimu.local / Admin@12345，可用 `ZO_OBSERVE_ROOT_USER_EMAIL` / `ZO_OBSERVE_ROOT_USER_PASSWORD` 覆盖）
 - OTLP gRPC: `127.0.0.1:5081`（tracing / metrics / logs 统一入口）
-- 默认 dashboard **Jimu Overview**：`make compose-observability` 启动时自动创建（幂等），含 17 面板：stat 卡片（错误日志/日志总量/DB 连接池/Goroutines）、时间序列（DB/运行时/日志/HTTP/熔断/MySQL/Redis）、最近错误日志表格；手动执行 `./deploy/openobserve/init-dashboard.sh` 可重新初始化（先在 UI 删除旧版），面板查询可在 UI 中调整
+- 默认 dashboard **Jimu Overview**：`make compose-observability` 启动时自动创建（幂等），含 17 面板：stat 卡片（错误日志/日志总量/DB 连接池/Goroutines）、时间序列（DB/运行时/日志/HTTP/熔断/MySQL/Redis）、最近错误日志表格
+
+**Dashboard 配置与同步（面板进 git）**：dashboard 定义保存在 `deploy/openobserve/dashboards/*.json`（v8 结构，含面板查询与布局），启动时按此文件创建/重建：
+
+```bash
+./deploy/openobserve/sync-dashboard.sh                # 应用 dashboards/*.json（幂等：同名重建）
+./deploy/openobserve/sync-dashboard.sh --export 名称  # 线上 dashboard 导出为 json（UI 微调后同步回 git）
+```
+
+JSON 中维护面板查询（`queries.fields` 流与轴映射、`type` 渲染类型）与布局（`layout` 网格坐标）；在 UI 手工调整后可用 `--export` 拉回并提交（运行时元数据自动剥离）。
 
 **数据库集成（MySQL/Redis 指标）**：`make compose-observability` 会同时启动 OTel Collector（`otel-collector` 服务，配置 `deploy/otel-collector.yaml`），采集 MySQL（performance_schema 指标：连接池/缓冲池/锁/慢查询相关）与 Redis（客户端/内存/命令吞吐）指标，经 OTLP/gRPC 推送到 OpenObserve（约 45 个 `mysql_*` / `redis_*` 指标流）：
 
@@ -227,7 +236,10 @@ jimu/
 │   │   └── otel-collector.yaml  # 数据库指标采集（MySQL/Redis → OpenObserve）
 │   ├── otel-collector.yaml      # OTel Collector 配置（receiver mysql/redis）
 │   ├── openobserve/             # OpenObserve 初始化脚本
-│   │   └── init-dashboard.sh    # 启动时自动创建默认 dashboard（幂等）
+│   │   ├── init-dashboard.sh    # 兼容入口（等同 sync-dashboard.sh）
+│   │   ├── sync-dashboard.sh    # dashboard 同步：apply（dashboards/*.json → 线上，幂等）/ --export（线上 → git）
+│   │   └── dashboards/          # dashboard 定义 JSON（面板查询与布局，git 管理）
+│   │       └── jimu-overview.json  # Jimu Overview 17 面板
 │   └── helm/                    # Helm Chart（含 openobserve / otel-collector 配置）
 ├── docs/openapi/               # Swagger 生成的 API 文档
 ├── migrations/
