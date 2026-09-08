@@ -15,7 +15,6 @@
 
 - 完成一个改动后自动提交
 - 连续多个改动时自动分批提交
-- `graphify update` 后自动提交产物
 - 任何形式的 "顺手提交"
 
 只有用户明确说"提交"、"commit"、"推送"等指令时才可以执行。此规则优先级最高，覆盖其他所有规范。
@@ -375,13 +374,18 @@ fix(config): validate enum values on load
 - 跑了什么验证。
 - 还有什么风险或未做事项。
 
-## graphify
+## codebase-memory-mcp
 
-本项目在 `graphify-out/` 下有知识图谱，包含 god 节点、社区结构和跨文件关系。
+本项目使用 codebase-memory-mcp（tree-sitter 知识图谱 MCP）做代码库结构分析，已替代原
+graphify。索引存全局 `~/.cache/codebase-memory-mcp/`，仓库内不落文件（`.codebase-memory/`
+已 gitignore）。
 
 规则：
 
-- 遇到代码库问题时，如果 `graphify-out/graph.json` 存在，先运行 `graphify query "<问题>"` 查询。用 `graphify path "<A>" "<B>"` 查看关系，用 `graphify explain "<概念>"` 聚焦特定概念。这些返回范围缩小的子图，通常比 `GRAPH_REPORT.md` 或原始 grep 输出小得多。
-- 如果 `graphify-out/wiki/index.md` 存在，用它做宏观导航，而不是直接浏览源码。
-- 只在宏观架构审查或 query/path/explain 无法提供足够上下文时，才阅读 `graphify-out/GRAPH_REPORT.md`。
-- 修改代码后，运行 `graphify update .` 保持图谱最新（仅 AST 分析，无 API 费用）。
+- 遇到代码库结构问题（调用链/影响面/架构），优先用 MCP 工具查询，而不是逐文件
+  grep/read：`trace_path`（调用链）、`search_graph`（结构/语义搜索）、
+  `get_architecture`（架构总览）、`detect_changes`（未提交改动的符号影响映射）、
+  `query_graph`（Cypher 只读查询）、`get_code_snippet`（按限定名取源码）。
+- 图谱未索引时先建索引：`codebase-memory-mcp cli index_repository --repo-path .`
+  （或在 agent 会话里说 "index this project"）；之后后台 watcher 自动跟随 git 变更。
+- 修改代码后无需手动刷新索引（watcher 自动同步）。

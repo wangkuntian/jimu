@@ -44,7 +44,7 @@ logs/
 .claude/
 .agents/
 
-# Graphify
-graphify-out/
+# codebase-memory-mcp（索引存全局缓存；团队共享产物按需手动提交）
+.codebase-memory/
 # 本地性能基线（跨机器不稳定，CI 使用绝对阈值模式）
 .benchmarks/
