@@ -3,6 +3,9 @@
 本项目的 AGENTS 协作规范。全仓库默认遵守本文件；子目录如果以后有自己的
 `AGENTS.md`，以更靠近被修改文件的规范为准。
 
+`CLAUDE.md` 是指向本文件的软链接（Claude Code 经它读取同一份规范）。更新规范只改
+本文件；请勿把 `CLAUDE.md` 改回实体文件或删除重建，以免软链失效。
+
 默认使用中文回复用户，除非用户明确要求使用其他语言。
 
 ## 禁止自动提交
@@ -150,6 +153,33 @@ HTTP 状态码始终 200，业务错误通过 `body.code` 体现：
 - 使用 Zap，通过 `logger.New(cfg.LogConfig)` 创建
 - 文件输出使用 lumberjack 滚动，配置项：`max_size`、`max_backups`、`max_age`、`compress`
 - `output: stdout` 时直接写终端不滚动
+
+#### 日志调用规范（OpenObserve 可观测性）
+
+- **必须使用结构化方法**：`Debugw/Infow/Warnw/Errorw`（msg + k/v 字段）。禁止 `Debug/Info/Warn/Error(...)` 传多个参数——sugared logger 会把所有参数 `fmt.Sprint` 拼进消息，导致 k/v 粘连、字段丢失。`make check-log-usage` 强制检查（CI 已接入）。
+- **消息**：静态动词短语（如 `job completed`），变量一律进字段，不拼进消息。
+- **字段命名**：小写 snake_case，**key 必须来自标准词汇表**（下表与 `tools/logcheck` 内置词汇表同步，未登记 key 会触发 R3 告警）。禁止动态 key（变量/表达式当 key，R2 报错）。统一字段：`trace_id` / `span_id`（由 `logger.WithContext(ctx)` 自动注入，业务不手动写）、`module`（模块名）、`error`（错误对象，写 `"error", err` 而非 `err.Error()`）。
+
+标准字段词汇表（节选，完整清单以 `tools/logcheck/main.go` 为准）：
+
+| key | 含义 | 类型/单位 |
+|---|---|---|
+| `trace_id` / `span_id` / `caller` | 链路与调用位置（自动注入） | string |
+| `module` | 模块名（auth/user/admin/scheduler/audit…） | string |
+| `error` / `error_code` | 错误对象 / 业务错误码（对应统一响应 `body.code`） | error / int |
+| `user_id` / `request_id` / `job_id` / `order_id` | 关联 ID | string |
+| `event_type` / `type` | 事件/类型 | string |
+| `attempt` / `max_retries` / `interval_sec` | 重试信息 | int |
+| `count` / `jobs` / `rows` / `deleted` | 数量 | int |
+| `duration` | 耗时 | int64（纳秒，可聚合） |
+| `sql` | 脱敏后的 SQL（gorm 日志） | string |
+| `latency` / `client_ip` / `user_agent` / `request_body` / `response_body` | HTTP 访问日志 | string |
+| `channel` / `to` / `subject` / `body` / `data` | 通知渠道日志 | string（`data` 为 JSON 字符串） |
+
+数值字段建议带单位后缀（`_ms` / `_sec` / `_bytes` / `_ns`），logcheck 对这类后缀自动放行。
+- **字段类型**：数值给数值、布尔给布尔；需要聚合的时长给数值字段（如 `duration_ms`）。平台侧保留类型，字符串化会丧失 OpenObserve 的范围查询/聚合能力。
+- **敏感信息**：不记录密码、token、验证码、身份证、手机号原文；PII 需脱敏（如 `138****1234`）。
+- **级别**：`debug` 排查细节 | `info` 业务事件 | `warn` 可恢复异常 | `error` 不可恢复（必须带 `error` 字段）。
 
 ### 数据库
 

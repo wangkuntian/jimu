@@ -159,15 +159,15 @@ docker compose run --rm -e ADMIN_PASSWORD=admin123 server ./jimu seed
 
 ### 可观测性（可选）
 
-启动 OpenObserve 监控栈（单服务统一承载 日志/指标/追踪/告警/仪表盘，替代原 Prometheus + Grafana + Loki + Promtail + AlertManager 五件套）：
+OpenObserve 监控栈（日志/指标/追踪/告警/仪表盘，替代原 Prometheus + Grafana + Loki + Promtail + AlertManager 五件套）随 `make compose-up` 按环境变量开启：
 
 ```bash
-make compose-observability   # 或 docker compose --profile observability up -d openobserve
+make compose-up                       # OTEL_ENABLED 默认开启；OTEL_ENABLED=false make compose-up 关闭
 ```
 
 - OpenObserve UI/API: http://127.0.0.1:5080 （默认账号 admin@jimu.local / Admin@12345，可用 `ZO_OBSERVE_ROOT_USER_EMAIL` / `ZO_OBSERVE_ROOT_USER_PASSWORD` 覆盖）
 - OTLP gRPC: `127.0.0.1:5081`（tracing / metrics / logs 统一入口）
-- 默认 dashboard **Jimu Overview**：`make compose-observability` 启动时自动创建（幂等），含 17 面板：stat 卡片（错误日志/日志总量/DB 连接池/Goroutines）、时间序列（DB/运行时/日志/HTTP/熔断/MySQL/Redis）、最近错误日志表格
+- 默认 dashboard **Jimu Overview**：开启时自动创建（幂等），含 17 面板：stat 卡片（错误日志/日志总量/DB 连接池/Goroutines）、时间序列（DB/运行时/日志/HTTP/熔断/MySQL/Redis）、最近错误日志表格
 
 **Dashboard 配置与同步（面板进 git）**：dashboard 定义保存在 `deploy/openobserve/dashboards/*.json`（v8 结构，含面板查询与布局），启动时按此文件创建/重建：
 
@@ -178,7 +178,7 @@ make compose-observability   # 或 docker compose --profile observability up -d 
 
 JSON 中维护面板查询（`queries.fields` 流与轴映射、`type` 渲染类型）与布局（`layout` 网格坐标）；在 UI 手工调整后可用 `--export` 拉回并提交（运行时元数据自动剥离）。
 
-**数据库集成（MySQL/Redis 指标）**：`make compose-observability` 会同时启动 OTel Collector（`otel-collector` 服务，配置 `deploy/otel-collector.yaml`），采集 MySQL（performance_schema 指标：连接池/缓冲池/锁/慢查询相关）与 Redis（客户端/内存/命令吞吐）指标，经 OTLP/gRPC 推送到 OpenObserve（约 45 个 `mysql_*` / `redis_*` 指标流）：
+**数据库集成（MySQL/Redis 指标）**：`make compose-up`（OTEL_ENABLED 默认开启）会同时启动 OTel Collector（`otel-collector` 服务，配置 `deploy/otel-collector.yaml`），采集 MySQL（performance_schema 指标：连接池/缓冲池/锁/慢查询相关）与 Redis（客户端/内存/命令吞吐）指标，经 OTLP/gRPC 推送到 OpenObserve（约 45 个 `mysql_*` / `redis_*` 指标流）：
 
 ```bash
 docker compose --profile observability up -d otel-collector   # 单独启动采集
@@ -191,12 +191,20 @@ docker compose --profile observability up -d otel-collector   # 单独启动采�
 让应用接入 OpenObserve（`otel.enabled` 开启，tracing + metrics + logs 均经 OTLP gRPC 推送）：
 
 ```bash
-OTEL_ENABLED=true make compose-up   # compose 内 server 自动指向 openobserve:5081
+make compose-up   # OTEL_ENABLED 默认开启，server 自动指向 openobserve:5081 推送
 ```
 
 应用侧：`/metrics` 端点保留 Prometheus 格式供外部工具抓取；指标另按 `metrics_interval_sec` 周期转 OTLP 推送；结构化日志异步推送（缓冲满丢弃，不影响主链路）。告警在 OpenObserve UI 内配置（VQL 告警规则 + 通知渠道）。
 
-停止：`make compose-observability-down`。
+**日志输出规范**（保证 OpenObserve 中可检索、可聚合、可与 trace 关联）：
+
+- **结构化调用**：必须使用 `Debugw / Infow / Warnw / Errorw`（msg + k/v 字段）。单参数 print 风格会把 k/v 拼进消息导致字段丢失（CI 的 `make check-log-usage` 强制检查）。
+- **字段命名**：统一小写 snake_case，且 **key 来自标准词汇表**（`user_id`、`event_type`、`duration`…，见 `AGENTS.md` 日志调用规范；`make check-log-usage` 静态检查：防粘连、禁动态 key、未登记 key 告警、禁直接塞 struct/map/slice）。
+- **类型保留**：数值/布尔按原类型上报（可范围查询与聚合），时长字段为纳秒数值，不会退化为字符串。
+- **trace 关联**：请求上下文内用 `logger.WithContext(ctx)` 记录日志，自动携带 `trace_id`/`span_id` 并挂到对应 trace，OpenObserve 日志与链路可互跳。
+- **敏感信息**（密码、token、验证码、手机号原文等）禁止入日志，PII 需脱敏（如 `138****1234`）。
+
+停止：`make compose-down`（统一入口，保留数据卷）。
 
 ## CLI 工具
 
@@ -602,7 +610,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `otel.logs_enabled` | 日志推送：zap 结构化日志异步转 OTLP logs | `true` |
 | `otel.metrics_interval_sec` | 指标推送间隔（秒），0 用默认 | `15` |
 | `otel.auth_email` / `otel.auth_password` | OpenObserve 账号凭据（OTLP/gRPC Basic Auth；生产可用 `OTEL_AUTH_EMAIL` / `OTEL_AUTH_PASSWORD`（或 `OTEL_AUTH_PASSWORD_FILE`）环境变量注入） | 与 OpenObserve 账号一致 |
-| `otel.org_id` | OpenObserve 组织（gRPC `organization` header；`OTEL_ORG_ID` 可覆盖） | `default` |
+| `otel.org_id` | OpenObserve 组织（gRPC `organization` header；`OTEL_ORG_ID` 可覆盖） | `Default` |
 | `http_client.timeout_sec` | 出站 HTTP 单次请求超时（秒），0 用默认 | `10` |
 | `http_client.max_retries` | 出站 HTTP 失败重试次数（仅网络错误与 5xx），0 用默认 | `2` |
 | `http_client.retry_interval_ms` | 出站 HTTP 重试基础间隔（毫秒，指数退避），0 用默认 | `200` |
@@ -672,9 +680,8 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `make compose-restart` | 重启所有容器 |
 | `make compose-logs` | 查看应用日志 |
 | `make compose-migrate` | Compose 环境执行迁移 |
-| `make compose-seed` | Compose 环境插入初始数据 |
-| `make compose-observability` | 启动监控栈（OpenObserve + 数据库指标 Collector，自动创建默认 dashboard，UI http://127.0.0.1:5080） |
-| `make compose-observability-down` | 停止监控栈 |
+| `make compose-seed` | Compose 环境插入初始数据（需 `.env` 提供 `ADMIN_PASSWORD`，或 `make compose-seed ADMIN_PASSWORD=xxx`） |
+| `make compose-up`（`OTEL_ENABLED=false` 关闭） | 统一开关（默认开）：启动 OpenObserve 监控栈（含数据库指标 Collector 与默认 dashboard）并让 server 推送遥测 |
 | `make compose-check` | 使用临时项目、Secret 和数据卷进行 Compose 运行时/API 验证，不影响本地服务 |
 | `make release-check` | 发布前检查（fmt-check + vet + test + govulncheck + Compose 运行时/API 验证） |
 | `make ci` | 本地 CI 检查（无外部依赖：fmt-check + vet + lint + test + 覆盖率 + race + swagger + smoke + build + govulncheck，完整 CI 见 `.github/workflows/ci.yml`） |
