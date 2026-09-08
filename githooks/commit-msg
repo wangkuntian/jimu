@@ -1,0 +1,41 @@
+#!/bin/sh
+# commit-msg: 拒绝含中日韩字符的提交消息
+# 规则来源：AGENTS.md「Commit Message 规范」——summary 与正文全部使用英文。
+# 安装：make hooks（git config core.hooksPath githooks）
+# 临时跳过：git commit --no-verify
+
+MSG_FILE="$1"
+[ -n "$MSG_FILE" ] && [ -f "$MSG_FILE" ] || exit 0
+
+if command -v python3 >/dev/null 2>&1; then
+	python3 - "$MSG_FILE" <<'PY'
+import re
+import sys
+
+cjk = re.compile(
+    "[\u1100-\u11ff\u2e80-\u2fdf\u3000-\u303f\u3040-\u30ff\u3130-\u318f"
+    "\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af\uff00-\uffef]"
+)
+
+text = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+hits = [(i + 1, line.strip()) for i, line in enumerate(text.splitlines()) if cjk.search(line)]
+if hits:
+    print("commit message contains CJK characters (rule: all-English messages, see AGENTS.md):", file=sys.stderr)
+    for n, line in hits[:5]:
+        print(f"  line {n}: {line[:60]}", file=sys.stderr)
+    if len(hits) > 5:
+        print(f"  ... {len(hits)} lines total", file=sys.stderr)
+    print("to bypass locally: git commit --no-verify", file=sys.stderr)
+    sys.exit(1)
+sys.exit(0)
+PY
+	exit $?
+fi
+
+# python3 不可用时降级为 perl；两者都缺则放行（兜底靠 review/CI）
+if command -v perl >/dev/null 2>&1; then
+	perl -CSD -ne 'exit 1 if /\p{Han}|\p{Hiragana}|\p{Katakana}|\p{Hangul}|\p{InCJK_Compatibility}|\p{InCJK_Symbols_and_Punctuation}|\p{InHalfwidth_and_Fullwidth_Forms}/; END { exit 0 }' "$MSG_FILE"
+	exit $?
+fi
+
+exit 0

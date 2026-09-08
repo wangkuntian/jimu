@@ -686,7 +686,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `make release-check` | 发布前检查（fmt-check + vet + test + govulncheck + Compose 运行时/API 验证） |
 | `make ci` | 本地 CI 检查（无外部依赖：fmt-check + vet + lint + test + 覆盖率 + race + swagger + smoke + build + govulncheck，完整 CI 见 `.github/workflows/ci.yml`） |
 | `make clean` | 清理构建产物 |
-| `make hooks` | 安装 pre-commit 钩子 |
+| `make hooks` | 安装 git 钩子（pre-commit 框架 + `githooks/commit-msg` 提交消息全英文检查） |
 
 ## Docker 部署
 

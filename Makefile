@@ -330,10 +330,10 @@ ci: fmt-check vet lint check-log-usage test-cover test-coverage-check test-race 
 release-check: fmt-check vet check-log-usage test govulncheck compose-check
 	@echo "All checks passed"
 
-## hooks: 安装 pre-commit 钩子（需 pip install pre-commit）
+## hooks: 启用 git 钩子（core.hooksPath=githooks：commit-msg 全英文检查 + pre-commit 框架包装；框架检查需 pip install pre-commit）
 hooks:
-	pre-commit install
-	@echo "pre-commit hooks installed"
+	git config core.hooksPath githooks
+	@echo "git hooks enabled (hooksPath=githooks: commit-msg + pre-commit wrapper)"
 
 ## dev: 热重载开发模式（需 air: go install github.com/air-verse/air@latest）
 dev:

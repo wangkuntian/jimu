@@ -1,0 +1,13 @@
+#!/bin/sh
+# pre-commit wrapper（core.hooksPath=githooks）
+# pre-commit 框架拒绝在 core.hooksPath 下安装钩子，因此由本包装脚本直接调用
+# 框架检查暂存文件；未安装时仅警告不阻塞（完整检查由 CI 兜底）。
+
+if command -v pre-commit >/dev/null 2>&1; then
+	exec pre-commit run
+elif command -v python3 >/dev/null 2>&1 && python3 -m pre_commit --version >/dev/null 2>&1; then
+	exec python3 -m pre_commit run
+else
+	echo "[githooks] pre-commit not installed; skipping framework checks (pip install pre-commit; CI still runs them)" >&2
+	exit 0
+fi

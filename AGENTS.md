@@ -298,7 +298,10 @@ type(scope): summary
 - `db`
 - `http`
 
-Commit message 全部使用英文：summary 与正文（body）都不得使用中文。
+Commit message 全部使用英文：summary 与正文（body）都不得使用中文。提交时由
+`githooks/commit-msg` 强制检查（`make hooks` 安装，即 `core.hooksPath` 指向 `githooks/`）；
+服务端由 CI (Commits) workflow（`.github/workflows/ci-commit.yml`，无 path 过滤）兜底；
+确需跳过本地检查用 `git commit --no-verify`。
 
 `summary` 规则：
 
