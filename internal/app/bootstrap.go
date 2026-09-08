@@ -94,12 +94,12 @@ func registerEventBusBridge(c *Container) {
 			}
 			conv, ok := outboxTypeConverters[evt.EventType]
 			if !ok {
-				c.Logger.Error("outbox bridge: unknown event type", "type", evt.EventType)
+				c.Logger.Errorw("outbox bridge: unknown event type", "type", evt.EventType)
 				return
 			}
 			strong, err := conv(evt.Payload)
 			if err != nil {
-				c.Logger.Error("outbox bridge: convert event failed", "type", evt.EventType, "error", err.Error())
+				c.Logger.Errorw("outbox bridge: convert event failed", "type", evt.EventType, "error", err.Error())
 				return
 			}
 			c.EventBus.Publish(evt.EventType, strong)
@@ -122,11 +122,11 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	if cfg.OTEL.Enabled && cfg.OTEL.MetricsEnabled {
 		reg, ok := prometheus.DefaultRegisterer.(*prometheus.Registry)
 		if !ok {
-			container.Logger.Error("openobserve metrics pusher init failed", "error", "default registerer type mismatch")
+			container.Logger.Errorw("openobserve metrics pusher init failed", "error", "default registerer type mismatch")
 		} else {
 			pusher, err := observability.NewMetricsPusher(context.Background(), cfg.OTEL, reg)
 			if err != nil {
-				container.Logger.Error("openobserve metrics pusher init failed", "error", err.Error())
+				container.Logger.Errorw("openobserve metrics pusher init failed", "error", err.Error())
 			} else {
 				pusher.Start()
 				container.MetricsPusher = pusher
@@ -179,7 +179,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	// 注册各模块的事件处理器（在定时任务之前，确保事件订阅就绪）
 	for _, module := range modules {
 		module.RegisterEvents(container.EventBus)
-		container.Logger.Info("module events registered", "name", module.Name())
+		container.Logger.Infow("module events registered", "name", module.Name())
 	}
 
 	// 注册全局事件处理器：将领域事件桥接到通知系统
@@ -187,7 +187,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		container.EventBus.Subscribe(contract.UserCreatedEmailNotification, func(payload interface{}) {
 			if msg, ok := payload.(notification.Message); ok {
 				if err := container.Notification.Dispatch(context.Background(), msg); err != nil {
-					container.Logger.Error("notification dispatch failed", "error", err.Error())
+					container.Logger.Errorw("notification dispatch failed", "error", err.Error())
 				}
 			}
 		})
@@ -203,18 +203,18 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		switch m["key"] {
 		case "log_level":
 			if err := container.Logger.SetLevel(m["value"]); err != nil {
-				container.Logger.Error("apply config.updated log_level failed", "error", err.Error())
+				container.Logger.Errorw("apply config.updated log_level failed", "error", err.Error())
 				return
 			}
 		}
-		container.Logger.Info("config updated applied", "key", m["key"], "value", m["value"])
+		container.Logger.Infow("config updated applied", "key", m["key"], "value", m["value"])
 	})
 
 	// 注册各模块的定时任务
 	if container.JobRegistry != nil {
 		for _, module := range modules {
 			module.RegisterJobs(container.JobRegistry)
-			container.Logger.Info("module jobs registered", "name", module.Name())
+			container.Logger.Infow("module jobs registered", "name", module.Name())
 		}
 
 		type jobDef struct {
@@ -227,9 +227,9 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			jobFns["outbox_process"] = jobDef{name: "Process Outbox Events", spec: "@every 10s", fn: func() {
 				n, err := container.Outbox.Process(context.Background(), 100)
 				if err != nil {
-					container.Logger.Error("outbox process error", "error", err.Error())
+					container.Logger.Errorw("outbox process error", "error", err.Error())
 				} else if n > 0 {
-					container.Logger.Debug("outbox processed", "count", n)
+					container.Logger.Debugw("outbox processed", "count", n)
 				}
 			}}
 		}
@@ -244,12 +244,12 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			jobFns["cleanup"] = jobDef{name: "Data Cleanup", spec: "0 3 * * *", fn: func() {
 				results, err := cleanupSvc.Run(context.Background())
 				if err != nil {
-					container.Logger.Error("cleanup job failed", "error", err.Error())
+					container.Logger.Errorw("cleanup job failed", "error", err.Error())
 					return
 				}
 				for _, r := range results {
 					if r.Deleted > 0 {
-						container.Logger.Info("cleanup completed", "table", r.Table, "deleted", r.Deleted)
+						container.Logger.Infow("cleanup completed", "table", r.Table, "deleted", r.Deleted)
 					}
 				}
 			}}
@@ -268,7 +268,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			return nil
 		})
 		if err != nil {
-			container.Logger.Error("restore scheduled jobs failed", "error", err.Error())
+			container.Logger.Errorw("restore scheduled jobs failed", "error", err.Error())
 		}
 		restoredSet := make(map[string]struct{}, len(restored))
 		for _, id := range restored {
@@ -279,7 +279,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 				continue
 			}
 			if err := container.Scheduler.AddNamedFunc(id, def.name, def.spec, def.fn); err != nil {
-				container.Logger.Error("register job failed", "id", id, "error", err.Error())
+				container.Logger.Errorw("register job failed", "id", id, "error", err.Error())
 			}
 		}
 	}
@@ -327,7 +327,7 @@ func (w workerPoolComponent) Stop(context.Context) error {
 }
 
 type moduleLogger interface {
-	Info(args ...interface{})
+	Infow(msg string, keysAndValues ...interface{})
 }
 
 type registerRouter interface {
@@ -357,13 +357,13 @@ func registerHTTP(router registerRouter, log moduleLogger, modules ...contract.M
 			group := router.Group("", protected...)
 			module.RegisterHTTP(group)
 			if log != nil {
-				log.Info("module registered", "name", module.Name())
+				log.Infow("module registered", "name", module.Name())
 			}
 			continue
 		}
 		module.RegisterHTTP(router)
 		if log != nil {
-			log.Info("module registered", "name", module.Name())
+			log.Infow("module registered", "name", module.Name())
 		}
 	}
 	return nil

@@ -79,12 +79,12 @@ func (s *Server) Start(ctx context.Context) error {
 	s.listener = lis
 	s.health.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 	if s.logger != nil {
-		s.logger.Info("grpc server listening", "addr", addr)
+		s.logger.Infow("grpc server listening", "addr", addr)
 	}
 	go func() {
 		if err := s.srv.Serve(lis); err != nil {
 			if s.logger != nil {
-				s.logger.Error("grpc serve stopped", "error", err.Error())
+				s.logger.Errorw("grpc serve stopped", "error", err.Error())
 			}
 		}
 	}()

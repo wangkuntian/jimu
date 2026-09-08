@@ -38,7 +38,7 @@ func ConnectWithRetry(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error)
 		if err == nil {
 			if pingErr := pingDB(context.Background(), db); pingErr == nil {
 				if log != nil {
-					log.Info("database connected", "attempt", attempt)
+					log.Infow("database connected", "attempt", attempt)
 				}
 				configurePool(db, cfg)
 				return db, nil
@@ -48,7 +48,7 @@ func ConnectWithRetry(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error)
 		}
 
 		if log != nil {
-			log.Warn("retrying database connection",
+			log.Warnw("retrying database connection",
 				"attempt", attempt,
 				"max_retries", maxRetries,
 				"interval_sec", interval,

@@ -97,7 +97,7 @@ func (s *CronScheduler) AddNamedFunc(id, name, spec string, cmd func()) error {
 			result, err := s.lock.TryAcquire(lockCtx, "job:"+id, 30*time.Second)
 			cancel()
 			if err != nil {
-				s.logger.Debug("job skipped, lock not acquired", "id", id, "error", err.Error())
+				s.logger.Debugw("job skipped, lock not acquired", "id", id, "error", err.Error())
 				return
 			}
 			defer func() { _ = s.lock.Release(context.Background(), result) }()
@@ -178,7 +178,7 @@ func (s *CronScheduler) recordRun(info *JobInfo, cmd func()) {
 				info.LastStatus = "failed"
 				info.LastError = fmt.Sprintf("%v", r)
 				s.mu.Unlock()
-				s.logger.Error("job panic", "name", info.Name, "panic", fmt.Sprintf("%v", r))
+				s.logger.Errorw("job panic", "name", info.Name, "panic", fmt.Sprintf("%v", r))
 			}
 		}()
 		s.observe(info.Name, cmd)
@@ -187,7 +187,7 @@ func (s *CronScheduler) recordRun(info *JobInfo, cmd func()) {
 		info.LastError = ""
 		s.mu.Unlock()
 	}()
-	s.logger.Debug("job completed", "name", info.Name, "duration", time.Since(start))
+	s.logger.Debugw("job completed", "name", info.Name, "duration", time.Since(start))
 }
 
 // TriggerJob 手动触发任务（不依赖 cron 调度，立即执行）
@@ -268,7 +268,7 @@ func (s *CronScheduler) AddFunc(spec string, cmd func()) error {
 	entryID, err := s.cron.AddFunc(spec, func() {
 		defer func() {
 			if r := recover(); r != nil {
-				s.logger.Error("job panic recovered",
+				s.logger.Errorw("job panic recovered",
 					"spec", spec,
 					"panic", fmt.Sprintf("%v", r),
 				)
@@ -278,21 +278,21 @@ func (s *CronScheduler) AddFunc(spec string, cmd func()) error {
 				}
 			}
 		}()
-		s.logger.Debug("job starting", "spec", spec)
+		s.logger.Debugw("job starting", "spec", spec)
 		s.observe(spec, cmd)
-		s.logger.Debug("job completed", "spec", spec)
+		s.logger.Debugw("job completed", "spec", spec)
 	})
 	if err != nil {
 		return fmt.Errorf("add job %q: %w", spec, err)
 	}
 	s.entries = append(s.entries, entryID)
-	s.logger.Info("job registered", "spec", spec, "entry_id", entryID)
+	s.logger.Infow("job registered", "spec", spec, "entry_id", entryID)
 	return nil
 }
 
 // Start 实现 contract.Component 接口
 func (s *CronScheduler) Start(_ context.Context) error {
-	s.logger.Info("scheduler starting", "jobs", len(s.entries))
+	s.logger.Infow("scheduler starting", "jobs", len(s.entries))
 	s.cron.Start()
 	return nil
 }

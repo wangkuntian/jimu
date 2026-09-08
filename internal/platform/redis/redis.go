@@ -100,13 +100,13 @@ func ConnectWithRetry(cfg config.RedisConfig, log *logger.Logger) (Client, error
 		cancel()
 		if err == nil {
 			if log != nil {
-				log.Info("redis connected", "attempt", attempt, "mode", cfg.Mode)
+				log.Infow("redis connected", "attempt", attempt, "mode", cfg.Mode)
 			}
 			return client, nil
 		}
 
 		if log != nil {
-			log.Warn("retrying redis connection",
+			log.Warnw("retrying redis connection",
 				"attempt", attempt,
 				"max_retries", maxRetries,
 				"interval_sec", interval,

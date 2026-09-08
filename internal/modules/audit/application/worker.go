@@ -100,7 +100,7 @@ func (w *Worker) run() {
 		ctx, cancel := context.WithTimeout(context.Background(), flushTimeout)
 		defer cancel()
 		if err := flush(ctx); err != nil && w.log != nil {
-			w.log.Error("audit batch write failed", "error", err)
+			w.log.Errorw("audit batch write failed", "error", err)
 		}
 	}
 

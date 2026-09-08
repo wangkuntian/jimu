@@ -3,6 +3,8 @@ package observability
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	logsdk "go.opentelemetry.io/otel/sdk/log"
 	sdkresource "go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -38,11 +41,15 @@ func NewLogExporter(ctx context.Context, cfg TracingConfig) (*LogExporter, error
 		return nil, fmt.Errorf("create otlp logs exporter: %w", err)
 	}
 
+	// 资源属性带实例标识：OpenObserve 支持按实例（host/pid）过滤日志
+	host, _ := os.Hostname()
 	provider := logsdk.NewLoggerProvider(
 		logsdk.WithResource(sdkresource.NewWithAttributes(
 			semconv.SchemaURL,
 			semconv.ServiceName(defaulted(cfg.ServiceName, "jimu")),
 			semconv.ServiceVersion(defaulted(cfg.ServiceVersion, "dev")),
+			semconv.ServiceInstanceID(host + ":" + strconv.Itoa(os.Getpid())),
+			semconv.HostName(host),
 		)),
 		logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter)),
 	)
@@ -116,17 +123,28 @@ func (l *LogExporter) emit(entry logEntry) {
 	record.SetSeverity(zapLevelToSeverity(entry.level))
 	record.SetBody(attribute.StringValue(entry.msg))
 
-	n := len(entry.fields)
-	if entry.caller != "" {
-		n++
+	// 关联追踪：WithContext 注入的 trace_id/span_id 字符串字段解析为 span context，
+	// sdk/log 的 Emit 会从 ctx 自动填充 LogRecord 的 traceID/spanID（OTLP 专用字段），
+	// OpenObserve 据此把日志挂到对应 trace。字段本身仍保留为普通属性供检索。
+	ctx := l.ctx
+	if tid, sid, ok := traceIDsFromFields(entry.fields); ok {
+		sc := trace.NewSpanContext(trace.SpanContextConfig{
+			TraceID:    tid,
+			SpanID:     sid,
+			TraceFlags: trace.FlagsSampled,
+		})
+		if sc.IsValid() {
+			ctx = trace.ContextWithSpanContext(ctx, sc)
+		}
 	}
-	attrs := make([]attribute.KeyValue, 0, n)
+
+	attrs := make([]attribute.KeyValue, 0, len(entry.fields)+1)
 	enc := zapcore.NewMapObjectEncoder()
 	for _, f := range entry.fields {
 		f.AddTo(enc)
 	}
 	for k, v := range enc.Fields {
-		attrs = append(attrs, attribute.String(k, fmt.Sprint(v)))
+		attrs = append(attrs, attributeFromValue(k, v))
 	}
 	if entry.caller != "" {
 		attrs = append(attrs, attribute.String("caller", entry.caller))
@@ -134,7 +152,66 @@ func (l *LogExporter) emit(entry logEntry) {
 	if len(attrs) > 0 {
 		record.AddAttributes(attrs...)
 	}
-	l.logger.Emit(l.ctx, record)
+	l.logger.Emit(ctx, record)
+}
+
+// traceIDsFromFields 从 logger.WithContext 注入的 trace_id/span_id 字符串字段
+// 解析追踪标识。解析失败（非 hex）时静默跳过，字段仍作为普通属性保留。
+func traceIDsFromFields(fields []zapcore.Field) (trace.TraceID, trace.SpanID, bool) {
+	var tid trace.TraceID
+	var sid trace.SpanID
+	haveTrace, haveSpan := false, false
+	for _, f := range fields {
+		if f.Type != zapcore.StringType {
+			continue
+		}
+		switch f.Key {
+		case "trace_id":
+			if id, err := trace.TraceIDFromHex(f.String); err == nil {
+				tid, haveTrace = id, true
+			}
+		case "span_id":
+			if id, err := trace.SpanIDFromHex(f.String); err == nil {
+				sid, haveSpan = id, true
+			}
+		}
+	}
+	return tid, sid, haveTrace && haveSpan
+}
+
+// attributeFromValue 保留字段类型，避免全部退化为字符串：
+// 数值/布尔保持数值类型（OpenObserve 可范围查询/聚合），
+// 时长固定为纳秒数值（与 zap.Duration 字段语义一致），
+// 其余类型（map/slice/struct）兜底为字符串。
+func attributeFromValue(k string, v interface{}) attribute.KeyValue {
+	switch tv := v.(type) {
+	case string:
+		return attribute.String(k, tv)
+	case int:
+		return attribute.Int(k, tv)
+	case int64:
+		return attribute.Int64(k, tv)
+	case float64:
+		return attribute.Float64(k, tv)
+	case bool:
+		return attribute.Bool(k, tv)
+	case time.Duration:
+		return attribute.Int64(k, int64(tv))
+	case time.Time:
+		return attribute.String(k, tv.Format(time.RFC3339Nano))
+	case []string:
+		return attribute.StringSlice(k, tv)
+	case []bool:
+		return attribute.BoolSlice(k, tv)
+	case []int:
+		return attribute.IntSlice(k, tv)
+	case []int64:
+		return attribute.Int64Slice(k, tv)
+	case []float64:
+		return attribute.Float64Slice(k, tv)
+	default:
+		return attribute.String(k, fmt.Sprint(v))
+	}
 }
 
 // otelLogCore zapcore.Core 桥接实现：写入有界 channel。
