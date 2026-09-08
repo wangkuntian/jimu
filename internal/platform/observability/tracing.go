@@ -33,32 +33,43 @@ type TracingConfig struct {
 	AuthPassword string `mapstructure:"auth_password"`
 	// OrgID OpenObserve 组织（gRPC metadata organization；OpenObserve OTLP 默认组织 default）
 	OrgID string `mapstructure:"org_id"`
+	// LogsStreamName OpenObserve 日志 stream 名（gRPC metadata stream-name；
+	// 空则不携带 header，落 OpenObserve 默认流 default）
+	LogsStreamName string `mapstructure:"logs_stream_name"`
+	// TracesStreamName OpenObserve 追踪 stream 名（同上，空则落默认流 default）
+	TracesStreamName string `mapstructure:"traces_stream_name"`
 }
 
 // DefaultTracingConfig 返回默认可观测性配置
 func DefaultTracingConfig() TracingConfig {
 	return TracingConfig{
-		Enabled:         false,
-		Endpoint:        "localhost:4317",
-		ServiceName:     "jimu",
-		ServiceVersion:  "dev",
-		SampleRate:      1.0,
-		MetricsEnabled:  true,
-		LogsEnabled:     true,
-		MetricsInterval: 15,
-		OrgID:           "default",
+		Enabled:          false,
+		Endpoint:         "localhost:4317",
+		ServiceName:      "jimu",
+		ServiceVersion:   "dev",
+		SampleRate:       1.0,
+		MetricsEnabled:   true,
+		LogsEnabled:      true,
+		MetricsInterval:  15,
+		OrgID:            "default",
+		LogsStreamName:   "jimu_logs",
+		TracesStreamName: "jimu_traces",
 	}
 }
 
 // otlpHeaders 构造 OpenObserve OTLP gRPC 认证与组织 metadata：
 //   - organization: 组织标识（默认 default）
+//   - stream-name: 目标 stream（logs/traces 各自指定；空则省略，落 OpenObserve 默认流 default）
 //   - authorization: Basic base64(email:password)，AuthEmail 非空时携带
-func otlpHeaders(cfg TracingConfig) map[string]string {
+func otlpHeaders(cfg TracingConfig, streamName string) map[string]string {
 	org := cfg.OrgID
 	if org == "" {
 		org = "default"
 	}
 	headers := map[string]string{"organization": org}
+	if streamName != "" {
+		headers["stream-name"] = streamName
+	}
 	if cfg.AuthEmail != "" {
 		token := base64.StdEncoding.EncodeToString([]byte(cfg.AuthEmail + ":" + cfg.AuthPassword))
 		headers["authorization"] = "Basic " + token
@@ -79,7 +90,7 @@ func InitTracing(ctx context.Context, cfg TracingConfig) (*sdktrace.TracerProvid
 	exporter, err := otlptracegrpc.New(ctx,
 		otlptracegrpc.WithEndpoint(cfg.Endpoint),
 		otlptracegrpc.WithInsecure(),
-		otlptracegrpc.WithHeaders(otlpHeaders(cfg)),
+		otlptracegrpc.WithHeaders(otlpHeaders(cfg, cfg.TracesStreamName)),
 		otlptracegrpc.WithTimeout(10*time.Second),
 	)
 	if err != nil {

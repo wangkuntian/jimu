@@ -205,6 +205,8 @@ otel:
   auth_email: "admin@jimu.local"
   auth_password: "Admin@12345"
   org_id: "default"
+  logs_stream_name: "jimu_logs"     # 日志 stream（空落 OpenObserve 默认流 default）
+  traces_stream_name: "jimu_traces" # 追踪 stream（空落默认流 default）
 
 # 出站 HTTP client 配置（oauth/webhook 等外部调用统一使用）
 http_client:

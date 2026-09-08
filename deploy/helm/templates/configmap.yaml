@@ -108,6 +108,8 @@ data:
       auth_email: {{ .Values.otel.authEmail | quote }}
       auth_password: {{ .Values.otel.authPassword | quote }}
       org_id: {{ .Values.otel.orgID | quote }}
+      logs_stream_name: {{ .Values.otel.logsStreamName | quote }}
+      traces_stream_name: {{ .Values.otel.tracesStreamName | quote }}
 
     db:
       host: {{ .Values.db.host | quote }}

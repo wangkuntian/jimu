@@ -38,7 +38,7 @@ func NewMetricsPusher(ctx context.Context, cfg TracingConfig, registry *promethe
 	exporter, err := otlpmetricgrpc.New(ctx,
 		otlpmetricgrpc.WithEndpoint(cfg.Endpoint),
 		otlpmetricgrpc.WithInsecure(),
-		otlpmetricgrpc.WithHeaders(otlpHeaders(cfg)),
+		otlpmetricgrpc.WithHeaders(otlpHeaders(cfg, "")), // metrics 按指标名分流，不指定 stream
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create otlp metrics exporter: %w", err)

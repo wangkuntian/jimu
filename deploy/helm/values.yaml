@@ -160,6 +160,9 @@ otel:
   # Basic token = base64(email:password)；Otel Collector 等外部端使用
   authToken: "YWRtaW5AamltdS5sb2NhbDpBZG1pbkAxMjM0NQ=="
   orgID: "default"
+  # 日志 / 追踪 stream 名（OpenObserve 会把非法字符规范为 _；空则落默认流 default）
+  logsStreamName: "jimu_logs"
+  tracesStreamName: "jimu_traces"
 
 # 数据库配置（引用外部 Secret）
 db:

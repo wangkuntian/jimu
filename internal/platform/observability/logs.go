@@ -35,7 +35,7 @@ func NewLogExporter(ctx context.Context, cfg TracingConfig) (*LogExporter, error
 	exporter, err := otlploggrpc.New(ctx,
 		otlploggrpc.WithEndpoint(cfg.Endpoint),
 		otlploggrpc.WithInsecure(),
-		otlploggrpc.WithHeaders(otlpHeaders(cfg)),
+		otlploggrpc.WithHeaders(otlpHeaders(cfg, cfg.LogsStreamName)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create otlp logs exporter: %w", err)
@@ -48,7 +48,7 @@ func NewLogExporter(ctx context.Context, cfg TracingConfig) (*LogExporter, error
 			semconv.SchemaURL,
 			semconv.ServiceName(defaulted(cfg.ServiceName, "jimu")),
 			semconv.ServiceVersion(defaulted(cfg.ServiceVersion, "dev")),
-			semconv.ServiceInstanceID(host + ":" + strconv.Itoa(os.Getpid())),
+			semconv.ServiceInstanceID(host+":"+strconv.Itoa(os.Getpid())),
 			semconv.HostName(host),
 		)),
 		logsdk.WithProcessor(logsdk.NewBatchProcessor(exporter)),

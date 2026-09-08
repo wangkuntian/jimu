@@ -6,12 +6,15 @@ import (
 )
 
 func TestOtlpHeaders_DefaultOrgNoAuth(t *testing.T) {
-	headers := otlpHeaders(TracingConfig{})
+	headers := otlpHeaders(TracingConfig{}, "")
 	if headers["organization"] != "default" {
 		t.Fatalf("organization = %q, want default", headers["organization"])
 	}
 	if _, ok := headers["authorization"]; ok {
 		t.Fatal("authorization should be absent when AuthEmail empty")
+	}
+	if _, ok := headers["stream-name"]; ok {
+		t.Fatal("stream-name should be absent when stream name empty")
 	}
 }
 
@@ -20,7 +23,7 @@ func TestOtlpHeaders_BasicAuth(t *testing.T) {
 		AuthEmail:    "admin@jimu.local",
 		AuthPassword: "admin",
 		OrgID:        "prod",
-	})
+	}, "")
 	if headers["organization"] != "prod" {
 		t.Fatalf("organization = %q, want prod", headers["organization"])
 	}
@@ -31,11 +34,28 @@ func TestOtlpHeaders_BasicAuth(t *testing.T) {
 }
 
 func TestOtlpHeaders_ExplicitDefaultOrg(t *testing.T) {
-	headers := otlpHeaders(TracingConfig{OrgID: "", AuthEmail: "u", AuthPassword: "p"})
+	headers := otlpHeaders(TracingConfig{OrgID: "", AuthEmail: "u", AuthPassword: "p"}, "")
 	if headers["organization"] != "default" {
 		t.Fatalf("empty OrgID should fall back to default, got %q", headers["organization"])
 	}
 	if headers["authorization"] == "" {
 		t.Fatal("authorization should be set when AuthEmail provided")
+	}
+}
+
+func TestOtlpHeaders_StreamName(t *testing.T) {
+	headers := otlpHeaders(TracingConfig{}, "jimu_logs")
+	if headers["stream-name"] != "jimu_logs" {
+		t.Fatalf("stream-name = %q, want jimu_logs", headers["stream-name"])
+	}
+}
+
+func TestDefaultTracingConfigStreamNames(t *testing.T) {
+	cfg := DefaultTracingConfig()
+	if cfg.LogsStreamName != "jimu_logs" {
+		t.Fatalf("LogsStreamName = %q, want jimu_logs", cfg.LogsStreamName)
+	}
+	if cfg.TracesStreamName != "jimu_traces" {
+		t.Fatalf("TracesStreamName = %q, want jimu_traces", cfg.TracesStreamName)
 	}
 }

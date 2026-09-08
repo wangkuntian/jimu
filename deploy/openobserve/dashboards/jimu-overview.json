@@ -30,11 +30,11 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT count(_timestamp) as \"y_axis_1\" FROM \"default\" WHERE severity = 'error'",
+              "query": "SELECT count(_timestamp) as \"y_axis_1\" FROM \"jimu_logs\" WHERE severity = 'error'",
               "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
-                "stream": "default",
+                "stream": "jimu_logs",
                 "stream_type": "logs",
                 "x": [],
                 "y": [
@@ -84,11 +84,11 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT count(_timestamp) as \"y_axis_1\" FROM \"default\"",
+              "query": "SELECT count(_timestamp) as \"y_axis_1\" FROM \"jimu_logs\"",
               "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
-                "stream": "default",
+                "stream": "jimu_logs",
                 "stream_type": "logs",
                 "x": [],
                 "y": [
@@ -426,11 +426,11 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) as \"x_axis_1\", count(_timestamp) as \"y_axis_1\" FROM \"default\" WHERE severity = 'error' GROUP BY x_axis_1",
+              "query": "SELECT histogram(_timestamp) as \"x_axis_1\", count(_timestamp) as \"y_axis_1\" FROM \"jimu_logs\" WHERE severity = 'error' GROUP BY x_axis_1",
               "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
-                "stream": "default",
+                "stream": "jimu_logs",
                 "stream_type": "logs",
                 "x": [
                   {
@@ -489,11 +489,11 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) as \"x_axis_1\", count(_timestamp) as \"y_axis_1\" FROM \"default\" GROUP BY x_axis_1",
+              "query": "SELECT histogram(_timestamp) as \"x_axis_1\", count(_timestamp) as \"y_axis_1\" FROM \"jimu_logs\" GROUP BY x_axis_1",
               "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
-                "stream": "default",
+                "stream": "jimu_logs",
                 "stream_type": "logs",
                 "x": [
                   {
@@ -822,11 +822,11 @@
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT _timestamp, severity, body, caller FROM \"default\" WHERE severity = 'error' ORDER BY _timestamp DESC LIMIT 20",
+              "query": "SELECT _timestamp, severity, body, caller FROM \"jimu_logs\" WHERE severity = 'error' ORDER BY _timestamp DESC LIMIT 20",
               "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
-                "stream": "default",
+                "stream": "jimu_logs",
                 "stream_type": "logs",
                 "x": [
                   {

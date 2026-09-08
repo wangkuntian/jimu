@@ -194,7 +194,7 @@ docker compose --profile observability up -d otel-collector   # 单独启动采�
 make compose-up   # OTEL_ENABLED 默认开启，server 自动指向 openobserve:5081 推送
 ```
 
-应用侧：`/metrics` 端点保留 Prometheus 格式供外部工具抓取；指标另按 `metrics_interval_sec` 周期转 OTLP 推送；结构化日志异步推送（缓冲满丢弃，不影响主链路）。告警在 OpenObserve UI 内配置（VQL 告警规则 + 通知渠道）。
+应用侧：`/metrics` 端点保留 Prometheus 格式供外部工具抓取；指标另按 `metrics_interval_sec` 周期转 OTLP 推送（按指标名分流成独立 stream）；结构化日志异步推送（缓冲满丢弃，不影响主链路）；日志与追踪分别写入 `jimu_logs` / `jimu_traces` stream（可用 `otel.logs_stream_name` / `otel.traces_stream_name` 调整，空值回落 OpenObserve 默认流 `default`）。告警在 OpenObserve UI 内配置（VQL 告警规则 + 通知渠道）。
 
 **日志输出规范**（保证 OpenObserve 中可检索、可聚合、可与 trace 关联）：
 
@@ -610,7 +610,8 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `otel.logs_enabled` | 日志推送：zap 结构化日志异步转 OTLP logs | `true` |
 | `otel.metrics_interval_sec` | 指标推送间隔（秒），0 用默认 | `15` |
 | `otel.auth_email` / `otel.auth_password` | OpenObserve 账号凭据（OTLP/gRPC Basic Auth；生产可用 `OTEL_AUTH_EMAIL` / `OTEL_AUTH_PASSWORD`（或 `OTEL_AUTH_PASSWORD_FILE`）环境变量注入） | 与 OpenObserve 账号一致 |
-| `otel.org_id` | OpenObserve 组织（gRPC `organization` header；`OTEL_ORG_ID` 可覆盖） | `Default` |
+| `otel.org_id` | OpenObserve 组织（gRPC `organization` header；`OTEL_ORG_ID` 可覆盖） | `default` |
+| `otel.logs_stream_name` / `otel.traces_stream_name` | OpenObserve 日志 / 追踪 stream 名（gRPC `stream-name` header；`OTEL_LOGS_STREAM_NAME` / `OTEL_TRACES_STREAM_NAME` 可覆盖；空则落 OpenObserve 默认流 `default`，非法字符会被 OpenObserve 规范为 `_`） | `jimu_logs` / `jimu_traces` |
 | `http_client.timeout_sec` | 出站 HTTP 单次请求超时（秒），0 用默认 | `10` |
 | `http_client.max_retries` | 出站 HTTP 失败重试次数（仅网络错误与 5xx），0 用默认 | `2` |
 | `http_client.retry_interval_ms` | 出站 HTTP 重试基础间隔（毫秒，指数退避），0 用默认 | `200` |

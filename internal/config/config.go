@@ -556,6 +556,12 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("OTEL_ORG_ID"); v != "" {
 		cfg.OTEL.OrgID = v
 	}
+	if v := os.Getenv("OTEL_LOGS_STREAM_NAME"); v != "" {
+		cfg.OTEL.LogsStreamName = v
+	}
+	if v := os.Getenv("OTEL_TRACES_STREAM_NAME"); v != "" {
+		cfg.OTEL.TracesStreamName = v
+	}
 }
 
 // getEnvOrFile 优先从 _FILE 指向的文件读取，其次直接读取环境变量
