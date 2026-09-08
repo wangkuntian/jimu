@@ -13,6 +13,7 @@ import (
 	"jimu/internal/platform/http/middleware"
 	"jimu/internal/platform/logger"
 	"jimu/internal/platform/observability"
+	"jimu/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
@@ -122,6 +123,25 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 	// CSRF 防护：配置了密钥才启用。Bearer 认证请求自动跳过，不影响 JWT API。
 	if securityCfg.CSRFSecret != "" {
 		r.Use(middleware.CSRF(middleware.DefaultCSRFConfig([]byte(securityCfg.CSRFSecret))))
+	}
+
+	// 根路径服务信息（替代裸 404）：仅开发模式（debug）注册，生产保持 404
+	if cfg.Mode == config.HTTPModeDebug {
+		serviceVersion := otelCfg.ServiceVersion
+		if serviceVersion == "" {
+			serviceVersion = "dev"
+		}
+		r.GET("/", func(c *gin.Context) {
+			response.OK(c, gin.H{
+				"service":          "jimu",
+				"version":          serviceVersion,
+				"api_docs":         "/swagger/index.html",
+				"api_base":         "/api/v1",
+				"health":           "management 端口 /livez、/readyz（默认 9090）",
+				"metrics":          "management 端口 /metrics（默认 9090）",
+				"observability_ui": "OpenObserve http://localhost:5080（OTEL_ENABLED 开启时）",
+			})
+		})
 	}
 
 	return r

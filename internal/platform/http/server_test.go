@@ -116,6 +116,34 @@ func testLogger() *logger.Logger {
 	return logger.New(config.LogConfig{Level: "error", Format: "console", Output: "stdout"})
 }
 
+func TestSetupRouterRootPathDebugOnly(t *testing.T) {
+	// debug 模式：根路径返回服务信息
+	r := SetupRouter(testLogger(),
+		config.HTTPConfig{Mode: config.HTTPModeDebug},
+		config.ServerConfig{},
+		config.SecurityConfig{},
+		observability.TracingConfig{ServiceVersion: "2.3.4"},
+	)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(stdhttp.MethodGet, "/", nil))
+	assert.Equal(t, stdhttp.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, "jimu")
+	assert.Contains(t, body, "2.3.4")
+	assert.Contains(t, body, "/swagger/index.html")
+
+	// release 模式：根路径保持 404（不暴露服务信息）
+	r = SetupRouter(testLogger(),
+		config.HTTPConfig{Mode: config.HTTPModeRelease},
+		config.ServerConfig{},
+		config.SecurityConfig{},
+		observability.TracingConfig{ServiceVersion: "9.9.9"},
+	)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(stdhttp.MethodGet, "/", nil))
+	assert.Equal(t, stdhttp.StatusNotFound, w.Code)
+}
+
 func TestSetupRouterWiresGlobalMiddleware(t *testing.T) {
 	r := SetupRouter(testLogger(),
 		config.HTTPConfig{Mode: config.HTTPModeTest, AllowedOrigins: []string{"*"}},
