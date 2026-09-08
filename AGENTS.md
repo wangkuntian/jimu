@@ -298,6 +298,8 @@ type(scope): summary
 - `db`
 - `http`
 
+Commit message 全部使用英文：summary 与正文（body）都不得使用中文。
+
 `summary` 规则：
 
 - 使用英文。
@@ -315,7 +317,7 @@ feat(auth): add JWT token refresh
 fix(config): validate enum values on load
 ```
 
-多行 commit 可以在正文说明 why 和风险，不重复 summary。一个 commit 只包含一个清晰主题，不混入无关改动。
+多行 commit 可以在正文说明 why 和风险（正文同样使用英文），不重复 summary。一个 commit 只包含一个清晰主题，不混入无关改动。
 
 ## Release Note 规范
 
