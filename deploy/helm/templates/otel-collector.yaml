@@ -28,7 +28,7 @@ data:
         tls:
           insecure: true
         headers:
-          authorization: "Basic {{ .Values.otel.authToken }}"
+          authorization: "Basic ${file:/run/secrets/zo_auth_token}"
           organization: {{ .Values.otel.orgID | quote }}
     service:
       pipelines:
@@ -65,6 +65,8 @@ spec:
             items:
               - key: {{ .Values.db.passwordKey }}
                 path: db_password
+              - key: zo_auth_token
+                path: zo_auth_token
       containers:
         - name: otel-collector
           image: "{{ .Values.otelCollector.image.repository }}:{{ .Values.otelCollector.image.tag }}"

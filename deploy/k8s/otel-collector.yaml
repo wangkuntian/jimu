@@ -26,7 +26,7 @@ data:
         tls:
           insecure: true
         headers:
-          authorization: "Basic ${env:ZO_AUTH_TOKEN}"
+          authorization: "Basic ${file:/run/secrets/zo_auth_token}"
           organization: ${env:ZO_ORG}
     service:
       pipelines:
@@ -62,6 +62,8 @@ spec:
             items:
               - key: DB_PASSWORD
                 path: db_password
+              - key: ZO_AUTH_TOKEN
+                path: zo_auth_token
       containers:
         - name: otel-collector
           image: otel/opentelemetry-collector-contrib:0.115.1
@@ -78,8 +80,6 @@ spec:
               value: "openobserve:5081"
             - name: ZO_ORG
               value: "default"
-            - name: ZO_AUTH_TOKEN
-              value: "YWRtaW5AamltdS5sb2NhbDpBZG1pbkAxMjM0NQ=="
           volumeMounts:
             - name: config
               mountPath: /etc/otelcol/config.yaml

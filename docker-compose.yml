@@ -11,7 +11,8 @@ services:
     volumes:
       - jimu-mariadb-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mariadb-admin", "ping", "--silent"]
+      # 带 root 密码 ping（读 secret 文件），避免无密码探测产生 Access denied 警告
+      test: ["CMD-SHELL", "mariadb-admin ping -uroot -p\"$$(cat /run/secrets/db_root_password)\" --silent"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -56,13 +57,13 @@ services:
       REDIS_DB: ${COMPOSE_REDIS_DB:-0}
       # 容器内 expose management 端点（/metrics 等，供外部抓取或调试）
       MANAGEMENT_HOST: "0.0.0.0"
-      # OpenObserve 接入：起 observability profile 后置 OTEL_ENABLED=true 即可
-      # （tracing/metrics/logs 统一 OTLP gRPC 推送到 openobserve:5081，
-      #   认证凭据默认与 openobserve 服务 ZO_ROOT_USER_EMAIL/PASSWORD 一致）
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      # OpenObserve 接入：OTEL_ENABLED 默认开启（.env/环境变量设 false 可关闭）
+      # （认证凭据默认与 openobserve 服务 ZO_ROOT_USER_EMAIL/PASSWORD 一致）
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
       OTEL_ENDPOINT: ${OTEL_ENDPOINT:-openobserve:5081}
       OTEL_AUTH_EMAIL: ${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local}
-      OTEL_AUTH_PASSWORD: ${ZO_OBSERVE_ROOT_USER_PASSWORD:-Admin@12345}
+      # OTEL_AUTH_PASSWORD 由 secret 文件注入（make secrets 生成）
+      OTEL_AUTH_PASSWORD_FILE: /run/secrets/otel_auth_password
       OTEL_ORG_ID: ${OTEL_ORG_ID:-default}
       # 敏感配置通过文件注入（非环境变量）
       DB_PASSWORD_FILE: /run/secrets/db_password
@@ -81,6 +82,7 @@ services:
     secrets:
       - db_password
       - jwt_secret
+      - otel_auth_password
 
   # 可选的 observability profile：OpenObserve 统一承载 日志/指标/追踪/告警/仪表盘
   openobserve:
@@ -113,15 +115,14 @@ services:
       # MySQL root 密码由 config 以 ${file:/run/secrets/db_root_password} 读取（无需 shell）
       ZO_EMAIL: ${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local}
       ZO_PASSWORD: ${ZO_OBSERVE_ROOT_USER_PASSWORD:-Admin@12345}
-      # Basic token = base64(email:password)；改默认凭据时同步覆盖此变量
-      ZO_AUTH_TOKEN: ${ZO_OBSERVE_AUTH_TOKEN:-YWRtaW5AamltdS5sb2NhbDpBZG1pbkAxMjM0NQ==}
-      ZO_ORG: default
+      ZO_ORG: ${OTEL_ORG_ID:-default}
       ZO_OTLP_ENDPOINT: openobserve:5081
       MYSQL_ENDPOINT: mariadb:3306
       MYSQL_USER: root
       REDIS_ENDPOINT: redis:6379
     secrets:
       - db_root_password
+      - zo_auth_token
     depends_on:
       openobserve:
         condition: service_started
@@ -145,3 +146,8 @@ secrets:
     file: ${COMPOSE_DB_PASSWORD_FILE:-./secrets/db_password.txt}
   jwt_secret:
     file: ${COMPOSE_JWT_SECRET_FILE:-./secrets/jwt_secret.txt}
+  # OpenObserve 认证（由 make secrets 从 .env 生成；openobserve 自身因无 _FILE 支持仍用环境变量）
+  otel_auth_password:
+    file: ./secrets/otel_auth_password.txt
+  zo_auth_token:
+    file: ./secrets/zo_auth_token.txt

@@ -2,8 +2,7 @@
 .PHONY: test-cover test-coverage-check test-race swagger-check smoke-check compose-check
 .PHONY: docker-build docker-run docker-stop docker-logs
 .PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
-.PHONY: compose-observability compose-observability-down
-.PHONY: bench loadtest proto
+.PHONY: bench loadtest proto secrets
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -24,7 +23,12 @@ SWAG := go run -mod=mod github.com/swaggo/swag/cmd/swag
 ENV ?= dev
 
 # 根据 APP_ENV 自动生成 --profile 参数：dev 环境启动 adminer
-COMPOSE_PROFILE_FLAG = $(if $(filter dev,$(APP_ENV)),--profile dev)
+COMPOSE_DEV_PROFILE = $(if $(filter dev,$(APP_ENV)),dev)
+# observability（OpenObserve 监控栈）默认开启（与 docker-compose 的 ${OTEL_ENABLED:-true} 一致）；
+# 显式 OTEL_ENABLED=false 关闭（不启动监控栈、server 不推送）
+COMPOSE_OBS_PROFILE = $(if $(filter false,$(OTEL_ENABLED)),,observability)
+# 组合 flag（如 --profile dev --profile observability）
+COMPOSE_PROFILE_FLAG = $(if $(strip $(COMPOSE_DEV_PROFILE) $(COMPOSE_OBS_PROFILE)),$(addprefix --profile ,$(COMPOSE_DEV_PROFILE) $(COMPOSE_OBS_PROFILE)))
 
 # 加载 .env 文件（如果存在），导出敏感变量供 docker 命令使用
 # 本地 make run/migrate/seed 直接读取 configs/ 中的 YAML，无需环境变量
@@ -46,6 +50,7 @@ help:
 	@echo "  make vet                  静态分析"
 	@echo "  make fmt                  格式化代码"
 	@echo "  make lint                 静态检查"
+	@echo "  make check-log-usage      检查日志调用均为 *w 系列（防 k/v 粘连）"
 	@echo ""
 	@echo "数据库:"
 	@echo "  make migrate              本地执行迁移"
@@ -69,8 +74,7 @@ help:
 	@echo "  make compose-logs         查看应用日志"
 	@echo "  make compose-migrate      Compose 环境执行迁移"
 	@echo "  make compose-seed         Compose 环境插入初始数据"
-	@echo "  make compose-observability      启动监控栈（OpenObserve：日志/指标/追踪/告警，自动创建默认 dashboard）"
-	@echo "  make compose-observability-down 停止监控栈"
+	@echo "  可选服务（环境变量开启）：OTEL_ENABLED=true 启动监控栈 + server 遥测推送（OpenObserve+采集+dashboard）"
 	@echo ""
 	@echo "工具:"
 	@echo "  make clean                清理构建产物"
@@ -155,13 +159,18 @@ docker-logs:
 	docker logs -f $(DOCKER_CONTAINER)
 
 # ========== Docker Compose ==========
-# 通过 .env 中 COMPOSE_PROFILES 控制启动的 profile（如 dev 启动 adminer）
+# 统一入口：make compose-up / compose-down。
+# 可选服务通过环境变量开启：
+#   dev           : APP_ENV=dev（adminer）
+#   observability : OTEL_ENABLED=true（统一开关：启动监控栈 + server 遥测推送）
+#                   （opens OpenObserve + MySQL/Redis 采集 + 默认 dashboard）
 
-## compose-up: 启动所有服务（依赖 + 应用）
+## compose-up: 启动服务（compose-up 开启 observability 时自动初始化 dashboard）
 compose-up:
 	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) up -d
+	@if [ "$(COMPOSE_OBS_PROFILE)" = "observability" ]; then bash scripts/observability.sh start; fi
 
-## compose-down: 停止所有服务
+## compose-down: 停止并删除所有 compose 服务容器（保留数据卷）
 compose-down:
 	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) down
 
@@ -177,26 +186,16 @@ compose-logs:
 compose-migrate:
 	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) run --rm server ./jimu migrate up
 
-## compose-seed: Compose 环境插入初始数据
+## compose-seed: Compose 环境插入初始数据（需 .env 提供 ADMIN_PASSWORD）
 compose-seed:
-	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) run --rm server ./jimu seed
+	@test -n "$(ADMIN_PASSWORD)" || { echo "❌ 缺少 ADMIN_PASSWORD：请在 .env 中设置管理员初始密码"; exit 1; }
+	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) run --rm -e ADMIN_PASSWORD="$(ADMIN_PASSWORD)" server ./jimu seed
 
-## compose-observability: 启动监控栈（OpenObserve + MySQL/Redis 采集，自动初始化默认 dashboard）
-compose-observability:
-	$(DOCKER_COMPOSE) --profile observability up -d openobserve otel-collector
-	ZO_HTTP=http://127.0.0.1:5080 \
-	ZO_EMAIL=$${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local} \
-	ZO_PASSWORD=$${ZO_OBSERVE_ROOT_USER_PASSWORD:-Admin@12345} \
-	./deploy/openobserve/init-dashboard.sh
-	@echo "OpenObserve started:"
-	@echo "  UI/API:      http://localhost:5080 (admin@jimu.local / Admin@12345)"
-	@echo "  默认面板:    Jimu Overview（错误日志/日志总量/DB 连接池）"
-	@echo "  OTLP:        localhost:5081"
-	@echo "启用应用推送：OTEL_ENABLED=true make compose-up（或对 server 容器设 OTEL_ENABLED=true）"
-
-## compose-observability-down: 停止监控栈
-compose-observability-down:
-	$(DOCKER_COMPOSE) --profile observability down
+## secrets: 从 .env 生成 Docker Secrets 文件（./secrets/*.txt；compose 各服务经 _FILE 挂载）
+##         依赖变量：DB_ROOT_PASSWORD / DB_PASSWORD / JWT_SECRET / ZO_OBSERVE_ROOT_USER_*
+##         已存在的文件默认不覆盖（MAKE_SECRETS_FORCE=1 强制重新生成）
+secrets:
+	@bash scripts/gen-secrets.sh
 
 # ========== 工具 ==========
 
@@ -237,6 +236,11 @@ lint:
 		echo "golangci-lint 未安装，使用 go vet 替代"; \
 		go vet ./...; \
 	fi
+
+## check-log-usage: 检查日志调用符合结构化规范（logcheck 静态分析：防粘连 R1 /
+## 禁动态 key R2 / 字段词汇表 R3 / 禁嵌套对象 R4；规则与 AGENTS.md 日志调用规范同步）
+check-log-usage:
+	@go run ./tools/logcheck "./internal/..." "./cmd/..." "./tools/..."
 
 ## clean: 清理构建产物
 clean:
@@ -319,11 +323,11 @@ compose-check:
 	@./scripts/smoke_api_contract.sh
 
 ## ci: 本地 CI 检查（无外部依赖部分，完整 CI 见 .github/workflows/ci.yml）
-ci: fmt-check vet lint test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck
+ci: fmt-check vet lint check-log-usage test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck
 	@echo "✅ All local CI checks passed"
 
 ## release-check: 发布前检查（Go 门禁 + govulncheck + 隔离 Compose/API smoke）
-release-check: fmt-check vet test govulncheck compose-check
+release-check: fmt-check vet check-log-usage test govulncheck compose-check
 	@echo "All checks passed"
 
 ## hooks: 安装 pre-commit 钩子（需 pip install pre-commit）
