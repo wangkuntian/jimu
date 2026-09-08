@@ -9,10 +9,20 @@ repos:
     rev: v0.5.1
     hooks:
       - id: go-fmt
-      - id: go-vet
-      - id: go-lint  # golint (已弃用但轻量); 主要靠下面的 golangci-lint
 
-  # golangci-lint（完整静态检查）
+  # go vet 全仓检查
+  # dnephin 的 go-vet 脚本假设仓库根目录本身是 Go 包（内部 go list 后按目录拼接包名），
+  # 本仓库根目录无 .go 文件会误报 "no Go files"，故替换为本地 hook
+  - repo: local
+    hooks:
+      - id: go-vet
+        name: go vet ./...
+        entry: go vet ./...
+        language: system
+        files: '\.go$'
+        pass_filenames: false
+
+  # golangci-lint（完整静态检查，已覆盖原 go-lint/golint——golint 已弃用且不再维护）
   - repo: https://github.com/golangci/golangci-lint
     rev: v2.7.2
     hooks:
@@ -28,6 +38,8 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        args: [--allow-multiple-documents]  # k8s 清单为 --- 分隔的多文档，属标准写法
+        exclude: '^deploy/helm/templates/'  # Go template 语法，非纯 YAML，无法解析
       - id: check-added-large-files
         args: ['--maxkb=512']
       - id: check-merge-conflict

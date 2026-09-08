@@ -49,7 +49,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **K8s 部署** — Deployment/Service/HPA/Ingress manifests
 - **CI/CD** — GitHub Actions + Dependabot 自动化 + 测试覆盖率门禁
 - **安全扫描** — govulncheck 依赖漏洞扫描（纳入 `make release-check` 与 CI）、Trivy 镜像扫描、SBOM 生成与镜像 smoke test
-- **静态检查** — golangci-lint + pre-commit 钩子（fmt / vet / lint）
+- **静态检查** — golangci-lint + pre-commit 钩子（fmt / vet / golangci-lint）
 - **追踪关联** — 访问日志自动注入 trace_id / span_id，关联 OpenTelemetry 追踪
 - **Redis 高可用** — `redis.mode` 支持 `single` / `sentinel` / `cluster` 三种部署模式（默认 single 行为不变）：哨兵模式通过 `master_name` + `sentinel_addrs` 自动故障转移，集群模式通过 `cluster_addrs` 连接分片；统一 `redis.Client` 接口，框架内 session/缓存/队列/限流/分布式锁全复用
 - **TOTP 二次验证** — RFC 6238 自研实现（`internal/shared/totp`，无外部依赖），用户可自助绑定/启用/关闭：`POST /auth/mfa/setup` 生成密钥与 otpauth URI（二维码绑定）、`/auth/mfa/enable` 首次验证码确认、`/auth/mfa/disable` 校验后关闭；启用后登录必须携带 `totp_code`（缺失 `2006`，错误 `2007`），密钥 AES-GCM 字段级加密落库
