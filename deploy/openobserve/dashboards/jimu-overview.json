@@ -1,49 +1,54 @@
 {
   "version": 8,
   "title": "Jimu Overview",
-  "description": "jimu 默认概览（日志/指标/追踪/数据库，自动生成；面板查询可在 UI 中调整）",
+  "description": "jimu 默认概览（日志/指标/数据库；192 列网格全宽布局）",
+  "folder_id": "default",
+  "variables": {
+    "list": [],
+    "showDynamicFilters": true
+  },
+  "defaultDatetimeDuration": {
+    "type": "relative",
+    "relativeTimePeriod": "1h"
+  },
   "tabs": [
     {
       "tabId": "default",
       "name": "Default",
       "panels": [
         {
-          "id": "jimu-stat-error",
-          "type": "stat",
+          "id": "jimu-metric-error",
+          "type": "metric",
           "title": "错误日志总数",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT count(*) AS count FROM \"default\" WHERE severity = 'error'",
-              "vrlFunctionQuery": null,
+              "query": "SELECT count(_timestamp) as \"y_axis_1\" FROM \"default\" WHERE severity = 'error'",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "default",
                 "stream_type": "logs",
-                "x": [
-                  {
-                    "label": "count",
-                    "alias": "count",
-                    "column": "count",
-                    "color": null
-                  }
-                ],
+                "x": [],
                 "y": [
                   {
-                    "label": "count",
-                    "alias": "count",
-                    "column": "count",
-                    "color": null
+                    "label": "错误日志数",
+                    "alias": "y_axis_1",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "count"
                   }
                 ],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -51,55 +56,53 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "",
+                "limit": 0
               }
             }
           ],
           "layout": {
             "x": 0,
             "y": 0,
-            "w": 6,
-            "h": 8,
-            "i": 1
+            "w": 96,
+            "h": 18,
+            "i": 1,
+            "moved": false
           }
         },
         {
-          "id": "jimu-stat-logs",
-          "type": "stat",
+          "id": "jimu-metric-logs",
+          "type": "metric",
           "title": "日志总量",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT count(*) AS count FROM \"default\"",
-              "vrlFunctionQuery": null,
+              "query": "SELECT count(_timestamp) as \"y_axis_1\" FROM \"default\"",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "default",
                 "stream_type": "logs",
-                "x": [
-                  {
-                    "label": "count",
-                    "alias": "count",
-                    "column": "count",
-                    "color": null
-                  }
-                ],
+                "x": [],
                 "y": [
                   {
-                    "label": "count",
-                    "alias": "count",
-                    "column": "count",
-                    "color": null
+                    "label": "日志数",
+                    "alias": "y_axis_1",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "count"
                   }
                 ],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -107,55 +110,53 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "",
+                "limit": 0
               }
             }
           ],
           "layout": {
-            "x": 6,
+            "x": 96,
             "y": 0,
-            "w": 6,
-            "h": 8,
-            "i": 2
+            "w": 96,
+            "h": 18,
+            "i": 2,
+            "moved": false
           }
         },
         {
-          "id": "jimu-stat-db",
-          "type": "stat",
+          "id": "jimu-metric-db",
+          "type": "metric",
           "title": "DB 使用连接",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT max(value) AS value FROM \"jimu_db_in_use_connections\"",
-              "vrlFunctionQuery": null,
+              "query": "SELECT max(value) as \"y_axis_1\" FROM \"jimu_db_in_use_connections\"",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "jimu_db_in_use_connections",
                 "stream_type": "metrics",
-                "x": [
-                  {
-                    "label": "value",
-                    "alias": "value",
-                    "column": "value",
-                    "color": null
-                  }
-                ],
+                "x": [],
                 "y": [
                   {
-                    "label": "value",
-                    "alias": "value",
+                    "label": "连接数",
+                    "alias": "y_axis_1",
                     "column": "value",
-                    "color": null
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "max"
                   }
                 ],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -163,55 +164,53 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "",
+                "limit": 0
               }
             }
           ],
           "layout": {
-            "x": 12,
-            "y": 0,
-            "w": 6,
-            "h": 8,
-            "i": 3
+            "x": 0,
+            "y": 18,
+            "w": 96,
+            "h": 18,
+            "i": 3,
+            "moved": false
           }
         },
         {
-          "id": "jimu-stat-goroutines",
-          "type": "stat",
+          "id": "jimu-metric-goroutines",
+          "type": "metric",
           "title": "Goroutines",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT max(value) AS value FROM \"jimu_runtime_goroutines\"",
-              "vrlFunctionQuery": null,
+              "query": "SELECT max(value) as \"y_axis_1\" FROM \"jimu_runtime_goroutines\"",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "jimu_runtime_goroutines",
                 "stream_type": "metrics",
-                "x": [
-                  {
-                    "label": "value",
-                    "alias": "value",
-                    "column": "value",
-                    "color": null
-                  }
-                ],
+                "x": [],
                 "y": [
                   {
-                    "label": "value",
-                    "alias": "value",
+                    "label": "协程数",
+                    "alias": "y_axis_1",
                     "column": "value",
-                    "color": null
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "max"
                   }
                 ],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -219,55 +218,44 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "",
+                "limit": 0
               }
             }
           ],
           "layout": {
-            "x": 18,
-            "y": 0,
-            "w": 6,
-            "h": 8,
-            "i": 4
+            "x": 96,
+            "y": 18,
+            "w": 96,
+            "h": 18,
+            "i": 4,
+            "moved": false
           }
         },
         {
-          "id": "jimu-ts-db",
-          "type": "time-series",
+          "id": "jimu-line-db",
+          "type": "line",
           "title": "DB 连接池使用",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
-          "queryType": "sql",
+          "queryType": "promql",
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) AS _time, max(value) AS value FROM \"jimu_db_in_use_connections\" GROUP BY _time ORDER BY _time",
-              "vrlFunctionQuery": null,
+              "query": "max(jimu_db_in_use_connections)",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "jimu_db_in_use_connections",
                 "stream_type": "metrics",
-                "x": [
-                  {
-                    "label": "_time",
-                    "alias": "_time",
-                    "column": "_time",
-                    "color": null
-                  }
-                ],
-                "y": [
-                  {
-                    "label": "value",
-                    "alias": "value",
-                    "column": "value",
-                    "color": null
-                  }
-                ],
+                "x": [],
+                "y": [],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -275,55 +263,44 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "连接数",
+                "limit": 0
               }
             }
           ],
           "layout": {
             "x": 0,
-            "y": 8,
-            "w": 12,
-            "h": 9,
-            "i": 5
+            "y": 36,
+            "w": 96,
+            "h": 18,
+            "i": 5,
+            "moved": false
           }
         },
         {
-          "id": "jimu-ts-goroutines",
-          "type": "time-series",
+          "id": "jimu-line-goroutines",
+          "type": "line",
           "title": "Goroutines 趋势",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
-          "queryType": "sql",
+          "queryType": "promql",
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) AS _time, max(value) AS value FROM \"jimu_runtime_goroutines\" GROUP BY _time ORDER BY _time",
-              "vrlFunctionQuery": null,
+              "query": "max(jimu_runtime_goroutines)",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "jimu_runtime_goroutines",
                 "stream_type": "metrics",
-                "x": [
-                  {
-                    "label": "_time",
-                    "alias": "_time",
-                    "column": "_time",
-                    "color": null
-                  }
-                ],
-                "y": [
-                  {
-                    "label": "value",
-                    "alias": "value",
-                    "column": "value",
-                    "color": null
-                  }
-                ],
+                "x": [],
+                "y": [],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -331,55 +308,44 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "协程数",
+                "limit": 0
               }
             }
           ],
           "layout": {
-            "x": 12,
-            "y": 8,
-            "w": 12,
-            "h": 9,
-            "i": 6
+            "x": 96,
+            "y": 36,
+            "w": 96,
+            "h": 18,
+            "i": 6,
+            "moved": false
           }
         },
         {
-          "id": "jimu-ts-memory",
-          "type": "time-series",
+          "id": "jimu-line-memory",
+          "type": "line",
           "title": "内存分配",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "bytes",
+            "decimals": null
           },
-          "queryType": "sql",
+          "queryType": "promql",
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) AS _time, max(value) AS value FROM \"jimu_runtime_memory_alloc_bytes\" GROUP BY _time ORDER BY _time",
-              "vrlFunctionQuery": null,
+              "query": "max(jimu_runtime_memory_alloc_bytes)",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "jimu_runtime_memory_alloc_bytes",
                 "stream_type": "metrics",
-                "x": [
-                  {
-                    "label": "_time",
-                    "alias": "_time",
-                    "column": "_time",
-                    "color": null
-                  }
-                ],
-                "y": [
-                  {
-                    "label": "value",
-                    "alias": "value",
-                    "column": "value",
-                    "color": null
-                  }
-                ],
+                "x": [],
+                "y": [],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -387,55 +353,44 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "内存分配",
+                "limit": 0
               }
             }
           ],
           "layout": {
             "x": 0,
-            "y": 17,
-            "w": 12,
-            "h": 9,
-            "i": 7
+            "y": 54,
+            "w": 96,
+            "h": 18,
+            "i": 7,
+            "moved": false
           }
         },
         {
-          "id": "jimu-ts-scheduler",
-          "type": "time-series",
+          "id": "jimu-line-scheduler",
+          "type": "line",
           "title": "调度任务执行数",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
-          "queryType": "sql",
+          "queryType": "promql",
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) AS _time, sum(value) AS value FROM \"jimu_scheduler_jobs_total\" GROUP BY _time ORDER BY _time",
-              "vrlFunctionQuery": null,
+              "query": "max(jimu_scheduler_jobs_total)",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "jimu_scheduler_jobs_total",
                 "stream_type": "metrics",
-                "x": [
-                  {
-                    "label": "_time",
-                    "alias": "_time",
-                    "column": "_time",
-                    "color": null
-                  }
-                ],
-                "y": [
-                  {
-                    "label": "value",
-                    "alias": "value",
-                    "column": "value",
-                    "color": null
-                  }
-                ],
+                "x": [],
+                "y": [],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -443,55 +398,62 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "任务执行数",
+                "limit": 0
               }
             }
           ],
           "layout": {
-            "x": 12,
-            "y": 17,
-            "w": 12,
-            "h": 9,
-            "i": 8
+            "x": 96,
+            "y": 54,
+            "w": 96,
+            "h": 18,
+            "i": 8,
+            "moved": false
           }
         },
         {
-          "id": "jimu-ts-error-logs",
-          "type": "time-series",
+          "id": "jimu-bar-error-logs",
+          "type": "bar",
           "title": "错误日志趋势",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) AS _time, count(*) AS count FROM \"default\" WHERE severity = 'error' GROUP BY _time ORDER BY _time",
-              "vrlFunctionQuery": null,
+              "query": "SELECT histogram(_timestamp) as \"x_axis_1\", count(_timestamp) as \"y_axis_1\" FROM \"default\" WHERE severity = 'error' GROUP BY x_axis_1",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "default",
                 "stream_type": "logs",
                 "x": [
                   {
-                    "label": "_time",
-                    "alias": "_time",
-                    "column": "_time",
-                    "color": null
+                    "label": "时间",
+                    "alias": "x_axis_1",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "histogram"
                   }
                 ],
                 "y": [
                   {
-                    "label": "count",
-                    "alias": "count",
-                    "column": "count",
-                    "color": null
+                    "label": "错误日志数",
+                    "alias": "y_axis_1",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "count"
                   }
                 ],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -499,55 +461,62 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "",
+                "limit": 0
               }
             }
           ],
           "layout": {
             "x": 0,
-            "y": 26,
-            "w": 12,
-            "h": 9,
-            "i": 9
+            "y": 72,
+            "w": 96,
+            "h": 18,
+            "i": 9,
+            "moved": false
           }
         },
         {
-          "id": "jimu-ts-logs",
-          "type": "time-series",
+          "id": "jimu-bar-logs",
+          "type": "bar",
           "title": "日志量趋势",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
           "queryType": "sql",
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) AS _time, count(*) AS count FROM \"default\" GROUP BY _time ORDER BY _time",
-              "vrlFunctionQuery": null,
+              "query": "SELECT histogram(_timestamp) as \"x_axis_1\", count(_timestamp) as \"y_axis_1\" FROM \"default\" GROUP BY x_axis_1",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "default",
                 "stream_type": "logs",
                 "x": [
                   {
-                    "label": "_time",
-                    "alias": "_time",
-                    "column": "_time",
-                    "color": null
+                    "label": "时间",
+                    "alias": "x_axis_1",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "histogram"
                   }
                 ],
                 "y": [
                   {
-                    "label": "count",
-                    "alias": "count",
-                    "column": "count",
-                    "color": null
+                    "label": "日志数",
+                    "alias": "y_axis_1",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "count"
                   }
                 ],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -555,55 +524,44 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "",
+                "limit": 0
               }
             }
           ],
           "layout": {
-            "x": 12,
-            "y": 26,
-            "w": 12,
-            "h": 9,
-            "i": 10
+            "x": 96,
+            "y": 72,
+            "w": 96,
+            "h": 18,
+            "i": 10,
+            "moved": false
           }
         },
         {
-          "id": "jimu-ts-inflight",
-          "type": "time-series",
+          "id": "jimu-line-inflight",
+          "type": "line",
           "title": "HTTP in-flight",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
-          "queryType": "sql",
+          "queryType": "promql",
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) AS _time, max(value) AS value FROM \"jimu_http_requests_inflight\" GROUP BY _time ORDER BY _time",
-              "vrlFunctionQuery": null,
+              "query": "max(jimu_http_requests_inflight)",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "jimu_http_requests_inflight",
                 "stream_type": "metrics",
-                "x": [
-                  {
-                    "label": "_time",
-                    "alias": "_time",
-                    "column": "_time",
-                    "color": null
-                  }
-                ],
-                "y": [
-                  {
-                    "label": "value",
-                    "alias": "value",
-                    "column": "value",
-                    "color": null
-                  }
-                ],
+                "x": [],
+                "y": [],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -611,55 +569,44 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "在途请求数",
+                "limit": 0
               }
             }
           ],
           "layout": {
             "x": 0,
-            "y": 35,
-            "w": 12,
-            "h": 9,
-            "i": 11
+            "y": 90,
+            "w": 96,
+            "h": 18,
+            "i": 11,
+            "moved": false
           }
         },
         {
-          "id": "jimu-ts-circuit",
-          "type": "time-series",
+          "id": "jimu-line-circuit",
+          "type": "line",
           "title": "出站熔断状态",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
-          "queryType": "sql",
+          "queryType": "promql",
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) AS _time, max(value) AS value FROM \"jimu_httpclient_circuit_open\" GROUP BY _time ORDER BY _time",
-              "vrlFunctionQuery": null,
+              "query": "max(jimu_httpclient_circuit_open)",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "jimu_httpclient_circuit_open",
                 "stream_type": "metrics",
-                "x": [
-                  {
-                    "label": "_time",
-                    "alias": "_time",
-                    "column": "_time",
-                    "color": null
-                  }
-                ],
-                "y": [
-                  {
-                    "label": "value",
-                    "alias": "value",
-                    "column": "value",
-                    "color": null
-                  }
-                ],
+                "x": [],
+                "y": [],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -667,55 +614,44 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "熔断数",
+                "limit": 0
               }
             }
           ],
           "layout": {
-            "x": 12,
-            "y": 35,
-            "w": 12,
-            "h": 9,
-            "i": 12
+            "x": 96,
+            "y": 90,
+            "w": 96,
+            "h": 18,
+            "i": 12,
+            "moved": false
           }
         },
         {
-          "id": "db-ts-mysql-threads",
-          "type": "time-series",
+          "id": "db-line-mysql-threads",
+          "type": "line",
           "title": "MySQL 线程数",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
-          "queryType": "sql",
+          "queryType": "promql",
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) AS _time, max(value) AS value FROM \"mysql_threads\" GROUP BY _time ORDER BY _time",
-              "vrlFunctionQuery": null,
+              "query": "max(mysql_threads)",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "mysql_threads",
                 "stream_type": "metrics",
-                "x": [
-                  {
-                    "label": "_time",
-                    "alias": "_time",
-                    "column": "_time",
-                    "color": null
-                  }
-                ],
-                "y": [
-                  {
-                    "label": "value",
-                    "alias": "value",
-                    "column": "value",
-                    "color": null
-                  }
-                ],
+                "x": [],
+                "y": [],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -723,55 +659,44 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "线程数",
+                "limit": 0
               }
             }
           ],
           "layout": {
             "x": 0,
-            "y": 44,
-            "w": 12,
-            "h": 9,
-            "i": 13
+            "y": 108,
+            "w": 96,
+            "h": 18,
+            "i": 13,
+            "moved": false
           }
         },
         {
-          "id": "db-ts-redis-clients",
-          "type": "time-series",
+          "id": "db-line-redis-clients",
+          "type": "line",
           "title": "Redis 客户端连接",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
-          "queryType": "sql",
+          "queryType": "promql",
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) AS _time, max(value) AS value FROM \"redis_clients_connected\" GROUP BY _time ORDER BY _time",
-              "vrlFunctionQuery": null,
+              "query": "max(redis_clients_connected)",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "redis_clients_connected",
                 "stream_type": "metrics",
-                "x": [
-                  {
-                    "label": "_time",
-                    "alias": "_time",
-                    "column": "_time",
-                    "color": null
-                  }
-                ],
-                "y": [
-                  {
-                    "label": "value",
-                    "alias": "value",
-                    "column": "value",
-                    "color": null
-                  }
-                ],
+                "x": [],
+                "y": [],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -779,55 +704,44 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "客户端连接数",
+                "limit": 0
               }
             }
           ],
           "layout": {
-            "x": 12,
-            "y": 44,
-            "w": 12,
-            "h": 9,
-            "i": 14
+            "x": 96,
+            "y": 108,
+            "w": 96,
+            "h": 18,
+            "i": 14,
+            "moved": false
           }
         },
         {
-          "id": "db-ts-redis-memory",
-          "type": "time-series",
+          "id": "db-line-redis-memory",
+          "type": "line",
           "title": "Redis 内存使用",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "bytes",
+            "decimals": null
           },
-          "queryType": "sql",
+          "queryType": "promql",
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) AS _time, max(value) AS value FROM \"redis_memory_used\" GROUP BY _time ORDER BY _time",
-              "vrlFunctionQuery": null,
+              "query": "max(redis_memory_used)",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "redis_memory_used",
                 "stream_type": "metrics",
-                "x": [
-                  {
-                    "label": "_time",
-                    "alias": "_time",
-                    "column": "_time",
-                    "color": null
-                  }
-                ],
-                "y": [
-                  {
-                    "label": "value",
-                    "alias": "value",
-                    "column": "value",
-                    "color": null
-                  }
-                ],
+                "x": [],
+                "y": [],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -835,55 +749,44 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "内存使用",
+                "limit": 0
               }
             }
           ],
           "layout": {
             "x": 0,
-            "y": 53,
-            "w": 12,
-            "h": 9,
-            "i": 15
+            "y": 126,
+            "w": 96,
+            "h": 18,
+            "i": 15,
+            "moved": false
           }
         },
         {
-          "id": "db-ts-redis-commands",
-          "type": "time-series",
+          "id": "db-line-redis-commands",
+          "type": "line",
           "title": "Redis 处理指令数",
           "description": "",
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
-          "queryType": "sql",
+          "queryType": "promql",
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp) AS _time, max(value) AS value FROM \"redis_commands_processed\" GROUP BY _time ORDER BY _time",
-              "vrlFunctionQuery": null,
+              "query": "max(redis_commands_processed)",
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "redis_commands_processed",
                 "stream_type": "metrics",
-                "x": [
-                  {
-                    "label": "_time",
-                    "alias": "_time",
-                    "column": "_time",
-                    "color": null
-                  }
-                ],
-                "y": [
-                  {
-                    "label": "value",
-                    "alias": "value",
-                    "column": "value",
-                    "color": null
-                  }
-                ],
+                "x": [],
+                "y": [],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -891,16 +794,18 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "指令数",
+                "limit": 0
               }
             }
           ],
           "layout": {
-            "x": 12,
-            "y": 53,
-            "w": 12,
-            "h": 9,
-            "i": 16
+            "x": 96,
+            "y": 126,
+            "w": 96,
+            "h": 18,
+            "i": 16,
+            "moved": false
           }
         },
         {
@@ -911,14 +816,14 @@
           "config": {
             "show_legends": true,
             "legends_position": null,
-            "base_map": null,
-            "map_view": null
+            "unit": "",
+            "decimals": null
           },
           "queryType": "sql",
           "queries": [
             {
               "query": "SELECT _timestamp, severity, body, caller FROM \"default\" WHERE severity = 'error' ORDER BY _timestamp DESC LIMIT 20",
-              "vrlFunctionQuery": null,
+              "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
                 "stream": "default",
@@ -928,29 +833,34 @@
                     "label": "_timestamp",
                     "alias": "_timestamp",
                     "column": "_timestamp",
-                    "color": null
+                    "color": null,
+                    "isDerived": false
                   },
                   {
                     "label": "severity",
                     "alias": "severity",
                     "column": "severity",
-                    "color": null
+                    "color": null,
+                    "isDerived": false
                   },
                   {
                     "label": "body",
                     "alias": "body",
                     "column": "body",
-                    "color": null
+                    "color": null,
+                    "isDerived": false
                   },
                   {
                     "label": "caller",
                     "alias": "caller",
                     "column": "caller",
-                    "color": null
+                    "color": null,
+                    "isDerived": false
                   }
                 ],
                 "y": [],
                 "z": [],
+                "breakdown": [],
                 "filter": {
                   "filterType": "group",
                   "logicalOperator": "AND",
@@ -958,16 +868,18 @@
                 }
               },
               "config": {
-                "promql_legend": ""
+                "promql_legend": "",
+                "limit": 0
               }
             }
           ],
           "layout": {
             "x": 0,
-            "y": 62,
-            "w": 24,
-            "h": 12,
-            "i": 17
+            "y": 144,
+            "w": 192,
+            "h": 22,
+            "i": 17,
+            "moved": false
           }
         }
       ]
