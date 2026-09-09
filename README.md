@@ -5,8 +5,8 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 ## 特性
 
 - **模块化架构** — Clean Architecture 分层，业务逻辑依赖接口不依赖实现
-- **统一认证** — typed JWT + Redis refresh session + Casbin RBAC v3 权限模型；API Key 认证（服务/机器间调用，`X-API-Key` 头 + `auth.APIKeyAuthMiddleware`，复用 `api_keys` 表）
-- **租户体系** — 单归属多租户：`tenants` 表 + 租户 CRUD API（`/api/v1/tenants`），`users`/`roles`/`audit_logs` 携带 `tenant_id` 做行级隔离；租户身份写入 JWT claim（`tid`）经中间件注入请求上下文，不接受客户端 header 传入；存量数据迁移时归入默认租户（`code=default`），角色名唯一性为租户内唯一，用户名/邮箱保持全局唯一（登录无需传租户标识）
+- **统一认证** — typed JWT + Redis refresh session + Casbin RBAC v3 权限模型；API Key 认证（服务/机器间调用，`X-API-Key` 头 + `auth.APIKeyAuthMiddleware` + `auth.RequireScope` scope 校验，复用 `api_keys` 表并按 `tenant_id` 归属租户，认证后自动注入租户上下文；能力标签与 Scope 约定见 [API Key 与 Scope](#api-key-与-scope)）
+- **租户体系** — 单归属多租户：`tenants` 表 + 租户 CRUD API（`/api/v1/tenants`），`users`/`roles`/`audit_logs`/`api_keys` 携带 `tenant_id` 做行级隔离，任务队列（`jobs`/`job_history`/`dead_letters`）与导入任务（`import_jobs`）同样归属租户；租户身份写入 JWT claim（`tid`）经中间件注入请求上下文，不接受客户端 header 传入；存量数据迁移时归入默认租户（`code=default`），角色名唯一性为租户内唯一，用户名/邮箱保持全局唯一（登录无需传租户标识）；归属关系为**租户 1:N 用户、用户单归属且不可跨租户**（见 [归属模型](#归属模型)）
 - **开通式注册** — 可选的 SaaS 语义（`auth.provisioning.enabled`）：注册即单事务开通新租户，注册者成为 owner，按可配置的角色模板自动初始化租户角色与全局权限绑定（模板模式，全部可配置：开关/owner 角色/角色与权限模板）；未启用时注册用户归默认租户
 - **密码重置** — 邮箱验证码自助重置（`POST /api/v1/auth/forgot-password` + `reset-password`），6 位数字码 Redis 一次性存储，防用户枚举，重置后强制登出全部会话
 - **敏感字段加密** — AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引（email/phone，`security.encryption_key` 配置后启用；未配置时明文模式，功能不受影响）
@@ -17,13 +17,13 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **结构化日志** — Zap + lumberjack 自动滚动
 - **数据库迁移** — Goose 迁移 CLI (up/down/status/redo)
 - **数据初始化** — Seed 命令一键插入管理员和基础权限（含 Casbin 策略同步）
-- **限流保护** — 全局令牌桶 + Redis 登录/注册固定窗口限流 + 用户维度滑动窗口限流
+- **限流保护** — 全局令牌桶（IP）+ Redis 登录/注册固定窗口 + 用户/租户/API Key 维度滑动窗口（租户维度全局挂载、平台级视角跳过；API Key 维度按路由挂载且以 Key ID 计数，不落明文）；并发上限负载保护（`server.max_concurrency`，超限可短排队后返回 `1010`/503，避免过载雪崩）
 - **HTTP 安全边界** — 请求体大小、超时、可信代理、CORS、安全 Headers；CSRF 防护（配置 `security.csrf_secret` 启用，Bearer 请求自动跳过）；API 签名验证中间件（可选，服务间调用按需挂载）
-- **缓存抽象** — Cache-Aside 模式，GetOrSet 自动回填
+- **缓存抽象** — Cache-Aside 模式，GetOrSet 自动回填；两级防击穿（进程内 singleflight 合并同 key 并发回源 + Redis 分布式锁跨实例互斥，锁异常时直接回源兜底）
 - **自定义校验** — 手机号、密码强度、身份证、用户名等常用规则
 - **国际化** — 按 `Accept-Language` 返回中文/英文错误与校验消息
 - **事件总线** — 内存实现，支持同步/异步发布订阅
-- **多队列支持** — Redis/Kafka/RabbitMQ 统一队列接口，`queue.type` 切换；三者均为 at-least-once：Redis（BLMove 原子消费 + 可见性超时重入队 + 延迟队列）、RabbitMQ（autoAck=false + requeue + 断连重投）、Kafka（FetchMessage 不自动提交 + Ack 显式 CommitMessages，崩溃重启重投未提交区间）。消费幂等：已成功/死信任务重复投递时 Ack 跳过，避免业务副作用重复执行（outbox 事件无状态机，不做去重）。失败任务按指数退避延迟重投（Redis 延迟队列），耗尽重试入死信表（`dead_letters`，可经管理 API 查询与标记解决）
+- **多队列支持** — Redis/Kafka/RabbitMQ 统一队列接口，`queue.type` 切换；三者均为 at-least-once：Redis（BLMove 原子消费 + 可见性超时重入队 + 延迟队列）、RabbitMQ（autoAck=false + requeue + 断连重投）、Kafka（FetchMessage 不自动提交 + Ack 显式 CommitMessages，崩溃重启重投未提交区间）。消费幂等：已成功/死信任务重复投递时 Ack 跳过，避免业务副作用重复执行（outbox 事件无状态机，不做去重）。失败任务按指数退避延迟重投（Redis 延迟队列），耗尽重试入死信表（`dead_letters`，可经管理 API 查询与标记解决）。任务归属提交者租户（`jobs.tenant_id`），消费时恢复该租户到执行上下文，管理端任务/死信接口按租户隔离
 - **事务封装** — 统一的事务管理 helper
 - **审计日志** — 有界队列批量写入，匿名请求安全处理
 - **管理端点** — 独立 management server 暴露健康检查、metrics 和可选 pprof
@@ -35,9 +35,10 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **分布式锁** — Redis 实现的分布式锁（防并发、选主）
 - **文件存储** — 本地/S3/OSS/MinIO 统一接口
 - **上传安全** — 文件大小限制 + magic-byte 嗅探覆盖可伪造的 Content-Type 头 + MIME 白名单；可选 ClamAV 病毒扫描（`upload.clamav.enabled`，stdlib 实现 INSTREAM 协议，落库前同步扫描，fail-closed：不干净或扫描不可达均拒绝落库）
-- **数据导入/导出** — CSV/Excel 模板解析、校验与导入/导出（`internal/platform/importer` / `internal/platform/exporter`）；通用 importer 保留 `Importer.Import`，通过可选逐行 `RowSink` 注入持久化，未配置时明确报错，业务应用负责事务落库，导出结果可被导入器回读验证
+- **数据导入/导出** — CSV/Excel 模板解析、校验与导入/导出（`internal/platform/importer` / `internal/platform/exporter`）；通用 importer 保留 `Importer.Import`，通过可选逐行 `RowSink` 注入持久化，未配置时明确报错，业务应用负责事务落库，导出结果可被导入器回读验证；管理端用户导入按操作者所在租户归属（无租户上下文时归默认租户），不产生未归属数据
 - **通知系统** — 邮件/短信(SMS)/WebSocket/Webhook 抽象；短信支持阿里云（dysmsapi SDK，`sms.enabled` 配置开关）；Webhook 回调载荷支持 HMAC-SHA256 签名（`notification.webhook.sign_secret`，附加 `X-Jimu-Timestamp`/`X-Jimu-Signature` 头，防重放）
 - **统一出站 HTTP client** — 封装 timeout + retry/backoff（仅网络错误与 5xx）+ 熔断（连续失败自动开启，冷却后探测恢复）+ 按目标 host 独立限流（令牌桶）+ OTel `traceparent` 注入（`internal/platform/httpclient`），OAuth 提供商与 Webhook 共用
+- **依赖熔断** — 统一熔断器 `internal/platform/breaker`（连续失败阈值 + 冷却后半开探测）接入 Redis（命令/连接级 hook）与 DB（语句级 `ConnPool`），依赖不可用时快速失败而非每请求等超时；只把连接/网络类错误计为失败（Redis 未命中与业务错误、DB 慢查询超时都不触发）；指标 `jimu_breaker_open` / `jimu_breaker_rejected_total` / `jimu_breaker_trip_total`。DB 在启用读写分离时自动跳过（dbresolver 管理独立连接池，已日志提示）
 - **Outbox 模式** — 事件发布与数据库事务一致性保证，支持 MQ 跨服务发布（`outbox.publisher` 切换；`mq` 模式下通过 WorkerPool 消费事件，`event_bus` 模式通过 `outbox:*` 桥接器注入事件总线）
 - **定时任务** — Cron 调度器（robfig/cron），支持 MySQL 持久化（`scheduler.store=mysql`）与多实例分布式锁协调，启动时通过 `RestoreFromStore` 恢复持久化任务（内置任务去重）
 - **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
@@ -503,6 +504,15 @@ curl -X POST http://localhost:8080/api/v1/auth/register \
 
 租户 CRUD 挂载在受保护路由下，需具备对应权限（seed 已内置 `/api/v1/tenants` 全套策略）。租户上下文来自 JWT `tid` claim：用户/角色/审计日志的查询与创建按当前租户自动隔离，无需传请求头。
 
+#### 归属模型
+
+- **租户 1:N 用户**：一个租户可有多个用户，一个用户只属于一个租户。结构上是 `users.tenant_id` 单列，没有用户-租户关联表。
+- **身份全局唯一**：`username` 与邮箱/手机号盲索引（`email_hash`/`phone_hash`）为全局唯一索引，同一身份不能存在于多个租户；租户归属创建后不可修改（`UpdateUserRequest` 仅支持 `status`），也没有切换租户接口。
+- **不支持一人多租**：跨租户协作请使用平台级视角（上下文无租户）或按租户归属的 API Key，而不是让同一账号加入多个租户。
+- **管理端用户接口按租户隔离**：`/api/v1/admin/users` 的列表、详情、更新、禁用、分配角色均限定在当前租户（跨租户按不存在处理），分配角色时角色名只在用户所属租户内解析。
+- **任务与导入任务按租户隔离**：`/api/v1/admin/jobs`、`/api/v1/admin/jobs/dead-letters` 的列表/详情/重试/标记解决与 `/api/v1/admin/users/import/:id` 均限定在当前租户；任务消费时会把任务归属租户注入执行上下文（outbox 事件无任务行，租户未知，按平台级处理）。
+- **`tenant_id=0` 表示未归属**：迁移前的存量数据或绕过服务层直接写库会产生该状态，登录时会归一到默认租户（`id=1`、`code=default`）。
+
 ```bash
 # 创建租户（编码全局唯一，仅限字母/数字/短横线/下划线，统一转小写存储）
 curl -X POST http://localhost:8080/api/v1/tenants \
@@ -530,6 +540,58 @@ curl -X DELETE http://localhost:8080/api/v1/tenants/<tenant_id> \
 ```
 
 相关错误码：`5001` 租户不存在、`5002` 租户编码已存在、`5003` 默认租户受保护、`5004` 租户编码格式无效。
+
+### API Key 与 Scope
+
+API Key 用于服务/机器间调用，请求携带 `X-API-Key` 头，复用 `api_keys` 表。认证中间件为 `auth.APIKeyAuthMiddleware`，框架不默认挂载，业务模块按需加到路由组上；scope 校验用 `auth.RequireScope` 挂在认证之后：
+
+```go
+// verifier 由容器提供：container.APIKeyVerifier
+api := r.Group("/api/v1/integration", auth.APIKeyAuthMiddleware(verifier))
+// 只读接口要求 user:read
+api.GET("/users", auth.RequireScope("user:read"), userHandler.List)
+// 写接口要求 user:write
+api.POST("/users", auth.RequireScope("user:write"), userHandler.Create)
+```
+
+`RequireScope` 未通过时返回 `401`（缺少/未认证 API Key）或 `403`（scope 不足）。
+
+#### Scope 命名约定
+
+`scopes` 是 API Key 的能力标签，落库为 `api_keys.scopes`（JSON 数组），命名格式 `资源:动作`，统一小写：
+
+| Scope | 含义 | 典型用途 |
+|-------|------|----------|
+| `user:read` | 读取用户列表与详情 | 外部系统同步用户 |
+| `user:write` | 创建、更新、删除用户 | 自动化开通与回收账号 |
+| `job:submit` | 提交异步任务 | 触发批量导入等后台作业 |
+| `audit:read` | 读取审计日志 | 合规系统拉取操作记录 |
+| `*` | 全部能力 | 内部服务全权 Key |
+
+约定：
+
+- **空 `scopes` 表示拒绝一切**：`APIKey.HasScope` 对空列表恒返回 false；只有显式包含 `*` 才代表全权，不要依赖"不填即全权"的隐式行为。
+- Scope 清单由业务方定义，框架不内置强制集合；`HasScope` 已提供通配匹配（`s == scope || s == "*"`），`RequireScope` 按同一语义校验。
+- **认证与授权分离**：`APIKeyAuthMiddleware` 只校验 Key 有效性（格式、存在、启用、未过期）并注入 Key；是否需要某个 scope 由路由上的 `RequireScope` 决定，未挂载即不校验 scope。
+- **API Key 维度限流**：`middleware.APIKeyRateLimitMiddleware(rdb, limit, window)` 挂在认证之后，按 Key ID 计数（不落明文），未携带 Key 的请求跳过该维度；租户维度由 `ratelimit.tenant.*` 全局启用。配额（按天/按月上限）用同一中间件配长窗口即可（例如 `window=24h`）。
+- **API Key 归属租户**：`api_keys.tenant_id` 在创建时取自创建者所在租户（上下文无租户时归默认租户，见 `platform/tenant.DefaultTenantID`）；认证通过后中间件把该租户注入请求上下文，业务层用 `tenant.FromContext(ctx)` 读取即可完成行级隔离。租户只来自 Key 自身，**不接受客户端 header/query 传入**。未归属（`tenant_id=0`）的存量 Key 按平台级视角处理。
+
+#### 管理 API
+
+```bash
+# 创建（明文 Key 仅返回一次；scopes 省略即拒绝一切）
+curl -X POST http://localhost:8080/api/v1/admin/apikeys \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "ci-bot", "scopes": ["user:read"], "expires_in": 90}'
+
+# 列表 / 详情 / 撤销
+curl http://localhost:8080/api/v1/admin/apikeys -H "Authorization: Bearer <access_token>"
+curl http://localhost:8080/api/v1/admin/apikeys/<id> -H "Authorization: Bearer <access_token>"
+curl -X DELETE http://localhost:8080/api/v1/admin/apikeys/<id> -H "Authorization: Bearer <access_token>"
+```
+
+`expires_in` 单位为天，缺省或 0 表示不过期。列表按当前租户过滤，详情/撤销跨租户不可见（返回 404）；平台级视角（上下文无租户）不过滤。
 
 ### 获取系统状态
 
@@ -632,6 +694,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `db.max_idle` | 最大空闲连接数 | `10`（开发）/ `20`（生产） |
 | `db.conn_max_lifetime_sec` | 连接最大存活时间（秒） | `3600` |
 | `db.read_hosts` / `db.read_ports` | 只读副本地址 / 端口（读写分离） | — |
+| `db.breaker.enabled` / `db.breaker.max_failures` / `db.breaker.reset_timeout_sec` | DB 语句级熔断开关 / 连续失败阈值 / 冷却秒数（读写分离启用时自动跳过） | `true` / `5` / `10` |
 | `redis.mode` | Redis 部署模式：`single` / `sentinel` / `cluster` | `single` |
 | `redis.addr` | Redis 地址（单机模式） | `127.0.0.1:6379` |
 | `redis.password` | Redis 密码（通过环境变量覆盖） | — |
@@ -642,6 +705,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `redis.cluster_addrs` | 集群模式节点地址列表（`mode=cluster` 必填） | — |
 | `redis.pool_size` | Redis 连接池大小 | `10`（开发）/ `50`（生产） |
 | `redis.min_idle_conns` | 最小空闲连接数 | `2`（开发）/ `10`（生产） |
+| `redis.breaker.enabled` / `redis.breaker.max_failures` / `redis.breaker.reset_timeout_sec` | Redis 熔断开关 / 连续失败阈值 / 冷却秒数 | `true` / `5` / `10` |
 | `log.level` | 日志级别 | `debug`（开发）/ `info`（生产） |
 | `log.format` | 日志格式 | `console`（开发）/ `json`（生产） |
 | `auth.jwt_secret` | JWT 签名密钥（生产必须 `JWT_SECRET` 环境变量注入） | — |
@@ -652,8 +716,10 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `auth.provisioning.owner_role` | owner 绑定的模板角色名；缺省为模板第一个角色 | — |
 | `auth.provisioning.roles[]` | 开通时初始化的角色模板（`name`/`description`/`permissions[]{resource,action}`）；permissions 引用全局权限表（`jimu seed` 写入），缺失条目跳过 | — |
 | `auth.public_registration` | 是否开放 `/auth/register` 公开注册端点 | `true`（开发）/ `false`（生产） |
-| `server.timeout_sec` | 请求超时（秒），0 不限 | `30` |
+| `server.timeout_sec` | 请求超时（秒），0 不限；超时且未产出响应时返回 `1008`/504 | `30` |
 | `server.rate_limit_rate` / `server.rate_limit_burst` | 全局限流速率（每秒）/ 桶容量 | `100` / `200` |
+| `server.max_concurrency` / `server.concurrency_wait_ms` | 并发处理上限 / 超限排队等待上限（毫秒，0=立即拒绝）；超限返回 `1010`/503，0 表示不限制 | `512` / `200` |
+| `ratelimit.tenant.enabled` / `ratelimit.tenant.limit` / `ratelimit.tenant.window_sec` | 租户维度限流开关 / 窗口内请求上限 / 窗口秒数（平台级视角 `tid=0` 跳过，Redis 异常 fail-open） | `false` / `6000` / `60` |
 | `id.worker_id` | 雪花 ID worker 编号（0-1023）；多实例部署时每个副本需唯一，避免 ID 冲突 | `0` |
 | `storage.type` | 存储类型 (`local`/`s3`/`oss`/`minio`)。`oss` 复用 S3 协议（path style + endpoint），无需阿里云 SDK；`minio` 需 `path_style: true` | `local` |
 | `upload.clamav.enabled` | 是否启用文件上传 ClamAV 病毒扫描；`false` 时上传不扫描 | `false` |
@@ -772,7 +838,7 @@ internal/modules/{name}/
 
 - Gorm + Goose 迁移，命名 `{seq}_create_{table}s.sql`，迁移文件需为每个字段和表添加中文 COMMENT
 - 基础表包含 `id`、`created_at`、`updated_at`、`deleted_at`；主键由应用生成雪花 ID（gorm hook），建表不使用 `AUTO_INCREMENT`
-- 支持读写分离（`read_hosts`、`read_ports` 配置）
+- 支持读写分离（`read_hosts`、`read_ports` 配置，MySQL/MariaDB 与 PostgreSQL 均支持，从库按 `RandomPolicy` 轮询）；**注意从库存在复制延迟**：写后立即读可能读到旧数据，强一致读请走主库（框架未做写后粘主，需要强一致的查询请在业务层显式指定主库或加读己之写补偿）
 
 ### 日志调用规范
 
