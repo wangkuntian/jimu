@@ -56,13 +56,17 @@ type Module interface {
 
 HTTP 路由统一注册在 `/api/v1` 前缀下。
 
-### 设计边界（非目标）
+### 租户体系
 
-以下能力**明确不做**，新增需求不得为其引入抽象：
+多租户（v0.2.0 起）为正式能力，实现遵循以下固定设计，修改时不得偏离：
 
-- **租户隔离** — 不做多租户（tenant）概念。项目定位单租户/单组织部署；用户体系全局唯一，数据表不预留 `tenant_id`、`tenant` 字段或租户中间件。若后续产品出现多租户需求，需重新设计数据模型，不应在现有表上打补丁。
-
-添加任何新表、接口或中间件前，先对照本清单确认不会引入非目标能力。
+- **单归属模型** — 用户/角色归属唯一租户（`users.tenant_id`、`roles.tenant_id`、`audit_logs.tenant_id`）。角色名唯一性为租户内唯一（`unique(tenant_id, name)`）；用户名/邮箱保持全局唯一，登录无需携带租户标识。
+- **上下文来源** — 租户身份由登录时按用户归属写入 JWT claim（`tid`），`AuthMiddleware` 注入 gin context，`tenant.Middleware()` 转入 request context；业务层只从 `internal/platform/tenant.FromContext(ctx)` 读取，**禁止**从 header/query 接受租户标识（旧实现因此被废弃）。
+- **默认租户** — 固定 `id=1`、`code=default`（`internal/platform/tenant.DefaultTenantID`），受保护不可删除；上下文无租户（tid=0，如滚动升级期旧 token）时创建的资源归默认租户、查询不做过滤（平台级视角）。
+- **错误码** — 租户模块占用 `5xxx`（5001-5004）。
+- **租户编码** — code 格式校验与归一化（统一转小写）收敛在 `internal/platform/tenant`（`ValidCode`/`NormalizeCode`，单一事实源）；编码不可变，自动生成格式为 `t`+12 位随机 hex。
+- **迁移** — 租户表与字段在 `005_add_tenants.sql`（mysql/postgres 双份），存量数据迁入默认租户。
+- **开通式注册** — 可选 SaaS 语义（`auth.provisioning.enabled`，要求 `public_registration`）：注册即单事务开通新租户 + owner 用户，按 `auth.provisioning.roles` 模板初始化角色与全局权限绑定（模板模式；权限引用 seed 写入的全局权限表，缺失跳过）；owner 绑定 `owner_role` 指定的模板角色（缺省第一个）。未启用时注册用户归默认租户。
 
 ## 配置约束
 

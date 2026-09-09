@@ -6,6 +6,8 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 
 - **模块化架构** — Clean Architecture 分层，业务逻辑依赖接口不依赖实现
 - **统一认证** — typed JWT + Redis refresh session + Casbin RBAC v3 权限模型；API Key 认证（服务/机器间调用，`X-API-Key` 头 + `auth.APIKeyAuthMiddleware`，复用 `api_keys` 表）
+- **租户体系** — 单归属多租户：`tenants` 表 + 租户 CRUD API（`/api/v1/tenants`），`users`/`roles`/`audit_logs` 携带 `tenant_id` 做行级隔离；租户身份写入 JWT claim（`tid`）经中间件注入请求上下文，不接受客户端 header 传入；存量数据迁移时归入默认租户（`code=default`），角色名唯一性为租户内唯一，用户名/邮箱保持全局唯一（登录无需传租户标识）
+- **开通式注册** — 可选的 SaaS 语义（`auth.provisioning.enabled`）：注册即单事务开通新租户，注册者成为 owner，按可配置的角色模板自动初始化租户角色与全局权限绑定（模板模式，全部可配置：开关/owner 角色/角色与权限模板）；未启用时注册用户归默认租户
 - **密码重置** — 邮箱验证码自助重置（`POST /api/v1/auth/forgot-password` + `reset-password`），6 位数字码 Redis 一次性存储，防用户枚举，重置后强制登出全部会话
 - **敏感字段加密** — AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引（email/phone，`security.encryption_key` 配置后启用；未配置时明文模式，功能不受影响）
 - **OAuth 登录** — Google/GitHub/微信第三方登录，`oauth.providers` 配置开关
@@ -55,12 +57,6 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **TOTP 二次验证** — RFC 6238 自研实现（`internal/shared/totp`，无外部依赖），用户可自助绑定/启用/关闭：`POST /auth/mfa/setup` 生成密钥与 otpauth URI（二维码绑定）、`/auth/mfa/enable` 首次验证码确认、`/auth/mfa/disable` 校验后关闭；启用后登录必须携带 `totp_code`（缺失 `2006`，错误 `2007`），密钥 AES-GCM 字段级加密落库
 - **统一 gRPC 客户端** — 出站调用封装（`internal/platform/grpc` `Client`）：连接管理 + 调用超时 + 指数退避重试（仅 Unavailable/ResourceExhausted 幂等安全码）+ panic 恢复拦截器 + Prometheus 指标（`jimu_grpc_client_*`），支持 TLS/insecure，与 HTTP client 对齐的框架风格
 - **错误追踪上报** — `internal/platform/reporter`：结构化错误日志（含 trace_id/span_id），HTTP `Recovery` 中间件 panic 自动上报；日志链路接入 OpenObserve 后错误自动汇聚，配合 OpenObserve 告警覆盖错误监控场景（`error_reporting.enabled` 开关）
-
-## 非目标
-
-以下能力明确不做，新增需求不得引入相关抽象：
-
-- **租户隔离** — 本项目定位单租户/单组织部署，用户体系全局唯一。数据表不预留 `tenant_id`、`tenant` 字段或租户中间件。若产品出现多租户需求，需重新设计数据模型，而非在现有表上打补丁。
 
 ## 技术栈
 
@@ -299,6 +295,7 @@ jimu/
 │       ├── user/               # 用户管理
 │       ├── role/               # 角色管理
 │       ├── permission/         # 权限管理
+│       ├── tenant/             # 租户管理
 │       ├── audit/              # 审计日志
 │       └── admin/              # 系统管理
 ├── tools/generator/            # 代码生成器
@@ -451,6 +448,52 @@ curl -X POST http://localhost:8080/api/v1/auth/mfa/disable \
   -d '{"code":"123456"}'
 ```
 
+### 开通式注册（可选）
+
+启用 `auth.provisioning.enabled`（要求 `public_registration: true`）后，注册即开通新租户：单事务创建租户 + owner 用户，并按角色模板自动绑定全局权限。请求携带 `tenant_name`（必填，`tenant_code` 可选，不传自动生成）：
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"founder1","password":"secret123","tenant_name":"Acme Inc","tenant_code":"acme"}'
+```
+
+响应包含 `user`（owner）与 `tenant`（新租户）。owner 登录后自动获得模板中 `owner_role` 指定的角色（缺省为模板第一个角色）。`tenant_code` 统一转小写存储，不传自动生成。模板中引用的权限需先由 `jimu seed` 写入全局权限表，缺失条目跳过。未启用开通式时，注册保持普通语义（用户归默认租户，忽略租户字段）。
+
+相关错误码：`2002` 用户名/邮箱已存在、`5002` 租户编码已存在、`5004` 租户编码格式无效。
+
+### 租户管理
+
+租户 CRUD 挂载在受保护路由下，需具备对应权限（seed 已内置 `/api/v1/tenants` 全套策略）。租户上下文来自 JWT `tid` claim：用户/角色/审计日志的查询与创建按当前租户自动隔离，无需传请求头。
+
+```bash
+# 创建租户（编码全局唯一，仅限字母/数字/短横线/下划线，统一转小写存储）
+curl -X POST http://localhost:8080/api/v1/tenants \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "acme", "name": "Acme Inc"}'
+
+# 租户列表（分页）
+curl "http://localhost:8080/api/v1/tenants?page=1&page_size=20" \
+  -H "Authorization: Bearer <access_token>"
+
+# 租户详情
+curl http://localhost:8080/api/v1/tenants/<tenant_id> \
+  -H "Authorization: Bearer <access_token>"
+
+# 更新租户（编码不可修改；status 0-禁用 1-启用）
+curl -X PUT http://localhost:8080/api/v1/tenants/<tenant_id> \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Acme Inc", "status": 1}'
+
+# 删除租户（软删除；默认租户 code=default 受保护，返回 5003）
+curl -X DELETE http://localhost:8080/api/v1/tenants/<tenant_id> \
+  -H "Authorization: Bearer <access_token>"
+```
+
+相关错误码：`5001` 租户不存在、`5002` 租户编码已存在、`5003` 默认租户受保护、`5004` 租户编码格式无效。
+
 ### 获取系统状态
 
 管理端点统一挂载 JWT + Casbin RBAC 认证，需携带管理员 `access_token`（无有效策略默认拒绝，返回 403）：
@@ -568,6 +611,9 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `auth.access_expire_min` | Access Token 有效期 (分钟) | `60`（开发）/ `15`（生产） |
 | `auth.refresh_expire_day` | Refresh Token 有效期 (天) | `30`（开发）/ `7`（生产） |
 | `auth.reset_code_ttl_min` | 密码重置验证码有效期 (分钟) | `15` |
+| `auth.provisioning.enabled` | 开通式注册：注册即开通新租户（要求 `auth.public_registration: true`） | `false` |
+| `auth.provisioning.owner_role` | owner 绑定的模板角色名；缺省为模板第一个角色 | — |
+| `auth.provisioning.roles[]` | 开通时初始化的角色模板（`name`/`description`/`permissions[]{resource,action}`）；permissions 引用全局权限表（`jimu seed` 写入），缺失条目跳过 | — |
 | `server.timeout_sec` | 请求超时（秒），0 不限 | `30` |
 | `server.rate_limit_rate` / `server.rate_limit_burst` | 全局限流速率（每秒）/ 桶容量 | `100` / `200` |
 | `id.worker_id` | 雪花 ID worker 编号（0-1023）；多实例部署时每个副本需唯一，避免 ID 冲突 | `0` |
