@@ -119,6 +119,8 @@ make migrate
 # 3. 初始化数据（管理员密码通过环境变量提供）
 ADMIN_PASSWORD=admin123 make seed
 
+# seed 写入：默认租户（code=default）、基础权限（含租户管理）、超级管理员角色、admin 用户
+
 # 4. 启动服务
 make run
 ```
@@ -195,7 +197,7 @@ make compose-up   # OTEL_ENABLED 默认开启，server 自动指向 openobserve:
 **日志输出规范**（保证 OpenObserve 中可检索、可聚合、可与 trace 关联）：
 
 - **结构化调用**：必须使用 `Debugw / Infow / Warnw / Errorw`（msg + k/v 字段）。单参数 print 风格会把 k/v 拼进消息导致字段丢失（CI 的 `make check-log-usage` 强制检查）。
-- **字段命名**：统一小写 snake_case，且 **key 来自标准词汇表**（`user_id`、`event_type`、`duration`…，见 `AGENTS.md` 日志调用规范；`make check-log-usage` 静态检查：防粘连、禁动态 key、未登记 key 告警、禁直接塞 struct/map/slice）。
+- **字段命名**：统一小写 snake_case，且 **key 来自标准词汇表**（`user_id`、`event_type`、`duration`…，见 `tools/logcheck/main.go` 及上文「开发规范 · 日志调用规范」；`make check-log-usage` 静态检查：防粘连、禁动态 key、未登记 key 告警、禁直接塞 struct/map/slice）。
 - **类型保留**：数值/布尔按原类型上报（可范围查询与聚合），时长字段为纳秒数值，不会退化为字符串。
 - **trace 关联**：请求上下文内用 `logger.WithContext(ctx)` 记录日志，自动携带 `trace_id`/`span_id` 并挂到对应 trace，OpenObserve 日志与链路可互跳。
 - **敏感信息**（密码、token、验证码、手机号原文等）禁止入日志，PII 需脱敏（如 `138****1234`）。
@@ -250,7 +252,11 @@ jimu/
 │   │   └── dashboards/          # dashboard 定义 JSON（面板查询与布局，git 管理）
 │   │       └── jimu-overview.json  # Jimu Overview 17 面板
 │   └── helm/                    # Helm Chart（含 openobserve / otel-collector 配置）
-├── docs/openapi/               # Swagger 生成的 API 文档
+├── docs/                         # 文档
+│   ├── openapi/                  # Swagger 生成的 API 文档
+│   ├── releases/                 # 版本 changelog / GitHub Release body（每版本一个文件）
+│   ├── CONTRIBUTING.md           # 贡献指南（分支/PR/发布/集成测试手册）
+│   └── SECURITY.md               # 安全政策（漏洞报告流程）
 ├── migrations/
 │   ├── mysql/                  # MySQL 迁移脚本（按功能合并）
 │   └── postgres/               # PostgreSQL 迁移脚本（按功能合并）
@@ -268,18 +274,25 @@ jimu/
 │   │   ├── redis/              # Redis 客户端 + 分布式锁
 │   │   ├── cache/              # 缓存抽象层
 │   │   ├── logger/             # Zap 日志
-│   │   ├── auth/               # JWT + Casbin + Session
+│   │   ├── auth/               # JWT + Casbin + Session + API Key
+│   │   ├── tenant/             # 租户上下文注入 + 编码校验/归一化
 │   │   ├── oauth/              # OAuth 第三方登录 Provider
 │   │   ├── captcha/            # 图形验证码（生成 + Redis 存储 + 校验）
+│   │   ├── encryption/         # AES-GCM 字段级加密 + HMAC 盲索引
 │   │   ├── event/              # 事件总线
-│   │   ├── observability/      # 健康检查 + Metrics + Tracing + OTLP 推送（OpenObserve）
-│   │   ├── reporter/           # 错误上报（结构化错误日志，接入 OpenObserve）
-│   │   ├── storage/            # 文件存储抽象
-│   │   ├── notification/       # 通知系统
+│   │   ├── queue/              # 多队列抽象（Redis/Kafka/RabbitMQ）+ 死信
 │   │   ├── outbox/             # Outbox 模式
 │   │   ├── scheduler/          # Cron 调度器
+│   │   ├── observability/      # 健康检查 + Metrics + Tracing + OTLP 推送（OpenObserve）
+│   │   ├── reporter/           # 错误上报（结构化错误日志，接入 OpenObserve）
+│   │   ├── httpclient/         # 统一出站 HTTP 客户端（超时/重试/熔断/限流）
 │   │   ├── grpc/               # gRPC server + 统一出站 Client（健康/反射/超时/重试/指标）
-│   │   ├── feature/            # Feature Flag
+│   │   ├── ws/                 # WebSocket（Hub + 会话/频道管理）
+│   │   ├── storage/            # 文件存储抽象（本地/S3/OSS/MinIO）
+│   │   ├── importer/           # 数据导入（CSV/Excel 模板解析与校验）
+│   │   ├── exporter/           # 数据导出（CSV/Excel）
+│   │   ├── notification/       # 通知系统（邮件/短信/WebSocket/Webhook）
+│   │   └── feature/            # Feature Flag
 │   ├── shared/                 # 跨模块通用能力
 │   │   ├── errors/             # AppError + 错误码
 │   │   ├── response/           # 统一响应格式
@@ -298,7 +311,9 @@ jimu/
 │       ├── tenant/             # 租户管理
 │       ├── audit/              # 审计日志
 │       └── admin/              # 系统管理
-├── tools/generator/            # 代码生成器
+├── tools/
+│   ├── generator/                # 代码生成器
+│   └── logcheck/                 # 日志调用规范静态检查（make check-log-usage）
 ├── .github/                    # GitHub Actions + Dependabot
 ├── Makefile
 ├── Dockerfile
@@ -614,6 +629,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `auth.provisioning.enabled` | 开通式注册：注册即开通新租户（要求 `auth.public_registration: true`） | `false` |
 | `auth.provisioning.owner_role` | owner 绑定的模板角色名；缺省为模板第一个角色 | — |
 | `auth.provisioning.roles[]` | 开通时初始化的角色模板（`name`/`description`/`permissions[]{resource,action}`）；permissions 引用全局权限表（`jimu seed` 写入），缺失条目跳过 | — |
+| `auth.public_registration` | 是否开放 `/auth/register` 公开注册端点 | `true`（开发）/ `false`（生产） |
 | `server.timeout_sec` | 请求超时（秒），0 不限 | `30` |
 | `server.rate_limit_rate` / `server.rate_limit_burst` | 全局限流速率（每秒）/ 桶容量 | `100` / `200` |
 | `id.worker_id` | 雪花 ID worker 编号（0-1023）；多实例部署时每个副本需唯一，避免 ID 冲突 | `0` |
@@ -623,7 +639,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `upload.clamav.timeout_sec` | 单次扫描超时（秒），0 用默认 10 | `10` |
 | `queue.type` | 队列类型 (`redis`/`kafka`/`rabbitmq`)，切 Kafka/RabbitMQ 时需保证 broker 可用，否则启动失败 | `redis` |
 | `outbox.publisher` | Outbox 发布器类型 (`event_bus`/`mq`)。`mq` 支持 `queue.type=kafka/rabbitmq/redis` | `event_bus` |
-| `scheduler.store` | 任务定义存储类型 (`memory`/`mysql`)；`mysql` 需迁移表 `scheduled_jobs`（迁移 014） | `memory` |
+| `scheduler.store` | 任务定义存储类型 (`memory`/`mysql`)；`mysql` 需迁移表 `scheduled_jobs`（迁移 003） | `memory` |
 | `oauth.providers.{name}.enabled` | 是否启用某 OAuth 提供商 (`google`/`github`/`wechat`) | `false` |
 | `oauth.providers.{name}.client_id` | 提供商应用 Client ID | — |
 | `oauth.providers.{name}.client_secret` | 提供商应用 Client Secret（生产建议环境变量注入） | — |
@@ -693,6 +709,59 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 - **磁盘层**：LUKS / 云盘加密（EBS、托管磁盘加密）作为兜底，对数据库实现无关。
 
 字段级加密面向「即便拿到数据库快照也无法直接读取 email/phone」的场景；全库加密面向「物理介质丢失」场景，二者正交、可叠加。
+
+## 开发规范
+
+### 模块结构
+
+每个业务模块必须遵循 Clean Architecture 分层：
+
+```text
+internal/modules/{name}/
+  domain/           # 实体、值对象、仓储接口
+  application/      # 用例服务、DTO
+  infrastructure/   # 数据库/缓存实现
+  interfaces/       # HTTP handler + 路由注册
+  module.go         # 实现 contract.Module 接口
+```
+
+- 业务逻辑必须依赖接口，不依赖具体实现
+- 所有模块实现 `contract.Module` 接口（`Name` / `RegisterHTTP` / `RegisterJobs` / `RegisterEvents`）
+- HTTP 路由统一注册在 `/api/v1` 前缀下
+
+### 错误码
+
+定义在 `internal/shared/errors/errors.go`，按模块分段分配，后续模块依次向后分配：
+
+- `1xxx` — 通用错误
+- `2xxx` — 用户/认证模块
+- `3xxx` — OAuth 模块
+- `4xxx` — 验证码模块
+- `5xxx` — 租户模块
+
+新增错误码需同步加入 `HTTPStatus` 映射与 `AllErrorCodes` 文档列表。
+
+### 配置
+
+- 新增配置项必须在 `internal/config/config.go` 定义常量并加入校验；枚举值非法时启动报错
+- 敏感值支持 `_FILE` 后缀从文件读取（Docker Secrets 兼容）
+
+### 数据库
+
+- Gorm + Goose 迁移，命名 `{seq}_create_{table}s.sql`，迁移文件需为每个字段和表添加中文 COMMENT
+- 基础表包含 `id`、`created_at`、`updated_at`、`deleted_at`；主键由应用生成雪花 ID（gorm hook），建表不使用 `AUTO_INCREMENT`
+- 支持读写分离（`read_hosts`、`read_ports` 配置）
+
+### 日志调用规范
+
+- **必须使用结构化方法** `Debugw/Infow/Warnw/Errorw`（msg + k/v 字段）；禁止 `Debug/Info/Warn/Error(...)` 传多个参数——sugared logger 会把参数 `fmt.Sprint` 拼进消息导致字段丢失。`make check-log-usage` 强制检查（CI 已接入）
+- 消息用静态动词短语，变量一律进字段；key 小写 snake_case，必须来自 `tools/logcheck/main.go` 内置词汇表（`_id` / `_ms` 等后缀自动放行），禁止动态 key
+- 错误写 `"error", err` 而非 `err.Error()`；数值给数值类型；不记录密码、token、验证码等敏感原文，PII 脱敏
+- 级别：`debug` 排查细节 | `info` 业务事件 | `warn` 可恢复异常 | `error` 不可恢复（必须带 `error` 字段）
+
+### 质量门禁
+
+所有改动必须通过 `make fmt`、`make vet`、`make lint`、`make test`；贡献流程与本地集成测试见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)。
 
 ## Makefile 命令
 
