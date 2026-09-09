@@ -53,9 +53,13 @@ db:
   conn_max_idle_time_sec: 600   # 连接最大空闲时间（秒）
   max_retries: 10               # 连接重试次数
   retry_interval_sec: 5         # 重试间隔（秒）
-  # 读写分离（取消注释启用）
+  # 读写分离（取消注释启用；启用后语句级熔断自动跳过）
   # read_hosts: ["mariadb-read-1", "mariadb-read-2"]
   # read_ports: [3306, 3306]
+  breaker:                        # 熔断：DB 不可用时快速失败
+    enabled: true
+    max_failures: 5               # 连续失败阈值
+    reset_timeout_sec: 10         # 冷却时间（秒）
 
 # Redis 配置
 redis:
@@ -73,6 +77,10 @@ redis:
   write_timeout_sec: 3          # 写超时（秒）
   max_retries: 10               # 连接重试次数
   retry_interval_sec: 5         # 重试间隔（秒）
+  breaker:                      # 熔断：Redis 不可用时快速失败
+    enabled: true
+    max_failures: 5             # 连续失败阈值
+    reset_timeout_sec: 10       # 冷却时间（秒）
 
 # 限流维度（全局 IP 令牌桶见 server.rate_limit_*）
 ratelimit:

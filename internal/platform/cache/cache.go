@@ -11,6 +11,7 @@ import (
 	redistore "jimu/internal/platform/redis"
 
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/sync/singleflight"
 )
 
 // 防击穿参数
@@ -44,6 +45,7 @@ type Cache interface {
 type RedisCache struct {
 	client redistore.Client
 	prefix string
+	sf     singleflight.Group // 进程内合并同 key 并发回源
 }
 
 // NewRedisCache 创建 Redis 缓存
@@ -108,8 +110,10 @@ func (c *RedisCache) Exists(ctx context.Context, key string) (bool, error) {
 }
 
 // GetOrSet 缓存不存在时自动获取并设置（Cache-Aside 模式）。
-// 防击穿：并发未命中时，只有一个请求执行 fetch，其余请求短暂等待后重读缓存；
-// 等待超时则直接 fetch 兜底，不阻塞调用方。锁带 TTL 防死锁。
+// 防击穿分两级：
+//  1. 进程内 singleflight：同一实例内同 key 并发未命中只回源一次；
+//  2. Redis 分布式锁：跨实例并发未命中只有一个回源，其余等待重读（锁带 TTL 防死锁，
+//     等待超时则直接回源兜底，不阻塞调用方）。
 func (c *RedisCache) GetOrSet(ctx context.Context, key string, dest interface{}, ttl time.Duration, fetch func() (interface{}, error)) error {
 	found, err := c.Get(ctx, key, dest)
 	if err != nil {
@@ -119,35 +123,52 @@ func (c *RedisCache) GetOrSet(ctx context.Context, key string, dest interface{},
 		return nil
 	}
 
+	// singleflight 结果可能是原始 JSON（命中缓存）或回源数据
+	v, err, _ := c.sf.Do(c.key(key), func() (interface{}, error) {
+		// 进程内二次确认：leader 可能已回填缓存
+		var raw json.RawMessage
+		if ok, err := c.Get(ctx, key, &raw); err == nil && ok {
+			return raw, nil
+		}
+		return c.fetchWithLock(ctx, key, ttl, fetch)
+	})
+	if err != nil {
+		return err
+	}
+	return assign(v, dest)
+}
+
+// fetchWithLock 跨实例防击穿：抢到锁者回源并写缓存，其余等待重读，超时兜底回源。
+func (c *RedisCache) fetchWithLock(ctx context.Context, key string, ttl time.Duration, fetch func() (interface{}, error)) (interface{}, error) {
 	token, ok, err := c.acquireLock(ctx, key)
 	if err != nil {
-		// 锁服务异常时直接 fetch，保证可用性
-		return c.fetchAndSet(ctx, key, dest, ttl, fetch)
+		// 锁服务异常时直接回源，保证可用性
+		return c.fetchAndSet(ctx, key, ttl, fetch)
 	}
 	if ok {
-		// 拿到锁，成为回源者
-		err := c.fetchAndSet(ctx, key, dest, ttl, fetch)
+		data, err := c.fetchAndSet(ctx, key, ttl, fetch)
 		c.releaseLock(ctx, key, token)
-		return err
+		return data, err
 	}
 
 	// 未拿到锁：等待持锁者写缓存后重读
 	for i := 0; i < lockRetry; i++ {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil, ctx.Err()
 		case <-time.After(lockWaitTime):
 		}
-		found, err := c.Get(ctx, key, dest)
+		var raw json.RawMessage
+		ok, err := c.Get(ctx, key, &raw)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if found {
-			return nil
+		if ok {
+			return raw, nil
 		}
 	}
-	// 等待超时仍无缓存：本请求直接 fetch，避免雪崩下所有请求无限等待
-	return c.fetchAndSet(ctx, key, dest, ttl, fetch)
+	// 等待超时仍无缓存：本请求直接回源，避免雪崩下所有请求无限等待
+	return c.fetchAndSet(ctx, key, ttl, fetch)
 }
 
 // acquireLock 获取 key 对应的防击穿锁，返回锁 token。
@@ -169,16 +190,21 @@ func (c *RedisCache) lockKey(key string) string {
 	return c.prefix + ":" + lockPrefix + key
 }
 
-// fetchAndSet 执行 fetch 并写缓存。
-func (c *RedisCache) fetchAndSet(ctx context.Context, key string, dest interface{}, ttl time.Duration, fetch func() (interface{}, error)) error {
+// fetchAndSet 执行 fetch 并写缓存，返回待反序列化的数据。
+func (c *RedisCache) fetchAndSet(ctx context.Context, key string, ttl time.Duration, fetch func() (interface{}, error)) (interface{}, error) {
 	data, err := fetch()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := c.Set(ctx, key, data, ttl); err != nil {
-		return err
+		return nil, err
 	}
-	bytes, err := json.Marshal(data)
+	return data, nil
+}
+
+// assign 把回源结果（业务值或原始 JSON）写入调用方的 dest。
+func assign(v interface{}, dest interface{}) error {
+	bytes, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}

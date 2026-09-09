@@ -321,6 +321,15 @@ type DBConfig struct {
 	// 读写分离
 	ReadHosts []string `mapstructure:"read_hosts"` // 从库地址列表
 	ReadPorts []int    `mapstructure:"read_ports"` // 从库端口列表
+	// 熔断（DB 不可用时快速失败，避免每请求都等连接/查询超时）
+	Breaker BreakerConfig `mapstructure:"breaker"`
+}
+
+// BreakerConfig 依赖熔断配置（Redis/DB 共用）
+type BreakerConfig struct {
+	Enabled         bool `mapstructure:"enabled"`           // 是否启用熔断
+	MaxFailures     int  `mapstructure:"max_failures"`      // 连续失败阈值（默认 5）
+	ResetTimeoutSec int  `mapstructure:"reset_timeout_sec"` // 冷却时间秒（默认 10）
 }
 
 // RateLimitConfig 限流维度配置（全局 IP 令牌桶见 server.rate_limit_*）。
@@ -359,6 +368,8 @@ type RedisConfig struct {
 	WriteTimeoutSec  int    `mapstructure:"write_timeout_sec"`
 	MaxRetries       int    `mapstructure:"max_retries"`
 	RetryIntervalSec int    `mapstructure:"retry_interval_sec"`
+	// 熔断（Redis 不可用时快速失败，避免每请求都等读/写超时）
+	Breaker BreakerConfig `mapstructure:"breaker"`
 }
 
 type LogConfig struct {

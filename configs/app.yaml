@@ -39,6 +39,10 @@ db:
   # 读写分离（开发环境通常不需要）
   # read_hosts: ["mariadb-read-1"]
   # read_ports: [3306]
+  breaker:                  # 熔断：DB 不可用时快速失败（读写分离启用时自动跳过）
+    enabled: true
+    max_failures: 5         # 连续失败阈值
+    reset_timeout_sec: 10   # 冷却时间（秒）
 
 # Redis 配置
 redis:
@@ -56,6 +60,10 @@ redis:
   write_timeout_sec: 3      # 写超时（秒）
   max_retries: 3            # 连接重试次数
   retry_interval_sec: 1     # 重试间隔（秒）
+  breaker:                  # 熔断：Redis 不可用时快速失败
+    enabled: true
+    max_failures: 5         # 连续失败阈值
+    reset_timeout_sec: 10   # 冷却时间（秒）
 
 # 限流维度（全局 IP 令牌桶见 server.rate_limit_*）
 ratelimit:

@@ -169,3 +169,43 @@ func TestRedisCache_DeletePattern(t *testing.T) {
 		t.Error("expected post:1 to still exist")
 	}
 }
+
+func TestRedisCache_GetOrSetSingleflightWhenLockHeldByOther(t *testing.T) {
+	// 锁被其他实例持有（本进程拿不到锁）时，进程内 singleflight 仍应把并发回源合并为一次
+	cache := setupTestCache(t)
+	ctx := context.Background()
+
+	if err := cache.client.Set(ctx, cache.lockKey("config"), "other-instance", time.Minute).Err(); err != nil {
+		t.Fatalf("prepare foreign lock failed: %v", err)
+	}
+
+	type Config struct {
+		Value string `json:"value"`
+	}
+
+	var mu sync.Mutex
+	callCount := 0
+	fetch := func() (interface{}, error) {
+		mu.Lock()
+		callCount++
+		mu.Unlock()
+		time.Sleep(30 * time.Millisecond)
+		return Config{Value: "fetched"}, nil
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var cfg Config
+			assert.NoError(t, cache.GetOrSet(ctx, "config", &cfg, time.Minute, fetch))
+			assert.Equal(t, "fetched", cfg.Value)
+		}()
+	}
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 1, callCount, "锁被他人持有时，singleflight 应合并进程内回源")
+}

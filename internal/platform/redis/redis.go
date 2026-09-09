@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"jimu/internal/config"
+	"jimu/internal/platform/breaker"
 	"jimu/internal/platform/logger"
 
 	"github.com/redis/go-redis/v9"
@@ -99,8 +100,14 @@ func ConnectWithRetry(cfg config.RedisConfig, log *logger.Logger) (Client, error
 		err := client.Ping(ctx).Err()
 		cancel()
 		if err == nil {
+			if cfg.Breaker.Enabled {
+				AttachBreaker(client, breaker.Config{
+					MaxFailures:  cfg.Breaker.MaxFailures,
+					ResetTimeout: time.Duration(cfg.Breaker.ResetTimeoutSec) * time.Second,
+				})
+			}
 			if log != nil {
-				log.Infow("redis connected", "attempt", attempt, "mode", cfg.Mode)
+				log.Infow("redis connected", "attempt", attempt, "mode", cfg.Mode, "breaker", cfg.Breaker.Enabled)
 			}
 			return client, nil
 		}
