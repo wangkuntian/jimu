@@ -47,6 +47,12 @@ func FromContext(ctx context.Context) uint64 {
 	return 0
 }
 
+// Visible 判断资源归属租户对上下文租户是否可见：
+// 上下文租户为 0（平台级视角）或资源未归属（0）时可见，否则须为同一租户。
+func Visible(resourceTenant, ctxTenant uint64) bool {
+	return ctxTenant == 0 || resourceTenant == 0 || resourceTenant == ctxTenant
+}
+
 // Middleware 将 gin context 中的 tenant_id（由 AuthMiddleware 从 JWT claim 注入）
 // 写入 request context，供业务层通过 FromContext 读取。
 func Middleware() gin.HandlerFunc {

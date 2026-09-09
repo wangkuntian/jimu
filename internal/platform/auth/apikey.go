@@ -17,6 +17,7 @@ import (
 // APIKey API 密钥信息
 type APIKey struct {
 	ID        uint64    `json:"id"`
+	TenantID  uint64    `json:"tenant_id"` // 所属租户（Key 决定租户，客户端不可指定）
 	Name      string    `json:"name"`
 	KeyPrefix string    `json:"key_prefix"` // 前 8 位，用于识别
 	Scopes    []string  `json:"scopes"`     // 权限范围，如 ["read", "write"]
@@ -151,6 +152,7 @@ func (s *dbAPIKeyStore) UpdateLastUsed(ctx context.Context, id uint64, t time.Ti
 func rowToAPIKey(row *adminapi.APIKey) *APIKey {
 	key := &APIKey{
 		ID:        row.ID,
+		TenantID:  row.TenantID,
 		Name:      row.Name,
 		KeyPrefix: row.KeyPrefix,
 		Enabled:   row.Enabled,

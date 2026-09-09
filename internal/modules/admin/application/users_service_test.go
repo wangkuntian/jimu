@@ -7,6 +7,7 @@ import (
 	"time"
 
 	userdomain "jimu/internal/modules/user/domain"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/pagination"
 
 	"github.com/stretchr/testify/assert"
@@ -15,8 +16,9 @@ import (
 
 // testRole 用于 roles 表的测试模型
 type testRole struct {
-	ID   uint64 `gorm:"primaryKey"`
-	Name string
+	ID       uint64 `gorm:"primaryKey"`
+	TenantID uint64 `gorm:"column:tenant_id"`
+	Name     string
 }
 
 func (testRole) TableName() string { return "roles" }
@@ -191,4 +193,55 @@ func TestAdminUserServiceAssignRolesRoleQueryError(t *testing.T) {
 	err := svc.AssignRoles(ctx, 1, []string{"admin"})
 	// roles 表不存在时查询报错，返回内部错误
 	assert.Error(t, err)
+}
+
+func TestAdminUserServiceTenantScoping(t *testing.T) {
+	// 创建用户：归属上下文租户；无租户上下文时归默认租户
+	var created *userdomain.User
+	svc := NewAdminUserService(&fakeUserRepository{create: func(ctx context.Context, user *userdomain.User) error {
+		created = user
+		return nil
+	}})
+	_, err := svc.CreateUser(tenant.WithTenant(context.Background(), 7), AdminCreateUserRequest{Username: "bob", Password: "password123"})
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(7), created.TenantID)
+
+	_, err = svc.CreateUser(context.Background(), AdminCreateUserRequest{Username: "bob", Password: "password123"})
+	assert.NoError(t, err)
+	assert.Equal(t, tenant.DefaultTenantID, created.TenantID)
+
+	// 跨租户：详情/更新/分配角色均按不存在处理
+	db := newSqliteDB(t, &userRole{}, &testRole{})
+	crossTenant := &fakeUserRepository{findByID: func(ctx context.Context, id uint64) (*userdomain.User, error) {
+		return &userdomain.User{ID: id, Username: "bob", TenantID: 2}, nil
+	}}
+	svc = NewAdminUserService(crossTenant, db)
+	_, err = svc.GetUser(tenant.WithTenant(context.Background(), 7), 1)
+	assert.Error(t, err)
+	assert.Error(t, svc.UpdateUser(tenant.WithTenant(context.Background(), 7), 1, AdminUpdateUserRequest{}))
+	assert.Error(t, svc.AssignRoles(tenant.WithTenant(context.Background(), 7), 1, nil))
+
+	// 同租户可见
+	_, err = svc.GetUser(tenant.WithTenant(context.Background(), 2), 1)
+	assert.NoError(t, err)
+	assert.NoError(t, svc.UpdateUser(tenant.WithTenant(context.Background(), 2), 1, AdminUpdateUserRequest{}))
+}
+
+func TestAdminUserServiceAssignRolesScopedToUserTenant(t *testing.T) {
+	ctx := context.Background()
+	db := newSqliteDB(t, &userRole{}, &testRole{})
+	// 不同租户存在同名角色（角色名租户内唯一）
+	assert.NoError(t, db.Create(&testRole{ID: 1, TenantID: 1, Name: "admin"}).Error)
+	assert.NoError(t, db.Create(&testRole{ID: 2, TenantID: 2, Name: "admin"}).Error)
+
+	svc := NewAdminUserService(&fakeUserRepository{findByID: func(ctx context.Context, id uint64) (*userdomain.User, error) {
+		return &userdomain.User{ID: id, TenantID: 2}, nil
+	}}, db)
+	assert.NoError(t, svc.AssignRoles(tenant.WithTenant(ctx, 2), 1, []string{"admin"}))
+
+	var roles []userRole
+	assert.NoError(t, db.Where("user_id = ?", 1).Find(&roles).Error)
+	assert.Len(t, roles, 1)
+	// 只解析到用户所属租户（2）的角色，未误取租户 1 的同名角色
+	assert.Equal(t, uint64(2), roles[0].RoleID)
 }

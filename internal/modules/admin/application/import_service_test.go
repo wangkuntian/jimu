@@ -10,6 +10,7 @@ import (
 	admindomain "jimu/internal/modules/admin/domain"
 	userdomain "jimu/internal/modules/user/domain"
 	"jimu/internal/platform/importer"
+	"jimu/internal/platform/tenant"
 
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
@@ -130,15 +131,25 @@ func TestImportServiceGetImportJob(t *testing.T) {
 }
 
 func TestImportServiceInsertUser(t *testing.T) {
-	ctx := context.Background()
 	db := newSqliteDB(t, &userdomain.User{})
 	svc := newImportService(db)
-	err := svc.insertUser(ctx, map[string]string{"username": "carol", "password": "secret123"})
+
+	// 上下文无租户：归默认租户
+	err := svc.insertUser(context.Background(), map[string]string{"username": "carol", "password": "secret123"})
 	assert.NoError(t, err)
 
 	var user userdomain.User
 	assert.NoError(t, db.First(&user, "username = ?", "carol").Error)
 	assert.Equal(t, int8(1), user.Status)
+	assert.Equal(t, tenant.DefaultTenantID, user.TenantID)
+
+	// 上下文有租户：归属该租户（不得悬空为 0）
+	err = svc.insertUser(tenant.WithTenant(context.Background(), 7), map[string]string{"username": "dave", "password": "secret123"})
+	assert.NoError(t, err)
+
+	var imported userdomain.User
+	assert.NoError(t, db.First(&imported, "username = ?", "dave").Error)
+	assert.Equal(t, uint64(7), imported.TenantID)
 }
 
 func TestRulesFor(t *testing.T) {
@@ -158,4 +169,26 @@ func TestImportServicePreviewFromBuffer(t *testing.T) {
 	result, err := svc.Preview(ctx, importer.FormatCSV, buf, "users")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, result.TotalRows)
+}
+
+func TestImportServiceJobTenant(t *testing.T) {
+	// 导入任务归属上下文租户
+	var created *admindomain.ImportJob
+	svc := NewImportService(&fakeImportJobRepo{create: func(ctx context.Context, job *admindomain.ImportJob) error {
+		created = job
+		return nil
+	}}, &fakeUserRepository{}, newSqliteDB(t, &userdomain.User{}))
+	_, job, err := svc.Import(tenant.WithTenant(context.Background(), 7), importer.FormatCSV, strings.NewReader(validCSV), "users", 1, "users.csv")
+	assert.NoError(t, err)
+	assert.NotNil(t, job)
+	assert.Equal(t, uint64(7), created.TenantID)
+
+	// 跨租户查询导入任务不可见，同租户可见
+	svc = NewImportService(&fakeImportJobRepo{findByID: func(ctx context.Context, id uint64) (*admindomain.ImportJob, error) {
+		return &admindomain.ImportJob{ID: id, TenantID: 2}, nil
+	}}, &fakeUserRepository{}, nil)
+	_, err = svc.GetImportJob(tenant.WithTenant(context.Background(), 7), 1)
+	assert.Error(t, err)
+	_, err = svc.GetImportJob(tenant.WithTenant(context.Background(), 2), 1)
+	assert.NoError(t, err)
 }

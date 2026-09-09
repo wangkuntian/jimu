@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"jimu/internal/platform/queue/domain"
+	"jimu/internal/platform/tenant"
 
 	"gorm.io/gorm"
 )
@@ -26,9 +27,14 @@ func NewMySQLStore(jobRepo domain.JobRepository, historyRepo domain.JobHistoryRe
 	}
 }
 
-// CreateJob 创建任务记录
+// CreateJob 创建任务记录，任务归属提交者所在租户（无租户上下文时归默认租户）
 func (s *MySQLStore) CreateJob(ctx context.Context, jobType, payload string, maxAttempts int) (*domain.Job, error) {
+	tenantID := tenant.FromContext(ctx)
+	if tenantID == 0 {
+		tenantID = tenant.DefaultTenantID
+	}
 	job := &domain.Job{
+		TenantID:    tenantID,
 		Type:        jobType,
 		Payload:     payload,
 		Status:      domain.JobStatusPending,
@@ -72,6 +78,7 @@ func (s *MySQLStore) MarkSuccess(ctx context.Context, jobID uint64, durationMs i
 		return err
 	}
 	history := &domain.JobHistory{
+		TenantID:  job.TenantID,
 		JobID:     jobID,
 		Status:    "success",
 		Duration:  durationMs,
@@ -93,6 +100,7 @@ func (s *MySQLStore) MarkFailed(ctx context.Context, jobID uint64, jobType, payl
 	if !isOutboxEvent {
 		job.Error = execErr.Error()
 		history := &domain.JobHistory{
+			TenantID:  job.TenantID,
 			JobID:     jobID,
 			Status:    "failed",
 			Error:     execErr.Error(),
@@ -109,6 +117,7 @@ func (s *MySQLStore) MarkFailed(ctx context.Context, jobID uint64, jobType, payl
 				return err
 			}
 			dead := &domain.DeadLetter{
+				TenantID:   job.TenantID,
 				JobID:      jobID,
 				Type:       jobType,
 				Payload:    payload,
@@ -120,8 +129,9 @@ func (s *MySQLStore) MarkFailed(ctx context.Context, jobID uint64, jobType, payl
 		return s.jobRepo.Update(ctx, job)
 	}
 
-	// outbox 事件：无 jobs 行，直接写死信
+	// outbox 事件：无 jobs 行，直接写死信（租户未知，取执行上下文租户，通常为 0=平台级）
 	dead := &domain.DeadLetter{
+		TenantID:   tenant.FromContext(ctx),
 		JobID:      jobID,
 		Type:       jobType,
 		Payload:    payload,

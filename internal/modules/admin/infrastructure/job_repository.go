@@ -34,11 +34,14 @@ func (r *mysqlJobRepository) Update(ctx context.Context, job *domain.Job) error 
 	return r.db.WithContext(ctx).Save(job).Error
 }
 
-func (r *mysqlJobRepository) List(ctx context.Context, offset, limit int, filters map[string]interface{}) ([]domain.Job, int64, error) {
+func (r *mysqlJobRepository) List(ctx context.Context, tenantID uint64, offset, limit int, filters map[string]interface{}) ([]domain.Job, int64, error) {
 	var jobs []domain.Job
 	var total int64
 
 	query := r.db.WithContext(ctx).Model(&domain.Job{})
+	if tenantID != 0 {
+		query = query.Where("tenant_id = ?", tenantID)
+	}
 	if status, ok := filters["status"]; ok {
 		query = query.Where("status = ?", status)
 	}

@@ -8,6 +8,7 @@ import (
 // JobHistory 任务执行历史
 type JobHistory struct {
 	ID        uint64    `gorm:"primaryKey" json:"id"`
+	TenantID  uint64    `gorm:"column:tenant_id;default:0;index" json:"tenant_id"` // 所属租户 ID（0=未归属）
 	JobID     uint64    `gorm:"not null;index" json:"job_id"`
 	Status    string    `gorm:"size:16;not null" json:"status"`
 	Error     string    `gorm:"type:text" json:"error"`

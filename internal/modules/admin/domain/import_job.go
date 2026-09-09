@@ -18,6 +18,7 @@ const (
 // ImportJob 数据导入任务
 type ImportJob struct {
 	ID          uint64    `gorm:"primaryKey" json:"id"`
+	TenantID    uint64    `gorm:"column:tenant_id;default:0;index" json:"tenant_id"` // 所属租户 ID（0=未归属）
 	Type        string    `gorm:"size:64;not null" json:"type"`
 	Filename    string    `gorm:"size:255;not null" json:"filename"`
 	Status      string    `gorm:"size:16;not null;default:pending;index" json:"status"`

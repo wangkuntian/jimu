@@ -40,13 +40,17 @@ func (r *mysqlAPIKeyRepository) FindByKeyHash(ctx context.Context, hash string) 
 	return &key, nil
 }
 
-func (r *mysqlAPIKeyRepository) List(ctx context.Context, offset, limit int) ([]domain.APIKey, int64, error) {
+func (r *mysqlAPIKeyRepository) List(ctx context.Context, tenantID uint64, offset, limit int) ([]domain.APIKey, int64, error) {
 	var keys []domain.APIKey
 	var total int64
-	if err := r.db.WithContext(ctx).Model(&domain.APIKey{}).Count(&total).Error; err != nil {
+	db := r.db.WithContext(ctx).Model(&domain.APIKey{})
+	if tenantID != 0 {
+		db = db.Where("tenant_id = ?", tenantID)
+	}
+	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	err := r.db.WithContext(ctx).Order("id DESC").Offset(offset).Limit(limit).Find(&keys).Error
+	err := db.Order("id DESC").Offset(offset).Limit(limit).Find(&keys).Error
 	return keys, total, err
 }
 

@@ -9,9 +9,11 @@ import (
 	"testing"
 
 	qdomain "jimu/internal/platform/queue/domain"
+	"jimu/internal/platform/tenant"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"gorm.io/gorm"
 )
 
 func TestAdminJobHandlerSubmit(t *testing.T) {
@@ -65,7 +67,7 @@ func TestAdminJobHandlerList(t *testing.T) {
 
 	// 仓储错误
 	r2 := gin.New()
-	r2.GET("/jobs", NewAdminJobHandler(&fakeJobRepo{list: func(ctx context.Context, offset, limit int, filters map[string]interface{}) ([]qdomain.Job, int64, error) {
+	r2.GET("/jobs", NewAdminJobHandler(&fakeJobRepo{list: func(ctx context.Context, tenantID uint64, offset, limit int, filters map[string]interface{}) ([]qdomain.Job, int64, error) {
 		return nil, 0, errors.New("db down")
 	}}, &fakeDeadLetterRepo{}).List)
 	w3 := httptest.NewRecorder()
@@ -151,7 +153,7 @@ func TestAdminJobHandlerListDeadLetters(t *testing.T) {
 
 	// 仓储错误
 	r3 := gin.New()
-	r3.GET("/jobs/dead-letters", NewAdminJobHandler(&fakeJobRepo{}, &fakeDeadLetterRepo{list: func(ctx context.Context, offset, limit int, resolved bool) ([]qdomain.DeadLetter, int64, error) {
+	r3.GET("/jobs/dead-letters", NewAdminJobHandler(&fakeJobRepo{}, &fakeDeadLetterRepo{list: func(ctx context.Context, tenantID uint64, offset, limit int, resolved bool) ([]qdomain.DeadLetter, int64, error) {
 		return nil, 0, errors.New("db down")
 	}}).ListDeadLetters)
 	w3 := httptest.NewRecorder()
@@ -183,10 +185,95 @@ func TestAdminJobHandlerResolveDeadLetter(t *testing.T) {
 
 	// 仓储错误
 	r3 := gin.New()
-	r3.POST("/jobs/dead-letters/:id/resolve", NewAdminJobHandler(&fakeJobRepo{}, &fakeDeadLetterRepo{markResolved: func(ctx context.Context, id uint64) error {
+	r3.POST("/jobs/dead-letters/:id/resolve", NewAdminJobHandler(&fakeJobRepo{}, &fakeDeadLetterRepo{markResolved: func(ctx context.Context, tenantID uint64, id uint64) error {
 		return errors.New("db down")
 	}}).ResolveDeadLetter)
 	w4 := httptest.NewRecorder()
 	r3.ServeHTTP(w4, httptest.NewRequest(http.MethodPost, "/jobs/dead-letters/1/resolve", nil))
 	assert.Equal(t, http.StatusInternalServerError, w4.Code)
+}
+
+// withTenantCtx 向请求上下文注入租户，模拟 ProtectedMiddleware 的租户注入
+func withTenantCtx(tid uint64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Request = c.Request.WithContext(tenant.WithTenant(c.Request.Context(), tid))
+		c.Next()
+	}
+}
+
+func TestAdminJobHandlerTenantIsolation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// 提交：任务归属上下文租户
+	var created *qdomain.Job
+	r := gin.New()
+	r.Use(withTenantCtx(7))
+	r.POST("/jobs", NewAdminJobHandler(&fakeJobRepo{create: func(ctx context.Context, job *qdomain.Job) error {
+		created = job
+		return nil
+	}}, &fakeDeadLetterRepo{}).Submit)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(`{"type":"email"}`)))
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, uint64(7), created.TenantID)
+
+	// 列表：上下文租户透传仓储
+	var gotTenant uint64
+	r2 := gin.New()
+	r2.Use(withTenantCtx(7))
+	r2.GET("/jobs", NewAdminJobHandler(&fakeJobRepo{list: func(ctx context.Context, tenantID uint64, offset, limit int, filters map[string]interface{}) ([]qdomain.Job, int64, error) {
+		gotTenant = tenantID
+		return nil, 0, nil
+	}}, &fakeDeadLetterRepo{}).List)
+	w2 := httptest.NewRecorder()
+	r2.ServeHTTP(w2, httptest.NewRequest(http.MethodGet, "/jobs", nil))
+	assert.Equal(t, http.StatusOK, w2.Code)
+	assert.Equal(t, uint64(7), gotTenant)
+
+	// 详情/重试：跨租户按不存在处理，同租户可见
+	crossRepo := &fakeJobRepo{findByID: func(ctx context.Context, id uint64) (*qdomain.Job, error) {
+		return &qdomain.Job{ID: id, TenantID: 2}, nil
+	}}
+	r3 := gin.New()
+	r3.Use(withTenantCtx(7))
+	r3.GET("/jobs/:id", NewAdminJobHandler(crossRepo, &fakeDeadLetterRepo{}).Get)
+	w3 := httptest.NewRecorder()
+	r3.ServeHTTP(w3, httptest.NewRequest(http.MethodGet, "/jobs/1", nil))
+	assert.Equal(t, http.StatusNotFound, w3.Code)
+
+	r4 := gin.New()
+	r4.Use(withTenantCtx(7))
+	r4.POST("/jobs/:id/retry", NewAdminJobHandler(crossRepo, &fakeDeadLetterRepo{}).Retry)
+	w4 := httptest.NewRecorder()
+	r4.ServeHTTP(w4, httptest.NewRequest(http.MethodPost, "/jobs/1/retry", nil))
+	assert.Equal(t, http.StatusNotFound, w4.Code)
+
+	r5 := gin.New()
+	r5.Use(withTenantCtx(2))
+	r5.GET("/jobs/:id", NewAdminJobHandler(crossRepo, &fakeDeadLetterRepo{}).Get)
+	w5 := httptest.NewRecorder()
+	r5.ServeHTTP(w5, httptest.NewRequest(http.MethodGet, "/jobs/1", nil))
+	assert.Equal(t, http.StatusOK, w5.Code)
+
+	// 死信：列表透传租户，跨租户处理返回 404
+	var deadTenant uint64
+	r6 := gin.New()
+	r6.Use(withTenantCtx(7))
+	r6.GET("/jobs/dead-letters", NewAdminJobHandler(&fakeJobRepo{}, &fakeDeadLetterRepo{list: func(ctx context.Context, tenantID uint64, offset, limit int, resolved bool) ([]qdomain.DeadLetter, int64, error) {
+		deadTenant = tenantID
+		return nil, 0, nil
+	}}).ListDeadLetters)
+	w6 := httptest.NewRecorder()
+	r6.ServeHTTP(w6, httptest.NewRequest(http.MethodGet, "/jobs/dead-letters", nil))
+	assert.Equal(t, http.StatusOK, w6.Code)
+	assert.Equal(t, uint64(7), deadTenant)
+
+	r7 := gin.New()
+	r7.Use(withTenantCtx(7))
+	r7.POST("/jobs/dead-letters/:id/resolve", NewAdminJobHandler(&fakeJobRepo{}, &fakeDeadLetterRepo{markResolved: func(ctx context.Context, tenantID uint64, id uint64) error {
+		return gorm.ErrRecordNotFound
+	}}).ResolveDeadLetter)
+	w7 := httptest.NewRecorder()
+	r7.ServeHTTP(w7, httptest.NewRequest(http.MethodPost, "/jobs/dead-letters/1/resolve", nil))
+	assert.Equal(t, http.StatusNotFound, w7.Code)
 }

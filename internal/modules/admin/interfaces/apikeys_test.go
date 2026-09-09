@@ -24,7 +24,7 @@ func TestAdminAPIKeyHandlerList(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	r2 := gin.New()
-	r2.GET("/apikeys", NewAdminAPIKeyHandler(application.NewAdminAPIKeyService(&fakeAPIKeyRepo{list: func(ctx context.Context, offset, limit int) ([]admindomain.APIKey, int64, error) {
+	r2.GET("/apikeys", NewAdminAPIKeyHandler(application.NewAdminAPIKeyService(&fakeAPIKeyRepo{list: func(ctx context.Context, tenantID uint64, offset, limit int) ([]admindomain.APIKey, int64, error) {
 		return nil, 0, errors.New("db down")
 	}})).List)
 	w2 := httptest.NewRecorder()

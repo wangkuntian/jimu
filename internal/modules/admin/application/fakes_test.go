@@ -131,7 +131,7 @@ func (f *fakeImportJobRepo) Update(ctx context.Context, job *admindomain.ImportJ
 type fakeAPIKeyRepo struct {
 	create   func(ctx context.Context, key *admindomain.APIKey) error
 	findByID func(ctx context.Context, id uint64) (*admindomain.APIKey, error)
-	list     func(ctx context.Context, offset, limit int) ([]admindomain.APIKey, int64, error)
+	list     func(ctx context.Context, tenantID uint64, offset, limit int) ([]admindomain.APIKey, int64, error)
 	delete   func(ctx context.Context, id uint64) error
 }
 
@@ -154,9 +154,9 @@ func (f *fakeAPIKeyRepo) FindByKeyHash(ctx context.Context, hash string) (*admin
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeAPIKeyRepo) List(ctx context.Context, offset, limit int) ([]admindomain.APIKey, int64, error) {
+func (f *fakeAPIKeyRepo) List(ctx context.Context, tenantID uint64, offset, limit int) ([]admindomain.APIKey, int64, error) {
 	if f.list != nil {
-		return f.list(ctx, offset, limit)
+		return f.list(ctx, tenantID, offset, limit)
 	}
 	return []admindomain.APIKey{{ID: 1, Name: "web"}}, 1, nil
 }
