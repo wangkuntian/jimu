@@ -145,6 +145,7 @@ type Config struct {
 	Management   ManagementConfig            `mapstructure:"management"`
 	DB           DBConfig                    `mapstructure:"db"`
 	Redis        RedisConfig                 `mapstructure:"redis"`
+	RateLimit    RateLimitConfig             `mapstructure:"ratelimit"`
 	Log          LogConfig                   `mapstructure:"log"`
 	Auth         AuthConfig                  `mapstructure:"auth"`
 	Server       ServerConfig                `mapstructure:"server"`
@@ -202,6 +203,9 @@ type ServerConfig struct {
 	TimeoutSec     int `mapstructure:"timeout_sec"`      // 请求超时秒数，0 表示不限制
 	RateLimitRate  int `mapstructure:"rate_limit_rate"`  // 全局限流速率（每秒请求数），0 表示不限流
 	RateLimitBurst int `mapstructure:"rate_limit_burst"` // 限流桶容量，允许的突发请求数
+	// 并发上限（负载保护）：超过上限返回 1010/503；0 表示不限制
+	MaxConcurrency    int `mapstructure:"max_concurrency"`
+	ConcurrencyWaitMs int `mapstructure:"concurrency_wait_ms"` // 超限后的排队等待上限（毫秒），0=立即拒绝
 }
 
 // SecurityConfig 安全头配置
@@ -317,6 +321,20 @@ type DBConfig struct {
 	// 读写分离
 	ReadHosts []string `mapstructure:"read_hosts"` // 从库地址列表
 	ReadPorts []int    `mapstructure:"read_ports"` // 从库端口列表
+}
+
+// RateLimitConfig 限流维度配置（全局 IP 令牌桶见 server.rate_limit_*）。
+// API Key 维度限流需前置 APIKeyAuthMiddleware，由业务路由按需挂载
+// middleware.APIKeyRateLimitMiddleware，因此不做全局配置。
+type RateLimitConfig struct {
+	Tenant RateLimitDimension `mapstructure:"tenant"` // 租户维度（Redis 滑动窗口，全局挂载）
+}
+
+// RateLimitDimension 单个限流维度配置
+type RateLimitDimension struct {
+	Enabled   bool `mapstructure:"enabled"`    // 是否启用
+	Limit     int  `mapstructure:"limit"`      // 窗口内允许的最大请求数
+	WindowSec int  `mapstructure:"window_sec"` // 窗口大小（秒）
 }
 
 type RedisConfig struct {

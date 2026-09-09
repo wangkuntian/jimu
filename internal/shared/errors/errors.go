@@ -41,6 +41,7 @@ const (
 	CodeRateLimited        = 1007 // 请求过于频繁
 	CodeTimeout            = 1008 // 请求超时
 	CodeConflict           = 1009 // 资源冲突
+	CodeServiceUnavailable = 1010 // 服务繁忙（负载保护拒绝）
 
 	// 用户/认证模块 (2xxx)
 	CodeUserNotFound     = 2001 // 用户不存在
@@ -111,6 +112,8 @@ func HTTPStatus(code int) int {
 		return 429
 	case CodeTimeout:
 		return 504
+	case CodeServiceUnavailable:
+		return 503
 	case CodeInternalError:
 		return 500
 	default:
@@ -165,6 +168,7 @@ func AllErrorCodes() []ErrorInfo {
 		{CodeRateLimited, "请求过于频繁", 429, "通用"},
 		{CodeTimeout, "请求超时", 504, "通用"},
 		{CodeConflict, "资源冲突", 409, "通用"},
+		{CodeServiceUnavailable, "服务繁忙", 503, "通用"},
 		{CodeUserNotFound, "用户不存在", 404, "用户"},
 		{CodeUserExists, "用户已存在", 409, "用户"},
 		{CodeInvalidPassword, "密码错误", 401, "用户"},

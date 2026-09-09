@@ -1,6 +1,7 @@
 package response
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -69,6 +70,7 @@ var codeToKey = map[int]string{
 	appErrs.CodeInvalidCredentials: "invalid_credentials",
 	appErrs.CodeRateLimited:        "rate_limit_exceeded",
 	appErrs.CodeTimeout:            "timeout",
+	appErrs.CodeServiceUnavailable: "service_unavailable",
 	appErrs.CodeConflict:           "conflict",
 	appErrs.CodeUserNotFound:       "user_not_found",
 	appErrs.CodeUserExists:         "user_exists",
@@ -87,6 +89,10 @@ func localeFrom(c *gin.Context) string {
 func failWithDetails(c *gin.Context, err error, details interface{}) {
 	var appErr *appErrs.AppError
 	if errors.As(err, &appErr) {
+		// 上下文超时（含被包装成内部错误的情况）统一按 1008/504 返回，避免误报 500
+		if errors.Is(appErr, context.DeadlineExceeded) && appErr.Code != appErrs.CodeTimeout {
+			appErr = appErrs.New(appErrs.CodeTimeout, appErr.Message)
+		}
 		// 内部错误隐藏具体原因，只返回翻译后的通用消息；其余错误码按 key 翻译
 		key, ok := codeToKey[appErr.Code]
 		if !ok {
@@ -96,6 +102,15 @@ func failWithDetails(c *gin.Context, err error, details interface{}) {
 		c.JSON(StatusForCode(appErr.Code), Body{
 			Code:      appErr.Code,
 			Message:   message,
+			RequestID: requestID(c),
+			Details:   details,
+		})
+		return
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		c.JSON(StatusForCode(appErrs.CodeTimeout), Body{
+			Code:      appErrs.CodeTimeout,
+			Message:   i18n.T("timeout", localeFrom(c)),
 			RequestID: requestID(c),
 			Details:   details,
 		})

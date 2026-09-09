@@ -57,6 +57,13 @@ redis:
   max_retries: 3            # 连接重试次数
   retry_interval_sec: 1     # 重试间隔（秒）
 
+# 限流维度（全局 IP 令牌桶见 server.rate_limit_*）
+ratelimit:
+  tenant:                   # 租户维度（Redis 滑动窗口；平台级视角 tid=0 跳过）
+    enabled: false
+    limit: 6000             # 每窗口允许请求数
+    window_sec: 60          # 窗口大小（秒）
+
 # 日志配置
 log:
   level: "debug"         # 日志级别：debug（开发环境详细日志）
@@ -85,6 +92,8 @@ server:
   timeout_sec: 60        # 请求超时秒数（开发环境较长，便于调试）
   rate_limit_rate: 0     # 全局限流速率（0 = 不限流）
   rate_limit_burst: 0    # 限流桶容量（0 = 不限流）
+  max_concurrency: 0     # 最大并发处理请求数（0 = 不限制）
+  concurrency_wait_ms: 0 # 超限排队等待上限毫秒（0 = 立即拒绝，返回 1010/503）
 
 # 雪花 ID 配置
 id:

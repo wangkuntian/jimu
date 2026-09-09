@@ -117,6 +117,7 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 		middleware.Security(cfg),
 		middleware.Recovery(reporters...),
 		middleware.Timeout(time.Duration(serverCfg.TimeoutSec)*time.Second),
+		middleware.ConcurrencyLimit(serverCfg.MaxConcurrency, time.Duration(serverCfg.ConcurrencyWaitMs)*time.Millisecond),
 		middleware.GlobalRateLimit(serverCfg.RateLimitRate, serverCfg.RateLimitBurst),
 	)
 

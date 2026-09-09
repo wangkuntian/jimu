@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"jimu/internal/platform/auth"
+
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -21,11 +23,20 @@ func TestDefaultKeyFuncPriority(t *testing.T) {
 	c1.Set("user_id", uint64(42))
 	assert.Equal(t, "user:42", defaultKeyFunc(c1))
 
-	// 其次 API Key
+	// 其次已认证 API Key：用 Key ID，不落明文
 	c2, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c2.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-	c2.Request.Header.Set("X-Api-Key", "abc")
-	assert.Equal(t, "apikey:abc", defaultKeyFunc(c2))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-API-Key", "jimu_plaintext_should_not_leak")
+	req = req.WithContext(auth.ContextWithAPIKey(req.Context(), &auth.APIKey{ID: 7}))
+	c2.Request = req
+	assert.Equal(t, "apikey:7", defaultKeyFunc(c2))
+
+	// 未认证时即使带 X-API-Key 头也走 IP（避免明文凭证进 Redis key）
+	c2b, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c2b.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	c2b.Request.Header.Set("X-API-Key", "jimu_plaintext_should_not_leak")
+	c2b.Request.RemoteAddr = "9.9.9.9:1"
+	assert.Equal(t, "ip:9.9.9.9", defaultKeyFunc(c2b))
 
 	// 最后 IP
 	c3, _ := gin.CreateTestContext(httptest.NewRecorder())

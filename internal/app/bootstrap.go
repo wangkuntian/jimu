@@ -10,6 +10,7 @@ import (
 	"jimu/internal/contract"
 	"jimu/internal/platform/db"
 	platformhttp "jimu/internal/platform/http"
+	"jimu/internal/platform/http/middleware"
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/observability"
 	"jimu/internal/platform/outbox"
@@ -154,7 +155,16 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		platformhttp.RegisterSwagger(router.Group("/swagger"))
 	}
 
-	if err := registerHTTP(router, container.Logger, modules...); err != nil {
+	// 租户维度限流（Redis 滑动窗口）：挂在受保护中间件之后，平台级视角跳过
+	var extraProtected []gin.HandlerFunc
+	if container.Redis != nil && cfg.RateLimit.Tenant.Enabled && cfg.RateLimit.Tenant.Limit > 0 {
+		extraProtected = append(extraProtected, middleware.TenantRateLimitMiddleware(
+			container.Redis,
+			cfg.RateLimit.Tenant.Limit,
+			time.Duration(cfg.RateLimit.Tenant.WindowSec)*time.Second,
+		))
+	}
+	if err := registerHTTP(router, container.Logger, extraProtected, modules...); err != nil {
 		return nil, err
 	}
 
@@ -335,7 +345,7 @@ type registerRouter interface {
 	Use(...gin.HandlerFunc) gin.IRoutes
 }
 
-func registerHTTP(router registerRouter, log moduleLogger, modules ...contract.Module) error {
+func registerHTTP(router registerRouter, log moduleLogger, extraProtected []gin.HandlerFunc, modules ...contract.Module) error {
 	for _, module := range modules {
 		if provider, ok := module.(contract.HTTPMiddlewareProvider); ok {
 			router.Use(provider.HTTPMiddleware()...)
@@ -352,6 +362,8 @@ func registerHTTP(router registerRouter, log moduleLogger, modules ...contract.M
 			break
 		}
 	}
+	// 追加外部注入的受保护中间件（如租户维度限流），顺序在认证/租户注入之后
+	protected = append(protected, extraProtected...)
 	for _, module := range modules {
 		if len(protected) > 0 && module.Name() != "auth" && module.Name() != "oauth" {
 			group := router.Group("", protected...)

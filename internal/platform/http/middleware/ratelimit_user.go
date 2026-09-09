@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"jimu/internal/platform/auth"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
@@ -56,21 +57,27 @@ func NewUserRateLimiter(client redistore.Client, limit int, window time.Duration
 	return r
 }
 
-// defaultKeyFunc 默认 key 提取：优先 user_id，其次 API Key，最后 IP
+// defaultKeyFunc 默认 key 提取：优先 user_id，其次已认证 API Key 的 ID，最后 IP。
+// 不要用 X-API-Key 原始值做 key，避免明文凭证落到 Redis。
 func defaultKeyFunc(c *gin.Context) string {
 	if userID, exists := c.Get("user_id"); exists {
 		return fmt.Sprintf("user:%v", userID)
 	}
-	if apiKey := c.GetHeader("X-Api-Key"); apiKey != "" {
-		return fmt.Sprintf("apikey:%s", apiKey)
+	if apiKey, ok := auth.APIKeyFromContext(c.Request.Context()); ok && apiKey != nil {
+		return fmt.Sprintf("apikey:%d", apiKey.ID)
 	}
 	return fmt.Sprintf("ip:%s", c.ClientIP())
 }
 
-// Middleware 返回 Gin 中间件
+// Middleware 返回 Gin 中间件；keyFunc 返回空串表示请求不属于该限流维度，直接放行
 func (r *UserRateLimiter) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		key := r.prefix + ":" + r.keyFunc(c)
+		rawKey := r.keyFunc(c)
+		if rawKey == "" {
+			c.Next()
+			return
+		}
+		key := r.prefix + ":" + rawKey
 		allowed, remaining, resetAt, err := r.allow(c.Request.Context(), key)
 		if err != nil {
 			// Redis 错误时放行（fail-open），避免服务不可用
