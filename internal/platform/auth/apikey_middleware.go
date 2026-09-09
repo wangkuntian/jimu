@@ -42,3 +42,22 @@ func APIKeyAuthMiddleware(verifier *APIKeyVerifier) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// RequireScope 校验已认证的 API Key 是否具备指定 scope（需前置 APIKeyAuthMiddleware）。
+// 语义：空 scopes 拒绝一切，只有显式包含 "*" 才代表全权（见 APIKey.HasScope）。
+func RequireScope(scope string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		apiKey, ok := APIKeyFromContext(c.Request.Context())
+		if !ok {
+			response.Fail(c, errors.New(errors.CodeUnauthorized, "api key required"))
+			c.Abort()
+			return
+		}
+		if !apiKey.HasScope(scope) {
+			response.Fail(c, errors.New(errors.CodeForbidden, "insufficient scope: "+scope))
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}

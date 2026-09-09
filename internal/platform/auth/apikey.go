@@ -97,7 +97,8 @@ func APIKeyFromContext(ctx context.Context) (*APIKey, bool) {
 	return key, ok
 }
 
-// HasScope 检查 API Key 是否拥有指定 scope
+// HasScope 检查 API Key 是否拥有指定 scope。
+// 空 scopes 表示拒绝一切；只有显式包含 "*" 才代表全权。
 func (k *APIKey) HasScope(scope string) bool {
 	for _, s := range k.Scopes {
 		if s == scope || s == "*" {
@@ -105,19 +106,6 @@ func (k *APIKey) HasScope(scope string) bool {
 		}
 	}
 	return false
-}
-
-// ScopesString 将 scopes 序列化为存储格式
-func ScopesString(scopes []string) string {
-	return strings.Join(scopes, ",")
-}
-
-// ParseScopes 从存储格式解析 scopes
-func ParseScopes(s string) []string {
-	if s == "" {
-		return nil
-	}
-	return strings.Split(s, ",")
 }
 
 // dbAPIKeyStore 基于 api_keys 表的 API Key 存储（DB 持久化实现）
