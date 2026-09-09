@@ -34,7 +34,7 @@ func TestMysqlRepositoryMySQLIntegration(t *testing.T) {
 	assert.Equal(t, u.Username, got.Username)
 
 	// List + Count
-	_, total, err := repo.List(ctx, 0, 10, "id", "desc")
+	_, total, err := repo.List(ctx, 0, 0, 10, "id", "desc")
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, total, int64(1))
 

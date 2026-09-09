@@ -16,6 +16,7 @@ type Change struct {
 type AuditLog struct {
 	ID         uint64    `gorm:"primaryKey" json:"id"`
 	UserID     uint64    `json:"user_id"`
+	TenantID   uint64    `gorm:"column:tenant_id;default:0" json:"tenant_id"` // 所属租户 ID（0=未归属）
 	Username   string    `gorm:"size:64" json:"username"`
 	Action     string    `gorm:"size:64" json:"action"`
 	Resource   string    `gorm:"size:128" json:"resource"`
@@ -38,5 +39,5 @@ type AuditRepository interface {
 	Create(ctx context.Context, log *AuditLog) error
 	CreateBatch(ctx context.Context, logs []AuditLog) error
 	FindByID(ctx context.Context, id uint64) (*AuditLog, error)
-	List(ctx context.Context, offset, limit int, sort, order string) ([]AuditLog, int64, error)
+	List(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]AuditLog, int64, error)
 }

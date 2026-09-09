@@ -3,6 +3,7 @@ package interfaces
 import (
 	auditdomain "jimu/internal/modules/audit/domain"
 	auditinfra "jimu/internal/modules/audit/infrastructure"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
@@ -20,10 +21,10 @@ func NewAdminAuditHandler(db *gorm.DB) *AdminAuditHandler {
 	return &AdminAuditHandler{repo: auditinfra.NewMysqlAuditRepository(db)}
 }
 
-// List 获取审计日志列表
+// List 获取审计日志列表（按上下文租户过滤；0=平台级视角不过滤）
 func (h *AdminAuditHandler) List(c *gin.Context) {
 	p := paginationFromQuery(c)
-	logs, total, err := h.repo.List(c.Request.Context(), p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
+	logs, total, err := h.repo.List(c.Request.Context(), tenant.FromContext(c.Request.Context()), p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
 	if err != nil {
 		response.Fail(c, err)
 		return

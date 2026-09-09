@@ -23,10 +23,14 @@ func (r *mysqlRepository) FindByID(ctx context.Context, id uint64) (*domain.Role
 	return &role, err
 }
 
-func (r *mysqlRepository) List(ctx context.Context, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
+// List 分页查询角色。tenantID 非 0 时仅返回该租户下的角色（0=平台级视角，不过滤）。
+func (r *mysqlRepository) List(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
 	var roles []domain.Role
 	var total int64
 	db := r.db.WithContext(ctx).Model(&domain.Role{})
+	if tenantID != 0 {
+		db = db.Where("tenant_id = ?", tenantID)
+	}
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}

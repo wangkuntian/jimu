@@ -10,7 +10,7 @@ import (
 
 func TestParseRejectsWrongTokenType(t *testing.T) {
 	j := New(strings.Repeat("s", 32), "jimu", 30, 7)
-	refresh, _, err := j.GenerateRefresh(42, "session-1")
+	refresh, _, err := j.GenerateRefresh(42, 1, "session-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,11 +21,11 @@ func TestParseRejectsWrongTokenType(t *testing.T) {
 
 func TestJWTPopulatesTypedClaims(t *testing.T) {
 	j := New(strings.Repeat("s", 32), "jimu", 30, 7)
-	access, err := j.GenerateAccess(42, "session-1")
+	access, err := j.GenerateAccess(42, 1, "session-1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	refresh, refreshClaims, err := j.GenerateRefresh(42, "session-1")
+	refresh, refreshClaims, err := j.GenerateRefresh(42, 1, "session-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,6 +39,9 @@ func TestJWTPopulatesTypedClaims(t *testing.T) {
 	}
 	if accessClaims.UserID != 42 || accessClaims.Subject != "42" {
 		t.Fatalf("subject/user mismatch: %#v", accessClaims)
+	}
+	if accessClaims.TenantID != 1 {
+		t.Fatalf("tenant claim mismatch: %#v", accessClaims)
 	}
 	if accessClaims.ID == "" || accessClaims.Issuer != "jimu" {
 		t.Fatalf("access claims missing metadata: %#v", accessClaims)

@@ -21,6 +21,7 @@ import (
 	"jimu/internal/modules/permission"
 	"jimu/internal/modules/role"
 	roledomain "jimu/internal/modules/role/domain"
+	tenantdomain "jimu/internal/modules/tenant/domain"
 	usermodule "jimu/internal/modules/user"
 	userdomain "jimu/internal/modules/user/domain"
 	platformauth "jimu/internal/platform/auth"
@@ -68,6 +69,7 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 		&userdomain.User{},
 		&roledomain.Role{},
 		&roledomain.Permission{},
+		&tenantdomain.Tenant{},
 		&auditdomain.AuditLog{},
 	))
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS user_roles (user_id INTEGER NOT NULL, role_id INTEGER NOT NULL)`).Error)
@@ -400,6 +402,7 @@ func TestAuthRateLimit(t *testing.T) {
 		&userdomain.User{},
 		&roledomain.Role{},
 		&roledomain.Permission{},
+		&tenantdomain.Tenant{},
 	))
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS user_roles (user_id INTEGER NOT NULL, role_id INTEGER NOT NULL)`).Error)
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS role_permissions (role_id INTEGER NOT NULL, permission_id INTEGER NOT NULL)`).Error)

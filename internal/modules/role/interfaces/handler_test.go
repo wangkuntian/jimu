@@ -157,7 +157,7 @@ type fakeRoleRepository struct{}
 func (r *fakeRoleRepository) FindByID(context.Context, uint64) (*domain.Role, error) {
 	return &domain.Role{ID: 7, Name: "admin"}, nil
 }
-func (r *fakeRoleRepository) List(context.Context, int, int, string, string) ([]domain.Role, int64, error) {
+func (r *fakeRoleRepository) List(context.Context, uint64, int, int, string, string) ([]domain.Role, int64, error) {
 	return nil, 0, nil
 }
 func (r *fakeRoleRepository) Create(_ context.Context, role *domain.Role) error {

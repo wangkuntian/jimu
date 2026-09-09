@@ -16,6 +16,7 @@ const (
 
 type Claims struct {
 	UserID    uint64 `json:"user_id"`
+	TenantID  uint64 `json:"tid"` // 归属租户 ID（0=未归属，登录时按用户归属写入）
 	SessionID string `json:"sid"`
 	TokenType string `json:"token_type"`
 	jwt.RegisteredClaims
@@ -53,13 +54,13 @@ func (j *JWT) SetPreviousSecret(secret string) {
 	j.previousSecret = []byte(secret)
 }
 
-func (j *JWT) GenerateAccess(userID uint64, sessionID string) (string, error) {
-	claims := j.newClaims(userID, sessionID, TokenTypeAccess, j.accessExpireMin)
+func (j *JWT) GenerateAccess(userID, tenantID uint64, sessionID string) (string, error) {
+	claims := j.newClaims(userID, tenantID, sessionID, TokenTypeAccess, j.accessExpireMin)
 	return j.sign(claims)
 }
 
-func (j *JWT) GenerateRefresh(userID uint64, sessionID string) (string, Claims, error) {
-	claims := j.newClaims(userID, sessionID, TokenTypeRefresh, j.refreshExpireDay)
+func (j *JWT) GenerateRefresh(userID, tenantID uint64, sessionID string) (string, Claims, error) {
+	claims := j.newClaims(userID, tenantID, sessionID, TokenTypeRefresh, j.refreshExpireDay)
 	token, err := j.sign(claims)
 	return token, claims, err
 }
@@ -117,10 +118,11 @@ func (j *JWT) Parse(tokenString, expectedType string) (*Claims, error) {
 	return claims, nil
 }
 
-func (j *JWT) newClaims(userID uint64, sessionID, tokenType string, ttl time.Duration) Claims {
+func (j *JWT) newClaims(userID, tenantID uint64, sessionID, tokenType string, ttl time.Duration) Claims {
 	now := time.Now()
 	return Claims{
 		UserID:    userID,
+		TenantID:  tenantID,
 		SessionID: sessionID,
 		TokenType: tokenType,
 		RegisteredClaims: jwt.RegisteredClaims{

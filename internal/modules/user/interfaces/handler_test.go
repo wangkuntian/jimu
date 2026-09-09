@@ -194,7 +194,7 @@ func (r *fakeUserRepository) FindByUsername(context.Context, string) (*domain.Us
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (r *fakeUserRepository) List(context.Context, int, int, string, string) ([]domain.User, int64, error) {
+func (r *fakeUserRepository) List(context.Context, uint64, int, int, string, string) ([]domain.User, int64, error) {
 	return nil, 0, nil
 }
 

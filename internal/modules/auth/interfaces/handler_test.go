@@ -95,7 +95,7 @@ func (r *handlerUserRepo) FindByID(context.Context, uint64) (*userdomain.User, e
 func (r *handlerUserRepo) FindByUsername(context.Context, string) (*userdomain.User, error) {
 	return nil, gorm.ErrRecordNotFound
 }
-func (r *handlerUserRepo) List(context.Context, int, int, string, string) ([]userdomain.User, int64, error) {
+func (r *handlerUserRepo) List(context.Context, uint64, int, int, string, string) ([]userdomain.User, int64, error) {
 	return nil, 0, nil
 }
 func (r *handlerUserRepo) Create(context.Context, *userdomain.User) error { return nil }

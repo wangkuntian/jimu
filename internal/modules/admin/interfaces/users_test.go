@@ -36,7 +36,7 @@ func TestAdminUserHandlerList(t *testing.T) {
 
 	// 仓储错误
 	r2 := gin.New()
-	r2.GET("/users", newUserHandler(&fakeUserRepository{list: func(ctx context.Context, offset, limit int, sort, order string) ([]userdomain.User, int64, error) {
+	r2.GET("/users", newUserHandler(&fakeUserRepository{list: func(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]userdomain.User, int64, error) {
 		return nil, 0, errors.New("db down")
 	}}).List)
 	w2 := httptest.NewRecorder()

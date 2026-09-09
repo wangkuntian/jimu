@@ -10,6 +10,7 @@ import (
 	"jimu/internal/contract"
 	"jimu/internal/modules/user/domain"
 	"jimu/internal/platform/outbox"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -84,6 +85,50 @@ func TestUserServiceGetMapsNotFound(t *testing.T) {
 	}
 }
 
+func TestUserServiceCreateAssignsTenant(t *testing.T) {
+	// 上下文带租户：新用户归属该租户
+	repo := &fakeUserRepository{}
+	svc := NewUserService(repo, nil)
+	if _, err := svc.Create(tenant.WithTenant(context.Background(), 7), CreateUserRequest{Username: "alice", Password: "password1"}); err != nil {
+		t.Fatal(err)
+	}
+	if repo.created == nil || repo.created.TenantID != 7 {
+		t.Fatalf("created tenant = %v, want 7", repo.created)
+	}
+
+	// 上下文无租户：归属默认租户
+	repo2 := &fakeUserRepository{}
+	if _, err := NewUserService(repo2, nil).Create(context.Background(), CreateUserRequest{Username: "bob", Password: "password1"}); err != nil {
+		t.Fatal(err)
+	}
+	if repo2.created == nil || repo2.created.TenantID != tenant.DefaultTenantID {
+		t.Fatalf("default tenant = %v, want %d", repo2.created, tenant.DefaultTenantID)
+	}
+}
+
+func TestUserServiceGetRejectsCrossTenant(t *testing.T) {
+	service := NewUserService(&fakeUserRepository{user: &domain.User{ID: 9, TenantID: 2}}, nil)
+	ctx := tenant.WithTenant(context.Background(), 1)
+
+	_, err := service.Get(ctx, 9)
+	if appCode(err) != apperrors.CodeNotFound {
+		t.Fatalf("code = %d, want %d", appCode(err), apperrors.CodeNotFound)
+	}
+}
+
+func TestUserServiceListPassesTenantToRepo(t *testing.T) {
+	repo := &fakeUserRepository{users: []domain.User{{ID: 7, Username: "alice"}}, total: 1}
+	service := NewUserService(repo, nil)
+	ctx := tenant.WithTenant(context.Background(), 7)
+
+	if _, _, err := service.List(ctx, pagination.Pagination{Page: 1, PageSize: 10, Sort: "id", Order: "desc"}); err != nil {
+		t.Fatal(err)
+	}
+	if repo.tenantID != 7 {
+		t.Fatalf("repo tenantID = %d, want 7", repo.tenantID)
+	}
+}
+
 type fakeUserRepository struct {
 	user      *domain.User
 	users     []domain.User
@@ -91,10 +136,12 @@ type fakeUserRepository struct {
 	findErr   error
 	listErr   error
 	deleteErr error
+	created   *domain.User
 	offset    int
 	limit     int
 	sort      string
 	order     string
+	tenantID  uint64
 }
 
 func (r *fakeUserRepository) FindByID(context.Context, uint64) (*domain.User, error) {
@@ -102,10 +149,11 @@ func (r *fakeUserRepository) FindByID(context.Context, uint64) (*domain.User, er
 }
 
 func (r *fakeUserRepository) FindByUsername(context.Context, string) (*domain.User, error) {
-	return nil, stderrors.New("not found")
+	return nil, gorm.ErrRecordNotFound
 }
 
-func (r *fakeUserRepository) List(_ context.Context, offset, limit int, sort, order string) ([]domain.User, int64, error) {
+func (r *fakeUserRepository) List(_ context.Context, tenantID uint64, offset, limit int, sort, order string) ([]domain.User, int64, error) {
+	r.tenantID = tenantID
 	r.offset = offset
 	r.limit = limit
 	r.sort = sort
@@ -113,7 +161,10 @@ func (r *fakeUserRepository) List(_ context.Context, offset, limit int, sort, or
 	return r.users, r.total, r.listErr
 }
 
-func (r *fakeUserRepository) Create(context.Context, *domain.User) error { return nil }
+func (r *fakeUserRepository) Create(_ context.Context, user *domain.User) error {
+	r.created = user
+	return nil
+}
 func (r *fakeUserRepository) Update(context.Context, *domain.User) error { return nil }
 func (r *fakeUserRepository) Delete(context.Context, uint64) error       { return r.deleteErr }
 func (r *fakeUserRepository) FindByEmailHash(context.Context, string) (*domain.User, error) {
@@ -164,7 +215,7 @@ func (r *fakeOutboxUserRepo) FindByID(context.Context, uint64) (*domain.User, er
 func (r *fakeOutboxUserRepo) FindByUsername(context.Context, string) (*domain.User, error) {
 	return nil, gorm.ErrRecordNotFound
 }
-func (r *fakeOutboxUserRepo) List(context.Context, int, int, string, string) ([]domain.User, int64, error) {
+func (r *fakeOutboxUserRepo) List(context.Context, uint64, int, int, string, string) ([]domain.User, int64, error) {
 	return nil, 0, nil
 }
 func (r *fakeOutboxUserRepo) Create(_ context.Context, u *domain.User) error {

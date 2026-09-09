@@ -15,6 +15,10 @@ type loginRequest struct {
 	CaptchaCode string `json:"captcha_code,omitempty"`
 	// TOTP 二次验证码（用户启用 TOTP 后登录必填，6 位数字）
 	TOTPCode string `json:"totp_code,omitempty" binding:"omitempty,len=6"`
+	// 租户名称（开通式注册时必填：注册即开通新租户，注册者成为 owner）
+	TenantName string `json:"tenant_name,omitempty" binding:"omitempty,min=1,max=128"`
+	// 租户编码（开通式注册时可选；不传自动生成，仅限字母/数字/短横线/下划线）
+	TenantCode string `json:"tenant_code,omitempty" binding:"omitempty,max=64"`
 }
 
 // enableTOTPRequest 启用 TOTP 请求参数（先用 SetupTOTP 获取密钥，再用本接口确认）

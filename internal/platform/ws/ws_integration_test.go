@@ -50,7 +50,7 @@ func newWSFixture(t *testing.T) *wsFixture {
 
 func (f *wsFixture) dial(t *testing.T, userID uint64) (*websocket.Conn, *testConn) {
 	t.Helper()
-	token, err := f.jwt.GenerateAccess(userID, "sess-"+strconv.FormatUint(userID, 10))
+	token, err := f.jwt.GenerateAccess(userID, 0, "sess-"+strconv.FormatUint(userID, 10))
 	require.NoError(t, err)
 	u := "ws" + strings.TrimPrefix(f.server.URL, "http") + "?token=" + token
 	conn, _, err := websocket.DefaultDialer.Dial(u, nil)

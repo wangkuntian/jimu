@@ -57,6 +57,12 @@ const (
 	// 验证码模块 (4xxx)
 	CodeCaptchaRequired = 4001 // 缺少验证码
 	CodeCaptchaInvalid  = 4002 // 验证码无效
+
+	// 租户模块 (5xxx)
+	CodeTenantNotFound   = 5001 // 租户不存在
+	CodeTenantExists     = 5002 // 租户已存在
+	CodeTenantProtected  = 5003 // 默认租户受保护，不可删除
+	CodeTenantCodeFormat = 5004 // 租户编码格式无效
 )
 
 type AppError struct {
@@ -95,11 +101,11 @@ func HTTPStatus(code int) int {
 		return 401
 	case CodeForbidden:
 		return 403
-	case CodeNotFound, CodeUserNotFound, CodeRoleNotFound, CodeOAuthProviderNotFound:
+	case CodeNotFound, CodeUserNotFound, CodeRoleNotFound, CodeOAuthProviderNotFound, CodeTenantNotFound:
 		return 404
-	case CodeConflict, CodeUserExists:
+	case CodeConflict, CodeUserExists, CodeTenantExists, CodeTenantProtected:
 		return 409
-	case CodeCaptchaRequired, CodeCaptchaInvalid, CodeInvalidResetCode:
+	case CodeCaptchaRequired, CodeCaptchaInvalid, CodeInvalidResetCode, CodeTenantCodeFormat:
 		return 400
 	case CodeRateLimited:
 		return 429
@@ -167,5 +173,9 @@ func AllErrorCodes() []ErrorInfo {
 		{CodeOAuthProviderNotFound, "第三方登录提供商不存在", 404, "OAuth"},
 		{CodeCaptchaRequired, "缺少验证码", 400, "验证码"},
 		{CodeCaptchaInvalid, "验证码无效", 400, "验证码"},
+		{CodeTenantNotFound, "租户不存在", 404, "租户"},
+		{CodeTenantExists, "租户已存在", 409, "租户"},
+		{CodeTenantProtected, "默认租户受保护，不可删除", 409, "租户"},
+		{CodeTenantCodeFormat, "租户编码格式无效", 400, "租户"},
 	}
 }

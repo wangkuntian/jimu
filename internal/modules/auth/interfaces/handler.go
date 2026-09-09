@@ -61,12 +61,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // Register godoc
 // @Summary      用户注册
 // @Description  注册新用户账户。仅当系统配置中 public_registration 为 true 时可用。支持 IP 维度的限流保护。
+// @Description  开通式注册（auth.provisioning.enabled=true）时，body 携带 tenant_name 即创建新租户并成为其 owner，按模板初始化角色权限，返回 {user, tenant}；未携带 tenant_name 报参数错误。
+// @Description  普通注册（未启用开通式）时忽略租户字段，用户归默认租户，返回用户信息。
+// @Description  开通式注册的 tenant_code 统一转小写存储，不传则自动生成；未传 tenant_name 报参数错误。
 // @Tags         认证
 // @Accept       json
 // @Produce      json
-// @Param        body  body      loginRequest  true  "注册信息（用户名和密码）"
-// @Success      200   {object}  response.Body  "成功，返回用户信息"
-// @Failure      400   {object}  contract.ErrorResponse  "参数错误（如用户名已存在）"
+// @Param        body  body      loginRequest  true  "注册信息（用户名和密码；开通式注册另需 tenant_name）"
+// @Success      200   {object}  response.Body  "成功，返回用户信息（开通式注册额外返回 tenant）"
+// @Failure      400   {object}  contract.ErrorResponse  "参数错误（如用户名已存在、租户编码格式无效或已存在）"
 // @Failure      429   {object}  contract.ErrorResponse  "请求过于频繁"
 // @Router       /auth/register [post]
 func (h *AuthHandler) Register(c *gin.Context) {
@@ -77,6 +80,25 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	if !h.verifyCaptcha(c, req) {
 		return
 	}
+
+	// 开通式注册：注册 = 开通新租户（单事务创建租户 + owner 用户 + 模板角色）
+	if h.cfg.Provisioning.Enabled {
+		res, err := h.service.RegisterProvisioned(c.Request.Context(), application.RegisterTenantRequest{
+			Username:   req.Username,
+			Password:   req.Password,
+			Email:      req.Email,
+			Phone:      req.Phone,
+			TenantName: req.TenantName,
+			TenantCode: req.TenantCode,
+		})
+		if err != nil {
+			response.Fail(c, err)
+			return
+		}
+		response.OK(c, gin.H{"user": res.User, "tenant": res.Tenant})
+		return
+	}
+
 	user, err := h.service.Register(c.Request.Context(), req.Username, req.Password, req.Email, req.Phone)
 	if err != nil {
 		response.Fail(c, err)

@@ -82,6 +82,12 @@ func (c *Config) validateCommon() error {
 	if c.Auth.LoginRateLimit <= 0 || c.Auth.LoginRateWindowSec <= 0 || c.Auth.RegisterRateLimit <= 0 || c.Auth.RegisterRateWindowSec <= 0 {
 		return errors.New("invalid auth rate limit")
 	}
+	if c.Auth.Provisioning.Enabled && !c.Auth.PublicRegistration {
+		return errors.New("auth.provisioning.enabled requires auth.public_registration")
+	}
+	if err := validateProvisioning(c.Auth.Provisioning); err != nil {
+		return err
+	}
 	if c.Audit.QueueSize <= 0 || c.Audit.BatchSize <= 0 || c.Audit.BatchSize > c.Audit.QueueSize || c.Audit.FlushIntervalMS <= 0 {
 		return errors.New("invalid audit configuration")
 	}
@@ -112,6 +118,36 @@ func (c *Config) validateCommon() error {
 	}
 	if c.Captcha.Enabled && c.Captcha.TTLMin <= 0 {
 		return errors.New("invalid captcha.ttl_min")
+	}
+	return nil
+}
+
+// validateProvisioning 校验开通式注册配置：enabled 时要求公开注册开启、模板非空、
+// 角色名唯一且权限条目完整、owner_role 必须能在模板中解析（空 = 第一个角色）
+func validateProvisioning(p ProvisioningConfig) error {
+	if !p.Enabled {
+		return nil
+	}
+	if len(p.Roles) == 0 {
+		return errors.New("auth.provisioning.enabled requires at least one role in auth.provisioning.roles")
+	}
+	names := make(map[string]bool, len(p.Roles))
+	for _, role := range p.Roles {
+		if role.Name == "" {
+			return errors.New("auth.provisioning.roles[].name is required")
+		}
+		if names[role.Name] {
+			return fmt.Errorf("duplicate auth.provisioning.roles[].name: %q", role.Name)
+		}
+		names[role.Name] = true
+		for _, perm := range role.Permissions {
+			if perm.Resource == "" || perm.Action == "" {
+				return fmt.Errorf("auth.provisioning.roles[%q].permissions entries require resource and action", role.Name)
+			}
+		}
+	}
+	if p.OwnerRole != "" && !names[p.OwnerRole] {
+		return fmt.Errorf("auth.provisioning.owner_role %q not found in auth.provisioning.roles", p.OwnerRole)
 	}
 	return nil
 }

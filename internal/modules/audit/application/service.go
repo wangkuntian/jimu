@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"jimu/internal/modules/audit/domain"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -60,9 +61,9 @@ func (s *AuditService) Get(ctx context.Context, id uint64) (*AuditLogResponse, e
 	return &resp, nil
 }
 
-// List 查询审计日志
+// List 查询审计日志。上下文带租户时仅返回该租户的日志（0=平台级视角，不过滤）。
 func (s *AuditService) List(ctx context.Context, p pagination.Pagination) ([]AuditLogResponse, int64, error) {
-	logs, total, err := s.repo.List(ctx, p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
+	logs, total, err := s.repo.List(ctx, tenant.FromContext(ctx), p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
 	if err != nil {
 		return nil, 0, errors.Wrap(errors.CodeInternalError, "failed to list audit logs", err)
 	}

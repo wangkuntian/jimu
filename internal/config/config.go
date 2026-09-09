@@ -354,17 +354,41 @@ type LogConfig struct {
 }
 
 type AuthConfig struct {
-	JWTSecret             string `mapstructure:"jwt_secret"`
-	JWTPreviousSecret     string `mapstructure:"jwt_previous_secret"`
-	Issuer                string `mapstructure:"issuer"`
-	AccessExpireMin       int    `mapstructure:"access_expire_min"`
-	RefreshExpireDay      int    `mapstructure:"refresh_expire_day"`
-	PublicRegistration    bool   `mapstructure:"public_registration"`
-	LoginRateLimit        int    `mapstructure:"login_rate_limit"`
-	LoginRateWindowSec    int    `mapstructure:"login_rate_window_sec"`
-	RegisterRateLimit     int    `mapstructure:"register_rate_limit"`
-	RegisterRateWindowSec int    `mapstructure:"register_rate_window_sec"`
-	ResetCodeTTLMin       int    `mapstructure:"reset_code_ttl_min"` // 密码重置验证码有效期（分钟）
+	JWTSecret             string             `mapstructure:"jwt_secret"`
+	JWTPreviousSecret     string             `mapstructure:"jwt_previous_secret"`
+	Issuer                string             `mapstructure:"issuer"`
+	AccessExpireMin       int                `mapstructure:"access_expire_min"`
+	RefreshExpireDay      int                `mapstructure:"refresh_expire_day"`
+	PublicRegistration    bool               `mapstructure:"public_registration"`
+	LoginRateLimit        int                `mapstructure:"login_rate_limit"`
+	LoginRateWindowSec    int                `mapstructure:"login_rate_window_sec"`
+	RegisterRateLimit     int                `mapstructure:"register_rate_limit"`
+	RegisterRateWindowSec int                `mapstructure:"register_rate_window_sec"`
+	ResetCodeTTLMin       int                `mapstructure:"reset_code_ttl_min"` // 密码重置验证码有效期（分钟）
+	Provisioning          ProvisioningConfig `mapstructure:"provisioning"`       // 开通式注册（注册 = 开通新租户）
+}
+
+// ProvisioningConfig 开通式注册配置。
+// enabled 时 /auth/register 在单事务内创建新租户 + owner 用户，并按 roles 模板
+// 初始化租户角色与全局权限绑定；owner 获得绑定 owner_role 指定的角色（缺省为模板第一个角色）。
+type ProvisioningConfig struct {
+	Enabled   bool                    `mapstructure:"enabled"`
+	OwnerRole string                  `mapstructure:"owner_role"` // owner 绑定的模板角色名；空 = 模板第一个角色
+	Roles     []ProvisionRoleTemplate `mapstructure:"roles"`
+}
+
+// ProvisionRoleTemplate 开通租户时初始化的角色模板。
+// permissions 引用全局权限表（seed 写入的 resource + action），缺失的权限跳过不报错。
+type ProvisionRoleTemplate struct {
+	Name        string                `mapstructure:"name"`
+	Description string                `mapstructure:"description"`
+	Permissions []ProvisionPermission `mapstructure:"permissions"`
+}
+
+// ProvisionPermission 模板角色绑定的全局权限
+type ProvisionPermission struct {
+	Resource string `mapstructure:"resource"`
+	Action   string `mapstructure:"action"`
 }
 
 // Load 加载配置

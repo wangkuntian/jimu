@@ -5,8 +5,10 @@ import (
 	"os"
 
 	"jimu/internal/modules/role/domain"
+	tenantDomain "jimu/internal/modules/tenant/domain"
 	userdomain "jimu/internal/modules/user/domain"
 	"jimu/internal/platform/auth"
+	"jimu/internal/platform/tenant"
 
 	"github.com/casbin/casbin/v3"
 	"golang.org/x/crypto/bcrypt"
@@ -22,6 +24,12 @@ func RunSeed(db *gorm.DB) error {
 	}
 
 	return db.Transaction(func(tx *gorm.DB) error {
+		// 0. 确保默认租户存在（迁移 005 已写入；此处兜底，如跳过迁移直接 seed）
+		defaultTenant := tenantDomain.Tenant{ID: tenant.DefaultTenantID, Code: "default", Name: "默认租户", Status: 1}
+		if err := tx.Where("code = ?", defaultTenant.Code).FirstOrCreate(&defaultTenant).Error; err != nil {
+			return fmt.Errorf("seed default tenant failed: %w", err)
+		}
+
 		// 1. 创建基础权限
 		permissions := basePermissions()
 
@@ -32,9 +40,9 @@ func RunSeed(db *gorm.DB) error {
 			}
 		}
 
-		// 2. 创建超级管理员角色
-		adminRole := domain.Role{Name: "超级管理员", Description: "拥有所有权限"}
-		if err := tx.Where("name = ?", adminRole.Name).FirstOrCreate(&adminRole).Error; err != nil {
+		// 2. 创建超级管理员角色（归属默认租户）
+		adminRole := domain.Role{Name: "超级管理员", Description: "拥有所有权限", TenantID: tenant.DefaultTenantID}
+		if err := tx.Where("name = ? AND tenant_id = ?", adminRole.Name, tenant.DefaultTenantID).FirstOrCreate(&adminRole).Error; err != nil {
 			return fmt.Errorf("seed admin role failed: %w", err)
 		}
 
@@ -63,6 +71,7 @@ func RunSeed(db *gorm.DB) error {
 				Username: "admin",
 				Password: string(hashedPassword),
 				Status:   1,
+				TenantID: tenant.DefaultTenantID,
 			}
 			if err := tx.Create(&adminUser).Error; err != nil {
 				return fmt.Errorf("seed admin user failed: %w", err)
@@ -147,6 +156,11 @@ func basePermissions() []domain.Permission {
 		{Name: "权限删除", Resource: "/api/v1/permissions/*", Action: "DELETE"},
 		{Name: "审计列表", Resource: "/api/v1/audits", Action: "GET"},
 		{Name: "审计详情", Resource: "/api/v1/audits/*", Action: "GET"},
+		{Name: "租户列表", Resource: "/api/v1/tenants", Action: "GET"},
+		{Name: "租户创建", Resource: "/api/v1/tenants", Action: "POST"},
+		{Name: "租户详情", Resource: "/api/v1/tenants/*", Action: "GET"},
+		{Name: "租户修改", Resource: "/api/v1/tenants/*", Action: "PUT"},
+		{Name: "租户删除", Resource: "/api/v1/tenants/*", Action: "DELETE"},
 		// 管理后台端点（/api/v1/admin/* 由 keyMatch 通配覆盖全部管理 API）
 		{Name: "管理后台读取", Resource: "/api/v1/admin/*", Action: "GET"},
 		{Name: "管理后台写入", Resource: "/api/v1/admin/*", Action: "POST"},

@@ -73,6 +73,6 @@ func (r *fakeAuditRepository) CreateBatch(context.Context, []domain.AuditLog) er
 func (r *fakeAuditRepository) FindByID(context.Context, uint64) (*domain.AuditLog, error) {
 	return &domain.AuditLog{ID: 7, Username: "alice", Action: "create"}, nil
 }
-func (r *fakeAuditRepository) List(context.Context, int, int, string, string) ([]domain.AuditLog, int64, error) {
+func (r *fakeAuditRepository) List(context.Context, uint64, int, int, string, string) ([]domain.AuditLog, int64, error) {
 	return nil, 0, nil
 }

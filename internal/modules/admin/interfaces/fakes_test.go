@@ -44,7 +44,7 @@ func (testUserRole) TableName() string { return "user_roles" }
 // fakeUserRepository 可配置的用户仓储 mock
 type fakeUserRepository struct {
 	findByID func(ctx context.Context, id uint64) (*userdomain.User, error)
-	list     func(ctx context.Context, offset, limit int, sort, order string) ([]userdomain.User, int64, error)
+	list     func(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]userdomain.User, int64, error)
 	create   func(ctx context.Context, user *userdomain.User) error
 	update   func(ctx context.Context, user *userdomain.User) error
 }
@@ -60,9 +60,9 @@ func (f *fakeUserRepository) FindByUsername(ctx context.Context, username string
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeUserRepository) List(ctx context.Context, offset, limit int, sort, order string) ([]userdomain.User, int64, error) {
+func (f *fakeUserRepository) List(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]userdomain.User, int64, error) {
 	if f.list != nil {
-		return f.list(ctx, offset, limit, sort, order)
+		return f.list(ctx, tenantID, offset, limit, sort, order)
 	}
 	return []userdomain.User{{ID: 1, Username: "alice", Status: 1}}, 1, nil
 }

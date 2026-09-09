@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"jimu/internal/modules/user/domain"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -108,9 +109,9 @@ func (s *AdminUserService) AssignRoles(ctx context.Context, userID uint64, roleN
 	})
 }
 
-// ListUsers 获取用户列表（支持搜索/过滤/分页）
+// ListUsers 获取用户列表（支持搜索/过滤/分页，按上下文租户过滤；0=平台级视角不过滤）
 func (s *AdminUserService) ListUsers(ctx context.Context, filter ListUserFilter, p pagination.Pagination) ([]AdminUser, int64, error) {
-	users, total, err := s.userRepo.List(ctx, p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
+	users, total, err := s.userRepo.List(ctx, tenant.FromContext(ctx), p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
 	if err != nil {
 		return nil, 0, apperrors.Wrap(apperrors.CodeInternalError, "failed to list users", err)
 	}

@@ -26,6 +26,7 @@ func AuditMiddleware(queue Queue) gin.HandlerFunc {
 
 		queue.Enqueue(domain.AuditLog{
 			UserID:   optionalUint64(c, "user_id"),
+			TenantID: optionalUint64(c, "tenant_id"),
 			Username: optionalString(c, "username"),
 			Action:   c.Request.Method,
 			Resource: path,

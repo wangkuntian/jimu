@@ -38,6 +38,10 @@ func New(db *gorm.DB, rdb redistore.Client, cfg config.AuthConfig, failClosed bo
 	// 密码重置验证码存储：redis 一次性码，TTL 取配置
 	resetStore := application.NewResetStore(rdb, time.Duration(cfg.ResetCodeTTLMin)*time.Minute)
 	allDeps := append(deps, resetStore, application.WithIssuer(cfg.Issuer))
+	// 开通式注册：注册 = 开通新租户（单事务，模板模式初始化角色权限）
+	if cfg.Provisioning.Enabled {
+		allDeps = append(allDeps, application.NewGormTenantProvisioner(db, cfg.Provisioning))
+	}
 	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin, allDeps...)
 	m := &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaSvc, captchaCfg: captchaCfg}
 	for _, dep := range deps {

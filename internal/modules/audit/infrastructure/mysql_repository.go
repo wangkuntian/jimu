@@ -39,10 +39,14 @@ func (r *mysqlAuditRepository) FindByID(ctx context.Context, id uint64) (*domain
 	return &log, nil
 }
 
-func (r *mysqlAuditRepository) List(ctx context.Context, offset, limit int, sort, order string) ([]domain.AuditLog, int64, error) {
+// List 分页查询审计日志。tenantID 非 0 时仅返回该租户的日志（0=平台级视角，不过滤）。
+func (r *mysqlAuditRepository) List(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]domain.AuditLog, int64, error) {
 	var logs []domain.AuditLog
 	var total int64
 	db := r.db.WithContext(ctx).Model(&domain.AuditLog{})
+	if tenantID != 0 {
+		db = db.Where("tenant_id = ?", tenantID)
+	}
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}

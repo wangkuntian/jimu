@@ -69,7 +69,7 @@ func TestMysqlRepositoryListCountAndPagination(t *testing.T) {
 		require.NoError(t, repo.Create(ctx, newTestUser()))
 	}
 
-	users, total, err := repo.List(ctx, 0, 2, "id", "desc")
+	users, total, err := repo.List(ctx, 0, 0, 2, "id", "desc")
 	assert.NoError(t, err)
 	assert.Equal(t, int64(3), total)
 	assert.Len(t, users, 2)

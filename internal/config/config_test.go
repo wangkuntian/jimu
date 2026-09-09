@@ -291,3 +291,90 @@ func TestValidateRedisEmptyModeDefaultsSingle(t *testing.T) {
 		t.Fatalf("empty redis.mode should default to %q, got %q", RedisModeSingle, cfg.Redis.Mode)
 	}
 }
+
+func validProvisioningConfig() ProvisioningConfig {
+	return ProvisioningConfig{
+		Enabled:   true,
+		OwnerRole: "管理员",
+		Roles: []ProvisionRoleTemplate{
+			{
+				Name:        "管理员",
+				Description: "租户管理员",
+				Permissions: []ProvisionPermission{{Resource: "/api/v1/users", Action: "GET"}},
+			},
+		},
+	}
+}
+
+func TestValidateProvisioningDisabled(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Auth.Provisioning = ProvisioningConfig{Enabled: false}
+	if err := cfg.Validate("prod"); err != nil {
+		t.Fatalf("disabled provisioning should pass validation, got: %v", err)
+	}
+}
+
+func TestValidateProvisioningValid(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Auth.PublicRegistration = true
+	cfg.Auth.Provisioning = validProvisioningConfig()
+	if err := cfg.Validate("prod"); err != nil {
+		t.Fatalf("valid provisioning should pass validation, got: %v", err)
+	}
+}
+
+func TestValidateProvisioningRequiresPublicRegistration(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Auth.Provisioning = validProvisioningConfig()
+	cfg.Auth.PublicRegistration = false
+	err := cfg.Validate("prod")
+	if err == nil || !strings.Contains(err.Error(), "auth.public_registration") {
+		t.Fatalf("provisioning without public registration should fail, got: %v", err)
+	}
+}
+
+func TestValidateProvisioningRequiresRoles(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Auth.PublicRegistration = true
+	cfg.Auth.Provisioning = ProvisioningConfig{Enabled: true}
+	err := cfg.Validate("prod")
+	if err == nil || !strings.Contains(err.Error(), "auth.provisioning.roles") {
+		t.Fatalf("provisioning without roles should fail, got: %v", err)
+	}
+}
+
+func TestValidateProvisioningRejectsDuplicateRoleName(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Auth.PublicRegistration = true
+	p := validProvisioningConfig()
+	p.Roles = append(p.Roles, p.Roles[0])
+	cfg.Auth.Provisioning = p
+	err := cfg.Validate("prod")
+	if err == nil || !strings.Contains(err.Error(), "duplicate") {
+		t.Fatalf("duplicate template role name should fail, got: %v", err)
+	}
+}
+
+func TestValidateProvisioningRejectsUnknownOwnerRole(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Auth.PublicRegistration = true
+	p := validProvisioningConfig()
+	p.OwnerRole = "不存在"
+	cfg.Auth.Provisioning = p
+	err := cfg.Validate("prod")
+	if err == nil || !strings.Contains(err.Error(), "owner_role") {
+		t.Fatalf("unknown owner_role should fail, got: %v", err)
+	}
+}
+
+func TestValidateProvisioningRejectsIncompletePermission(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Auth.PublicRegistration = true
+	p := validProvisioningConfig()
+	p.Roles[0].Permissions = []ProvisionPermission{{Resource: "/api/v1/users"}}
+	cfg.Auth.Provisioning = p
+	err := cfg.Validate("prod")
+	if err == nil || !strings.Contains(err.Error(), "resource and action") {
+		t.Fatalf("permission without action should fail, got: %v", err)
+	}
+}

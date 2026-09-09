@@ -17,6 +17,7 @@ import (
 	"jimu/internal/platform/encryption"
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/outbox"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/totp"
 
@@ -26,17 +27,18 @@ import (
 )
 
 type AuthService struct {
-	userRepo   userdomain.UserRepository
-	jwtUtil    *auth.JWT
-	sessions   auth.SessionStore
-	lockout    *auth.LoginFailureTracker
-	accessMin  int
-	outbox     *outbox.Outbox
-	cipher     *encryption.Cipher
-	notifier   notification.Dispatcher
-	resetStore *ResetStore
-	resetGen   func() string // 验证码生成器（测试注入）
-	issuer     string        // TOTP otpauth URI 的 issuer
+	userRepo    userdomain.UserRepository
+	jwtUtil     *auth.JWT
+	sessions    auth.SessionStore
+	lockout     *auth.LoginFailureTracker
+	accessMin   int
+	outbox      *outbox.Outbox
+	cipher      *encryption.Cipher
+	notifier    notification.Dispatcher
+	resetStore  *ResetStore
+	resetGen    func() string     // 验证码生成器（测试注入）
+	issuer      string            // TOTP otpauth URI 的 issuer
+	provisioner TenantProvisioner // 开通式注册（nil = 未启用，注册仅建普通用户）
 }
 
 func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int, deps ...interface{}) *AuthService {
@@ -59,6 +61,8 @@ func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessi
 			s.resetStore = d
 		case totpIssuer:
 			s.issuer = string(d)
+		case TenantProvisioner:
+			s.provisioner = d
 		}
 	}
 	return s
@@ -128,7 +132,7 @@ func (s *AuthService) LoginWithTOTP(ctx context.Context, username, password, tot
 // finishLogin 校验通过后的公共登录收尾：签发 token + 建会话 + Outbox 事件。
 func (s *AuthService) finishLogin(ctx context.Context, user *userdomain.User) (*authdomain.TokenPair, error) {
 	sessionID := uuid.NewString()
-	accessToken, refreshToken, refreshClaims, err := s.issueTokenPair(user.ID, sessionID)
+	accessToken, refreshToken, refreshClaims, err := s.issueTokenPair(user.ID, effectiveTenantID(user.TenantID), sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -170,17 +174,8 @@ func (s *AuthService) recordFailure(ctx context.Context, username string) {
 
 func (s *AuthService) Register(ctx context.Context, username, password, email, phone string) (*userdomain.User, error) {
 	username = normalizeUsername(username)
-	existing, _ := s.userRepo.FindByUsername(ctx, username)
-	if existing != nil {
-		return nil, errors.New(errors.CodeUserExists, "username already exists")
-	}
-
-	// 邮箱查重（盲索引精确查询）；空邮箱跳过，DB unique 索引兜底
-	if email != "" && s.cipher != nil {
-		existing, _ := s.userRepo.FindByEmailHash(ctx, s.cipher.BlindIndex(email))
-		if existing != nil {
-			return nil, errors.New(errors.CodeUserExists, "email already exists")
-		}
+	if err := s.checkRegistrationAvailable(ctx, username, email); err != nil {
+		return nil, err
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -194,11 +189,67 @@ func (s *AuthService) Register(ctx context.Context, username, password, email, p
 		Email:    email,
 		Phone:    phone,
 		Status:   1,
+		// 公开注册入口无租户上下文，新用户归默认租户
+		TenantID: tenant.DefaultTenantID,
 	}
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to create user", err)
 	}
 	return user, nil
+}
+
+// RegisterTenantRequest 开通式注册请求：创建新租户，注册者成为该租户 owner
+type RegisterTenantRequest struct {
+	Username   string
+	Password   string
+	Email      string
+	Phone      string
+	TenantName string // 租户名称（必填）
+	TenantCode string // 租户编码（可选；空则自动生成）
+}
+
+// RegisterProvisioned 开通式注册（auth.provisioning.enabled）：单事务创建
+// 新租户 + owner 用户 + 模板角色与权限绑定。未启用时返回参数错误。
+func (s *AuthService) RegisterProvisioned(ctx context.Context, req RegisterTenantRequest) (*ProvisionResult, error) {
+	if s.provisioner == nil {
+		return nil, errors.New(errors.CodeInvalidParam, "tenant provisioning is disabled")
+	}
+	if req.TenantName == "" {
+		return nil, errors.New(errors.CodeInvalidParam, "tenant_name is required for provisioned registration")
+	}
+	username := normalizeUsername(req.Username)
+	if err := s.checkRegistrationAvailable(ctx, username, req.Email); err != nil {
+		return nil, err
+	}
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, errors.Wrap(errors.CodeInternalError, "failed to hash password", err)
+	}
+	return s.provisioner.Provision(ctx, ProvisionParams{
+		Username:     username,
+		PasswordHash: string(hashedPassword),
+		Email:        req.Email,
+		Phone:        req.Phone,
+		TenantName:   req.TenantName,
+		TenantCode:   req.TenantCode,
+	})
+}
+
+// checkRegistrationAvailable 注册前置查重：用户名 + 邮箱盲索引（DB unique 兜底并发）
+func (s *AuthService) checkRegistrationAvailable(ctx context.Context, username, email string) error {
+	existing, _ := s.userRepo.FindByUsername(ctx, username)
+	if existing != nil {
+		return errors.New(errors.CodeUserExists, "username already exists")
+	}
+
+	// 邮箱查重（盲索引精确查询）；空邮箱跳过，DB unique 索引兜底
+	if email != "" && s.cipher != nil {
+		existing, _ := s.userRepo.FindByEmailHash(ctx, s.cipher.BlindIndex(email))
+		if existing != nil {
+			return errors.New(errors.CodeUserExists, "email already exists")
+		}
+	}
+	return nil
 }
 
 // ForgotPassword 发送密码重置验证码到邮箱。用户不存在仍返回成功，避免邮箱枚举。
@@ -353,7 +404,7 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*authdo
 		return nil, errors.New(errors.CodeUnauthorized, "invalid refresh token")
 	}
 
-	accessToken, newRefreshToken, newRefreshClaims, err := s.issueTokenPair(claims.UserID, claims.SessionID)
+	accessToken, newRefreshToken, newRefreshClaims, err := s.issueTokenPair(claims.UserID, claims.TenantID, claims.SessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -389,16 +440,24 @@ func (s *AuthService) LogoutAll(ctx context.Context, userID uint64) error {
 	return nil
 }
 
-func (s *AuthService) issueTokenPair(userID uint64, sessionID string) (string, string, auth.Claims, error) {
-	accessToken, err := s.jwtUtil.GenerateAccess(userID, sessionID)
+func (s *AuthService) issueTokenPair(userID, tenantID uint64, sessionID string) (string, string, auth.Claims, error) {
+	accessToken, err := s.jwtUtil.GenerateAccess(userID, tenantID, sessionID)
 	if err != nil {
 		return "", "", auth.Claims{}, errors.Wrap(errors.CodeInternalError, "failed to generate access token", err)
 	}
-	refreshToken, refreshClaims, err := s.jwtUtil.GenerateRefresh(userID, sessionID)
+	refreshToken, refreshClaims, err := s.jwtUtil.GenerateRefresh(userID, tenantID, sessionID)
 	if err != nil {
 		return "", "", auth.Claims{}, errors.Wrap(errors.CodeInternalError, "failed to generate refresh token", err)
 	}
 	return accessToken, refreshToken, refreshClaims, nil
+}
+
+// effectiveTenantID 返回用于签发的租户 ID；未归属（0）时归默认租户。
+func effectiveTenantID(userTenant uint64) uint64 {
+	if userTenant == 0 {
+		return tenant.DefaultTenantID
+	}
+	return userTenant
 }
 
 func refreshTTL(claims auth.Claims) time.Duration {

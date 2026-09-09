@@ -39,7 +39,7 @@ func (r *fakeBatchRepository) FindByID(context.Context, uint64) (*domain.AuditLo
 	return nil, nil
 }
 
-func (r *fakeBatchRepository) List(context.Context, int, int, string, string) ([]domain.AuditLog, int64, error) {
+func (r *fakeBatchRepository) List(context.Context, uint64, int, int, string, string) ([]domain.AuditLog, int64, error) {
 	return nil, 0, nil
 }
 

@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	platformauth "jimu/internal/platform/auth"
+	"jimu/internal/platform/tenant"
 
 	"github.com/casbin/casbin/v3"
 	"github.com/gin-gonic/gin"
@@ -11,5 +12,6 @@ func ProtectedMiddleware(jwtUtil *platformauth.JWT, store platformauth.Authoriza
 	return []gin.HandlerFunc{
 		platformauth.AuthMiddleware(jwtUtil),
 		platformauth.AuthorizationMiddleware(store, enforcer),
+		tenant.Middleware(),
 	}
 }

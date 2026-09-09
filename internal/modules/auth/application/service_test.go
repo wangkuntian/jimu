@@ -160,6 +160,72 @@ func TestLogoutRevokesSessions(t *testing.T) {
 	}
 }
 
+func TestRegisterProvisionedRequiresProvisioner(t *testing.T) {
+	repo := &fakeUserRepo{users: map[string]*userdomain.User{}}
+	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30)
+
+	_, err := service.RegisterProvisioned(context.Background(), RegisterTenantRequest{
+		Username: "alice", Password: "secret123", TenantName: "Acme",
+	})
+	if appCode(err) != apperrors.CodeInvalidParam {
+		t.Fatalf("code = %d, want %d", appCode(err), apperrors.CodeInvalidParam)
+	}
+}
+
+func TestRegisterProvisionedDelegatesToProvisioner(t *testing.T) {
+	repo := &fakeUserRepo{users: map[string]*userdomain.User{}}
+	fake := &fakeTenantProvisioner{result: &ProvisionResult{}}
+	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, fake)
+
+	res, err := service.RegisterProvisioned(context.Background(), RegisterTenantRequest{
+		Username:   " Alice ",
+		Password:   "secret123",
+		Email:      "alice@example.com",
+		TenantName: "Acme Inc",
+		TenantCode: "acme",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res != fake.result {
+		t.Fatalf("result = %#v, want provisioner result", res)
+	}
+	if fake.params.Username != "alice" || fake.params.TenantName != "Acme Inc" || fake.params.TenantCode != "acme" {
+		t.Fatalf("params = %#v", fake.params)
+	}
+	if fake.params.PasswordHash == "secret123" || fake.params.PasswordHash == "" {
+		t.Fatalf("password must be hashed before provisioning: %q", fake.params.PasswordHash)
+	}
+}
+
+func TestRegisterProvisionedRejectsMissingTenantName(t *testing.T) {
+	repo := &fakeUserRepo{users: map[string]*userdomain.User{}}
+	fake := &fakeTenantProvisioner{result: &ProvisionResult{}}
+	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, fake)
+
+	_, err := service.RegisterProvisioned(context.Background(), RegisterTenantRequest{
+		Username: "alice", Password: "secret123",
+	})
+	if appCode(err) != apperrors.CodeInvalidParam {
+		t.Fatalf("code = %d, want %d", appCode(err), apperrors.CodeInvalidParam)
+	}
+}
+
+// fakeTenantProvisioner 记录 Provision 入参，返回预置结果/错误
+type fakeTenantProvisioner struct {
+	params ProvisionParams
+	result *ProvisionResult
+	err    error
+}
+
+func (f *fakeTenantProvisioner) Provision(_ context.Context, params ProvisionParams) (*ProvisionResult, error) {
+	f.params = params
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.result, nil
+}
+
 type fakeUserRepo struct {
 	users           map[string]*userdomain.User
 	lookups         []string
@@ -186,7 +252,7 @@ func (r *fakeUserRepo) FindByUsername(_ context.Context, username string) (*user
 	return user, nil
 }
 
-func (r *fakeUserRepo) List(context.Context, int, int, string, string) ([]userdomain.User, int64, error) {
+func (r *fakeUserRepo) List(context.Context, uint64, int, int, string, string) ([]userdomain.User, int64, error) {
 	return nil, 0, stderrors.New("not implemented")
 }
 

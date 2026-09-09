@@ -59,7 +59,7 @@ func (r *fakeAuditRepository) CreateBatch(context.Context, []domain.AuditLog) er
 func (r *fakeAuditRepository) FindByID(context.Context, uint64) (*domain.AuditLog, error) {
 	return r.log, r.findErr
 }
-func (r *fakeAuditRepository) List(_ context.Context, offset, limit int, sort, order string) ([]domain.AuditLog, int64, error) {
+func (r *fakeAuditRepository) List(_ context.Context, _ uint64, offset, limit int, sort, order string) ([]domain.AuditLog, int64, error) {
 	r.offset = offset
 	r.limit = limit
 	r.sort = sort

@@ -78,7 +78,7 @@ func (r *fakeRoleRepository) FindByID(context.Context, uint64) (*domain.Role, er
 	return &domain.Role{}, r.findErr
 }
 
-func (r *fakeRoleRepository) List(_ context.Context, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
+func (r *fakeRoleRepository) List(_ context.Context, _ uint64, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
 	r.offset = offset
 	r.limit = limit
 	r.sort = sort

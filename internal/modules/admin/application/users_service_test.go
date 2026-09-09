@@ -25,7 +25,7 @@ func TestAdminUserServiceListUsers(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	svc := NewAdminUserService(&fakeUserRepository{list: func(ctx context.Context, offset, limit int, sort, order string) ([]userdomain.User, int64, error) {
+	svc := NewAdminUserService(&fakeUserRepository{list: func(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]userdomain.User, int64, error) {
 		return []userdomain.User{{ID: 1, Username: "alice", Status: 1, CreatedAt: now}}, 1, nil
 	}})
 	users, total, err := svc.ListUsers(ctx, ListUserFilter{}, pagination.Pagination{})
@@ -55,7 +55,7 @@ func TestAdminUserServiceListUsers(t *testing.T) {
 	assert.Len(t, users, 0)
 
 	// 仓储错误
-	svcErr := NewAdminUserService(&fakeUserRepository{list: func(ctx context.Context, offset, limit int, sort, order string) ([]userdomain.User, int64, error) {
+	svcErr := NewAdminUserService(&fakeUserRepository{list: func(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]userdomain.User, int64, error) {
 		return nil, 0, errors.New("db down")
 	}})
 	_, _, err = svcErr.ListUsers(ctx, ListUserFilter{}, pagination.Pagination{})

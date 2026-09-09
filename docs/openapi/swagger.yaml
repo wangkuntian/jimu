@@ -42,6 +42,19 @@ definitions:
     required:
     - name
     type: object
+  application.CreateTenantRequest:
+    properties:
+      code:
+        maxLength: 64
+        type: string
+      name:
+        maxLength: 128
+        minLength: 1
+        type: string
+    required:
+    - code
+    - name
+    type: object
   application.CreateUserRequest:
     properties:
       email:
@@ -81,6 +94,18 @@ definitions:
         type: string
     required:
     - name
+    type: object
+  application.UpdateTenantRequest:
+    properties:
+      name:
+        maxLength: 128
+        minLength: 1
+        type: string
+      status:
+        enum:
+        - 0
+        - 1
+        type: integer
     type: object
   application.UpdateUserRequest:
     properties:
@@ -153,6 +178,15 @@ definitions:
         type: string
       phone:
         description: 手机号（注册时可选收集；登录忽略）
+        type: string
+      tenant_code:
+        description: 租户编码（开通式注册时可选；不传自动生成，仅限字母/数字/短横线/下划线）
+        maxLength: 64
+        type: string
+      tenant_name:
+        description: 租户名称（开通式注册时必填：注册即开通新租户，注册者成为 owner）
+        maxLength: 128
+        minLength: 1
         type: string
       totp_code:
         description: TOTP 二次验证码（用户启用 TOTP 后登录必填，6 位数字）
@@ -545,9 +579,13 @@ paths:
     post:
       consumes:
       - application/json
-      description: 注册新用户账户。仅当系统配置中 public_registration 为 true 时可用。支持 IP 维度的限流保护。
+      description: |-
+        注册新用户账户。仅当系统配置中 public_registration 为 true 时可用。支持 IP 维度的限流保护。
+        开通式注册（auth.provisioning.enabled=true）时，body 携带 tenant_name 即创建新租户并成为其 owner，按模板初始化角色权限，返回 {user, tenant}；未携带 tenant_name 报参数错误。
+        普通注册（未启用开通式）时忽略租户字段，用户归默认租户，返回用户信息。
+        开通式注册的 tenant_code 统一转小写存储，不传则自动生成；未传 tenant_name 报参数错误。
       parameters:
-      - description: 注册信息（用户名和密码）
+      - description: 注册信息（用户名和密码；开通式注册另需 tenant_name）
         in: body
         name: body
         required: true
@@ -557,11 +595,11 @@ paths:
       - application/json
       responses:
         "200":
-          description: 成功，返回用户信息
+          description: 成功，返回用户信息（开通式注册额外返回 tenant）
           schema:
             $ref: '#/definitions/response.Body'
         "400":
-          description: 参数错误（如用户名已存在）
+          description: 参数错误（如用户名已存在、租户编码格式无效或已存在）
           schema:
             $ref: '#/definitions/contract.ErrorResponse'
         "429":
@@ -1049,6 +1087,190 @@ paths:
       summary: 分配角色权限
       tags:
       - 角色管理
+  /tenants:
+    get:
+      description: 分页获取租户列表。支持按 ID、编码、创建时间排序。
+      parameters:
+      - description: 页码（默认 1）
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量（默认 20，最大 100）
+        in: query
+        name: page_size
+        type: integer
+      - description: 排序字段（支持 id、code、created_at，默认 id）
+        in: query
+        name: sort
+        type: string
+      - description: 排序方向（asc 或 desc，默认 desc）
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回分页租户列表
+          schema:
+            $ref: '#/definitions/contract.PageResponse'
+        "400":
+          description: 参数错误（如无效的排序字段）
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取租户列表
+      tags:
+      - 租户管理
+    post:
+      consumes:
+      - application/json
+      description: 创建新租户。编码全局唯一，仅允许字母、数字、短横线和下划线（统一转小写存储）；创建后编码不可修改。
+      parameters:
+      - description: 租户信息（编码和名称）
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/application.CreateTenantRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 创建成功，返回租户信息
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: 参数错误（编码格式无效）
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "409":
+          description: 租户编码已存在
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建租户
+      tags:
+      - 租户管理
+  /tenants/{id}:
+    delete:
+      description: 软删除指定租户。默认租户受保护，不可删除。
+      parameters:
+      - description: 租户 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: 参数错误（ID 格式无效）
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: 租户不存在
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "409":
+          description: 默认租户不可删除
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除租户
+      tags:
+      - 租户管理
+    get:
+      description: 根据租户 ID 获取租户详细信息。
+      parameters:
+      - description: 租户 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回租户信息
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: 参数错误（ID 格式无效）
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: 租户不存在
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取租户详情
+      tags:
+      - 租户管理
+    put:
+      consumes:
+      - application/json
+      description: 更新指定租户的名称或状态。编码不可修改。默认租户可改名但不可删除。
+      parameters:
+      - description: 租户 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 要更新的租户信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/application.UpdateTenantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: 租户不存在
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新租户信息
+      tags:
+      - 租户管理
   /users:
     get:
       description: 分页获取用户列表。支持按 ID、用户名、创建时间排序，可指定升序或降序。

@@ -15,6 +15,7 @@ import (
 	oauthmodule "jimu/internal/modules/oauth"
 	"jimu/internal/modules/permission"
 	"jimu/internal/modules/role"
+	tenantmodule "jimu/internal/modules/tenant"
 	"jimu/internal/modules/user"
 	"jimu/internal/platform/auth"
 )
@@ -72,6 +73,7 @@ func run() error {
 		authmodule.New(container.DB, container.Redis, cfg.Auth, cfg.HTTP.Mode == config.HTTPModeRelease, container.Captcha, cfg.Captcha, container.Outbox, container.Notification, container.Cipher),
 		role.New(container.DB),
 		permission.New(container.DB),
+		tenantmodule.New(container.DB, *cfg),
 		auditmodule.New(container.DB, cfg.Audit, container.Logger),
 		adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, container.Scheduler, container.Storage, container.UploadScanner, container.FeatureFlag, container.EventBus,
 			auth.NewWithRotation(cfg.Auth.JWTSecret, cfg.Auth.JWTPreviousSecret, cfg.Auth.Issuer, cfg.Auth.AccessExpireMin, cfg.Auth.RefreshExpireDay)),

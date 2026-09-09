@@ -13,6 +13,7 @@ import (
 	"jimu/internal/platform/cache"
 	"jimu/internal/platform/encryption"
 	"jimu/internal/platform/outbox"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -41,6 +42,12 @@ func NewUserService(repo domain.UserRepository, cache cache.Cache, deps ...inter
 }
 
 const userCacheTTL = 5 * time.Minute
+
+// tenantAllowed 判断目标资源租户是否允许当前上下文访问。
+// ctxTenant=0 表示平台级视角（无租户上下文），放行所有资源。
+func tenantAllowed(resourceTenant, ctxTenant uint64) bool {
+	return ctxTenant == 0 || resourceTenant == 0 || resourceTenant == ctxTenant
+}
 
 func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserResponse, error) {
 	existing, err := s.repo.FindByUsername(ctx, req.Username)
@@ -74,6 +81,11 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserR
 		Phone:    req.Phone,
 		Status:   1,
 	}
+	// 新用户归属创建者所在租户；上下文无租户（平台级/旧 token）时归默认租户
+	user.TenantID = tenant.FromContext(ctx)
+	if user.TenantID == 0 {
+		user.TenantID = tenant.DefaultTenantID
+	}
 	if err := s.repo.Create(ctx, user); err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to create user", err)
 	}
@@ -102,11 +114,15 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserR
 }
 
 func (s *UserService) Get(ctx context.Context, id uint64) (*UserResponse, error) {
+	ctxTenant := tenant.FromContext(ctx)
 	// Cache-Aside: 先查缓存
 	if s.cache != nil {
 		cacheKey := fmt.Sprintf("user:id:%d", id)
 		var resp UserResponse
 		if found, _ := s.cache.Get(ctx, cacheKey, &resp); found {
+			if !tenantAllowed(resp.TenantID, ctxTenant) {
+				return nil, errors.New(errors.CodeNotFound, "user not found")
+			}
 			return &resp, nil
 		}
 	}
@@ -122,6 +138,9 @@ func (s *UserService) Get(ctx context.Context, id uint64) (*UserResponse, error)
 		return nil, errors.Wrap(code, message, err)
 	}
 	resp := ToUserResponse(*user)
+	if !tenantAllowed(resp.TenantID, ctxTenant) {
+		return nil, errors.New(errors.CodeNotFound, "user not found")
+	}
 
 	// 写入缓存
 	if s.cache != nil {
@@ -131,7 +150,7 @@ func (s *UserService) Get(ctx context.Context, id uint64) (*UserResponse, error)
 }
 
 func (s *UserService) List(ctx context.Context, p pagination.Pagination) ([]UserResponse, int64, error) {
-	users, total, err := s.repo.List(ctx, p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
+	users, total, err := s.repo.List(ctx, tenant.FromContext(ctx), p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
 	if err != nil {
 		return nil, 0, errors.Wrap(errors.CodeInternalError, "failed to list users", err)
 	}
@@ -145,6 +164,9 @@ func (s *UserService) Update(ctx context.Context, id uint64, req UpdateUserReque
 			return errors.Wrap(errors.CodeNotFound, "user not found", err)
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to get user", err)
+	}
+	if !tenantAllowed(user.TenantID, tenant.FromContext(ctx)) {
+		return errors.New(errors.CodeNotFound, "user not found")
 	}
 	if req.Status != nil {
 		user.Status = *req.Status
@@ -180,6 +202,9 @@ func (s *UserService) Delete(ctx context.Context, id uint64) error {
 			return errors.Wrap(errors.CodeNotFound, "user not found", err)
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to get user", err)
+	}
+	if !tenantAllowed(user.TenantID, tenant.FromContext(ctx)) {
+		return errors.New(errors.CodeNotFound, "user not found")
 	}
 	if err := s.repo.Delete(ctx, user.ID); err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to delete user", err)
