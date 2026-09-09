@@ -1,0 +1,23 @@
+{
+  "name": "jimu_error_logs_spike",
+  "stream_type": "logs",
+  "stream_name": "jimu_logs",
+  "is_real_time": false,
+  "query_condition": {
+    "type": "custom",
+    "conditions": [
+      { "column": "severity", "operator": "=", "value": "error" }
+    ]
+  },
+  "trigger_condition": {
+    "period": 5,
+    "operator": ">=",
+    "threshold": 10,
+    "frequency": 2,
+    "frequency_type": "minutes",
+    "silence": 10
+  },
+  "destinations": ["jimu_webhook"],
+  "description": "5 分钟内错误日志(severity=error)达到 10 条告警；阈值按业务量调整",
+  "enabled": true
+}

@@ -5,13 +5,14 @@
 # 不影响 mariadb / redis / server 等业务容器。
 #
 # 用法:
-#   ./scripts/observability.sh start     # 启动 openobserve + otel-collector 并初始化 dashboard
+#   ./scripts/observability.sh start     # 启动 openobserve + otel-collector 并初始化 dashboard / 默认告警
 #   ./scripts/observability.sh stop      # 停止并删除监控栈容器（保留业务容器与数据卷）
 #   ./scripts/observability.sh restart   # 重启监控栈
 #   ./scripts/observability.sh status    # 查看监控栈容器状态
 #
 # 环境变量（来自 .env，缺省同 docker-compose.yml）：
 #   ZO_OBSERVE_HTTP_PORT / ZO_OBSERVE_ROOT_USER_EMAIL / ZO_OBSERVE_ROOT_USER_PASSWORD
+#   ZO_ALERT_WEBHOOK_URL（可选：默认告警的 webhook 通知地址；未设置则跳过告警同步）
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,6 +39,11 @@ start() {
     ZO_EMAIL="${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local}" \
     ZO_PASSWORD="${ZO_OBSERVE_ROOT_USER_PASSWORD:-}" \
     "$ROOT_DIR/deploy/openobserve/init-dashboard.sh"
+  echo "==> 同步默认告警（幂等，需 ZO_ALERT_WEBHOOK_URL）"
+  ZO_HTTP="$ZO_HTTP" \
+    ZO_EMAIL="${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local}" \
+    ZO_PASSWORD="${ZO_OBSERVE_ROOT_USER_PASSWORD:-}" \
+    "$ROOT_DIR/deploy/openobserve/sync-alerts.sh"
   echo "✅ OpenObserve:   $ZO_HTTP （默认账号 ${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local}）"
   echo "   OTLP gRPC:    127.0.0.1:${ZO_OBSERVE_GRPC_PORT:-5081}"
   echo "   启用应用推送：OTEL_ENABLED=true make compose-up"

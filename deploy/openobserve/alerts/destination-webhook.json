@@ -1,0 +1,15 @@
+{
+  "name": "jimu_webhook",
+  "module": {
+    "alert": {
+      "template": "jimu_alert_http",
+      "destination_type": {
+        "type": "http",
+        "url": "__ZO_ALERT_WEBHOOK_URL__",
+        "method": "post",
+        "skip_tls_verify": false,
+        "output_format": "json"
+      }
+    }
+  }
+}

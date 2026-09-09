@@ -166,8 +166,9 @@ make compose-up                       # OTEL_ENABLED 默认开启；OTEL_ENABLED
 - OpenObserve UI/API: http://127.0.0.1:5080 （默认账号 admin@jimu.local / Admin@12345，可用 `ZO_OBSERVE_ROOT_USER_EMAIL` / `ZO_OBSERVE_ROOT_USER_PASSWORD` 覆盖）
 - OTLP gRPC: `127.0.0.1:5081`（tracing / metrics / logs 统一入口）
 - 默认 dashboard **Jimu Overview**：开启时自动创建（幂等），含 17 面板：stat 卡片（错误日志/日志总量/DB 连接池/Goroutines）、时间序列（DB/运行时/日志/HTTP/熔断/MySQL/Redis）、最近错误日志表格
+- 官方数据库 dashboard **MySQL Metrics Monitoring** / **Redis Metrics Dashboard**：随启动自动创建（数据来自 OTel Collector 采集的 `mysql_*` / `redis_*` 指标流）；可选的 **PostgreSQL**（opentelemetry-contrib 采集）见下文
 
-**Dashboard 配置与同步（面板进 git）**：dashboard 定义保存在 `deploy/openobserve/dashboards/*.json`（v8 结构，含面板查询与布局），启动时按此文件创建/重建：
+**Dashboard 配置与同步（面板进 git）**：dashboard 定义保存在 `deploy/openobserve/dashboards/*.json`（v8 结构，含面板查询与布局），启动时按此文件创建/重建；MySQL/Redis 官方模板取自 [openobserve/dashboards](https://github.com/openobserve/dashboards) 并归一为 v8 结构与 192 列网格布局入库（官方原始文件为旧版小网格，直接导入面板会缩成一条）：
 
 ```bash
 ./deploy/openobserve/sync-dashboard.sh                # 应用 dashboards/*.json（幂等：同名重建）
@@ -176,6 +177,18 @@ make compose-up                       # OTEL_ENABLED 默认开启；OTEL_ENABLED
 
 JSON 中维护面板查询（`queries.fields` 流与轴映射、`type` 渲染类型）与布局（`layout` 网格坐标）；在 UI 手工调整后可用 `--export` 拉回并提交（运行时元数据自动剥离）。
 
+**默认告警（可选）**：内置 8 条告警规则（`deploy/openobserve/alerts/jimu_*.json`，覆盖错误日志激增、HTTP 5xx 占比、DB 连接池饱和、队列死信、Outbox 发布失败、出站熔断、MySQL 线程数、Redis key 淘汰），经 OpenObserve v2 告警 API 同步（幂等：存在则更新，否则创建）。创建告警必须绑定已存在的通知目的地，因此同步依赖 `ZO_ALERT_WEBHOOK_URL`：
+
+```bash
+# .env 设置后 make compose-up 随监控栈启动自动同步；webhook 指向企业微信/钉钉/飞书/Slack 等网关均可
+ZO_ALERT_WEBHOOK_URL=https://example.com/webhook
+./deploy/openobserve/sync-alerts.sh                   # 手工同步（含通知模板 jimu_alert_http + 目的地 jimu_webhook）
+```
+
+- `ZO_ALERT_WEBHOOK_URL` 留空时跳过同步（不影响其它功能），告警也可在 UI 内手工配置
+- 告警创建要求目标 stream 已有数据入库（按 stream schema 校验）；首次启动数据未就绪的规则会自动重试，超限跳过，稍后重跑补齐
+- 目的地固定 `jimu_webhook`（POST JSON，载荷含 `alert_name` / `stream` / `level` / `fired_count` 等），阈值为保守默认值，在 `alerts/*.json` 或 UI 中按业务调整
+
 **数据库集成（MySQL/Redis 指标）**：`make compose-up`（OTEL_ENABLED 默认开启）会同时启动 OTel Collector（`otel-collector` 服务，配置 `deploy/otel-collector.yaml`），采集 MySQL（performance_schema 指标：连接池/缓冲池/锁/慢查询相关）与 Redis（客户端/内存/命令吞吐）指标，经 OTLP/gRPC 推送到 OpenObserve（约 45 个 `mysql_*` / `redis_*` 指标流）：
 
 ```bash
@@ -183,8 +196,11 @@ docker compose --profile observability up -d otel-collector   # 单独启动采�
 ```
 
 - 采集凭据：compose 内 MySQL 用 root 密码（secret `db_root_password`）；k8s/helm 生产环境默认用应用用户（`jimu`），需为其授予 `PROCESS, REPLICATION CLIENT` 权限以读取状态变量
-- PostgreSQL：`deploy/otel-collector.yaml` 已预留 `postgres` receiver 配置（取消注释并按需填 `PG_*` 环境变量）
-- 面板：dashboard 已预置 MySQL 线程数 / Redis 客户端连接 / Redis 内存 / Redis 指令吞吐 4 个时间序列面板（数据来自 collector）
+- PostgreSQL（可选）：`deploy/otel-collector.yaml` 预留 `postgres` receiver，与 compose 的 `PG_ENDPOINT` / `PG_USER` / `PG_PASSWORD` 注释配置成对启用；启用后同步可选模板 `deploy/openobserve/dashboards-optional/postgresql-metrics.json`（官方 PostgreSQL (opentelemetry-contrib) 版，35 面板）：
+  ```bash
+  DASH_DIR=deploy/openobserve/dashboards-optional ./deploy/openobserve/sync-dashboard.sh
+  ```
+- 面板：dashboard 已预置 MySQL 线程数 / Redis 客户端连接 / Redis 内存 / Redis 指令吞吐 4 个时间序列面板（数据来自 collector）；独立官方模板提供 MySQL 6 面板（页/行/缓冲池操作等）与 Redis 7 面板（内存/吞吐/CPU 等）
 
 让应用接入 OpenObserve（`otel.enabled` 开启，tracing + metrics + logs 均经 OTLP gRPC 推送）：
 
@@ -192,7 +208,7 @@ docker compose --profile observability up -d otel-collector   # 单独启动采�
 make compose-up   # OTEL_ENABLED 默认开启，server 自动指向 openobserve:5081 推送
 ```
 
-应用侧：`/metrics` 端点保留 Prometheus 格式供外部工具抓取；指标另按 `metrics_interval_sec` 周期转 OTLP 推送（按指标名分流成独立 stream）；结构化日志异步推送（缓冲满丢弃，不影响主链路）；日志与追踪分别写入 `jimu_logs` / `jimu_traces` stream（可用 `otel.logs_stream_name` / `otel.traces_stream_name` 调整，空值回落 OpenObserve 默认流 `default`）。告警在 OpenObserve UI 内配置（VQL 告警规则 + 通知渠道）。
+应用侧：`/metrics` 端点保留 Prometheus 格式供外部工具抓取；指标另按 `metrics_interval_sec` 周期转 OTLP 推送（按指标名分流成独立 stream）；结构化日志异步推送（缓冲满丢弃，不影响主链路）；日志与追踪分别写入 `jimu_logs` / `jimu_traces` stream（可用 `otel.logs_stream_name` / `otel.traces_stream_name` 调整，空值回落 OpenObserve 默认流 `default`）。内置默认告警随监控栈同步（见上文「默认告警」），其余告警在 OpenObserve UI 内配置（VQL 告警规则 + 通知渠道）。
 
 **日志输出规范**（保证 OpenObserve 中可检索、可聚合、可与 trace 关联）：
 
@@ -249,8 +265,14 @@ jimu/
 │   ├── openobserve/             # OpenObserve 初始化脚本
 │   │   ├── init-dashboard.sh    # 兼容入口（等同 sync-dashboard.sh）
 │   │   ├── sync-dashboard.sh    # dashboard 同步：apply（dashboards/*.json → 线上，幂等）/ --export（线上 → git）
-│   │   └── dashboards/          # dashboard 定义 JSON（面板查询与布局，git 管理）
-│   │       └── jimu-overview.json  # Jimu Overview 17 面板
+│   │   ├── sync-alerts.sh       # 默认告警同步（模板/目的地/规则 → 线上，幂等；依赖 ZO_ALERT_WEBHOOK_URL）
+│   │   ├── dashboards/          # dashboard 定义 JSON（面板查询与布局，git 管理）
+│   │   │   ├── jimu-overview.json      # Jimu Overview 17 面板
+│   │   │   ├── mysql-metrics.json      # 官方 MySQL Metrics Monitoring 6 面板
+│   │   │   └── redis-metrics.json      # 官方 Redis Metrics Dashboard 7 面板
+│   │   ├── dashboards-optional/ # 可选 dashboard（按需用 DASH_DIR 同步）
+│   │   │   └── postgresql-metrics.json # 官方 PostgreSQL (opentelemetry-contrib) 35 面板
+│   │   └── alerts/              # 默认告警规则 JSON（模板/目的地/jimu_*.json，git 管理）
 │   └── helm/                    # Helm Chart（含 openobserve / otel-collector 配置）
 ├── docs/                         # 文档
 │   ├── openapi/                  # Swagger 生成的 API 文档
@@ -797,7 +819,7 @@ internal/modules/{name}/
 | `make compose-logs` | 查看应用日志 |
 | `make compose-migrate` | Compose 环境执行迁移 |
 | `make compose-seed` | Compose 环境插入初始数据（需 `.env` 提供 `ADMIN_PASSWORD`，或 `make compose-seed ADMIN_PASSWORD=xxx`） |
-| `make compose-up`（`OTEL_ENABLED=false` 关闭） | 统一开关（默认开）：启动 OpenObserve 监控栈（含数据库指标 Collector 与默认 dashboard）并让 server 推送遥测 |
+| `make compose-up`（`OTEL_ENABLED=false` 关闭） | 统一开关（默认开）：启动 OpenObserve 监控栈（含数据库指标 Collector、默认 dashboard 与内置告警同步）并让 server 推送遥测 |
 | `make compose-check` | 使用临时项目、Secret 和数据卷进行 Compose 运行时/API 验证，不影响本地服务 |
 | `make release-check` | 发布前检查（fmt-check + vet + test + govulncheck + Compose 运行时/API 验证） |
 | `make ci` | 本地 CI 检查（无外部依赖：fmt-check + vet + lint + test + 覆盖率 + race + swagger + smoke + build + govulncheck，完整 CI 见 `.github/workflows/ci.yml`） |

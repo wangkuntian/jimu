@@ -1,0 +1,22 @@
+{
+  "name": "jimu_outbox_publish_failures",
+  "stream_type": "metrics",
+  "stream_name": "jimu_outbox_events_total",
+  "is_real_time": false,
+  "query_condition": {
+    "type": "promql",
+    "promql": "sum(increase(jimu_outbox_events_total{result=\"failed\"}[10m]))",
+    "promql_condition": { "column": "value", "operator": ">=", "value": 3 }
+  },
+  "trigger_condition": {
+    "period": 10,
+    "operator": ">=",
+    "threshold": 1,
+    "frequency": 5,
+    "frequency_type": "minutes",
+    "silence": 30
+  },
+  "destinations": ["jimu_webhook"],
+  "description": "10 分钟窗口内 Outbox 事件发布失败 >= 3 条",
+  "enabled": true
+}

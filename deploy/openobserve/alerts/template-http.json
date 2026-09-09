@@ -1,0 +1,6 @@
+{
+  "name": "jimu_alert_http",
+  "is_default": false,
+  "type": "http",
+  "body": "{\"alert_name\":\"{alert_name}\",\"org\":\"{org_name}\",\"stream\":\"{stream_name}\",\"stream_type\":\"{stream_type}\",\"level\":\"{alert_level}\",\"period_minutes\":\"{alert_period}\",\"condition\":\"{alert_operator} {alert_threshold}\",\"fired_count\":\"{alert_count}\",\"start_time\":\"{alert_start_time}\",\"end_time\":\"{alert_end_time}\"}"
+}

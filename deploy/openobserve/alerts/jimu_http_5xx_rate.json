@@ -1,0 +1,22 @@
+{
+  "name": "jimu_http_5xx_rate",
+  "stream_type": "metrics",
+  "stream_name": "jimu_http_requests_total",
+  "is_real_time": false,
+  "query_condition": {
+    "type": "promql",
+    "promql": "100 * sum(increase(jimu_http_requests_total{status=~\"5..\"}[10m])) / sum(increase(jimu_http_requests_total[10m]))",
+    "promql_condition": { "column": "value", "operator": ">", "value": 5 }
+  },
+  "trigger_condition": {
+    "period": 10,
+    "operator": ">=",
+    "threshold": 1,
+    "frequency": 2,
+    "frequency_type": "minutes",
+    "silence": 15
+  },
+  "destinations": ["jimu_webhook"],
+  "description": "10 分钟窗口内 HTTP 5xx 占比 > 5%（无流量时不触发）",
+  "enabled": true
+}

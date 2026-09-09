@@ -1,7 +1,7 @@
 {
   "version": 8,
   "title": "Jimu Overview",
-  "description": "jimu 默认概览（日志/指标/数据库；192 列网格全宽布局）",
+  "description": "Jimu 默认概览",
   "folder_id": "default",
   "variables": {
     "list": [],
