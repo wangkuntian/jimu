@@ -25,14 +25,10 @@ func pgDSNHost(cfg config.DBConfig, host string, port int) string {
 	if port == 0 {
 		port = cfg.Port
 	}
-	// TimeZone 决定会话时区；未配置时保持原有 Asia/Shanghai 行为
-	tz := cfg.Timezone
-	if tz == "" {
-		tz = "Asia/Shanghai"
-	}
+	// 时间统一按 UTC 存储与读取（与 MySQL 侧约定一致）
 	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable TimeZone=%s",
-		host, port, cfg.User, cfg.Password, cfg.Database, tz,
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable TimeZone=UTC",
+		host, port, cfg.User, cfg.Password, cfg.Database,
 	)
 }
 

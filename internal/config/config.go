@@ -319,9 +319,6 @@ type DBConfig struct {
 	ConnMaxIdleTimeSec int    `mapstructure:"conn_max_idle_time_sec"`
 	MaxRetries         int    `mapstructure:"max_retries"`
 	RetryIntervalSec   int    `mapstructure:"retry_interval_sec"`
-	// 连接时区（IANA 名称，如 Asia/Shanghai / UTC）。
-	// 留空保持各驱动原有行为：MySQL 用 Local，PostgreSQL 用 Asia/Shanghai。
-	Timezone string `mapstructure:"timezone"`
 	// 读写分离
 	ReadHosts []string `mapstructure:"read_hosts"` // 从库地址列表
 	ReadPorts []int    `mapstructure:"read_ports"` // 从库端口列表

@@ -696,7 +696,6 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `db.max_idle` | 最大空闲连接数 | `10`（开发）/ `20`（生产） |
 | `db.conn_max_lifetime_sec` | 连接最大存活时间（秒） | `3600` |
 | `db.read_hosts` / `db.read_ports` | 只读副本地址 / 端口（读写分离） | — |
-| `db.timezone` | 连接时区（IANA 名称，如 `Asia/Shanghai`/`UTC`）；留空保持驱动默认（MySQL `Local`、PostgreSQL `Asia/Shanghai`），非法值启动即报错 | — |
 | `db.breaker.enabled` / `db.breaker.max_failures` / `db.breaker.reset_timeout_sec` | DB 语句级熔断开关 / 连续失败阈值 / 冷却秒数（读写分离启用时自动跳过） | `true` / `5` / `10` |
 | `redis.mode` | Redis 部署模式：`single` / `sentinel` / `cluster` | `single` |
 | `redis.addr` | Redis 地址（单机模式） | `127.0.0.1:6379` |
@@ -845,7 +844,7 @@ internal/modules/{name}/
 - Gorm + Goose 迁移，命名 `{seq}_create_{table}s.sql`，迁移文件需为每个字段和表添加中文 COMMENT
 - 基础表包含 `id`、`created_at`、`updated_at`、`deleted_at`；主键由应用生成雪花 ID（gorm hook），建表不使用 `AUTO_INCREMENT`
 - 支持读写分离（`read_hosts`、`read_ports` 配置，MySQL/MariaDB 与 PostgreSQL 均支持，从库按 `RandomPolicy` 轮询）；**注意从库存在复制延迟**：写后立即读可能读到旧数据，强一致读请走主库（框架未做写后粘主，需要强一致的查询请在业务层显式指定主库或加读己之写补偿）
-- 时区：库表时间列由数据库会话时区解释，可用 `db.timezone` 统一（留空保持驱动默认）；**同一环境务必固定时区**，变更时区会改变既有时间数据的解读，需先评估存量数据
+- 时间统一 **UTC**：连接固定 `loc=UTC` + MySQL 会话 `time_zone='+00:00'`（PostgreSQL `TimeZone=UTC`），驱动与服务器时区必须一致，否则 `TIMESTAMP` 列与 `DEFAULT CURRENT_TIMESTAMP` 会相差一个时区偏移；API 以 RFC3339（带 `Z`）返回，展示时区由前端/SDK 转换
 - 金额/精度：框架**不提供**decimal 抽象（避免引入依赖与过早抽象）；金额用 `DECIMAL(m,n)` 列存储、Go 侧用 `string` 或最小货币单位 `int64` 传输，**禁止用 float 表示金额**
 - 全文检索：`platform/search.New(db)` 按方言返回实现；索引写入需在业务写事务提交后调用（或经 outbox 异步补索引），避免主数据与索引不一致
 - 并发写控制：`platform/db` 提供 `LockRow`（事务内 `SELECT ... FOR UPDATE` 锁定单行，SQLite 自动降级）与 `SaveOptimistic`（`version` 列乐观锁，冲突返回 `db.ErrConcurrentUpdate`，调用方映射 409）；`users`/`roles`/`tenants` 已带 `version` 列，角色/租户更新走乐观锁，角色权限替换与用户角色分配在事务内先锁目标行
