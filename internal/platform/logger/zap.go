@@ -114,6 +114,8 @@ func New(cfg config.LogConfig, extraCores ...zapcore.Core) *Logger {
 		cores = append(cores, extraCores...)
 		core = zapcore.NewTee(cores...)
 	}
+	// 所有 sink 统一脱敏：凭证整体替换，邮箱/手机号等 PII 部分保留
+	core = WithMasking(core)
 	zapLogger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
 
 	return &Logger{zapLogger.Sugar(), &atomicLevel}
