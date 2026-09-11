@@ -36,6 +36,8 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **文件存储** — 本地/S3/OSS/MinIO 统一接口
 - **上传安全** — 文件大小限制 + magic-byte 嗅探覆盖可伪造的 Content-Type 头 + MIME 白名单；可选 ClamAV 病毒扫描（`upload.clamav.enabled`，stdlib 实现 INSTREAM 协议，落库前同步扫描，fail-closed：不干净或扫描不可达均拒绝落库）
 - **数据导入/导出** — CSV/Excel 模板解析、校验与导入/导出（`internal/platform/importer` / `internal/platform/exporter`）；通用 importer 保留 `Importer.Import`，通过可选逐行 `RowSink` 注入持久化，未配置时明确报错，业务应用负责事务落库，导出结果可被导入器回读验证；管理端用户导入按操作者所在租户归属（无租户上下文时归默认租户），不产生未归属数据
+- **历史数据保留** — `platform/db` 保留服务按表分批硬删除过期历史数据（`audit_logs`/`jobs`/`job_history`/`dead_letters`/`outbox_events`/`import_jobs`），挂在定时任务上（`retention.enabled`，默认关闭）；只清理终态记录（已发布事件、已处理死信、已结束任务），指标 `jimu_retention_deleted_total`
+- **全文检索** — `platform/search` 统一接口（`Index`/`Delete`/`Search`）+ 公共索引表 `search_documents`：MySQL 走 FULLTEXT（`MATCH ... AGAINST`），PostgreSQL 走 `tsvector` 表达式 GIN 索引；按 `tenant_id` 隔离，`(tenant_id, doc_type, doc_id)` 唯一保证幂等覆盖。中文分词需数据库侧扩展（MySQL ngram / PG zhparser）
 - **通知系统** — 邮件/短信(SMS)/WebSocket/Webhook 抽象；短信支持阿里云（dysmsapi SDK，`sms.enabled` 配置开关）；Webhook 回调载荷支持 HMAC-SHA256 签名（`notification.webhook.sign_secret`，附加 `X-Jimu-Timestamp`/`X-Jimu-Signature` 头，防重放）
 - **统一出站 HTTP client** — 封装 timeout + retry/backoff（仅网络错误与 5xx）+ 熔断（连续失败自动开启，冷却后探测恢复）+ 按目标 host 独立限流（令牌桶）+ OTel `traceparent` 注入（`internal/platform/httpclient`），OAuth 提供商与 Webhook 共用
 - **依赖熔断** — 统一熔断器 `internal/platform/breaker`（连续失败阈值 + 冷却后半开探测）接入 Redis（命令/连接级 hook）与 DB（语句级 `ConnPool`），依赖不可用时快速失败而非每请求等超时；只把连接/网络类错误计为失败（Redis 未命中与业务错误、DB 慢查询超时都不触发）；指标 `jimu_breaker_open` / `jimu_breaker_rejected_total` / `jimu_breaker_trip_total`。DB 在启用读写分离时自动跳过（dbresolver 管理独立连接池，已日志提示）
@@ -694,6 +696,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `db.max_idle` | 最大空闲连接数 | `10`（开发）/ `20`（生产） |
 | `db.conn_max_lifetime_sec` | 连接最大存活时间（秒） | `3600` |
 | `db.read_hosts` / `db.read_ports` | 只读副本地址 / 端口（读写分离） | — |
+| `db.timezone` | 连接时区（IANA 名称，如 `Asia/Shanghai`/`UTC`）；留空保持驱动默认（MySQL `Local`、PostgreSQL `Asia/Shanghai`），非法值启动即报错 | — |
 | `db.breaker.enabled` / `db.breaker.max_failures` / `db.breaker.reset_timeout_sec` | DB 语句级熔断开关 / 连续失败阈值 / 冷却秒数（读写分离启用时自动跳过） | `true` / `5` / `10` |
 | `redis.mode` | Redis 部署模式：`single` / `sentinel` / `cluster` | `single` |
 | `redis.addr` | Redis 地址（单机模式） | `127.0.0.1:6379` |
@@ -720,6 +723,9 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `server.rate_limit_rate` / `server.rate_limit_burst` | 全局限流速率（每秒）/ 桶容量 | `100` / `200` |
 | `server.max_concurrency` / `server.concurrency_wait_ms` | 并发处理上限 / 超限排队等待上限（毫秒，0=立即拒绝）；超限返回 `1010`/503，0 表示不限制 | `512` / `200` |
 | `ratelimit.tenant.enabled` / `ratelimit.tenant.limit` / `ratelimit.tenant.window_sec` | 租户维度限流开关 / 窗口内请求上限 / 窗口秒数（平台级视角 `tid=0` 跳过，Redis 异常 fail-open） | `false` / `6000` / `60` |
+| `retention.enabled` / `retention.cron` / `retention.batch_size` | 历史数据保留任务开关 / 调度表达式 / 每批删除行数（默认关闭） | `false` / `30 3 * * *` / `500` |
+| `retention.audit_log_days` / `retention.job_days` / `retention.job_history_days` | 审计日志 / 已终态任务 / 任务执行历史保留天数（0=不清理） | `180` / `7` / `30` |
+| `retention.dead_letter_days` / `retention.outbox_event_days` / `retention.import_job_days` | 已处理死信 / 已发布 outbox 事件 / 已结束导入任务保留天数（0=不清理） | `30` / `7` / `90` |
 | `id.worker_id` | 雪花 ID worker 编号（0-1023）；多实例部署时每个副本需唯一，避免 ID 冲突 | `0` |
 | `storage.type` | 存储类型 (`local`/`s3`/`oss`/`minio`)。`oss` 复用 S3 协议（path style + endpoint），无需阿里云 SDK；`minio` 需 `path_style: true` | `local` |
 | `upload.clamav.enabled` | 是否启用文件上传 ClamAV 病毒扫描；`false` 时上传不扫描 | `false` |
@@ -839,6 +845,9 @@ internal/modules/{name}/
 - Gorm + Goose 迁移，命名 `{seq}_create_{table}s.sql`，迁移文件需为每个字段和表添加中文 COMMENT
 - 基础表包含 `id`、`created_at`、`updated_at`、`deleted_at`；主键由应用生成雪花 ID（gorm hook），建表不使用 `AUTO_INCREMENT`
 - 支持读写分离（`read_hosts`、`read_ports` 配置，MySQL/MariaDB 与 PostgreSQL 均支持，从库按 `RandomPolicy` 轮询）；**注意从库存在复制延迟**：写后立即读可能读到旧数据，强一致读请走主库（框架未做写后粘主，需要强一致的查询请在业务层显式指定主库或加读己之写补偿）
+- 时区：库表时间列由数据库会话时区解释，可用 `db.timezone` 统一（留空保持驱动默认）；**同一环境务必固定时区**，变更时区会改变既有时间数据的解读，需先评估存量数据
+- 金额/精度：框架**不提供**decimal 抽象（避免引入依赖与过早抽象）；金额用 `DECIMAL(m,n)` 列存储、Go 侧用 `string` 或最小货币单位 `int64` 传输，**禁止用 float 表示金额**
+- 全文检索：`platform/search.New(db)` 按方言返回实现；索引写入需在业务写事务提交后调用（或经 outbox 异步补索引），避免主数据与索引不一致
 - 并发写控制：`platform/db` 提供 `LockRow`（事务内 `SELECT ... FOR UPDATE` 锁定单行，SQLite 自动降级）与 `SaveOptimistic`（`version` 列乐观锁，冲突返回 `db.ErrConcurrentUpdate`，调用方映射 409）；`users`/`roles`/`tenants` 已带 `version` 列，角色/租户更新走乐观锁，角色权限替换与用户角色分配在事务内先锁目标行
 
 ### 日志调用规范
