@@ -35,8 +35,12 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
+      # docs/openapi 由 swag 生成，CI 会用 make swagger 重新生成并做逐字节比对，
+      # 任何格式化改写都会导致比对失败，故跳过这两个改写类钩子
       - id: trailing-whitespace
+        exclude: '^docs/openapi/'
       - id: end-of-file-fixer
+        exclude: '^docs/openapi/'
       - id: check-yaml
         args: [--allow-multiple-documents]  # k8s 清单为 --- 分隔的多文档，属标准写法
         exclude: '^deploy/helm/templates/'  # Go template 语法，非纯 YAML，无法解析
