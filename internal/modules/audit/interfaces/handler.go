@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"jimu/internal/modules/audit/application"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"
@@ -17,6 +18,31 @@ type AuditHandler struct {
 
 func NewAuditHandler(service *application.AuditService) *AuditHandler {
 	return &AuditHandler{service: service}
+}
+
+// Verify godoc
+// @Summary      校验审计链完整性
+// @Description  按 ID 升序重算审计日志的链式哈希（HMAC-SHA256/SHA-256）并检查前后衔接，用于发现篡改或删除。返回参与校验的条目数、未哈希的存量条目数、是否完整、首个异常条目与原因；单租户全量校验时还会比对链头检测末尾条目被删除。
+// @Tags         审计日志
+// @Produce      json
+// @Security     BearerAuth
+// @Param        from_id  query     int     false  "起始条目 ID（含），默认从头开始"
+// @Param        to_id    query     int     false  "结束条目 ID（含），默认到最后"
+// @Param        limit    query     int     false  "最多校验条数（默认 1000）"
+// @Success      200      {object}  response.Body{data=application.VerifyResult}  "成功，返回校验结果"
+// @Failure      500      {object}  contract.ErrorResponse  "服务器内部错误"
+// @Router       /audits/verify [get]
+func (h *AuditHandler) Verify(c *gin.Context) {
+	fromID, _ := strconv.ParseUint(c.Query("from_id"), 10, 64)
+	toID, _ := strconv.ParseUint(c.Query("to_id"), 10, 64)
+	limit, _ := strconv.Atoi(c.Query("limit"))
+
+	result, err := h.service.Verify(c.Request.Context(), tenant.FromContext(c.Request.Context()), fromID, toID, limit)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, result)
 }
 
 // List godoc

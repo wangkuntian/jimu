@@ -18,7 +18,7 @@ type AdminAuditHandler struct {
 
 // NewAdminAuditHandler 创建审计日志 handler
 func NewAdminAuditHandler(db *gorm.DB) *AdminAuditHandler {
-	return &AdminAuditHandler{repo: auditinfra.NewMysqlAuditRepository(db)}
+	return &AdminAuditHandler{repo: auditinfra.NewMysqlAuditRepository(db, "")}
 }
 
 // List 获取审计日志列表（按上下文租户过滤；0=平台级视角不过滤）

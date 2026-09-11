@@ -115,6 +115,33 @@ definitions:
         - 1
         type: integer
     type: object
+  application.VerifyResult:
+    properties:
+      broken_at:
+        description: 首个异常条目 ID
+        type: integer
+      checked:
+        description: 参与校验的已哈希条目数
+        type: integer
+      head_hash:
+        description: 链头记录的哈希
+        type: string
+      intact:
+        description: 链是否完整
+        type: boolean
+      last_hash:
+        description: 扫描到的最后一条哈希
+        type: string
+      reason:
+        description: 异常原因
+        type: string
+      tail_intact:
+        description: 链尾是否与链头一致（检测末尾条目被删）
+        type: boolean
+      unhashed:
+        description: 迁移前未哈希的存量条目数
+        type: integer
+    type: object
   contract.ErrorResponse:
     properties:
       code:
@@ -358,6 +385,43 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取审计日志详情
+      tags:
+      - 审计日志
+  /audits/verify:
+    get:
+      description: 按 ID 升序重算审计日志的链式哈希（HMAC-SHA256/SHA-256）并检查前后衔接，用于发现篡改或删除。返回参与校验的条目数、未哈希的存量条目数、是否完整、首个异常条目与原因；单租户全量校验时还会比对链头检测末尾条目被删除。
+      parameters:
+      - description: 起始条目 ID（含），默认从头开始
+        in: query
+        name: from_id
+        type: integer
+      - description: 结束条目 ID（含），默认到最后
+        in: query
+        name: to_id
+        type: integer
+      - description: 最多校验条数（默认 1000）
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回校验结果
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/application.VerifyResult'
+              type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 校验审计链完整性
       tags:
       - 审计日志
   /auth/forgot-password:

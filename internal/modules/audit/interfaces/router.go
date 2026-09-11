@@ -13,6 +13,8 @@ func RegisterAuditRoutes(r *gin.RouterGroup, service *application.AuditService) 
 	audits := r.Group("/audits")
 	{
 		audits.GET("", middleware.ValidateQuery(&pagination.Pagination{}), handler.List)
+		// 必须在 /:id 之前注册，避免路径冲突
+		audits.GET("/verify", handler.Verify)
 		audits.GET("/:id", handler.Get)
 	}
 }

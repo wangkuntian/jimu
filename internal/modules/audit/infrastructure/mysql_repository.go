@@ -11,22 +11,41 @@ import (
 )
 
 type mysqlAuditRepository struct {
-	db *gorm.DB
+	db     *gorm.DB
+	secret []byte // 审计链 HMAC 密钥（空则退化为 SHA-256）
 }
 
-func NewMysqlAuditRepository(db *gorm.DB) domain.AuditRepository {
-	return &mysqlAuditRepository{db: db}
+// NewMysqlAuditRepository 创建审计仓储；hashSecret 用于链式哈希（建议非空）
+func NewMysqlAuditRepository(db *gorm.DB, hashSecret string) domain.AuditRepository {
+	return &mysqlAuditRepository{db: db, secret: []byte(hashSecret)}
 }
 
+// Create 写入单条审计并在事务内补齐链式哈希
 func (r *mysqlAuditRepository) Create(ctx context.Context, log *domain.AuditLog) error {
-	return r.db.WithContext(ctx).Create(log).Error
+	logs := []domain.AuditLog{*log}
+	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := chainLogs(tx, logs, r.secret); err != nil {
+			return err
+		}
+		return tx.Create(&logs).Error
+	}); err != nil {
+		return err
+	}
+	*log = logs[0]
+	return nil
 }
 
+// CreateBatch 批量写入；先锁定链头再依次哈希，保证批次内顺序与全序一致
 func (r *mysqlAuditRepository) CreateBatch(ctx context.Context, logs []domain.AuditLog) error {
 	if len(logs) == 0 {
 		return nil
 	}
-	return r.db.WithContext(ctx).Create(&logs).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := chainLogs(tx, logs, r.secret); err != nil {
+			return err
+		}
+		return tx.Create(&logs).Error
+	})
 }
 
 func (r *mysqlAuditRepository) FindByID(ctx context.Context, id uint64) (*domain.AuditLog, error) {

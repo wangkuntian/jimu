@@ -253,9 +253,10 @@ type ManagementConfig struct {
 }
 
 type AuditConfig struct {
-	QueueSize       int `mapstructure:"queue_size"`
-	BatchSize       int `mapstructure:"batch_size"`
-	FlushIntervalMS int `mapstructure:"flush_interval_ms"`
+	QueueSize       int    `mapstructure:"queue_size"`
+	BatchSize       int    `mapstructure:"batch_size"`
+	FlushIntervalMS int    `mapstructure:"flush_interval_ms"`
+	HashSecret      string `mapstructure:"hash_secret"` // 审计链 HMAC 密钥；为空时退化为 SHA-256
 }
 
 type StorageConfig struct {
@@ -553,6 +554,10 @@ func applyEnvOverrides(cfg *Config) {
 	// 密钥轮换：旧 JWT 密钥（用于验证轮换期间尚未过期的旧 token）
 	if v := getEnvOrFile("JWT_PREVIOUS_SECRET_FILE", "JWT_PREVIOUS_SECRET"); v != "" {
 		cfg.Auth.JWTPreviousSecret = v
+	}
+	// 审计链 HMAC 密钥：配置后篡改者无法重算整条链
+	if v := getEnvOrFile("AUDIT_HASH_SECRET_FILE", "AUDIT_HASH_SECRET"); v != "" {
+		cfg.Audit.HashSecret = v
 	}
 	// 数据库
 	if v := os.Getenv("DB_DRIVER"); v != "" {
