@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"jimu/internal/modules/role/domain"
+	dbutil "jimu/internal/platform/db"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -44,6 +45,15 @@ func TestRoleServiceUpdateMapsNotFound(t *testing.T) {
 	err := service.Update(context.Background(), 8, UpdateRoleRequest{Name: "admin"})
 	if roleAppCode(err) != apperrors.CodeNotFound {
 		t.Fatalf("code = %d, want %d", roleAppCode(err), apperrors.CodeNotFound)
+	}
+}
+
+func TestRoleServiceUpdateMapsConcurrentUpdateToConflict(t *testing.T) {
+	service := NewRoleService(&fakeRoleRepository{updateErr: dbutil.ErrConcurrentUpdate})
+
+	err := service.Update(context.Background(), 8, UpdateRoleRequest{Name: "admin"})
+	if roleAppCode(err) != apperrors.CodeConflict {
+		t.Fatalf("code = %d, want %d", roleAppCode(err), apperrors.CodeConflict)
 	}
 }
 

@@ -2,8 +2,10 @@ package application
 
 import (
 	"context"
+	stderrors "errors"
 
 	"jimu/internal/modules/tenant/domain"
+	dbutil "jimu/internal/platform/db"
 	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
@@ -80,6 +82,9 @@ func (s *TenantService) Update(ctx context.Context, id uint64, req UpdateTenantR
 		t.Status = *req.Status
 	}
 	if err := s.repo.Update(ctx, t); err != nil {
+		if stderrors.Is(err, dbutil.ErrConcurrentUpdate) {
+			return errors.Wrap(errors.CodeConflict, "tenant was modified concurrently, please retry", err)
+		}
 		return errors.Wrap(errors.CodeInternalError, "failed to update tenant", err)
 	}
 	return nil

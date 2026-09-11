@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"jimu/internal/modules/user/domain"
+	dbutil "jimu/internal/platform/db"
 	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
@@ -102,8 +103,15 @@ func (s *AdminUserService) AssignRoles(ctx context.Context, userID uint64, roleN
 		}
 	}
 
-	// 事务：清空旧角色，写入新角色
+	// 事务：先锁定用户行（串行化并发的角色替换），再清空旧角色、写入新角色
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var locked domain.User
+		if err := dbutil.LockRow(tx, &locked, userID).Error; err != nil {
+			if stderrors.Is(err, gorm.ErrRecordNotFound) {
+				return apperrors.New(apperrors.CodeNotFound, "user not found")
+			}
+			return apperrors.Wrap(apperrors.CodeInternalError, "failed to lock user", err)
+		}
 		if err := tx.Where("user_id = ?", userID).Delete(&userRole{}).Error; err != nil {
 			return err
 		}

@@ -144,7 +144,8 @@ func TestAdminUserServiceDisableUser(t *testing.T) {
 
 func TestAdminUserServiceAssignRoles(t *testing.T) {
 	ctx := context.Background()
-	db := newSqliteDB(t, &userRole{}, &testRole{})
+	db := newSqliteDB(t, &userRole{}, &testRole{}, &userdomain.User{})
+	assert.NoError(t, db.Create(&userdomain.User{ID: 1, Username: "alice"}).Error)
 	assert.NoError(t, db.Create(&testRole{ID: 1, Name: "admin"}).Error)
 	assert.NoError(t, db.Create(&testRole{ID: 2, Name: "viewer"}).Error)
 
@@ -188,7 +189,7 @@ func TestAdminUserServiceAssignRoles(t *testing.T) {
 func TestAdminUserServiceAssignRolesRoleQueryError(t *testing.T) {
 	// 构造角色表查询失败场景：迁移后立即断连的 sqlite 很难模拟，使用不含 roles 表的 db
 	ctx := context.Background()
-	db := newSqliteDB(t, &userRole{})
+	db := newSqliteDB(t, &userRole{}, &userdomain.User{})
 	svc := NewAdminUserService(&fakeUserRepository{}, db)
 	err := svc.AssignRoles(ctx, 1, []string{"admin"})
 	// roles 表不存在时查询报错，返回内部错误
@@ -211,7 +212,7 @@ func TestAdminUserServiceTenantScoping(t *testing.T) {
 	assert.Equal(t, tenant.DefaultTenantID, created.TenantID)
 
 	// 跨租户：详情/更新/分配角色均按不存在处理
-	db := newSqliteDB(t, &userRole{}, &testRole{})
+	db := newSqliteDB(t, &userRole{}, &testRole{}, &userdomain.User{})
 	crossTenant := &fakeUserRepository{findByID: func(ctx context.Context, id uint64) (*userdomain.User, error) {
 		return &userdomain.User{ID: id, Username: "bob", TenantID: 2}, nil
 	}}
@@ -229,7 +230,8 @@ func TestAdminUserServiceTenantScoping(t *testing.T) {
 
 func TestAdminUserServiceAssignRolesScopedToUserTenant(t *testing.T) {
 	ctx := context.Background()
-	db := newSqliteDB(t, &userRole{}, &testRole{})
+	db := newSqliteDB(t, &userRole{}, &testRole{}, &userdomain.User{})
+	assert.NoError(t, db.Create(&userdomain.User{ID: 1, Username: "alice", TenantID: 2}).Error)
 	// 不同租户存在同名角色（角色名租户内唯一）
 	assert.NoError(t, db.Create(&testRole{ID: 1, TenantID: 1, Name: "admin"}).Error)
 	assert.NoError(t, db.Create(&testRole{ID: 2, TenantID: 2, Name: "admin"}).Error)

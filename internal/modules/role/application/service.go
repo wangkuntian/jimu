@@ -5,6 +5,7 @@ import (
 	stderrors "errors"
 
 	"jimu/internal/modules/role/domain"
+	dbutil "jimu/internal/platform/db"
 	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
@@ -76,6 +77,9 @@ func (s *RoleService) Update(ctx context.Context, id uint64, req UpdateRoleReque
 	if err := s.repo.Update(ctx, role); err != nil {
 		if isDuplicateKey(err) {
 			return errors.Wrap(errors.CodeConflict, "role already exists", err)
+		}
+		if stderrors.Is(err, dbutil.ErrConcurrentUpdate) {
+			return errors.Wrap(errors.CodeConflict, "role was modified concurrently, please retry", err)
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to update role", err)
 	}

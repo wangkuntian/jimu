@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"jimu/internal/modules/tenant/domain"
+	dbutil "jimu/internal/platform/db"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -53,8 +54,16 @@ func (r *mysqlRepository) Create(ctx context.Context, t *domain.Tenant) error {
 	return r.db.WithContext(ctx).Create(t).Error
 }
 
+// Update 乐观锁更新：version 不匹配时返回 db.ErrConcurrentUpdate（调用方映射 409）
 func (r *mysqlRepository) Update(ctx context.Context, t *domain.Tenant) error {
-	return r.db.WithContext(ctx).Save(t).Error
+	if err := dbutil.SaveOptimistic(r.db.WithContext(ctx), &domain.Tenant{}, t.ID, t.Version, map[string]interface{}{
+		"name":   t.Name,
+		"status": t.Status,
+	}); err != nil {
+		return err
+	}
+	t.Version++
+	return nil
 }
 
 func (r *mysqlRepository) Delete(ctx context.Context, id uint64) error {

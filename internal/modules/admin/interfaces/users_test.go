@@ -143,7 +143,8 @@ func TestAdminUserHandlerAssignRole(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// 成功（db 含 roles 表与 user_roles 表）
-	db := newSqliteDB(t, &testUserRole{}, &testRole{})
+	db := newSqliteDB(t, &testUserRole{}, &testRole{}, &userdomain.User{})
+	assert.NoError(t, db.Create(&userdomain.User{ID: 1, Username: "alice"}).Error)
 	assert.NoError(t, db.Create(&testRole{ID: 1, Name: "admin"}).Error)
 	r := gin.New()
 	r.POST("/users/:id/roles", newUserHandler(&fakeUserRepository{}, db).AssignRole)
