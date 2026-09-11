@@ -53,6 +53,7 @@ db:
   conn_max_idle_time_sec: 600   # 连接最大空闲时间（秒）
   max_retries: 10               # 连接重试次数
   retry_interval_sec: 5         # 重试间隔（秒）
+  # timezone: "Asia/Shanghai"   # 连接时区（IANA）。留空保持驱动默认：MySQL=Local，PostgreSQL=Asia/Shanghai
   # 读写分离（取消注释启用；启用后语句级熔断自动跳过）
   # read_hosts: ["mariadb-read-1", "mariadb-read-2"]
   # read_ports: [3306, 3306]

@@ -68,8 +68,13 @@ func dsn(cfg config.DBConfig, host string, port int) string {
 	if port == 0 {
 		port = cfg.Port
 	}
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		cfg.User, cfg.Password, host, port, cfg.Database)
+	// loc 决定 DATETIME 的解析时区；未配置时保持原有 Local 行为
+	loc := cfg.Timezone
+	if loc == "" {
+		loc = "Local"
+	}
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=%s",
+		cfg.User, cfg.Password, host, port, cfg.Database, loc)
 }
 
 // openByDriver 根据 Driver 选择数据库实现

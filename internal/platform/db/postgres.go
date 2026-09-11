@@ -25,9 +25,14 @@ func pgDSNHost(cfg config.DBConfig, host string, port int) string {
 	if port == 0 {
 		port = cfg.Port
 	}
+	// TimeZone 决定会话时区；未配置时保持原有 Asia/Shanghai 行为
+	tz := cfg.Timezone
+	if tz == "" {
+		tz = "Asia/Shanghai"
+	}
 	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable TimeZone=Asia/Shanghai",
-		host, port, cfg.User, cfg.Password, cfg.Database,
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable TimeZone=%s",
+		host, port, cfg.User, cfg.Password, cfg.Database, tz,
 	)
 }
 

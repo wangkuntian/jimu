@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 func (c *Config) Validate(env string) error {
@@ -39,6 +40,11 @@ func (c *Config) validateCommon() error {
 	}
 	if !contains(validDBDrivers, c.DB.Driver) {
 		return fmt.Errorf("invalid db.driver: %q, must be one of %v", c.DB.Driver, validDBDrivers)
+	}
+	if c.DB.Timezone != "" {
+		if _, err := time.LoadLocation(c.DB.Timezone); err != nil {
+			return fmt.Errorf("invalid db.timezone: %q is not a valid IANA time zone", c.DB.Timezone)
+		}
 	}
 	if !contains(validLogLevels, c.Log.Level) {
 		return fmt.Errorf("invalid log.level: %q, must be one of %v", c.Log.Level, validLogLevels)
