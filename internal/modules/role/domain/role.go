@@ -13,6 +13,7 @@ type Role struct {
 	Name        string         `gorm:"size:64;not null;uniqueIndex:idx_roles_tenant_name,priority:2" json:"name"`                // 租户内唯一
 	Description string         `gorm:"size:255;default:''" json:"description"`
 	Status      int8           `gorm:"default:1" json:"status"`
+	Version     int64          `gorm:"not null;default:0" json:"-"` // 乐观锁版本号（每次更新自增）
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`

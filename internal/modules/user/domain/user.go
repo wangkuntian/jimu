@@ -18,6 +18,7 @@ type User struct {
 	TOTPEnabled bool           `gorm:"default:false" json:"totp_enabled"`          // 是否启用 TOTP 二次验证
 	Status      int8           `gorm:"default:1" json:"status"`
 	TenantID    uint64         `gorm:"column:tenant_id;default:0;index" json:"tenant_id"` // 所属租户 ID（0=未归属）
+	Version     int64          `gorm:"not null;default:0" json:"-"`                       // 乐观锁版本号（每次更新自增）
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
