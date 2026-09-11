@@ -265,6 +265,28 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			}}
 		}
 
+		if container.DB != nil && cfg.Retention.Enabled {
+			retentionSvc := db.NewRetentionService(container.DB, cfg.Retention)
+			spec := cfg.Retention.Cron
+			if spec == "" {
+				spec = "30 3 * * *"
+			}
+			jobFns["retention"] = jobDef{name: "History Retention", spec: spec, fn: func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+				defer cancel()
+				results, err := retentionSvc.Run(ctx)
+				if err != nil {
+					container.Logger.Errorw("retention job failed", "error", err.Error())
+					return
+				}
+				for _, r := range results {
+					if r.Deleted > 0 {
+						container.Logger.Infow("retention completed", "table", r.Table, "deleted", r.Deleted)
+					}
+				}
+			}}
+		}
+
 		// 注册 WebSocket Hub 运行
 		if container.WebSocketHub != nil {
 			go container.WebSocketHub.Run(context.Background())

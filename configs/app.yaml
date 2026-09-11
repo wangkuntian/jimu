@@ -73,6 +73,18 @@ ratelimit:
     limit: 6000             # 每窗口允许请求数
     window_sec: 60          # 窗口大小（秒）
 
+# 数据保留（清理增长型历史表；默认关闭，启用前请确认合规要求）
+retention:
+  enabled: false
+  cron: "30 3 * * *"        # 调度表达式
+  batch_size: 500           # 每批删除行数
+  audit_log_days: 180       # 审计日志保留天数（0=不清理）
+  job_days: 7               # 已终态任务保留天数
+  job_history_days: 30      # 任务执行历史保留天数
+  dead_letter_days: 30      # 已处理死信保留天数
+  outbox_event_days: 7      # 已发布 outbox 事件保留天数
+  import_job_days: 90       # 已结束导入任务保留天数
+
 # 日志配置
 log:
   level: "debug"         # 日志级别：debug（开发环境详细日志）
