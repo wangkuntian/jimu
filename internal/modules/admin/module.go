@@ -38,6 +38,7 @@ type Module struct {
 	wsPres      *ws.PresenceManager
 	wsChannels  *ws.ChannelManager
 	jwt         *auth.JWT
+	quota       adminapp.TenantQuota
 }
 
 // New 创建管理模块
@@ -63,6 +64,8 @@ func New(version, env string, rdb redistore.Client, db *gorm.DB, deps ...interfa
 			m.jwt = d
 		case gin.HandlerFunc:
 			m.ipAllowlist = d
+		case adminapp.TenantQuota:
+			m.quota = d
 		}
 	}
 	return m
@@ -118,7 +121,7 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 
 	// 用户管理端点
 	userHandler := admininterfaces.NewAdminUserHandler(
-		adminapp.NewAdminUserService(userinfra.NewMysqlRepository(m.db), m.db),
+		adminapp.NewAdminUserService(userinfra.NewMysqlRepository(m.db), m.db).WithQuota(m.quota),
 	)
 	admin.GET("/users", userHandler.List)
 	admin.POST("/users", userHandler.Create)
@@ -129,7 +132,7 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 
 	// API Key 管理端点
 	apiKeyHandler := admininterfaces.NewAdminAPIKeyHandler(
-		adminapp.NewAdminAPIKeyService(admininfra.NewMysqlAPIKeyRepository(m.db)),
+		adminapp.NewAdminAPIKeyService(admininfra.NewMysqlAPIKeyRepository(m.db)).WithQuota(m.quota),
 	)
 	admin.GET("/apikeys", apiKeyHandler.List)
 	admin.POST("/apikeys", apiKeyHandler.Create)

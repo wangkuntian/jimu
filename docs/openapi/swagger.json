@@ -1543,6 +1543,202 @@
                 ]
             }
         },
+        "/tenant-plans": {
+            "get": {
+                "description": "分页返回全部套餐定义。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户运营"
+                ],
+                "summary": "获取套餐列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码（默认 1）",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量（默认 20，最大 100）",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回分页套餐列表",
+                        "schema": {
+                            "$ref": "#/definitions/contract.PageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "description": "创建租户套餐（资源上限，0 表示不限）。编码全局唯一，统一转小写存储且不可修改。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户运营"
+                ],
+                "summary": "创建套餐",
+                "parameters": [
+                    {
+                        "description": "套餐信息（编码、名称与各项上限）",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/application.CreatePlanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "创建成功，返回套餐信息",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "套餐编码已存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/tenant-plans/{id}": {
+            "put": {
+                "description": "更新套餐名称与各项上限；编码不可修改。修改后对使用该套餐的租户立即生效。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户运营"
+                ],
+                "summary": "更新套餐",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "套餐 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "要更新的字段（为空表示不修改）",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/application.UpdatePlanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "套餐不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "description": "删除未被任何租户使用的套餐；仍被租户使用时返回 409，避免租户静默失去配额约束。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户运营"
+                ],
+                "summary": "删除套餐",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "套餐 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "套餐不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "套餐仍被租户使用",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
         "/tenants": {
             "get": {
                 "description": "分页获取租户列表。支持按 ID、编码、创建时间排序。",
@@ -1649,6 +1845,37 @@
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/tenants/usage": {
+            "get": {
+                "description": "返回当前租户的套餐与各资源用量（用户/角色/API Key）及上限，用于容量自查；未分配套餐时 plan 为 null 且不限量。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户运营"
+                ],
+                "summary": "获取当前租户用量",
+                "responses": {
+                    "200": {
+                        "description": "成功，返回套餐与用量",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1819,6 +2046,64 @@
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/tenants/{id}/plan": {
+            "put": {
+                "description": "为指定租户分配套餐；plan_id=0 表示取消套餐（取消后不再受配额限制）。超限时不影响既有数据，只阻止继续创建。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户运营"
+                ],
+                "summary": "为租户分配套餐",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "租户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "套餐 ID（0=取消套餐）",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/application.AssignPlanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分配成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "套餐不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -2210,6 +2495,14 @@
                 }
             }
         },
+        "application.AssignPlanRequest": {
+            "type": "object",
+            "properties": {
+                "plan_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "application.BatchDeleteRequest": {
             "type": "object",
             "required": [
@@ -2242,6 +2535,40 @@
                 },
                 "resource": {
                     "type": "string"
+                }
+            }
+        },
+        "application.CreatePlanRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "name"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 1
+                },
+                "max_api_keys": {
+                    "description": "0=不限",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_roles": {
+                    "description": "0=不限",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_users": {
+                    "description": "0=不限",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
                 }
             }
         },
@@ -2318,6 +2645,28 @@
                 },
                 "resource": {
                     "type": "string"
+                }
+            }
+        },
+        "application.UpdatePlanRequest": {
+            "type": "object",
+            "properties": {
+                "max_api_keys": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_roles": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_users": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
                 }
             }
         },

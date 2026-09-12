@@ -55,6 +55,13 @@ type AdminCreateUserRequest struct {
 type AdminUserService struct {
 	userRepo domain.UserRepository
 	db       *gorm.DB
+	quota    TenantQuota // nil = 未启用租户配额
+}
+
+// WithQuota 注入租户配额校验（未注入时不做配额检查）
+func (s *AdminUserService) WithQuota(quota TenantQuota) *AdminUserService {
+	s.quota = quota
+	return s
 }
 
 // NewAdminUserService 创建用户管理服务
@@ -171,6 +178,18 @@ func (s *AdminUserService) GetUser(ctx context.Context, id uint64) (*AdminUser, 
 
 // CreateUser 创建用户
 func (s *AdminUserService) CreateUser(ctx context.Context, req AdminCreateUserRequest) (*AdminUser, error) {
+	// 新用户归属创建者所在租户；上下文无租户（平台级/旧 token）时归默认租户
+	tenantID := tenant.FromContext(ctx)
+	if tenantID == 0 {
+		tenantID = tenant.DefaultTenantID
+	}
+	// 配额校验在写入前完成，超限直接拒绝（已存在的数据不受影响）
+	if s.quota != nil {
+		if err := s.quota.CheckUserQuota(ctx, tenantID); err != nil {
+			return nil, err
+		}
+	}
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.CodeInternalError, "failed to hash password", err)
@@ -182,11 +201,7 @@ func (s *AdminUserService) CreateUser(ctx context.Context, req AdminCreateUserRe
 		Phone:    req.Phone,
 		Status:   req.Status,
 	}
-	// 新用户归属创建者所在租户；上下文无租户（平台级/旧 token）时归默认租户
-	user.TenantID = tenant.FromContext(ctx)
-	if user.TenantID == 0 {
-		user.TenantID = tenant.DefaultTenantID
-	}
+	user.TenantID = tenantID
 	if req.Status == 0 {
 		user.Status = 1
 	}

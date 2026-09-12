@@ -68,16 +68,20 @@ func run() error {
 		container.Logger.Warnw("config file watch disabled", "error", err.Error())
 	}
 
+	// 租户套餐/配额：定义在 tenant 模块，注入到创建用户/角色/API Key 的路径
+	tenantMod := tenantmodule.New(container.DB, *cfg)
+
 	application, err := app.Bootstrap(
 		container,
 		user.New(container.DB, *cfg, container.Redis, container.Outbox),
-		authmodule.New(container.DB, container.Redis, cfg.Auth, cfg.HTTP.Mode == config.HTTPModeRelease, container.Captcha, cfg.Captcha, container.Outbox, container.Notification, container.Cipher, container.BreachChecker),
-		role.New(container.DB),
+		authmodule.New(container.DB, container.Redis, cfg.Auth, cfg.HTTP.Mode == config.HTTPModeRelease, container.Captcha, cfg.Captcha, container.Outbox, container.Notification, container.Cipher, container.BreachChecker, tenantMod.Quota()),
+		role.New(container.DB, tenantMod.Quota()),
 		permission.New(container.DB),
-		tenantmodule.New(container.DB, *cfg),
+		tenantMod,
 		auditmodule.New(container.DB, cfg.Audit, container.Logger),
 		adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, middleware.IPAllowlist(cfg.Security.AdminIPAllowlist), container.Scheduler, container.Storage, container.UploadScanner, container.FeatureFlag, container.EventBus,
-			auth.NewWithRotation(cfg.Auth.JWTSecret, cfg.Auth.JWTPreviousSecret, cfg.Auth.Issuer, cfg.Auth.AccessExpireMin, cfg.Auth.RefreshExpireDay)),
+			auth.NewWithRotation(cfg.Auth.JWTSecret, cfg.Auth.JWTPreviousSecret, cfg.Auth.Issuer, cfg.Auth.AccessExpireMin, cfg.Auth.RefreshExpireDay),
+			tenantMod.Quota()),
 		oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth, container.HTTPClient),
 	)
 	if err != nil {

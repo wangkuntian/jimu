@@ -46,6 +46,7 @@ type AuthService struct {
 	issuer               string            // TOTP otpauth URI 的 issuer
 	provisioner          TenantProvisioner // 开通式注册（nil = 未启用，注册仅建普通用户）
 	breachChecker        breach.Checker    // 泄露口令检查（nil = 未启用）
+	quota                TenantQuota       // 租户配额（nil = 未启用）
 }
 
 func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int, deps ...interface{}) *AuthService {
@@ -72,6 +73,8 @@ func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessi
 			s.provisioner = d
 		case breach.Checker:
 			s.breachChecker = d
+		case TenantQuota:
+			s.quota = d
 		case authdomain.LoginHistoryRepository:
 			s.loginHistory = d
 		case authdomain.PasswordHistoryRepository:
@@ -231,6 +234,12 @@ func (s *AuthService) Register(ctx context.Context, username, password, email, p
 
 	if err := s.checkBreachedPassword(ctx, password); err != nil {
 		return nil, err
+	}
+	// 公开注册的用户归默认租户：默认租户被分配套餐时同样受配额约束
+	if s.quota != nil {
+		if err := s.quota.CheckUserQuota(ctx, tenant.DefaultTenantID); err != nil {
+			return nil, err
+		}
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)

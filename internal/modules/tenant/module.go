@@ -12,20 +12,31 @@ import (
 
 type Module struct {
 	service *application.TenantService
+	plans   *application.PlanService
+	quota   *application.QuotaService
 }
 
 func New(db *gorm.DB, _ config.Config) *Module {
 	repo := infrastructure.NewMysqlRepository(db)
-	service := application.NewTenantService(repo)
-	return &Module{service: service}
+	quotaRepo := infrastructure.NewMysqlQuotaRepository(db)
+	return &Module{
+		service: application.NewTenantService(repo),
+		plans:   application.NewPlanService(infrastructure.NewMysqlPlanRepository(db), quotaRepo),
+		quota:   application.NewQuotaService(quotaRepo),
+	}
 }
+
+// Quota 暴露配额校验服务，供用户/角色/API Key 创建路径注入
+func (m *Module) Quota() *application.QuotaService { return m.quota }
 
 func (m *Module) Name() string {
 	return "tenant"
 }
 
 func (m *Module) RegisterHTTP(r contract.Router) {
-	interfaces.RegisterTenantRoutes(r.Group("/api/v1"), m.service)
+	rg := r.Group("/api/v1")
+	interfaces.RegisterTenantRoutes(rg, m.service)
+	interfaces.RegisterPlanRoutes(rg, m.plans)
 }
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}

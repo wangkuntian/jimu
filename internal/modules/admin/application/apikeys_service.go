@@ -16,7 +16,14 @@ const apiKeyPrefix = "jimu_"
 
 // AdminAPIKeyService API Key 管理服务
 type AdminAPIKeyService struct {
-	repo domain.APIKeyRepository
+	repo  domain.APIKeyRepository
+	quota TenantQuota // nil = 未启用租户配额
+}
+
+// WithQuota 注入租户配额校验（未注入时不做配额检查）
+func (s *AdminAPIKeyService) WithQuota(quota TenantQuota) *AdminAPIKeyService {
+	s.quota = quota
+	return s
 }
 
 // NewAdminAPIKeyService 创建 API Key 管理服务
@@ -46,6 +53,15 @@ type CreateKeyInput struct {
 func (s *AdminAPIKeyService) CreateKey(ctx context.Context, input CreateKeyInput) (string, *domain.APIKey, error) {
 	if input.Name == "" {
 		return "", nil, apperrors.New(apperrors.CodeInvalidParam, "name is required")
+	}
+	if s.quota != nil {
+		tenantID := tenant.FromContext(ctx)
+		if tenantID == 0 {
+			tenantID = tenant.DefaultTenantID
+		}
+		if err := s.quota.CheckAPIKeyQuota(ctx, tenantID); err != nil {
+			return "", nil, err
+		}
 	}
 
 	// Generate random key

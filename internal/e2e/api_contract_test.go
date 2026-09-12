@@ -70,6 +70,7 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 		&roledomain.Role{},
 		&roledomain.Permission{},
 		&tenantdomain.Tenant{},
+		&tenantdomain.Plan{},
 		&auditdomain.AuditLog{},
 	))
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS user_roles (user_id INTEGER NOT NULL, role_id INTEGER NOT NULL)`).Error)
@@ -403,6 +404,7 @@ func TestAuthRateLimit(t *testing.T) {
 		&roledomain.Role{},
 		&roledomain.Permission{},
 		&tenantdomain.Tenant{},
+		&tenantdomain.Plan{},
 	))
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS user_roles (user_id INTEGER NOT NULL, role_id INTEGER NOT NULL)`).Error)
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS role_permissions (role_id INTEGER NOT NULL, permission_id INTEGER NOT NULL)`).Error)

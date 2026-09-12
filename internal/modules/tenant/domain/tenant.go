@@ -13,7 +13,8 @@ type Tenant struct {
 	Code      string         `gorm:"size:64;uniqueIndex;not null" json:"code"`
 	Name      string         `gorm:"size:128;not null" json:"name"`
 	Status    int8           `gorm:"default:1" json:"status"`
-	Version   int64          `gorm:"not null;default:0" json:"-"` // 乐观锁版本号（每次更新自增）
+	PlanID    uint64         `gorm:"not null;default:0" json:"plan_id"` // 套餐 ID（0=未分配，不受配额限制）
+	Version   int64          `gorm:"not null;default:0" json:"-"`       // 乐观锁版本号（每次更新自增）
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

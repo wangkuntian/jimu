@@ -9,6 +9,11 @@ definitions:
     required:
     - permission_ids
     type: object
+  application.AssignPlanRequest:
+    properties:
+      plan_id:
+        type: integer
+    type: object
   application.BatchDeleteRequest:
     properties:
       ids:
@@ -32,6 +37,32 @@ definitions:
     - action
     - name
     - resource
+    type: object
+  application.CreatePlanRequest:
+    properties:
+      code:
+        maxLength: 32
+        minLength: 1
+        type: string
+      max_api_keys:
+        description: 0=不限
+        minimum: 0
+        type: integer
+      max_roles:
+        description: 0=不限
+        minimum: 0
+        type: integer
+      max_users:
+        description: 0=不限
+        minimum: 0
+        type: integer
+      name:
+        maxLength: 64
+        minLength: 1
+        type: string
+    required:
+    - code
+    - name
     type: object
   application.CreateRoleRequest:
     properties:
@@ -85,6 +116,22 @@ definitions:
     - action
     - name
     - resource
+    type: object
+  application.UpdatePlanRequest:
+    properties:
+      max_api_keys:
+        minimum: 0
+        type: integer
+      max_roles:
+        minimum: 0
+        type: integer
+      max_users:
+        minimum: 0
+        type: integer
+      name:
+        maxLength: 64
+        minLength: 1
+        type: string
     type: object
   application.UpdateRoleRequest:
     properties:
@@ -1252,6 +1299,130 @@ paths:
       summary: 分配角色权限
       tags:
       - 角色管理
+  /tenant-plans:
+    get:
+      description: 分页返回全部套餐定义。
+      parameters:
+      - description: 页码（默认 1）
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量（默认 20，最大 100）
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回分页套餐列表
+          schema:
+            $ref: '#/definitions/contract.PageResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取套餐列表
+      tags:
+      - 租户运营
+    post:
+      consumes:
+      - application/json
+      description: 创建租户套餐（资源上限，0 表示不限）。编码全局唯一，统一转小写存储且不可修改。
+      parameters:
+      - description: 套餐信息（编码、名称与各项上限）
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/application.CreatePlanRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 创建成功，返回套餐信息
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "409":
+          description: 套餐编码已存在
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建套餐
+      tags:
+      - 租户运营
+  /tenant-plans/{id}:
+    delete:
+      description: 删除未被任何租户使用的套餐；仍被租户使用时返回 409，避免租户静默失去配额约束。
+      parameters:
+      - description: 套餐 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: 套餐不存在
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "409":
+          description: 套餐仍被租户使用
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除套餐
+      tags:
+      - 租户运营
+    put:
+      consumes:
+      - application/json
+      description: 更新套餐名称与各项上限；编码不可修改。修改后对使用该套餐的租户立即生效。
+      parameters:
+      - description: 套餐 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 要更新的字段（为空表示不修改）
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/application.UpdatePlanRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: 套餐不存在
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新套餐
+      tags:
+      - 租户运营
   /tenants:
     get:
       description: 分页获取租户列表。支持按 ID、编码、创建时间排序。
@@ -1436,6 +1607,62 @@ paths:
       summary: 更新租户信息
       tags:
       - 租户管理
+  /tenants/{id}/plan:
+    put:
+      consumes:
+      - application/json
+      description: 为指定租户分配套餐；plan_id=0 表示取消套餐（取消后不再受配额限制）。超限时不影响既有数据，只阻止继续创建。
+      parameters:
+      - description: 租户 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 套餐 ID（0=取消套餐）
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/application.AssignPlanRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分配成功
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: 套餐不存在
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 为租户分配套餐
+      tags:
+      - 租户运营
+  /tenants/usage:
+    get:
+      description: 返回当前租户的套餐与各资源用量（用户/角色/API Key）及上限，用于容量自查；未分配套餐时 plan 为 null 且不限量。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回套餐与用量
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取当前租户用量
+      tags:
+      - 租户运营
   /users:
     get:
       description: 分页获取用户列表。支持按 ID、用户名、创建时间排序，可指定升序或降序。

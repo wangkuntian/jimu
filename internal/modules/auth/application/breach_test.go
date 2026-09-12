@@ -9,6 +9,7 @@ import (
 	userdomain "jimu/internal/modules/user/domain"
 	"jimu/internal/platform/auth"
 	"jimu/internal/platform/encryption"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/stretchr/testify/assert"
@@ -140,4 +141,27 @@ func TestResetPasswordRejectsBreachedPassword(t *testing.T) {
 	err := svc.ResetPassword(ctx, "alice@example.com", "123456", "password123")
 	assert.Equal(t, apperrors.CodePasswordBreached, appCode(err))
 	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(alice.Password), []byte("correct")), "被拒时密码保持不变")
+}
+
+// fakeTenantQuota 只返回预设的配额校验结果
+type fakeTenantQuota struct {
+	err     error
+	checked []uint64
+}
+
+func (f *fakeTenantQuota) CheckUserQuota(_ context.Context, tenantID uint64) error {
+	f.checked = append(f.checked, tenantID)
+	return f.err
+}
+
+func TestRegisterRejectsWhenQuotaExceeded(t *testing.T) {
+	ctx := context.Background()
+	quota := &fakeTenantQuota{err: apperrors.New(apperrors.CodeQuotaExceeded, "users quota exceeded")}
+	svc, repo := newBreachService(t, &fakeBreachChecker{})
+	svc.quota = quota
+
+	_, err := svc.Register(ctx, "alice", "password123", "alice@example.com", "")
+	assert.Equal(t, apperrors.CodeQuotaExceeded, appCode(err))
+	assert.Equal(t, []uint64{tenant.DefaultTenantID}, quota.checked, "公开注册的用户归默认租户，配额按默认租户校验")
+	assert.Empty(t, repo.created, "配额超限时不应创建用户")
 }

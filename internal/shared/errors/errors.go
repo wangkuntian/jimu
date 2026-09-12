@@ -66,6 +66,7 @@ const (
 	CodeTenantExists     = 5002 // 租户已存在
 	CodeTenantProtected  = 5003 // 默认租户受保护，不可删除
 	CodeTenantCodeFormat = 5004 // 租户编码格式无效
+	CodeQuotaExceeded    = 5005 // 租户资源配额已用尽
 )
 
 type AppError struct {
@@ -108,6 +109,8 @@ func HTTPStatus(code int) int {
 		return 404
 	case CodeConflict, CodeUserExists, CodeTenantExists, CodeTenantProtected:
 		return 409
+	case CodeQuotaExceeded:
+		return 403
 	case CodeCaptchaRequired, CodeCaptchaInvalid, CodeInvalidResetCode, CodeTenantCodeFormat, CodePasswordReused, CodePasswordBreached:
 		return 400
 	case CodeRateLimited:
@@ -187,5 +190,6 @@ func AllErrorCodes() []ErrorInfo {
 		{CodeTenantExists, "租户已存在", 409, "租户"},
 		{CodeTenantProtected, "默认租户受保护，不可删除", 409, "租户"},
 		{CodeTenantCodeFormat, "租户编码格式无效", 400, "租户"},
+		{CodeQuotaExceeded, "租户资源配额已用尽", 403, "租户"},
 	}
 }

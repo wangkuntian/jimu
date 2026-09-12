@@ -14,11 +14,18 @@ import (
 )
 
 type RoleService struct {
-	repo domain.RoleRepository
+	repo  domain.RoleRepository
+	quota TenantQuota // nil = 未启用租户配额
 }
 
 func NewRoleService(repo domain.RoleRepository) *RoleService {
 	return &RoleService{repo: repo}
+}
+
+// WithQuota 注入租户配额校验（未注入时不做配额检查）
+func (s *RoleService) WithQuota(quota TenantQuota) *RoleService {
+	s.quota = quota
+	return s
 }
 
 func (s *RoleService) Create(ctx context.Context, req CreateRoleRequest) (*RoleResponse, error) {
@@ -27,6 +34,11 @@ func (s *RoleService) Create(ctx context.Context, req CreateRoleRequest) (*RoleR
 	role.TenantID = tenant.FromContext(ctx)
 	if role.TenantID == 0 {
 		role.TenantID = tenant.DefaultTenantID
+	}
+	if s.quota != nil {
+		if err := s.quota.CheckRoleQuota(ctx, role.TenantID); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.repo.Create(ctx, role); err != nil {
 		if isDuplicateKey(err) {
