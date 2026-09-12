@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"jimu/internal/platform/queue/domain"
+	"jimu/internal/platform/tenant"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -36,4 +37,24 @@ func TestMysqlJobHistoryRepositoryCreateAndList(t *testing.T) {
 	empty, err := repo.ListByJobID(ctx, 999)
 	assert.NoError(t, err)
 	assert.Len(t, empty, 0)
+}
+
+func TestMysqlJobHistoryRepositoryListByJobIDIsolatesTenants(t *testing.T) {
+	db := newHistoryTestDB(t)
+	repo := NewMysqlJobHistoryRepository(db)
+
+	assert.NoError(t, repo.Create(context.Background(), &domain.JobHistory{JobID: 1, TenantID: 1, Status: "success"}))
+	assert.NoError(t, repo.Create(context.Background(), &domain.JobHistory{JobID: 1, TenantID: 2, Status: "failed"}))
+
+	// 有租户上下文：只看到本租户记录
+	tenantOne := tenant.WithTenant(context.Background(), 1)
+	history, err := repo.ListByJobID(tenantOne, 1)
+	assert.NoError(t, err)
+	assert.Len(t, history, 1)
+	assert.Equal(t, "success", history[0].Status)
+
+	// 平台级视角（tid=0）：不过滤
+	all, err := repo.ListByJobID(context.Background(), 1)
+	assert.NoError(t, err)
+	assert.Len(t, all, 2)
 }
