@@ -48,8 +48,8 @@ func NewWeChatProvider(cfg WeChatConfig, client *httpclient.Client) *WeChatProvi
 func (p *WeChatProvider) Name() string { return "wechat" }
 
 // AuthURL 构造授权跳转 URL
-func (p *WeChatProvider) AuthURL(state string) string {
-	return p.config.AuthCodeURL(state)
+func (p *WeChatProvider) AuthURL(_ context.Context, state string) (string, error) {
+	return p.config.AuthCodeURL(state), nil
 }
 
 // Exchange 用授权码换取用户信息

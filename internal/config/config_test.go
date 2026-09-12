@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestLoad(t *testing.T) {
@@ -393,5 +394,30 @@ func TestValidateIPAllowlist(t *testing.T) {
 	base.Security.AdminIPAllowlist = []string{"not-a-cidr"}
 	if err := base.Validate("dev"); err == nil {
 		t.Fatal("invalid admin allowlist should be rejected")
+	}
+}
+
+func TestValidateOAuthProviders(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     OAuthProviderConfig
+		wantErr bool
+	}{
+		{"未启用时忽略空配置", OAuthProviderConfig{Enabled: false}, false},
+		{"启用但缺 client_id", OAuthProviderConfig{Enabled: true, RedirectURL: "https://x/cb"}, true},
+		{"启用但缺 redirect_url", OAuthProviderConfig{Enabled: true, ClientID: "id"}, true},
+		{"内置提供商合法", OAuthProviderConfig{Enabled: true, ClientID: "id", RedirectURL: "https://x/cb"}, false},
+		{"OIDC issuer 合法", OAuthProviderConfig{Enabled: true, ClientID: "id", RedirectURL: "https://x/cb", IssuerURL: "https://idp.example.com/realms/acme"}, false},
+		{"OIDC issuer 非绝对地址", OAuthProviderConfig{Enabled: true, ClientID: "id", RedirectURL: "https://x/cb", IssuerURL: "idp.example.com"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateOAuthProviders(OAuthConfig{Providers: map[string]OAuthProviderConfig{"p": tt.cfg}})
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+		})
 	}
 }

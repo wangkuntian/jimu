@@ -62,7 +62,7 @@ func (s *OAuthService) AuthURL(ctx context.Context, providerName, state string) 
 	if err := s.rdb.Set(ctx, oauthStateKey(state), providerName, oauthStateTTL).Err(); err != nil {
 		return "", errors.Wrap(errors.CodeInternalError, "store oauth state", err)
 	}
-	return p.AuthURL(state), nil
+	return p.AuthURL(ctx, state)
 }
 
 // BeginLogin 生成 state 并返回授权跳转 URL

@@ -195,6 +195,15 @@ oauth:
       client_secret: ""
       redirect_url: "http://localhost:8080/api/v1/oauth/github/callback"
       enabled: false
+    # 通用 OIDC（Keycloak/Okta/Auth0/Azure AD 等）：issuer_url 非空即按 OIDC 处理，
+    # provider 名可自定义（本例回调为 /api/v1/oauth/keycloak/callback）
+    oidc:
+      client_id: ""
+      client_secret: ""
+      redirect_url: "http://localhost:8080/api/v1/oauth/keycloak/callback"
+      issuer_url: ""            # 如 https://keycloak.example.com/realms/acme
+      scopes: ["openid", "profile", "email"]  # 可选，缺省即这三项
+      enabled: false
 
 # 验证码配置
 captcha:

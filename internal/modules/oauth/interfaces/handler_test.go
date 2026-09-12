@@ -30,8 +30,8 @@ type fakeProvider struct {
 }
 
 func (p *fakeProvider) Name() string { return "github" }
-func (p *fakeProvider) AuthURL(state string) string {
-	return "https://github.com/login/oauth/authorize?state=" + state
+func (p *fakeProvider) AuthURL(_ context.Context, state string) (string, error) {
+	return "https://github.com/login/oauth/authorize?state=" + state, nil
 }
 func (p *fakeProvider) Exchange(context.Context, string) (*oauthplatform.UserInfo, error) {
 	return p.info, p.err

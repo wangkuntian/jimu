@@ -2,6 +2,7 @@
 package oauth
 
 import (
+	"context"
 	"testing"
 
 	"jimu/internal/platform/httpclient"
@@ -21,7 +22,8 @@ func TestGoogleAuthURL(t *testing.T) {
 		ClientSecret: "secret",
 		RedirectURL:  "http://localhost:8080/api/v1/oauth/google/callback",
 	}, httpclient.New(httpclient.Config{}))
-	url := p.AuthURL("state123")
+	url, err := p.AuthURL(context.Background(), "state123")
+	assert.NoError(t, err)
 	assert.Contains(t, url, "state=state123")
 	assert.Contains(t, url, "client_id=id")
 }

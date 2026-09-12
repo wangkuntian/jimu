@@ -37,6 +37,14 @@ func buildProviders(cfg config.OAuthConfig, client *httpclient.Client) map[strin
 		if !pc.Enabled {
 			continue
 		}
+		// 配了 issuer_url 即通用 OIDC（Keycloak/Okta/Auth0/Azure AD 等），provider 名自定义
+		if pc.IssuerURL != "" {
+			providers[name] = oauthplatform.NewOIDCProvider(name, oauthplatform.OIDCConfig{
+				ClientID: pc.ClientID, ClientSecret: pc.ClientSecret, RedirectURL: pc.RedirectURL,
+				IssuerURL: pc.IssuerURL, Scopes: pc.Scopes,
+			}, client)
+			continue
+		}
 		switch name {
 		case "google":
 			providers[name] = oauthplatform.NewGoogleProvider(oauthplatform.GoogleConfig{

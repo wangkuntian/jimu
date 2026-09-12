@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"strings"
 )
 
@@ -109,6 +110,9 @@ func (c *Config) validateCommon() error {
 	if err := validateProvisioning(c.Auth.Provisioning); err != nil {
 		return err
 	}
+	if err := validateOAuthProviders(c.OAuth); err != nil {
+		return err
+	}
 	if c.Audit.QueueSize <= 0 || c.Audit.BatchSize <= 0 || c.Audit.BatchSize > c.Audit.QueueSize || c.Audit.FlushIntervalMS <= 0 {
 		return errors.New("invalid audit configuration")
 	}
@@ -169,6 +173,27 @@ func validateProvisioning(p ProvisioningConfig) error {
 	}
 	if p.OwnerRole != "" && !names[p.OwnerRole] {
 		return fmt.Errorf("auth.provisioning.owner_role %q not found in auth.provisioning.roles", p.OwnerRole)
+	}
+	return nil
+}
+
+// validateOAuthProviders 校验启用的 OAuth/OIDC 提供商：client_id/redirect_url 必填，
+// OIDC（配了 issuer_url）还要求 issuer_url 是 http(s) 绝对地址。
+func validateOAuthProviders(cfg OAuthConfig) error {
+	for name, p := range cfg.Providers {
+		if !p.Enabled {
+			continue
+		}
+		if p.ClientID == "" || p.RedirectURL == "" {
+			return fmt.Errorf("oauth.providers.%s requires client_id and redirect_url when enabled", name)
+		}
+		if p.IssuerURL == "" {
+			continue
+		}
+		u, err := url.Parse(p.IssuerURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("oauth.providers.%s.issuer_url must be an absolute http(s) URL", name)
+		}
 	}
 	return nil
 }

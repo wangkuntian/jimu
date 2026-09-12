@@ -914,7 +914,7 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "提供商 (google/github/wechat)",
+                        "description": "提供商名（内置 google/github/wechat，或配置了 issuer_url 的自定义 OIDC 提供商）",
                         "name": "provider",
                         "in": "path",
                         "required": true

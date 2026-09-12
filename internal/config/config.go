@@ -77,17 +77,21 @@ type SchedulerConfig struct {
 	Store string `mapstructure:"store"` // 任务定义存储类型：memory, mysql
 }
 
-// OAuthProviderConfig 单个 OAuth 提供商配置
+// OAuthProviderConfig 单个 OAuth 提供商配置。
+// 填了 issuer_url 的提供商按通用 OIDC 处理（provider 名可自定义，如 keycloak/okta/azuread）；
+// 否则按内置提供商名（google/github/wechat）匹配。
 type OAuthProviderConfig struct {
-	ClientID     string `mapstructure:"client_id"`
-	ClientSecret string `mapstructure:"client_secret"`
-	RedirectURL  string `mapstructure:"redirect_url"`
-	Enabled      bool   `mapstructure:"enabled"`
+	ClientID     string   `mapstructure:"client_id"`
+	ClientSecret string   `mapstructure:"client_secret"`
+	RedirectURL  string   `mapstructure:"redirect_url"`
+	IssuerURL    string   `mapstructure:"issuer_url"` // OIDC discovery 签发者地址
+	Scopes       []string `mapstructure:"scopes"`     // 可选，默认 openid profile email
+	Enabled      bool     `mapstructure:"enabled"`
 }
 
 // OAuthConfig OAuth 登录配置
 type OAuthConfig struct {
-	Providers map[string]OAuthProviderConfig `mapstructure:"providers"` // 提供商名 -> 配置（google/github/wechat）
+	Providers map[string]OAuthProviderConfig `mapstructure:"providers"` // 提供商名 -> 配置（内置 google/github/wechat，或自定义 OIDC 提供商名）
 }
 
 // CaptchaConfig 验证码配置
