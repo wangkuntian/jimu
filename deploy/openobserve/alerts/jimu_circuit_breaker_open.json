@@ -1,11 +1,11 @@
 {
   "name": "jimu_circuit_breaker_open",
   "stream_type": "metrics",
-  "stream_name": "jimu_httpclient_circuit_open",
+  "stream_name": "jimu_breaker_open",
   "is_real_time": false,
   "query_condition": {
     "type": "promql",
-    "promql": "max(jimu_httpclient_circuit_open)",
+    "promql": "max(jimu_breaker_open)",
     "promql_condition": { "column": "value", "operator": ">", "value": 0 }
   },
   "trigger_condition": {
@@ -17,6 +17,6 @@
     "silence": 15
   },
   "destinations": ["jimu_webhook"],
-  "description": "出站 HTTP 客户端熔断器处于打开状态（下游连续失败）",
+  "description": "依赖熔断器处于打开状态（HTTP 出站 / Redis / DB 连续失败）；按 jimu_breaker_open 的 component 标签定位依赖",
   "enabled": true
 }

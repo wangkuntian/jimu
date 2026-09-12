@@ -586,7 +586,7 @@
         {
           "id": "jimu-line-circuit",
           "type": "line",
-          "title": "出站熔断状态",
+          "title": "依赖熔断状态",
           "description": "",
           "config": {
             "show_legends": true,
@@ -597,11 +597,11 @@
           "queryType": "promql",
           "queries": [
             {
-              "query": "max(jimu_httpclient_circuit_open)",
+              "query": "max(jimu_breaker_open)",
               "vrlFunctionQuery": "",
               "customQuery": true,
               "fields": {
-                "stream": "jimu_httpclient_circuit_open",
+                "stream": "jimu_breaker_open",
                 "stream_type": "metrics",
                 "x": [],
                 "y": [],
