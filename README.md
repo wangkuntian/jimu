@@ -7,6 +7,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **模块化架构** — Clean Architecture 分层，业务逻辑依赖接口不依赖实现
 - **统一认证** — typed JWT + Redis refresh session + Casbin RBAC v3 权限模型；API Key 认证（服务/机器间调用，`X-API-Key` 头 + `auth.APIKeyAuthMiddleware` + `auth.RequireScope` scope 校验，复用 `api_keys` 表并按 `tenant_id` 归属租户，认证后自动注入租户上下文；能力标签与 Scope 约定见 [API Key 与 Scope](#api-key-与-scope)）
 - **租户体系** — 单归属多租户：`tenants` 表 + 租户 CRUD API（`/api/v1/tenants`），`users`/`roles`/`audit_logs`/`api_keys` 携带 `tenant_id` 做行级隔离，任务队列（`jobs`/`job_history`/`dead_letters`）、导入任务（`import_jobs`）与可信设备（`trusted_devices`）同样归属租户；租户身份写入 JWT claim（`tid`）经中间件注入请求上下文，不接受客户端 header 传入；存量数据迁移时归入默认租户（`code=default`），角色名唯一性为租户内唯一，用户名/邮箱保持全局唯一（登录无需传租户标识）；归属关系为**租户 1:N 用户、用户单归属且不可跨租户**（见 [归属模型](#归属模型)）
+- **租户运营（套餐 / 配额 / 用量）** — `tenant_plans` 定义资源上限（`max_users`/`max_roles`/`max_api_keys`，0=不限），`tenants.plan_id=0` 表示未分配套餐（不受限，保持向后兼容）；创建用户（管理端与公开注册）、角色、API Key 前校验上限，超限返回新增错误码 `5005`/403 且不影响既有数据；`GET /api/v1/tenants/usage` 返回当前租户套餐与各项用量，`/api/v1/tenant-plans` 管理套餐定义、`PUT /api/v1/tenants/{id}/plan` 分配套餐（`jimu seed` 会内置一个未分配的 `free` 示例套餐）
 - **开通式注册** — 可选的 SaaS 语义（`auth.provisioning.enabled`）：注册即单事务开通新租户，注册者成为 owner，按可配置的角色模板自动初始化租户角色与全局权限绑定（模板模式，全部可配置：开关/owner 角色/角色与权限模板）；未启用时注册用户归默认租户
 - **密码重置** — 邮箱验证码自助重置（`POST /api/v1/auth/forgot-password` + `reset-password`），6 位数字码 Redis 一次性存储，防用户枚举，重置后强制登出全部会话
 - **敏感信息脱敏** — `platform/mask` 提供手机号/邮箱/身份证/银行卡/姓名/IP 等脱敏函数与按字段名判定（`RedactByKey`/`Map`）；日志链路（文件、stdout、OTLP 导出）统一接入，凭证类字段整体替换为 `***`、PII 部分保留，避免明文落盘
@@ -244,7 +245,7 @@ make cli
 ./bin/jimu migrate redo             # 重做最后一次迁移
 
 # 数据初始化
-./bin/jimu seed                     # 插入初始数据（含 Casbin 策略同步）
+./bin/jimu seed                     # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例）
 ```
 
 ## 项目结构
@@ -570,6 +571,7 @@ curl -X POST http://localhost:8080/api/v1/auth/register \
 - **管理端用户接口按租户隔离**：`/api/v1/admin/users` 的列表、详情、更新、禁用、分配角色均限定在当前租户（跨租户按不存在处理），分配角色时角色名只在用户所属租户内解析。
 - **任务与导入任务按租户隔离**：`/api/v1/admin/jobs`、`/api/v1/admin/jobs/dead-letters` 的列表/详情/重试/标记解决与 `/api/v1/admin/users/import/:id` 均限定在当前租户；任务消费时会把任务归属租户注入执行上下文（outbox 事件无任务行，租户未知，按平台级处理）。
 - **`tenant_id=0` 表示未归属**：迁移前的存量数据或绕过服务层直接写库会产生该状态，登录时会归一到默认租户（`id=1`、`code=default`）。
+- **套餐与配额**：套餐定义在 `tenant_plans`，租户通过 `tenants.plan_id` 关联；`plan_id=0` 或套餐上限为 0 时不受限制。配额只在创建前校验（创建用户/角色/API Key），已超限的存量数据不会被删除；`users`/`roles` 统计排除软删除记录，`api_keys` 为硬删除直接计数。批量导入用户不逐行校验配额。
 
 ```bash
 # 创建租户（编码全局唯一，仅限字母/数字/短横线/下划线，统一转小写存储）
@@ -598,6 +600,46 @@ curl -X DELETE http://localhost:8080/api/v1/tenants/<tenant_id> \
 ```
 
 相关错误码：`5001` 租户不存在、`5002` 租户编码已存在、`5003` 默认租户受保护、`5004` 租户编码格式无效。
+
+### 租户运营（套餐 / 配额 / 用量）
+
+平台侧先定义套餐，再分配给租户；分配后创建用户/角色/API Key 会按上限校验。
+
+```bash
+# 1. 创建套餐（上限 0 表示不限；编码统一转小写且不可修改）
+curl -X POST http://localhost:8080/api/v1/tenant-plans \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"code":"free","name":"免费版","max_users":10,"max_roles":5,"max_api_keys":2}'
+
+# 2. 分配套餐给租户（plan_id=0 表示取消套餐）
+curl -X PUT http://localhost:8080/api/v1/tenants/2/plan \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"plan_id":1}'
+
+# 3. 查看当前租户用量与上限
+curl http://localhost:8080/api/v1/tenants/usage \
+  -H "Authorization: Bearer <access_token>"
+```
+
+用量响应示例（`plan` 为 `null` 表示未分配套餐、不受限）：
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "tenant_id": 2,
+    "plan": {"id": 1, "code": "free", "name": "免费版", "max_users": 10, "max_roles": 5, "max_api_keys": 2},
+    "users": {"used": 3, "limit": 10},
+    "roles": {"used": 2, "limit": 5},
+    "api_keys": {"used": 0, "limit": 2}
+  }
+}
+```
+
+创建资源超限时返回 `5005`/403（`{"code":5005,"message":"users quota exceeded"}`）。套餐仍被租户使用时不可删除（`409`），避免租户静默失去约束；`PUT /api/v1/tenant-plans/{id}` 更新上限、`DELETE /api/v1/tenant-plans/{id}` 下线套餐。
 
 ### API Key 与 Scope
 
