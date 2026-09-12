@@ -48,7 +48,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
 - **OpenTelemetry 可观测性（OpenObserve）** — 统一 OTLP gRPC 输出：分布式追踪（HTTP/Gin + Gorm 查询 + Redis 命令全链路 span，队列/Outbox 异步边界透传 `traceparent`/`tracestate`）、Prometheus 指标转 OTLP 推送、结构化日志异步推送（`otel.enabled` 开启）
 - **Prometheus 指标** — DB 连接池 + 运行时 + HTTP 请求指标（`jimu_http_*`）+ 队列执行/死信（`jimu_queue_*`）+ Outbox 发布（`jimu_outbox_*`）+ 依赖熔断（`jimu_breaker_*`）+ 定时任务执行（`jimu_scheduler_*`，成功/失败计数 + 耗时分布）；Management `/metrics` 暴露 Prometheus 格式，`otel.metrics_enabled` 时定期转 OTLP 推送 OpenObserve
-- **gRPC server** — 与 HTTP 双栈并存，内置健康检查（`grpc_health_v1`）与反射（grpcurl 可探），可选启用（`grpc.enabled`，默认端口 9091）；业务示例 `UserInfoService` 演示 proto 定义 → `make proto` 生成 → 服务实现 → 注册全流程，业务模块经 `RegisterService` 接入
+- **gRPC server** — 与 HTTP 双栈并存，内置健康检查（`grpc_health_v1`）与反射（grpcurl 可探），可选启用（`grpc.enabled`，默认端口 9091）；服务端治理拦截器：**panic 恢复**（转 `Internal` 并上报，避免 handler panic 终止进程）+ 请求量/错误量/在途/耗时指标（`jimu_grpc_server_*`）+ 单请求超时（`grpc.timeout_sec`，超时返回 `DeadlineExceeded`）；业务示例 `UserInfoService` 演示 proto 定义 → `make proto` 生成 → 服务实现 → 注册全流程，业务模块经 `RegisterService` 接入
 - **PostgreSQL 支持** — `db.driver=postgres`（或 `DB_DRIVER=postgres`）切换，迁移文件独立于 `migrations/postgres/`，与 MySQL 语法（`BIGINT UNSIGNED`/`ENGINE=InnoDB`/`ON UPDATE`）完全隔离；连接、迁移、seed、JWT/RBAC 全链路已用真实 PG 17 验证
 - **分布式 ID** — 雪花 ID 生成器（`internal/shared/id`），所有数据库主键由应用生成，`id.worker_id` 配置多实例唯一编号
 - **Docker 支持** — Dockerfile + docker-compose 一键起服务
@@ -60,7 +60,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **追踪关联** — 访问日志自动注入 trace_id / span_id，关联 OpenTelemetry 追踪
 - **Redis 高可用** — `redis.mode` 支持 `single` / `sentinel` / `cluster` 三种部署模式（默认 single 行为不变）：哨兵模式通过 `master_name` + `sentinel_addrs` 自动故障转移，集群模式通过 `cluster_addrs` 连接分片；统一 `redis.Client` 接口，框架内 session/缓存/队列/限流/分布式锁全复用
 - **TOTP 二次验证** — RFC 6238 自研实现（`internal/shared/totp`，无外部依赖），用户可自助绑定/启用/关闭：`POST /auth/mfa/setup` 生成密钥与 otpauth URI（二维码绑定）、`/auth/mfa/enable` 首次验证码确认、`/auth/mfa/disable` 校验后关闭；启用后登录必须携带 `totp_code`（缺失 `2006`，错误 `2007`），密钥 AES-GCM 字段级加密落库
-- **统一 gRPC 客户端** — 出站调用封装（`internal/platform/grpc` `Client`）：连接管理 + 调用超时 + 指数退避重试（仅 Unavailable/ResourceExhausted 幂等安全码）+ panic 恢复拦截器 + Prometheus 指标（`jimu_grpc_client_*`），支持 TLS/insecure，与 HTTP client 对齐的框架风格
+- **统一 gRPC 客户端** — 出站调用封装（`internal/platform/grpc` `Client`）：连接管理 + 调用超时 + 指数退避重试（仅 Unavailable/ResourceExhausted 幂等安全码）+ **出站熔断**（复用 `platform/breaker`，只把 Unavailable/DeadlineExceeded 计为失败）+ panic 恢复拦截器 + Prometheus 指标（`jimu_grpc_client_*`），支持 TLS/insecure，与 HTTP client 对齐的框架风格
 - **密码防复用** — 改密时校验新密码不等于当前密码与最近 N 个历史密码（`auth.password_history_count`，默认 5，0=关闭），历史哈希落库 `password_histories` 并按条数自动裁剪；命中返回 `2008`
 - **可信设备（记住此设备）** — 仅对启用 TOTP 的账号生效：登录时传 `remember_device: true`，成功后返回一次性明文 `device_token`（前缀 `jimu_dev_`，库中只存 SHA-256 哈希）；后续登录携带 `X-Device-Token` 头且不带 `totp_code` 即可跳过 TOTP，**密码仍必需**；令牌绑定签发用户（泄露也无法用于他人账号），改密与 `/auth/logout-all` 自动吊销，`GET/DELETE /auth/devices` 自助查看与注销；有效期 `auth.trusted_device_days`（默认 30，0=关闭）
 - **登录历史** — 每次登录尝试落库 `login_histories`（成功/失败/锁定 + 原因 + IP + User-Agent，账号不存在也记录用户名），`GET /api/v1/auth/login-history` 供用户自助排查异常登录；写入失败只记日志，不影响登录主流程
@@ -317,7 +317,7 @@ jimu/
 │   │   ├── observability/      # 健康检查 + Metrics + Tracing + OTLP 推送（OpenObserve）
 │   │   ├── reporter/           # 错误上报（结构化错误日志，接入 OpenObserve）
 │   │   ├── httpclient/         # 统一出站 HTTP 客户端（超时/重试/熔断/限流）
-│   │   ├── grpc/               # gRPC server + 统一出站 Client（健康/反射/超时/重试/指标）
+│   │   ├── grpc/               # gRPC server + 统一出站 Client（健康/反射/超时/重试/熔断/恢复/指标）
 │   │   ├── ws/                 # WebSocket（Hub + 会话/频道管理）
 │   │   ├── storage/            # 文件存储抽象（本地/S3/OSS/MinIO）
 │   │   ├── importer/           # 数据导入（CSV/Excel 模板解析与校验）
@@ -884,9 +884,10 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `notification.webhook.sign_secret` | Webhook 回调载荷签名密钥（HMAC-SHA256，`X-Jimu-Signature`）；空则不签名 | — |
 | `grpc.enabled` | 是否启用 gRPC server（与 HTTP 双栈并存，默认关闭） | `false` |
 | `grpc.host` / `grpc.port` | gRPC 监听地址 / 端口 | `0.0.0.0` / `9091` |
+| `grpc.timeout_sec` | gRPC 单请求处理超时（秒），0=不限；超时由服务端拦截器返回 `DeadlineExceeded` | `30`（生产）/ `60`（开发） |
 | `grpc` 业务服务 | 示例 `UserInfoService`（`internal/platform/grpc/userinfo_service.go`，proto 在 `proto/jimu/v1/userinfo.proto`，`make proto` 重新生成）；业务模块仿照 `RegisterUserInfoService` 经 `RegisterService` 接入 | — |
 | `error_reporting.enabled` | 是否启用错误上报（结构化错误日志输出，含 trace_id；未启用时零开销） | `false`（开发）/ `true`（生产） |
-| gRPC 出站客户端 | 统一封装 `internal/platform/grpc` `Client`（`NewClient`）：超时/重试/恢复/指标 `jimu_grpc_client_*`，业务经 `Conn()` 走生成的强类型客户端 | — |
+| gRPC 出站客户端 | 统一封装 `internal/platform/grpc` `Client`（`NewClient`）：超时/重试/熔断/恢复/指标 `jimu_grpc_client_*`，业务经 `Conn()` 走生成的强类型客户端 | — |
 
 ### 静态加密（Data at Rest）
 
