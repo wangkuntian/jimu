@@ -61,6 +61,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **Redis 高可用** — `redis.mode` 支持 `single` / `sentinel` / `cluster` 三种部署模式（默认 single 行为不变）：哨兵模式通过 `master_name` + `sentinel_addrs` 自动故障转移，集群模式通过 `cluster_addrs` 连接分片；统一 `redis.Client` 接口，框架内 session/缓存/队列/限流/分布式锁全复用
 - **TOTP 二次验证** — RFC 6238 自研实现（`internal/shared/totp`，无外部依赖），用户可自助绑定/启用/关闭：`POST /auth/mfa/setup` 生成密钥与 otpauth URI（二维码绑定）、`/auth/mfa/enable` 首次验证码确认、`/auth/mfa/disable` 校验后关闭；启用后登录必须携带 `totp_code`（缺失 `2006`，错误 `2007`），密钥 AES-GCM 字段级加密落库
 - **统一 gRPC 客户端** — 出站调用封装（`internal/platform/grpc` `Client`）：连接管理 + 调用超时 + 指数退避重试（仅 Unavailable/ResourceExhausted 幂等安全码）+ **出站熔断**（复用 `platform/breaker`，只把 Unavailable/DeadlineExceeded 计为失败）+ panic 恢复拦截器 + Prometheus 指标（`jimu_grpc_client_*`），支持 TLS/insecure，与 HTTP client 对齐的框架风格
+- **WebAuthn / 通行密钥** — `auth.webauthn.*`（`rp_id`/`rp_origins`/`session_ttl_min`）启用后支持 Passkey：已登录用户经 `POST /auth/webauthn/register/begin|finish` 自助注册（凭证公钥落库 `webauthn_credentials`，迁移 015，私钥永不离开认证器），`POST /auth/webauthn/login/begin|finish` 无密码登录（通行密钥是抗钓鱼强因子，不叠加密码与 TOTP），`GET/PUT/DELETE /auth/webauthn/credentials` 管理与注销；挑战经 Redis 一次性存储（`session_id` 回传，防替换/重放），签名计数器回写用于克隆检测，凭证按租户与用户隔离
 - **密码防复用** — 改密时校验新密码不等于当前密码与最近 N 个历史密码（`auth.password_history_count`，默认 5，0=关闭），历史哈希落库 `password_histories` 并按条数自动裁剪；命中返回 `2008`
 - **可信设备（记住此设备）** — 仅对启用 TOTP 的账号生效：登录时传 `remember_device: true`，成功后返回一次性明文 `device_token`（前缀 `jimu_dev_`，库中只存 SHA-256 哈希）；后续登录携带 `X-Device-Token` 头且不带 `totp_code` 即可跳过 TOTP，**密码仍必需**；令牌绑定签发用户（泄露也无法用于他人账号），改密与 `/auth/logout-all` 自动吊销，`GET/DELETE /auth/devices` 自助查看与注销；有效期 `auth.trusted_device_days`（默认 30，0=关闭）
 - **登录历史** — 每次登录尝试落库 `login_histories`（成功/失败/锁定 + 原因 + IP + User-Agent，账号不存在也记录用户名），`GET /api/v1/auth/login-history` 供用户自助排查异常登录；写入失败只记日志，不影响登录主流程
@@ -545,6 +546,36 @@ curl -X DELETE http://localhost:8080/api/v1/auth/devices/1 \
 
 令牌只存哈希、绑定签发用户；改密或调用 `/auth/logout-all` 后全部可信设备立即失效（`auth.trusted_device_days` 控制有效期，过期记录由保留任务清理）。
 
+### WebAuthn / 通行密钥（Passkey）
+
+启用 `auth.webauthn.enabled` 后，用户可注册通行密钥并用它**无密码登录**。浏览器侧需 HTTPS（本地 `localhost` 例外），`rp_id` 填站点有效域、`rp_origins` 填前端来源。
+
+```bash
+# 1. 已登录用户开始注册：返回 session_id 与 publicKey 选项
+curl -X POST http://localhost:8080/api/v1/auth/webauthn/register/begin \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"MacBook"}'
+
+# 2. 前端调用 navigator.credentials.create(options)，把返回的凭证 JSON 原样提交
+curl -X POST "http://localhost:8080/api/v1/auth/webauthn/register/finish?session_id=<session_id>" \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d @credential.json
+
+# 3. 无密码登录：begin 拿断言选项，前端 navigator.credentials.get(options) 后提交断言
+curl -X POST http://localhost:8080/api/v1/auth/webauthn/login/begin \
+  -H "Content-Type: application/json" -d '{"username":"alice"}'
+curl -X POST "http://localhost:8080/api/v1/auth/webauthn/login/finish?session_id=<session_id>" \
+  -H "Content-Type: application/json" -d @assertion.json
+
+# 4. 管理已注册凭证（列表 / 重命名 / 删除）
+curl -X GET http://localhost:8080/api/v1/auth/webauthn/credentials -H "Authorization: Bearer <access_token>"
+curl -X DELETE http://localhost:8080/api/v1/auth/webauthn/credentials/1 -H "Authorization: Bearer <access_token>"
+```
+
+要点：挑战只存服务端 Redis（一次性、默认 5 分钟），客户端仅回传 `session_id`，因此挑战无法被替换或重放；登录成功后回写签名计数器与备份状态（克隆检测）；注册/登录会话分别绑定仪式类型与用户，跨用直接拒绝；`session_id` 失效或签名不匹配返回 `2011`，用户未注册凭证返回 `2010`。删除全部凭证不影响密码/TOTP 登录。
+
 ### 开通式注册（可选）
 
 启用 `auth.provisioning.enabled`（要求 `public_registration: true`）后，注册即开通新租户：单事务创建租户 + owner 用户，并按角色模板自动绑定全局权限。请求携带 `tenant_name`（必填，`tenant_code` 可选，不传自动生成）：
@@ -828,6 +859,8 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `security.ip_allowlist` / `security.admin_ip_allowlist` | 全局 / 管理端 IP 白名单（CIDR 或单个 IP，可多项）；为空表示不限制，非法值启动报错 | `[]` |
 | `auth.password_history_count` | 密码防复用：检查最近 N 个历史密码（0=关闭） | `5` |
 | `auth.trusted_device_days` | 可信设备（记住此设备）有效期天数，0=关闭该能力 | `30` |
+| `auth.webauthn.enabled` / `rp_id` / `rp_origins` | 通行密钥开关 / Relying Party 有效域（不带 scheme）/ 允许的浏览器来源（绝对 URL） | `false` / — / — |
+| `auth.webauthn.rp_display_name` / `session_ttl_min` | 展示给用户的站点名 / 挑战有效期（分钟，0 用默认 5） | `Jimu` / `5` |
 | `auth.breach_check_enabled` | 泄露口令检查（HIBP k-匿名范围查询，需可出网）；开启后注册/重置密码命中泄露库返回 `2009` | `false` |
 | `audit.hash_secret` | 审计链 HMAC 密钥（建议经 `AUDIT_HASH_SECRET` 或 Secret 文件注入）；为空时退化为 SHA-256，篡改者可重算整条链 | — |
 | `id.worker_id` | 雪花 ID worker 编号（0-1023）；多实例部署时每个副本需唯一，避免 ID 冲突 | `0` |
