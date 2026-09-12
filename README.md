@@ -6,7 +6,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 
 - **模块化架构** — Clean Architecture 分层，业务逻辑依赖接口不依赖实现
 - **统一认证** — typed JWT + Redis refresh session + Casbin RBAC v3 权限模型；API Key 认证（服务/机器间调用，`X-API-Key` 头 + `auth.APIKeyAuthMiddleware` + `auth.RequireScope` scope 校验，复用 `api_keys` 表并按 `tenant_id` 归属租户，认证后自动注入租户上下文；能力标签与 Scope 约定见 [API Key 与 Scope](#api-key-与-scope)）
-- **租户体系** — 单归属多租户：`tenants` 表 + 租户 CRUD API（`/api/v1/tenants`），`users`/`roles`/`audit_logs`/`api_keys` 携带 `tenant_id` 做行级隔离，任务队列（`jobs`/`job_history`/`dead_letters`）与导入任务（`import_jobs`）同样归属租户；租户身份写入 JWT claim（`tid`）经中间件注入请求上下文，不接受客户端 header 传入；存量数据迁移时归入默认租户（`code=default`），角色名唯一性为租户内唯一，用户名/邮箱保持全局唯一（登录无需传租户标识）；归属关系为**租户 1:N 用户、用户单归属且不可跨租户**（见 [归属模型](#归属模型)）
+- **租户体系** — 单归属多租户：`tenants` 表 + 租户 CRUD API（`/api/v1/tenants`），`users`/`roles`/`audit_logs`/`api_keys` 携带 `tenant_id` 做行级隔离，任务队列（`jobs`/`job_history`/`dead_letters`）、导入任务（`import_jobs`）与可信设备（`trusted_devices`）同样归属租户；租户身份写入 JWT claim（`tid`）经中间件注入请求上下文，不接受客户端 header 传入；存量数据迁移时归入默认租户（`code=default`），角色名唯一性为租户内唯一，用户名/邮箱保持全局唯一（登录无需传租户标识）；归属关系为**租户 1:N 用户、用户单归属且不可跨租户**（见 [归属模型](#归属模型)）
 - **开通式注册** — 可选的 SaaS 语义（`auth.provisioning.enabled`）：注册即单事务开通新租户，注册者成为 owner，按可配置的角色模板自动初始化租户角色与全局权限绑定（模板模式，全部可配置：开关/owner 角色/角色与权限模板）；未启用时注册用户归默认租户
 - **密码重置** — 邮箱验证码自助重置（`POST /api/v1/auth/forgot-password` + `reset-password`），6 位数字码 Redis 一次性存储，防用户枚举，重置后强制登出全部会话
 - **敏感信息脱敏** — `platform/mask` 提供手机号/邮箱/身份证/银行卡/姓名/IP 等脱敏函数与按字段名判定（`RedactByKey`/`Map`）；日志链路（文件、stdout、OTLP 导出）统一接入，凭证类字段整体替换为 `***`、PII 部分保留，避免明文落盘
@@ -61,6 +61,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **TOTP 二次验证** — RFC 6238 自研实现（`internal/shared/totp`，无外部依赖），用户可自助绑定/启用/关闭：`POST /auth/mfa/setup` 生成密钥与 otpauth URI（二维码绑定）、`/auth/mfa/enable` 首次验证码确认、`/auth/mfa/disable` 校验后关闭；启用后登录必须携带 `totp_code`（缺失 `2006`，错误 `2007`），密钥 AES-GCM 字段级加密落库
 - **统一 gRPC 客户端** — 出站调用封装（`internal/platform/grpc` `Client`）：连接管理 + 调用超时 + 指数退避重试（仅 Unavailable/ResourceExhausted 幂等安全码）+ panic 恢复拦截器 + Prometheus 指标（`jimu_grpc_client_*`），支持 TLS/insecure，与 HTTP client 对齐的框架风格
 - **密码防复用** — 改密时校验新密码不等于当前密码与最近 N 个历史密码（`auth.password_history_count`，默认 5，0=关闭），历史哈希落库 `password_histories` 并按条数自动裁剪；命中返回 `2008`
+- **可信设备（记住此设备）** — 仅对启用 TOTP 的账号生效：登录时传 `remember_device: true`，成功后返回一次性明文 `device_token`（前缀 `jimu_dev_`，库中只存 SHA-256 哈希）；后续登录携带 `X-Device-Token` 头且不带 `totp_code` 即可跳过 TOTP，**密码仍必需**；令牌绑定签发用户（泄露也无法用于他人账号），改密与 `/auth/logout-all` 自动吊销，`GET/DELETE /auth/devices` 自助查看与注销；有效期 `auth.trusted_device_days`（默认 30，0=关闭）
 - **登录历史** — 每次登录尝试落库 `login_histories`（成功/失败/锁定 + 原因 + IP + User-Agent，账号不存在也记录用户名），`GET /api/v1/auth/login-history` 供用户自助排查异常登录；写入失败只记日志，不影响登录主流程
 - **错误追踪上报** — `internal/platform/reporter`：结构化错误日志（含 trace_id/span_id），HTTP `Recovery` 中间件 panic 自动上报；日志链路接入 OpenObserve 后错误自动汇聚，配合 OpenObserve 告警覆盖错误监控场景（`error_reporting.enabled` 开关）
 
@@ -491,6 +492,31 @@ curl -X POST http://localhost:8080/api/v1/auth/mfa/disable \
   -d '{"code":"123456"}'
 ```
 
+### 可信设备（记住此设备）
+
+仅对启用 TOTP 的账号有意义：勾选后服务端签发设备令牌，客户端安全保存并在下次登录时通过 `X-Device-Token` 携带，即可在**密码正确**的前提下跳过 TOTP。
+
+```bash
+# 1. 登录时勾选记住此设备（响应多返回 device_token，仅此一次明文）
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","password":"password123","totp_code":"123456","remember_device":true}'
+
+# 2. 后续登录：带设备令牌、不带 totp_code
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -H "X-Device-Token: jimu_dev_<token>" \
+  -d '{"username":"alice","password":"password123"}'
+
+# 3. 查看 / 注销可信设备（注销单个传 id，全部注销不带 id）
+curl -X GET http://localhost:8080/api/v1/auth/devices \
+  -H "Authorization: Bearer <access_token>"
+curl -X DELETE http://localhost:8080/api/v1/auth/devices/1 \
+  -H "Authorization: Bearer <access_token>"
+```
+
+令牌只存哈希、绑定签发用户；改密或调用 `/auth/logout-all` 后全部可信设备立即失效（`auth.trusted_device_days` 控制有效期，过期记录由保留任务清理）。
+
 ### 开通式注册（可选）
 
 启用 `auth.provisioning.enabled`（要求 `public_registration: true`）后，注册即开通新租户：单事务创建租户 + owner 用户，并按角色模板自动绑定全局权限。请求携带 `tenant_name`（必填，`tenant_code` 可选，不传自动生成）：
@@ -727,11 +753,12 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `ratelimit.tenant.enabled` / `ratelimit.tenant.limit` / `ratelimit.tenant.window_sec` | 租户维度限流开关 / 窗口内请求上限 / 窗口秒数（平台级视角 `tid=0` 跳过，Redis 异常 fail-open） | `false` / `6000` / `60` |
 | `retention.enabled` / `retention.cron` / `retention.batch_size` | 历史数据保留任务开关 / 调度表达式 / 每批删除行数（默认关闭） | `false` / `30 3 * * *` / `500` |
 | `retention.audit_log_days` / `retention.job_days` / `retention.job_history_days` | 审计日志 / 已终态任务 / 任务执行历史保留天数（0=不清理） | `180` / `7` / `30` |
-| `retention.dead_letter_days` / `retention.outbox_event_days` / `retention.import_job_days` | 已处理死信 / 已发布 outbox 事件 / 已结束导入任务保留天数（0=不清理） | `30` / `7` / `90` |
+| `retention.dead_letter_days` / `retention.outbox_event_days` / `retention.import_job_days` / `retention.trusted_device_days` | 已处理死信 / 已发布 outbox 事件 / 已结束导入任务 / 已失效可信设备保留天数（0=不清理） | `30` / `7` / `90` / `7` |
 | `http.tls.enabled` / `http.tls.cert_file` / `http.tls.key_file` / `http.tls.client_ca_file` | HTTP 服务端 TLS；`client_ca_file` 非空时启用 mTLS（要求并校验客户端证书） | `false` / — / — / — |
 | `grpc.tls.*` | gRPC 服务端 TLS/mTLS，字段与 `http.tls` 同构 | `false` |
 | `security.ip_allowlist` / `security.admin_ip_allowlist` | 全局 / 管理端 IP 白名单（CIDR 或单个 IP，可多项）；为空表示不限制，非法值启动报错 | `[]` |
 | `auth.password_history_count` | 密码防复用：检查最近 N 个历史密码（0=关闭） | `5` |
+| `auth.trusted_device_days` | 可信设备（记住此设备）有效期天数，0=关闭该能力 | `30` |
 | `audit.hash_secret` | 审计链 HMAC 密钥（建议经 `AUDIT_HASH_SECRET` 或 Secret 文件注入）；为空时退化为 SHA-256，篡改者可重算整条链 | — |
 | `id.worker_id` | 雪花 ID worker 编号（0-1023）；多实例部署时每个副本需唯一，避免 ID 冲突 | `0` |
 | `storage.type` | 存储类型 (`local`/`s3`/`oss`/`minio`)。`oss` 复用 S3 协议（path style + endpoint），无需阿里云 SDK；`minio` 需 `path_style: true` | `local` |
