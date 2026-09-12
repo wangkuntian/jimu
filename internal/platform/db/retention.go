@@ -112,6 +112,14 @@ func NewRetentionService(db *gorm.DB, cfg config.RetentionConfig) *RetentionServ
 	return &RetentionService{db: db, rules: DefaultRetentionRules(cfg), batchSize: batch}
 }
 
+// NewRetentionServiceWithRules 使用自定义规则创建保留服务（业务自有表可复用同一套分批清理逻辑）
+func NewRetentionServiceWithRules(db *gorm.DB, rules []RetentionRule, batchSize int) *RetentionService {
+	if batchSize <= 0 {
+		batchSize = defaultRetentionBatchSize
+	}
+	return &RetentionService{db: db, rules: rules, batchSize: batchSize}
+}
+
 // Run 执行全部规则；单表失败不阻断其他表，错误聚合返回
 func (s *RetentionService) Run(ctx context.Context) ([]RetentionResult, error) {
 	if s.db == nil {
@@ -139,7 +147,8 @@ func (s *RetentionService) Run(ctx context.Context) ([]RetentionResult, error) {
 	return results, errors.Join(errs...)
 }
 
-// purge 分批硬删除过期行（Unscoped 绕过软删除，软删数据也一并清理）
+// purge 分批硬删除过期行（Unscoped 绕过软删除，软删数据也一并清理）。
+// 子查询必须包一层派生表：MySQL/MariaDB 不支持 IN (SELECT ... LIMIT n)。
 func (s *RetentionService) purge(ctx context.Context, rule RetentionRule, cutoff time.Time) (int64, error) {
 	var total int64
 	for i := 0; i < maxRetentionBatches; i++ {
@@ -151,7 +160,9 @@ func (s *RetentionService) purge(ctx context.Context, rule RetentionRule, cutoff
 		}
 		sub = sub.Limit(s.batchSize)
 
-		res := s.db.WithContext(ctx).Unscoped().Where("id IN (?)", sub).Delete(rule.Model)
+		// MySQL/MariaDB 不支持 `IN (SELECT ... LIMIT n)`（错误 1235），需再包一层派生表
+		derived := s.db.WithContext(ctx).Table("(?) AS batch", sub).Select("id")
+		res := s.db.WithContext(ctx).Unscoped().Where("id IN (?)", derived).Delete(rule.Model)
 		if res.Error != nil {
 			return total, res.Error
 		}
