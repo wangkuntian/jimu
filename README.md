@@ -19,7 +19,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **数据库迁移** — Goose 迁移 CLI (up/down/status/redo)
 - **数据初始化** — Seed 命令一键插入管理员和基础权限（含 Casbin 策略同步）
 - **限流保护** — 全局令牌桶（IP）+ Redis 登录/注册固定窗口 + 用户/租户/API Key 维度滑动窗口（租户维度全局挂载、平台级视角跳过；API Key 维度按路由挂载且以 Key ID 计数，不落明文）；并发上限负载保护（`server.max_concurrency`，超限可短排队后返回 `1010`/503，避免过载雪崩）
-- **HTTP 安全边界** — 请求体大小、超时、可信代理、CORS、安全 Headers；**IP 白名单**（`security.ip_allowlist` 全局 + `security.admin_ip_allowlist` 管理端，CIDR/单 IP，启动校验，客户端 IP 依赖可信代理配置）；CSRF 防护（配置 `security.csrf_secret` 启用，Bearer 请求自动跳过）；API 签名验证中间件（可选，服务间调用按需挂载）
+- **HTTP 安全边界** — 请求体大小、超时、可信代理、CORS、安全 Headers；**IP 白名单**（`security.ip_allowlist` 全局 + `security.admin_ip_allowlist` 管理端，CIDR/单 IP，启动校验，客户端 IP 依赖可信代理配置）；**TLS/mTLS**（`http.tls` 与 `grpc.tls` 同构：`client_ca_file` 非空即要求并校验客户端证书，HTTP 与 gRPC 双栈一致）；CSRF 防护（配置 `security.csrf_secret` 启用，Bearer 请求自动跳过）；API 签名验证中间件（可选，服务间调用按需挂载）
 - **缓存抽象** — Cache-Aside 模式，GetOrSet 自动回填；两级防击穿（进程内 singleflight 合并同 key 并发回源 + Redis 分布式锁跨实例互斥，锁异常时直接回源兜底）
 - **自定义校验** — 手机号、密码强度、身份证、用户名等常用规则
 - **国际化** — 按 `Accept-Language` 返回中文/英文错误与校验消息
@@ -727,6 +727,8 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `retention.enabled` / `retention.cron` / `retention.batch_size` | 历史数据保留任务开关 / 调度表达式 / 每批删除行数（默认关闭） | `false` / `30 3 * * *` / `500` |
 | `retention.audit_log_days` / `retention.job_days` / `retention.job_history_days` | 审计日志 / 已终态任务 / 任务执行历史保留天数（0=不清理） | `180` / `7` / `30` |
 | `retention.dead_letter_days` / `retention.outbox_event_days` / `retention.import_job_days` | 已处理死信 / 已发布 outbox 事件 / 已结束导入任务保留天数（0=不清理） | `30` / `7` / `90` |
+| `http.tls.enabled` / `http.tls.cert_file` / `http.tls.key_file` / `http.tls.client_ca_file` | HTTP 服务端 TLS；`client_ca_file` 非空时启用 mTLS（要求并校验客户端证书） | `false` / — / — / — |
+| `grpc.tls.*` | gRPC 服务端 TLS/mTLS，字段与 `http.tls` 同构 | `false` |
 | `security.ip_allowlist` / `security.admin_ip_allowlist` | 全局 / 管理端 IP 白名单（CIDR 或单个 IP，可多项）；为空表示不限制，非法值启动报错 | `[]` |
 | `audit.hash_secret` | 审计链 HMAC 密钥（建议经 `AUDIT_HASH_SECRET` 或 Secret 文件注入）；为空时退化为 SHA-256，篡改者可重算整条链 | — |
 | `id.worker_id` | 雪花 ID worker 编号（0-1023）；多实例部署时每个副本需唯一，避免 ID 冲突 | `0` |
