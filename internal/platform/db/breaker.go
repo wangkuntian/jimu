@@ -13,80 +13,9 @@ import (
 
 	"jimu/internal/config"
 	"jimu/internal/platform/breaker"
-	"jimu/internal/platform/logger"
 
 	"gorm.io/gorm"
 )
-
-// breakerConnPool 在语句级别接入熔断：DB 不可用时快速失败，避免每个请求都等连接/查询超时。
-// 只把连接/网络类错误计为失败（见 isDBTransportError），SQL 业务错误不影响熔断状态。
-type breakerConnPool struct {
-	pool *sql.DB
-	b    *breaker.Breaker
-}
-
-// newBreakerConnPool 包装 sql.DB，实现 gorm.ConnPool 与 gorm.ConnPoolBeginner
-func newBreakerConnPool(pool *sql.DB, b *breaker.Breaker) gorm.ConnPool {
-	return &breakerConnPool{pool: pool, b: b}
-}
-
-// DB 保证 gorm.DB.DB() 仍能拿到底层连接池（健康检查、连接池指标依赖）
-func (p *breakerConnPool) DB() *sql.DB { return p.pool }
-
-func (p *breakerConnPool) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
-	if err := p.b.Allow(); err != nil {
-		return nil, err
-	}
-	stmt, err := p.pool.PrepareContext(ctx, query)
-	p.record(err)
-	return stmt, err
-}
-
-func (p *breakerConnPool) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	if err := p.b.Allow(); err != nil {
-		return nil, err
-	}
-	res, err := p.pool.ExecContext(ctx, query, args...)
-	p.record(err)
-	return res, err
-}
-
-func (p *breakerConnPool) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	if err := p.b.Allow(); err != nil {
-		return nil, err
-	}
-	rows, err := p.pool.QueryContext(ctx, query, args...)
-	p.record(err)
-	return rows, err
-}
-
-// QueryRowContext 无法在此观察错误（错误在 Scan 时暴露）。熔断开启时用已取消的
-// context 快速失败，避免真正发起查询；错误表现为 context.Canceled。
-func (p *breakerConnPool) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	if err := p.b.Allow(); err != nil {
-		cancelled, cancel := context.WithCancel(ctx)
-		cancel()
-		return p.pool.QueryRowContext(cancelled, query, args...)
-	}
-	return p.pool.QueryRowContext(ctx, query, args...)
-}
-
-func (p *breakerConnPool) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {
-	if err := p.b.Allow(); err != nil {
-		return nil, err
-	}
-	tx, err := p.pool.BeginTx(ctx, opts)
-	p.record(err)
-	return tx, err
-}
-
-func (p *breakerConnPool) record(err error) {
-	if isDBTransportError(err) {
-		p.b.OnFailure()
-		return
-	}
-	p.b.OnSuccess()
-}
 
 // isDBTransportError 判断是否为连接/网络类错误。
 // 刻意不把 context.DeadlineExceeded 计入：慢查询超时未必代表数据库不可用，
@@ -124,26 +53,81 @@ func isDBTransportError(err error) bool {
 	return false
 }
 
-// attachBreaker 在语句级挂载熔断。
-// 注意：启用读写分离时 dbresolver 会为每个主/从库建立独立连接池并接管 ConnPool，
-// 语句级熔断无法覆盖，此时跳过并给出提示。
-func attachBreaker(db *gorm.DB, cfg config.BreakerConfig, split bool, log *logger.Logger) error {
+// attachBreaker 在 gorm 回调层挂载语句级熔断：语句执行前 Allow，执行后按错误类型记成功/失败。
+// 走回调而不是包装 ConnPool，因此读写分离（dbresolver 为每个主/从库建独立连接池）同样生效，
+// 且不会影响 gorm.DB()、连接池上限等对底层 *sql.DB 的操作。
+func attachBreaker(db *gorm.DB, cfg config.BreakerConfig) error {
 	if !cfg.Enabled {
 		return nil
 	}
-	if split {
-		if log != nil {
-			log.Warnw("db breaker skipped: read/write splitting enabled", "reason", "dbresolver manages its own conn pools")
-		}
-		return nil
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		return fmt.Errorf("get sql.DB for breaker: %w", err)
-	}
-	db.ConnPool = newBreakerConnPool(sqlDB, breaker.New("db", breaker.Config{
+	plugin := &breakerPlugin{b: breaker.New("db", breaker.Config{
 		MaxFailures:  cfg.MaxFailures,
 		ResetTimeout: time.Duration(cfg.ResetTimeoutSec) * time.Second,
-	}))
+	})}
+	if err := db.Use(plugin); err != nil {
+		return fmt.Errorf("register db breaker: %w", err)
+	}
 	return nil
+}
+
+// breakerPlugin 以 gorm 插件形式在每种语句处理器的首尾挂载熔断。
+type breakerPlugin struct {
+	b *breaker.Breaker
+}
+
+func (p *breakerPlugin) Name() string { return "jimu:db-breaker" }
+
+// Initialize 为 Create/Query/Update/Delete/Row/Raw 六类操作注册 allow/record 回调。
+// Before("*")/After("*") 保证在处理器内所有回调之外执行。
+func (p *breakerPlugin) Initialize(db *gorm.DB) error {
+	create, query := db.Callback().Create(), db.Callback().Query()
+	update, remove := db.Callback().Update(), db.Callback().Delete()
+	row, raw := db.Callback().Row(), db.Callback().Raw()
+
+	type callback interface {
+		Register(string, func(*gorm.DB)) error
+	}
+	processors := []struct {
+		op            string
+		before, after callback
+	}{
+		{"create", create.Before("*"), create.After("*")},
+		{"query", query.Before("*"), query.After("*")},
+		{"update", update.Before("*"), update.After("*")},
+		{"delete", remove.Before("*"), remove.After("*")},
+		{"row", row.Before("*"), row.After("*")},
+		{"raw", raw.Before("*"), raw.After("*")},
+	}
+	for _, item := range processors {
+		if err := item.before.Register("jimu:breaker:allow:"+item.op, p.allow); err != nil {
+			return err
+		}
+		if err := item.after.Register("jimu:breaker:record:"+item.op, p.record); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// allow 熔断开启时把错误写入语句，后续回调因 db.Error 非空而不会真正访问数据库。
+func (p *breakerPlugin) allow(db *gorm.DB) {
+	if db.Error != nil {
+		return
+	}
+	if err := p.b.Allow(); err != nil {
+		// 错误写入语句即中止后续回调（gorm 的 SQL 回调都以 db.Error == nil 为前提）
+		_ = db.AddError(err)
+	}
+}
+
+// record 结算本次语句：熔断拒绝已计入 rejected，不重复计数。
+func (p *breakerPlugin) record(db *gorm.DB) {
+	if errors.Is(db.Error, breaker.ErrOpen) {
+		return
+	}
+	if isDBTransportError(db.Error) {
+		p.b.OnFailure()
+		return
+	}
+	p.b.OnSuccess()
 }

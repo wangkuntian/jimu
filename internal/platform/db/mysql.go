@@ -128,7 +128,7 @@ func openMySQL(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {
 		}
 	}
 
-	if err := attachBreaker(db, cfg.Breaker, len(cfg.ReadHosts) > 0, log); err != nil {
+	if err := attachBreaker(db, cfg.Breaker); err != nil {
 		return nil, err
 	}
 
