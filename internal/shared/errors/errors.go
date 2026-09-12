@@ -100,7 +100,7 @@ func HTTPStatus(code int) int {
 		return 200
 	case CodeInvalidParam:
 		return 400
-	case CodeUnauthorized, CodeInvalidCredentials, CodeInvalidPassword:
+	case CodeUnauthorized, CodeInvalidCredentials, CodeInvalidPassword, CodeMFARequired, CodeInvalidMFA:
 		return 401
 	case CodeForbidden:
 		return 403
@@ -176,6 +176,9 @@ func AllErrorCodes() []ErrorInfo {
 		{CodeInvalidPassword, "密码错误", 401, "用户"},
 		{CodeRoleNotFound, "角色不存在", 404, "角色"},
 		{CodeInvalidResetCode, "密码重置验证码无效或已过期", 400, "用户"},
+		{CodeMFARequired, "需要提供 TOTP 二次验证码", 401, "用户"},
+		{CodeInvalidMFA, "TOTP 验证码无效", 401, "用户"},
+		{CodePasswordReused, "新密码与当前或近期使用过的密码重复", 400, "用户"},
 		{CodePasswordBreached, "新密码出现在已知数据泄露集合中", 400, "用户"},
 		{CodeOAuthProviderNotFound, "第三方登录提供商不存在", 404, "OAuth"},
 		{CodeCaptchaRequired, "缺少验证码", 400, "验证码"},
