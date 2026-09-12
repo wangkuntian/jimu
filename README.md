@@ -11,7 +11,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **密码重置** — 邮箱验证码自助重置（`POST /api/v1/auth/forgot-password` + `reset-password`），6 位数字码 Redis 一次性存储，防用户枚举，重置后强制登出全部会话
 - **敏感信息脱敏** — `platform/mask` 提供手机号/邮箱/身份证/银行卡/姓名/IP 等脱敏函数与按字段名判定（`RedactByKey`/`Map`）；日志链路（文件、stdout、OTLP 导出）统一接入，凭证类字段整体替换为 `***`、PII 部分保留，避免明文落盘
 - **敏感字段加密** — AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引（email/phone，`security.encryption_key` 配置后启用；未配置时明文模式，功能不受影响）
-- **OAuth 登录** — Google/GitHub/微信第三方登录，`oauth.providers` 配置开关
+- **OAuth 登录** — Google/GitHub/微信第三方登录，`oauth.providers` 配置开关；配置 `issuer_url` 的提供商按通用 OIDC 处理（授权码模式，discovery + userinfo），可接入 Keycloak/Okta/Auth0/Azure AD 等企业 IdP
 - **图形验证码** — 登录/注册验证码，Redis 存储一次性校验，`captcha.enabled` 配置开关
 - **统一响应** — 标准 `{code, message, data}` 格式 + 分页
 - **多环境配置** — Viper + yaml + 环境变量覆盖，枚举值启动校验
@@ -426,6 +426,30 @@ GET /api/v1/oauth/google/callback?code=<code>&state=<state>
 }
 ```
 
+### 企业 SSO（通用 OIDC）
+
+任何暴露 `{issuer_url}/.well-known/openid-configuration` 的 IdP 都可接入（Keycloak / Okta / Auth0 / Azure AD / Authing 等）：在 `oauth.providers` 下新增一个键（键名即回调路径里的 provider 名），填 `issuer_url` 即按 OIDC 处理，无需为每个厂商写代码。
+
+```yaml
+oauth:
+  providers:
+    keycloak:                                  # provider 名自定义
+      client_id: "jimu"
+      client_secret: "${OAUTH_KEYCLOAK_SECRET}"
+      redirect_url: "https://api.example.com/api/v1/oauth/keycloak/callback"
+      issuer_url: "https://keycloak.example.com/realms/acme"
+      scopes: ["openid", "profile", "email"]   # 可选，缺省即这三项
+      enabled: true
+```
+
+```bash
+# 跳转授权（浏览器访问），回调地址在 IdP 侧需登记为上面的 redirect_url
+curl -L "https://api.example.com/api/v1/oauth/keycloak/login?state=<state>"
+GET /api/v1/oauth/keycloak/callback?code=<code>&state=<state>   # 回调签发 JWT（同登录响应）
+```
+
+实现要点：discovery 文档首次使用时拉取并缓存（失败不缓存、下次重试），并校验文档 `issuer` 与配置一致以防 discovery 被指向其他签发者；换码走 `client_secret_post`，随后用 access_token 调 userinfo 取 `sub`/`email`/`name`（`name` 缺失时退化为 `preferred_username`），`sub` 为空即拒绝；用户按 `provider + sub` 绑定，首次登录自动建号（用户名 `{provider}_{sub}`）。
+
 ### 刷新 Token
 
 ```bash
@@ -776,6 +800,8 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `oauth.providers.{name}.client_id` | 提供商应用 Client ID | — |
 | `oauth.providers.{name}.client_secret` | 提供商应用 Client Secret（生产建议环境变量注入） | — |
 | `oauth.providers.{name}.redirect_url` | 授权回调地址 | — |
+| `oauth.providers.{name}.issuer_url` | OIDC 签发者地址（非空即按通用 OIDC 处理，provider 名可自定义），如 `https://keycloak.example.com/realms/acme` | — |
+| `oauth.providers.{name}.scopes` | OIDC 授权 scope，缺省 `openid profile email` | — |
 | `captcha.enabled` | 是否启用登录/注册验证码 | `false`（开发与生产，前端验证码流程就绪后再开启） |
 | `captcha.ttl_min` | 验证码有效期 (分钟) | `5` |
 | `email.enabled` | 是否启用真实 SMTP 发送；`false` 时邮件通知回退日志渠道 | `false` |
