@@ -70,7 +70,7 @@ func TestNewServerTLSInvalidFiles(t *testing.T) {
 	}
 	_, err := NewServer(cfg, gin.New())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "load tls key pair")
+	assert.Contains(t, err.Error(), "load key pair")
 }
 
 func TestNewServerTLSValid(t *testing.T) {

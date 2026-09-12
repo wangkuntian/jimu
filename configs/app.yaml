@@ -15,6 +15,12 @@ http:
   max_body_bytes: 1048576  # 1MB
   trusted_proxies: ["127.0.0.1"]
   allowed_origins: ["http://localhost:3000", "http://127.0.0.1:3000"]
+  # TLS / mTLS：client_ca_file 非空时要求并校验客户端证书（双向认证）
+  tls:
+    enabled: false
+    cert_file: ""
+    key_file: ""
+    client_ca_file: ""
 
 management:
   host: "127.0.0.1"      # 仅本地访问（安全）
@@ -268,3 +274,9 @@ grpc:
   enabled: false           # 是否启用 gRPC server
   host: "127.0.0.1"        # 监听地址
   port: 9091               # 监听端口
+  # TLS / mTLS（与 HTTP 侧同构）
+  tls:
+    enabled: false
+    cert_file: ""
+    key_file: ""
+    client_ca_file: ""

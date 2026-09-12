@@ -41,6 +41,12 @@ func (c *Config) validateCommon() error {
 	if !contains(validDBDrivers, c.DB.Driver) {
 		return fmt.Errorf("invalid db.driver: %q, must be one of %v", c.DB.Driver, validDBDrivers)
 	}
+	if err := validateTLS("http.tls", c.HTTP.TLS); err != nil {
+		return err
+	}
+	if err := validateTLS("grpc.tls", c.GRPC.TLS); err != nil {
+		return err
+	}
 	if err := validateCIDRs("security.ip_allowlist", c.Security.IPAllowlist); err != nil {
 		return err
 	}
@@ -180,6 +186,17 @@ func validateCIDRs(key string, entries []string) error {
 		if _, _, err := net.ParseCIDR(entry); err != nil {
 			return fmt.Errorf("invalid %s entry %q: must be an IP or CIDR", key, entry)
 		}
+	}
+	return nil
+}
+
+// validateTLS 校验 TLS 配置一致性：启用时必须提供证书与私钥
+func validateTLS(key string, cfg TLSConfig) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	if cfg.CertFile == "" || cfg.KeyFile == "" {
+		return fmt.Errorf("invalid %s: cert_file and key_file are required when enabled", key)
 	}
 	return nil
 }

@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"net"
 
+	"jimu/internal/config"
 	"jimu/internal/platform/grpc/userinfopb"
 	"jimu/internal/platform/logger"
+	"jimu/internal/platform/tlsconf"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
@@ -19,9 +22,10 @@ import (
 
 // Config gRPC server 配置
 type Config struct {
-	Enabled bool   `mapstructure:"enabled"` // 是否启用 gRPC server
-	Host    string `mapstructure:"host"`    // 监听地址
-	Port    int    `mapstructure:"port"`    // 监听端口
+	Enabled bool             `mapstructure:"enabled"` // 是否启用 gRPC server
+	Host    string           `mapstructure:"host"`    // 监听地址
+	Port    int              `mapstructure:"port"`    // 监听端口
+	TLS     config.TLSConfig `mapstructure:"tls"`     // TLS/mTLS（client_ca_file 非空即要求客户端证书）
 }
 
 // Server 框架级 gRPC server：与 HTTP 双栈并存，默认注册健康检查（grpc_health_v1）与反射（grpcurl 可探）。
@@ -35,13 +39,21 @@ type Server struct {
 
 // New 创建 gRPC server（不监听，Start 时才绑定端口）。
 // logger 可为 nil（跳过日志输出）。
-func New(cfg Config, log *logger.Logger) *Server {
-	srv := grpc.NewServer()
+func New(cfg Config, log *logger.Logger) (*Server, error) {
+	opts := []grpc.ServerOption{}
+	if cfg.TLS.Enabled {
+		tlsCfg, err := tlsconf.ServerConfig(cfg.TLS)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsCfg)))
+	}
+	srv := grpc.NewServer(opts...)
 	h := health.NewServer()
 	healthpb.RegisterHealthServer(srv, h)
 	reflection.Register(srv)
 	RegisterPingServer(srv, &pingService{})
-	return &Server{cfg: cfg, logger: log, srv: srv, health: h}
+	return &Server{cfg: cfg, logger: log, srv: srv, health: h}, nil
 }
 
 // RegisterUserInfoService 注册业务示例服务 UserInfoService 到 gRPC server。

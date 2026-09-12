@@ -194,9 +194,10 @@ type WebhookNotificationConfig struct {
 
 // GRPCConfig gRPC server 配置（与 HTTP 双栈并存，可选启用）
 type GRPCConfig struct {
-	Enabled bool   `mapstructure:"enabled"` // 是否启用 gRPC server
-	Host    string `mapstructure:"host"`    // 监听地址
-	Port    int    `mapstructure:"port"`    // 监听端口
+	Enabled bool      `mapstructure:"enabled"` // 是否启用 gRPC server
+	Host    string    `mapstructure:"host"`    // 监听地址
+	Port    int       `mapstructure:"port"`    // 监听端口
+	TLS     TLSConfig `mapstructure:"tls"`     // TLS/mTLS 配置（与 HTTP 侧同构）
 }
 
 // ServerConfig 服务运行时配置
@@ -306,11 +307,13 @@ type HTTPConfig struct {
 	TLS                  TLSConfig `mapstructure:"tls"`
 }
 
-// TLSConfig TLS 配置
+// TLSConfig TLS 配置（HTTP 与 gRPC 共用）
 type TLSConfig struct {
 	Enabled  bool   `mapstructure:"enabled"`   // 是否启用 TLS
-	CertFile string `mapstructure:"cert_file"` // 证书文件路径
-	KeyFile  string `mapstructure:"key_file"`  // 私钥文件路径
+	CertFile string `mapstructure:"cert_file"` // 服务端证书文件路径
+	KeyFile  string `mapstructure:"key_file"`  // 服务端私钥文件路径
+	// 客户端 CA 证书文件：非空时启用双向认证（mTLS），要求并校验客户端证书
+	ClientCAFile string `mapstructure:"client_ca_file"`
 }
 
 type DBConfig struct {

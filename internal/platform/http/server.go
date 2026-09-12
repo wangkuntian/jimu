@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -13,6 +12,7 @@ import (
 	"jimu/internal/platform/http/middleware"
 	"jimu/internal/platform/logger"
 	"jimu/internal/platform/observability"
+	"jimu/internal/platform/tlsconf"
 	"jimu/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
@@ -34,14 +34,11 @@ func NewServer(cfg config.HTTPConfig, r *gin.Engine) (*Server, error) {
 		IdleTimeout:       time.Duration(cfg.IdleTimeoutSec) * time.Second,
 	}
 	if cfg.TLS.Enabled {
-		cert, err := tls.LoadX509KeyPair(cfg.TLS.CertFile, cfg.TLS.KeyFile)
+		tlsCfg, err := tlsconf.ServerConfig(cfg.TLS)
 		if err != nil {
-			return nil, fmt.Errorf("load tls key pair: %w", err)
+			return nil, err
 		}
-		srv.TLSConfig = &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			MinVersion:   tls.VersionTLS12,
-		}
+		srv.TLSConfig = tlsCfg
 	}
 	return newServer(srv), nil
 }

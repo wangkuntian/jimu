@@ -281,11 +281,15 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	apiKeyVerifier := auth.NewAPIKeyVerifier(auth.NewDBAPIKeyStore(dbConn))
 
 	// gRPC server（与 HTTP 双栈；bootstrap 在 grpc.enabled 时纳入生命周期）
-	grpcServer := grpcpkg.New(grpcpkg.Config{
+	grpcServer, err := grpcpkg.New(grpcpkg.Config{
 		Enabled: cfg.GRPC.Enabled,
 		Host:    cfg.GRPC.Host,
 		Port:    cfg.GRPC.Port,
+		TLS:     cfg.GRPC.TLS,
 	}, log)
+	if err != nil {
+		return nil, fmt.Errorf("init grpc server: %w", err)
+	}
 	// 业务示例：注册 UserInfoService（真实业务模块可在此注入自己的 service）
 	grpcServer.RegisterUserInfoService(dbConn)
 
