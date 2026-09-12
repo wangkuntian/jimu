@@ -40,13 +40,13 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **历史数据保留** — `platform/db` 保留服务按表分批硬删除过期历史数据（`audit_logs`/`jobs`/`job_history`/`dead_letters`/`outbox_events`/`import_jobs`），挂在定时任务上（`retention.enabled`，默认关闭）；只清理终态记录（已发布事件、已处理死信、已结束任务），指标 `jimu_retention_deleted_total`
 - **全文检索** — `platform/search` 统一接口（`Index`/`Delete`/`Search`）+ 公共索引表 `search_documents`：MySQL 走 FULLTEXT（`MATCH ... AGAINST`），PostgreSQL 走 `tsvector` 表达式 GIN 索引；按 `tenant_id` 隔离，`(tenant_id, doc_type, doc_id)` 唯一保证幂等覆盖。中文分词需数据库侧扩展（MySQL ngram / PG zhparser）
 - **通知系统** — 邮件/短信(SMS)/WebSocket/Webhook 抽象；短信支持阿里云（dysmsapi SDK，`sms.enabled` 配置开关）；Webhook 回调载荷支持 HMAC-SHA256 签名（`notification.webhook.sign_secret`，附加 `X-Jimu-Timestamp`/`X-Jimu-Signature` 头，防重放）
-- **统一出站 HTTP client** — 封装 timeout + retry/backoff（仅网络错误与 5xx）+ 熔断（连续失败自动开启，冷却后探测恢复）+ 按目标 host 独立限流（令牌桶）+ OTel `traceparent` 注入（`internal/platform/httpclient`），OAuth 提供商与 Webhook 共用
-- **依赖熔断** — 统一熔断器 `internal/platform/breaker`（连续失败阈值 + 冷却后半开探测）接入 Redis（命令/连接级 hook）与 DB（语句级 `ConnPool`），依赖不可用时快速失败而非每请求等超时；只把连接/网络类错误计为失败（Redis 未命中与业务错误、DB 慢查询超时都不触发）；指标 `jimu_breaker_open` / `jimu_breaker_rejected_total` / `jimu_breaker_trip_total`。DB 在启用读写分离时自动跳过（dbresolver 管理独立连接池，已日志提示）
+- **统一出站 HTTP client** — 封装 timeout + retry/backoff（仅网络错误与 5xx）+ 熔断（复用 `platform/breaker`，连续失败自动开启、冷却后探测恢复）+ 按目标 host 独立限流（令牌桶）+ OTel `traceparent` 注入（`internal/platform/httpclient`），OAuth 提供商与 Webhook 共用
+- **依赖熔断** — 统一熔断器 `internal/platform/breaker`（连续失败阈值 + 冷却后半开探测）接入三类依赖：Redis（命令/连接级 hook）、DB（gorm 语句级回调，**主库与只读副本一体生效**）、HTTP 出站（`httpclient`）；依赖不可用时快速失败而非每请求等超时；只把连接/网络类错误计为失败（Redis 未命中与业务错误、DB 慢查询超时都不触发）；指标 `jimu_breaker_open` / `jimu_breaker_rejected_total` / `jimu_breaker_trip_total`（`component` 标签区分 httpclient/redis/db）
 - **Outbox 模式** — 事件发布与数据库事务一致性保证，支持 MQ 跨服务发布（`outbox.publisher` 切换；`mq` 模式下通过 WorkerPool 消费事件，`event_bus` 模式通过 `outbox:*` 桥接器注入事件总线）
 - **定时任务** — Cron 调度器（robfig/cron），支持 MySQL 持久化（`scheduler.store=mysql`）与多实例分布式锁协调，启动时通过 `RestoreFromStore` 恢复持久化任务（内置任务去重）
 - **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
 - **OpenTelemetry 可观测性（OpenObserve）** — 统一 OTLP gRPC 输出：分布式追踪（HTTP/Gin + Gorm 查询 + Redis 命令全链路 span，队列/Outbox 异步边界透传 `traceparent`/`tracestate`）、Prometheus 指标转 OTLP 推送、结构化日志异步推送（`otel.enabled` 开启）
-- **Prometheus 指标** — DB 连接池 + 运行时 + HTTP 请求指标（`jimu_http_*`）+ 队列执行/死信（`jimu_queue_*`）+ Outbox 发布（`jimu_outbox_*`）+ 出站熔断（`jimu_httpclient_*`）+ 定时任务执行（`jimu_scheduler_*`，成功/失败计数 + 耗时分布）；Management `/metrics` 暴露 Prometheus 格式，`otel.metrics_enabled` 时定期转 OTLP 推送 OpenObserve
+- **Prometheus 指标** — DB 连接池 + 运行时 + HTTP 请求指标（`jimu_http_*`）+ 队列执行/死信（`jimu_queue_*`）+ Outbox 发布（`jimu_outbox_*`）+ 依赖熔断（`jimu_breaker_*`）+ 定时任务执行（`jimu_scheduler_*`，成功/失败计数 + 耗时分布）；Management `/metrics` 暴露 Prometheus 格式，`otel.metrics_enabled` 时定期转 OTLP 推送 OpenObserve
 - **gRPC server** — 与 HTTP 双栈并存，内置健康检查（`grpc_health_v1`）与反射（grpcurl 可探），可选启用（`grpc.enabled`，默认端口 9091）；业务示例 `UserInfoService` 演示 proto 定义 → `make proto` 生成 → 服务实现 → 注册全流程，业务模块经 `RegisterService` 接入
 - **PostgreSQL 支持** — `db.driver=postgres`（或 `DB_DRIVER=postgres`）切换，迁移文件独立于 `migrations/postgres/`，与 MySQL 语法（`BIGINT UNSIGNED`/`ENGINE=InnoDB`/`ON UPDATE`）完全隔离；连接、迁移、seed、JWT/RBAC 全链路已用真实 PG 17 验证
 - **分布式 ID** — 雪花 ID 生成器（`internal/shared/id`），所有数据库主键由应用生成，`id.worker_id` 配置多实例唯一编号
@@ -173,7 +173,7 @@ make compose-up                       # OTEL_ENABLED 默认开启；OTEL_ENABLED
 
 - OpenObserve UI/API: http://127.0.0.1:5080 （默认账号 admin@jimu.local / Admin@12345，可用 `ZO_OBSERVE_ROOT_USER_EMAIL` / `ZO_OBSERVE_ROOT_USER_PASSWORD` 覆盖）
 - OTLP gRPC: `127.0.0.1:5081`（tracing / metrics / logs 统一入口）
-- 默认 dashboard **Jimu Overview**：开启时自动创建（幂等），含 17 面板：stat 卡片（错误日志/日志总量/DB 连接池/Goroutines）、时间序列（DB/运行时/日志/HTTP/熔断/MySQL/Redis）、最近错误日志表格
+- 默认 dashboard **Jimu Overview**：开启时自动创建（幂等），含 17 面板：stat 卡片（错误日志/日志总量/DB 连接池/Goroutines）、时间序列（DB/运行时/日志/HTTP/依赖熔断/MySQL/Redis）、最近错误日志表格
 - 官方数据库 dashboard **MySQL Metrics Monitoring** / **Redis Metrics Dashboard**：随启动自动创建（数据来自 OTel Collector 采集的 `mysql_*` / `redis_*` 指标流）；可选的 **PostgreSQL**（opentelemetry-contrib 采集）见下文
 
 **Dashboard 配置与同步（面板进 git）**：dashboard 定义保存在 `deploy/openobserve/dashboards/*.json`（v8 结构，含面板查询与布局），启动时按此文件创建/重建；MySQL/Redis 官方模板取自 [openobserve/dashboards](https://github.com/openobserve/dashboards) 并归一为 v8 结构与 192 列网格布局入库（官方原始文件为旧版小网格，直接导入面板会缩成一条）：
@@ -185,7 +185,7 @@ make compose-up                       # OTEL_ENABLED 默认开启；OTEL_ENABLED
 
 JSON 中维护面板查询（`queries.fields` 流与轴映射、`type` 渲染类型）与布局（`layout` 网格坐标）；在 UI 手工调整后可用 `--export` 拉回并提交（运行时元数据自动剥离）。
 
-**默认告警（可选）**：内置 8 条告警规则（`deploy/openobserve/alerts/jimu_*.json`，覆盖错误日志激增、HTTP 5xx 占比、DB 连接池饱和、队列死信、Outbox 发布失败、出站熔断、MySQL 线程数、Redis key 淘汰），经 OpenObserve v2 告警 API 同步（幂等：存在则更新，否则创建）。创建告警必须绑定已存在的通知目的地，因此同步依赖 `ZO_ALERT_WEBHOOK_URL`：
+**默认告警（可选）**：内置 8 条告警规则（`deploy/openobserve/alerts/jimu_*.json`，覆盖错误日志激增、HTTP 5xx 占比、DB 连接池饱和、队列死信、Outbox 发布失败、依赖熔断、MySQL 线程数、Redis key 淘汰），经 OpenObserve v2 告警 API 同步（幂等：存在则更新，否则创建）。创建告警必须绑定已存在的通知目的地，因此同步依赖 `ZO_ALERT_WEBHOOK_URL`：
 
 ```bash
 # .env 设置后 make compose-up 随监控栈启动自动同步；webhook 指向企业微信/钉钉/飞书/Slack 等网关均可
@@ -752,7 +752,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `db.max_idle` | 最大空闲连接数 | `10`（开发）/ `20`（生产） |
 | `db.conn_max_lifetime_sec` | 连接最大存活时间（秒） | `3600` |
 | `db.read_hosts` / `db.read_ports` | 只读副本地址 / 端口（读写分离） | — |
-| `db.breaker.enabled` / `db.breaker.max_failures` / `db.breaker.reset_timeout_sec` | DB 语句级熔断开关 / 连续失败阈值 / 冷却秒数（读写分离启用时自动跳过） | `true` / `5` / `10` |
+| `db.breaker.enabled` / `db.breaker.max_failures` / `db.breaker.reset_timeout_sec` | DB 语句级熔断开关 / 连续失败阈值 / 冷却秒数（走 gorm 回调，读写分离下同样覆盖只读副本） | `true` / `5` / `10` |
 | `redis.mode` | Redis 部署模式：`single` / `sentinel` / `cluster` | `single` |
 | `redis.addr` | Redis 地址（单机模式） | `127.0.0.1:6379` |
 | `redis.password` | Redis 密码（通过环境变量覆盖） | — |
