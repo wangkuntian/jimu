@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"gorm.io/gorm"
 )
 
@@ -129,4 +130,42 @@ func TestDefaultClientConfig(t *testing.T) {
 	if cfg.MaxRetries != 2 || cfg.RetryInterval != 200*time.Millisecond {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
+}
+
+func TestClientBreakerOpensAfterConsecutiveFailures(t *testing.T) {
+	// 未监听的地址：Unavailable 计入熔断失败
+	client, err := NewClient(ClientConfig{
+		Address:      "127.0.0.1:1",
+		ServiceName:  "breaker-test",
+		CallTimeout:  time.Second,
+		MaxRetries:   0,
+		MaxFailures:  2,
+		ResetTimeout: time.Minute,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+
+	invoke := func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		return client.Invoke(ctx, "/jimu.test.Interceptor/Call", &emptypb.Empty{}, &emptypb.Empty{})
+	}
+
+	// 前两次真实失败：第二次可能已是熔断拒绝（同样 Unavailable），因此只断言最终进入熔断
+	for i := 0; i < 4; i++ {
+		err := invoke()
+		require.Error(t, err)
+		assert.Equal(t, codes.Unavailable, status.Code(err))
+	}
+
+	// 熔断开启后快速失败：错误信息包含熔断标识
+	assert.Contains(t, invoke().Error(), "circuit open", "连续失败后应快速失败而不是继续等超时")
+}
+
+func TestIsBreakerFailure(t *testing.T) {
+	assert.True(t, isBreakerFailure(codes.Unavailable))
+	assert.True(t, isBreakerFailure(codes.DeadlineExceeded))
+	assert.False(t, isBreakerFailure(codes.NotFound))
+	assert.False(t, isBreakerFailure(codes.InvalidArgument))
+	assert.False(t, isBreakerFailure(codes.OK))
 }

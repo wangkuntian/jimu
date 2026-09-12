@@ -198,10 +198,11 @@ type WebhookNotificationConfig struct {
 
 // GRPCConfig gRPC server 配置（与 HTTP 双栈并存，可选启用）
 type GRPCConfig struct {
-	Enabled bool      `mapstructure:"enabled"` // 是否启用 gRPC server
-	Host    string    `mapstructure:"host"`    // 监听地址
-	Port    int       `mapstructure:"port"`    // 监听端口
-	TLS     TLSConfig `mapstructure:"tls"`     // TLS/mTLS 配置（与 HTTP 侧同构）
+	Enabled    bool      `mapstructure:"enabled"`     // 是否启用 gRPC server
+	Host       string    `mapstructure:"host"`        // 监听地址
+	Port       int       `mapstructure:"port"`        // 监听端口
+	TimeoutSec int       `mapstructure:"timeout_sec"` // 单请求处理超时（秒），0 不限
+	TLS        TLSConfig `mapstructure:"tls"`         // TLS/mTLS 配置（与 HTTP 侧同构）
 }
 
 // ServerConfig 服务运行时配置

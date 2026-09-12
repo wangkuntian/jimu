@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"time"
 
 	"jimu/internal/config"
 	"jimu/internal/platform/grpc/userinfopb"
@@ -22,10 +23,11 @@ import (
 
 // Config gRPC server 配置
 type Config struct {
-	Enabled bool             `mapstructure:"enabled"` // 是否启用 gRPC server
-	Host    string           `mapstructure:"host"`    // 监听地址
-	Port    int              `mapstructure:"port"`    // 监听端口
-	TLS     config.TLSConfig `mapstructure:"tls"`     // TLS/mTLS（client_ca_file 非空即要求客户端证书）
+	Enabled    bool             `mapstructure:"enabled"`     // 是否启用 gRPC server
+	Host       string           `mapstructure:"host"`        // 监听地址
+	Port       int              `mapstructure:"port"`        // 监听端口
+	TimeoutSec int              `mapstructure:"timeout_sec"` // 单请求处理超时（秒），0 不限
+	TLS        config.TLSConfig `mapstructure:"tls"`         // TLS/mTLS（client_ca_file 非空即要求客户端证书）
 }
 
 // Server 框架级 gRPC server：与 HTTP 双栈并存，默认注册健康检查（grpc_health_v1）与反射（grpcurl 可探）。
@@ -38,8 +40,8 @@ type Server struct {
 }
 
 // New 创建 gRPC server（不监听，Start 时才绑定端口）。
-// logger 可为 nil（跳过日志输出）。
-func New(cfg Config, log *logger.Logger) (*Server, error) {
+// logger 可为 nil（跳过日志输出）；可选传入 Reporter（错误上报，实现见 platform/reporter）。
+func New(cfg Config, log *logger.Logger, reporters ...Reporter) (*Server, error) {
 	opts := []grpc.ServerOption{}
 	if cfg.TLS.Enabled {
 		tlsCfg, err := tlsconf.ServerConfig(cfg.TLS)
@@ -48,12 +50,28 @@ func New(cfg Config, log *logger.Logger) (*Server, error) {
 		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsCfg)))
 	}
+	// 顺序：recovery 最外层（panic 也计入指标语义之外），随后是指标与超时
+	opts = append(opts, grpc.ChainUnaryInterceptor(
+		serverRecoveryInterceptor(log, firstReporter(reporters)),
+		serverMetricsInterceptor(),
+		serverTimeoutInterceptor(time.Duration(cfg.TimeoutSec)*time.Second),
+	))
 	srv := grpc.NewServer(opts...)
 	h := health.NewServer()
 	healthpb.RegisterHealthServer(srv, h)
 	reflection.Register(srv)
 	RegisterPingServer(srv, &pingService{})
 	return &Server{cfg: cfg, logger: log, srv: srv, health: h}, nil
+}
+
+// firstReporter 返回第一个非 nil 的上报器
+func firstReporter(reporters []Reporter) Reporter {
+	for _, r := range reporters {
+		if r != nil {
+			return r
+		}
+	}
+	return nil
 }
 
 // RegisterUserInfoService 注册业务示例服务 UserInfoService 到 gRPC server。

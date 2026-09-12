@@ -289,21 +289,23 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	// 路由组按需挂载 auth.APIKeyAuthMiddleware(c.APIKeyVerifier)
 	apiKeyVerifier := auth.NewAPIKeyVerifier(auth.NewDBAPIKeyStore(dbConn))
 
+	// 错误上报：启用时输出结构化错误日志（日志链路接入 OpenObserve 后自动汇聚）
+	// gRPC 服务端 panic 也经此上报（server recovery 拦截器）
+	errorReporter := reporter.NewReporter(cfg.ErrorReport, log.Errorw)
+
 	// gRPC server（与 HTTP 双栈；bootstrap 在 grpc.enabled 时纳入生命周期）
 	grpcServer, err := grpcpkg.New(grpcpkg.Config{
-		Enabled: cfg.GRPC.Enabled,
-		Host:    cfg.GRPC.Host,
-		Port:    cfg.GRPC.Port,
-		TLS:     cfg.GRPC.TLS,
-	}, log)
+		Enabled:    cfg.GRPC.Enabled,
+		Host:       cfg.GRPC.Host,
+		Port:       cfg.GRPC.Port,
+		TimeoutSec: cfg.GRPC.TimeoutSec,
+		TLS:        cfg.GRPC.TLS,
+	}, log, errorReporter)
 	if err != nil {
 		return nil, fmt.Errorf("init grpc server: %w", err)
 	}
 	// 业务示例：注册 UserInfoService（真实业务模块可在此注入自己的 service）
 	grpcServer.RegisterUserInfoService(dbConn)
-
-	// 错误上报：启用时输出结构化错误日志（日志链路接入 OpenObserve 后自动汇聚）
-	errorReporter := reporter.NewReporter(cfg.ErrorReport, log.Errorw)
 
 	return &Container{
 		Config:         cfg,
