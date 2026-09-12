@@ -116,6 +116,7 @@ auth:
   reset_code_ttl_min: 15     # 密码重置验证码有效期（分钟）
   password_history_count: 5      # 防复用：检查最近 N 个历史密码（0=关闭）
   trusted_device_days: 30        # 可信设备有效期（天，0=关闭「记住此设备」）
+  breach_check_enabled: false    # 泄露口令检查（HIBP 范围查询，需出网；开启后注册/改密会校验）
 
 # 服务运行时配置
 server:

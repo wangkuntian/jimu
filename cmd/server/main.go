@@ -71,7 +71,7 @@ func run() error {
 	application, err := app.Bootstrap(
 		container,
 		user.New(container.DB, *cfg, container.Redis, container.Outbox),
-		authmodule.New(container.DB, container.Redis, cfg.Auth, cfg.HTTP.Mode == config.HTTPModeRelease, container.Captcha, cfg.Captcha, container.Outbox, container.Notification, container.Cipher),
+		authmodule.New(container.DB, container.Redis, cfg.Auth, cfg.HTTP.Mode == config.HTTPModeRelease, container.Captcha, cfg.Captcha, container.Outbox, container.Notification, container.Cipher, container.BreachChecker),
 		role.New(container.DB),
 		permission.New(container.DB),
 		tenantmodule.New(container.DB, *cfg),

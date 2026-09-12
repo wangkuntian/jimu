@@ -14,6 +14,7 @@ import (
 	authdomain "jimu/internal/modules/auth/domain"
 	userdomain "jimu/internal/modules/user/domain"
 	"jimu/internal/platform/auth"
+	"jimu/internal/platform/breach"
 	"jimu/internal/platform/encryption"
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/outbox"
@@ -44,6 +45,7 @@ type AuthService struct {
 	resetGen             func() string     // 验证码生成器（测试注入）
 	issuer               string            // TOTP otpauth URI 的 issuer
 	provisioner          TenantProvisioner // 开通式注册（nil = 未启用，注册仅建普通用户）
+	breachChecker        breach.Checker    // 泄露口令检查（nil = 未启用）
 }
 
 func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int, deps ...interface{}) *AuthService {
@@ -68,6 +70,8 @@ func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessi
 			s.issuer = string(d)
 		case TenantProvisioner:
 			s.provisioner = d
+		case breach.Checker:
+			s.breachChecker = d
 		case authdomain.LoginHistoryRepository:
 			s.loginHistory = d
 		case authdomain.PasswordHistoryRepository:
@@ -225,6 +229,10 @@ func (s *AuthService) Register(ctx context.Context, username, password, email, p
 		return nil, err
 	}
 
+	if err := s.checkBreachedPassword(ctx, password); err != nil {
+		return nil, err
+	}
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to hash password", err)
@@ -266,6 +274,9 @@ func (s *AuthService) RegisterProvisioned(ctx context.Context, req RegisterTenan
 	}
 	username := normalizeUsername(req.Username)
 	if err := s.checkRegistrationAvailable(ctx, username, req.Email); err != nil {
+		return nil, err
+	}
+	if err := s.checkBreachedPassword(ctx, req.Password); err != nil {
 		return nil, err
 	}
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
@@ -352,6 +363,9 @@ func (s *AuthService) ResetPassword(ctx context.Context, email, code, newPasswor
 	if err := s.checkPasswordReuse(ctx, user, newPassword); err != nil {
 		return err
 	}
+	if err := s.checkBreachedPassword(ctx, newPassword); err != nil {
+		return err
+	}
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to hash password", err)
@@ -365,6 +379,24 @@ func (s *AuthService) ResetPassword(ctx context.Context, email, code, newPasswor
 	s.revokeTrustedDevicesQuietly(ctx, user.ID)
 	if s.sessions != nil {
 		_ = s.sessions.RevokeAll(ctx, user.ID)
+	}
+	return nil
+}
+
+// checkBreachedPassword 检查口令是否出现在已知泄露集合中（HIBP）。
+// 未启用检查器时直接放行；检查服务不可用时也放行（只记日志），
+// 避免外部依赖故障阻断注册与改密。
+func (s *AuthService) checkBreachedPassword(ctx context.Context, password string) error {
+	if s.breachChecker == nil {
+		return nil
+	}
+	breached, err := s.breachChecker.IsBreached(ctx, password)
+	if err != nil {
+		log.Printf("auth: breach check skipped: %v", err)
+		return nil
+	}
+	if breached {
+		return errors.New(errors.CodePasswordBreached, "password has appeared in a known data breach")
 	}
 	return nil
 }

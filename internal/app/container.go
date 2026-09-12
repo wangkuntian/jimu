@@ -11,6 +11,7 @@ import (
 	"jimu/internal/contract"
 	admininfra "jimu/internal/modules/admin/infrastructure"
 	"jimu/internal/platform/auth"
+	"jimu/internal/platform/breach"
 	"jimu/internal/platform/captcha"
 	"jimu/internal/platform/db"
 	"jimu/internal/platform/encryption"
@@ -56,8 +57,10 @@ type Container struct {
 	Cipher         *encryption.Cipher
 	WorkerPool     *queue.WorkerPool
 	APIKeyVerifier *auth.APIKeyVerifier
-	GRPCServer     *grpcpkg.Server
-	Reporter       reporter.Reporter
+	// 泄露口令检查（HIBP）；auth.breach_check_enabled 关闭时为 nil
+	BreachChecker breach.Checker
+	GRPCServer    *grpcpkg.Server
+	Reporter      reporter.Reporter
 	// 观测出口（OTLP → OpenObserve；未启用时为 nil）
 	MetricsPusher *observability.MetricsPusher
 	LogExporter   *observability.LogExporter
@@ -174,6 +177,12 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		RateLimitRate:   cfg.HTTPClient.RateLimitRate,
 		RateLimitBurst:  cfg.HTTPClient.RateLimitBurst,
 	})
+
+	// 泄露口令检查（HIBP k-匿名范围查询）：默认关闭，启用时复用统一出站 client（超时/重试/熔断）
+	var breachChecker breach.Checker
+	if cfg.Auth.BreachCheckEnabled {
+		breachChecker = breach.New(httpClient)
+	}
 
 	notifier := notification.NewDispatcher()
 	// WebSocket Hub（通知渠道 + 实时通信共用）
@@ -318,6 +327,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		Cipher:         cipher,
 		WorkerPool:     pendingWorkerPool,
 		APIKeyVerifier: apiKeyVerifier,
+		BreachChecker:  breachChecker,
 		GRPCServer:     grpcServer,
 		LogExporter:    logExporter,
 	}, nil

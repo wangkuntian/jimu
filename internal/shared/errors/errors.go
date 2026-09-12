@@ -52,6 +52,7 @@ const (
 	CodeMFARequired      = 2006 // 需要提供 TOTP 二次验证码
 	CodeInvalidMFA       = 2007 // TOTP 验证码无效
 	CodePasswordReused   = 2008 // 新密码与当前或近期使用过的密码重复
+	CodePasswordBreached = 2009 // 新密码出现在已知数据泄露集合中
 
 	// OAuth 模块 (3xxx)
 	CodeOAuthProviderNotFound = 3001 // 第三方登录提供商不存在
@@ -107,7 +108,7 @@ func HTTPStatus(code int) int {
 		return 404
 	case CodeConflict, CodeUserExists, CodeTenantExists, CodeTenantProtected:
 		return 409
-	case CodeCaptchaRequired, CodeCaptchaInvalid, CodeInvalidResetCode, CodeTenantCodeFormat, CodePasswordReused:
+	case CodeCaptchaRequired, CodeCaptchaInvalid, CodeInvalidResetCode, CodeTenantCodeFormat, CodePasswordReused, CodePasswordBreached:
 		return 400
 	case CodeRateLimited:
 		return 429
@@ -175,6 +176,7 @@ func AllErrorCodes() []ErrorInfo {
 		{CodeInvalidPassword, "密码错误", 401, "用户"},
 		{CodeRoleNotFound, "角色不存在", 404, "角色"},
 		{CodeInvalidResetCode, "密码重置验证码无效或已过期", 400, "用户"},
+		{CodePasswordBreached, "新密码出现在已知数据泄露集合中", 400, "用户"},
 		{CodeOAuthProviderNotFound, "第三方登录提供商不存在", 404, "OAuth"},
 		{CodeCaptchaRequired, "缺少验证码", 400, "验证码"},
 		{CodeCaptchaInvalid, "验证码无效", 400, "验证码"},
