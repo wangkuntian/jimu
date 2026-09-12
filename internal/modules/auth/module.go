@@ -39,7 +39,9 @@ func New(db *gorm.DB, rdb redistore.Client, cfg config.AuthConfig, failClosed bo
 	// 密码重置验证码存储：redis 一次性码，TTL 取配置
 	resetStore := application.NewResetStore(rdb, time.Duration(cfg.ResetCodeTTLMin)*time.Minute)
 	loginHistoryRepo := authinfra.NewMysqlLoginHistoryRepository(db)
-	allDeps := append(deps, resetStore, application.WithIssuer(cfg.Issuer), loginHistoryRepo)
+	passwordHistoryRepo := authinfra.NewMysqlPasswordHistoryRepository(db)
+	allDeps := append(deps, resetStore, application.WithIssuer(cfg.Issuer), loginHistoryRepo,
+		passwordHistoryRepo, application.WithPasswordHistory(cfg.PasswordHistoryCount))
 	// 开通式注册：注册 = 开通新租户（单事务，模板模式初始化角色权限）
 	if cfg.Provisioning.Enabled {
 		allDeps = append(allDeps, application.NewGormTenantProvisioner(db, cfg.Provisioning))

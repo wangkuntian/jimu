@@ -113,6 +113,7 @@ auth:
   register_rate_limit: 100   # 注册限流（次/窗口）
   register_rate_window_sec: 60 # 注册限流窗口（秒）
   reset_code_ttl_min: 15     # 密码重置验证码有效期（分钟）
+  password_history_count: 5      # 防复用：检查最近 N 个历史密码（0=关闭）
 
 # 服务运行时配置
 server:

@@ -51,6 +51,7 @@ const (
 	CodeInvalidResetCode = 2005 // 密码重置验证码无效或已过期
 	CodeMFARequired      = 2006 // 需要提供 TOTP 二次验证码
 	CodeInvalidMFA       = 2007 // TOTP 验证码无效
+	CodePasswordReused   = 2008 // 新密码与当前或近期使用过的密码重复
 
 	// OAuth 模块 (3xxx)
 	CodeOAuthProviderNotFound = 3001 // 第三方登录提供商不存在
@@ -106,7 +107,7 @@ func HTTPStatus(code int) int {
 		return 404
 	case CodeConflict, CodeUserExists, CodeTenantExists, CodeTenantProtected:
 		return 409
-	case CodeCaptchaRequired, CodeCaptchaInvalid, CodeInvalidResetCode, CodeTenantCodeFormat:
+	case CodeCaptchaRequired, CodeCaptchaInvalid, CodeInvalidResetCode, CodeTenantCodeFormat, CodePasswordReused:
 		return 400
 	case CodeRateLimited:
 		return 429

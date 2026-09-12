@@ -27,19 +27,21 @@ import (
 )
 
 type AuthService struct {
-	userRepo     userdomain.UserRepository
-	jwtUtil      *auth.JWT
-	sessions     auth.SessionStore
-	lockout      *auth.LoginFailureTracker
-	accessMin    int
-	outbox       *outbox.Outbox
-	cipher       *encryption.Cipher
-	notifier     notification.Dispatcher
-	resetStore   *ResetStore
-	loginHistory authdomain.LoginHistoryRepository // 登录历史（nil=不记录）
-	resetGen     func() string                     // 验证码生成器（测试注入）
-	issuer       string                            // TOTP otpauth URI 的 issuer
-	provisioner  TenantProvisioner                 // 开通式注册（nil = 未启用，注册仅建普通用户）
+	userRepo             userdomain.UserRepository
+	jwtUtil              *auth.JWT
+	sessions             auth.SessionStore
+	lockout              *auth.LoginFailureTracker
+	accessMin            int
+	outbox               *outbox.Outbox
+	cipher               *encryption.Cipher
+	notifier             notification.Dispatcher
+	resetStore           *ResetStore
+	loginHistory         authdomain.LoginHistoryRepository    // 登录历史（nil=不记录）
+	passwordHistory      authdomain.PasswordHistoryRepository // 密码历史（nil=不做防复用检查）
+	passwordHistoryCount int
+	resetGen             func() string     // 验证码生成器（测试注入）
+	issuer               string            // TOTP otpauth URI 的 issuer
+	provisioner          TenantProvisioner // 开通式注册（nil = 未启用，注册仅建普通用户）
 }
 
 func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int, deps ...interface{}) *AuthService {
@@ -66,6 +68,10 @@ func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessi
 			s.provisioner = d
 		case authdomain.LoginHistoryRepository:
 			s.loginHistory = d
+		case authdomain.PasswordHistoryRepository:
+			s.passwordHistory = d
+		case passwordHistoryCount:
+			s.passwordHistoryCount = int(d)
 		}
 	}
 	return s
@@ -312,6 +318,9 @@ func (s *AuthService) ResetPassword(ctx context.Context, email, code, newPasswor
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to find user by email", err)
 	}
+	if err := s.checkPasswordReuse(ctx, user, newPassword); err != nil {
+		return err
+	}
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to hash password", err)
@@ -319,10 +328,53 @@ func (s *AuthService) ResetPassword(ctx context.Context, email, code, newPasswor
 	if err := s.userRepo.UpdatePassword(ctx, user.ID, string(hashedPassword)); err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to update password", err)
 	}
+	// 记录被替换掉的旧密码，供后续防复用检查
+	s.recordPasswordHistory(ctx, user)
 	if s.sessions != nil {
 		_ = s.sessions.RevokeAll(ctx, user.ID)
 	}
 	return nil
+}
+
+// passwordHistoryCount 注入防复用检查的历史条数（0=关闭）的 dep。
+type passwordHistoryCount int
+
+// WithPasswordHistory 返回注入防复用历史条数的 dep，供 NewAuthService 使用。
+func WithPasswordHistory(count int) interface{} { return passwordHistoryCount(count) }
+
+// checkPasswordReuse 阻止把密码改回当前值或最近使用过的历史密码。
+// 未配置仓储或条数为 0 时跳过检查（视为未启用该策略）。
+func (s *AuthService) checkPasswordReuse(ctx context.Context, user *userdomain.User, newPassword string) error {
+	if s.passwordHistory == nil || s.passwordHistoryCount <= 0 {
+		return nil
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(newPassword)) == nil {
+		return errors.New(errors.CodePasswordReused, "new password must differ from the current one")
+	}
+	hashes, err := s.passwordHistory.ListRecentHashes(ctx, user.ID, s.passwordHistoryCount)
+	if err != nil {
+		return errors.Wrap(errors.CodeInternalError, "failed to load password history", err)
+	}
+	for _, hash := range hashes {
+		if bcrypt.CompareHashAndPassword([]byte(hash), []byte(newPassword)) == nil {
+			return errors.New(errors.CodePasswordReused, "password was used recently")
+		}
+	}
+	return nil
+}
+
+// recordPasswordHistory 记录旧密码哈希并裁剪到配置条数；失败只记日志，不阻断改密结果。
+func (s *AuthService) recordPasswordHistory(ctx context.Context, user *userdomain.User) {
+	if s.passwordHistory == nil || s.passwordHistoryCount <= 0 || user.Password == "" {
+		return
+	}
+	if err := s.passwordHistory.Add(ctx, user.TenantID, user.ID, user.Password); err != nil {
+		log.Printf("auth: record password history for user %d: %v", user.ID, err)
+		return
+	}
+	if err := s.passwordHistory.Trim(ctx, user.ID, s.passwordHistoryCount); err != nil {
+		log.Printf("auth: trim password history for user %d: %v", user.ID, err)
+	}
 }
 
 // SetupTOTP 为用户生成新的 TOTP 密钥并返回 otpauth URI（未启用，需 EnableTOTP 确认）。

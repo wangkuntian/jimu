@@ -71,6 +71,7 @@ var codeToKey = map[int]string{
 	appErrs.CodeRateLimited:        "rate_limit_exceeded",
 	appErrs.CodeTimeout:            "timeout",
 	appErrs.CodeServiceUnavailable: "service_unavailable",
+	appErrs.CodePasswordReused:     "password_reused",
 	appErrs.CodeConflict:           "conflict",
 	appErrs.CodeUserNotFound:       "user_not_found",
 	appErrs.CodeUserExists:         "user_exists",

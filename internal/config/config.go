@@ -417,8 +417,9 @@ type AuthConfig struct {
 	LoginRateWindowSec    int                `mapstructure:"login_rate_window_sec"`
 	RegisterRateLimit     int                `mapstructure:"register_rate_limit"`
 	RegisterRateWindowSec int                `mapstructure:"register_rate_window_sec"`
-	ResetCodeTTLMin       int                `mapstructure:"reset_code_ttl_min"` // 密码重置验证码有效期（分钟）
-	Provisioning          ProvisioningConfig `mapstructure:"provisioning"`       // 开通式注册（注册 = 开通新租户）
+	ResetCodeTTLMin       int                `mapstructure:"reset_code_ttl_min"`     // 密码重置验证码有效期（分钟）
+	PasswordHistoryCount  int                `mapstructure:"password_history_count"` // 防复用：检查最近 N 个历史密码（0=关闭）
+	Provisioning          ProvisioningConfig `mapstructure:"provisioning"`           // 开通式注册（注册 = 开通新租户）
 }
 
 // ProvisioningConfig 开通式注册配置。

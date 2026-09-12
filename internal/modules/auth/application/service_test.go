@@ -14,6 +14,8 @@ import (
 	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/totp"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -583,4 +585,96 @@ func TestListLoginHistoryWithoutRepository(t *testing.T) {
 	if _, _, err := service.ListLoginHistory(context.Background(), 42, pagination.Pagination{Page: 1, PageSize: 20}); err == nil {
 		t.Fatal("expected error when login history repo is not configured")
 	}
+}
+
+type fakePasswordHistoryRepo struct {
+	hashes   []string
+	added    []string
+	trimKeep []int
+}
+
+func (r *fakePasswordHistoryRepo) Add(_ context.Context, _, _ uint64, hash string) error {
+	r.added = append(r.added, hash)
+	return nil
+}
+
+func (r *fakePasswordHistoryRepo) ListRecentHashes(context.Context, uint64, int) ([]string, error) {
+	return r.hashes, nil
+}
+
+func (r *fakePasswordHistoryRepo) Trim(_ context.Context, _ uint64, keep int) error {
+	r.trimKeep = append(r.trimKeep, keep)
+	return nil
+}
+
+// newPasswordHistoryService 构造带密码历史仓储的 AuthService（复用重置流程所需依赖）
+func newPasswordHistoryService(t *testing.T, repo *fakeUserRepo, history authdomain.PasswordHistoryRepository, count int) *AuthService {
+	t.Helper()
+	_, rclient := newResetRedis(t)
+	resetStore := NewResetStore(rclient, 15*time.Minute)
+	svc := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30,
+		encryption.New(resetTestKey), resetStore, &fakeDispatcher{}, history, WithPasswordHistory(count))
+	svc.resetGen = func() string { return "123456" }
+	return svc
+}
+
+func newResetUserRepo(t *testing.T, password string, id uint64) *fakeUserRepo {
+	t.Helper()
+	user := userWithPassword(t, id, "alice", password, 1)
+	repo := &fakeUserRepo{users: map[string]*userdomain.User{"alice": user}}
+	repo.findByEmailHash = func(context.Context, string) (*userdomain.User, error) {
+		return user, nil
+	}
+	return repo
+}
+
+func TestResetPasswordRejectsCurrentPassword(t *testing.T) {
+	ctx := context.Background()
+	repo := newResetUserRepo(t, "correct", 42)
+	svc := newPasswordHistoryService(t, repo, &fakePasswordHistoryRepo{}, 5)
+
+	require.NoError(t, svc.ForgotPassword(ctx, "alice@example.com"))
+	err := svc.ResetPassword(ctx, "alice@example.com", "123456", "correct")
+	assert.Equal(t, apperrors.CodePasswordReused, appCode(err), "不得改回当前密码")
+}
+
+func TestResetPasswordRejectsHistoryPassword(t *testing.T) {
+	ctx := context.Background()
+	oldHash, err := bcrypt.GenerateFromPassword([]byte("old-secret"), bcrypt.DefaultCost)
+	require.NoError(t, err)
+
+	repo := newResetUserRepo(t, "correct", 42)
+	history := &fakePasswordHistoryRepo{hashes: []string{string(oldHash)}}
+	svc := newPasswordHistoryService(t, repo, history, 5)
+
+	require.NoError(t, svc.ForgotPassword(ctx, "alice@example.com"))
+	err = svc.ResetPassword(ctx, "alice@example.com", "123456", "old-secret")
+	assert.Equal(t, apperrors.CodePasswordReused, appCode(err), "不得复用历史密码")
+}
+
+func TestResetPasswordRecordsPreviousHash(t *testing.T) {
+	ctx := context.Background()
+	repo := newResetUserRepo(t, "correct", 42)
+	previousHash := repo.users["alice"].Password
+	history := &fakePasswordHistoryRepo{}
+	svc := newPasswordHistoryService(t, repo, history, 5)
+
+	require.NoError(t, svc.ForgotPassword(ctx, "alice@example.com"))
+	require.NoError(t, svc.ResetPassword(ctx, "alice@example.com", "123456", "brand-new-pass"))
+
+	require.Len(t, history.added, 1)
+	assert.Equal(t, previousHash, history.added[0], "应记录被替换的旧密码哈希")
+	assert.Equal(t, []int{5}, history.trimKeep, "应按配置条数裁剪历史")
+}
+
+func TestResetPasswordAllowsReuseWhenDisabled(t *testing.T) {
+	ctx := context.Background()
+	repo := newResetUserRepo(t, "correct", 42)
+	history := &fakePasswordHistoryRepo{}
+	// count=0 表示未启用防复用策略
+	svc := newPasswordHistoryService(t, repo, history, 0)
+
+	require.NoError(t, svc.ForgotPassword(ctx, "alice@example.com"))
+	require.NoError(t, svc.ResetPassword(ctx, "alice@example.com", "123456", "correct"))
+	assert.Empty(t, history.added, "未启用时不应写入历史")
 }
