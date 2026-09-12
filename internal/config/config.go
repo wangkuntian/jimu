@@ -429,6 +429,18 @@ type AuthConfig struct {
 	TrustedDeviceDays     int                `mapstructure:"trusted_device_days"`    // 可信设备有效期（天，0=关闭「记住此设备」）
 	BreachCheckEnabled    bool               `mapstructure:"breach_check_enabled"`   // 泄露口令检查（HIBP k-匿名范围查询，默认关闭）
 	Provisioning          ProvisioningConfig `mapstructure:"provisioning"`           // 开通式注册（注册 = 开通新租户）
+	WebAuthn              WebAuthnConfig     `mapstructure:"webauthn"`               // WebAuthn/通行密钥（无密码登录）
+}
+
+// WebAuthnConfig WebAuthn/通行密钥配置。
+// rp_id 必须是站点有效域（不带 scheme，如 example.com；本地开发用 localhost），
+// rp_origins 是允许的浏览器来源（含 scheme，如 https://example.com）。
+type WebAuthnConfig struct {
+	Enabled       bool     `mapstructure:"enabled"`         // 是否启用通行密钥
+	RPDisplayName string   `mapstructure:"rp_display_name"` // 展示给用户的站点名称
+	RPID          string   `mapstructure:"rp_id"`           // Relying Party ID（站点有效域）
+	RPOrigins     []string `mapstructure:"rp_origins"`      // 允许的来源（绝对 URL）
+	SessionTTLMin int      `mapstructure:"session_ttl_min"` // 挑战有效期（分钟），0 用默认 5
 }
 
 // ProvisioningConfig 开通式注册配置。

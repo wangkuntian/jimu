@@ -118,6 +118,14 @@ auth:
   trusted_device_days: 30        # 可信设备有效期（天，0=关闭「记住此设备」）
   breach_check_enabled: false    # 泄露口令检查（HIBP 范围查询，需出网；开启后注册/改密会校验）
 
+  # WebAuthn / 通行密钥（无密码登录；需 HTTPS，本地开发用 localhost）
+  webauthn:
+    enabled: false
+    rp_display_name: "Jimu"
+    rp_id: "localhost"                          # 站点有效域（不带 scheme），生产改为你的域名
+    rp_origins: ["http://localhost:8080"]       # 允许的浏览器来源（绝对 URL，需与前端页面同源）
+    session_ttl_min: 5                          # 挑战有效期（分钟）
+
 # 服务运行时配置
 server:
   timeout_sec: 60        # 请求超时秒数（开发环境较长，便于调试）

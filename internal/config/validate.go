@@ -113,6 +113,9 @@ func (c *Config) validateCommon() error {
 	if err := validateOAuthProviders(c.OAuth); err != nil {
 		return err
 	}
+	if err := validateWebAuthn(c.Auth.WebAuthn); err != nil {
+		return err
+	}
 	if c.Audit.QueueSize <= 0 || c.Audit.BatchSize <= 0 || c.Audit.BatchSize > c.Audit.QueueSize || c.Audit.FlushIntervalMS <= 0 {
 		return errors.New("invalid audit configuration")
 	}
@@ -194,6 +197,29 @@ func validateOAuthProviders(cfg OAuthConfig) error {
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 			return fmt.Errorf("oauth.providers.%s.issuer_url must be an absolute http(s) URL", name)
 		}
+	}
+	return nil
+}
+
+// validateWebAuthn 校验启用的 WebAuthn 配置：rp_id 必填，rp_origins 必须是非空绝对 http(s) 来源
+func validateWebAuthn(cfg WebAuthnConfig) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	if strings.TrimSpace(cfg.RPID) == "" {
+		return errors.New("auth.webauthn.rp_id is required when enabled")
+	}
+	if len(cfg.RPOrigins) == 0 {
+		return errors.New("auth.webauthn.rp_origins is required when enabled")
+	}
+	for _, origin := range cfg.RPOrigins {
+		u, err := url.Parse(origin)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("auth.webauthn.rp_origins entry %q must be an absolute http(s) origin", origin)
+		}
+	}
+	if cfg.SessionTTLMin < 0 {
+		return errors.New("auth.webauthn.session_ttl_min must not be negative")
 	}
 	return nil
 }

@@ -23,6 +23,10 @@ func RegisterAuthRoutes(r *gin.RouterGroup, service *application.AuthService, jw
 		authGroup.POST("/forgot-password", middleware.ValidateJSON(&forgotPasswordRequest{}), handler.ForgotPassword)
 		authGroup.POST("/reset-password", middleware.ValidateJSON(&resetPasswordRequest{}), handler.ResetPassword)
 
+		// WebAuthn/通行密钥：begin 为公开端点（无密码登录），finish 校验断言后签发 token
+		authGroup.POST("/webauthn/login/begin", middleware.ValidateJSON(&webAuthnLoginBeginRequest{}), handler.BeginWebAuthnLogin)
+		authGroup.POST("/webauthn/login/finish", handler.FinishWebAuthnLogin)
+
 		protected := authGroup.Group("")
 		protected.Use(auth.AuthMiddleware(jwtUtil))
 		protected.POST("/logout", handler.Logout)
@@ -34,6 +38,11 @@ func RegisterAuthRoutes(r *gin.RouterGroup, service *application.AuthService, jw
 		protected.GET("/devices", handler.ListDevices)
 		protected.DELETE("/devices", handler.RevokeAllDevices)
 		protected.DELETE("/devices/:id", handler.RevokeDevice)
+		protected.POST("/webauthn/register/begin", handler.BeginWebAuthnRegistration)
+		protected.POST("/webauthn/register/finish", handler.FinishWebAuthnRegistration)
+		protected.GET("/webauthn/credentials", handler.ListWebAuthnCredentials)
+		protected.PUT("/webauthn/credentials/:id", middleware.ValidateJSON(&webAuthnRenameRequest{}), handler.RenameWebAuthnCredential)
+		protected.DELETE("/webauthn/credentials/:id", handler.DeleteWebAuthnCredential)
 	}
 }
 

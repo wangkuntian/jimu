@@ -15,6 +15,8 @@ import (
 
 	redistore "jimu/internal/platform/redis"
 
+	"github.com/go-webauthn/webauthn/webauthn"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -41,9 +43,23 @@ func New(db *gorm.DB, rdb redistore.Client, cfg config.AuthConfig, failClosed bo
 	loginHistoryRepo := authinfra.NewMysqlLoginHistoryRepository(db)
 	passwordHistoryRepo := authinfra.NewMysqlPasswordHistoryRepository(db)
 	trustedDeviceRepo := authinfra.NewMysqlTrustedDeviceRepository(db)
-	allDeps := append(deps, resetStore, application.WithIssuer(cfg.Issuer), loginHistoryRepo,
+	webauthnRepo := authinfra.NewMysqlWebAuthnCredentialRepository(db)
+	allDeps := append(deps, resetStore, rdb, application.WithIssuer(cfg.Issuer), loginHistoryRepo,
 		passwordHistoryRepo, application.WithPasswordHistory(cfg.PasswordHistoryCount),
-		trustedDeviceRepo, application.WithTrustedDeviceTTL(cfg.TrustedDeviceDays))
+		trustedDeviceRepo, application.WithTrustedDeviceTTL(cfg.TrustedDeviceDays),
+		webauthnRepo, application.WithWebAuthnSessionTTL(time.Duration(cfg.WebAuthn.SessionTTLMin)*time.Minute))
+	// WebAuthn/通行密钥：仅在启用时构造库句柄（配置合法性已由 config.Validate 保证）
+	if cfg.WebAuthn.Enabled {
+		handle, err := webauthn.New(&webauthn.Config{
+			RPDisplayName: cfg.WebAuthn.RPDisplayName,
+			RPID:          cfg.WebAuthn.RPID,
+			RPOrigins:     cfg.WebAuthn.RPOrigins,
+		})
+		if err != nil {
+			return nil
+		}
+		allDeps = append(allDeps, handle)
+	}
 	// 开通式注册：注册 = 开通新租户（单事务，模板模式初始化角色权限）
 	if cfg.Provisioning.Enabled {
 		allDeps = append(allDeps, application.NewGormTenantProvisioner(db, cfg.Provisioning))

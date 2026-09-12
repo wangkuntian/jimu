@@ -18,10 +18,12 @@ import (
 	"jimu/internal/platform/encryption"
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/outbox"
+	redistore "jimu/internal/platform/redis"
 	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/totp"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -47,6 +49,10 @@ type AuthService struct {
 	provisioner          TenantProvisioner // 开通式注册（nil = 未启用，注册仅建普通用户）
 	breachChecker        breach.Checker    // 泄露口令检查（nil = 未启用）
 	quota                TenantQuota       // 租户配额（nil = 未启用）
+	rdb                  redistore.Client  // Redis（WebAuthn 挑战会话等）
+	webauthn             *webauthn.WebAuthn
+	webauthnCreds        authdomain.WebAuthnCredentialRepository // nil = 未启用 WebAuthn
+	webauthnSessionTTL   time.Duration
 }
 
 func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int, deps ...interface{}) *AuthService {
@@ -75,6 +81,14 @@ func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessi
 			s.breachChecker = d
 		case TenantQuota:
 			s.quota = d
+		case redistore.Client:
+			s.rdb = d
+		case *webauthn.WebAuthn:
+			s.webauthn = d
+		case authdomain.WebAuthnCredentialRepository:
+			s.webauthnCreds = d
+		case webAuthnSessionTTL:
+			s.webauthnSessionTTL = time.Duration(d)
 		case authdomain.LoginHistoryRepository:
 			s.loginHistory = d
 		case authdomain.PasswordHistoryRepository:

@@ -44,15 +44,17 @@ const (
 	CodeServiceUnavailable = 1010 // 服务繁忙（负载保护拒绝）
 
 	// 用户/认证模块 (2xxx)
-	CodeUserNotFound     = 2001 // 用户不存在
-	CodeUserExists       = 2002 // 用户已存在
-	CodeInvalidPassword  = 2003 // 密码错误
-	CodeRoleNotFound     = 2004 // 角色不存在
-	CodeInvalidResetCode = 2005 // 密码重置验证码无效或已过期
-	CodeMFARequired      = 2006 // 需要提供 TOTP 二次验证码
-	CodeInvalidMFA       = 2007 // TOTP 验证码无效
-	CodePasswordReused   = 2008 // 新密码与当前或近期使用过的密码重复
-	CodePasswordBreached = 2009 // 新密码出现在已知数据泄露集合中
+	CodeUserNotFound               = 2001 // 用户不存在
+	CodeUserExists                 = 2002 // 用户已存在
+	CodeInvalidPassword            = 2003 // 密码错误
+	CodeRoleNotFound               = 2004 // 角色不存在
+	CodeInvalidResetCode           = 2005 // 密码重置验证码无效或已过期
+	CodeMFARequired                = 2006 // 需要提供 TOTP 二次验证码
+	CodeInvalidMFA                 = 2007 // TOTP 验证码无效
+	CodePasswordReused             = 2008 // 新密码与当前或近期使用过的密码重复
+	CodePasswordBreached           = 2009 // 新密码出现在已知数据泄露集合中
+	CodeWebAuthnNoCredential       = 2010 // 该用户未注册通行密钥
+	CodeWebAuthnVerificationFailed = 2011 // 通行密钥校验失败（挑战过期/签名无效）
 
 	// OAuth 模块 (3xxx)
 	CodeOAuthProviderNotFound = 3001 // 第三方登录提供商不存在
@@ -105,13 +107,13 @@ func HTTPStatus(code int) int {
 		return 401
 	case CodeForbidden:
 		return 403
-	case CodeNotFound, CodeUserNotFound, CodeRoleNotFound, CodeOAuthProviderNotFound, CodeTenantNotFound:
+	case CodeNotFound, CodeUserNotFound, CodeRoleNotFound, CodeOAuthProviderNotFound, CodeTenantNotFound, CodeWebAuthnNoCredential:
 		return 404
 	case CodeConflict, CodeUserExists, CodeTenantExists, CodeTenantProtected:
 		return 409
 	case CodeQuotaExceeded:
 		return 403
-	case CodeCaptchaRequired, CodeCaptchaInvalid, CodeInvalidResetCode, CodeTenantCodeFormat, CodePasswordReused, CodePasswordBreached:
+	case CodeCaptchaRequired, CodeCaptchaInvalid, CodeInvalidResetCode, CodeTenantCodeFormat, CodePasswordReused, CodePasswordBreached, CodeWebAuthnVerificationFailed:
 		return 400
 	case CodeRateLimited:
 		return 429
@@ -191,5 +193,7 @@ func AllErrorCodes() []ErrorInfo {
 		{CodeTenantProtected, "默认租户受保护，不可删除", 409, "租户"},
 		{CodeTenantCodeFormat, "租户编码格式无效", 400, "租户"},
 		{CodeQuotaExceeded, "租户资源配额已用尽", 403, "租户"},
+		{CodeWebAuthnNoCredential, "该用户未注册通行密钥", 404, "用户"},
+		{CodeWebAuthnVerificationFailed, "通行密钥校验失败", 400, "用户"},
 	}
 }

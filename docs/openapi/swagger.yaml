@@ -300,6 +300,30 @@ definitions:
     - email
     - new_password
     type: object
+  interfaces.webAuthnBeginRequest:
+    properties:
+      name:
+        maxLength: 64
+        type: string
+    type: object
+  interfaces.webAuthnLoginBeginRequest:
+    properties:
+      username:
+        maxLength: 64
+        minLength: 3
+        type: string
+    required:
+    - username
+    type: object
+  interfaces.webAuthnRenameRequest:
+    properties:
+      name:
+        maxLength: 64
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
   response.Body:
     properties:
       code:
@@ -849,6 +873,215 @@ paths:
           schema:
             $ref: '#/definitions/contract.ErrorResponse'
       summary: 重置密码
+      tags:
+      - 认证
+  /auth/webauthn/credentials:
+    get:
+      description: 返回当前用户已注册的通行密钥（不含公钥等敏感字段），用于设备管理与注销。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回通行密钥列表
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取通行密钥列表
+      tags:
+      - 认证
+  /auth/webauthn/credentials/{id}:
+    delete:
+      description: 删除当前用户的某个通行密钥；删除最后一个凭证后该账号不能再使用通行密钥登录（密码登录不受影响）。
+      parameters:
+      - description: 凭证 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除通行密钥
+      tags:
+      - 认证
+    put:
+      consumes:
+      - application/json
+      description: 修改当前用户某个通行密钥的名称。
+      parameters:
+      - description: 凭证 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 新名称
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/interfaces.webAuthnRenameRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 重命名通行密钥
+      tags:
+      - 认证
+  /auth/webauthn/login/begin:
+    post:
+      consumes:
+      - application/json
+      description: 按用户名生成 WebAuthn 登录断言（allowCredentials 为该用户已注册凭证）与一次性 session_id。用户不存在或未注册凭证时返回错误，不泄漏账号是否存在之外的信息。支持
+        IP 与用户名维度限流。
+      parameters:
+      - description: 用户名
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/interfaces.webAuthnLoginBeginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回 session_id 与登录选项
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: 认证失败（用户不存在或已禁用）
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: 该用户未注册通行密钥（2010）
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "429":
+          description: 请求过于频繁
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      summary: 开始通行密钥登录
+      tags:
+      - 认证
+  /auth/webauthn/login/finish:
+    post:
+      consumes:
+      - application/json
+      description: 校验浏览器返回的登录断言（签名、挑战、计数器），通过后签发 access/refresh token。通行密钥是抗钓鱼的强因子，因此不再要求密码，也不叠加
+        TOTP。session_id 取自 begin 响应；请求体为 navigator.credentials.get() 的原始 JSON。
+      parameters:
+      - description: begin 接口返回的 session_id
+        in: query
+        name: session_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回 accessToken 和 refreshToken
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: 断言校验失败（2011）
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "429":
+          description: 请求过于频繁
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      summary: 完成通行密钥登录
+      tags:
+      - 认证
+  /auth/webauthn/register/begin:
+    post:
+      consumes:
+      - application/json
+      description: 为当前登录用户生成 WebAuthn 注册选项（publicKey）与一次性 session_id。客户端调用 navigator.credentials.create()
+        后，把返回的凭证 JSON 原样提交到 finish 接口。需要浏览器与 HTTPS（localhost 除外）。
+      parameters:
+      - description: 凭证名称（可选，便于识别设备）
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/interfaces.webAuthnBeginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回 session_id 与注册选项
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: WebAuthn 未配置
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 开始注册通行密钥
+      tags:
+      - 认证
+  /auth/webauthn/register/finish:
+    post:
+      consumes:
+      - application/json
+      description: 校验浏览器返回的注册凭证（证明与挑战），通过后保存公钥。session_id 取自 begin 响应；请求体为 navigator.credentials.create()
+        的原始 JSON。
+      parameters:
+      - description: begin 接口返回的 session_id
+        in: query
+        name: session_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回已注册凭证信息
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: 凭证校验失败（2011）
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 完成注册通行密钥
       tags:
       - 认证
   /captcha:
