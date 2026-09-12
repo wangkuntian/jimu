@@ -32,6 +32,10 @@ security:
   content_security_policy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
   referrer_policy: "strict-origin-when-cross-origin"
   permissions_policy: "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+  # IP 白名单（CIDR 或单个 IP）；为空表示不限制。客户端 IP 依赖 http.trusted_proxies 正确配置
+  ip_allowlist: []
+  # 管理端（/api/v1/admin）IP 白名单；为空表示沿用 ip_allowlist（建议生产限制为办公网/VPN）
+  admin_ip_allowlist: []
 
 management:
   host: "0.0.0.0"      # 生产环境需被监控系统访问

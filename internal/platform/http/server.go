@@ -94,6 +94,10 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 	r.Use(
 		middleware.RequestID(),
 	)
+	// IP 白名单：非空时仅放行列表内来源（管理端另有 AdminIPAllowlist）
+	if len(securityCfg.IPAllowlist) > 0 {
+		r.Use(middleware.IPAllowlist(securityCfg.IPAllowlist))
+	}
 	// 语言解析：从 Accept-Language 注入 locale，供响应与校验翻译使用
 	r.Use(middleware.Locale())
 	// HTTP 指标中间件（在路由处理前注册，测量完整延迟）

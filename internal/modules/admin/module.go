@@ -25,18 +25,19 @@ import (
 
 // Module 管理模块
 type Module struct {
-	service    *adminapp.Service
-	rdb        redistore.Client
-	db         *gorm.DB
-	sched      *scheduler.CronScheduler
-	storage    storage.Storage
-	scanner    platformhttp.Scanner
-	feature    *feature.Manager
-	eventBus   contract.EventBus
-	wsHub      *ws.ClientHub
-	wsPres     *ws.PresenceManager
-	wsChannels *ws.ChannelManager
-	jwt        *auth.JWT
+	ipAllowlist gin.HandlerFunc
+	service     *adminapp.Service
+	rdb         redistore.Client
+	db          *gorm.DB
+	sched       *scheduler.CronScheduler
+	storage     storage.Storage
+	scanner     platformhttp.Scanner
+	feature     *feature.Manager
+	eventBus    contract.EventBus
+	wsHub       *ws.ClientHub
+	wsPres      *ws.PresenceManager
+	wsChannels  *ws.ChannelManager
+	jwt         *auth.JWT
 }
 
 // New 创建管理模块
@@ -60,6 +61,8 @@ func New(version, env string, rdb redistore.Client, db *gorm.DB, deps ...interfa
 			m.eventBus = d
 		case *auth.JWT:
 			m.jwt = d
+		case gin.HandlerFunc:
+			m.ipAllowlist = d
 		}
 	}
 	return m
@@ -93,6 +96,10 @@ func (m *Module) Name() string { return "admin" }
 func (m *Module) RegisterHTTP(r contract.Router) {
 	// 管理员权限中间件，统一挂载在 /api/v1/admin 前缀下
 	admin := r.Group("/api/v1/admin")
+	// 管理端 IP 白名单需先于鉴权生效（未配置时不挂载）
+	if m.ipAllowlist != nil {
+		admin.Use(m.ipAllowlist)
+	}
 	admin.Use(middleware.AdminAuth())
 
 	// 公开端点（错误码文档）

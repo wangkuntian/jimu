@@ -224,6 +224,10 @@ security:
   content_security_policy: "default-src 'self'"
   referrer_policy: "strict-origin-when-cross-origin"
   permissions_policy: "camera=(), microphone=(), geolocation=()"
+  # IP 白名单（CIDR 或单个 IP）；为空表示不限制。客户端 IP 依赖 http.trusted_proxies 正确配置
+  ip_allowlist: []
+  # 管理端（/api/v1/admin）IP 白名单；为空表示沿用 ip_allowlist
+  admin_ip_allowlist: []
 
 # OpenTelemetry 可观测性（OpenObserve：统一 日志/指标/追踪）
 # 启用后 tracing + metrics + logs 均经 OTLP gRPC 推送到 endpoint。

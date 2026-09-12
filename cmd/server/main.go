@@ -18,6 +18,7 @@ import (
 	tenantmodule "jimu/internal/modules/tenant"
 	"jimu/internal/modules/user"
 	"jimu/internal/platform/auth"
+	"jimu/internal/platform/http/middleware"
 )
 
 // @title           Jimu API
@@ -75,7 +76,7 @@ func run() error {
 		permission.New(container.DB),
 		tenantmodule.New(container.DB, *cfg),
 		auditmodule.New(container.DB, cfg.Audit, container.Logger),
-		adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, container.Scheduler, container.Storage, container.UploadScanner, container.FeatureFlag, container.EventBus,
+		adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, middleware.IPAllowlist(cfg.Security.AdminIPAllowlist), container.Scheduler, container.Storage, container.UploadScanner, container.FeatureFlag, container.EventBus,
 			auth.NewWithRotation(cfg.Auth.JWTSecret, cfg.Auth.JWTPreviousSecret, cfg.Auth.Issuer, cfg.Auth.AccessExpireMin, cfg.Auth.RefreshExpireDay)),
 		oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth, container.HTTPClient),
 	)

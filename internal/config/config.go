@@ -225,6 +225,12 @@ type SecurityConfig struct {
 	// 字段级加密密钥（AES-256-GCM，≥32 字节）。空则明文模式（email/phone 不加密存储，仍计算盲索引）。
 	// 建议 ENCRYPTION_KEY 环境变量注入；启用后存量明文行可正常解密读回。
 	EncryptionKey string `mapstructure:"encryption_key"`
+
+	// IP 白名单（CIDR 或单个 IP）。为空表示不限制；非空时仅放行列表内来源，
+	// 其余请求返回 403。客户端 IP 由 gin 依据 trusted_proxies 解析 X-Forwarded-For。
+	IPAllowlist []string `mapstructure:"ip_allowlist"`
+	// 管理端 IP 白名单（/api/v1/admin）。为空表示沿用 IPAllowlist；同样非空时仅放行列表内来源。
+	AdminIPAllowlist []string `mapstructure:"admin_ip_allowlist"`
 }
 
 // DefaultSecurityConfig 返回默认安全配置

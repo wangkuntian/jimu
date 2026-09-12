@@ -378,3 +378,20 @@ func TestValidateProvisioningRejectsIncompletePermission(t *testing.T) {
 		t.Fatalf("permission without action should fail, got: %v", err)
 	}
 }
+
+func TestValidateIPAllowlist(t *testing.T) {
+	base, err := Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	base.Security.IPAllowlist = []string{"10.0.0.0/8", "127.0.0.1"}
+	if err := base.Validate("dev"); err != nil {
+		t.Fatalf("valid allowlist rejected: %v", err)
+	}
+
+	base.Security.AdminIPAllowlist = []string{"not-a-cidr"}
+	if err := base.Validate("dev"); err == nil {
+		t.Fatal("invalid admin allowlist should be rejected")
+	}
+}

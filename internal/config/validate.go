@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 )
 
@@ -39,6 +40,12 @@ func (c *Config) validateCommon() error {
 	}
 	if !contains(validDBDrivers, c.DB.Driver) {
 		return fmt.Errorf("invalid db.driver: %q, must be one of %v", c.DB.Driver, validDBDrivers)
+	}
+	if err := validateCIDRs("security.ip_allowlist", c.Security.IPAllowlist); err != nil {
+		return err
+	}
+	if err := validateCIDRs("security.admin_ip_allowlist", c.Security.AdminIPAllowlist); err != nil {
+		return err
 	}
 	if c.Retention.Enabled {
 		if strings.TrimSpace(c.Retention.Cron) == "" {
@@ -156,6 +163,23 @@ func validateProvisioning(p ProvisioningConfig) error {
 	}
 	if p.OwnerRole != "" && !names[p.OwnerRole] {
 		return fmt.Errorf("auth.provisioning.owner_role %q not found in auth.provisioning.roles", p.OwnerRole)
+	}
+	return nil
+}
+
+// validateCIDRs 校验 IP 白名单条目（CIDR 或单个 IP），非法值启动即报错
+func validateCIDRs(key string, entries []string) error {
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if net.ParseIP(entry) != nil {
+			continue
+		}
+		if _, _, err := net.ParseCIDR(entry); err != nil {
+			return fmt.Errorf("invalid %s entry %q: must be an IP or CIDR", key, entry)
+		}
 	}
 	return nil
 }
