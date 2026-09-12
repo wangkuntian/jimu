@@ -10,6 +10,7 @@ import (
 	platformauth "jimu/internal/platform/auth"
 	"jimu/internal/platform/captcha"
 	"jimu/internal/shared/errors"
+	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
@@ -50,12 +51,54 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if !h.verifyCaptcha(c, req) {
 		return
 	}
-	tokenPair, err := h.service.LoginWithTOTP(c.Request.Context(), req.Username, req.Password, req.TOTPCode)
+	ctx := application.WithClientInfo(c.Request.Context(), c.ClientIP(), c.Request.UserAgent())
+	tokenPair, err := h.service.LoginWithTOTP(ctx, req.Username, req.Password, req.TOTPCode)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
 	response.OK(c, tokenPair)
+}
+
+// LoginHistory godoc
+// @Summary      获取登录历史
+// @Description  分页返回当前用户的登录历史（成功/失败/锁定），含时间、IP 与 User-Agent，用于异常登录自查。按 id 倒序。
+// @Tags         认证
+// @Produce      json
+// @Security     BearerAuth
+// @Param        page       query     int  false  "页码（默认 1）"
+// @Param        page_size  query     int  false  "每页数量（默认 20，最大 100）"
+// @Success      200        {object}  contract.PageResponse  "成功，返回登录历史分页数据"
+// @Failure      401        {object}  contract.ErrorResponse  "未认证"
+// @Failure      500        {object}  contract.ErrorResponse  "服务器内部错误"
+// @Router       /auth/login-history [get]
+func (h *AuthHandler) LoginHistory(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
+		return
+	}
+	p, _ := c.MustGet("validated_query").(*pagination.Pagination)
+	if err := p.Normalize("id", "created_at"); err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
+		return
+	}
+	records, total, err := h.service.ListLoginHistory(c.Request.Context(), userID, *p)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.Page(c, records, total, p.Page, p.PageSize)
+}
+
+// currentUserID 从 gin 上下文读取认证中间件注入的 user_id
+func currentUserID(c *gin.Context) (uint64, bool) {
+	v, exists := c.Get("user_id")
+	if !exists {
+		return 0, false
+	}
+	id, ok := v.(uint64)
+	return id, ok
 }
 
 // Register godoc

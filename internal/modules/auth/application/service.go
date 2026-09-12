@@ -27,18 +27,19 @@ import (
 )
 
 type AuthService struct {
-	userRepo    userdomain.UserRepository
-	jwtUtil     *auth.JWT
-	sessions    auth.SessionStore
-	lockout     *auth.LoginFailureTracker
-	accessMin   int
-	outbox      *outbox.Outbox
-	cipher      *encryption.Cipher
-	notifier    notification.Dispatcher
-	resetStore  *ResetStore
-	resetGen    func() string     // 验证码生成器（测试注入）
-	issuer      string            // TOTP otpauth URI 的 issuer
-	provisioner TenantProvisioner // 开通式注册（nil = 未启用，注册仅建普通用户）
+	userRepo     userdomain.UserRepository
+	jwtUtil      *auth.JWT
+	sessions     auth.SessionStore
+	lockout      *auth.LoginFailureTracker
+	accessMin    int
+	outbox       *outbox.Outbox
+	cipher       *encryption.Cipher
+	notifier     notification.Dispatcher
+	resetStore   *ResetStore
+	loginHistory authdomain.LoginHistoryRepository // 登录历史（nil=不记录）
+	resetGen     func() string                     // 验证码生成器（测试注入）
+	issuer       string                            // TOTP otpauth URI 的 issuer
+	provisioner  TenantProvisioner                 // 开通式注册（nil = 未启用，注册仅建普通用户）
 }
 
 func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int, deps ...interface{}) *AuthService {
@@ -63,6 +64,8 @@ func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessi
 			s.issuer = string(d)
 		case TenantProvisioner:
 			s.provisioner = d
+		case authdomain.LoginHistoryRepository:
+			s.loginHistory = d
 		}
 	}
 	return s
@@ -91,6 +94,7 @@ func (s *AuthService) LoginWithTOTP(ctx context.Context, username, password, tot
 			return nil, errors.Wrap(errors.CodeInternalError, "lockout check failed", err)
 		}
 		if locked {
+			s.recordLoginHistory(ctx, 0, 0, normalized, authdomain.LoginStatusLocked, "account locked")
 			return nil, ErrAccountLocked(remaining)
 		}
 	}
@@ -98,25 +102,30 @@ func (s *AuthService) LoginWithTOTP(ctx context.Context, username, password, tot
 	user, err := s.userRepo.FindByUsername(ctx, normalized)
 	if err != nil {
 		s.recordFailure(ctx, normalized)
+		s.recordLoginHistory(ctx, 0, 0, normalized, authdomain.LoginStatusFailed, "user not found")
 		return nil, invalidCredentials()
 	}
 	if user.Status != 1 {
 		s.recordFailure(ctx, normalized)
+		s.recordLoginHistory(ctx, user.ID, user.TenantID, normalized, authdomain.LoginStatusFailed, "user disabled")
 		return nil, invalidCredentials()
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		s.recordFailure(ctx, normalized)
+		s.recordLoginHistory(ctx, user.ID, user.TenantID, normalized, authdomain.LoginStatusFailed, "invalid password")
 		return nil, invalidCredentials()
 	}
 
 	// TOTP 校验：用户启用后必须提供有效验证码
 	if user.TOTPEnabled {
 		if totpCode == "" {
+			s.recordLoginHistory(ctx, user.ID, user.TenantID, normalized, authdomain.LoginStatusFailed, "totp code required")
 			return nil, errors.New(errors.CodeMFARequired, "TOTP code required")
 		}
 		if !totp.Validate(user.TOTPSecret, totpCode, time.Now(), totp.DefaultPeriod, totp.DefaultDigits, totp.DefaultSkew) {
 			s.recordFailure(ctx, normalized)
+			s.recordLoginHistory(ctx, user.ID, user.TenantID, normalized, authdomain.LoginStatusFailed, "invalid totp code")
 			return nil, errors.New(errors.CodeInvalidMFA, "invalid TOTP code")
 		}
 	}
@@ -139,6 +148,7 @@ func (s *AuthService) finishLogin(ctx context.Context, user *userdomain.User) (*
 	if err := s.sessions.Create(ctx, user.ID, sessionID, refreshClaims.ID, refreshTTL(refreshClaims)); err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to create session", err)
 	}
+	s.recordLoginHistory(ctx, user.ID, user.TenantID, user.Username, authdomain.LoginStatusSuccess, "")
 
 	// 写入 Outbox 发布登录成功事件（同用户创建一致，走统一可靠投递路径）
 	if s.outbox != nil {

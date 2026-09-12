@@ -488,6 +488,38 @@ paths:
       summary: 用户登录
       tags:
       - 认证
+  /auth/login-history:
+    get:
+      description: 分页返回当前用户的登录历史（成功/失败/锁定），含时间、IP 与 User-Agent，用于异常登录自查。按 id 倒序。
+      parameters:
+      - description: 页码（默认 1）
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量（默认 20，最大 100）
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回登录历史分页数据
+          schema:
+            $ref: '#/definitions/contract.PageResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取登录历史
+      tags:
+      - 认证
   /auth/logout:
     post:
       description: 撤销当前会话的刷新令牌，使其失效。需要有效的访问令牌进行身份验证。

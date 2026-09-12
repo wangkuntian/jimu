@@ -11,6 +11,7 @@ import (
 	"jimu/internal/platform/auth"
 	"jimu/internal/platform/encryption"
 	apperrors "jimu/internal/shared/errors"
+	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/totp"
 
 	"golang.org/x/crypto/bcrypt"
@@ -488,3 +489,98 @@ func totpCurrentCodeFor(now time.Time, secret string) string {
 }
 
 var _ authdomain.AuthServiceInterface = (*AuthService)(nil)
+
+type fakeLoginHistoryRepo struct {
+	records []authdomain.LoginHistory
+	err     error
+}
+
+func (r *fakeLoginHistoryRepo) Create(_ context.Context, record *authdomain.LoginHistory) error {
+	if r.err != nil {
+		return r.err
+	}
+	r.records = append(r.records, *record)
+	return nil
+}
+
+func (r *fakeLoginHistoryRepo) ListByUser(context.Context, uint64, uint64, int, int) ([]authdomain.LoginHistory, int64, error) {
+	return r.records, int64(len(r.records)), nil
+}
+
+func TestLoginRecordsHistory(t *testing.T) {
+	history := &fakeLoginHistoryRepo{}
+	alice := userWithPassword(t, 42, "alice", "correct", 1)
+	alice.TenantID = 7
+	repo := &fakeUserRepo{users: map[string]*userdomain.User{"alice": alice}}
+	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, history)
+	ctx := WithClientInfo(context.Background(), "203.0.113.7", "curl/8.0")
+
+	// 成功
+	_, err := service.LoginWithTOTP(ctx, "alice", "correct", "")
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if len(history.records) != 1 {
+		t.Fatalf("records = %d, want 1", len(history.records))
+	}
+	success := history.records[0]
+	if success.Status != authdomain.LoginStatusSuccess || success.UserID != 42 || success.TenantID != 7 {
+		t.Fatalf("unexpected success record: %+v", success)
+	}
+	if success.IP != "203.0.113.7" || success.UserAgent != "curl/8.0" {
+		t.Fatalf("client info not recorded: %+v", success)
+	}
+
+	// 密码错误
+	_, _ = service.LoginWithTOTP(ctx, "alice", "wrong", "")
+	if len(history.records) != 2 {
+		t.Fatalf("records = %d, want 2", len(history.records))
+	}
+	failure := history.records[1]
+	if failure.Status != authdomain.LoginStatusFailed || failure.Reason != "invalid password" {
+		t.Fatalf("unexpected failure record: %+v", failure)
+	}
+
+	// 账号不存在：user_id 为 0，仍记录用户名便于排查
+	_, _ = service.LoginWithTOTP(ctx, "nobody", "x", "")
+	if len(history.records) != 3 {
+		t.Fatalf("records = %d, want 3", len(history.records))
+	}
+	missing := history.records[2]
+	if missing.UserID != 0 || missing.Reason != "user not found" || missing.Username != "nobody" {
+		t.Fatalf("unexpected missing-user record: %+v", missing)
+	}
+}
+
+func TestLoginHistoryRecordFailureDoesNotBreakLogin(t *testing.T) {
+	history := &fakeLoginHistoryRepo{err: stderrors.New("db down")}
+	repo := &fakeUserRepo{users: map[string]*userdomain.User{
+		"alice": userWithPassword(t, 42, "alice", "correct", 1),
+	}}
+	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, history)
+
+	// 审计旁路失败不应影响登录
+	if _, err := service.LoginWithTOTP(context.Background(), "alice", "correct", ""); err != nil {
+		t.Fatalf("login should succeed even if history write fails: %v", err)
+	}
+}
+
+func TestListLoginHistory(t *testing.T) {
+	history := &fakeLoginHistoryRepo{records: []authdomain.LoginHistory{{ID: 1, UserID: 42, Status: authdomain.LoginStatusSuccess}}}
+	service := NewAuthService(&fakeUserRepo{}, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, history)
+
+	records, total, err := service.ListLoginHistory(context.Background(), 42, pagination.Pagination{Page: 1, PageSize: 20})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if total != 1 || len(records) != 1 {
+		t.Fatalf("records = %d total = %d", len(records), total)
+	}
+}
+
+func TestListLoginHistoryWithoutRepository(t *testing.T) {
+	service := NewAuthService(&fakeUserRepo{}, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30)
+	if _, _, err := service.ListLoginHistory(context.Background(), 42, pagination.Pagination{Page: 1, PageSize: 20}); err == nil {
+		t.Fatal("expected error when login history repo is not configured")
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"jimu/internal/platform/auth"
 	"jimu/internal/platform/captcha"
 	"jimu/internal/platform/http/middleware"
+	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,6 +30,7 @@ func RegisterAuthRoutes(r *gin.RouterGroup, service *application.AuthService, jw
 		protected.POST("/mfa/setup", handler.SetupTOTP)
 		protected.POST("/mfa/enable", middleware.ValidateJSON(&enableTOTPRequest{}), handler.EnableTOTP)
 		protected.POST("/mfa/disable", middleware.ValidateJSON(&disableTOTPRequest{}), handler.DisableTOTP)
+		protected.GET("/login-history", middleware.ValidateQuery(&pagination.Pagination{}), handler.LoginHistory)
 	}
 }
 

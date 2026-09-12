@@ -6,6 +6,7 @@ import (
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/modules/auth/application"
+	authinfra "jimu/internal/modules/auth/infrastructure"
 	"jimu/internal/modules/auth/interfaces"
 	"jimu/internal/modules/user/infrastructure"
 	"jimu/internal/platform/auth"
@@ -37,7 +38,8 @@ func New(db *gorm.DB, rdb redistore.Client, cfg config.AuthConfig, failClosed bo
 	lockoutTracker := auth.NewLoginFailureTracker(rdb, auth.DefaultLockoutConfig())
 	// 密码重置验证码存储：redis 一次性码，TTL 取配置
 	resetStore := application.NewResetStore(rdb, time.Duration(cfg.ResetCodeTTLMin)*time.Minute)
-	allDeps := append(deps, resetStore, application.WithIssuer(cfg.Issuer))
+	loginHistoryRepo := authinfra.NewMysqlLoginHistoryRepository(db)
+	allDeps := append(deps, resetStore, application.WithIssuer(cfg.Issuer), loginHistoryRepo)
 	// 开通式注册：注册 = 开通新租户（单事务，模板模式初始化角色权限）
 	if cfg.Provisioning.Enabled {
 		allDeps = append(allDeps, application.NewGormTenantProvisioner(db, cfg.Provisioning))
