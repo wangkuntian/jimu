@@ -39,6 +39,8 @@ type AuthService struct {
 	loginHistory         authdomain.LoginHistoryRepository    // 登录历史（nil=不记录）
 	passwordHistory      authdomain.PasswordHistoryRepository // 密码历史（nil=不做防复用检查）
 	passwordHistoryCount int
+	trustedDevices       authdomain.TrustedDeviceRepository // 可信设备（nil=不支持跳过 TOTP）
+	trustedDeviceDays    int
 	resetGen             func() string     // 验证码生成器（测试注入）
 	issuer               string            // TOTP otpauth URI 的 issuer
 	provisioner          TenantProvisioner // 开通式注册（nil = 未启用，注册仅建普通用户）
@@ -72,6 +74,10 @@ func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessi
 			s.passwordHistory = d
 		case passwordHistoryCount:
 			s.passwordHistoryCount = int(d)
+		case authdomain.TrustedDeviceRepository:
+			s.trustedDevices = d
+		case trustedDeviceTTLDays:
+			s.trustedDeviceDays = int(d)
 		}
 	}
 	return s
@@ -123,16 +129,22 @@ func (s *AuthService) LoginWithTOTP(ctx context.Context, username, password, tot
 		return nil, invalidCredentials()
 	}
 
-	// TOTP 校验：用户启用后必须提供有效验证码
+	// TOTP 校验：用户启用后必须提供有效验证码；携带该用户的可信设备令牌时可跳过
 	if user.TOTPEnabled {
+		skipTOTP := false
 		if totpCode == "" {
-			s.recordLoginHistory(ctx, user.ID, user.TenantID, normalized, authdomain.LoginStatusFailed, "totp code required")
-			return nil, errors.New(errors.CodeMFARequired, "TOTP code required")
+			skipTOTP = s.isTrustedDevice(ctx, user)
 		}
-		if !totp.Validate(user.TOTPSecret, totpCode, time.Now(), totp.DefaultPeriod, totp.DefaultDigits, totp.DefaultSkew) {
-			s.recordFailure(ctx, normalized)
-			s.recordLoginHistory(ctx, user.ID, user.TenantID, normalized, authdomain.LoginStatusFailed, "invalid totp code")
-			return nil, errors.New(errors.CodeInvalidMFA, "invalid TOTP code")
+		if !skipTOTP {
+			if totpCode == "" {
+				s.recordLoginHistory(ctx, user.ID, user.TenantID, normalized, authdomain.LoginStatusFailed, "totp code required")
+				return nil, errors.New(errors.CodeMFARequired, "TOTP code required")
+			}
+			if !totp.Validate(user.TOTPSecret, totpCode, time.Now(), totp.DefaultPeriod, totp.DefaultDigits, totp.DefaultSkew) {
+				s.recordFailure(ctx, normalized)
+				s.recordLoginHistory(ctx, user.ID, user.TenantID, normalized, authdomain.LoginStatusFailed, "invalid totp code")
+				return nil, errors.New(errors.CodeInvalidMFA, "invalid TOTP code")
+			}
 		}
 	}
 
@@ -141,8 +153,27 @@ func (s *AuthService) LoginWithTOTP(ctx context.Context, username, password, tot
 		_ = s.lockout.Reset(ctx, normalized)
 	}
 
-	return s.finishLogin(ctx, user)
+	pair, err := s.finishLogin(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+	// 「记住此设备」：仅在启用 TOTP 的账号上签发；签发失败不影响登录
+	if user.TOTPEnabled && clientInfoFrom(ctx).RememberDevice && s.trustedDevices != nil && s.trustedDeviceDays > 0 {
+		token, issueErr := s.issueTrustedDevice(ctx, user)
+		if issueErr != nil {
+			log.Printf("auth: issue trusted device for user %d: %v", user.ID, issueErr)
+		} else {
+			pair.DeviceToken = token
+		}
+	}
+	return pair, nil
 }
+
+// trustedDeviceTTLDays 注入可信设备有效期（天）的 dep。
+type trustedDeviceTTLDays int
+
+// WithTrustedDeviceTTL 返回注入可信设备有效期的 dep，供 NewAuthService 使用（0=关闭该能力）。
+func WithTrustedDeviceTTL(days int) interface{} { return trustedDeviceTTLDays(days) }
 
 // finishLogin 校验通过后的公共登录收尾：签发 token + 建会话 + Outbox 事件。
 func (s *AuthService) finishLogin(ctx context.Context, user *userdomain.User) (*authdomain.TokenPair, error) {
@@ -330,6 +361,8 @@ func (s *AuthService) ResetPassword(ctx context.Context, email, code, newPasswor
 	}
 	// 记录被替换掉的旧密码，供后续防复用检查
 	s.recordPasswordHistory(ctx, user)
+	// 改密后吊销全部可信设备：旧设备不得继续跳过 TOTP
+	s.revokeTrustedDevicesQuietly(ctx, user.ID)
 	if s.sessions != nil {
 		_ = s.sessions.RevokeAll(ctx, user.ID)
 	}
@@ -499,6 +532,8 @@ func (s *AuthService) LogoutAll(ctx context.Context, userID uint64) error {
 	if err := s.sessions.RevokeAll(ctx, userID); err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to revoke sessions", err)
 	}
+	// 登出全部设备同时吊销可信设备，避免遗留可跳过 TOTP 的凭证
+	s.revokeTrustedDevicesQuietly(ctx, userID)
 	return nil
 }
 

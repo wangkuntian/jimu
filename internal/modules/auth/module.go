@@ -40,8 +40,10 @@ func New(db *gorm.DB, rdb redistore.Client, cfg config.AuthConfig, failClosed bo
 	resetStore := application.NewResetStore(rdb, time.Duration(cfg.ResetCodeTTLMin)*time.Minute)
 	loginHistoryRepo := authinfra.NewMysqlLoginHistoryRepository(db)
 	passwordHistoryRepo := authinfra.NewMysqlPasswordHistoryRepository(db)
+	trustedDeviceRepo := authinfra.NewMysqlTrustedDeviceRepository(db)
 	allDeps := append(deps, resetStore, application.WithIssuer(cfg.Issuer), loginHistoryRepo,
-		passwordHistoryRepo, application.WithPasswordHistory(cfg.PasswordHistoryCount))
+		passwordHistoryRepo, application.WithPasswordHistory(cfg.PasswordHistoryCount),
+		trustedDeviceRepo, application.WithTrustedDeviceTTL(cfg.TrustedDeviceDays))
 	// 开通式注册：注册 = 开通新租户（单事务，模板模式初始化角色权限）
 	if cfg.Provisioning.Enabled {
 		allDeps = append(allDeps, application.NewGormTenantProvisioner(db, cfg.Provisioning))

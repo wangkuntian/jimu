@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +16,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// DeviceTokenHeader 可信设备令牌请求头：登录时携带可在密码正确的前提下跳过 TOTP
+const DeviceTokenHeader = "X-Device-Token"
 
 type AuthHandler struct {
 	service    *application.AuthService
@@ -52,12 +56,87 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 	ctx := application.WithClientInfo(c.Request.Context(), c.ClientIP(), c.Request.UserAgent())
+	ctx = application.WithLoginDevice(ctx, c.GetHeader(DeviceTokenHeader), req.RememberDevice)
 	tokenPair, err := h.service.LoginWithTOTP(ctx, req.Username, req.Password, req.TOTPCode)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
 	response.OK(c, tokenPair)
+}
+
+// ListDevices godoc
+// @Summary      获取可信设备列表
+// @Description  返回当前用户的可信设备（登录时可跳过 TOTP 的设备）。密码始终必需，设备令牌仅替代 TOTP 因子；改密或登出全部设备会吊销全部可信设备。
+// @Tags         认证
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  response.Body  "成功，返回可信设备列表"
+// @Failure      401  {object}  contract.ErrorResponse  "未认证"
+// @Router       /auth/devices [get]
+func (h *AuthHandler) ListDevices(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
+		return
+	}
+	devices, err := h.service.ListTrustedDevices(c.Request.Context(), userID)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, devices)
+}
+
+// RevokeDevice godoc
+// @Summary      注销可信设备
+// @Description  按 ID 注销当前用户的一个可信设备，注销后该设备登录需重新提供 TOTP。
+// @Tags         认证
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "设备 ID"
+// @Success      200  {object}  response.Body  "成功，返回已注销设备 ID"
+// @Failure      400  {object}  contract.ErrorResponse  "参数错误（设备 ID 非法）"
+// @Failure      401  {object}  contract.ErrorResponse  "未认证"
+// @Router       /auth/devices/{id} [delete]
+func (h *AuthHandler) RevokeDevice(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid device id"))
+		return
+	}
+	if err := h.service.RevokeTrustedDevice(c.Request.Context(), userID, id); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"revoked": id})
+}
+
+// RevokeAllDevices godoc
+// @Summary      注销全部可信设备
+// @Description  注销当前用户全部可信设备，用于设备丢失或异常登录后的止损。
+// @Tags         认证
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  response.Body  "成功"
+// @Failure      401  {object}  contract.ErrorResponse  "未认证"
+// @Router       /auth/devices [delete]
+func (h *AuthHandler) RevokeAllDevices(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
+		return
+	}
+	if err := h.service.RevokeAllTrustedDevices(c.Request.Context(), userID); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"revoked": "all"})
 }
 
 // LoginHistory godoc

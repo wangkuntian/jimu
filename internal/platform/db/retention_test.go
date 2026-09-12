@@ -113,4 +113,10 @@ func TestDefaultRetentionRulesSkipZeroDays(t *testing.T) {
 	assert.Equal(t, "outbox_events", rules[1].Table)
 	// 死信用方言中立条件（MySQL/PG 通用）
 	assert.Contains(t, DefaultRetentionRules(config.RetentionConfig{DeadLetterDays: 30})[0].Condition, "TRUE")
+
+	// 可信设备按过期时间清理（保留窗口内已失效的设备仍可用于排查）
+	devices := DefaultRetentionRules(config.RetentionConfig{TrustedDeviceDays: 7})
+	require.Len(t, devices, 1)
+	assert.Equal(t, "trusted_devices", devices[0].Table)
+	assert.Equal(t, "expires_at", devices[0].TimeColumn)
 }

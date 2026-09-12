@@ -90,6 +90,7 @@ retention:
   dead_letter_days: 30      # 已处理死信保留天数
   outbox_event_days: 7      # 已发布 outbox 事件保留天数
   import_job_days: 90       # 已结束导入任务保留天数
+  trusted_device_days: 7    # 失效可信设备保留天数（过期后保留审计窗口再清理）
 
 # 日志配置
 log:
@@ -114,6 +115,7 @@ auth:
   register_rate_window_sec: 60 # 注册限流窗口（秒）
   reset_code_ttl_min: 15     # 密码重置验证码有效期（分钟）
   password_history_count: 5      # 防复用：检查最近 N 个历史密码（0=关闭）
+  trusted_device_days: 30        # 可信设备有效期（天，0=关闭「记住此设备」）
 
 # 服务运行时配置
 server:

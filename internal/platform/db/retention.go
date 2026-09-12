@@ -52,14 +52,19 @@ type (
 		ID        uint64    `gorm:"primaryKey"`
 		CreatedAt time.Time `gorm:"column:created_at"`
 	}
+	trustedDeviceRow struct {
+		ID        uint64    `gorm:"primaryKey"`
+		ExpiresAt time.Time `gorm:"column:expires_at"`
+	}
 )
 
-func (auditLogRow) TableName() string    { return "audit_logs" }
-func (jobRow) TableName() string         { return "jobs" }
-func (jobHistoryRow) TableName() string  { return "job_history" }
-func (deadLetterRow) TableName() string  { return "dead_letters" }
-func (outboxEventRow) TableName() string { return "outbox_events" }
-func (importJobRow) TableName() string   { return "import_jobs" }
+func (auditLogRow) TableName() string      { return "audit_logs" }
+func (jobRow) TableName() string           { return "jobs" }
+func (jobHistoryRow) TableName() string    { return "job_history" }
+func (deadLetterRow) TableName() string    { return "dead_letters" }
+func (outboxEventRow) TableName() string   { return "outbox_events" }
+func (importJobRow) TableName() string     { return "import_jobs" }
+func (trustedDeviceRow) TableName() string { return "trusted_devices" }
 
 // RetentionRule 单表保留策略
 type RetentionRule struct {
@@ -80,6 +85,7 @@ func DefaultRetentionRules(cfg config.RetentionConfig) []RetentionRule {
 		{Table: "dead_letters", Model: &deadLetterRow{}, TimeColumn: "resolved_at", Condition: "resolved = TRUE", Days: cfg.DeadLetterDays},
 		{Table: "outbox_events", Model: &outboxEventRow{}, TimeColumn: "published_at", Condition: "published_at IS NOT NULL", Days: cfg.OutboxEventDays},
 		{Table: "import_jobs", Model: &importJobRow{}, TimeColumn: "created_at", Condition: "status IN ('completed', 'failed')", Days: cfg.ImportJobDays},
+		{Table: "trusted_devices", Model: &trustedDeviceRow{}, TimeColumn: "expires_at", Days: cfg.TrustedDeviceDays},
 	}
 	rules := make([]RetentionRule, 0, len(all))
 	for _, r := range all {

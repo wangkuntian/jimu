@@ -256,6 +256,112 @@
                 ]
             }
         },
+        "/auth/devices": {
+            "get": {
+                "description": "返回当前用户的可信设备（登录时可跳过 TOTP 的设备）。密码始终必需，设备令牌仅替代 TOTP 因子；改密或登出全部设备会吊销全部可信设备。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "获取可信设备列表",
+                "responses": {
+                    "200": {
+                        "description": "成功，返回可信设备列表",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "description": "注销当前用户全部可信设备，用于设备丢失或异常登录后的止损。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "注销全部可信设备",
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/auth/devices/{id}": {
+            "delete": {
+                "description": "按 ID 注销当前用户的一个可信设备，注销后该设备登录需重新提供 TOTP。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "注销可信设备",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "设备 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回已注销设备 ID",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（设备 ID 非法）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
         "/auth/forgot-password": {
             "post": {
                 "description": "向指定邮箱发送 6 位数字验证码。用户不存在也返回成功，防止邮箱枚举探测。",
@@ -2393,6 +2499,10 @@
                 "phone": {
                     "description": "手机号（注册时可选收集；登录忽略）",
                     "type": "string"
+                },
+                "remember_device": {
+                    "description": "记住此设备：登录成功后签发设备令牌，后续登录携带 X-Device-Token 可跳过 TOTP（密码仍必需）",
+                    "type": "boolean"
                 },
                 "tenant_code": {
                     "description": "租户编码（开通式注册时可选；不传自动生成，仅限字母/数字/短横线/下划线）",

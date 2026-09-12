@@ -51,6 +51,22 @@ func TestLogoutRouteRequiresAccessToken(t *testing.T) {
 	}
 }
 
+func TestTrustedDeviceRoutesRequireAccessToken(t *testing.T) {
+	r := testRouter(false)
+	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), testAuthConfig(), nil, nil, config.CaptchaConfig{})
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/auth/devices"},
+		{http.MethodDelete, "/api/v1/auth/devices/1"},
+		{http.MethodDelete, "/api/v1/auth/devices"},
+	} {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, nil))
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("%s %s status = %d, want %d", tc.method, tc.path, w.Code, http.StatusUnauthorized)
+		}
+	}
+}
+
 func TestRefreshRouteStaysPublic(t *testing.T) {
 	r := testRouter(false)
 	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), testAuthConfig(), nil, nil, config.CaptchaConfig{})

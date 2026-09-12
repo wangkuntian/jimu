@@ -31,6 +31,9 @@ func RegisterAuthRoutes(r *gin.RouterGroup, service *application.AuthService, jw
 		protected.POST("/mfa/enable", middleware.ValidateJSON(&enableTOTPRequest{}), handler.EnableTOTP)
 		protected.POST("/mfa/disable", middleware.ValidateJSON(&disableTOTPRequest{}), handler.DisableTOTP)
 		protected.GET("/login-history", middleware.ValidateQuery(&pagination.Pagination{}), handler.LoginHistory)
+		protected.GET("/devices", handler.ListDevices)
+		protected.DELETE("/devices", handler.RevokeAllDevices)
+		protected.DELETE("/devices/:id", handler.RevokeDevice)
 	}
 }
 

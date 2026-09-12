@@ -354,6 +354,8 @@ type RetentionConfig struct {
 	DeadLetterDays  int    `mapstructure:"dead_letter_days"`  // 已处理死信保留天数
 	OutboxEventDays int    `mapstructure:"outbox_event_days"` // 已发布 outbox 事件保留天数
 	ImportJobDays   int    `mapstructure:"import_job_days"`   // 已结束导入任务保留天数
+	// 失效可信设备的保留天数（按 expires_at 计，留出审计窗口后清理）
+	TrustedDeviceDays int `mapstructure:"trusted_device_days"`
 }
 
 // RateLimitConfig 限流维度配置（全局 IP 令牌桶见 server.rate_limit_*）。
@@ -419,6 +421,7 @@ type AuthConfig struct {
 	RegisterRateWindowSec int                `mapstructure:"register_rate_window_sec"`
 	ResetCodeTTLMin       int                `mapstructure:"reset_code_ttl_min"`     // 密码重置验证码有效期（分钟）
 	PasswordHistoryCount  int                `mapstructure:"password_history_count"` // 防复用：检查最近 N 个历史密码（0=关闭）
+	TrustedDeviceDays     int                `mapstructure:"trusted_device_days"`    // 可信设备有效期（天，0=关闭「记住此设备」）
 	Provisioning          ProvisioningConfig `mapstructure:"provisioning"`           // 开通式注册（注册 = 开通新租户）
 }
 
