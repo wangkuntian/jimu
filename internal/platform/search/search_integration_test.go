@@ -53,3 +53,45 @@ func TestMysqlSearcherIntegration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, res)
 }
+
+// TestMysqlSearcherCJKFallbackIntegration 验证默认分词器下中文查询也能命中（LIKE 回退路径）
+func TestMysqlSearcherCJKFallbackIntegration(t *testing.T) {
+	tdb := testutil.SkipUnlessMysql(t)
+	defer tdb.Close()
+
+	require.NoError(t, tdb.Migrate(), "goose 迁移应成功")
+	require.NoError(t, tdb.Truncate("search_documents"))
+
+	s, err := New(tdb.DB)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	require.NoError(t, s.Index(ctx,
+		Document{TenantID: 1, Type: "article", DocID: 11, Title: "数据库调优", Body: "索引与查询计划"},
+		Document{TenantID: 1, Type: "article", DocID: 12, Title: "golang backend", Body: "结构化日志"},
+		Document{TenantID: 2, Type: "article", DocID: 13, Title: "数据库分片", Body: "其他租户"},
+	))
+
+	// 中文子串命中且标题优先
+	res, err := s.Search(ctx, 1, "数据库", 10)
+	require.NoError(t, err)
+	require.Len(t, res, 1)
+	assert.Equal(t, uint64(11), res[0].DocID)
+	assert.Greater(t, res[0].Score, float64(0))
+
+	// 租户隔离
+	res, err = s.Search(ctx, 0, "数据库", 10)
+	require.NoError(t, err)
+	assert.Len(t, res, 2)
+
+	// 正文中的中文也能命中
+	res, err = s.Search(ctx, 1, "结构化", 10)
+	require.NoError(t, err)
+	require.Len(t, res, 1)
+	assert.Equal(t, uint64(12), res[0].DocID)
+
+	// 通配符按字面量处理，不应扩大匹配范围
+	res, err = s.Search(ctx, 1, "%", 10)
+	require.NoError(t, err)
+	assert.Empty(t, res)
+}

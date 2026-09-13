@@ -42,18 +42,15 @@ func (s *mysqlSearcher) Search(ctx context.Context, tenantID uint64, query strin
 	if query == "" {
 		return nil, nil
 	}
+	// CJK 查询：FULLTEXT 默认分词器按词边界切词，中文/日文/韩文无法命中，
+	// 退化为 LIKE 子串匹配（走不了全文索引，注意大表开销；启用 ngram 解析器后可去掉回退）
+	if containsCJK(query) {
+		return s.searchLike(ctx, tenantID, query, limit)
+	}
 	// MATCH ... AGAINST 以相关度分数排序（InnoDB 自然语言模式）
 	const match = "MATCH(title, body) AGAINST (? IN NATURAL LANGUAGE MODE)"
 
-	var rows []struct {
-		ID       uint64
-		TenantID uint64
-		DocType  string
-		DocID    uint64
-		Title    string
-		Body     string
-		Score    float64
-	}
+	var rows []rowWithScore
 
 	q := s.db.WithContext(ctx).Table("search_documents").
 		Select("id, tenant_id, doc_type, doc_id, title, body, "+match+" AS score", query).
@@ -67,19 +64,24 @@ func (s *mysqlSearcher) Search(ctx context.Context, tenantID uint64, query strin
 		return nil, err
 	}
 
-	results := make([]Result, 0, len(rows))
-	for _, r := range rows {
-		results = append(results, Result{
-			Document: Document{
-				ID:       r.ID,
-				TenantID: r.TenantID,
-				Type:     r.DocType,
-				DocID:    r.DocID,
-				Title:    r.Title,
-				Body:     r.Body,
-			},
-			Score: r.Score,
-		})
+	return toResults(rows), nil
+}
+
+// searchLike CJK 回退路径：标题命中权重高于正文，按分值倒序返回
+func (s *mysqlSearcher) searchLike(ctx context.Context, tenantID uint64, query string, limit int) ([]Result, error) {
+	pattern := likePattern(query)
+	var rows []rowWithScore
+
+	q := s.db.WithContext(ctx).Table("search_documents").
+		Select("id, tenant_id, doc_type, doc_id, title, body, CASE WHEN title LIKE ? ESCAPE '"+likeEscapeChar+"' THEN "+itoa(cjkFallbackScore)+" ELSE 1 END AS score", pattern).
+		Where("title LIKE ? ESCAPE '"+likeEscapeChar+"' OR body LIKE ? ESCAPE '"+likeEscapeChar+"'", pattern, pattern).
+		Order("score DESC, id ASC").
+		Limit(normalizeLimit(limit))
+	if tenantID != 0 {
+		q = q.Where("tenant_id = ?", tenantID)
 	}
-	return results, nil
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return toResults(rows), nil
 }

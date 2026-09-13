@@ -100,6 +100,58 @@ func toRows(docs []Document) ([]searchDocumentRow, error) {
 	return rows, nil
 }
 
+// rowWithScore 检索结果行（score 由各方言的排序表达式计算）
+type rowWithScore struct {
+	ID       uint64
+	TenantID uint64
+	DocType  string
+	DocID    uint64
+	Title    string
+	Body     string
+	Score    float64
+}
+
+func toResults(rows []rowWithScore) []Result {
+	results := make([]Result, 0, len(rows))
+	for _, r := range rows {
+		results = append(results, Result{
+			Document: Document{
+				ID:       r.ID,
+				TenantID: r.TenantID,
+				Type:     r.DocType,
+				DocID:    r.DocID,
+				Title:    r.Title,
+				Body:     r.Body,
+			},
+			Score: r.Score,
+		})
+	}
+	return results
+}
+
+// itoa 小整数转字符串（仅用于拼接固定分值，避免引入 strconv 依赖噪音）
+func itoa(v int) string {
+	if v == 0 {
+		return "0"
+	}
+	neg := v < 0
+	if neg {
+		v = -v
+	}
+	var buf [20]byte
+	i := len(buf)
+	for v > 0 {
+		i--
+		buf[i] = byte('0' + v%10)
+		v /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
+}
+
 func normalizeLimit(limit int) int {
 	if limit <= 0 {
 		return defaultLimit

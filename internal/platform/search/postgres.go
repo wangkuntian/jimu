@@ -46,17 +46,15 @@ func (s *postgresSearcher) Search(ctx context.Context, tenantID uint64, query st
 	if query == "" {
 		return nil, nil
 	}
+	// CJK 查询：tsvector 的 simple 分词器按词边界切词，中文/日文/韩文无法命中，
+	// 退化为 ILIKE 子串匹配（走不了 GIN 索引，注意大表开销；安装 zhparser 后可去掉回退）
+	if containsCJK(query) {
+		return s.searchLike(ctx, tenantID, query, limit)
+	}
+
 	rank := "ts_rank(" + tsvExpr + ", plainto_tsquery('simple', ?))"
 
-	var rows []struct {
-		ID       uint64
-		TenantID uint64
-		DocType  string
-		DocID    uint64
-		Title    string
-		Body     string
-		Score    float64
-	}
+	var rows []rowWithScore
 
 	q := s.db.WithContext(ctx).Table("search_documents").
 		Select("id, tenant_id, doc_type, doc_id, title, body, "+rank+" AS score", query).
@@ -70,19 +68,24 @@ func (s *postgresSearcher) Search(ctx context.Context, tenantID uint64, query st
 		return nil, err
 	}
 
-	results := make([]Result, 0, len(rows))
-	for _, r := range rows {
-		results = append(results, Result{
-			Document: Document{
-				ID:       r.ID,
-				TenantID: r.TenantID,
-				Type:     r.DocType,
-				DocID:    r.DocID,
-				Title:    r.Title,
-				Body:     r.Body,
-			},
-			Score: r.Score,
-		})
+	return toResults(rows), nil
+}
+
+// searchLike CJK 回退路径：标题命中权重高于正文，按分值倒序返回
+func (s *postgresSearcher) searchLike(ctx context.Context, tenantID uint64, query string, limit int) ([]Result, error) {
+	pattern := likePattern(query)
+	var rows []rowWithScore
+
+	q := s.db.WithContext(ctx).Table("search_documents").
+		Select("id, tenant_id, doc_type, doc_id, title, body, CASE WHEN title ILIKE ? ESCAPE '"+likeEscapeChar+"' THEN "+itoa(cjkFallbackScore)+" ELSE 1 END AS score", pattern).
+		Where("title ILIKE ? ESCAPE '"+likeEscapeChar+"' OR body ILIKE ? ESCAPE '"+likeEscapeChar+"'", pattern, pattern).
+		Order("score DESC, id ASC").
+		Limit(normalizeLimit(limit))
+	if tenantID != 0 {
+		q = q.Where("tenant_id = ?", tenantID)
 	}
-	return results, nil
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return toResults(rows), nil
 }
