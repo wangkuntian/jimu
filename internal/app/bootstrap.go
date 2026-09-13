@@ -164,6 +164,13 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			time.Duration(cfg.RateLimit.Tenant.WindowSec)*time.Second,
 		))
 	}
+	// 幂等中间件：挂在认证/租户注入之后，键按租户+用户+方法+路径绑定
+	if container.Redis != nil && cfg.Security.IdempotencyEnabled {
+		extraProtected = append(extraProtected, middleware.IdempotencyMiddleware(
+			container.Redis,
+			time.Duration(cfg.Security.IdempotencyTTLSec)*time.Second,
+		))
+	}
 	if err := registerHTTP(router, container.Logger, extraProtected, modules...); err != nil {
 		return nil, err
 	}

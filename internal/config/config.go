@@ -237,6 +237,11 @@ type SecurityConfig struct {
 	IPAllowlist []string `mapstructure:"ip_allowlist"`
 	// 管理端 IP 白名单（/api/v1/admin）。为空表示沿用 IPAllowlist；同样非空时仅放行列表内来源。
 	AdminIPAllowlist []string `mapstructure:"admin_ip_allowlist"`
+
+	// 幂等中间件：客户端携带 Idempotency-Key 时，同键重复请求返回首次结果（默认启用）。
+	IdempotencyEnabled bool `mapstructure:"idempotency_enabled"`
+	// 幂等记录保留时长（秒），0 用默认 24 小时
+	IdempotencyTTLSec int `mapstructure:"idempotency_ttl_sec"`
 }
 
 // DefaultSecurityConfig 返回默认安全配置

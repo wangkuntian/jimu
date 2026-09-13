@@ -256,6 +256,9 @@ security:
   # 管理端（/api/v1/admin）IP 白名单；为空表示沿用 ip_allowlist
   admin_ip_allowlist: []
 
+  # 幂等中间件：客户端带 Idempotency-Key 时，同键重复请求返回首次结果（5xx 不缓存，可安全重试）
+  idempotency_enabled: true
+  idempotency_ttl_sec: 86400     # 幂等记录保留时长（秒），默认 24 小时
 # OpenTelemetry 可观测性（OpenObserve：统一 日志/指标/追踪）
 # 启用后 tracing + metrics + logs 均经 OTLP gRPC 推送到 endpoint。
 # 本地起 openobserve（make compose-observability）后置 enabled: true 即可。

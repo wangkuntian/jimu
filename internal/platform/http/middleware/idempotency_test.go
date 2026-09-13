@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -123,4 +125,143 @@ func TestIdempotencyCachedResponseSerializes(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(raw), &cached))
 	assert.Equal(t, http.StatusOK, cached.Status)
 	assert.NotEmpty(t, cached.Body)
+}
+
+func TestIdempotencyRejectsConcurrentDuplicate(t *testing.T) {
+	rdb := newRedisForTest(t)
+
+	gin.SetMode(gin.TestMode)
+	release := make(chan struct{})
+	started := make(chan struct{})
+	var calls atomic.Int32
+	r := gin.New()
+	r.Use(IdempotencyMiddleware(rdb, time.Minute))
+	r.POST("/pay", func(c *gin.Context) {
+		if calls.Add(1) == 1 {
+			close(started)
+		}
+		<-release
+		c.JSON(http.StatusOK, gin.H{"result": "ok"})
+	})
+
+	go func() {
+		req := httptest.NewRequest(http.MethodPost, "/pay", nil)
+		req.Header.Set("Idempotency-Key", testIDKey)
+		r.ServeHTTP(httptest.NewRecorder(), req)
+	}()
+	<-started // 首个请求已进入 handler 且占位已写入
+
+	second := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/pay", nil)
+	req.Header.Set("Idempotency-Key", testIDKey)
+	r.ServeHTTP(second, req)
+	close(release)
+
+	assert.Equal(t, http.StatusConflict, second.Code, "同键并发请求应返回 409 而不是重复执行")
+	assert.Equal(t, int32(1), calls.Load())
+}
+
+func TestIdempotencyReplayMarksHeader(t *testing.T) {
+	rdb := newRedisForTest(t)
+	r, _ := idempotencyRouter(rdb)
+
+	first := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/pay", nil)
+	req.Header.Set("Idempotency-Key", testIDKey)
+	r.ServeHTTP(first, req)
+	assert.Empty(t, first.Header().Get(IdempotencyReplayedHeader))
+
+	second := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/pay", nil)
+	req2.Header.Set("Idempotency-Key", testIDKey)
+	r.ServeHTTP(second, req2)
+	assert.Equal(t, "true", second.Header().Get(IdempotencyReplayedHeader), "重放应带标记")
+}
+
+func TestIdempotencyScopesKeyByPathAndUser(t *testing.T) {
+	rdb := newRedisForTest(t)
+
+	gin.SetMode(gin.TestMode)
+	var calls atomic.Int32
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		if v := c.GetHeader("X-Test-User"); v != "" {
+			id, _ := strconv.ParseUint(v, 10, 64)
+			c.Set("user_id", id)
+		}
+		c.Next()
+	})
+	r.Use(IdempotencyMiddleware(rdb, time.Minute))
+	handler := func(c *gin.Context) {
+		calls.Add(1)
+		c.JSON(http.StatusOK, gin.H{"n": calls.Load()})
+	}
+	r.POST("/pay", handler)
+	r.POST("/refund", handler)
+
+	// 同键不同路径：各自执行
+	for _, path := range []string{"/pay", "/refund"} {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req.Header.Set("Idempotency-Key", testIDKey)
+		r.ServeHTTP(httptest.NewRecorder(), req)
+	}
+	assert.Equal(t, int32(2), calls.Load(), "不同路径不应共享幂等记录")
+
+	// 同键同路径不同用户：各自执行
+	for _, user := range []string{"1", "2"} {
+		req := httptest.NewRequest(http.MethodPost, "/pay", nil)
+		req.Header.Set("Idempotency-Key", testIDKey)
+		req.Header.Set("X-Test-User", user)
+		r.ServeHTTP(httptest.NewRecorder(), req)
+	}
+	assert.Equal(t, int32(4), calls.Load(), "不同用户不应共享幂等记录")
+}
+
+func TestIdempotencyDoesNotCacheOversizedBody(t *testing.T) {
+	rdb := newRedisForTest(t)
+
+	gin.SetMode(gin.TestMode)
+	var calls atomic.Int32
+	r := gin.New()
+	r.Use(IdempotencyMiddleware(rdb, time.Minute))
+	r.POST("/big", func(c *gin.Context) {
+		calls.Add(1)
+		c.String(http.StatusOK, strings.Repeat("x", idempotencyMaxBody+1))
+	})
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/big", nil)
+		req.Header.Set("Idempotency-Key", testIDKey)
+		r.ServeHTTP(httptest.NewRecorder(), req)
+	}
+	assert.Equal(t, int32(2), calls.Load(), "超过缓存上限的响应不应被缓存")
+}
+
+func TestIdempotencyRetryAllowedAfterServerError(t *testing.T) {
+	rdb := newRedisForTest(t)
+
+	gin.SetMode(gin.TestMode)
+	var calls atomic.Int32
+	r := gin.New()
+	r.Use(IdempotencyMiddleware(rdb, time.Minute))
+	r.POST("/flaky", func(c *gin.Context) {
+		if calls.Add(1) == 1 {
+			c.JSON(http.StatusInternalServerError, gin.H{"e": "boom"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"result": "ok"})
+	})
+
+	first := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/flaky", nil)
+	req.Header.Set("Idempotency-Key", testIDKey)
+	r.ServeHTTP(first, req)
+	assert.Equal(t, http.StatusInternalServerError, first.Code)
+
+	second := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/flaky", nil)
+	req2.Header.Set("Idempotency-Key", testIDKey)
+	r.ServeHTTP(second, req2)
+	assert.Equal(t, http.StatusOK, second.Code, "5xx 释放占位后允许同键重试")
+	assert.Equal(t, int32(2), calls.Load())
 }
