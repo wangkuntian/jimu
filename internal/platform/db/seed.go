@@ -162,6 +162,7 @@ func basePermissions() []domain.Permission {
 		{Name: "权限删除", Resource: "/api/v1/permissions/*", Action: "DELETE"},
 		{Name: "审计列表", Resource: "/api/v1/audits", Action: "GET"},
 		{Name: "审计详情", Resource: "/api/v1/audits/*", Action: "GET"},
+		{Name: "审计导出", Resource: "/api/v1/audits/export", Action: "GET"},
 		{Name: "租户列表", Resource: "/api/v1/tenants", Action: "GET"},
 		{Name: "租户创建", Resource: "/api/v1/tenants", Action: "POST"},
 		{Name: "租户详情", Resource: "/api/v1/tenants/*", Action: "GET"},

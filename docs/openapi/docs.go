@@ -147,6 +147,63 @@ const docTemplate = `{
                 ]
             }
         },
+        "/audits/export": {
+            "get": {
+                "description": "按时间范围流式导出当前租户的审计日志（平台级视角导出全部租户）。format=csv（默认，含 UTF-8 BOM）或 json（NDJSON，每行一个对象）；单次最多 50000 条、跨度最多 90 天，超过返回参数错误，请缩小时间范围。",
+                "produces": [
+                    "text/csv"
+                ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "导出审计日志",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "导出格式：csv（默认）或 json",
+                        "name": "format",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "起始时间（RFC3339，默认 7 天前）",
+                        "name": "start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束时间（RFC3339，默认当前）",
+                        "name": "end",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "导出文件内容",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（格式、时间范围或条数超限）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
         "/audits/verify": {
             "get": {
                 "description": "按 ID 升序重算审计日志的链式哈希（HMAC-SHA256/SHA-256）并检查前后衔接，用于发现篡改或删除。返回参与校验的条目数、未哈希的存量条目数、是否完整、首个异常条目与原因；单租户全量校验时还会比对链头检测末尾条目被删除。",

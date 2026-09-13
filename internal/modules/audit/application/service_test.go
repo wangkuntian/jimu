@@ -1,8 +1,12 @@
 package application
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
+	"encoding/json"
 	stderrors "errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,6 +82,22 @@ func (r *fakeAuditRepository) ListForVerify(context.Context, uint64, uint64, uin
 
 func (r *fakeAuditRepository) ChainHead(context.Context, uint64) (string, error) {
 	return r.headHash, nil
+}
+
+func (r *fakeAuditRepository) CountRange(context.Context, uint64, time.Time, time.Time) (int64, error) {
+	return r.total, r.listErr
+}
+
+func (r *fakeAuditRepository) ListRange(_ context.Context, _ uint64, _, _ time.Time, offset, limit int) ([]domain.AuditLog, error) {
+	// 模拟分页：按 offset/limit 切分 logs
+	if offset >= len(r.logs) {
+		return nil, r.listErr
+	}
+	end := offset + limit
+	if end > len(r.logs) {
+		end = len(r.logs)
+	}
+	return r.logs[offset:end], r.listErr
 }
 
 func auditAppCode(err error) int {
@@ -170,4 +190,107 @@ func TestAuditServiceVerifyDetectsTailTruncation(t *testing.T) {
 	assert.False(t, res.TailIntact, "应检测到链尾被截断")
 	assert.Equal(t, entries[1].EntryHash, res.HeadHash)
 	assert.Equal(t, entries[0].EntryHash, res.LastHash)
+}
+
+func TestAuditExportCSV(t *testing.T) {
+	repo := &fakeAuditRepository{
+		logs: []domain.AuditLog{
+			{ID: 1, TenantID: 1, Username: "alice", Action: "login", Path: "/api/v1/auth/login", Status: 200,
+				CreatedAt: time.Unix(1700000000, 0), PrevHash: "", EntryHash: "h1"},
+			{ID: 2, TenantID: 1, Username: "bob", Action: "create_user", Path: "/api/v1/admin/users", Status: 201,
+				CreatedAt: time.Unix(1700000010, 0), PrevHash: "h1", EntryHash: "h2"},
+		},
+		total: 2,
+	}
+	svc := NewAuditService(repo, "secret")
+
+	var buf bytes.Buffer
+	summary, err := svc.Export(context.Background(), ExportOptions{
+		Format: ExportFormatCSV,
+		Start:  time.Unix(1699990000, 0),
+		End:    time.Unix(1700001000, 0),
+	}, &buf)
+	if err != nil {
+		t.Fatalf("Export() error: %v", err)
+	}
+	if summary.Rows != 2 || summary.Format != ExportFormatCSV {
+		t.Fatalf("summary = %+v", summary)
+	}
+
+	rows, err := csv.NewReader(&buf).ReadAll()
+	if err != nil {
+		t.Fatalf("csv parse: %v", err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("csv rows = %d, want header + 2", len(rows))
+	}
+	if rows[0][0] != "id" || rows[0][5] != "action" {
+		t.Fatalf("unexpected header: %v", rows[0])
+	}
+	if rows[1][4] != "alice" || rows[2][5] != "create_user" {
+		t.Fatalf("unexpected rows: %v", rows)
+	}
+	if !strings.HasPrefix(rows[1][1], "2023-11-14T") {
+		t.Fatalf("created_at 应为 UTC RFC3339: %v", rows[1][1])
+	}
+}
+
+func TestAuditExportJSON(t *testing.T) {
+	repo := &fakeAuditRepository{
+		logs:  []domain.AuditLog{{ID: 1, TenantID: 1, Username: "alice", Action: "login", CreatedAt: time.Unix(1700000000, 0)}},
+		total: 1,
+	}
+	svc := NewAuditService(repo, "secret")
+
+	var buf bytes.Buffer
+	summary, err := svc.Export(context.Background(), ExportOptions{Format: ExportFormatJSON}, &buf)
+	if err != nil {
+		t.Fatalf("Export() error: %v", err)
+	}
+	if summary.Rows != 1 {
+		t.Fatalf("rows = %d", summary.Rows)
+	}
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("ndjson lines = %d", len(lines))
+	}
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &entry); err != nil {
+		t.Fatalf("ndjson parse: %v", err)
+	}
+	if entry["username"] != "alice" {
+		t.Fatalf("entry = %v", entry)
+	}
+}
+
+func TestAuditExportRejectsInvalidOptions(t *testing.T) {
+	svc := NewAuditService(&fakeAuditRepository{total: 1}, "secret")
+	ctx := context.Background()
+
+	tests := []struct {
+		name string
+		opts ExportOptions
+	}{
+		{"未知格式", ExportOptions{Format: "xml"}},
+		{"开始晚于结束", ExportOptions{Start: time.Unix(2000000000, 0), End: time.Unix(1000000000, 0)}},
+		{"跨度过大", ExportOptions{Start: time.Now().AddDate(0, 0, -120), End: time.Now()}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := svc.Export(ctx, tt.opts, &bytes.Buffer{}); auditAppCode(err) != apperrors.CodeInvalidParam {
+				t.Fatalf("code = %d, want %d", auditAppCode(err), apperrors.CodeInvalidParam)
+			}
+		})
+	}
+
+	// 条数超上限
+	big := NewAuditService(&fakeAuditRepository{total: exportMaxRows + 1}, "secret")
+	if _, err := big.Export(ctx, ExportOptions{}, &bytes.Buffer{}); auditAppCode(err) != apperrors.CodeInvalidParam {
+		t.Fatalf("超出条目上限应返回参数错误, got %d", auditAppCode(err))
+	}
+
+	// writer 缺失
+	if _, err := svc.Export(ctx, ExportOptions{}, nil); auditAppCode(err) != apperrors.CodeInternalError {
+		t.Fatalf("缺少 writer 应返回内部错误, got %d", auditAppCode(err))
+	}
 }

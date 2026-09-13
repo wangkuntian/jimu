@@ -1,7 +1,9 @@
 package interfaces
 
 import (
+	"fmt"
 	"strconv"
+	"time"
 
 	"jimu/internal/modules/audit/application"
 	"jimu/internal/platform/tenant"
@@ -43,6 +45,72 @@ func (h *AuditHandler) Verify(c *gin.Context) {
 		return
 	}
 	response.OK(c, result)
+}
+
+// Export godoc
+// @Summary      导出审计日志
+// @Description  按时间范围流式导出当前租户的审计日志（平台级视角导出全部租户）。format=csv（默认，含 UTF-8 BOM）或 json（NDJSON，每行一个对象）；单次最多 50000 条、跨度最多 90 天，超过返回参数错误，请缩小时间范围。
+// @Tags         审计日志
+// @Produce      text/csv
+// @Security     BearerAuth
+// @Param        format  query     string  false  "导出格式：csv（默认）或 json"
+// @Param        start   query     string  false  "起始时间（RFC3339，默认 7 天前）"
+// @Param        end     query     string  false  "结束时间（RFC3339，默认当前）"
+// @Success      200     {string}  string  "导出文件内容"
+// @Failure      400     {object}  contract.ErrorResponse  "参数错误（格式、时间范围或条数超限）"
+// @Failure      500     {object}  contract.ErrorResponse  "服务器内部错误"
+// @Router       /audits/export [get]
+func (h *AuditHandler) Export(c *gin.Context) {
+	opts := application.ExportOptions{Format: c.Query("format")}
+	if raw := c.Query("start"); raw != "" {
+		start, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			response.Fail(c, errors.New(errors.CodeInvalidParam, "start must be RFC3339"))
+			return
+		}
+		opts.Start = start
+	}
+	if raw := c.Query("end"); raw != "" {
+		end, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			response.Fail(c, errors.New(errors.CodeInvalidParam, "end must be RFC3339"))
+			return
+		}
+		opts.End = end
+	}
+
+	// 先算出文件名与 Content-Type：数据一旦开始写入就不能再改响应头
+	contentType := "text/csv; charset=utf-8"
+	if opts.Format == application.ExportFormatJSON {
+		contentType = "application/x-ndjson; charset=utf-8"
+	}
+	filename := fmt.Sprintf("audits_%s.%s", time.Now().UTC().Format("20060102T150405Z"), exportExtension(opts.Format))
+	c.Header("Content-Type", contentType)
+	c.Header("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	if opts.Format == application.ExportFormatCSV {
+		// BOM：让 Excel 正确识别 UTF-8 中文
+		_, _ = c.Writer.Write([]byte{0xEF, 0xBB, 0xBF})
+	}
+
+	summary, err := h.service.Export(c.Request.Context(), opts, c.Writer)
+	if err != nil {
+		// 已经开始流式写出时无法改状态码，记录日志即可
+		if !c.Writer.Written() {
+			response.Fail(c, err)
+			return
+		}
+		c.Error(err) //nolint:errcheck // gin 错误收集，无返回值
+		return
+	}
+	c.Header("X-Export-Rows", strconv.FormatInt(summary.Rows, 10))
+}
+
+// exportExtension 导出文件扩展名
+func exportExtension(format string) string {
+	if format == application.ExportFormatJSON {
+		return "ndjson"
+	}
+	return "csv"
 }
 
 // List godoc

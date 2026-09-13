@@ -47,4 +47,8 @@ type AuditRepository interface {
 	ListForVerify(ctx context.Context, tenantID uint64, fromID, toID uint64, limit int) ([]AuditLog, error)
 	// ChainHead 返回该租户审计链最新哈希；无记录时返回空串
 	ChainHead(ctx context.Context, tenantID uint64) (string, error)
+	// CountRange 统计时间范围内（created_at >= start 且 < end）的条目数，用于导出前限流校验
+	CountRange(ctx context.Context, tenantID uint64, start, end time.Time) (int64, error)
+	// ListRange 按时间范围分页返回条目（id 升序，便于稳定分批导出）
+	ListRange(ctx context.Context, tenantID uint64, start, end time.Time, offset, limit int) ([]AuditLog, error)
 }

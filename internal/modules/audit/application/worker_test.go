@@ -49,6 +49,14 @@ func (r *fakeBatchRepository) ListForVerify(context.Context, uint64, uint64, uin
 
 func (r *fakeBatchRepository) ChainHead(context.Context, uint64) (string, error) { return "", nil }
 
+func (r *fakeBatchRepository) CountRange(context.Context, uint64, time.Time, time.Time) (int64, error) {
+	return 0, nil
+}
+
+func (r *fakeBatchRepository) ListRange(context.Context, uint64, time.Time, time.Time, int, int) ([]domain.AuditLog, error) {
+	return nil, nil
+}
+
 func testWorker(repo domain.AuditRepository, queueSize, batchSize int, flush time.Duration) *Worker {
 	return NewWorker(repo, config.AuditConfig{
 		QueueSize:       queueSize,

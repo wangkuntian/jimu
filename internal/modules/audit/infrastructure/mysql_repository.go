@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"jimu/internal/modules/audit/domain"
 
@@ -59,6 +60,36 @@ func (r *mysqlAuditRepository) FindByID(ctx context.Context, id uint64) (*domain
 }
 
 // List 分页查询审计日志。tenantID 非 0 时仅返回该租户的日志（0=平台级视角，不过滤）。
+// CountRange 统计时间范围内的条目数（tenantID=0 表示平台级，不过滤租户）
+func (r *mysqlAuditRepository) CountRange(ctx context.Context, tenantID uint64, start, end time.Time) (int64, error) {
+	var total int64
+	db := r.db.WithContext(ctx).Model(&domain.AuditLog{}).
+		Where("created_at >= ? AND created_at < ?", start, end)
+	if tenantID != 0 {
+		db = db.Where("tenant_id = ?", tenantID)
+	}
+	err := db.Count(&total).Error
+	return total, err
+}
+
+// ListRange 按时间范围分页返回条目（id 升序，保证分批导出稳定）
+func (r *mysqlAuditRepository) ListRange(ctx context.Context, tenantID uint64, start, end time.Time, offset, limit int) ([]domain.AuditLog, error) {
+	var logs []domain.AuditLog
+	db := r.db.WithContext(ctx).Model(&domain.AuditLog{}).
+		Where("created_at >= ? AND created_at < ?", start, end)
+	if tenantID != 0 {
+		db = db.Where("tenant_id = ?", tenantID)
+	}
+	err := db.Order("id ASC").Offset(offset).Limit(limit).Find(&logs).Error
+	if err != nil {
+		return nil, err
+	}
+	for i := range logs {
+		deserializeChanges(&logs[i])
+	}
+	return logs, nil
+}
+
 func (r *mysqlAuditRepository) List(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]domain.AuditLog, int64, error) {
 	var logs []domain.AuditLog
 	var total int64
