@@ -27,7 +27,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **事件总线** — 内存实现，支持同步/异步发布订阅
 - **多队列支持** — Redis/Kafka/RabbitMQ 统一队列接口，`queue.type` 切换；三者均为 at-least-once：Redis（BLMove 原子消费 + 可见性超时重入队 + 延迟队列）、RabbitMQ（autoAck=false + requeue + 断连重投）、Kafka（FetchMessage 不自动提交 + Ack 显式 CommitMessages，崩溃重启重投未提交区间）。消费幂等：已成功/死信任务重复投递时 Ack 跳过，避免业务副作用重复执行（outbox 事件无状态机，不做去重）。失败任务按指数退避延迟重投（Redis 延迟队列），耗尽重试入死信表（`dead_letters`，可经管理 API 查询与标记解决）。任务归属提交者租户（`jobs.tenant_id`），消费时恢复该租户到执行上下文，管理端任务/死信接口按租户隔离
 - **事务封装** — 统一的事务管理 helper
-- **审计日志** — 有界队列批量写入，匿名请求安全处理；**防篡改哈希链**：每条审计按租户写入 `prev_hash`/`entry_hash`（`audit.hash_secret` 配置时用 HMAC-SHA256，否则 SHA-256），写入时锁定链头行保证多实例全序；`GET /api/v1/audits/verify` 可按范围重算校验，检测内容篡改、链接断裂与链尾截断
+- **审计日志** — 有界队列批量写入，匿名请求安全处理；**防篡改哈希链**：每条审计按租户写入 `prev_hash`/`entry_hash`（`audit.hash_secret` 配置时用 HMAC-SHA256，否则 SHA-256），写入时锁定链头行保证多实例全序；`GET /api/v1/audits/verify` 可按范围重算校验，检测内容篡改、链接断裂与链尾截断；`GET /api/v1/audits/export` 按时间范围流式导出 CSV（含 BOM，Excel 可直接打开）或 NDJSON，单次上限 5 万条、跨度 90 天
 - **管理端点** — 独立 management server 暴露健康检查、metrics 和可选 pprof
 - **管理 API** — 系统状态、在线用户、强制下线、错误码文档
 - **脚手架** — Cobra CLI 一键生成完整模块骨架
@@ -39,7 +39,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **上传安全** — 文件大小限制 + magic-byte 嗅探覆盖可伪造的 Content-Type 头 + MIME 白名单；可选 ClamAV 病毒扫描（`upload.clamav.enabled`，stdlib 实现 INSTREAM 协议，落库前同步扫描，fail-closed：不干净或扫描不可达均拒绝落库）
 - **数据导入/导出** — CSV/Excel 模板解析、校验与导入/导出（`internal/platform/importer` / `internal/platform/exporter`）；通用 importer 保留 `Importer.Import`，通过可选逐行 `RowSink` 注入持久化，未配置时明确报错，业务应用负责事务落库，导出结果可被导入器回读验证；管理端用户导入按操作者所在租户归属（无租户上下文时归默认租户），不产生未归属数据
 - **历史数据保留** — `platform/db` 保留服务按表分批硬删除过期历史数据（`audit_logs`/`jobs`/`job_history`/`dead_letters`/`outbox_events`/`import_jobs`），挂在定时任务上（`retention.enabled`，默认关闭）；只清理终态记录（已发布事件、已处理死信、已结束任务），指标 `jimu_retention_deleted_total`
-- **全文检索** — `platform/search` 统一接口（`Index`/`Delete`/`Search`）+ 公共索引表 `search_documents`：MySQL 走 FULLTEXT（`MATCH ... AGAINST`），PostgreSQL 走 `tsvector` 表达式 GIN 索引；按 `tenant_id` 隔离，`(tenant_id, doc_type, doc_id)` 唯一保证幂等覆盖。中文分词需数据库侧扩展（MySQL ngram / PG zhparser）
+- **全文检索** — `platform/search` 统一接口（`Index`/`Delete`/`Search`）+ 公共索引表 `search_documents`：MySQL 走 FULLTEXT（`MATCH ... AGAINST`），PostgreSQL 走 `tsvector` 表达式 GIN 索引；按 `tenant_id` 隔离，`(tenant_id, doc_type, doc_id)` 唯一保证幂等覆盖。**CJK 查询自动回退**：查询含中文/日文/韩文时改用 LIKE/ILIKE 子串匹配（标题命中优先），默认分词器下也能命中，代价是不走索引（大表建议启用 MySQL ngram 或 PG zhparser）；LIKE 通配符按字面量转义
 - **通知系统** — 邮件/短信(SMS)/WebSocket/Webhook 抽象；短信支持阿里云（dysmsapi SDK，`sms.enabled` 配置开关）；Webhook 回调载荷支持 HMAC-SHA256 签名（`notification.webhook.sign_secret`，附加 `X-Jimu-Timestamp`/`X-Jimu-Signature` 头，防重放）
 - **统一出站 HTTP client** — 封装 timeout + retry/backoff（仅网络错误与 5xx）+ 熔断（复用 `platform/breaker`，连续失败自动开启、冷却后探测恢复）+ 按目标 host 独立限流（令牌桶）+ OTel `traceparent` 注入（`internal/platform/httpclient`），OAuth 提供商与 Webhook 共用
 - **依赖熔断** — 统一熔断器 `internal/platform/breaker`（连续失败阈值 + 冷却后半开探测）接入三类依赖：Redis（命令/连接级 hook）、DB（gorm 语句级回调，**主库与只读副本一体生效**）、HTTP 出站（`httpclient`）；依赖不可用时快速失败而非每请求等超时；只把连接/网络类错误计为失败（Redis 未命中与业务错误、DB 慢查询超时都不触发）；指标 `jimu_breaker_open` / `jimu_breaker_rejected_total` / `jimu_breaker_trip_total`（`component` 标签区分 httpclient/redis/db）
@@ -66,6 +66,8 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **可信设备（记住此设备）** — 仅对启用 TOTP 的账号生效：登录时传 `remember_device: true`，成功后返回一次性明文 `device_token`（前缀 `jimu_dev_`，库中只存 SHA-256 哈希）；后续登录携带 `X-Device-Token` 头且不带 `totp_code` 即可跳过 TOTP，**密码仍必需**；令牌绑定签发用户（泄露也无法用于他人账号），改密与 `/auth/logout-all` 自动吊销，`GET/DELETE /auth/devices` 自助查看与注销；有效期 `auth.trusted_device_days`（默认 30，0=关闭）
 - **登录历史** — 每次登录尝试落库 `login_histories`（成功/失败/锁定 + 原因 + IP + User-Agent，账号不存在也记录用户名），`GET /api/v1/auth/login-history` 供用户自助排查异常登录；写入失败只记日志，不影响登录主流程
 - **泄露口令检查（可选）** — `auth.breach_check_enabled` 开启后，注册（含开通式注册）与重置密码会调用 Have I Been Pwned 范围查询接口：只发送口令 SHA-1 的前 5 位（k-匿名，完整口令与哈希不出网）并在本地比对结果，命中返回新增错误码 `2009`；检查服务不可用时放行（只记日志），避免外部依赖故障阻断注册与改密
+- **请求幂等** — 客户端携带 `Idempotency-Key` 时，同键重复请求返回首次结果（响应带 `Idempotency-Replayed: true`），键按「租户 + 用户 + 方法 + 路径 + 客户端键」哈希存储于 Redis；首个请求用 `SET NX` 占位，并发同键请求返回 `409/1009` 而不是各执行一次；5xx 与超过 256KB 的响应不缓存并释放占位（可用同键安全重试）；Redis 异常时放行。`security.idempotency_enabled`（默认开）/`security.idempotency_ttl_sec`（默认 24h）
+- **错误消息多语言** — `Accept-Language: zh|en` 经中间件写入上下文，响应错误消息按错误码取本地化文案（未登记的错误码保留调用方消息，不会再出现「403 + 服务器内部错误」这类矛盾响应）；测试强制校验每个错误码都已登记中英文文案
 - **错误追踪上报** — `internal/platform/reporter`：结构化错误日志（含 trace_id/span_id），HTTP `Recovery` 中间件 panic 自动上报；日志链路接入 OpenObserve 后错误自动汇聚，配合 OpenObserve 告警覆盖错误监控场景（`error_reporting.enabled` 开关）
 
 ## 技术栈
@@ -247,6 +249,10 @@ make cli
 
 # 数据初始化
 ./bin/jimu seed                     # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例）
+
+# 备份与恢复（依赖 mysqldump/pg_dump 或 mysql/psql 客户端；密码经 MYSQL_PWD/PGPASSWORD 传入）
+./bin/jimu backup  --out backup-$(date +%F).sql          # 导出为明文 SQL（--single-transaction，不锁表）
+./bin/jimu restore --in backup-2025-01-01.sql --yes      # 恢复（破坏性，必须显式 --yes）
 ```
 
 ## 项目结构
@@ -856,6 +862,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `retention.dead_letter_days` / `retention.outbox_event_days` / `retention.import_job_days` / `retention.trusted_device_days` | 已处理死信 / 已发布 outbox 事件 / 已结束导入任务 / 已失效可信设备保留天数（0=不清理） | `30` / `7` / `90` / `7` |
 | `http.tls.enabled` / `http.tls.cert_file` / `http.tls.key_file` / `http.tls.client_ca_file` | HTTP 服务端 TLS；`client_ca_file` 非空时启用 mTLS（要求并校验客户端证书） | `false` / — / — / — |
 | `grpc.tls.*` | gRPC 服务端 TLS/mTLS，字段与 `http.tls` 同构 | `false` |
+| `security.idempotency_enabled` / `security.idempotency_ttl_sec` | 幂等中间件开关 / 幂等记录保留时长（秒） | `true` / `86400` |
 | `security.ip_allowlist` / `security.admin_ip_allowlist` | 全局 / 管理端 IP 白名单（CIDR 或单个 IP，可多项）；为空表示不限制，非法值启动报错 | `[]` |
 | `auth.password_history_count` | 密码防复用：检查最近 N 个历史密码（0=关闭） | `5` |
 | `auth.trusted_device_days` | 可信设备（记住此设备）有效期天数，0=关闭该能力 | `30` |
