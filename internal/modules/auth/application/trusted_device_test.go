@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -321,4 +322,70 @@ func TestCleanupExpiredTrustedDevicesWithoutRepo(t *testing.T) {
 
 	_, err = svc.ListTrustedDevices(context.Background(), 42)
 	assert.Equal(t, apperrors.CodeInternalError, appCode(err), "未配置仓储时应报内部错误")
+}
+
+// failingTrustedDeviceRepo 让查询/写入全部报错，用于覆盖服务的异常分支
+type failingTrustedDeviceRepo struct {
+	fakeTrustedDeviceRepo
+	findErr   error
+	createErr error
+	deleteErr error
+	touchErr  error
+}
+
+func (r *failingTrustedDeviceRepo) FindByTokenHash(context.Context, string) (*authdomain.TrustedDevice, error) {
+	return nil, r.findErr
+}
+func (r *failingTrustedDeviceRepo) Create(context.Context, *authdomain.TrustedDevice) error {
+	return r.createErr
+}
+func (r *failingTrustedDeviceRepo) Delete(context.Context, uint64, uint64, uint64) error {
+	return r.deleteErr
+}
+func (r *failingTrustedDeviceRepo) Touch(context.Context, uint64, time.Time) error { return r.touchErr }
+func (r *failingTrustedDeviceRepo) ListByUser(context.Context, uint64, uint64) ([]authdomain.TrustedDevice, error) {
+	return nil, r.findErr
+}
+func (r *failingTrustedDeviceRepo) DeleteAllByUser(context.Context, uint64) error { return r.deleteErr }
+func (r *failingTrustedDeviceRepo) DeleteExpired(context.Context, time.Time) (int64, error) {
+	return 0, r.findErr
+}
+
+func TestTrustedDeviceServiceErrorBranches(t *testing.T) {
+	ctx := context.Background()
+	repo := &failingTrustedDeviceRepo{
+		findErr:   errors.New("boom"),
+		deleteErr: errors.New("boom"),
+		createErr: errors.New("boom"),
+	}
+	svc := NewAuthService(&fakeUserRepo{users: map[string]*userdomain.User{}},
+		auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30,
+		repo, WithTrustedDeviceTTL(30))
+
+	// 列表查询失败：直接透传仓储错误（响应层按 500 处理）
+	if _, err := svc.ListTrustedDevices(ctx, 42); err == nil {
+		t.Fatal("仓储报错时 ListTrustedDevices 应返回错误")
+	}
+
+	// 吊销失败 → 内部错误
+	assert.Equal(t, apperrors.CodeInternalError, appCode(svc.RevokeTrustedDevice(ctx, 42, 1)))
+	assert.Equal(t, apperrors.CodeInternalError, appCode(svc.RevokeAllTrustedDevices(ctx, 42)))
+
+	// 签发失败时返回错误，由登录流程降级为「不返回设备令牌」
+	alice := userWithPassword(t, 42, "alice", "correct", 1)
+	assert.Error(t, func() error { _, err := svc.issueTrustedDevice(ctx, alice); return err }())
+
+	// 过期设备视为不可信，并顺手清理（清理失败不影响判定）
+	expired := &failingTrustedDeviceRepo{deleteErr: errors.New("cleanup failed")}
+	expired.devices = []*authdomain.TrustedDevice{{
+		ID: 9, UserID: 42, TokenHash: hashDeviceToken("jimu_dev_expired"), ExpiresAt: time.Now().Add(-time.Minute),
+	}}
+	svc.trustedDevices = expired
+	assert.False(t, svc.isTrustedDevice(ctx, alice), "过期设备应视为不可信")
+
+	// 清理过期设备：错误透传
+	svc.trustedDevices = &failingTrustedDeviceRepo{findErr: errors.New("down")}
+	if _, err := svc.CleanupExpiredTrustedDevices(ctx); err == nil {
+		t.Fatal("清理失败应返回错误")
+	}
 }

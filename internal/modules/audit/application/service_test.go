@@ -294,3 +294,71 @@ func TestAuditExportRejectsInvalidOptions(t *testing.T) {
 		t.Fatalf("缺少 writer 应返回内部错误, got %d", auditAppCode(err))
 	}
 }
+
+// failingRangeRepo 让范围查询报错，覆盖导出的错误分支
+type failingRangeRepo struct {
+	fakeAuditRepository
+	countErr error
+	listErr2 error
+}
+
+func (r *failingRangeRepo) CountRange(context.Context, uint64, time.Time, time.Time) (int64, error) {
+	return 0, r.countErr
+}
+
+func (r *failingRangeRepo) ListRange(context.Context, uint64, time.Time, time.Time, int, int) ([]domain.AuditLog, error) {
+	return nil, r.listErr2
+}
+
+func TestAuditExportRepoErrors(t *testing.T) {
+	ctx := context.Background()
+
+	// 统计失败 → 内部错误
+	svc := NewAuditService(&failingRangeRepo{countErr: stderrors.New("count down")}, "secret")
+	if _, err := svc.Export(ctx, ExportOptions{}, &bytes.Buffer{}); auditAppCode(err) != apperrors.CodeInternalError {
+		t.Fatalf("code = %d, want %d", auditAppCode(err), apperrors.CodeInternalError)
+	}
+
+	// 分批读取失败 → 内部错误
+	svc = NewAuditService(&failingRangeRepo{listErr2: stderrors.New("read down")}, "secret")
+	if _, err := svc.Export(ctx, ExportOptions{}, &bytes.Buffer{}); auditAppCode(err) != apperrors.CodeInternalError {
+		t.Fatalf("code = %d, want %d", auditAppCode(err), apperrors.CodeInternalError)
+	}
+}
+
+// failingWriter 让写出失败，覆盖导出时的写错误分支
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, stderrors.New("write down") }
+
+func TestAuditExportWriterErrors(t *testing.T) {
+	repo := &fakeAuditRepository{
+		logs:  []domain.AuditLog{{ID: 1, TenantID: 1, Username: "alice", CreatedAt: time.Unix(1700000000, 0)}},
+		total: 1,
+	}
+	svc := NewAuditService(repo, "secret")
+
+	for _, format := range []string{ExportFormatCSV, ExportFormatJSON} {
+		_, err := svc.Export(context.Background(), ExportOptions{Format: format}, failingWriter{})
+		if auditAppCode(err) != apperrors.CodeInternalError {
+			t.Fatalf("format=%s code = %d, want %d", format, auditAppCode(err), apperrors.CodeInternalError)
+		}
+	}
+}
+
+func TestAuditExportDefaultsToLastSevenDays(t *testing.T) {
+	repo := &fakeAuditRepository{total: 0}
+	svc := NewAuditService(repo, "secret")
+
+	summary, err := svc.Export(context.Background(), ExportOptions{}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("Export() error: %v", err)
+	}
+	span := summary.End.Sub(summary.Start)
+	if span < 6*24*time.Hour || span > 8*24*time.Hour {
+		t.Fatalf("默认时间跨度应约为 7 天，实际 %v", span)
+	}
+	if summary.Format != ExportFormatCSV {
+		t.Fatalf("默认格式应为 csv，实际 %s", summary.Format)
+	}
+}
