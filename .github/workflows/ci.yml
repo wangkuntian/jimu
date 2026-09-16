@@ -153,6 +153,18 @@ jobs:
           DB_NAME: jimu_test
         run: go test ./... -coverprofile=coverage.out
 
+      - name: "🗄️  Verify backup/restore round trip (mysql + postgres)"
+        run: |
+          sudo apt-get install -y mariadb-client postgresql-client
+          # 直接调用 scripts/backup.sh 与 scripts/restore.sh（host 模式），
+          # 覆盖客户端探测、方言分支与恢复校验，而不是内联重写一套 dump 逻辑
+          MODE=host DB_DRIVER=mysql \
+            DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root DB_PASSWORD=root DB_NAME=jimu_test \
+            ./scripts/test_backup_restore.sh
+          MODE=host DB_DRIVER=postgres \
+            DB_HOST=127.0.0.1 DB_PORT=5432 DB_USER=postgres DB_PASSWORD=postgres DB_NAME=jimu_test \
+            ./scripts/test_backup_restore.sh
+
       - name: "🐘 Run postgres migration smoke"
         env:
           DB_DRIVER: postgres
