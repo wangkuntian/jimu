@@ -10,6 +10,9 @@ services:
       TZ: Asia/Shanghai
     volumes:
       - jimu-mariadb-data:/var/lib/mysql
+      # 备份/恢复脚本与输出目录：容器内直接执行，产物落到宿主机 ./backups
+      - ./scripts:/opt/jimu/scripts:ro
+      - ./backups:/backups
     healthcheck:
       # 带 root 密码 ping（读 secret 文件），避免无密码探测产生 Access denied 警告
       test: ["CMD-SHELL", "mariadb-admin ping -uroot -p\"$$(cat /run/secrets/db_root_password)\" --silent"]

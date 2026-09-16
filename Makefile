@@ -57,8 +57,10 @@ help:
 	@echo "  make migrate-down         本地回滚迁移"
 	@echo "  make migrate-status       查看迁移状态"
 	@echo "  make seed                 本地插入初始数据"
-	@echo "  make backup               备份数据库（mariadb-dump/mysqldump）"
-	@echo "  make restore              从备份恢复数据库（需 BACKUP_FILE=...，FORCE=1 跳过确认）"
+	@echo "  make compose-db-backup    在数据库容器内备份（脚本已挂载，产物落 ./backups）"
+	@echo "  make compose-db-restore   在数据库容器内恢复（需 FILE=/backups/xxx.sql.gz，破坏性）"
+	@echo "  make backup               主机侧备份（需本机 mariadb-dump/mysqldump 客户端）"
+	@echo "  make restore              主机侧恢复（需 BACKUP_FILE=...，FORCE=1 跳过确认）"
 	@echo "  make test-backup-restore  备份/恢复往返测试（需运行中 mariadb 容器）"
 	@echo ""
 	@echo "Docker 容器（单容器，需外部 DB + Redis）:"
@@ -128,6 +130,15 @@ backup:
 ## restore: 从备份恢复数据库（需 mysql，用法: make restore BACKUP_FILE=./backups/xxx.sql.gz）
 restore:
 	@./scripts/restore.sh $(BACKUP_FILE)
+
+## compose-db-backup: 在数据库容器内执行备份（脚本已挂载，输出到宿主机 ./backups）
+compose-db-backup:
+	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) exec -T mariadb bash /opt/jimu/scripts/backup.sh /backups
+
+## compose-db-restore: 在数据库容器内执行恢复（破坏性；用法: make compose-db-restore FILE=/backups/jimu_xxx.sql.gz）
+compose-db-restore:
+	@test -n "$(FILE)" || { echo "❌ 用法: make compose-db-restore FILE=/backups/jimu_YYYYmmdd_HHMMSS.sql.gz"; exit 1; }
+	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) exec -T -e FORCE=1 mariadb bash /opt/jimu/scripts/restore.sh "$(FILE)"
 
 ## test-backup-restore: 备份/恢复往返测试（通过 docker exec 调用容器内 mariadb，用法: make test-backup-restore [CONTAINER=jimu-test-mysql]）
 test-backup-restore:
@@ -314,6 +325,8 @@ swagger-check:
 smoke-check:
 	@bash -n scripts/test_runtime_security.sh
 	@bash -n scripts/smoke_api_contract.sh
+	@bash -n scripts/backup.sh
+	@bash -n scripts/restore.sh
 	@bash -n scripts/test_backup_restore.sh
 	@echo "✅ Smoke 脚本语法正确"
 

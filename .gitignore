@@ -48,3 +48,6 @@ logs/
 .codebase-memory/
 # 本地性能基线（跨机器不稳定，CI 使用绝对阈值模式）
 .benchmarks/
+
+# 数据库备份产物
+backups/
