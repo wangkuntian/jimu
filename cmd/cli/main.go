@@ -128,8 +128,9 @@ var backupCmd = &cobra.Command{
 	Use:   "backup",
 	Short: "Dump the database to a plain SQL file",
 	Long: "Dump the configured database to a plain SQL file.\n" +
-		"Requires mysqldump (mysql) or pg_dump (postgres) in PATH; run inside the server container\n" +
-		"if the host has no client tools. The password is passed via MYSQL_PWD / PGPASSWORD.",
+		"MySQL uses mariadb-dump or mysqldump, PostgreSQL uses pg_dump; the tool is checked\n" +
+		"before anything is written, so a missing client fails fast. Run inside the server\n" +
+		"container when the host has no client tools. Password goes through MYSQL_PWD / PGPASSWORD.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if backupOut == "" {
 			return errBackupOutRequired
@@ -138,16 +139,18 @@ var backupCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
+		// 先解析并校验客户端命令：工具缺失时不创建（更不会留下）空备份文件
+		spec, err := db.BuildBackup(cfg.DB)
+		if err != nil {
+			return err
+		}
 		file, err := os.Create(backupOut)
 		if err != nil {
 			return fmt.Errorf("failed to create backup file: %w", err)
 		}
 		defer func() { _ = file.Close() }()
 
-		spec, err := db.BuildBackup(cfg.DB, file)
-		if err != nil {
-			return err
-		}
+		spec.Stdout = file
 		spec.Stderr = os.Stderr
 		fmt.Printf("running: %s\n", spec.RedactedCommand())
 
@@ -173,7 +176,8 @@ var restoreCmd = &cobra.Command{
 	Use:   "restore",
 	Short: "Restore the database from a dump file (destructive)",
 	Long: "Restore the configured database from a plain SQL dump produced by `jimu backup`.\n" +
-		"This overwrites existing data, so it requires --yes. Requires the mysql client or psql in PATH.",
+		"This overwrites existing data, so it requires --yes. MySQL uses the mariadb or mysql\n" +
+		"client, PostgreSQL uses psql; the tool is checked before the dump file is even opened.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if restoreIn == "" {
 			return errRestoreInRequired
@@ -185,16 +189,18 @@ var restoreCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
+		// 先解析并校验客户端命令，再读 dump 文件（避免工具缺失时白读大文件）
+		spec, err := db.BuildRestore(cfg.DB)
+		if err != nil {
+			return err
+		}
 		file, err := os.Open(restoreIn)
 		if err != nil {
 			return fmt.Errorf("failed to open dump file: %w", err)
 		}
 		defer func() { _ = file.Close() }()
 
-		spec, err := db.BuildRestore(cfg.DB, file)
-		if err != nil {
-			return err
-		}
+		spec.Stdin = file
 		spec.Stdout = os.Stdout
 		spec.Stderr = os.Stderr
 		fmt.Printf("running: %s < %s\n", spec.RedactedCommand(), restoreIn)
