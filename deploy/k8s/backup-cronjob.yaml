@@ -1,0 +1,73 @@
+# 数据库备份 CronJob（可选）：镜像内置 mariadb-dump/pg_dump 与仓库 scripts/（见 deploy/backup/Dockerfile）
+# 应用前请确认：
+#   1) 已构建并推送备份镜像，替换下方 image（make build-backup-image）
+#   2) jimu-config / jimu-secrets 中的 DB_* 与要备份的库一致（本清单默认跟随 jimu-config）
+#   3) jimu-db-backups PVC 的容量与 StorageClass 符合环境要求
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jimu-db-backups
+  namespace: jimu
+  labels:
+    app: jimu-db-backup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName: standard
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: jimu-db-backup
+  namespace: jimu
+  labels:
+    app: jimu-db-backup
+spec:
+  # 每天 03:00 备份；保留天数由 RETENTION_DAYS 控制
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: jimu-db-backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: registry.example.com/jimu-backup:1.0.0
+              imagePullPolicy: IfNotPresent
+              # 镜像 ENTRYPOINT 为 scripts/backup.sh，参数即输出目录
+              args: ["/backups"]
+              envFrom:
+                - configMapRef:
+                    name: jimu-config
+                - secretRef:
+                    name: jimu-secrets
+              env:
+                # mysql（MariaDB/MySQL）或 postgres；脚本会自行探测对应客户端
+                - name: DB_DRIVER
+                  value: "mysql"
+                - name: RETENTION_DAYS
+                  value: "7"
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: jimu-db-backups

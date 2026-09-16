@@ -1,0 +1,87 @@
+{{- if .Values.backup.enabled }}
+{{- $driver := .Values.backup.driver | default "mysql" }}
+{{- if and (not .Values.backup.persistence.create) (not .Values.backup.persistence.existingClaim) }}
+{{- fail "backup.persistence.create=true or backup.persistence.existingClaim is required when backup.enabled" }}
+{{- end }}
+{{- if .Values.backup.persistence.create }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-db-backups
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "jimu.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.backup.persistence.size }}
+  {{- if .Values.backup.persistence.storageClass }}
+  storageClassName: {{ .Values.backup.persistence.storageClass | quote }}
+  {{- end }}
+---
+{{- end }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-db-backup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "jimu.labels" . | nindent 4 }}
+    app.kubernetes.io/component: db-backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: {{ .Values.backup.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.backup.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.backup.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      # 备份失败不无限重试：下一次调度会再试
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            {{- include "jimu.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: db-backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: "{{ .Values.backup.image.repository }}:{{ .Values.backup.image.tag }}"
+              imagePullPolicy: {{ .Values.backup.image.pullPolicy }}
+              # 镜像 ENTRYPOINT 为 scripts/backup.sh，参数即输出目录
+              args: ["/backups"]
+              env:
+                - name: DB_DRIVER
+                  value: {{ $driver | quote }}
+                - name: DB_HOST
+                  value: {{ .Values.db.host | quote }}
+                - name: DB_PORT
+                  value: {{ .Values.db.port | quote }}
+                - name: DB_USER
+                  value: {{ .Values.db.user | quote }}
+                - name: DB_NAME
+                  value: {{ .Values.db.database | quote }}
+                - name: DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.db.existingSecret }}
+                      key: {{ .Values.db.passwordKey }}
+                - name: RETENTION_DAYS
+                  value: {{ .Values.backup.retentionDays | quote }}
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              {{- if .Values.backup.persistence.create }}
+              persistentVolumeClaim:
+                claimName: {{ .Release.Name }}-db-backups
+              {{- else }}
+              persistentVolumeClaim:
+                claimName: {{ .Values.backup.persistence.existingClaim }}
+              {{- end }}
+{{- end }}

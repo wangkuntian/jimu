@@ -164,6 +164,36 @@ otel:
   logsStreamName: "jimu_logs"
   tracesStreamName: "jimu_traces"
 
+# 数据库备份（CronJob）：镜像内置 mariadb-dump 与 pg_dump，脚本取自仓库 scripts/（见 deploy/backup/Dockerfile）
+backup:
+  enabled: false
+  # 备份时间（cron 表达式，集群时区）
+  schedule: "0 3 * * *"
+  # 数据库方言：mysql（MariaDB/MySQL）或 postgres
+  driver: mysql
+  # 备份保留天数（0 表示不清理）
+  retentionDays: 7
+  image:
+    repository: jimu-backup
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  # 备份产物落盘位置：create=true 时按 size/storageClass 新建 PVC，否则必须给 existingClaim
+  persistence:
+    create: false
+    existingClaim: ""
+    size: 10Gi
+    storageClass: ""
+
 # 数据库配置（引用外部 Secret）
 db:
   existingSecret: jimu-secrets

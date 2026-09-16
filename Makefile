@@ -57,6 +57,7 @@ help:
 	@echo "  make migrate-down         本地回滚迁移"
 	@echo "  make migrate-status       查看迁移状态"
 	@echo "  make seed                 本地插入初始数据"
+	@echo "  make build-backup-image   构建备份任务镜像 jimu-backup（K8s/Helm CronJob 用）"
 	@echo "  make compose-db-backup    在数据库容器内备份（脚本已挂载，产物落 ./backups）"
 	@echo "  make compose-db-restore   在数据库容器内恢复（需 FILE=/backups/xxx.sql.gz，破坏性）"
 	@echo "  make backup               主机侧备份（需本机 mariadb-dump/mysqldump 客户端）"
@@ -130,6 +131,10 @@ backup:
 ## restore: 从备份恢复数据库（需 mysql，用法: make restore BACKUP_FILE=./backups/xxx.sql.gz）
 restore:
 	@./scripts/restore.sh $(BACKUP_FILE)
+
+## build-backup-image: 构建数据库备份任务镜像（内置 mariadb-dump + pg_dump + 仓库脚本；PG 客户端版本可配）
+build-backup-image:
+	docker build -f deploy/backup/Dockerfile -t jimu-backup:latest --build-arg PG_CLIENT_VERSION=$(or $(PG_CLIENT_VERSION),17) .
 
 ## compose-db-backup: 在数据库容器内执行备份（脚本已挂载，输出到宿主机 ./backups）
 compose-db-backup:
@@ -325,6 +330,7 @@ swagger-check:
 smoke-check:
 	@bash -n scripts/test_runtime_security.sh
 	@bash -n scripts/smoke_api_contract.sh
+	@bash -n scripts/db_common.sh
 	@bash -n scripts/backup.sh
 	@bash -n scripts/restore.sh
 	@bash -n scripts/test_backup_restore.sh
