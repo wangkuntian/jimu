@@ -66,6 +66,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **可信设备（记住此设备）** — 仅对启用 TOTP 的账号生效：登录时传 `remember_device: true`，成功后返回一次性明文 `device_token`（前缀 `jimu_dev_`，库中只存 SHA-256 哈希）；后续登录携带 `X-Device-Token` 头且不带 `totp_code` 即可跳过 TOTP，**密码仍必需**；令牌绑定签发用户（泄露也无法用于他人账号），改密与 `/auth/logout-all` 自动吊销，`GET/DELETE /auth/devices` 自助查看与注销；有效期 `auth.trusted_device_days`（默认 30，0=关闭）
 - **登录历史** — 每次登录尝试落库 `login_histories`（成功/失败/锁定 + 原因 + IP + User-Agent，账号不存在也记录用户名），`GET /api/v1/auth/login-history` 供用户自助排查异常登录；写入失败只记日志，不影响登录主流程
 - **泄露口令检查（可选）** — `auth.breach_check_enabled` 开启后，注册（含开通式注册）与重置密码会调用 Have I Been Pwned 范围查询接口：只发送口令 SHA-1 的前 5 位（k-匿名，完整口令与哈希不出网）并在本地比对结果，命中返回新增错误码 `2009`；检查服务不可用时放行（只记日志），避免外部依赖故障阻断注册与改密
+- **数据库备份/恢复** — `jimu backup --out <file>` / `jimu restore --in <file> --yes`：**先探测客户端命令**（MySQL 依次尝试 `mariadb-dump`/`mysqldump` 与 `mariadb`/`mysql`，MariaDB 官方镜像只有前者；PostgreSQL 用 `pg_dump`/`psql`），缺失时立即报错并列出候选命令，不会创建空备份文件；备份用 `--single-transaction` 不锁表，恢复用 `psql --set=ON_ERROR_STOP=on` 遇错即停，口令经 `MYSQL_PWD`/`PGPASSWORD` 传入（不进命令行与日志）
 - **请求幂等** — 客户端携带 `Idempotency-Key` 时，同键重复请求返回首次结果（响应带 `Idempotency-Replayed: true`），键按「租户 + 用户 + 方法 + 路径 + 客户端键」哈希存储于 Redis；首个请求用 `SET NX` 占位，并发同键请求返回 `409/1009` 而不是各执行一次；5xx 与超过 256KB 的响应不缓存并释放占位（可用同键安全重试）；Redis 异常时放行。`security.idempotency_enabled`（默认开）/`security.idempotency_ttl_sec`（默认 24h）
 - **错误消息多语言** — `Accept-Language: zh|en` 经中间件写入上下文，响应错误消息按错误码取本地化文案（未登记的错误码保留调用方消息，不会再出现「403 + 服务器内部错误」这类矛盾响应）；测试强制校验每个错误码都已登记中英文文案
 - **错误追踪上报** — `internal/platform/reporter`：结构化错误日志（含 trace_id/span_id），HTTP `Recovery` 中间件 panic 自动上报；日志链路接入 OpenObserve 后错误自动汇聚，配合 OpenObserve 告警覆盖错误监控场景（`error_reporting.enabled` 开关）
@@ -250,8 +251,8 @@ make cli
 # 数据初始化
 ./bin/jimu seed                     # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例）
 
-# 备份与恢复（依赖 mysqldump/pg_dump 或 mysql/psql 客户端；密码经 MYSQL_PWD/PGPASSWORD 传入）
-./bin/jimu backup  --out backup-$(date +%F).sql          # 导出为明文 SQL（--single-transaction，不锁表）
+# 备份与恢复（先校验客户端命令，缺失即失败且不产生空文件；密码经 MYSQL_PWD/PGPASSWORD 传入）
+./bin/jimu backup  --out backup-$(date +%F).sql          # 导出明文 SQL（--single-transaction，不锁表）
 ./bin/jimu restore --in backup-2025-01-01.sql --yes      # 恢复（破坏性，必须显式 --yes）
 ```
 
