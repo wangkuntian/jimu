@@ -1016,7 +1016,9 @@ internal/modules/{name}/
 | `make migrate-down` | 回滚最后一次迁移 |
 | `make migrate-status` | 查看迁移状态 |
 | `make seed` | 插入初始数据 |
-| `make backup` | 备份数据库（`scripts/backup.sh`，mariadb-dump/mysqldump + gzip + 保留 7 天） |
+| `make compose-db-backup` | **推荐**：在数据库容器内备份（脚本已挂载，产物落宿主机 `./backups`，gzip + 保留 7 天） |
+| `make compose-db-restore` | **推荐**：在数据库容器内恢复（`FILE=/backups/xxx.sql.gz`，破坏性，等价 `FORCE=1`） |
+| `make backup` | 主机侧备份（需本机有 mariadb-dump/mysqldump 客户端，直连 `DB_HOST:DB_PORT`） |
 | `make restore` | 从备份恢复数据库（`scripts/restore.sh`，需 `BACKUP_FILE=...`，`FORCE=1` 跳过确认） |
 | `make test-backup-restore` | 备份/恢复往返测试（`scripts/test_backup_restore.sh`，需运行中 mariadb 容器） |
 | `make test` | 运行测试 |
@@ -1045,6 +1047,22 @@ internal/modules/{name}/
 | `make ci` | 本地 CI 检查（无外部依赖：fmt-check + vet + lint + test + 覆盖率 + race + swagger + smoke + build + govulncheck，完整 CI 见 `.github/workflows/ci.yml`） |
 | `make clean` | 清理构建产物 |
 | `make hooks` | 安装 git 钩子（pre-commit 框架 + `githooks/commit-msg` 提交消息全英文检查） |
+
+## 数据库备份与恢复
+
+备份/恢复脚本随 `./scripts` 挂载进数据库容器（`/opt/jimu/scripts`），并在容器内直接执行容器自带的 `mariadb-dump`/`mariadb`（MariaDB 12 官方镜像没有 `mysqldump`/`mysql` 软链接），因此宿主机无需安装任何数据库客户端：
+
+```bash
+make compose-db-backup                                  # 备份：产物直接落在宿主机 ./backups
+make compose-db-restore FILE=/backups/jimu_20250101_120000.sql.gz   # 恢复（覆盖现有数据，谨慎）
+```
+
+- **口令**：脚本按 `DB_PASSWORD` → `DB_PASSWORD_FILE` → 容器内 secret（`MARIADB_PASSWORD_FILE`/`MARIADB_ROOT_PASSWORD_FILE`，按 `DB_USER` 是否为 root 选择优先项）依次取用，并通过 `MYSQL_PWD` 传给客户端，不出现在命令行参数与进程列表
+- **参数**：`--single-transaction`（InnoDB 一致性快照，不锁表）、`--routines --triggers --events`、`--default-character-set=utf8mb4`；`--set-gtid-purged` 只在客户端支持时（mysqldump）才传，避免回退到 `mariadb-dump` 时报错
+- **保留**：`RETENTION_DAYS`（默认 7 天）自动清理旧备份；`GZIP=0` 可输出未压缩 SQL
+- **恢复保护**：非交互环境必须显式 `FORCE=1`（`make compose-db-restore` 已带上），交互执行时会二次确认；文件不存在或为空直接拒绝
+- **主机直连模式**：`make backup` / `make restore BACKUP_FILE=... FORCE=1` 使用本机客户端直连数据库，适合未跑 compose 的场景；缺少客户端时脚本会给出明确提示
+- **往返验证**：`make test-backup-restore [CONTAINER=jimu-mariadb-1]` 会建标记表 → 备份 → 清空 → 恢复 → 校验数据还原
 
 ## Docker 部署
 
