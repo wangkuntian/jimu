@@ -155,7 +155,9 @@ jobs:
 
       - name: "🗄️  Verify backup/restore round trip (mysql + postgres)"
         run: |
-          sudo apt-get install -y mariadb-client postgresql-client
+          # 客户端版本须 >= 服务端：CI 的 postgres service 是 17，Ubuntu 自带客户端为 16，
+          # 因此统一走共享安装脚本（与备份镜像同一份逻辑）
+          sudo PG_CLIENT_VERSION=17 bash scripts/install_db_clients.sh
           # 直接调用 scripts/backup.sh 与 scripts/restore.sh（host 模式），
           # 覆盖客户端探测、方言分支与恢复校验，而不是内联重写一套 dump 逻辑
           MODE=host DB_DRIVER=mysql \

@@ -330,6 +330,7 @@ swagger-check:
 smoke-check:
 	@bash -n scripts/test_runtime_security.sh
 	@bash -n scripts/smoke_api_contract.sh
+	@bash -n scripts/install_db_clients.sh
 	@bash -n scripts/db_common.sh
 	@bash -n scripts/backup.sh
 	@bash -n scripts/restore.sh

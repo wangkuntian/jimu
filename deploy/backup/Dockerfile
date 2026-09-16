@@ -13,22 +13,13 @@
 FROM mariadb:12.1.2-noble
 
 # PostgreSQL 客户端与 mariadb-dump 共存：同一个镜像可备份两种方言。
-# pg_dump 要求客户端版本 ≥ 服务端版本（Ubuntu 自带的 16.x 无法 dump PG 17），
-# 因此从 PGDG 源安装，可用 --build-arg PG_CLIENT_VERSION=18 跟随服务端升级。
+# 安装逻辑与 CI 共用 scripts/install_db_clients.sh（pg_dump 必须 >= 服务端版本，
+# 发行版自带的 16.x 无法 dump PG 17，故走 PGDG 源），可用 --build-arg 指定大版本。
 ARG PG_CLIENT_VERSION=17
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
-    && install -d /usr/share/postgresql-common/pgdg \
-    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-        -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
-    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" \
-        > /etc/apt/sources.list.d/pgdg.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends "postgresql-client-${PG_CLIENT_VERSION}" \
-    && apt-get purge -y --auto-remove curl gnupg \
-    && rm -rf /var/lib/apt/lists/*
-# 安装后校验：客户端主版本必须与服务端一致或更高，否则备份会在运行期才失败
-RUN pg_dump --version && mariadb-dump --version
+COPY scripts/install_db_clients.sh /tmp/install_db_clients.sh
+RUN PG_CLIENT_VERSION="${PG_CLIENT_VERSION}" bash /tmp/install_db_clients.sh \
+    && rm -f /tmp/install_db_clients.sh
+
 
 COPY scripts/backup.sh scripts/restore.sh scripts/db_common.sh /opt/jimu/scripts/
 RUN chmod 0755 /opt/jimu/scripts/*.sh
