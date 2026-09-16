@@ -1,11 +1,8 @@
 package main
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"os"
-	"time"
 
 	"jimu/internal/config"
 	"jimu/internal/platform/db"
@@ -110,111 +107,6 @@ var migrateRedoCmd = &cobra.Command{
 	},
 }
 
-var (
-	errBackupOutRequired   = errors.New("--out is required")
-	errRestoreInRequired   = errors.New("--in is required")
-	errRestoreNotConfirmed = errors.New("restore overwrites existing data, pass --yes to confirm")
-)
-
-var (
-	backupOut        string
-	backupTimeoutSec int
-	restoreIn        string
-	restoreYes       bool
-	restoreTimeout   int
-)
-
-var backupCmd = &cobra.Command{
-	Use:   "backup",
-	Short: "Dump the database to a plain SQL file",
-	Long: "Dump the configured database to a plain SQL file.\n" +
-		"MySQL uses mariadb-dump or mysqldump, PostgreSQL uses pg_dump; the tool is checked\n" +
-		"before anything is written, so a missing client fails fast. Run inside the server\n" +
-		"container when the host has no client tools. Password goes through MYSQL_PWD / PGPASSWORD.",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if backupOut == "" {
-			return errBackupOutRequired
-		}
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
-		}
-		// 先解析并校验客户端命令：工具缺失时不创建（更不会留下）空备份文件
-		spec, err := db.BuildBackup(cfg.DB)
-		if err != nil {
-			return err
-		}
-		file, err := os.Create(backupOut)
-		if err != nil {
-			return fmt.Errorf("failed to create backup file: %w", err)
-		}
-		defer func() { _ = file.Close() }()
-
-		spec.Stdout = file
-		spec.Stderr = os.Stderr
-		fmt.Printf("running: %s\n", spec.RedactedCommand())
-
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(backupTimeoutSec)*time.Second)
-		defer cancel()
-		if err := spec.Run(ctx); err != nil {
-			_ = os.Remove(backupOut) // 失败的 dump 不留半截文件
-			return err
-		}
-		if err := file.Sync(); err != nil {
-			return fmt.Errorf("failed to flush backup file: %w", err)
-		}
-		info, err := file.Stat()
-		if err != nil {
-			return fmt.Errorf("failed to stat backup file: %w", err)
-		}
-		fmt.Printf("backup written: %s (%d bytes)\n", backupOut, info.Size())
-		return nil
-	},
-}
-
-var restoreCmd = &cobra.Command{
-	Use:   "restore",
-	Short: "Restore the database from a dump file (destructive)",
-	Long: "Restore the configured database from a plain SQL dump produced by `jimu backup`.\n" +
-		"This overwrites existing data, so it requires --yes. MySQL uses the mariadb or mysql\n" +
-		"client, PostgreSQL uses psql; the tool is checked before the dump file is even opened.",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if restoreIn == "" {
-			return errRestoreInRequired
-		}
-		if !restoreYes {
-			return errRestoreNotConfirmed
-		}
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
-		}
-		// 先解析并校验客户端命令，再读 dump 文件（避免工具缺失时白读大文件）
-		spec, err := db.BuildRestore(cfg.DB)
-		if err != nil {
-			return err
-		}
-		file, err := os.Open(restoreIn)
-		if err != nil {
-			return fmt.Errorf("failed to open dump file: %w", err)
-		}
-		defer func() { _ = file.Close() }()
-
-		spec.Stdin = file
-		spec.Stdout = os.Stdout
-		spec.Stderr = os.Stderr
-		fmt.Printf("running: %s < %s\n", spec.RedactedCommand(), restoreIn)
-
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(restoreTimeout)*time.Second)
-		defer cancel()
-		if err := spec.Run(ctx); err != nil {
-			return err
-		}
-		fmt.Println("restore finished")
-		return nil
-	},
-}
-
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version",
@@ -267,14 +159,6 @@ var seedCmd = &cobra.Command{
 }
 
 func init() {
-	backupCmd.Flags().StringVar(&backupOut, "out", "", "output SQL file (required)")
-	backupCmd.Flags().IntVar(&backupTimeoutSec, "timeout-sec", 1800, "dump timeout in seconds")
-	restoreCmd.Flags().StringVar(&restoreIn, "in", "", "input SQL file (required)")
-	restoreCmd.Flags().BoolVar(&restoreYes, "yes", false, "confirm the destructive restore")
-	restoreCmd.Flags().IntVar(&restoreTimeout, "timeout-sec", 1800, "restore timeout in seconds")
-	rootCmd.AddCommand(backupCmd)
-	rootCmd.AddCommand(restoreCmd)
-
 	moduleCmd.AddCommand(moduleCreateCmd)
 	migrateCmd.AddCommand(migrateUpCmd)
 	migrateCmd.AddCommand(migrateDownCmd)
