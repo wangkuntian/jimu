@@ -49,8 +49,8 @@ func NewGitHubProvider(cfg GitHubConfig, client *httpclient.Client) *GitHubProvi
 func (p *GitHubProvider) Name() string { return "github" }
 
 // AuthURL 构造授权跳转 URL
-func (p *GitHubProvider) AuthURL(state string) string {
-	return p.config.AuthCodeURL(state)
+func (p *GitHubProvider) AuthURL(_ context.Context, state string) (string, error) {
+	return p.config.AuthCodeURL(state), nil
 }
 
 // Exchange 用授权码换取用户信息

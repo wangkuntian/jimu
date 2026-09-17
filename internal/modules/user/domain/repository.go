@@ -7,7 +7,7 @@ type UserRepository interface {
 	FindByUsername(ctx context.Context, username string) (*User, error)
 	FindByEmailHash(ctx context.Context, hash string) (*User, error)
 	FindByPhoneHash(ctx context.Context, hash string) (*User, error)
-	List(ctx context.Context, offset, limit int, sort, order string) ([]User, int64, error)
+	List(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]User, int64, error)
 	Create(ctx context.Context, user *User) error
 	Update(ctx context.Context, user *User) error
 	UpdatePassword(ctx context.Context, id uint64, hashedPassword string) error

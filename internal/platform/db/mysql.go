@@ -38,7 +38,7 @@ func ConnectWithRetry(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error)
 		if err == nil {
 			if pingErr := pingDB(context.Background(), db); pingErr == nil {
 				if log != nil {
-					log.Info("database connected", "attempt", attempt)
+					log.Infow("database connected", "attempt", attempt)
 				}
 				configurePool(db, cfg)
 				return db, nil
@@ -48,7 +48,7 @@ func ConnectWithRetry(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error)
 		}
 
 		if log != nil {
-			log.Warn("retrying database connection",
+			log.Warnw("retrying database connection",
 				"attempt", attempt,
 				"max_retries", maxRetries,
 				"interval_sec", interval,
@@ -68,7 +68,9 @@ func dsn(cfg config.DBConfig, host string, port int) string {
 	if port == 0 {
 		port = cfg.Port
 	}
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+	// 时间统一按 UTC 存储与读取：驱动 loc=UTC 与服务器会话 time_zone='+00:00' 必须一致，
+	// 否则 TIMESTAMP 列与 DEFAULT CURRENT_TIMESTAMP 的写入/读取会相差一个时区偏移。
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=UTC&time_zone=%%27%%2B00%%3A00%%27",
 		cfg.User, cfg.Password, host, port, cfg.Database)
 }
 
@@ -124,6 +126,10 @@ func openMySQL(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {
 		); err != nil {
 			return nil, fmt.Errorf("register dbresolver: %w", err)
 		}
+	}
+
+	if err := attachBreaker(db, cfg.Breaker); err != nil {
+		return nil, err
 	}
 
 	return db, nil

@@ -46,7 +46,7 @@ func newSqliteDB(t *testing.T, models ...interface{}) *gorm.DB {
 // fakeUserRepository 可配置的用户仓储 mock
 type fakeUserRepository struct {
 	findByID func(ctx context.Context, id uint64) (*userdomain.User, error)
-	list     func(ctx context.Context, offset, limit int, sort, order string) ([]userdomain.User, int64, error)
+	list     func(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]userdomain.User, int64, error)
 	create   func(ctx context.Context, user *userdomain.User) error
 	update   func(ctx context.Context, user *userdomain.User) error
 }
@@ -62,9 +62,9 @@ func (f *fakeUserRepository) FindByUsername(ctx context.Context, username string
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeUserRepository) List(ctx context.Context, offset, limit int, sort, order string) ([]userdomain.User, int64, error) {
+func (f *fakeUserRepository) List(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]userdomain.User, int64, error) {
 	if f.list != nil {
-		return f.list(ctx, offset, limit, sort, order)
+		return f.list(ctx, tenantID, offset, limit, sort, order)
 	}
 	return []userdomain.User{{ID: 1, Username: "alice", Status: 1}}, 1, nil
 }
@@ -131,7 +131,7 @@ func (f *fakeImportJobRepo) Update(ctx context.Context, job *admindomain.ImportJ
 type fakeAPIKeyRepo struct {
 	create   func(ctx context.Context, key *admindomain.APIKey) error
 	findByID func(ctx context.Context, id uint64) (*admindomain.APIKey, error)
-	list     func(ctx context.Context, offset, limit int) ([]admindomain.APIKey, int64, error)
+	list     func(ctx context.Context, tenantID uint64, offset, limit int) ([]admindomain.APIKey, int64, error)
 	delete   func(ctx context.Context, id uint64) error
 }
 
@@ -154,9 +154,9 @@ func (f *fakeAPIKeyRepo) FindByKeyHash(ctx context.Context, hash string) (*admin
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeAPIKeyRepo) List(ctx context.Context, offset, limit int) ([]admindomain.APIKey, int64, error) {
+func (f *fakeAPIKeyRepo) List(ctx context.Context, tenantID uint64, offset, limit int) ([]admindomain.APIKey, int64, error) {
 	if f.list != nil {
-		return f.list(ctx, offset, limit)
+		return f.list(ctx, tenantID, offset, limit)
 	}
 	return []admindomain.APIKey{{ID: 1, Name: "web"}}, 1, nil
 }

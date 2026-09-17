@@ -1,0 +1,888 @@
+{
+  "version": 8,
+  "title": "Jimu Overview",
+  "description": "Jimu 默认概览",
+  "folder_id": "default",
+  "variables": {
+    "list": [],
+    "showDynamicFilters": true
+  },
+  "defaultDatetimeDuration": {
+    "type": "relative",
+    "relativeTimePeriod": "1h"
+  },
+  "tabs": [
+    {
+      "tabId": "default",
+      "name": "Default",
+      "panels": [
+        {
+          "id": "jimu-metric-error",
+          "type": "metric",
+          "title": "错误日志总数",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT count(_timestamp) as \"y_axis_1\" FROM \"jimu_logs\" WHERE severity = 'error'",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "jimu_logs",
+                "stream_type": "logs",
+                "x": [],
+                "y": [
+                  {
+                    "label": "错误日志数",
+                    "alias": "y_axis_1",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "count"
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 0,
+            "w": 96,
+            "h": 18,
+            "i": 1,
+            "moved": false
+          }
+        },
+        {
+          "id": "jimu-metric-logs",
+          "type": "metric",
+          "title": "日志总量",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT count(_timestamp) as \"y_axis_1\" FROM \"jimu_logs\"",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "jimu_logs",
+                "stream_type": "logs",
+                "x": [],
+                "y": [
+                  {
+                    "label": "日志数",
+                    "alias": "y_axis_1",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "count"
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 96,
+            "y": 0,
+            "w": 96,
+            "h": 18,
+            "i": 2,
+            "moved": false
+          }
+        },
+        {
+          "id": "jimu-metric-db",
+          "type": "metric",
+          "title": "DB 使用连接",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT max(value) as \"y_axis_1\" FROM \"jimu_db_in_use_connections\"",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "jimu_db_in_use_connections",
+                "stream_type": "metrics",
+                "x": [],
+                "y": [
+                  {
+                    "label": "连接数",
+                    "alias": "y_axis_1",
+                    "column": "value",
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "max"
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 18,
+            "w": 96,
+            "h": 18,
+            "i": 3,
+            "moved": false
+          }
+        },
+        {
+          "id": "jimu-metric-goroutines",
+          "type": "metric",
+          "title": "Goroutines",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT max(value) as \"y_axis_1\" FROM \"jimu_runtime_goroutines\"",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "jimu_runtime_goroutines",
+                "stream_type": "metrics",
+                "x": [],
+                "y": [
+                  {
+                    "label": "协程数",
+                    "alias": "y_axis_1",
+                    "column": "value",
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "max"
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 96,
+            "y": 18,
+            "w": 96,
+            "h": 18,
+            "i": 4,
+            "moved": false
+          }
+        },
+        {
+          "id": "jimu-line-db",
+          "type": "line",
+          "title": "DB 连接池使用",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "promql",
+          "queries": [
+            {
+              "query": "max(jimu_db_in_use_connections)",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "jimu_db_in_use_connections",
+                "stream_type": "metrics",
+                "x": [],
+                "y": [],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "连接数",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 36,
+            "w": 96,
+            "h": 18,
+            "i": 5,
+            "moved": false
+          }
+        },
+        {
+          "id": "jimu-line-goroutines",
+          "type": "line",
+          "title": "Goroutines 趋势",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "promql",
+          "queries": [
+            {
+              "query": "max(jimu_runtime_goroutines)",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "jimu_runtime_goroutines",
+                "stream_type": "metrics",
+                "x": [],
+                "y": [],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "协程数",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 96,
+            "y": 36,
+            "w": 96,
+            "h": 18,
+            "i": 6,
+            "moved": false
+          }
+        },
+        {
+          "id": "jimu-line-memory",
+          "type": "line",
+          "title": "内存分配",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "bytes",
+            "decimals": null
+          },
+          "queryType": "promql",
+          "queries": [
+            {
+              "query": "max(jimu_runtime_memory_alloc_bytes)",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "jimu_runtime_memory_alloc_bytes",
+                "stream_type": "metrics",
+                "x": [],
+                "y": [],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "内存分配",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 54,
+            "w": 96,
+            "h": 18,
+            "i": 7,
+            "moved": false
+          }
+        },
+        {
+          "id": "jimu-line-scheduler",
+          "type": "line",
+          "title": "调度任务执行数",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "promql",
+          "queries": [
+            {
+              "query": "max(jimu_scheduler_jobs_total)",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "jimu_scheduler_jobs_total",
+                "stream_type": "metrics",
+                "x": [],
+                "y": [],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "任务执行数",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 96,
+            "y": 54,
+            "w": 96,
+            "h": 18,
+            "i": 8,
+            "moved": false
+          }
+        },
+        {
+          "id": "jimu-bar-error-logs",
+          "type": "bar",
+          "title": "错误日志趋势",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT histogram(_timestamp) as \"x_axis_1\", count(_timestamp) as \"y_axis_1\" FROM \"jimu_logs\" WHERE severity = 'error' GROUP BY x_axis_1",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "jimu_logs",
+                "stream_type": "logs",
+                "x": [
+                  {
+                    "label": "时间",
+                    "alias": "x_axis_1",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "histogram"
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "错误日志数",
+                    "alias": "y_axis_1",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "count"
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 72,
+            "w": 96,
+            "h": 18,
+            "i": 9,
+            "moved": false
+          }
+        },
+        {
+          "id": "jimu-bar-logs",
+          "type": "bar",
+          "title": "日志量趋势",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT histogram(_timestamp) as \"x_axis_1\", count(_timestamp) as \"y_axis_1\" FROM \"jimu_logs\" GROUP BY x_axis_1",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "jimu_logs",
+                "stream_type": "logs",
+                "x": [
+                  {
+                    "label": "时间",
+                    "alias": "x_axis_1",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "histogram"
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "日志数",
+                    "alias": "y_axis_1",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false,
+                    "aggregationFunction": "count"
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 96,
+            "y": 72,
+            "w": 96,
+            "h": 18,
+            "i": 10,
+            "moved": false
+          }
+        },
+        {
+          "id": "jimu-line-inflight",
+          "type": "line",
+          "title": "HTTP in-flight",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "promql",
+          "queries": [
+            {
+              "query": "max(jimu_http_requests_inflight)",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "jimu_http_requests_inflight",
+                "stream_type": "metrics",
+                "x": [],
+                "y": [],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "在途请求数",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 90,
+            "w": 96,
+            "h": 18,
+            "i": 11,
+            "moved": false
+          }
+        },
+        {
+          "id": "jimu-line-circuit",
+          "type": "line",
+          "title": "依赖熔断状态",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "promql",
+          "queries": [
+            {
+              "query": "max(jimu_breaker_open)",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "jimu_breaker_open",
+                "stream_type": "metrics",
+                "x": [],
+                "y": [],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "熔断数",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 96,
+            "y": 90,
+            "w": 96,
+            "h": 18,
+            "i": 12,
+            "moved": false
+          }
+        },
+        {
+          "id": "db-line-mysql-threads",
+          "type": "line",
+          "title": "MySQL 线程数",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "promql",
+          "queries": [
+            {
+              "query": "max(mysql_threads)",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "mysql_threads",
+                "stream_type": "metrics",
+                "x": [],
+                "y": [],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "线程数",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 108,
+            "w": 96,
+            "h": 18,
+            "i": 13,
+            "moved": false
+          }
+        },
+        {
+          "id": "db-line-redis-clients",
+          "type": "line",
+          "title": "Redis 客户端连接",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "promql",
+          "queries": [
+            {
+              "query": "max(redis_clients_connected)",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "redis_clients_connected",
+                "stream_type": "metrics",
+                "x": [],
+                "y": [],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "客户端连接数",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 96,
+            "y": 108,
+            "w": 96,
+            "h": 18,
+            "i": 14,
+            "moved": false
+          }
+        },
+        {
+          "id": "db-line-redis-memory",
+          "type": "line",
+          "title": "Redis 内存使用",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "bytes",
+            "decimals": null
+          },
+          "queryType": "promql",
+          "queries": [
+            {
+              "query": "max(redis_memory_used)",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "redis_memory_used",
+                "stream_type": "metrics",
+                "x": [],
+                "y": [],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "内存使用",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 126,
+            "w": 96,
+            "h": 18,
+            "i": 15,
+            "moved": false
+          }
+        },
+        {
+          "id": "db-line-redis-commands",
+          "type": "line",
+          "title": "Redis 处理指令数",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "promql",
+          "queries": [
+            {
+              "query": "max(redis_commands_processed)",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "redis_commands_processed",
+                "stream_type": "metrics",
+                "x": [],
+                "y": [],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "指令数",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 96,
+            "y": 126,
+            "w": 96,
+            "h": 18,
+            "i": 16,
+            "moved": false
+          }
+        },
+        {
+          "id": "jimu-table-errors",
+          "type": "table",
+          "title": "最近错误日志",
+          "description": "",
+          "config": {
+            "show_legends": true,
+            "legends_position": null,
+            "unit": "",
+            "decimals": null
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT _timestamp, severity, body, caller FROM \"jimu_logs\" WHERE severity = 'error' ORDER BY _timestamp DESC LIMIT 20",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "jimu_logs",
+                "stream_type": "logs",
+                "x": [
+                  {
+                    "label": "_timestamp",
+                    "alias": "_timestamp",
+                    "column": "_timestamp",
+                    "color": null,
+                    "isDerived": false
+                  },
+                  {
+                    "label": "severity",
+                    "alias": "severity",
+                    "column": "severity",
+                    "color": null,
+                    "isDerived": false
+                  },
+                  {
+                    "label": "body",
+                    "alias": "body",
+                    "column": "body",
+                    "color": null,
+                    "isDerived": false
+                  },
+                  {
+                    "label": "caller",
+                    "alias": "caller",
+                    "column": "caller",
+                    "color": null,
+                    "isDerived": false
+                  }
+                ],
+                "y": [],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "",
+                "limit": 0
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 144,
+            "w": 192,
+            "h": 22,
+            "i": 17,
+            "moved": false
+          }
+        }
+      ]
+    }
+  ]
+}

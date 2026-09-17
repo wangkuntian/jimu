@@ -10,6 +10,7 @@ import (
 // APIKey API 密钥实体
 type APIKey struct {
 	ID        uint64    `gorm:"primaryKey" json:"id"`
+	TenantID  uint64    `gorm:"column:tenant_id;default:0;index" json:"tenant_id"` // 所属租户 ID（0=未归属）
 	Name      string    `gorm:"size:64;not null" json:"name"`
 	KeyPrefix string    `gorm:"size:16;not null;index" json:"key_prefix"`
 	KeyHash   string    `gorm:"size:64;not null;index:idx_key_hash" json:"-"`
@@ -30,7 +31,7 @@ type APIKeyRepository interface {
 	Create(ctx context.Context, key *APIKey) error
 	FindByID(ctx context.Context, id uint64) (*APIKey, error)
 	FindByKeyHash(ctx context.Context, hash string) (*APIKey, error)
-	List(ctx context.Context, offset, limit int) ([]APIKey, int64, error)
+	List(ctx context.Context, tenantID uint64, offset, limit int) ([]APIKey, int64, error)
 	Update(ctx context.Context, key *APIKey) error
 	Delete(ctx context.Context, id uint64) error
 	IncrementUseCount(ctx context.Context, id uint64) error

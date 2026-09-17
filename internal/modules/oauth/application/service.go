@@ -12,6 +12,7 @@ import (
 	userdomain "jimu/internal/modules/user/domain"
 	"jimu/internal/platform/auth"
 	oauthplatform "jimu/internal/platform/oauth"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 
 	redistore "jimu/internal/platform/redis"
@@ -61,7 +62,7 @@ func (s *OAuthService) AuthURL(ctx context.Context, providerName, state string) 
 	if err := s.rdb.Set(ctx, oauthStateKey(state), providerName, oauthStateTTL).Err(); err != nil {
 		return "", errors.Wrap(errors.CodeInternalError, "store oauth state", err)
 	}
-	return p.AuthURL(state), nil
+	return p.AuthURL(ctx, state)
 }
 
 // BeginLogin 生成 state 并返回授权跳转 URL
@@ -127,13 +128,14 @@ func (s *OAuthService) Login(ctx context.Context, providerName, code, state stri
 		userID = binding.UserID
 	}
 
-	// 签发 token
+	// 签发 token（租户取自用户归属；未归属时归默认租户）
 	sessionID := uuid.NewString()
-	accessToken, err := s.jwtUtil.GenerateAccess(userID, sessionID)
+	tenantID := s.resolveTenantID(ctx, userID)
+	accessToken, err := s.jwtUtil.GenerateAccess(userID, tenantID, sessionID)
 	if err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "generate access token", err)
 	}
-	refreshToken, refreshClaims, err := s.jwtUtil.GenerateRefresh(userID, sessionID)
+	refreshToken, refreshClaims, err := s.jwtUtil.GenerateRefresh(userID, tenantID, sessionID)
 	if err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "generate refresh token", err)
 	}
@@ -163,6 +165,7 @@ func (s *OAuthService) createUserWithBinding(ctx context.Context, providerName s
 		Username: username,
 		Password: string(hashed),
 		Status:   1,
+		TenantID: tenant.DefaultTenantID,
 	}
 	var userID uint64
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -187,4 +190,19 @@ func refreshTTL(claims auth.Claims) time.Duration {
 		return 0
 	}
 	return time.Until(claims.ExpiresAt.Time)
+}
+
+// resolveTenantID 查询用户归属租户；未归属（0）、db 不可用或查询失败时归默认租户
+func (s *OAuthService) resolveTenantID(ctx context.Context, userID uint64) uint64 {
+	if s.db == nil {
+		return tenant.DefaultTenantID
+	}
+	var u userdomain.User
+	if err := s.db.WithContext(ctx).Select("id", "tenant_id").First(&u, userID).Error; err != nil {
+		return tenant.DefaultTenantID
+	}
+	if u.TenantID == 0 {
+		return tenant.DefaultTenantID
+	}
+	return u.TenantID
 }

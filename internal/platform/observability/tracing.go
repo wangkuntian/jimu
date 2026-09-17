@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -13,24 +14,67 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
 )
 
-// TracingConfig OpenTelemetry 追踪配置
+// TracingConfig OpenTelemetry 可观测性配置（追踪/指标/日志统一走 OTLP gRPC）
 type TracingConfig struct {
 	Enabled        bool    `mapstructure:"enabled"`
 	Endpoint       string  `mapstructure:"endpoint"`
 	ServiceName    string  `mapstructure:"service_name"`
 	ServiceVersion string  `mapstructure:"service_version"`
 	SampleRate     float64 `mapstructure:"sample_rate"`
+	// MetricsEnabled 是否将 Prometheus 指标转换为 OTLP 推送到 OpenObserve
+	MetricsEnabled bool `mapstructure:"metrics_enabled"`
+	// LogsEnabled 是否将结构化日志推送到 OpenObserve
+	LogsEnabled bool `mapstructure:"logs_enabled"`
+	// MetricsInterval 指标推送间隔（秒），<=0 默认 15
+	MetricsInterval int `mapstructure:"metrics_interval_sec"`
+	// AuthEmail / AuthPassword OpenObserve 账号凭据（Basic Auth，gRPC metadata authorization）。
+	// AuthEmail 为空则不携带凭据（OpenObserve 默认拒绝匿名 OTLP 写入）。
+	AuthEmail    string `mapstructure:"auth_email"`
+	AuthPassword string `mapstructure:"auth_password"`
+	// OrgID OpenObserve 组织（gRPC metadata organization；OpenObserve OTLP 默认组织 default）
+	OrgID string `mapstructure:"org_id"`
+	// LogsStreamName OpenObserve 日志 stream 名（gRPC metadata stream-name；
+	// 空则不携带 header，落 OpenObserve 默认流 default）
+	LogsStreamName string `mapstructure:"logs_stream_name"`
+	// TracesStreamName OpenObserve 追踪 stream 名（同上，空则落默认流 default）
+	TracesStreamName string `mapstructure:"traces_stream_name"`
 }
 
-// DefaultTracingConfig 返回默认追踪配置
+// DefaultTracingConfig 返回默认可观测性配置
 func DefaultTracingConfig() TracingConfig {
 	return TracingConfig{
-		Enabled:        false,
-		Endpoint:       "localhost:4317",
-		ServiceName:    "jimu",
-		ServiceVersion: "dev",
-		SampleRate:     1.0,
+		Enabled:          false,
+		Endpoint:         "localhost:4317",
+		ServiceName:      "jimu",
+		ServiceVersion:   "dev",
+		SampleRate:       1.0,
+		MetricsEnabled:   true,
+		LogsEnabled:      true,
+		MetricsInterval:  15,
+		OrgID:            "default",
+		LogsStreamName:   "jimu_logs",
+		TracesStreamName: "jimu_traces",
 	}
+}
+
+// otlpHeaders 构造 OpenObserve OTLP gRPC 认证与组织 metadata：
+//   - organization: 组织标识（默认 default）
+//   - stream-name: 目标 stream（logs/traces 各自指定；空则省略，落 OpenObserve 默认流 default）
+//   - authorization: Basic base64(email:password)，AuthEmail 非空时携带
+func otlpHeaders(cfg TracingConfig, streamName string) map[string]string {
+	org := cfg.OrgID
+	if org == "" {
+		org = "default"
+	}
+	headers := map[string]string{"organization": org}
+	if streamName != "" {
+		headers["stream-name"] = streamName
+	}
+	if cfg.AuthEmail != "" {
+		token := base64.StdEncoding.EncodeToString([]byte(cfg.AuthEmail + ":" + cfg.AuthPassword))
+		headers["authorization"] = "Basic " + token
+	}
+	return headers
 }
 
 // InitTracing 初始化 OpenTelemetry 追踪
@@ -46,6 +90,7 @@ func InitTracing(ctx context.Context, cfg TracingConfig) (*sdktrace.TracerProvid
 	exporter, err := otlptracegrpc.New(ctx,
 		otlptracegrpc.WithEndpoint(cfg.Endpoint),
 		otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithHeaders(otlpHeaders(cfg, cfg.TracesStreamName)),
 		otlptracegrpc.WithTimeout(10*time.Second),
 	)
 	if err != nil {

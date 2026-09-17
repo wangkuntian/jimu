@@ -10,6 +10,9 @@ type TokenPair struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int    `json:"expires_in"`
+	// DeviceToken 仅在「记住此设备」成功签发时返回，客户端需安全保存；
+	// 后续登录携带它可在密码正确的前提下跳过 TOTP。
+	DeviceToken string `json:"device_token,omitempty"`
 }
 
 type AuthServiceInterface interface {

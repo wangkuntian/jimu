@@ -18,10 +18,10 @@ type UserInfo struct {
 
 // Provider 第三方登录提供商接口
 type Provider interface {
-	// Name 提供商名称（google/github/wechat）
+	// Name 提供商名称（内置 google/github/wechat，或自定义 OIDC 提供商名）
 	Name() string
-	// AuthURL 构造授权跳转 URL
-	AuthURL(state string) string
+	// AuthURL 构造授权跳转 URL（OIDC 等需要先拉取 discovery 文档的提供商可能失败）
+	AuthURL(ctx context.Context, state string) (string, error)
 	// Exchange 用授权码换取用户信息
 	Exchange(ctx context.Context, code string) (*UserInfo, error)
 }

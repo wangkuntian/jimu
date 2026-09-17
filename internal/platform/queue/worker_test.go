@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"jimu/internal/platform/queue/domain"
+	"jimu/internal/platform/tenant"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -101,7 +102,7 @@ func (r *fakeJobRepo) Update(ctx context.Context, job *domain.Job) error {
 	return nil
 }
 
-func (r *fakeJobRepo) List(ctx context.Context, offset, limit int, filters map[string]interface{}) ([]domain.Job, int64, error) {
+func (r *fakeJobRepo) List(ctx context.Context, tenantID uint64, offset, limit int, filters map[string]interface{}) ([]domain.Job, int64, error) {
 	return nil, 0, nil
 }
 
@@ -138,11 +139,13 @@ func (r *fakeDeadRepo) Create(ctx context.Context, d *domain.DeadLetter) error {
 	return nil
 }
 
-func (r *fakeDeadRepo) List(ctx context.Context, offset, limit int, resolved bool) ([]domain.DeadLetter, int64, error) {
+func (r *fakeDeadRepo) List(ctx context.Context, tenantID uint64, offset, limit int, resolved bool) ([]domain.DeadLetter, int64, error) {
 	return nil, 0, nil
 }
 
-func (r *fakeDeadRepo) MarkResolved(ctx context.Context, id uint64) error { return nil }
+func (r *fakeDeadRepo) MarkResolved(ctx context.Context, tenantID uint64, id uint64) error {
+	return nil
+}
 
 // fakeStore 构造内存版 MySQLStore
 func fakeStore() *MySQLStore {
@@ -349,4 +352,62 @@ func TestWorkerPoolConsumeRestoresTrace(t *testing.T) {
 	wp.Stop()
 
 	assert.Equal(t, sc.TraceID(), gotTraceID)
+}
+
+func TestMySQLStoreCreateJobTenant(t *testing.T) {
+	jobRepo := newFakeJobRepo()
+	store := NewMySQLStore(jobRepo, &fakeHistoryRepo{}, &fakeDeadRepo{})
+
+	// 上下文有租户：归属该租户
+	job, err := store.CreateJob(tenant.WithTenant(context.Background(), 7), "echo", "{}", 3)
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(7), job.TenantID)
+
+	// 无租户上下文：归默认租户
+	job, err = store.CreateJob(context.Background(), "echo", "{}", 3)
+	assert.NoError(t, err)
+	assert.Equal(t, tenant.DefaultTenantID, job.TenantID)
+}
+
+func TestMySQLStoreMarkFailedPropagatesTenant(t *testing.T) {
+	jobRepo := newFakeJobRepo()
+	history := &fakeHistoryRepo{}
+	dead := &fakeDeadRepo{}
+	store := NewMySQLStore(jobRepo, history, dead)
+
+	job, err := store.CreateJob(tenant.WithTenant(context.Background(), 5), "echo", "{}", 1)
+	assert.NoError(t, err)
+	// 先进入执行态（Attempts=1），失败即耗尽重试次数 → 写死信
+	assert.NoError(t, store.MarkRunning(context.Background(), job.ID))
+	assert.NoError(t, store.MarkFailed(context.Background(), job.ID, "echo", "{}", errors.New("boom"), 1))
+	require.Len(t, history.records, 1)
+	assert.Equal(t, uint64(5), history.records[0].TenantID)
+	require.Len(t, dead.items, 1)
+	assert.Equal(t, uint64(5), dead.items[0].TenantID)
+}
+
+func TestWorkerPoolRestoresJobTenant(t *testing.T) {
+	got := make(chan uint64, 1)
+	RegisterWorker("tenant-echo", func(ctx context.Context, payload string) error {
+		got <- tenant.FromContext(ctx)
+		return nil
+	})
+
+	jobRepo := newFakeJobRepo()
+	store := NewMySQLStore(jobRepo, &fakeHistoryRepo{}, &fakeDeadRepo{})
+	job, err := store.CreateJob(tenant.WithTenant(context.Background(), 9), "tenant-echo", "{}", 3)
+	require.NoError(t, err)
+
+	consumer := &fakeConsumer{jobs: make(chan *JobData, 1)}
+	consumer.jobs <- &JobData{ID: job.ID, Type: "tenant-echo", Payload: "{}"}
+
+	wp := NewWorkerPool(WorkerConfig{Workers: 1, PollTimeout: 10 * time.Millisecond}, consumer, store)
+	wp.Start()
+	select {
+	case tid := <-got:
+		assert.Equal(t, uint64(9), tid)
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker did not run")
+	}
+	wp.Stop()
 }

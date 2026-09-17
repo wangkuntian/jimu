@@ -29,17 +29,17 @@ func TestDSN(t *testing.T) {
 	cfg := config.DBConfig{Host: "db", Port: 3306, User: "u", Password: "p", Database: "app"}
 
 	got := dsn(cfg, "", 0)
-	want := "u:p@tcp(db:3306)/app?charset=utf8mb4&parseTime=True&loc=Local"
+	want := "u:p@tcp(db:3306)/app?charset=utf8mb4&parseTime=True&loc=UTC&time_zone=%27%2B00%3A00%27"
 	assert.Equal(t, want, got)
 
 	// 显式 host/port 优先
 	got = dsn(cfg, "replica", 3307)
-	want = "u:p@tcp(replica:3307)/app?charset=utf8mb4&parseTime=True&loc=Local"
+	want = "u:p@tcp(replica:3307)/app?charset=utf8mb4&parseTime=True&loc=UTC&time_zone=%27%2B00%3A00%27"
 	assert.Equal(t, want, got)
 
 	// 只有 host 覆盖时 port 回落默认
 	got = dsn(cfg, "replica", 0)
-	want = "u:p@tcp(replica:3306)/app?charset=utf8mb4&parseTime=True&loc=Local"
+	want = "u:p@tcp(replica:3306)/app?charset=utf8mb4&parseTime=True&loc=UTC&time_zone=%27%2B00%3A00%27"
 	assert.Equal(t, want, got)
 }
 

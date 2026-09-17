@@ -1,0 +1,48 @@
+name: CI (Commits)
+
+# 提交消息门禁：所有 commit message（summary 与正文）必须为英文
+# （AGENTS.md「Commit Message 规范」；本地由 githooks/commit-msg 在 commit 时
+# 强制，本 workflow 为服务端兜底，复用同一检查实现）。
+# 无 path 过滤：任何 PR/push 都会运行，避免仅改 docs/deploy 的 PR 绕过检查。
+
+on:
+  push:
+    branches: [master, release/*]
+  pull_request:
+    branches: [master, release/*]
+
+# 同分支连续推送取消旧 run（独立于 ci-go / ci-docker）
+concurrency:
+  group: ci-commit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commit-messages:
+    name: Commit Messages (all-English)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # push：检查本次推送新增的提交区间。
+      # 分支删除（after 为零 SHA）时跳过；force push 的 base 不可解析时脚本自动降级为只查 tip。
+      - name: "📝 Check pushed commits"
+        if: github.event_name == 'push' && github.event.after != '0000000000000000000000000000000000000000'
+        run: |
+          scripts/check_commit_messages.sh "${{ github.event.before }}" "${{ github.event.after }}"
+
+      # PR：检查 merge ref 相对 base 分支的全部提交（即 PR 头部的所有提交）。
+      # merge ref 不存在（冲突未解决）时降级为只查 PR head 提交。
+      - name: "📝 Check pull request commits"
+        if: github.event_name == 'pull_request'
+        run: |
+          if git fetch --no-tags origin "refs/pull/${{ github.event.pull_request.number }}/merge"; then
+            scripts/check_commit_messages.sh "origin/${{ github.event.pull_request.base.ref }}" "FETCH_HEAD"
+          elif git fetch --no-tags origin "refs/pull/${{ github.event.pull_request.number }}/head"; then
+            echo "PR merge ref unavailable (conflicts?); falling back to head ref"
+            scripts/check_commit_messages.sh "origin/${{ github.event.pull_request.base.ref }}" "FETCH_HEAD"
+          else
+            echo "cannot fetch PR refs; checking head sha only"
+            scripts/check_commit_messages.sh "" "${{ github.event.pull_request.head.sha }}"
+          fi

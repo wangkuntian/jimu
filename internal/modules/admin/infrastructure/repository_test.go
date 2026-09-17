@@ -30,23 +30,38 @@ func TestMysqlAPIKeyRepository(t *testing.T) {
 	repo := NewMysqlAPIKeyRepository(db)
 	ctx := context.Background()
 
-	// Create + FindByID
-	key := &admindomain.APIKey{ID: 1, Name: "web", KeyPrefix: "jimu_ab", KeyHash: "h1", Scopes: "[\"read\"]", Enabled: true, CreatedBy: 3}
+	// Create + FindByID（含租户字段）
+	key := &admindomain.APIKey{ID: 1, TenantID: 1, Name: "web", KeyPrefix: "jimu_ab", KeyHash: "h1", Scopes: "[\"read\"]", Enabled: true, CreatedBy: 3}
 	assert.NoError(t, repo.Create(ctx, key))
 	got, err := repo.FindByID(ctx, 1)
 	assert.NoError(t, err)
 	assert.Equal(t, "web", got.Name)
+	assert.Equal(t, uint64(1), got.TenantID)
 
 	// FindByKeyHash
 	byHash, err := repo.FindByKeyHash(ctx, "h1")
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(1), byHash.ID)
 
-	// List
-	keys, total, err := repo.List(ctx, 0, 10)
+	// List：平台级视角（tenantID=0）不过滤
+	keys, total, err := repo.List(ctx, 0, 0, 10)
 	assert.NoError(t, err)
 	assert.Len(t, keys, 1)
 	assert.Equal(t, int64(1), total)
+
+	// List：按租户过滤（其他租户的 Key 不可见）
+	other := &admindomain.APIKey{ID: 2, TenantID: 2, Name: "other", KeyPrefix: "jimu_cd", KeyHash: "h2", Enabled: true}
+	assert.NoError(t, repo.Create(ctx, other))
+	keys, total, err = repo.List(ctx, 1, 0, 10)
+	assert.NoError(t, err)
+	assert.Len(t, keys, 1)
+	assert.Equal(t, int64(1), total)
+	assert.Equal(t, "web", keys[0].Name)
+	keys, total, err = repo.List(ctx, 2, 0, 10)
+	assert.NoError(t, err)
+	assert.Len(t, keys, 1)
+	assert.Equal(t, int64(1), total)
+	assert.Equal(t, "other", keys[0].Name)
 
 	// Update
 	key.Name = "web2"
@@ -107,21 +122,29 @@ func TestMysqlJobRepository(t *testing.T) {
 
 	// List 带 status 过滤
 	assert.NoError(t, repo.Create(ctx, &qdomain.Job{ID: 2, Type: "email", Status: qdomain.JobStatusPending}))
-	jobs, total, err := repo.List(ctx, 0, 10, map[string]interface{}{"status": "failed"})
+	jobs, total, err := repo.List(ctx, 0, 0, 10, map[string]interface{}{"status": "failed"})
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), total)
 	assert.Len(t, jobs, 1)
 	assert.Equal(t, uint64(1), jobs[0].ID)
 
 	// List 带 type 过滤
-	jobs, total, err = repo.List(ctx, 0, 10, map[string]interface{}{"type": "sms"})
+	jobs, total, err = repo.List(ctx, 0, 0, 10, map[string]interface{}{"type": "sms"})
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), total)
 	assert.Empty(t, jobs)
 
 	// List 无过滤
-	jobs, total, err = repo.List(ctx, 0, 10, map[string]interface{}{})
+	jobs, total, err = repo.List(ctx, 0, 0, 10, map[string]interface{}{})
 	assert.NoError(t, err)
 	assert.Equal(t, int64(2), total)
 	assert.Len(t, jobs, 2)
+
+	// List 按租户过滤
+	assert.NoError(t, repo.Create(ctx, &qdomain.Job{ID: 3, TenantID: 5, Type: "email", Status: qdomain.JobStatusPending}))
+	jobs, total, err = repo.List(ctx, 5, 0, 10, map[string]interface{}{})
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	assert.Len(t, jobs, 1)
+	assert.Equal(t, uint64(3), jobs[0].ID)
 }

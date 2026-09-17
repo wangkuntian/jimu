@@ -1,85 +1,112 @@
 #!/bin/bash
-# 数据库备份脚本
-# 用法: ./scripts/backup.sh [output_dir]
-# 环境变量: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+# 数据库备份脚本（MySQL/MariaDB/PostgreSQL）
+#
+# 推荐用法：在数据库容器内执行（脚本由 compose 挂载，输出目录绑定到 ./backups）
+#   docker compose exec -T mariadb bash /opt/jimu/scripts/backup.sh /backups
+#   make compose-db-backup
+# 主机用法（本机需有 mariadb-dump/mysqldump 或 pg_dump，且数据库端口可达）：
+#   ./scripts/backup.sh [output_dir]        # 默认 ./backups
+#
+# 环境变量：
+#   DB_DRIVER                        mysql（默认）/ postgres；未设置时按可用客户端探测
+#   DB_HOST/DB_PORT/DB_USER/DB_NAME  连接信息（默认端口随方言：3306 / 5432）
+#   DB_PASSWORD                      口令；为空时依次尝试 DB_PASSWORD_FILE、
+#                                    MARIADB_(ROOT_)PASSWORD_FILE / POSTGRES_PASSWORD_FILE、
+#                                    /run/secrets/db_root_password、/run/secrets/db_password
+#   MARIADB_DUMP / MYSQLDUMP / PG_DUMP  指定 dump 命令（默认自动探测）
+#   RETENTION_DAYS                   备份保留天数（默认 7，0 表示不清理）
+#   GZIP=0                           不压缩（默认 gzip 压缩）
 
 set -euo pipefail
 
-# 配置（可通过环境变量覆盖）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/db_common.sh
+source "${SCRIPT_DIR}/db_common.sh"
+
+DB_DRIVER="$(resolve_driver)"
 DB_HOST="${DB_HOST:-127.0.0.1}"
-DB_PORT="${DB_PORT:-3306}"
-DB_USER="${DB_USER:-jimu}"
+DB_PORT="${DB_PORT:-$(default_db_port "$DB_DRIVER")}"
+DB_USER="${DB_USER:-$(default_db_user "$DB_DRIVER")}"
 DB_PASSWORD="${DB_PASSWORD:-}"
 DB_NAME="${DB_NAME:-jimu}"
 OUTPUT_DIR="${1:-./backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-7}"
 
-# 创建输出目录
-mkdir -p "$OUTPUT_DIR"
+PASSWORD="$(read_password "$DB_DRIVER")"
+DUMP_BIN="$(resolve_dump "$DB_DRIVER")"
 
-# 生成文件名
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="${OUTPUT_DIR}/${DB_NAME}_${TIMESTAMP}.sql.gz"
+# 组装 dump 参数：两个方言都保证一致性快照语义
+case "$DB_DRIVER" in
+    postgres)
+        # --clean --if-exists 让恢复可覆盖既有对象；--no-password 避免交互式口令提示
+        DUMP_ARGS=(
+            --host="$DB_HOST"
+            --port="$DB_PORT"
+            --username="$DB_USER"
+            --no-password
+            --format=plain
+            --clean
+            --if-exists
+            "$DB_NAME"
+        )
+        ;;
+    *)
+        # --set-gtid-purged 是 MySQL 专有选项，mariadb-dump 不支持（MariaDB 12 会直接报错），
+        # 因此按实际命令是否支持来决定是否传参，避免回退到 mariadb-dump 后备份失败。
+        GTID_FLAG=()
+        if "$DUMP_BIN" --help 2>&1 | grep -q -- '--set-gtid-purged'; then
+            GTID_FLAG=(--set-gtid-purged=OFF)
+        fi
+        DUMP_ARGS=(
+            --host="$DB_HOST"
+            --port="$DB_PORT"
+            --user="$DB_USER"
+            --single-transaction   # InnoDB 一致性快照，不锁表
+            --routines
+            --triggers
+            --events
+            --default-character-set=utf8mb4
+            "${GTID_FLAG[@]}"
+            "$DB_NAME"
+        )
+        ;;
+esac
+
+mkdir -p "$OUTPUT_DIR"
+TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+if [ "${GZIP:-1}" = "0" ]; then
+    BACKUP_FILE="${OUTPUT_DIR}/${DB_NAME}_${TIMESTAMP}.sql"
+else
+    BACKUP_FILE="${OUTPUT_DIR}/${DB_NAME}_${TIMESTAMP}.sql.gz"
+fi
 
 echo "=== Jimu Database Backup ==="
-echo "Host: ${DB_HOST}:${DB_PORT}"
+echo "Driver:   ${DB_DRIVER}"
+echo "Host:     ${DB_HOST}:${DB_PORT}"
 echo "Database: ${DB_NAME}"
-echo "Output: ${BACKUP_FILE}"
+echo "Tool:     ${DUMP_BIN}"
+echo "Output:   ${BACKUP_FILE}"
 
-# 选择 dump 客户端：优先 mysqldump，回退 mariadb-dump（mariadb:12+ 移除了 mysqldump 软链接）
-DUMP_BIN="${MYSQLDUMP:-}"
-if [ -z "$DUMP_BIN" ]; then
-    if command -v mysqldump >/dev/null 2>&1; then
-        DUMP_BIN=mysqldump
-    elif command -v mariadb-dump >/dev/null 2>&1; then
-        DUMP_BIN=mariadb-dump
-    else
-        echo "❌ 未找到 mysqldump 或 mariadb-dump，请安装 MariaDB/MySQL 客户端" >&2
-        exit 1
-    fi
-fi
-
-# 执行备份
-if [ -n "$DB_PASSWORD" ]; then
-    "$DUMP_BIN" \
-        --host="$DB_HOST" \
-        --port="$DB_PORT" \
-        --user="$DB_USER" \
-        --password="$DB_PASSWORD" \
-        --single-transaction \
-        --routines \
-        --triggers \
-        --events \
-        --set-gtid-purged=OFF \
-        "$DB_NAME" | gzip > "$BACKUP_FILE"
+if [ "${GZIP:-1}" = "0" ]; then
+    run_with_password "$DB_DRIVER" "$DUMP_BIN" "$PASSWORD" "${DUMP_ARGS[@]}" > "$BACKUP_FILE"
 else
-    "$DUMP_BIN" \
-        --host="$DB_HOST" \
-        --port="$DB_PORT" \
-        --user="$DB_USER" \
-        --single-transaction \
-        --routines \
-        --triggers \
-        --events \
-        --set-gtid-purged=OFF \
-        "$DB_NAME" | gzip > "$BACKUP_FILE"
+    run_with_password "$DB_DRIVER" "$DUMP_BIN" "$PASSWORD" "${DUMP_ARGS[@]}" | gzip > "$BACKUP_FILE"
 fi
 
-# 验证备份
 if [ -s "$BACKUP_FILE" ]; then
-    SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
+    SIZE="$(du -h "$BACKUP_FILE" | cut -f1)"
     echo "✅ Backup completed: ${BACKUP_FILE} (${SIZE})"
 else
-    echo "❌ Backup failed: file is empty"
+    echo "❌ Backup failed: file is empty" >&2
     rm -f "$BACKUP_FILE"
     exit 1
 fi
 
-# 清理旧备份
-echo "Cleaning up backups older than ${RETENTION_DAYS} days..."
-find "$OUTPUT_DIR" -name "${DB_NAME}_*.sql.gz" -mtime +"$RETENTION_DAYS" -delete
+if [ "$RETENTION_DAYS" -gt 0 ]; then
+    echo "Cleaning up backups older than ${RETENTION_DAYS} days..."
+    find "$OUTPUT_DIR" -maxdepth 1 \( -name "${DB_NAME}_*.sql.gz" -o -name "${DB_NAME}_*.sql" \) -mtime +"$RETENTION_DAYS" -delete
+fi
 
-# 列出当前备份
 echo ""
 echo "Current backups:"
-ls -lh "$OUTPUT_DIR"/*.sql.gz 2>/dev/null || echo "(none)"
+ls -lh "$OUTPUT_DIR"/"${DB_NAME}"_*.sql* 2>/dev/null || echo "(none)"

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"jimu/internal/modules/role/domain"
+	tenantdomain "jimu/internal/modules/tenant/domain"
 	userdomain "jimu/internal/modules/user/domain"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -45,11 +46,30 @@ func repoRoot(t *testing.T) string {
 	return filepath.Dir(filepath.Dir(MigrationDir()))
 }
 
+// expectDefaultTenantQuery 编排默认租户 FirstOrCreate 的 SELECT+INSERT 预期
+func expectDefaultTenantQuery(mock sqlmock.Sqlmock) {
+	mock.ExpectQuery("SELECT \\* FROM `tenants`").
+		WillReturnRows(sqlmock.NewRows(nil))
+	mock.ExpectExec("INSERT INTO `tenants`").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+}
+
+// expectFreePlanQuery 编排内置套餐 FirstOrCreate 的 SELECT+INSERT 预期
+func expectFreePlanQuery(mock sqlmock.Sqlmock) {
+	mock.ExpectQuery("SELECT \\* FROM `tenant_plans`").
+		WillReturnRows(sqlmock.NewRows(nil))
+	mock.ExpectExec("INSERT INTO `tenant_plans`").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+}
+
 // expectRunSeedQueries 为 RunSeed 全流程编排 sqlmock 预期：
-// BEGIN → 22×(权限 SELECT+INSERT) → 角色 SELECT+INSERT → 22×(role_permissions
-// count+INSERT) → 管理员 SELECT+INSERT → user_roles INSERT → COMMIT
+// BEGIN → 租户 SELECT+INSERT → 套餐 SELECT+INSERT → 27×(权限 SELECT+INSERT) → 角色 SELECT+INSERT →
+// 27×(role_permissions count+INSERT) → 管理员 SELECT+INSERT → user_roles INSERT → COMMIT
 func expectRunSeedQueries(mock sqlmock.Sqlmock) {
 	mock.ExpectBegin()
+
+	expectDefaultTenantQuery(mock)
+	expectFreePlanQuery(mock)
 
 	for range basePermissions() {
 		mock.ExpectQuery("SELECT \\* FROM `permissions`").
@@ -107,6 +127,8 @@ func TestRunSeed_PermissionQueryError(t *testing.T) {
 
 	db, mock := newMockGormDB(t)
 	mock.ExpectBegin()
+	expectDefaultTenantQuery(mock)
+	expectFreePlanQuery(mock)
 	mock.ExpectQuery("SELECT \\* FROM `permissions`").
 		WillReturnError(errors.New("select boom"))
 	mock.ExpectRollback()
@@ -120,6 +142,8 @@ func TestRunSeed_RoleInsertError(t *testing.T) {
 
 	db, mock := newMockGormDB(t)
 	mock.ExpectBegin()
+	expectDefaultTenantQuery(mock)
+	expectFreePlanQuery(mock)
 	for range basePermissions() {
 		mock.ExpectQuery("SELECT \\* FROM `permissions`").
 			WillReturnRows(sqlmock.NewRows(nil))
@@ -141,6 +165,8 @@ func TestRunSeed_AssignPermissionError(t *testing.T) {
 
 	db, mock := newMockGormDB(t)
 	mock.ExpectBegin()
+	expectDefaultTenantQuery(mock)
+	expectFreePlanQuery(mock)
 	for range basePermissions() {
 		mock.ExpectQuery("SELECT \\* FROM `permissions`").
 			WillReturnRows(sqlmock.NewRows(nil))
@@ -167,6 +193,8 @@ func TestRunSeed_AdminUserCreateError(t *testing.T) {
 
 	db, mock := newMockGormDB(t)
 	mock.ExpectBegin()
+	expectDefaultTenantQuery(mock)
+	expectFreePlanQuery(mock)
 	for range basePermissions() {
 		mock.ExpectQuery("SELECT \\* FROM `permissions`").
 			WillReturnRows(sqlmock.NewRows(nil))
@@ -198,6 +226,8 @@ func TestRunSeed_AssignAdminRoleError(t *testing.T) {
 
 	db, mock := newMockGormDB(t)
 	mock.ExpectBegin()
+	expectDefaultTenantQuery(mock)
+	expectFreePlanQuery(mock)
 	for range basePermissions() {
 		mock.ExpectQuery("SELECT \\* FROM `permissions`").
 			WillReturnRows(sqlmock.NewRows(nil))
@@ -232,6 +262,8 @@ func TestRunSeed_RolePermissionCountError(t *testing.T) {
 
 	db, mock := newMockGormDB(t)
 	mock.ExpectBegin()
+	expectDefaultTenantQuery(mock)
+	expectFreePlanQuery(mock)
 	for range basePermissions() {
 		mock.ExpectQuery("SELECT \\* FROM `permissions`").
 			WillReturnRows(sqlmock.NewRows(nil))
@@ -271,7 +303,7 @@ func TestRunSeedWithCasbin(t *testing.T) {
 	t.Setenv("ADMIN_PASSWORD", "secret123")
 
 	db := newSeedSqliteDB(t)
-	require.NoError(t, db.AutoMigrate(&domain.Permission{}, &domain.Role{}, &userdomain.User{}))
+	require.NoError(t, db.AutoMigrate(&domain.Permission{}, &domain.Role{}, &userdomain.User{}, &tenantdomain.Tenant{}, &tenantdomain.Plan{}))
 	require.NoError(t, db.Exec("CREATE TABLE role_permissions (role_id INTEGER, permission_id INTEGER)").Error)
 	require.NoError(t, db.Exec("CREATE TABLE user_roles (user_id INTEGER, role_id INTEGER)").Error)
 
@@ -329,6 +361,11 @@ func TestBasePermissionsCoverBusinessRoutes(t *testing.T) {
 		{"/api/v1/permissions/*", "DELETE"},
 		{"/api/v1/audits", "GET"},
 		{"/api/v1/audits/*", "GET"},
+		{"/api/v1/tenants", "GET"},
+		{"/api/v1/tenants", "POST"},
+		{"/api/v1/tenants/*", "GET"},
+		{"/api/v1/tenants/*", "PUT"},
+		{"/api/v1/tenants/*", "DELETE"},
 	}
 	got := make(map[string]bool)
 	for _, permission := range basePermissions() {

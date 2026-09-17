@@ -19,6 +19,7 @@ const (
 // Job 任务实体
 type Job struct {
 	ID          uint64    `gorm:"primaryKey" json:"id"`
+	TenantID    uint64    `gorm:"column:tenant_id;default:0;index" json:"tenant_id"` // 所属租户 ID（0=未归属）
 	Type        string    `gorm:"size:64;not null;index" json:"type"`
 	Payload     string    `gorm:"type:text" json:"payload"`
 	Status      string    `gorm:"size:16;not null;default:pending;index:idx_status_next_run" json:"status"`
@@ -38,5 +39,5 @@ type JobRepository interface {
 	Create(ctx context.Context, job *Job) error
 	FindByID(ctx context.Context, id uint64) (*Job, error)
 	Update(ctx context.Context, job *Job) error
-	List(ctx context.Context, offset, limit int, filters map[string]interface{}) ([]Job, int64, error)
+	List(ctx context.Context, tenantID uint64, offset, limit int, filters map[string]interface{}) ([]Job, int64, error)
 }

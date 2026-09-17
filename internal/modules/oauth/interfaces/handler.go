@@ -22,7 +22,7 @@ func NewOAuthHandler(service *application.OAuthService) *OAuthHandler {
 // @Summary      OAuth 登录跳转
 // @Description  重定向到第三方授权页
 // @Tags         OAuth
-// @Param        provider path string true "提供商 (google/github/wechat)"
+// @Param        provider path string true "提供商名（内置 google/github/wechat，或配置了 issuer_url 的自定义 OIDC 提供商）"
 // @Success      302
 // @Router       /oauth/{provider}/login [get]
 func (h *OAuthHandler) Login(c *gin.Context) {

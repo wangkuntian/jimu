@@ -21,7 +21,8 @@ import (
 func startTestGRPCServer(t *testing.T) (*grpcpkg.Server, *grpc.ClientConn) {
 	t.Helper()
 	log := logger.New(config.LogConfig{Level: "warn", Format: "console", Output: "stdout"})
-	s := grpcpkg.New(grpcpkg.Config{Host: "127.0.0.1", Port: 0}, log)
+	s, err := grpcpkg.New(grpcpkg.Config{Host: "127.0.0.1", Port: 0}, log)
+	require.NoError(t, err)
 	require.NoError(t, s.Start(context.Background()))
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 

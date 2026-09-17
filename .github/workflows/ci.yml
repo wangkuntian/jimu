@@ -1,26 +1,42 @@
-name: CI
+name: CI (Go)
+
+# Go 代码质量门禁：lint / test（含覆盖率）/ race / benchmark / govulncheck。
+# 仅当 Go 相关代码或测试/构建脚本变更时触发。
+# 镜像构建与安全扫描见 ci-docker.yml（Dockerfile/compose/deploy 变更）。
 
 on:
   push:
     branches: [master, release/*]
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-      - "LICENSE"
-      - ".gitignore"
-      - ".editorconfig"
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "tools/**"
+      - "go.mod"
+      - "go.sum"
+      - "migrations/**"
+      - "proto/**"
+      - "configs/**"
+      - "scripts/**"
+      - "Makefile"
+      - ".github/workflows/ci.yml"
   pull_request:
     branches: [master, release/*]
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-      - "LICENSE"
-      - ".gitignore"
-      - ".editorconfig"
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "tools/**"
+      - "go.mod"
+      - "go.sum"
+      - "migrations/**"
+      - "proto/**"
+      - "configs/**"
+      - "scripts/**"
+      - "Makefile"
+      - ".github/workflows/ci.yml"
 
-# 同分支连续推送取消旧 run
+# 同分支连续推送取消旧 run（本 workflow 独立取消，不干扰 ci-docker）
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-go-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -53,6 +69,9 @@ jobs:
           go vet ./...
           echo "✅ go vet passed"
 
+      - name: "🧾 Structured log usage check"
+        run: make check-log-usage
+
       - name: "🧹 golangci-lint"
         uses: golangci/golangci-lint-action@v9
         with:
@@ -67,9 +86,9 @@ jobs:
             | grep -E '^(internal/|cmd/|configs/|migrations/)' \
             | grep -qv '^$'; then
             if ! git diff --name-only origin/${{ github.base_ref }}...HEAD \
-              | grep -q '^CHANGELOG\.md$'; then
-              echo "❌ PR changes source files but CHANGELOG.md is not updated"
-              echo "👉 Please update the [Unreleased] section in CHANGELOG.md"
+              | grep -Eq '^CHANGELOG\.md$|^docs/releases/'; then
+              echo "❌ PR changes source files but CHANGELOG is not updated"
+              echo "👉 Please update docs/releases/<target version>.md"
               exit 1
             fi
           fi
@@ -133,6 +152,20 @@ jobs:
           DB_PASSWORD: root
           DB_NAME: jimu_test
         run: go test ./... -coverprofile=coverage.out
+
+      - name: "🗄️  Verify backup/restore round trip (mysql + postgres)"
+        run: |
+          # 客户端版本须 >= 服务端：CI 的 postgres service 是 17，Ubuntu 自带客户端为 16，
+          # 因此统一走共享安装脚本（与备份镜像同一份逻辑）
+          sudo PG_CLIENT_VERSION=17 bash scripts/install_db_clients.sh
+          # 直接调用 scripts/backup.sh 与 scripts/restore.sh（host 模式），
+          # 覆盖客户端探测、方言分支与恢复校验，而不是内联重写一套 dump 逻辑
+          MODE=host DB_DRIVER=mysql \
+            DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root DB_PASSWORD=root DB_NAME=jimu_test \
+            ./scripts/test_backup_restore.sh
+          MODE=host DB_DRIVER=postgres \
+            DB_HOST=127.0.0.1 DB_PORT=5432 DB_USER=postgres DB_PASSWORD=postgres DB_NAME=jimu_test \
+            ./scripts/test_backup_restore.sh
 
       - name: "🐘 Run postgres migration smoke"
         env:
@@ -241,26 +274,6 @@ jobs:
           export PATH="$(go env GOPATH)/bin:$PATH"
           scripts/bench_ci.sh --absolute
 
-  docker:
-    name: Docker Build
-    runs-on: ubuntu-latest
-    needs: [test]
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: "🐳 Build Docker image"
-        run: docker build -t jimu:${{ github.sha }} .
-
-      - name: "💾 Save image artifact"
-        run: docker save jimu:${{ github.sha }} -o jimu-image.tar
-
-      - name: "📤 Upload image artifact"
-        uses: actions/upload-artifact@v7
-        with:
-          name: docker-image
-          path: jimu-image.tar
-          retention-days: 1
-
   govulncheck:
     name: Govulncheck
     runs-on: ubuntu-latest
@@ -274,121 +287,3 @@ jobs:
 
       - name: "🛡️ govulncheck"
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-
-  security:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    needs: [docker]
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: "📥 Download image artifact"
-        uses: actions/download-artifact@v8
-        with:
-          name: docker-image
-          path: .
-
-      - name: "📦 Load Docker image"
-        run: docker load -i jimu-image.tar
-
-      - name: "🔐 Trivy image scan"
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: jimu:${{ github.sha }}
-          format: table
-          exit-code: '1'
-          ignore-unfixed: true
-          severity: CRITICAL,HIGH
-
-      - name: "📋 Generate SBOM"
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: jimu:${{ github.sha }}
-          format: cyclonedx
-          output: jimu-sbom.json
-
-      - name: "📤 Upload SBOM artifact"
-        uses: actions/upload-artifact@v7
-        with:
-          name: sbom
-          path: jimu-sbom.json
-
-      - name: "📄 Generate license report"
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          go run github.com/google/go-licenses@latest report --ignore "jimu/" ./... > license-report.txt
-          echo "✅ License report generated"
-
-      - name: "📤 Upload license report"
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/upload-artifact@v7
-        with:
-          name: license-report
-          path: license-report.txt
-
-  smoke:
-    name: Image Smoke Test
-    runs-on: ubuntu-latest
-    needs: [docker]
-    services:
-      mariadb:
-        image: mariadb:12.1.2-noble
-        env:
-          MARIADB_ROOT_PASSWORD: root
-          MARIADB_DATABASE: jimu_test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mariadb-admin ping --silent"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-      redis:
-        image: redis:8.4.0-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd="redis-cli ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: "📥 Download image artifact"
-        uses: actions/download-artifact@v8
-        with:
-          name: docker-image
-          path: .
-
-      - name: "📦 Load Docker image"
-        run: docker load -i jimu-image.tar
-
-      - name: "🚀 Start container and verify health"
-        run: |
-          docker run -d --name jimu-smoke \
-            --add-host=host.docker.internal:host-gateway \
-            -p 18080:8080 -p 19090:9090 \
-            -e APP_ENV=dev \
-            -e DB_HOST=host.docker.internal -e DB_PORT=3306 \
-            -e DB_USER=root -e DB_PASSWORD=root \
-            -e DB_NAME=jimu_test \
-            -e REDIS_ADDR=host.docker.internal:6379 \
-            -e MANAGEMENT_HOST=0.0.0.0 \
-            -e JWT_SECRET=smoke-test-secret \
-            jimu:${{ github.sha }}
-          for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:19090/livez >/dev/null 2>&1; then
-              echo "✅ livez OK"
-              break
-            fi
-            sleep 2
-          done
-          if ! curl -sf http://127.0.0.1:19090/livez >/dev/null; then
-            echo "❌ livez not reachable, container logs:"
-            docker logs jimu-smoke
-            exit 1
-          fi
-          curl -sf http://127.0.0.1:19090/livez
-          curl -sf http://127.0.0.1:19090/readyz
-          echo "✅ Image smoke test passed"

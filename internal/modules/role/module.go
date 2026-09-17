@@ -13,9 +13,14 @@ type Module struct {
 	service *application.RoleService
 }
 
-func New(db *gorm.DB) *Module {
+func New(db *gorm.DB, deps ...interface{}) *Module {
 	repo := infrastructure.NewMysqlRepository(db)
 	service := application.NewRoleService(repo)
+	for _, dep := range deps {
+		if quota, ok := dep.(application.TenantQuota); ok {
+			service.WithQuota(quota)
+		}
+	}
 	return &Module{service: service}
 }
 

@@ -44,7 +44,7 @@ func (testUserRole) TableName() string { return "user_roles" }
 // fakeUserRepository 可配置的用户仓储 mock
 type fakeUserRepository struct {
 	findByID func(ctx context.Context, id uint64) (*userdomain.User, error)
-	list     func(ctx context.Context, offset, limit int, sort, order string) ([]userdomain.User, int64, error)
+	list     func(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]userdomain.User, int64, error)
 	create   func(ctx context.Context, user *userdomain.User) error
 	update   func(ctx context.Context, user *userdomain.User) error
 }
@@ -60,9 +60,9 @@ func (f *fakeUserRepository) FindByUsername(ctx context.Context, username string
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeUserRepository) List(ctx context.Context, offset, limit int, sort, order string) ([]userdomain.User, int64, error) {
+func (f *fakeUserRepository) List(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]userdomain.User, int64, error) {
 	if f.list != nil {
-		return f.list(ctx, offset, limit, sort, order)
+		return f.list(ctx, tenantID, offset, limit, sort, order)
 	}
 	return []userdomain.User{{ID: 1, Username: "alice", Status: 1}}, 1, nil
 }
@@ -100,7 +100,7 @@ func (f *fakeUserRepository) UpdateTOTP(context.Context, uint64, string, bool) e
 type fakeAPIKeyRepo struct {
 	create   func(ctx context.Context, key *admindomain.APIKey) error
 	findByID func(ctx context.Context, id uint64) (*admindomain.APIKey, error)
-	list     func(ctx context.Context, offset, limit int) ([]admindomain.APIKey, int64, error)
+	list     func(ctx context.Context, tenantID uint64, offset, limit int) ([]admindomain.APIKey, int64, error)
 	delete   func(ctx context.Context, id uint64) error
 }
 
@@ -123,9 +123,9 @@ func (f *fakeAPIKeyRepo) FindByKeyHash(ctx context.Context, hash string) (*admin
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeAPIKeyRepo) List(ctx context.Context, offset, limit int) ([]admindomain.APIKey, int64, error) {
+func (f *fakeAPIKeyRepo) List(ctx context.Context, tenantID uint64, offset, limit int) ([]admindomain.APIKey, int64, error) {
 	if f.list != nil {
-		return f.list(ctx, offset, limit)
+		return f.list(ctx, tenantID, offset, limit)
 	}
 	return []admindomain.APIKey{{ID: 1, Name: "web"}}, 1, nil
 }
@@ -174,7 +174,7 @@ type fakeJobRepo struct {
 	create   func(ctx context.Context, job *qdomain.Job) error
 	findByID func(ctx context.Context, id uint64) (*qdomain.Job, error)
 	update   func(ctx context.Context, job *qdomain.Job) error
-	list     func(ctx context.Context, offset, limit int, filters map[string]interface{}) ([]qdomain.Job, int64, error)
+	list     func(ctx context.Context, tenantID uint64, offset, limit int, filters map[string]interface{}) ([]qdomain.Job, int64, error)
 }
 
 func (f *fakeJobRepo) Create(ctx context.Context, job *qdomain.Job) error {
@@ -199,31 +199,31 @@ func (f *fakeJobRepo) Update(ctx context.Context, job *qdomain.Job) error {
 	return nil
 }
 
-func (f *fakeJobRepo) List(ctx context.Context, offset, limit int, filters map[string]interface{}) ([]qdomain.Job, int64, error) {
+func (f *fakeJobRepo) List(ctx context.Context, tenantID uint64, offset, limit int, filters map[string]interface{}) ([]qdomain.Job, int64, error) {
 	if f.list != nil {
-		return f.list(ctx, offset, limit, filters)
+		return f.list(ctx, tenantID, offset, limit, filters)
 	}
 	return []qdomain.Job{{ID: 1, Type: "email"}}, 1, nil
 }
 
 // fakeDeadLetterRepo 可配置的死信仓储 mock
 type fakeDeadLetterRepo struct {
-	list         func(ctx context.Context, offset, limit int, resolved bool) ([]qdomain.DeadLetter, int64, error)
-	markResolved func(ctx context.Context, id uint64) error
+	list         func(ctx context.Context, tenantID uint64, offset, limit int, resolved bool) ([]qdomain.DeadLetter, int64, error)
+	markResolved func(ctx context.Context, tenantID uint64, id uint64) error
 }
 
 func (f *fakeDeadLetterRepo) Create(ctx context.Context, d *qdomain.DeadLetter) error { return nil }
 
-func (f *fakeDeadLetterRepo) List(ctx context.Context, offset, limit int, resolved bool) ([]qdomain.DeadLetter, int64, error) {
+func (f *fakeDeadLetterRepo) List(ctx context.Context, tenantID uint64, offset, limit int, resolved bool) ([]qdomain.DeadLetter, int64, error) {
 	if f.list != nil {
-		return f.list(ctx, offset, limit, resolved)
+		return f.list(ctx, tenantID, offset, limit, resolved)
 	}
 	return []qdomain.DeadLetter{{ID: 1, JobID: 1}}, 1, nil
 }
 
-func (f *fakeDeadLetterRepo) MarkResolved(ctx context.Context, id uint64) error {
+func (f *fakeDeadLetterRepo) MarkResolved(ctx context.Context, tenantID uint64, id uint64) error {
 	if f.markResolved != nil {
-		return f.markResolved(ctx, id)
+		return f.markResolved(ctx, tenantID, id)
 	}
 	return nil
 }

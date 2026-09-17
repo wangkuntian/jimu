@@ -1,0 +1,13 @@
+-- +goose Up
+ALTER TABLE users ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE roles ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
+
+COMMENT ON COLUMN users.version IS '乐观锁版本号（每次更新自增）';
+COMMENT ON COLUMN roles.version IS '乐观锁版本号（每次更新自增）';
+COMMENT ON COLUMN tenants.version IS '乐观锁版本号（每次更新自增）';
+
+-- +goose Down
+ALTER TABLE users DROP COLUMN IF EXISTS version;
+ALTER TABLE roles DROP COLUMN IF EXISTS version;
+ALTER TABLE tenants DROP COLUMN IF EXISTS version;

@@ -25,18 +25,20 @@ import (
 
 // Module 管理模块
 type Module struct {
-	service    *adminapp.Service
-	rdb        redistore.Client
-	db         *gorm.DB
-	sched      *scheduler.CronScheduler
-	storage    storage.Storage
-	scanner    platformhttp.Scanner
-	feature    *feature.Manager
-	eventBus   contract.EventBus
-	wsHub      *ws.ClientHub
-	wsPres     *ws.PresenceManager
-	wsChannels *ws.ChannelManager
-	jwt        *auth.JWT
+	ipAllowlist gin.HandlerFunc
+	service     *adminapp.Service
+	rdb         redistore.Client
+	db          *gorm.DB
+	sched       *scheduler.CronScheduler
+	storage     storage.Storage
+	scanner     platformhttp.Scanner
+	feature     *feature.Manager
+	eventBus    contract.EventBus
+	wsHub       *ws.ClientHub
+	wsPres      *ws.PresenceManager
+	wsChannels  *ws.ChannelManager
+	jwt         *auth.JWT
+	quota       adminapp.TenantQuota
 }
 
 // New 创建管理模块
@@ -60,6 +62,10 @@ func New(version, env string, rdb redistore.Client, db *gorm.DB, deps ...interfa
 			m.eventBus = d
 		case *auth.JWT:
 			m.jwt = d
+		case gin.HandlerFunc:
+			m.ipAllowlist = d
+		case adminapp.TenantQuota:
+			m.quota = d
 		}
 	}
 	return m
@@ -93,6 +99,10 @@ func (m *Module) Name() string { return "admin" }
 func (m *Module) RegisterHTTP(r contract.Router) {
 	// 管理员权限中间件，统一挂载在 /api/v1/admin 前缀下
 	admin := r.Group("/api/v1/admin")
+	// 管理端 IP 白名单需先于鉴权生效（未配置时不挂载）
+	if m.ipAllowlist != nil {
+		admin.Use(m.ipAllowlist)
+	}
 	admin.Use(middleware.AdminAuth())
 
 	// 公开端点（错误码文档）
@@ -111,7 +121,7 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 
 	// 用户管理端点
 	userHandler := admininterfaces.NewAdminUserHandler(
-		adminapp.NewAdminUserService(userinfra.NewMysqlRepository(m.db), m.db),
+		adminapp.NewAdminUserService(userinfra.NewMysqlRepository(m.db), m.db).WithQuota(m.quota),
 	)
 	admin.GET("/users", userHandler.List)
 	admin.POST("/users", userHandler.Create)
@@ -122,7 +132,7 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 
 	// API Key 管理端点
 	apiKeyHandler := admininterfaces.NewAdminAPIKeyHandler(
-		adminapp.NewAdminAPIKeyService(admininfra.NewMysqlAPIKeyRepository(m.db)),
+		adminapp.NewAdminAPIKeyService(admininfra.NewMysqlAPIKeyRepository(m.db)).WithQuota(m.quota),
 	)
 	admin.GET("/apikeys", apiKeyHandler.List)
 	admin.POST("/apikeys", apiKeyHandler.Create)

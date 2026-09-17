@@ -102,6 +102,14 @@ data:
       service_name: {{ .Values.otel.serviceName | quote }}
       service_version: {{ .Values.otel.serviceVersion | quote }}
       sample_rate: {{ .Values.otel.sampleRate }}
+      metrics_enabled: {{ .Values.otel.metricsEnabled }}
+      logs_enabled: {{ .Values.otel.logsEnabled }}
+      metrics_interval_sec: {{ .Values.otel.metricsIntervalSec }}
+      auth_email: {{ .Values.otel.authEmail | quote }}
+      auth_password: {{ .Values.otel.authPassword | quote }}
+      org_id: {{ .Values.otel.orgID | quote }}
+      logs_stream_name: {{ .Values.otel.logsStreamName | quote }}
+      traces_stream_name: {{ .Values.otel.tracesStreamName | quote }}
 
     db:
       host: {{ .Values.db.host | quote }}

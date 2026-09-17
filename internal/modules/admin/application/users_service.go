@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"jimu/internal/modules/user/domain"
+	dbutil "jimu/internal/platform/db"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -53,6 +55,13 @@ type AdminCreateUserRequest struct {
 type AdminUserService struct {
 	userRepo domain.UserRepository
 	db       *gorm.DB
+	quota    TenantQuota // nil = 未启用租户配额
+}
+
+// WithQuota 注入租户配额校验（未注入时不做配额检查）
+func (s *AdminUserService) WithQuota(quota TenantQuota) *AdminUserService {
+	s.quota = quota
+	return s
 }
 
 // NewAdminUserService 创建用户管理服务
@@ -69,21 +78,28 @@ func (s *AdminUserService) AssignRoles(ctx context.Context, userID uint64, roleN
 	if s.db == nil {
 		return apperrors.New(apperrors.CodeInternalError, "db not configured for role assignment")
 	}
-	if _, err := s.userRepo.FindByID(ctx, userID); err != nil {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
 		if stderrors.Is(err, gorm.ErrRecordNotFound) {
 			return apperrors.Wrap(apperrors.CodeNotFound, "user not found", err)
 		}
 		return apperrors.Wrap(apperrors.CodeInternalError, "failed to get user", err)
 	}
+	if !tenantVisible(user.TenantID, tenant.FromContext(ctx)) {
+		return apperrors.New(apperrors.CodeNotFound, "user not found")
+	}
 
-	// 解析角色名 -> 角色 ID
+	// 解析角色名 -> 角色 ID（角色名租户内唯一，限定在用户所属租户内解析）
 	var roleIDs []uint64
 	if len(roleNames) > 0 {
 		var roles []struct {
 			ID uint64
 		}
-		if err := s.db.WithContext(ctx).Table("roles").
-			Where("name IN ?", roleNames).Find(&roles).Error; err != nil {
+		query := s.db.WithContext(ctx).Table("roles").Where("name IN ?", roleNames)
+		if user.TenantID != 0 {
+			query = query.Where("tenant_id = ?", user.TenantID)
+		}
+		if err := query.Find(&roles).Error; err != nil {
 			return apperrors.Wrap(apperrors.CodeInternalError, "failed to load roles", err)
 		}
 		for _, r := range roles {
@@ -94,8 +110,15 @@ func (s *AdminUserService) AssignRoles(ctx context.Context, userID uint64, roleN
 		}
 	}
 
-	// 事务：清空旧角色，写入新角色
+	// 事务：先锁定用户行（串行化并发的角色替换），再清空旧角色、写入新角色
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var locked domain.User
+		if err := dbutil.LockRow(tx, &locked, userID).Error; err != nil {
+			if stderrors.Is(err, gorm.ErrRecordNotFound) {
+				return apperrors.New(apperrors.CodeNotFound, "user not found")
+			}
+			return apperrors.Wrap(apperrors.CodeInternalError, "failed to lock user", err)
+		}
 		if err := tx.Where("user_id = ?", userID).Delete(&userRole{}).Error; err != nil {
 			return err
 		}
@@ -108,9 +131,9 @@ func (s *AdminUserService) AssignRoles(ctx context.Context, userID uint64, roleN
 	})
 }
 
-// ListUsers 获取用户列表（支持搜索/过滤/分页）
+// ListUsers 获取用户列表（支持搜索/过滤/分页，按上下文租户过滤；0=平台级视角不过滤）
 func (s *AdminUserService) ListUsers(ctx context.Context, filter ListUserFilter, p pagination.Pagination) ([]AdminUser, int64, error) {
-	users, total, err := s.userRepo.List(ctx, p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
+	users, total, err := s.userRepo.List(ctx, tenant.FromContext(ctx), p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
 	if err != nil {
 		return nil, 0, apperrors.Wrap(apperrors.CodeInternalError, "failed to list users", err)
 	}
@@ -133,7 +156,7 @@ func (s *AdminUserService) ListUsers(ctx context.Context, filter ListUserFilter,
 	return result, total, nil
 }
 
-// GetUser 获取用户详情
+// GetUser 获取用户详情（跨租户不可见）
 func (s *AdminUserService) GetUser(ctx context.Context, id uint64) (*AdminUser, error) {
 	user, err := s.userRepo.FindByID(ctx, id)
 	if err != nil {
@@ -141,6 +164,9 @@ func (s *AdminUserService) GetUser(ctx context.Context, id uint64) (*AdminUser, 
 			return nil, apperrors.Wrap(apperrors.CodeNotFound, "user not found", err)
 		}
 		return nil, apperrors.Wrap(apperrors.CodeInternalError, "failed to get user", err)
+	}
+	if !tenantVisible(user.TenantID, tenant.FromContext(ctx)) {
+		return nil, apperrors.New(apperrors.CodeNotFound, "user not found")
 	}
 	return &AdminUser{
 		ID:        user.ID,
@@ -152,6 +178,18 @@ func (s *AdminUserService) GetUser(ctx context.Context, id uint64) (*AdminUser, 
 
 // CreateUser 创建用户
 func (s *AdminUserService) CreateUser(ctx context.Context, req AdminCreateUserRequest) (*AdminUser, error) {
+	// 新用户归属创建者所在租户；上下文无租户（平台级/旧 token）时归默认租户
+	tenantID := tenant.FromContext(ctx)
+	if tenantID == 0 {
+		tenantID = tenant.DefaultTenantID
+	}
+	// 配额校验在写入前完成，超限直接拒绝（已存在的数据不受影响）
+	if s.quota != nil {
+		if err := s.quota.CheckUserQuota(ctx, tenantID); err != nil {
+			return nil, err
+		}
+	}
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.CodeInternalError, "failed to hash password", err)
@@ -163,6 +201,7 @@ func (s *AdminUserService) CreateUser(ctx context.Context, req AdminCreateUserRe
 		Phone:    req.Phone,
 		Status:   req.Status,
 	}
+	user.TenantID = tenantID
 	if req.Status == 0 {
 		user.Status = 1
 	}
@@ -189,7 +228,7 @@ type AdminUpdateUserRequest struct {
 	Phone  *string `json:"phone" binding:"omitempty"`
 }
 
-// UpdateUser 更新用户状态/联系方式（Save 全字段保存，hook 重新加密并刷新盲索引）
+// UpdateUser 更新用户状态/联系方式（Save 全字段保存，hook 重新加密并刷新盲索引）；跨租户不可见
 func (s *AdminUserService) UpdateUser(ctx context.Context, id uint64, req AdminUpdateUserRequest) error {
 	user, err := s.userRepo.FindByID(ctx, id)
 	if err != nil {
@@ -197,6 +236,9 @@ func (s *AdminUserService) UpdateUser(ctx context.Context, id uint64, req AdminU
 			return apperrors.Wrap(apperrors.CodeNotFound, "user not found", err)
 		}
 		return apperrors.Wrap(apperrors.CodeInternalError, "failed to get user", err)
+	}
+	if !tenantVisible(user.TenantID, tenant.FromContext(ctx)) {
+		return apperrors.New(apperrors.CodeNotFound, "user not found")
 	}
 	if req.Status != nil {
 		user.Status = *req.Status

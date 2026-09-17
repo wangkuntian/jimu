@@ -47,8 +47,8 @@ func NewGoogleProvider(cfg GoogleConfig, client *httpclient.Client) *GoogleProvi
 func (p *GoogleProvider) Name() string { return "google" }
 
 // AuthURL 构造授权跳转 URL
-func (p *GoogleProvider) AuthURL(state string) string {
-	return p.config.AuthCodeURL(state)
+func (p *GoogleProvider) AuthURL(_ context.Context, state string) (string, error) {
+	return p.config.AuthCodeURL(state), nil
 }
 
 // Exchange 用授权码换取用户信息

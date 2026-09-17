@@ -80,11 +80,6 @@
         },
         "/audits": {
             "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
                 "description": "分页获取系统审计日志。记录用户的操作行为（如登录、创建、修改、删除等），用于安全审计和行为追踪。支持按 ID、创建时间排序。",
                 "produces": [
                     "application/json"
@@ -138,16 +133,136 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/audits/{id}": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
+                ]
+            }
+        },
+        "/audits/export": {
+            "get": {
+                "description": "按时间范围流式导出当前租户的审计日志（平台级视角导出全部租户）。format=csv（默认，含 UTF-8 BOM）或 json（NDJSON，每行一个对象）；单次最多 50000 条、跨度最多 90 天，超过返回参数错误，请缩小时间范围。",
+                "produces": [
+                    "text/csv"
                 ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "导出审计日志",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "导出格式：csv（默认）或 json",
+                        "name": "format",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "起始时间（RFC3339，默认 7 天前）",
+                        "name": "start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束时间（RFC3339，默认当前）",
+                        "name": "end",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "导出文件内容",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（格式、时间范围或条数超限）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/audits/verify": {
+            "get": {
+                "description": "按 ID 升序重算审计日志的链式哈希（HMAC-SHA256/SHA-256）并检查前后衔接，用于发现篡改或删除。返回参与校验的条目数、未哈希的存量条目数、是否完整、首个异常条目与原因；单租户全量校验时还会比对链头检测末尾条目被删除。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "校验审计链完整性",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "起始条目 ID（含），默认从头开始",
+                        "name": "from_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "结束条目 ID（含），默认到最后",
+                        "name": "to_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "最多校验条数（默认 1000）",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回校验结果",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/application.VerifyResult"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/audits/{id}": {
+            "get": {
                 "description": "根据审计日志 ID 获取详细信息，包括操作用户、操作类型、资源、详情、IP 地址、HTTP 方法、请求路径和状态码。",
                 "produces": [
                     "application/json"
@@ -190,7 +305,118 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/auth/devices": {
+            "get": {
+                "description": "返回当前用户的可信设备（登录时可跳过 TOTP 的设备）。密码始终必需，设备令牌仅替代 TOTP 因子；改密或登出全部设备会吊销全部可信设备。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "获取可信设备列表",
+                "responses": {
+                    "200": {
+                        "description": "成功，返回可信设备列表",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "description": "注销当前用户全部可信设备，用于设备丢失或异常登录后的止损。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "注销全部可信设备",
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/auth/devices/{id}": {
+            "delete": {
+                "description": "按 ID 注销当前用户的一个可信设备，注销后该设备登录需重新提供 TOTP。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "注销可信设备",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "设备 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回已注销设备 ID",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（设备 ID 非法）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
             }
         },
         "/auth/forgot-password": {
@@ -291,13 +517,59 @@
                 }
             }
         },
-        "/auth/logout": {
-            "post": {
+        "/auth/login-history": {
+            "get": {
+                "description": "分页返回当前用户的登录历史（成功/失败/锁定），含时间、IP 与 User-Agent，用于异常登录自查。按 id 倒序。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "获取登录历史",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码（默认 1）",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量（默认 20，最大 100）",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回登录历史分页数据",
+                        "schema": {
+                            "$ref": "#/definitions/contract.PageResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/auth/logout": {
+            "post": {
                 "description": "撤销当前会话的刷新令牌，使其失效。需要有效的访问令牌进行身份验证。",
                 "produces": [
                     "application/json"
@@ -319,16 +591,16 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/auth/logout-all": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/auth/logout-all": {
+            "post": {
                 "description": "撤销该用户的所有刷新会话，强制所有设备重新登录。需要有效的访问令牌进行身份验证。",
                 "produces": [
                     "application/json"
@@ -350,16 +622,16 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/auth/mfa/disable": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/auth/mfa/disable": {
+            "post": {
                 "description": "校验当前验证码后关闭 TOTP 并清除密钥。关闭后登录不再要求 TOTP 码。",
                 "consumes": [
                     "application/json"
@@ -401,16 +673,16 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/auth/mfa/enable": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/auth/mfa/enable": {
+            "post": {
                 "description": "用认证器生成的首次验证码确认启用 TOTP。验证码通过后该用户登录必须提供 TOTP 码。",
                 "consumes": [
                     "application/json"
@@ -452,16 +724,16 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/auth/mfa/setup": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/auth/mfa/setup": {
+            "post": {
                 "description": "生成新的 TOTP 密钥并返回 otpauth URI（用于二维码/认证器绑定）。重复调用会轮换密钥。绑定后需调用启用接口用首次验证码确认。",
                 "produces": [
                     "application/json"
@@ -483,7 +755,12 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
             }
         },
         "/auth/refresh": {
@@ -534,7 +811,7 @@
         },
         "/auth/register": {
             "post": {
-                "description": "注册新用户账户。仅当系统配置中 public_registration 为 true 时可用。支持 IP 维度的限流保护。",
+                "description": "注册新用户账户。仅当系统配置中 public_registration 为 true 时可用。支持 IP 维度的限流保护。\n开通式注册（auth.provisioning.enabled=true）时，body 携带 tenant_name 即创建新租户并成为其 owner，按模板初始化角色权限，返回 {user, tenant}；未携带 tenant_name 报参数错误。\n普通注册（未启用开通式）时忽略租户字段，用户归默认租户，返回用户信息。\n开通式注册的 tenant_code 统一转小写存储，不传则自动生成；未传 tenant_name 报参数错误。",
                 "consumes": [
                     "application/json"
                 ],
@@ -547,7 +824,7 @@
                 "summary": "用户注册",
                 "parameters": [
                     {
-                        "description": "注册信息（用户名和密码）",
+                        "description": "注册信息（用户名和密码；开通式注册另需 tenant_name）",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -558,13 +835,13 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "成功，返回用户信息",
+                        "description": "成功，返回用户信息（开通式注册额外返回 tenant）",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
                     },
                     "400": {
-                        "description": "参数错误（如用户名已存在）",
+                        "description": "参数错误（如用户名已存在、租户编码格式无效或已存在）",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -622,6 +899,328 @@
                         }
                     }
                 }
+            }
+        },
+        "/auth/webauthn/credentials": {
+            "get": {
+                "description": "返回当前用户已注册的通行密钥（不含公钥等敏感字段），用于设备管理与注销。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "获取通行密钥列表",
+                "responses": {
+                    "200": {
+                        "description": "成功，返回通行密钥列表",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/auth/webauthn/credentials/{id}": {
+            "put": {
+                "description": "修改当前用户某个通行密钥的名称。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "重命名通行密钥",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "凭证 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "新名称",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/interfaces.webAuthnRenameRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "description": "删除当前用户的某个通行密钥；删除最后一个凭证后该账号不能再使用通行密钥登录（密码登录不受影响）。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "删除通行密钥",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "凭证 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/auth/webauthn/login/begin": {
+            "post": {
+                "description": "按用户名生成 WebAuthn 登录断言（allowCredentials 为该用户已注册凭证）与一次性 session_id。用户不存在或未注册凭证时返回错误，不泄漏账号是否存在之外的信息。支持 IP 与用户名维度限流。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "开始通行密钥登录",
+                "parameters": [
+                    {
+                        "description": "用户名",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/interfaces.webAuthnLoginBeginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回 session_id 与登录选项",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "认证失败（用户不存在或已禁用）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "该用户未注册通行密钥（2010）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "请求过于频繁",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/webauthn/login/finish": {
+            "post": {
+                "description": "校验浏览器返回的登录断言（签名、挑战、计数器），通过后签发 access/refresh token。通行密钥是抗钓鱼的强因子，因此不再要求密码，也不叠加 TOTP。session_id 取自 begin 响应；请求体为 navigator.credentials.get() 的原始 JSON。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "完成通行密钥登录",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "begin 接口返回的 session_id",
+                        "name": "session_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回 accessToken 和 refreshToken",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "断言校验失败（2011）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "请求过于频繁",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/webauthn/register/begin": {
+            "post": {
+                "description": "为当前登录用户生成 WebAuthn 注册选项（publicKey）与一次性 session_id。客户端调用 navigator.credentials.create() 后，把返回的凭证 JSON 原样提交到 finish 接口。需要浏览器与 HTTPS（localhost 除外）。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "开始注册通行密钥",
+                "parameters": [
+                    {
+                        "description": "凭证名称（可选，便于识别设备）",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/interfaces.webAuthnBeginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回 session_id 与注册选项",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "WebAuthn 未配置",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/auth/webauthn/register/finish": {
+            "post": {
+                "description": "校验浏览器返回的注册凭证（证明与挑战），通过后保存公钥。session_id 取自 begin 响应；请求体为 navigator.credentials.create() 的原始 JSON。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "完成注册通行密钥",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "begin 接口返回的 session_id",
+                        "name": "session_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回已注册凭证信息",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "凭证校验失败（2011）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
             }
         },
         "/captcha": {
@@ -694,7 +1293,7 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "提供商 (google/github/wechat)",
+                        "description": "提供商名（内置 google/github/wechat，或配置了 issuer_url 的自定义 OIDC 提供商）",
                         "name": "provider",
                         "in": "path",
                         "required": true
@@ -709,11 +1308,6 @@
         },
         "/permissions": {
             "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
                 "description": "分页获取权限列表。支持按 ID、名称、资源路径、操作类型、创建时间排序。",
                 "produces": [
                     "application/json"
@@ -767,14 +1361,14 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "创建新权限。权限由资源路径（resource）和操作类型（action）唯一标识，用于控制 API 访问。",
                 "consumes": [
                     "application/json"
@@ -822,16 +1416,16 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/permissions/{id}": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/permissions/{id}": {
+            "get": {
                 "description": "根据权限 ID 获取权限详细信息，包括资源路径和操作类型。",
                 "produces": [
                     "application/json"
@@ -874,14 +1468,14 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "put": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "put": {
                 "description": "更新指定权限的名称、资源路径或操作类型。",
                 "consumes": [
                     "application/json"
@@ -942,14 +1536,14 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "软删除指定权限。删除后权限数据仍保留在数据库中，但无法分配给角色。",
                 "produces": [
                     "application/json"
@@ -983,16 +1577,16 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/roles": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/roles": {
+            "get": {
                 "description": "分页获取角色列表。支持按 ID、名称、创建时间排序。",
                 "produces": [
                     "application/json"
@@ -1046,14 +1640,14 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "创建新角色。角色名称必须唯一，用于权限管理和访问控制。",
                 "consumes": [
                     "application/json"
@@ -1101,16 +1695,16 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/roles/{id}": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/roles/{id}": {
+            "get": {
                 "description": "根据角色 ID 获取角色详细信息，包括关联的权限列表。",
                 "produces": [
                     "application/json"
@@ -1153,14 +1747,14 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "put": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "put": {
                 "description": "更新指定角色的名称或描述。",
                 "consumes": [
                     "application/json"
@@ -1221,14 +1815,14 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "软删除指定角色。删除后角色数据仍保留在数据库中，但无法分配给用户。",
                 "produces": [
                     "application/json"
@@ -1262,16 +1856,16 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/roles/{id}/permissions": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/roles/{id}/permissions": {
+            "post": {
                 "description": "为指定角色分配权限。传入权限 ID 数组，角色将被赋予这些权限。原有权限会被替换。",
                 "consumes": [
                     "application/json"
@@ -1320,16 +1914,589 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/users": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
+                ]
+            }
+        },
+        "/tenant-plans": {
+            "get": {
+                "description": "分页返回全部套餐定义。",
+                "produces": [
+                    "application/json"
                 ],
+                "tags": [
+                    "租户运营"
+                ],
+                "summary": "获取套餐列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码（默认 1）",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量（默认 20，最大 100）",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回分页套餐列表",
+                        "schema": {
+                            "$ref": "#/definitions/contract.PageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "description": "创建租户套餐（资源上限，0 表示不限）。编码全局唯一，统一转小写存储且不可修改。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户运营"
+                ],
+                "summary": "创建套餐",
+                "parameters": [
+                    {
+                        "description": "套餐信息（编码、名称与各项上限）",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/application.CreatePlanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "创建成功，返回套餐信息",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "套餐编码已存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/tenant-plans/{id}": {
+            "put": {
+                "description": "更新套餐名称与各项上限；编码不可修改。修改后对使用该套餐的租户立即生效。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户运营"
+                ],
+                "summary": "更新套餐",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "套餐 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "要更新的字段（为空表示不修改）",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/application.UpdatePlanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "套餐不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "description": "删除未被任何租户使用的套餐；仍被租户使用时返回 409，避免租户静默失去配额约束。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户运营"
+                ],
+                "summary": "删除套餐",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "套餐 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "套餐不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "套餐仍被租户使用",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/tenants": {
+            "get": {
+                "description": "分页获取租户列表。支持按 ID、编码、创建时间排序。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户管理"
+                ],
+                "summary": "获取租户列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码（默认 1）",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量（默认 20，最大 100）",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "排序字段（支持 id、code、created_at，默认 id）",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "排序方向（asc 或 desc，默认 desc）",
+                        "name": "order",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回分页租户列表",
+                        "schema": {
+                            "$ref": "#/definitions/contract.PageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（如无效的排序字段）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "description": "创建新租户。编码全局唯一，仅允许字母、数字、短横线和下划线（统一转小写存储）；创建后编码不可修改。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户管理"
+                ],
+                "summary": "创建租户",
+                "parameters": [
+                    {
+                        "description": "租户信息（编码和名称）",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/application.CreateTenantRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "创建成功，返回租户信息",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（编码格式无效）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "租户编码已存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/tenants/usage": {
+            "get": {
+                "description": "返回当前租户的套餐与各资源用量（用户/角色/API Key）及上限，用于容量自查；未分配套餐时 plan 为 null 且不限量。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户运营"
+                ],
+                "summary": "获取当前租户用量",
+                "responses": {
+                    "200": {
+                        "description": "成功，返回套餐与用量",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/tenants/{id}": {
+            "get": {
+                "description": "根据租户 ID 获取租户详细信息。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户管理"
+                ],
+                "summary": "获取租户详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "租户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回租户信息",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（ID 格式无效）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "租户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
+            "put": {
+                "description": "更新指定租户的名称或状态。编码不可修改。默认租户可改名但不可删除。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户管理"
+                ],
+                "summary": "更新租户信息",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "租户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "要更新的租户信息",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/application.UpdateTenantRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "租户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "description": "软删除指定租户。默认租户受保护，不可删除。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户管理"
+                ],
+                "summary": "删除租户",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "租户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（ID 格式无效）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "租户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "默认租户不可删除",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/tenants/{id}/plan": {
+            "put": {
+                "description": "为指定租户分配套餐；plan_id=0 表示取消套餐（取消后不再受配额限制）。超限时不影响既有数据，只阻止继续创建。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "租户运营"
+                ],
+                "summary": "为租户分配套餐",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "租户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "套餐 ID（0=取消套餐）",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/application.AssignPlanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分配成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "套餐不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/users": {
+            "get": {
                 "description": "分页获取用户列表。支持按 ID、用户名、创建时间排序，可指定升序或降序。",
                 "produces": [
                     "application/json"
@@ -1383,14 +2550,14 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "创建新用户账户。用户名必须唯一，密码需符合强度要求（8-32位，包含字母和数字）。支持幂等性保护（通过 Idempotency-Key 请求头）。",
                 "consumes": [
                     "application/json"
@@ -1438,16 +2605,16 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/users/batch-delete": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/users/batch-delete": {
+            "post": {
                 "description": "批量软删除用户（单次最多 100 个）。返回成功/失败计数。",
                 "consumes": [
                     "application/json"
@@ -1483,16 +2650,16 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/users/export.csv": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/users/export.csv": {
+            "get": {
                 "description": "导出所有用户为 CSV 文件。列：ID、用户名、状态、创建时间。",
                 "produces": [
                     "text/csv"
@@ -1528,16 +2695,16 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/users/{id}": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/users/{id}": {
+            "get": {
                 "description": "根据用户 ID 获取用户详细信息。不包含密码等敏感字段。",
                 "produces": [
                     "application/json"
@@ -1580,14 +2747,14 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "put": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "put": {
                 "description": "更新指定用户的信息（如状态）。部分字段支持部分更新。",
                 "consumes": [
                     "application/json"
@@ -1642,14 +2809,14 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "软删除指定用户。删除后用户数据仍保留在数据库中，但无法登录系统。",
                 "produces": [
                     "application/json"
@@ -1683,7 +2850,12 @@
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
             }
         }
     },
@@ -1699,6 +2871,14 @@
                     "items": {
                         "type": "integer"
                     }
+                }
+            }
+        },
+        "application.AssignPlanRequest": {
+            "type": "object",
+            "properties": {
+                "plan_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -1737,6 +2917,40 @@
                 }
             }
         },
+        "application.CreatePlanRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "name"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 1
+                },
+                "max_api_keys": {
+                    "description": "0=不限",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_roles": {
+                    "description": "0=不限",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_users": {
+                    "description": "0=不限",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
+                }
+            }
+        },
         "application.CreateRoleRequest": {
             "type": "object",
             "required": [
@@ -1748,6 +2962,24 @@
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "application.CreateTenantRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "name"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1
                 }
             }
         },
@@ -1795,6 +3027,28 @@
                 }
             }
         },
+        "application.UpdatePlanRequest": {
+            "type": "object",
+            "properties": {
+                "max_api_keys": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_roles": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_users": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
+                }
+            }
+        },
         "application.UpdateRoleRequest": {
             "type": "object",
             "required": [
@@ -1809,6 +3063,23 @@
                 }
             }
         },
+        "application.UpdateTenantRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1
+                },
+                "status": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                }
+            }
+        },
         "application.UpdateUserRequest": {
             "type": "object",
             "properties": {
@@ -1818,6 +3089,43 @@
                         0,
                         1
                     ]
+                }
+            }
+        },
+        "application.VerifyResult": {
+            "type": "object",
+            "properties": {
+                "broken_at": {
+                    "description": "首个异常条目 ID",
+                    "type": "integer"
+                },
+                "checked": {
+                    "description": "参与校验的已哈希条目数",
+                    "type": "integer"
+                },
+                "head_hash": {
+                    "description": "链头记录的哈希",
+                    "type": "string"
+                },
+                "intact": {
+                    "description": "链是否完整",
+                    "type": "boolean"
+                },
+                "last_hash": {
+                    "description": "扫描到的最后一条哈希",
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "异常原因",
+                    "type": "string"
+                },
+                "tail_intact": {
+                    "description": "链尾是否与链头一致（检测末尾条目被删）",
+                    "type": "boolean"
+                },
+                "unhashed": {
+                    "description": "迁移前未哈希的存量条目数",
+                    "type": "integer"
                 }
             }
         },
@@ -1920,6 +3228,21 @@
                     "description": "手机号（注册时可选收集；登录忽略）",
                     "type": "string"
                 },
+                "remember_device": {
+                    "description": "记住此设备：登录成功后签发设备令牌，后续登录携带 X-Device-Token 可跳过 TOTP（密码仍必需）",
+                    "type": "boolean"
+                },
+                "tenant_code": {
+                    "description": "租户编码（开通式注册时可选；不传自动生成，仅限字母/数字/短横线/下划线）",
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "tenant_name": {
+                    "description": "租户名称（开通式注册时必填：注册即开通新租户，注册者成为 owner）",
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1
+                },
                 "totp_code": {
                     "description": "TOTP 二次验证码（用户启用 TOTP 后登录必填，6 位数字）",
                     "type": "string"
@@ -1962,6 +3285,41 @@
                     "type": "string",
                     "maxLength": 32,
                     "minLength": 8
+                }
+            }
+        },
+        "interfaces.webAuthnBeginRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 64
+                }
+            }
+        },
+        "interfaces.webAuthnLoginBeginRequest": {
+            "type": "object",
+            "required": [
+                "username"
+            ],
+            "properties": {
+                "username": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 3
+                }
+            }
+        },
+        "interfaces.webAuthnRenameRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
                 }
             }
         },

@@ -14,7 +14,7 @@ func TestBusinessRoutesRequireProtectedMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	if err := registerHTTP(router, nil, fakeAuthzModule{}, fakeBusinessModule{}); err != nil {
+	if err := registerHTTP(router, nil, nil, fakeAuthzModule{}, fakeBusinessModule{}); err != nil {
 		t.Fatal(err)
 	}
 

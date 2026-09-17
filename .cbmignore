@@ -1,0 +1,4 @@
+# codebase-memory-mcp 索引范围调整
+# deploy/ 命中内置 skip-list；取反后 K8s/Helm/compose 清单按 IaC 入图
+# （Resource 节点 + 交叉引用）。改完需重新索引生效。
+!deploy/

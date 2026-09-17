@@ -1,0 +1,22 @@
+{
+  "name": "jimu_db_pool_saturation",
+  "stream_type": "metrics",
+  "stream_name": "jimu_db_in_use_connections",
+  "is_real_time": false,
+  "query_condition": {
+    "type": "promql",
+    "promql": "100 * max(jimu_db_in_use_connections) / max(jimu_db_max_open_connections)",
+    "promql_condition": { "column": "value", "operator": ">=", "value": 90 }
+  },
+  "trigger_condition": {
+    "period": 5,
+    "operator": ">=",
+    "threshold": 1,
+    "frequency": 2,
+    "frequency_type": "minutes",
+    "silence": 15
+  },
+  "destinations": ["jimu_webhook"],
+  "description": "DB 连接池使用率 >= 90%（max_open_connections 配置为 0 不限流时不触发）",
+  "enabled": true
+}

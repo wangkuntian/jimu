@@ -32,6 +32,7 @@ type UserResponse struct {
 	ID        uint64    `json:"id"`
 	Username  string    `json:"username"`
 	Status    int8      `json:"status"`
+	TenantID  uint64    `json:"tenant_id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -41,6 +42,7 @@ func ToUserResponse(user domain.User) UserResponse {
 		ID:        user.ID,
 		Username:  user.Username,
 		Status:    user.Status,
+		TenantID:  user.TenantID,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 	}

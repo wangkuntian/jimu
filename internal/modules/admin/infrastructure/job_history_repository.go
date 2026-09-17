@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"jimu/internal/platform/queue/domain"
+	"jimu/internal/platform/tenant"
 
 	"gorm.io/gorm"
 )
@@ -21,8 +22,13 @@ func (r *mysqlJobHistoryRepository) Create(ctx context.Context, h *domain.JobHis
 	return r.db.WithContext(ctx).Create(h).Error
 }
 
+// ListByJobID 按任务 ID 查询执行历史；有租户上下文时按租户过滤（tid=0 为平台级视角，不过滤）。
 func (r *mysqlJobHistoryRepository) ListByJobID(ctx context.Context, jobID uint64) ([]domain.JobHistory, error) {
 	var history []domain.JobHistory
-	err := r.db.WithContext(ctx).Where("job_id = ?", jobID).Order("id DESC").Find(&history).Error
+	db := r.db.WithContext(ctx).Where("job_id = ?", jobID)
+	if tid := tenant.FromContext(ctx); tid != 0 {
+		db = db.Where("tenant_id = ?", tid)
+	}
+	err := db.Order("id DESC").Find(&history).Error
 	return history, err
 }

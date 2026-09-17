@@ -42,7 +42,7 @@
 | FR-032 脚手架 | implemented | `jimu module create` → `tools/generator` |
 | FR-033 Swagger | implemented | swag 注解 + swagger.yaml/json + UI |
 | **FR-034 部署+门禁** | **implemented** ✅（2026-08-12 修复） | deploy/k8s 真实；`make release-check` 已含 govulncheck，ci.yml 增加 tag 触发使发布路径跑完整门禁 |
-| FR-035 无多租户 | implemented（约束） | internal/ 无 tenant 字段或中间件 |
+| FR-035 无多租户 | superseded（v0.2.0） | 多租户恢复为正式能力：tenants 表 + `tenant_id` 隔离 + JWT `tid` claim，见 AGENTS.md「租户体系」 |
 
 ## Decisions
 

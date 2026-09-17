@@ -10,12 +10,14 @@ import (
 	"jimu/internal/contract"
 	"jimu/internal/platform/db"
 	platformhttp "jimu/internal/platform/http"
+	"jimu/internal/platform/http/middleware"
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/observability"
 	"jimu/internal/platform/outbox"
 	"jimu/internal/platform/queue"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
 	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
 	gormotel "gorm.io/plugin/opentelemetry/tracing"
 )
@@ -93,12 +95,12 @@ func registerEventBusBridge(c *Container) {
 			}
 			conv, ok := outboxTypeConverters[evt.EventType]
 			if !ok {
-				c.Logger.Error("outbox bridge: unknown event type", "type", evt.EventType)
+				c.Logger.Errorw("outbox bridge: unknown event type", "type", evt.EventType)
 				return
 			}
 			strong, err := conv(evt.Payload)
 			if err != nil {
-				c.Logger.Error("outbox bridge: convert event failed", "type", evt.EventType, "error", err.Error())
+				c.Logger.Errorw("outbox bridge: convert event failed", "type", evt.EventType, "error", err.Error())
 				return
 			}
 			c.EventBus.Publish(evt.EventType, strong)
@@ -115,6 +117,23 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		return nil, fmt.Errorf("init tracing: %w", err)
 	}
 	container.TracerProvider = tp
+
+	// 指标推送（OTLP/gRPC → OpenObserve）：基于 Prometheus 默认 registry，
+	// 现有 promauto 采集逻辑不变，/metrics 端点继续可用。
+	if cfg.OTEL.Enabled && cfg.OTEL.MetricsEnabled {
+		reg, ok := prometheus.DefaultRegisterer.(*prometheus.Registry)
+		if !ok {
+			container.Logger.Errorw("openobserve metrics pusher init failed", "error", "default registerer type mismatch")
+		} else {
+			pusher, err := observability.NewMetricsPusher(context.Background(), cfg.OTEL, reg)
+			if err != nil {
+				container.Logger.Errorw("openobserve metrics pusher init failed", "error", err.Error())
+			} else {
+				pusher.Start()
+				container.MetricsPusher = pusher
+			}
+		}
+	}
 
 	// 启用 OTel 时插桩 DB/Redis，捕获查询子 span。
 	// 必须在 InitTracing 之后：插件创建时固化全局 TracerProvider，
@@ -136,7 +155,23 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		platformhttp.RegisterSwagger(router.Group("/swagger"))
 	}
 
-	if err := registerHTTP(router, container.Logger, modules...); err != nil {
+	// 租户维度限流（Redis 滑动窗口）：挂在受保护中间件之后，平台级视角跳过
+	var extraProtected []gin.HandlerFunc
+	if container.Redis != nil && cfg.RateLimit.Tenant.Enabled && cfg.RateLimit.Tenant.Limit > 0 {
+		extraProtected = append(extraProtected, middleware.TenantRateLimitMiddleware(
+			container.Redis,
+			cfg.RateLimit.Tenant.Limit,
+			time.Duration(cfg.RateLimit.Tenant.WindowSec)*time.Second,
+		))
+	}
+	// 幂等中间件：挂在认证/租户注入之后，键按租户+用户+方法+路径绑定
+	if container.Redis != nil && cfg.Security.IdempotencyEnabled {
+		extraProtected = append(extraProtected, middleware.IdempotencyMiddleware(
+			container.Redis,
+			time.Duration(cfg.Security.IdempotencyTTLSec)*time.Second,
+		))
+	}
+	if err := registerHTTP(router, container.Logger, extraProtected, modules...); err != nil {
 		return nil, err
 	}
 
@@ -161,7 +196,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	// 注册各模块的事件处理器（在定时任务之前，确保事件订阅就绪）
 	for _, module := range modules {
 		module.RegisterEvents(container.EventBus)
-		container.Logger.Info("module events registered", "name", module.Name())
+		container.Logger.Infow("module events registered", "name", module.Name())
 	}
 
 	// 注册全局事件处理器：将领域事件桥接到通知系统
@@ -169,7 +204,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		container.EventBus.Subscribe(contract.UserCreatedEmailNotification, func(payload interface{}) {
 			if msg, ok := payload.(notification.Message); ok {
 				if err := container.Notification.Dispatch(context.Background(), msg); err != nil {
-					container.Logger.Error("notification dispatch failed", "error", err.Error())
+					container.Logger.Errorw("notification dispatch failed", "error", err.Error())
 				}
 			}
 		})
@@ -185,18 +220,18 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		switch m["key"] {
 		case "log_level":
 			if err := container.Logger.SetLevel(m["value"]); err != nil {
-				container.Logger.Error("apply config.updated log_level failed", "error", err.Error())
+				container.Logger.Errorw("apply config.updated log_level failed", "error", err.Error())
 				return
 			}
 		}
-		container.Logger.Info("config updated applied", "key", m["key"], "value", m["value"])
+		container.Logger.Infow("config updated applied", "key", m["key"], "value", m["value"])
 	})
 
 	// 注册各模块的定时任务
 	if container.JobRegistry != nil {
 		for _, module := range modules {
 			module.RegisterJobs(container.JobRegistry)
-			container.Logger.Info("module jobs registered", "name", module.Name())
+			container.Logger.Infow("module jobs registered", "name", module.Name())
 		}
 
 		type jobDef struct {
@@ -209,9 +244,9 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			jobFns["outbox_process"] = jobDef{name: "Process Outbox Events", spec: "@every 10s", fn: func() {
 				n, err := container.Outbox.Process(context.Background(), 100)
 				if err != nil {
-					container.Logger.Error("outbox process error", "error", err.Error())
+					container.Logger.Errorw("outbox process error", "error", err.Error())
 				} else if n > 0 {
-					container.Logger.Debug("outbox processed", "count", n)
+					container.Logger.Debugw("outbox processed", "count", n)
 				}
 			}}
 		}
@@ -226,12 +261,34 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			jobFns["cleanup"] = jobDef{name: "Data Cleanup", spec: "0 3 * * *", fn: func() {
 				results, err := cleanupSvc.Run(context.Background())
 				if err != nil {
-					container.Logger.Error("cleanup job failed", "error", err.Error())
+					container.Logger.Errorw("cleanup job failed", "error", err.Error())
 					return
 				}
 				for _, r := range results {
 					if r.Deleted > 0 {
-						container.Logger.Info("cleanup completed", "table", r.Table, "deleted", r.Deleted)
+						container.Logger.Infow("cleanup completed", "table", r.Table, "deleted", r.Deleted)
+					}
+				}
+			}}
+		}
+
+		if container.DB != nil && cfg.Retention.Enabled {
+			retentionSvc := db.NewRetentionService(container.DB, cfg.Retention)
+			spec := cfg.Retention.Cron
+			if spec == "" {
+				spec = "30 3 * * *"
+			}
+			jobFns["retention"] = jobDef{name: "History Retention", spec: spec, fn: func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+				defer cancel()
+				results, err := retentionSvc.Run(ctx)
+				if err != nil {
+					container.Logger.Errorw("retention job failed", "error", err.Error())
+					return
+				}
+				for _, r := range results {
+					if r.Deleted > 0 {
+						container.Logger.Infow("retention completed", "table", r.Table, "deleted", r.Deleted)
 					}
 				}
 			}}
@@ -250,7 +307,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			return nil
 		})
 		if err != nil {
-			container.Logger.Error("restore scheduled jobs failed", "error", err.Error())
+			container.Logger.Errorw("restore scheduled jobs failed", "error", err.Error())
 		}
 		restoredSet := make(map[string]struct{}, len(restored))
 		for _, id := range restored {
@@ -261,7 +318,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 				continue
 			}
 			if err := container.Scheduler.AddNamedFunc(id, def.name, def.spec, def.fn); err != nil {
-				container.Logger.Error("register job failed", "id", id, "error", err.Error())
+				container.Logger.Errorw("register job failed", "id", id, "error", err.Error())
 			}
 		}
 	}
@@ -309,7 +366,7 @@ func (w workerPoolComponent) Stop(context.Context) error {
 }
 
 type moduleLogger interface {
-	Info(args ...interface{})
+	Infow(msg string, keysAndValues ...interface{})
 }
 
 type registerRouter interface {
@@ -317,7 +374,7 @@ type registerRouter interface {
 	Use(...gin.HandlerFunc) gin.IRoutes
 }
 
-func registerHTTP(router registerRouter, log moduleLogger, modules ...contract.Module) error {
+func registerHTTP(router registerRouter, log moduleLogger, extraProtected []gin.HandlerFunc, modules ...contract.Module) error {
 	for _, module := range modules {
 		if provider, ok := module.(contract.HTTPMiddlewareProvider); ok {
 			router.Use(provider.HTTPMiddleware()...)
@@ -334,18 +391,20 @@ func registerHTTP(router registerRouter, log moduleLogger, modules ...contract.M
 			break
 		}
 	}
+	// 追加外部注入的受保护中间件（如租户维度限流），顺序在认证/租户注入之后
+	protected = append(protected, extraProtected...)
 	for _, module := range modules {
 		if len(protected) > 0 && module.Name() != "auth" && module.Name() != "oauth" {
 			group := router.Group("", protected...)
 			module.RegisterHTTP(group)
 			if log != nil {
-				log.Info("module registered", "name", module.Name())
+				log.Infow("module registered", "name", module.Name())
 			}
 			continue
 		}
 		module.RegisterHTTP(router)
 		if log != nil {
-			log.Info("module registered", "name", module.Name())
+			log.Infow("module registered", "name", module.Name())
 		}
 	}
 	return nil

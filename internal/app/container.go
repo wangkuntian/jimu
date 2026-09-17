@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	admininfra "jimu/internal/modules/admin/infrastructure"
 	"jimu/internal/platform/auth"
+	"jimu/internal/platform/breach"
 	"jimu/internal/platform/captcha"
 	"jimu/internal/platform/db"
 	"jimu/internal/platform/encryption"
@@ -29,6 +31,7 @@ import (
 	"jimu/internal/platform/storage"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.uber.org/zap/zapcore"
 	"gorm.io/gorm"
 )
 
@@ -54,8 +57,13 @@ type Container struct {
 	Cipher         *encryption.Cipher
 	WorkerPool     *queue.WorkerPool
 	APIKeyVerifier *auth.APIKeyVerifier
-	GRPCServer     *grpcpkg.Server
-	Reporter       reporter.Reporter
+	// 泄露口令检查（HIBP）；auth.breach_check_enabled 关闭时为 nil
+	BreachChecker breach.Checker
+	GRPCServer    *grpcpkg.Server
+	Reporter      reporter.Reporter
+	// 观测出口（OTLP → OpenObserve；未启用时为 nil）
+	MetricsPusher *observability.MetricsPusher
+	LogExporter   *observability.LogExporter
 }
 
 func (c *Container) Start(context.Context) error { return nil }
@@ -76,6 +84,12 @@ func (c *Container) Stop(ctx context.Context) error {
 	if c.TracerProvider != nil {
 		result = errors.Join(result, observability.ShutdownTracing(ctx, c.TracerProvider))
 	}
+	if c.MetricsPusher != nil {
+		result = errors.Join(result, c.MetricsPusher.Shutdown(ctx))
+	}
+	if c.LogExporter != nil {
+		result = errors.Join(result, c.LogExporter.Shutdown(ctx))
+	}
 	if c.Reporter != nil {
 		// 优雅停机：给在途错误上报一个发送窗口
 		c.Reporter.Flush(5 * time.Second)
@@ -87,7 +101,21 @@ func (c *Container) Stop(ctx context.Context) error {
 }
 
 func NewContainer(cfg *config.Config) (*Container, error) {
-	log := logger.New(cfg.Log)
+	// OpenObserve 日志通道：otel 启用时附加到 zap（初始化失败仅告警，不阻断启动）
+	var (
+		logExporter *observability.LogExporter
+		extraCores  []zapcore.Core
+	)
+	if cfg.OTEL.Enabled && cfg.OTEL.LogsEnabled {
+		var err error
+		logExporter, err = observability.NewLogExporter(context.Background(), cfg.OTEL)
+		if err != nil {
+			log.Printf("openobserve logs exporter init failed: %v", err)
+		} else {
+			extraCores = append(extraCores, logExporter.ZapCore(zapcore.DebugLevel))
+		}
+	}
+	log := logger.New(cfg.Log, extraCores...)
 	var pendingWorkerPool *queue.WorkerPool
 
 	// 雪花 ID：初始化全局生成器后再连库（hook 在 open 时注册）
@@ -149,6 +177,12 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		RateLimitRate:   cfg.HTTPClient.RateLimitRate,
 		RateLimitBurst:  cfg.HTTPClient.RateLimitBurst,
 	})
+
+	// 泄露口令检查（HIBP k-匿名范围查询）：默认关闭，启用时复用统一出站 client（超时/重试/熔断）
+	var breachChecker breach.Checker
+	if cfg.Auth.BreachCheckEnabled {
+		breachChecker = breach.New(httpClient)
+	}
 
 	notifier := notification.NewDispatcher()
 	// WebSocket Hub（通知渠道 + 实时通信共用）
@@ -255,22 +289,23 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	// 路由组按需挂载 auth.APIKeyAuthMiddleware(c.APIKeyVerifier)
 	apiKeyVerifier := auth.NewAPIKeyVerifier(auth.NewDBAPIKeyStore(dbConn))
 
+	// 错误上报：启用时输出结构化错误日志（日志链路接入 OpenObserve 后自动汇聚）
+	// gRPC 服务端 panic 也经此上报（server recovery 拦截器）
+	errorReporter := reporter.NewReporter(cfg.ErrorReport, log.Errorw)
+
 	// gRPC server（与 HTTP 双栈；bootstrap 在 grpc.enabled 时纳入生命周期）
-	grpcServer := grpcpkg.New(grpcpkg.Config{
-		Enabled: cfg.GRPC.Enabled,
-		Host:    cfg.GRPC.Host,
-		Port:    cfg.GRPC.Port,
-	}, log)
+	grpcServer, err := grpcpkg.New(grpcpkg.Config{
+		Enabled:    cfg.GRPC.Enabled,
+		Host:       cfg.GRPC.Host,
+		Port:       cfg.GRPC.Port,
+		TimeoutSec: cfg.GRPC.TimeoutSec,
+		TLS:        cfg.GRPC.TLS,
+	}, log, errorReporter)
+	if err != nil {
+		return nil, fmt.Errorf("init grpc server: %w", err)
+	}
 	// 业务示例：注册 UserInfoService（真实业务模块可在此注入自己的 service）
 	grpcServer.RegisterUserInfoService(dbConn)
-
-	// 错误追踪上报（Sentry 等）：未启用时为空实现，零开销。
-	// Environment 优先取配置；未配置时回退应用元数据环境（APP_ENV）。
-	reportCfg := cfg.ErrorReport
-	if reportCfg.Environment == "" {
-		reportCfg.Environment = cfg.Environment
-	}
-	errorReporter := reporter.NewReporter(reportCfg, log.Errorw)
 
 	return &Container{
 		Config:         cfg,
@@ -294,6 +329,8 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		Cipher:         cipher,
 		WorkerPool:     pendingWorkerPool,
 		APIKeyVerifier: apiKeyVerifier,
+		BreachChecker:  breachChecker,
 		GRPCServer:     grpcServer,
+		LogExporter:    logExporter,
 	}, nil
 }

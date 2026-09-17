@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -13,6 +12,8 @@ import (
 	"jimu/internal/platform/http/middleware"
 	"jimu/internal/platform/logger"
 	"jimu/internal/platform/observability"
+	"jimu/internal/platform/tlsconf"
+	"jimu/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
@@ -33,14 +34,11 @@ func NewServer(cfg config.HTTPConfig, r *gin.Engine) (*Server, error) {
 		IdleTimeout:       time.Duration(cfg.IdleTimeoutSec) * time.Second,
 	}
 	if cfg.TLS.Enabled {
-		cert, err := tls.LoadX509KeyPair(cfg.TLS.CertFile, cfg.TLS.KeyFile)
+		tlsCfg, err := tlsconf.ServerConfig(cfg.TLS)
 		if err != nil {
-			return nil, fmt.Errorf("load tls key pair: %w", err)
+			return nil, err
 		}
-		srv.TLSConfig = &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			MinVersion:   tls.VersionTLS12,
-		}
+		srv.TLSConfig = tlsCfg
 	}
 	return newServer(srv), nil
 }
@@ -93,6 +91,10 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 	r.Use(
 		middleware.RequestID(),
 	)
+	// IP 白名单：非空时仅放行列表内来源（管理端另有 AdminIPAllowlist）
+	if len(securityCfg.IPAllowlist) > 0 {
+		r.Use(middleware.IPAllowlist(securityCfg.IPAllowlist))
+	}
 	// 语言解析：从 Accept-Language 注入 locale，供响应与校验翻译使用
 	r.Use(middleware.Locale())
 	// HTTP 指标中间件（在路由处理前注册，测量完整延迟）
@@ -116,12 +118,32 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 		middleware.Security(cfg),
 		middleware.Recovery(reporters...),
 		middleware.Timeout(time.Duration(serverCfg.TimeoutSec)*time.Second),
+		middleware.ConcurrencyLimit(serverCfg.MaxConcurrency, time.Duration(serverCfg.ConcurrencyWaitMs)*time.Millisecond),
 		middleware.GlobalRateLimit(serverCfg.RateLimitRate, serverCfg.RateLimitBurst),
 	)
 
 	// CSRF 防护：配置了密钥才启用。Bearer 认证请求自动跳过，不影响 JWT API。
 	if securityCfg.CSRFSecret != "" {
 		r.Use(middleware.CSRF(middleware.DefaultCSRFConfig([]byte(securityCfg.CSRFSecret))))
+	}
+
+	// 根路径服务信息（替代裸 404）：仅开发模式（debug）注册，生产保持 404
+	if cfg.Mode == config.HTTPModeDebug {
+		serviceVersion := otelCfg.ServiceVersion
+		if serviceVersion == "" {
+			serviceVersion = "dev"
+		}
+		r.GET("/", func(c *gin.Context) {
+			response.OK(c, gin.H{
+				"service":          "jimu",
+				"version":          serviceVersion,
+				"api_docs":         "/swagger/index.html",
+				"api_base":         "/api/v1",
+				"health":           "management 端口 /livez、/readyz（默认 9090）",
+				"metrics":          "management 端口 /metrics（默认 9090）",
+				"observability_ui": "OpenObserve http://localhost:5080（OTEL_ENABLED 开启时）",
+			})
+		})
 	}
 
 	return r

@@ -1,0 +1,22 @@
+{
+  "name": "jimu_redis_keys_evicted",
+  "stream_type": "metrics",
+  "stream_name": "redis_keys_evicted",
+  "is_real_time": false,
+  "query_condition": {
+    "type": "promql",
+    "promql": "sum(increase(redis_keys_evicted[10m]))",
+    "promql_condition": { "column": "value", "operator": ">", "value": 0 }
+  },
+  "trigger_condition": {
+    "period": 10,
+    "operator": ">=",
+    "threshold": 1,
+    "frequency": 5,
+    "frequency_type": "minutes",
+    "silence": 30
+  },
+  "destinations": ["jimu_webhook"],
+  "description": "10 分钟窗口内 Redis 发生 key 淘汰（内存达到 maxmemory）",
+  "enabled": true
+}

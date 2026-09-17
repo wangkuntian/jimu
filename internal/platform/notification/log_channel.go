@@ -2,6 +2,7 @@ package notification
 
 import (
 	"context"
+	"encoding/json"
 
 	"jimu/internal/platform/logger"
 )
@@ -20,12 +21,19 @@ func NewLogChannel(ch Channel, log *logger.Logger) *LogChannel {
 }
 
 func (l *LogChannel) Send(ctx context.Context, msg Message) error {
-	l.log.WithContext(ctx).Info("notification delivered to log channel",
+	// 模板变量序列化为 JSON 字符串（OTLP attribute 不支持嵌套对象）
+	dataStr := ""
+	if len(msg.Data) > 0 {
+		if b, err := json.Marshal(msg.Data); err == nil {
+			dataStr = string(b)
+		}
+	}
+	l.log.WithContext(ctx).Infow("notification delivered to log channel",
 		"channel", msg.Channel,
 		"to", msg.To,
 		"subject", msg.Subject,
 		"body", msg.Body,
-		"data", msg.Data,
+		"data", dataStr,
 	)
 	return nil
 }

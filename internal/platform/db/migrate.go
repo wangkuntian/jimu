@@ -67,7 +67,7 @@ func MigrateWithRetry(cfg config.DBConfig, log *logger.Logger, direction string)
 		if err := Migrate(cfg, direction); err != nil {
 			lastErr = err
 			if log != nil {
-				log.Warn("retrying database migration",
+				log.Warnw("retrying database migration",
 					"direction", direction,
 					"attempt", attempt,
 					"max_retries", maxRetries,

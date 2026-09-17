@@ -7,6 +7,7 @@ import (
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/platform/httpclient"
+	oauthplatform "jimu/internal/platform/oauth"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -77,4 +78,21 @@ func TestBuildProvidersFiltersEnabled(t *testing.T) {
 
 	assert.Equal(t, "google", providers["google"].Name())
 	assert.Equal(t, "wechat", providers["wechat"].Name())
+}
+
+func TestBuildProvidersUsesOIDCWhenIssuerConfigured(t *testing.T) {
+	httpClient := httpclient.New(httpclient.Config{})
+	providers := buildProviders(config.OAuthConfig{
+		Providers: map[string]config.OAuthProviderConfig{
+			// issuer_url 非空即按通用 OIDC 处理，provider 名自定义
+			"keycloak": {ClientID: "k-id", IssuerURL: "https://idp.example.com/realms/acme", RedirectURL: "https://x/k", Enabled: true},
+			// 未启用不构造
+			"okta": {ClientID: "o-id", IssuerURL: "https://okta.example.com", Enabled: false},
+		},
+	}, httpClient)
+
+	require.Len(t, providers, 1)
+	require.Contains(t, providers, "keycloak")
+	assert.Equal(t, "keycloak", providers["keycloak"].Name())
+	assert.IsType(t, &oauthplatform.OIDCProvider{}, providers["keycloak"])
 }

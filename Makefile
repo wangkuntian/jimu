@@ -2,8 +2,7 @@
 .PHONY: test-cover test-coverage-check test-race swagger-check smoke-check compose-check
 .PHONY: docker-build docker-run docker-stop docker-logs
 .PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
-.PHONY: compose-observability compose-observability-down
-.PHONY: bench loadtest proto
+.PHONY: bench loadtest proto secrets
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -24,7 +23,12 @@ SWAG := go run -mod=mod github.com/swaggo/swag/cmd/swag
 ENV ?= dev
 
 # 根据 APP_ENV 自动生成 --profile 参数：dev 环境启动 adminer
-COMPOSE_PROFILE_FLAG = $(if $(filter dev,$(APP_ENV)),--profile dev)
+COMPOSE_DEV_PROFILE = $(if $(filter dev,$(APP_ENV)),dev)
+# observability（OpenObserve 监控栈）默认开启（与 docker-compose 的 ${OTEL_ENABLED:-true} 一致）；
+# 显式 OTEL_ENABLED=false 关闭（不启动监控栈、server 不推送）
+COMPOSE_OBS_PROFILE = $(if $(filter false,$(OTEL_ENABLED)),,observability)
+# 组合 flag（如 --profile dev --profile observability）
+COMPOSE_PROFILE_FLAG = $(if $(strip $(COMPOSE_DEV_PROFILE) $(COMPOSE_OBS_PROFILE)),$(addprefix --profile ,$(COMPOSE_DEV_PROFILE) $(COMPOSE_OBS_PROFILE)))
 
 # 加载 .env 文件（如果存在），导出敏感变量供 docker 命令使用
 # 本地 make run/migrate/seed 直接读取 configs/ 中的 YAML，无需环境变量
@@ -46,14 +50,18 @@ help:
 	@echo "  make vet                  静态分析"
 	@echo "  make fmt                  格式化代码"
 	@echo "  make lint                 静态检查"
+	@echo "  make check-log-usage      检查日志调用均为 *w 系列（防 k/v 粘连）"
 	@echo ""
 	@echo "数据库:"
 	@echo "  make migrate              本地执行迁移"
 	@echo "  make migrate-down         本地回滚迁移"
 	@echo "  make migrate-status       查看迁移状态"
 	@echo "  make seed                 本地插入初始数据"
-	@echo "  make backup               备份数据库（mariadb-dump/mysqldump）"
-	@echo "  make restore              从备份恢复数据库（需 BACKUP_FILE=...，FORCE=1 跳过确认）"
+	@echo "  make build-backup-image   构建备份任务镜像 jimu-backup（K8s/Helm CronJob 用）"
+	@echo "  make compose-db-backup    在数据库容器内备份（脚本已挂载，产物落 ./backups）"
+	@echo "  make compose-db-restore   在数据库容器内恢复（需 FILE=/backups/xxx.sql.gz，破坏性）"
+	@echo "  make backup               主机侧备份（需本机 mariadb-dump/mysqldump 客户端）"
+	@echo "  make restore              主机侧恢复（需 BACKUP_FILE=...，FORCE=1 跳过确认）"
 	@echo "  make test-backup-restore  备份/恢复往返测试（需运行中 mariadb 容器）"
 	@echo ""
 	@echo "Docker 容器（单容器，需外部 DB + Redis）:"
@@ -69,8 +77,7 @@ help:
 	@echo "  make compose-logs         查看应用日志"
 	@echo "  make compose-migrate      Compose 环境执行迁移"
 	@echo "  make compose-seed         Compose 环境插入初始数据"
-	@echo "  make compose-observability      启动监控栈（Prometheus + Grafana）"
-	@echo "  make compose-observability-down 停止监控栈"
+	@echo "  可选服务（环境变量开启）：OTEL_ENABLED=true 启动监控栈 + server 遥测推送（OpenObserve+采集+dashboard）"
 	@echo ""
 	@echo "工具:"
 	@echo "  make clean                清理构建产物"
@@ -125,6 +132,19 @@ backup:
 restore:
 	@./scripts/restore.sh $(BACKUP_FILE)
 
+## build-backup-image: 构建数据库备份任务镜像（内置 mariadb-dump + pg_dump + 仓库脚本；PG 客户端版本可配）
+build-backup-image:
+	docker build -f deploy/backup/Dockerfile -t jimu-backup:latest --build-arg PG_CLIENT_VERSION=$(or $(PG_CLIENT_VERSION),17) .
+
+## compose-db-backup: 在数据库容器内执行备份（脚本已挂载，输出到宿主机 ./backups）
+compose-db-backup:
+	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) exec -T mariadb bash /opt/jimu/scripts/backup.sh /backups
+
+## compose-db-restore: 在数据库容器内执行恢复（破坏性；用法: make compose-db-restore FILE=/backups/jimu_xxx.sql.gz）
+compose-db-restore:
+	@test -n "$(FILE)" || { echo "❌ 用法: make compose-db-restore FILE=/backups/jimu_YYYYmmdd_HHMMSS.sql.gz"; exit 1; }
+	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) exec -T -e FORCE=1 mariadb bash /opt/jimu/scripts/restore.sh "$(FILE)"
+
 ## test-backup-restore: 备份/恢复往返测试（通过 docker exec 调用容器内 mariadb，用法: make test-backup-restore [CONTAINER=jimu-test-mysql]）
 test-backup-restore:
 	@./scripts/test_backup_restore.sh $(CONTAINER)
@@ -155,13 +175,18 @@ docker-logs:
 	docker logs -f $(DOCKER_CONTAINER)
 
 # ========== Docker Compose ==========
-# 通过 .env 中 COMPOSE_PROFILES 控制启动的 profile（如 dev 启动 adminer）
+# 统一入口：make compose-up / compose-down。
+# 可选服务通过环境变量开启：
+#   dev           : APP_ENV=dev（adminer）
+#   observability : OTEL_ENABLED=true（统一开关：启动监控栈 + server 遥测推送）
+#                   （opens OpenObserve + MySQL/Redis 采集 + 默认 dashboard）
 
-## compose-up: 启动所有服务（依赖 + 应用）
+## compose-up: 启动服务（compose-up 开启 observability 时自动初始化 dashboard）
 compose-up:
 	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) up -d
+	@if [ "$(COMPOSE_OBS_PROFILE)" = "observability" ]; then bash scripts/observability.sh start; fi
 
-## compose-down: 停止所有服务
+## compose-down: 停止并删除所有 compose 服务容器（保留数据卷）
 compose-down:
 	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) down
 
@@ -177,22 +202,16 @@ compose-logs:
 compose-migrate:
 	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) run --rm server ./jimu migrate up
 
-## compose-seed: Compose 环境插入初始数据
+## compose-seed: Compose 环境插入初始数据（需 .env 提供 ADMIN_PASSWORD）
 compose-seed:
-	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) run --rm server ./jimu seed
+	@test -n "$(ADMIN_PASSWORD)" || { echo "❌ 缺少 ADMIN_PASSWORD：请在 .env 中设置管理员初始密码"; exit 1; }
+	$(DOCKER_COMPOSE) $(COMPOSE_PROFILE_FLAG) run --rm -e ADMIN_PASSWORD="$(ADMIN_PASSWORD)" server ./jimu seed
 
-## compose-observability: 启动监控栈（Prometheus + Grafana + AlertManager + Loki)
-compose-observability:
-	$(DOCKER_COMPOSE) --profile observability up -d
-
-## compose-observability-down: 停止监控栈
-compose-observability-down:
-	$(DOCKER_COMPOSE) --profile observability down
-
-## compose-observability-test: 触发一条告警以验证 AlertManager 链路(本地测试)
-compose-observability-test:
-	$(DOCKER_COMPOSE) --profile observability exec -T alertmanager amtool --alertmanager.url=http://localhost:9093 alert add label=severity=critical label=team=jimu label=instance=localhost annotation=summary='Jimu test alert' annotation=description='This is a test alert to verify the AlertManager pipeline.'
-	@echo "Test alert fired; visit http://localhost:9093 to verify."
+## secrets: 从 .env 生成 Docker Secrets 文件（./secrets/*.txt；compose 各服务经 _FILE 挂载）
+##         依赖变量：DB_ROOT_PASSWORD / DB_PASSWORD / JWT_SECRET / ZO_OBSERVE_ROOT_USER_*
+##         已存在的文件默认不覆盖（MAKE_SECRETS_FORCE=1 强制重新生成）
+secrets:
+	@bash scripts/gen-secrets.sh
 
 # ========== 工具 ==========
 
@@ -233,6 +252,11 @@ lint:
 		echo "golangci-lint 未安装，使用 go vet 替代"; \
 		go vet ./...; \
 	fi
+
+## check-log-usage: 检查日志调用符合结构化规范（logcheck 静态分析：防粘连 R1 /
+## 禁动态 key R2 / 字段词汇表 R3 / 禁嵌套对象 R4；规则与 AGENTS.md 日志调用规范同步）
+check-log-usage:
+	@go run ./tools/logcheck "./internal/..." "./cmd/..." "./tools/..."
 
 ## clean: 清理构建产物
 clean:
@@ -306,6 +330,10 @@ swagger-check:
 smoke-check:
 	@bash -n scripts/test_runtime_security.sh
 	@bash -n scripts/smoke_api_contract.sh
+	@bash -n scripts/install_db_clients.sh
+	@bash -n scripts/db_common.sh
+	@bash -n scripts/backup.sh
+	@bash -n scripts/restore.sh
 	@bash -n scripts/test_backup_restore.sh
 	@echo "✅ Smoke 脚本语法正确"
 
@@ -315,17 +343,17 @@ compose-check:
 	@./scripts/smoke_api_contract.sh
 
 ## ci: 本地 CI 检查（无外部依赖部分，完整 CI 见 .github/workflows/ci.yml）
-ci: fmt-check vet lint test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck
+ci: fmt-check vet lint check-log-usage test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck
 	@echo "✅ All local CI checks passed"
 
 ## release-check: 发布前检查（Go 门禁 + govulncheck + 隔离 Compose/API smoke）
-release-check: fmt-check vet test govulncheck compose-check
+release-check: fmt-check vet check-log-usage test govulncheck compose-check
 	@echo "All checks passed"
 
-## hooks: 安装 pre-commit 钩子（需 pip install pre-commit）
+## hooks: 启用 git 钩子（core.hooksPath=githooks：commit-msg 全英文检查 + pre-commit 框架包装；框架检查需 pip install pre-commit）
 hooks:
-	pre-commit install
-	@echo "pre-commit hooks installed"
+	git config core.hooksPath githooks
+	@echo "git hooks enabled (hooksPath=githooks: commit-msg + pre-commit wrapper)"
 
 ## dev: 热重载开发模式（需 air: go install github.com/air-verse/air@latest）
 dev:

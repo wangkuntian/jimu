@@ -13,6 +13,8 @@ import (
 	"math"
 	"time"
 
+	"jimu/internal/platform/breaker"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"google.golang.org/grpc"
@@ -50,6 +52,10 @@ type ClientConfig struct {
 	TLSCredentials credentials.TransportCredentials
 	// 服务名（仅用于日志与指标标签）
 	ServiceName string
+	// 熔断：连续失败阈值（0 用默认 5），只把 Unavailable/DeadlineExceeded 计为失败
+	MaxFailures int
+	// 熔断冷却时长（0 用默认 10s），冷却后放行单次探测
+	ResetTimeout time.Duration
 }
 
 // DefaultClientConfig 返回默认 gRPC 客户端配置
@@ -107,11 +113,18 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
 	defer cancel()
 
+	// 熔断按服务名分组件，便于指标区分下游；重试在熔断之内（一次逻辑调用只结算一次）
+	circuit := breaker.New("grpc_client:"+cfg.ServiceName, breaker.Config{
+		MaxFailures:  cfg.MaxFailures,
+		ResetTimeout: cfg.ResetTimeout,
+	})
+
 	conn, err := grpc.NewClient(cfg.Address,
 		grpc.WithTransportCredentials(creds),
 		grpc.WithChainUnaryInterceptor(
 			clientRecoveryInterceptor(),
 			clientMetricsInterceptor(cfg.ServiceName),
+			clientBreakerInterceptor(circuit),
 			clientRetryInterceptor(maxRetries, retryBase, cfg.ServiceName),
 		),
 	)
@@ -160,6 +173,33 @@ func (c *Client) State() connectivity.State {
 func retryableCode(c codes.Code) bool {
 	switch c {
 	case codes.Unavailable, codes.ResourceExhausted:
+		return true
+	default:
+		return false
+	}
+}
+
+// clientBreakerInterceptor 出站熔断：连续失败后快速失败，冷却后放行单次探测。
+// 只把 Unavailable/DeadlineExceeded 计为失败（下游不可达/无响应），业务错误不影响状态。
+func clientBreakerInterceptor(circuit *breaker.Breaker) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		if err := circuit.Allow(); err != nil {
+			return status.Errorf(codes.Unavailable, "grpc client circuit open: %v", err)
+		}
+		err := invoker(ctx, method, req, reply, cc, opts...)
+		if isBreakerFailure(status.Code(err)) {
+			circuit.OnFailure()
+			return err
+		}
+		circuit.OnSuccess()
+		return err
+	}
+}
+
+// isBreakerFailure 判断状态码是否代表下游不可用（计入熔断失败）
+func isBreakerFailure(code codes.Code) bool {
+	switch code {
+	case codes.Unavailable, codes.DeadlineExceeded:
 		return true
 	default:
 		return false

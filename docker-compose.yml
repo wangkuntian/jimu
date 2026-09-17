@@ -10,8 +10,12 @@ services:
       TZ: Asia/Shanghai
     volumes:
       - jimu-mariadb-data:/var/lib/mysql
+      # 备份/恢复脚本与输出目录：容器内直接执行，产物落到宿主机 ./backups
+      - ./scripts:/opt/jimu/scripts:ro
+      - ./backups:/backups
     healthcheck:
-      test: ["CMD", "mariadb-admin", "ping", "--silent"]
+      # 带 root 密码 ping（读 secret 文件），避免无密码探测产生 Access denied 警告
+      test: ["CMD-SHELL", "mariadb-admin ping -uroot -p\"$$(cat /run/secrets/db_root_password)\" --silent"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -54,8 +58,16 @@ services:
       DB_NAME: ${COMPOSE_DB_NAME:-jimu}
       REDIS_ADDR: ${COMPOSE_REDIS_ADDR:-redis:6379}
       REDIS_DB: ${COMPOSE_REDIS_DB:-0}
-      # 容器内 expose management 端点供 Prometheus 抓取（默认 app.yaml 绑定 127.0.0.1）
+      # 容器内 expose management 端点（/metrics 等，供外部抓取或调试）
       MANAGEMENT_HOST: "0.0.0.0"
+      # OpenObserve 接入：OTEL_ENABLED 默认开启（.env/环境变量设 false 可关闭）
+      # （认证凭据默认与 openobserve 服务 ZO_ROOT_USER_EMAIL/PASSWORD 一致）
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
+      OTEL_ENDPOINT: ${OTEL_ENDPOINT:-openobserve:5081}
+      OTEL_AUTH_EMAIL: ${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local}
+      # OTEL_AUTH_PASSWORD 由 secret 文件注入（make secrets 生成）
+      OTEL_AUTH_PASSWORD_FILE: /run/secrets/otel_auth_password
+      OTEL_ORG_ID: ${OTEL_ORG_ID:-default}
       # 敏感配置通过文件注入（非环境变量）
       DB_PASSWORD_FILE: /run/secrets/db_password
       JWT_SECRET_FILE: /run/secrets/jwt_secret
@@ -73,84 +85,67 @@ services:
     secrets:
       - db_password
       - jwt_secret
+      - otel_auth_password
 
-  # 可选的 observability profile：Prometheus 抓取 /metrics，Grafana 可视化
-  prometheus:
-    image: prom/prometheus:v2.55.1
-    profiles: ["observability"]
-    restart: unless-stopped
-    volumes:
-      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./deploy/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
-      - jimu-prometheus-data:/prometheus
-    ports:
-      - "127.0.0.1:9093:9090"
-    depends_on:
-      server:
-        condition: service_started
-
-  alertmanager:
-    image: prom/alertmanager:v0.27.0
-    profiles: ["observability"]
-    restart: unless-stopped
-    volumes:
-      - ./deploy/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-      - jimu-alertmanager-data:/alertmanager
-    ports:
-      - "127.0.0.1:9094:9093"
-    depends_on:
-      - prometheus
-
-  loki:
-    image: grafana/loki:3.2.1
-    profiles: ["observability"]
-    restart: unless-stopped
-    command: -config.file=/etc/loki/local-config.yaml
-    volumes:
-      - jimu-loki-data:/loki
-    ports:
-      - "127.0.0.1:3100:3100"
-
-  promtail:
-    image: grafana/promtail:3.2.1
-    profiles: ["observability"]
-    restart: unless-stopped
-    volumes:
-      - ./deploy/promtail.yml:/etc/promtail/config.yml:ro
-      - ./logs:/app/logs:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-    command: -config.file=/etc/promtail/config.yml
-    depends_on:
-      - loki
-
-  grafana:
-    image: grafana/grafana:11.3.0
+  # 可选的 observability profile：OpenObserve 统一承载 日志/指标/追踪/告警/仪表盘
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:v0.92.2
     profiles: ["observability"]
     restart: unless-stopped
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      ZO_ROOT_USER_EMAIL: ${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local}
+      ZO_ROOT_USER_PASSWORD: ${ZO_OBSERVE_ROOT_USER_PASSWORD:-Admin@12345}
+      ZO_DATA_DIR: /data
+      ZO_HTTP_PORT: "5080"
+      ZO_GRPC_PORT: "5081"
     volumes:
-      - jimu-grafana-data:/var/lib/grafana
-      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./deploy/grafana/dashboard.json:/var/lib/grafana/dashboards/jimu.json:ro
+      - jimu-openobserve-data:/data
     ports:
-      - "127.0.0.1:3000:3000"
+      # HTTP UI / API（日志 JSON、Prometheus remote write 等）
+      - "127.0.0.1:${ZO_OBSERVE_HTTP_PORT:-5080}:5080"
+      # OTLP/gRPC（tracing/metrics/logs 推送）
+      - "127.0.0.1:${ZO_OBSERVE_GRPC_PORT:-5081}:5081"
+
+  # 可选的 observability profile：OTel Collector 采集数据库指标（MySQL/Redis）→ OpenObserve
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    profiles: ["observability"]
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./deploy/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      # MySQL root 密码由 config 以 ${file:/run/secrets/db_root_password} 读取（无需 shell）
+      ZO_EMAIL: ${ZO_OBSERVE_ROOT_USER_EMAIL:-admin@jimu.local}
+      ZO_PASSWORD: ${ZO_OBSERVE_ROOT_USER_PASSWORD:-Admin@12345}
+      ZO_ORG: ${OTEL_ORG_ID:-default}
+      ZO_OTLP_ENDPOINT: openobserve:5081
+      MYSQL_ENDPOINT: mariadb:3306
+      MYSQL_USER: root
+      REDIS_ENDPOINT: redis:6379
+      # PostgreSQL 采集：与 deploy/otel-collector.yaml 中注释掉的 postgres receiver 成对启用
+      # PG_PASSWORD 直接走环境变量（receiver 配置即 ${env:PG_PASSWORD}）
+      # PG_ENDPOINT: postgres:5432
+      # PG_USER: postgres
+      # PG_PASSWORD: change-this-pg-password
+    secrets:
+      - db_root_password
+      - zo_auth_token
     depends_on:
-      - prometheus
+      openobserve:
+        condition: service_started
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   jimu-mariadb-data:
     name: ${COMPOSE_MARIADB_VOLUME:-jimu-mariadb-data}
   jimu-redis-data:
     name: ${COMPOSE_REDIS_VOLUME:-jimu-redis-data}
-  jimu-prometheus-data:
-    name: ${COMPOSE_PROMETHEUS_VOLUME:-jimu-prometheus-data}
-  jimu-alertmanager-data:
-    name: ${COMPOSE_ALERTMANAGER_VOLUME:-jimu-alertmanager-data}
-  jimu-loki-data:
-    name: ${COMPOSE_LOKI_VOLUME:-jimu-loki-data}
-  jimu-grafana-data:
-    name: ${COMPOSE_GRAFANA_VOLUME:-jimu-grafana-data}
+  jimu-openobserve-data:
+    name: ${COMPOSE_OPENOBSERVE_VOLUME:-jimu-openobserve-data}
 
 secrets:
   db_root_password:
@@ -159,3 +154,8 @@ secrets:
     file: ${COMPOSE_DB_PASSWORD_FILE:-./secrets/db_password.txt}
   jwt_secret:
     file: ${COMPOSE_JWT_SECRET_FILE:-./secrets/jwt_secret.txt}
+  # OpenObserve 认证（由 make secrets 从 .env 生成；openobserve 自身因无 _FILE 支持仍用环境变量）
+  otel_auth_password:
+    file: ./secrets/otel_auth_password.txt
+  zo_auth_token:
+    file: ./secrets/zo_auth_token.txt

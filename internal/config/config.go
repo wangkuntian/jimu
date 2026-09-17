@@ -77,17 +77,21 @@ type SchedulerConfig struct {
 	Store string `mapstructure:"store"` // 任务定义存储类型：memory, mysql
 }
 
-// OAuthProviderConfig 单个 OAuth 提供商配置
+// OAuthProviderConfig 单个 OAuth 提供商配置。
+// 填了 issuer_url 的提供商按通用 OIDC 处理（provider 名可自定义，如 keycloak/okta/azuread）；
+// 否则按内置提供商名（google/github/wechat）匹配。
 type OAuthProviderConfig struct {
-	ClientID     string `mapstructure:"client_id"`
-	ClientSecret string `mapstructure:"client_secret"`
-	RedirectURL  string `mapstructure:"redirect_url"`
-	Enabled      bool   `mapstructure:"enabled"`
+	ClientID     string   `mapstructure:"client_id"`
+	ClientSecret string   `mapstructure:"client_secret"`
+	RedirectURL  string   `mapstructure:"redirect_url"`
+	IssuerURL    string   `mapstructure:"issuer_url"` // OIDC discovery 签发者地址
+	Scopes       []string `mapstructure:"scopes"`     // 可选，默认 openid profile email
+	Enabled      bool     `mapstructure:"enabled"`
 }
 
 // OAuthConfig OAuth 登录配置
 type OAuthConfig struct {
-	Providers map[string]OAuthProviderConfig `mapstructure:"providers"` // 提供商名 -> 配置（google/github/wechat）
+	Providers map[string]OAuthProviderConfig `mapstructure:"providers"` // 提供商名 -> 配置（内置 google/github/wechat，或自定义 OIDC 提供商名）
 }
 
 // CaptchaConfig 验证码配置
@@ -145,6 +149,8 @@ type Config struct {
 	Management   ManagementConfig            `mapstructure:"management"`
 	DB           DBConfig                    `mapstructure:"db"`
 	Redis        RedisConfig                 `mapstructure:"redis"`
+	RateLimit    RateLimitConfig             `mapstructure:"ratelimit"`
+	Retention    RetentionConfig             `mapstructure:"retention"`
 	Log          LogConfig                   `mapstructure:"log"`
 	Auth         AuthConfig                  `mapstructure:"auth"`
 	Server       ServerConfig                `mapstructure:"server"`
@@ -192,9 +198,11 @@ type WebhookNotificationConfig struct {
 
 // GRPCConfig gRPC server 配置（与 HTTP 双栈并存，可选启用）
 type GRPCConfig struct {
-	Enabled bool   `mapstructure:"enabled"` // 是否启用 gRPC server
-	Host    string `mapstructure:"host"`    // 监听地址
-	Port    int    `mapstructure:"port"`    // 监听端口
+	Enabled    bool      `mapstructure:"enabled"`     // 是否启用 gRPC server
+	Host       string    `mapstructure:"host"`        // 监听地址
+	Port       int       `mapstructure:"port"`        // 监听端口
+	TimeoutSec int       `mapstructure:"timeout_sec"` // 单请求处理超时（秒），0 不限
+	TLS        TLSConfig `mapstructure:"tls"`         // TLS/mTLS 配置（与 HTTP 侧同构）
 }
 
 // ServerConfig 服务运行时配置
@@ -202,6 +210,9 @@ type ServerConfig struct {
 	TimeoutSec     int `mapstructure:"timeout_sec"`      // 请求超时秒数，0 表示不限制
 	RateLimitRate  int `mapstructure:"rate_limit_rate"`  // 全局限流速率（每秒请求数），0 表示不限流
 	RateLimitBurst int `mapstructure:"rate_limit_burst"` // 限流桶容量，允许的突发请求数
+	// 并发上限（负载保护）：超过上限返回 1010/503；0 表示不限制
+	MaxConcurrency    int `mapstructure:"max_concurrency"`
+	ConcurrencyWaitMs int `mapstructure:"concurrency_wait_ms"` // 超限后的排队等待上限（毫秒），0=立即拒绝
 }
 
 // SecurityConfig 安全头配置
@@ -220,6 +231,17 @@ type SecurityConfig struct {
 	// 字段级加密密钥（AES-256-GCM，≥32 字节）。空则明文模式（email/phone 不加密存储，仍计算盲索引）。
 	// 建议 ENCRYPTION_KEY 环境变量注入；启用后存量明文行可正常解密读回。
 	EncryptionKey string `mapstructure:"encryption_key"`
+
+	// IP 白名单（CIDR 或单个 IP）。为空表示不限制；非空时仅放行列表内来源，
+	// 其余请求返回 403。客户端 IP 由 gin 依据 trusted_proxies 解析 X-Forwarded-For。
+	IPAllowlist []string `mapstructure:"ip_allowlist"`
+	// 管理端 IP 白名单（/api/v1/admin）。为空表示沿用 IPAllowlist；同样非空时仅放行列表内来源。
+	AdminIPAllowlist []string `mapstructure:"admin_ip_allowlist"`
+
+	// 幂等中间件：客户端携带 Idempotency-Key 时，同键重复请求返回首次结果（默认启用）。
+	IdempotencyEnabled bool `mapstructure:"idempotency_enabled"`
+	// 幂等记录保留时长（秒），0 用默认 24 小时
+	IdempotencyTTLSec int `mapstructure:"idempotency_ttl_sec"`
 }
 
 // DefaultSecurityConfig 返回默认安全配置
@@ -248,9 +270,10 @@ type ManagementConfig struct {
 }
 
 type AuditConfig struct {
-	QueueSize       int `mapstructure:"queue_size"`
-	BatchSize       int `mapstructure:"batch_size"`
-	FlushIntervalMS int `mapstructure:"flush_interval_ms"`
+	QueueSize       int    `mapstructure:"queue_size"`
+	BatchSize       int    `mapstructure:"batch_size"`
+	FlushIntervalMS int    `mapstructure:"flush_interval_ms"`
+	HashSecret      string `mapstructure:"hash_secret"` // 审计链 HMAC 密钥；为空时退化为 SHA-256
 }
 
 type StorageConfig struct {
@@ -294,11 +317,13 @@ type HTTPConfig struct {
 	TLS                  TLSConfig `mapstructure:"tls"`
 }
 
-// TLSConfig TLS 配置
+// TLSConfig TLS 配置（HTTP 与 gRPC 共用）
 type TLSConfig struct {
 	Enabled  bool   `mapstructure:"enabled"`   // 是否启用 TLS
-	CertFile string `mapstructure:"cert_file"` // 证书文件路径
-	KeyFile  string `mapstructure:"key_file"`  // 私钥文件路径
+	CertFile string `mapstructure:"cert_file"` // 服务端证书文件路径
+	KeyFile  string `mapstructure:"key_file"`  // 服务端私钥文件路径
+	// 客户端 CA 证书文件：非空时启用双向认证（mTLS），要求并校验客户端证书
+	ClientCAFile string `mapstructure:"client_ca_file"`
 }
 
 type DBConfig struct {
@@ -317,6 +342,44 @@ type DBConfig struct {
 	// 读写分离
 	ReadHosts []string `mapstructure:"read_hosts"` // 从库地址列表
 	ReadPorts []int    `mapstructure:"read_ports"` // 从库端口列表
+	// 熔断（DB 不可用时快速失败，避免每请求都等连接/查询超时）
+	Breaker BreakerConfig `mapstructure:"breaker"`
+}
+
+// BreakerConfig 依赖熔断配置（Redis/DB 共用）
+type BreakerConfig struct {
+	Enabled         bool `mapstructure:"enabled"`           // 是否启用熔断
+	MaxFailures     int  `mapstructure:"max_failures"`      // 连续失败阈值（默认 5）
+	ResetTimeoutSec int  `mapstructure:"reset_timeout_sec"` // 冷却时间秒（默认 10）
+}
+
+// RetentionConfig 数据保留策略（清理增长型历史表，避免无限增长）
+type RetentionConfig struct {
+	Enabled         bool   `mapstructure:"enabled"`
+	Cron            string `mapstructure:"cron"`              // 调度表达式（默认每天 03:30）
+	BatchSize       int    `mapstructure:"batch_size"`        // 每批删除行数（默认 500）
+	AuditLogDays    int    `mapstructure:"audit_log_days"`    // 审计日志保留天数，0=不清理
+	JobDays         int    `mapstructure:"job_days"`          // 已终态任务保留天数
+	JobHistoryDays  int    `mapstructure:"job_history_days"`  // 任务执行历史保留天数
+	DeadLetterDays  int    `mapstructure:"dead_letter_days"`  // 已处理死信保留天数
+	OutboxEventDays int    `mapstructure:"outbox_event_days"` // 已发布 outbox 事件保留天数
+	ImportJobDays   int    `mapstructure:"import_job_days"`   // 已结束导入任务保留天数
+	// 失效可信设备的保留天数（按 expires_at 计，留出审计窗口后清理）
+	TrustedDeviceDays int `mapstructure:"trusted_device_days"`
+}
+
+// RateLimitConfig 限流维度配置（全局 IP 令牌桶见 server.rate_limit_*）。
+// API Key 维度限流需前置 APIKeyAuthMiddleware，由业务路由按需挂载
+// middleware.APIKeyRateLimitMiddleware，因此不做全局配置。
+type RateLimitConfig struct {
+	Tenant RateLimitDimension `mapstructure:"tenant"` // 租户维度（Redis 滑动窗口，全局挂载）
+}
+
+// RateLimitDimension 单个限流维度配置
+type RateLimitDimension struct {
+	Enabled   bool `mapstructure:"enabled"`    // 是否启用
+	Limit     int  `mapstructure:"limit"`      // 窗口内允许的最大请求数
+	WindowSec int  `mapstructure:"window_sec"` // 窗口大小（秒）
 }
 
 type RedisConfig struct {
@@ -341,6 +404,8 @@ type RedisConfig struct {
 	WriteTimeoutSec  int    `mapstructure:"write_timeout_sec"`
 	MaxRetries       int    `mapstructure:"max_retries"`
 	RetryIntervalSec int    `mapstructure:"retry_interval_sec"`
+	// 熔断（Redis 不可用时快速失败，避免每请求都等读/写超时）
+	Breaker BreakerConfig `mapstructure:"breaker"`
 }
 
 type LogConfig struct {
@@ -354,17 +419,56 @@ type LogConfig struct {
 }
 
 type AuthConfig struct {
-	JWTSecret             string `mapstructure:"jwt_secret"`
-	JWTPreviousSecret     string `mapstructure:"jwt_previous_secret"`
-	Issuer                string `mapstructure:"issuer"`
-	AccessExpireMin       int    `mapstructure:"access_expire_min"`
-	RefreshExpireDay      int    `mapstructure:"refresh_expire_day"`
-	PublicRegistration    bool   `mapstructure:"public_registration"`
-	LoginRateLimit        int    `mapstructure:"login_rate_limit"`
-	LoginRateWindowSec    int    `mapstructure:"login_rate_window_sec"`
-	RegisterRateLimit     int    `mapstructure:"register_rate_limit"`
-	RegisterRateWindowSec int    `mapstructure:"register_rate_window_sec"`
-	ResetCodeTTLMin       int    `mapstructure:"reset_code_ttl_min"` // 密码重置验证码有效期（分钟）
+	JWTSecret             string             `mapstructure:"jwt_secret"`
+	JWTPreviousSecret     string             `mapstructure:"jwt_previous_secret"`
+	Issuer                string             `mapstructure:"issuer"`
+	AccessExpireMin       int                `mapstructure:"access_expire_min"`
+	RefreshExpireDay      int                `mapstructure:"refresh_expire_day"`
+	PublicRegistration    bool               `mapstructure:"public_registration"`
+	LoginRateLimit        int                `mapstructure:"login_rate_limit"`
+	LoginRateWindowSec    int                `mapstructure:"login_rate_window_sec"`
+	RegisterRateLimit     int                `mapstructure:"register_rate_limit"`
+	RegisterRateWindowSec int                `mapstructure:"register_rate_window_sec"`
+	ResetCodeTTLMin       int                `mapstructure:"reset_code_ttl_min"`     // 密码重置验证码有效期（分钟）
+	PasswordHistoryCount  int                `mapstructure:"password_history_count"` // 防复用：检查最近 N 个历史密码（0=关闭）
+	TrustedDeviceDays     int                `mapstructure:"trusted_device_days"`    // 可信设备有效期（天，0=关闭「记住此设备」）
+	BreachCheckEnabled    bool               `mapstructure:"breach_check_enabled"`   // 泄露口令检查（HIBP k-匿名范围查询，默认关闭）
+	Provisioning          ProvisioningConfig `mapstructure:"provisioning"`           // 开通式注册（注册 = 开通新租户）
+	WebAuthn              WebAuthnConfig     `mapstructure:"webauthn"`               // WebAuthn/通行密钥（无密码登录）
+}
+
+// WebAuthnConfig WebAuthn/通行密钥配置。
+// rp_id 必须是站点有效域（不带 scheme，如 example.com；本地开发用 localhost），
+// rp_origins 是允许的浏览器来源（含 scheme，如 https://example.com）。
+type WebAuthnConfig struct {
+	Enabled       bool     `mapstructure:"enabled"`         // 是否启用通行密钥
+	RPDisplayName string   `mapstructure:"rp_display_name"` // 展示给用户的站点名称
+	RPID          string   `mapstructure:"rp_id"`           // Relying Party ID（站点有效域）
+	RPOrigins     []string `mapstructure:"rp_origins"`      // 允许的来源（绝对 URL）
+	SessionTTLMin int      `mapstructure:"session_ttl_min"` // 挑战有效期（分钟），0 用默认 5
+}
+
+// ProvisioningConfig 开通式注册配置。
+// enabled 时 /auth/register 在单事务内创建新租户 + owner 用户，并按 roles 模板
+// 初始化租户角色与全局权限绑定；owner 获得绑定 owner_role 指定的角色（缺省为模板第一个角色）。
+type ProvisioningConfig struct {
+	Enabled   bool                    `mapstructure:"enabled"`
+	OwnerRole string                  `mapstructure:"owner_role"` // owner 绑定的模板角色名；空 = 模板第一个角色
+	Roles     []ProvisionRoleTemplate `mapstructure:"roles"`
+}
+
+// ProvisionRoleTemplate 开通租户时初始化的角色模板。
+// permissions 引用全局权限表（seed 写入的 resource + action），缺失的权限跳过不报错。
+type ProvisionRoleTemplate struct {
+	Name        string                `mapstructure:"name"`
+	Description string                `mapstructure:"description"`
+	Permissions []ProvisionPermission `mapstructure:"permissions"`
+}
+
+// ProvisionPermission 模板角色绑定的全局权限
+type ProvisionPermission struct {
+	Resource string `mapstructure:"resource"`
+	Action   string `mapstructure:"action"`
 }
 
 // Load 加载配置
@@ -487,6 +591,10 @@ func applyEnvOverrides(cfg *Config) {
 	if v := getEnvOrFile("JWT_PREVIOUS_SECRET_FILE", "JWT_PREVIOUS_SECRET"); v != "" {
 		cfg.Auth.JWTPreviousSecret = v
 	}
+	// 审计链 HMAC 密钥：配置后篡改者无法重算整条链
+	if v := getEnvOrFile("AUDIT_HASH_SECRET_FILE", "AUDIT_HASH_SECRET"); v != "" {
+		cfg.Audit.HashSecret = v
+	}
 	// 数据库
 	if v := os.Getenv("DB_DRIVER"); v != "" {
 		cfg.DB.Driver = v
@@ -539,6 +647,28 @@ func applyEnvOverrides(cfg *Config) {
 	// 字段级加密密钥
 	if v := getEnvOrFile("ENCRYPTION_KEY_FILE", "ENCRYPTION_KEY"); v != "" {
 		cfg.Security.EncryptionKey = v
+	}
+	// OpenTelemetry（OpenObserve 接入；compose 场景通过环境变量覆盖端点/开关/凭据）
+	if v := os.Getenv("OTEL_ENABLED"); v != "" {
+		cfg.OTEL.Enabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("OTEL_ENDPOINT"); v != "" {
+		cfg.OTEL.Endpoint = v
+	}
+	if v := getEnvOrFile("OTEL_AUTH_PASSWORD_FILE", "OTEL_AUTH_PASSWORD"); v != "" {
+		cfg.OTEL.AuthPassword = v
+	}
+	if v := os.Getenv("OTEL_AUTH_EMAIL"); v != "" {
+		cfg.OTEL.AuthEmail = v
+	}
+	if v := os.Getenv("OTEL_ORG_ID"); v != "" {
+		cfg.OTEL.OrgID = v
+	}
+	if v := os.Getenv("OTEL_LOGS_STREAM_NAME"); v != "" {
+		cfg.OTEL.LogsStreamName = v
+	}
+	if v := os.Getenv("OTEL_TRACES_STREAM_NAME"); v != "" {
+		cfg.OTEL.TracesStreamName = v
 	}
 }
 

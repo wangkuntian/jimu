@@ -9,6 +9,7 @@ import (
 	"jimu/internal/modules/admin/domain"
 	userdomain "jimu/internal/modules/user/domain"
 	"jimu/internal/platform/importer"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"golang.org/x/crypto/bcrypt"
@@ -82,7 +83,13 @@ func (s *ImportService) Import(ctx context.Context, format importer.Format, file
 		return validation, nil, nil
 	}
 
+	// 导入任务归属操作者所在租户；上下文无租户（平台级）时归默认租户
+	tenantID := tenant.FromContext(ctx)
+	if tenantID == 0 {
+		tenantID = tenant.DefaultTenantID
+	}
 	job := &domain.ImportJob{
+		TenantID:  tenantID,
 		Type:      importType,
 		Filename:  filename,
 		Status:    domain.ImportJobProcessing,
@@ -120,7 +127,7 @@ func (s *ImportService) Import(ctx context.Context, format importer.Format, file
 	return result, job, nil
 }
 
-// GetImportJob 查询导入任务状态
+// GetImportJob 查询导入任务状态（跨租户不可见）
 func (s *ImportService) GetImportJob(ctx context.Context, id uint64) (*domain.ImportJob, error) {
 	job, err := s.importJobs.FindByID(ctx, id)
 	if err != nil {
@@ -128,6 +135,9 @@ func (s *ImportService) GetImportJob(ctx context.Context, id uint64) (*domain.Im
 			return nil, apperrors.Wrap(apperrors.CodeNotFound, "import job not found", err)
 		}
 		return nil, apperrors.Wrap(apperrors.CodeInternalError, "get import job failed", err)
+	}
+	if !tenant.Visible(job.TenantID, tenant.FromContext(ctx)) {
+		return nil, apperrors.New(apperrors.CodeNotFound, "import job not found")
 	}
 	return job, nil
 }
@@ -137,7 +147,13 @@ func (s *ImportService) insertUser(ctx context.Context, row map[string]string) e
 	if err != nil {
 		return err
 	}
+	// 导入用户归属操作者所在租户；上下文无租户（平台级）时归默认租户
+	tenantID := tenant.FromContext(ctx)
+	if tenantID == 0 {
+		tenantID = tenant.DefaultTenantID
+	}
 	user := &userdomain.User{
+		TenantID: tenantID,
 		Username: row["username"],
 		Password: string(hash),
 		Status:   1,

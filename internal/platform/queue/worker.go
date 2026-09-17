@@ -8,6 +8,7 @@ import (
 
 	"jimu/internal/platform/observability"
 	"jimu/internal/platform/queue/domain"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -175,6 +176,10 @@ func (p *WorkerPool) executeJob(data *JobData) {
 				queueJobsTotal.WithLabelValues(data.Type, "deduped").Inc()
 				_ = p.queue.Ack(ctx, data)
 				return
+			}
+			// 恢复任务归属租户，业务 handler 可据此做租户隔离
+			if job.TenantID != 0 {
+				ctx = tenant.WithTenant(ctx, job.TenantID)
 			}
 		}
 		if err := p.store.MarkRunning(ctx, data.ID); err != nil {

@@ -1,0 +1,22 @@
+{
+  "name": "jimu_mysql_threads_high",
+  "stream_type": "metrics",
+  "stream_name": "mysql_threads",
+  "is_real_time": false,
+  "query_condition": {
+    "type": "promql",
+    "promql": "max(mysql_threads)",
+    "promql_condition": { "column": "value", "operator": ">=", "value": 150 }
+  },
+  "trigger_condition": {
+    "period": 5,
+    "operator": ">=",
+    "threshold": 1,
+    "frequency": 5,
+    "frequency_type": "minutes",
+    "silence": 30
+  },
+  "destinations": ["jimu_webhook"],
+  "description": "MySQL 线程(连接)数 >= 150；阈值需按服务端 max_connections 调整",
+  "enabled": true
+}

@@ -23,6 +23,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 // createKey 插入 API Key。用 map 避免 gorm 零值省略（sqlite default:true 会掩盖显式 false）
 func createKey(t *testing.T, db *gorm.DB, key *adminapi.APIKey) *adminapi.APIKey {
 	err := db.Model(&adminapi.APIKey{}).Create(map[string]interface{}{
+		"tenant_id":  key.TenantID,
 		"name":       key.Name,
 		"key_prefix": key.KeyPrefix,
 		"key_hash":   key.KeyHash,

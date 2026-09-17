@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestLoad(t *testing.T) {
@@ -289,5 +290,134 @@ func TestValidateRedisEmptyModeDefaultsSingle(t *testing.T) {
 	}
 	if cfg.Redis.Mode != RedisModeSingle {
 		t.Fatalf("empty redis.mode should default to %q, got %q", RedisModeSingle, cfg.Redis.Mode)
+	}
+}
+
+func validProvisioningConfig() ProvisioningConfig {
+	return ProvisioningConfig{
+		Enabled:   true,
+		OwnerRole: "管理员",
+		Roles: []ProvisionRoleTemplate{
+			{
+				Name:        "管理员",
+				Description: "租户管理员",
+				Permissions: []ProvisionPermission{{Resource: "/api/v1/users", Action: "GET"}},
+			},
+		},
+	}
+}
+
+func TestValidateProvisioningDisabled(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Auth.Provisioning = ProvisioningConfig{Enabled: false}
+	if err := cfg.Validate("prod"); err != nil {
+		t.Fatalf("disabled provisioning should pass validation, got: %v", err)
+	}
+}
+
+func TestValidateProvisioningValid(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Auth.PublicRegistration = true
+	cfg.Auth.Provisioning = validProvisioningConfig()
+	if err := cfg.Validate("prod"); err != nil {
+		t.Fatalf("valid provisioning should pass validation, got: %v", err)
+	}
+}
+
+func TestValidateProvisioningRequiresPublicRegistration(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Auth.Provisioning = validProvisioningConfig()
+	cfg.Auth.PublicRegistration = false
+	err := cfg.Validate("prod")
+	if err == nil || !strings.Contains(err.Error(), "auth.public_registration") {
+		t.Fatalf("provisioning without public registration should fail, got: %v", err)
+	}
+}
+
+func TestValidateProvisioningRequiresRoles(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Auth.PublicRegistration = true
+	cfg.Auth.Provisioning = ProvisioningConfig{Enabled: true}
+	err := cfg.Validate("prod")
+	if err == nil || !strings.Contains(err.Error(), "auth.provisioning.roles") {
+		t.Fatalf("provisioning without roles should fail, got: %v", err)
+	}
+}
+
+func TestValidateProvisioningRejectsDuplicateRoleName(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Auth.PublicRegistration = true
+	p := validProvisioningConfig()
+	p.Roles = append(p.Roles, p.Roles[0])
+	cfg.Auth.Provisioning = p
+	err := cfg.Validate("prod")
+	if err == nil || !strings.Contains(err.Error(), "duplicate") {
+		t.Fatalf("duplicate template role name should fail, got: %v", err)
+	}
+}
+
+func TestValidateProvisioningRejectsUnknownOwnerRole(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Auth.PublicRegistration = true
+	p := validProvisioningConfig()
+	p.OwnerRole = "不存在"
+	cfg.Auth.Provisioning = p
+	err := cfg.Validate("prod")
+	if err == nil || !strings.Contains(err.Error(), "owner_role") {
+		t.Fatalf("unknown owner_role should fail, got: %v", err)
+	}
+}
+
+func TestValidateProvisioningRejectsIncompletePermission(t *testing.T) {
+	cfg := validProdConfig()
+	cfg.Auth.PublicRegistration = true
+	p := validProvisioningConfig()
+	p.Roles[0].Permissions = []ProvisionPermission{{Resource: "/api/v1/users"}}
+	cfg.Auth.Provisioning = p
+	err := cfg.Validate("prod")
+	if err == nil || !strings.Contains(err.Error(), "resource and action") {
+		t.Fatalf("permission without action should fail, got: %v", err)
+	}
+}
+
+func TestValidateIPAllowlist(t *testing.T) {
+	base, err := Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	base.Security.IPAllowlist = []string{"10.0.0.0/8", "127.0.0.1"}
+	if err := base.Validate("dev"); err != nil {
+		t.Fatalf("valid allowlist rejected: %v", err)
+	}
+
+	base.Security.AdminIPAllowlist = []string{"not-a-cidr"}
+	if err := base.Validate("dev"); err == nil {
+		t.Fatal("invalid admin allowlist should be rejected")
+	}
+}
+
+func TestValidateOAuthProviders(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     OAuthProviderConfig
+		wantErr bool
+	}{
+		{"未启用时忽略空配置", OAuthProviderConfig{Enabled: false}, false},
+		{"启用但缺 client_id", OAuthProviderConfig{Enabled: true, RedirectURL: "https://x/cb"}, true},
+		{"启用但缺 redirect_url", OAuthProviderConfig{Enabled: true, ClientID: "id"}, true},
+		{"内置提供商合法", OAuthProviderConfig{Enabled: true, ClientID: "id", RedirectURL: "https://x/cb"}, false},
+		{"OIDC issuer 合法", OAuthProviderConfig{Enabled: true, ClientID: "id", RedirectURL: "https://x/cb", IssuerURL: "https://idp.example.com/realms/acme"}, false},
+		{"OIDC issuer 非绝对地址", OAuthProviderConfig{Enabled: true, ClientID: "id", RedirectURL: "https://x/cb", IssuerURL: "idp.example.com"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateOAuthProviders(OAuthConfig{Providers: map[string]OAuthProviderConfig{"p": tt.cfg}})
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+		})
 	}
 }

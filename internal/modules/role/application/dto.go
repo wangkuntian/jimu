@@ -21,6 +21,7 @@ type RoleResponse struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	Status      int8      `json:"status"`
+	TenantID    uint64    `json:"tenant_id"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -35,6 +36,7 @@ func ToRoleResponse(role domain.Role) RoleResponse {
 		Name:        role.Name,
 		Description: role.Description,
 		Status:      role.Status,
+		TenantID:    role.TenantID,
 		CreatedAt:   role.CreatedAt,
 		UpdatedAt:   role.UpdatedAt,
 	}

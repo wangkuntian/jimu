@@ -18,9 +18,9 @@ type Module struct {
 }
 
 func New(db *gorm.DB, cfg config.AuditConfig, log *logger.Logger) *Module {
-	repo := infrastructure.NewMysqlAuditRepository(db)
+	repo := infrastructure.NewMysqlAuditRepository(db, cfg.HashSecret)
 	return &Module{
-		service: application.NewAuditService(repo),
+		service: application.NewAuditService(repo, cfg.HashSecret),
 		worker:  application.NewWorker(repo, cfg, log),
 	}
 }

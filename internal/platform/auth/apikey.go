@@ -17,6 +17,7 @@ import (
 // APIKey API 密钥信息
 type APIKey struct {
 	ID        uint64    `json:"id"`
+	TenantID  uint64    `json:"tenant_id"` // 所属租户（Key 决定租户，客户端不可指定）
 	Name      string    `json:"name"`
 	KeyPrefix string    `json:"key_prefix"` // 前 8 位，用于识别
 	Scopes    []string  `json:"scopes"`     // 权限范围，如 ["read", "write"]
@@ -96,7 +97,8 @@ func APIKeyFromContext(ctx context.Context) (*APIKey, bool) {
 	return key, ok
 }
 
-// HasScope 检查 API Key 是否拥有指定 scope
+// HasScope 检查 API Key 是否拥有指定 scope。
+// 空 scopes 表示拒绝一切；只有显式包含 "*" 才代表全权。
 func (k *APIKey) HasScope(scope string) bool {
 	for _, s := range k.Scopes {
 		if s == scope || s == "*" {
@@ -104,19 +106,6 @@ func (k *APIKey) HasScope(scope string) bool {
 		}
 	}
 	return false
-}
-
-// ScopesString 将 scopes 序列化为存储格式
-func ScopesString(scopes []string) string {
-	return strings.Join(scopes, ",")
-}
-
-// ParseScopes 从存储格式解析 scopes
-func ParseScopes(s string) []string {
-	if s == "" {
-		return nil
-	}
-	return strings.Split(s, ",")
 }
 
 // dbAPIKeyStore 基于 api_keys 表的 API Key 存储（DB 持久化实现）
@@ -151,6 +140,7 @@ func (s *dbAPIKeyStore) UpdateLastUsed(ctx context.Context, id uint64, t time.Ti
 func rowToAPIKey(row *adminapi.APIKey) *APIKey {
 	key := &APIKey{
 		ID:        row.ID,
+		TenantID:  row.TenantID,
 		Name:      row.Name,
 		KeyPrefix: row.KeyPrefix,
 		Enabled:   row.Enabled,

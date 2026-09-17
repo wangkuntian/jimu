@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,10 +11,14 @@ import (
 	platformauth "jimu/internal/platform/auth"
 	"jimu/internal/platform/captcha"
 	"jimu/internal/shared/errors"
+	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
 )
+
+// DeviceTokenHeader 可信设备令牌请求头：登录时携带可在密码正确的前提下跳过 TOTP
+const DeviceTokenHeader = "X-Device-Token"
 
 type AuthHandler struct {
 	service    *application.AuthService
@@ -50,7 +55,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if !h.verifyCaptcha(c, req) {
 		return
 	}
-	tokenPair, err := h.service.LoginWithTOTP(c.Request.Context(), req.Username, req.Password, req.TOTPCode)
+	ctx := application.WithClientInfo(c.Request.Context(), c.ClientIP(), c.Request.UserAgent())
+	ctx = application.WithLoginDevice(ctx, c.GetHeader(DeviceTokenHeader), req.RememberDevice)
+	tokenPair, err := h.service.LoginWithTOTP(ctx, req.Username, req.Password, req.TOTPCode)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -58,15 +65,133 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	response.OK(c, tokenPair)
 }
 
+// ListDevices godoc
+// @Summary      获取可信设备列表
+// @Description  返回当前用户的可信设备（登录时可跳过 TOTP 的设备）。密码始终必需，设备令牌仅替代 TOTP 因子；改密或登出全部设备会吊销全部可信设备。
+// @Tags         认证
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  response.Body  "成功，返回可信设备列表"
+// @Failure      401  {object}  contract.ErrorResponse  "未认证"
+// @Router       /auth/devices [get]
+func (h *AuthHandler) ListDevices(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
+		return
+	}
+	devices, err := h.service.ListTrustedDevices(c.Request.Context(), userID)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, devices)
+}
+
+// RevokeDevice godoc
+// @Summary      注销可信设备
+// @Description  按 ID 注销当前用户的一个可信设备，注销后该设备登录需重新提供 TOTP。
+// @Tags         认证
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "设备 ID"
+// @Success      200  {object}  response.Body  "成功，返回已注销设备 ID"
+// @Failure      400  {object}  contract.ErrorResponse  "参数错误（设备 ID 非法）"
+// @Failure      401  {object}  contract.ErrorResponse  "未认证"
+// @Router       /auth/devices/{id} [delete]
+func (h *AuthHandler) RevokeDevice(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid device id"))
+		return
+	}
+	if err := h.service.RevokeTrustedDevice(c.Request.Context(), userID, id); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"revoked": id})
+}
+
+// RevokeAllDevices godoc
+// @Summary      注销全部可信设备
+// @Description  注销当前用户全部可信设备，用于设备丢失或异常登录后的止损。
+// @Tags         认证
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  response.Body  "成功"
+// @Failure      401  {object}  contract.ErrorResponse  "未认证"
+// @Router       /auth/devices [delete]
+func (h *AuthHandler) RevokeAllDevices(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
+		return
+	}
+	if err := h.service.RevokeAllTrustedDevices(c.Request.Context(), userID); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"revoked": "all"})
+}
+
+// LoginHistory godoc
+// @Summary      获取登录历史
+// @Description  分页返回当前用户的登录历史（成功/失败/锁定），含时间、IP 与 User-Agent，用于异常登录自查。按 id 倒序。
+// @Tags         认证
+// @Produce      json
+// @Security     BearerAuth
+// @Param        page       query     int  false  "页码（默认 1）"
+// @Param        page_size  query     int  false  "每页数量（默认 20，最大 100）"
+// @Success      200        {object}  contract.PageResponse  "成功，返回登录历史分页数据"
+// @Failure      401        {object}  contract.ErrorResponse  "未认证"
+// @Failure      500        {object}  contract.ErrorResponse  "服务器内部错误"
+// @Router       /auth/login-history [get]
+func (h *AuthHandler) LoginHistory(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
+		return
+	}
+	p, _ := c.MustGet("validated_query").(*pagination.Pagination)
+	if err := p.Normalize("id", "created_at"); err != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
+		return
+	}
+	records, total, err := h.service.ListLoginHistory(c.Request.Context(), userID, *p)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.Page(c, records, total, p.Page, p.PageSize)
+}
+
+// currentUserID 从 gin 上下文读取认证中间件注入的 user_id
+func currentUserID(c *gin.Context) (uint64, bool) {
+	v, exists := c.Get("user_id")
+	if !exists {
+		return 0, false
+	}
+	id, ok := v.(uint64)
+	return id, ok
+}
+
 // Register godoc
 // @Summary      用户注册
 // @Description  注册新用户账户。仅当系统配置中 public_registration 为 true 时可用。支持 IP 维度的限流保护。
+// @Description  开通式注册（auth.provisioning.enabled=true）时，body 携带 tenant_name 即创建新租户并成为其 owner，按模板初始化角色权限，返回 {user, tenant}；未携带 tenant_name 报参数错误。
+// @Description  普通注册（未启用开通式）时忽略租户字段，用户归默认租户，返回用户信息。
+// @Description  开通式注册的 tenant_code 统一转小写存储，不传则自动生成；未传 tenant_name 报参数错误。
 // @Tags         认证
 // @Accept       json
 // @Produce      json
-// @Param        body  body      loginRequest  true  "注册信息（用户名和密码）"
-// @Success      200   {object}  response.Body  "成功，返回用户信息"
-// @Failure      400   {object}  contract.ErrorResponse  "参数错误（如用户名已存在）"
+// @Param        body  body      loginRequest  true  "注册信息（用户名和密码；开通式注册另需 tenant_name）"
+// @Success      200   {object}  response.Body  "成功，返回用户信息（开通式注册额外返回 tenant）"
+// @Failure      400   {object}  contract.ErrorResponse  "参数错误（如用户名已存在、租户编码格式无效或已存在）"
 // @Failure      429   {object}  contract.ErrorResponse  "请求过于频繁"
 // @Router       /auth/register [post]
 func (h *AuthHandler) Register(c *gin.Context) {
@@ -77,6 +202,25 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	if !h.verifyCaptcha(c, req) {
 		return
 	}
+
+	// 开通式注册：注册 = 开通新租户（单事务创建租户 + owner 用户 + 模板角色）
+	if h.cfg.Provisioning.Enabled {
+		res, err := h.service.RegisterProvisioned(c.Request.Context(), application.RegisterTenantRequest{
+			Username:   req.Username,
+			Password:   req.Password,
+			Email:      req.Email,
+			Phone:      req.Phone,
+			TenantName: req.TenantName,
+			TenantCode: req.TenantCode,
+		})
+		if err != nil {
+			response.Fail(c, err)
+			return
+		}
+		response.OK(c, gin.H{"user": res.User, "tenant": res.Tenant})
+		return
+	}
+
 	user, err := h.service.Register(c.Request.Context(), req.Username, req.Password, req.Email, req.Phone)
 	if err != nil {
 		response.Fail(c, err)

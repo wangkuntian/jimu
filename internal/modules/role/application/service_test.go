@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"jimu/internal/modules/role/domain"
+	dbutil "jimu/internal/platform/db"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -47,6 +49,15 @@ func TestRoleServiceUpdateMapsNotFound(t *testing.T) {
 	}
 }
 
+func TestRoleServiceUpdateMapsConcurrentUpdateToConflict(t *testing.T) {
+	service := NewRoleService(&fakeRoleRepository{updateErr: dbutil.ErrConcurrentUpdate})
+
+	err := service.Update(context.Background(), 8, UpdateRoleRequest{Name: "admin"})
+	if roleAppCode(err) != apperrors.CodeConflict {
+		t.Fatalf("code = %d, want %d", roleAppCode(err), apperrors.CodeConflict)
+	}
+}
+
 func TestRoleServiceDeleteWrapsRepositoryError(t *testing.T) {
 	cause := stderrors.New("sql: connection refused")
 	service := NewRoleService(&fakeRoleRepository{deleteErr: cause})
@@ -69,6 +80,7 @@ type fakeRoleRepository struct {
 	limit     int
 	sort      string
 	order     string
+	created   []string
 }
 
 func (r *fakeRoleRepository) FindByID(context.Context, uint64) (*domain.Role, error) {
@@ -78,7 +90,7 @@ func (r *fakeRoleRepository) FindByID(context.Context, uint64) (*domain.Role, er
 	return &domain.Role{}, r.findErr
 }
 
-func (r *fakeRoleRepository) List(_ context.Context, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
+func (r *fakeRoleRepository) List(_ context.Context, _ uint64, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
 	r.offset = offset
 	r.limit = limit
 	r.sort = sort
@@ -86,7 +98,12 @@ func (r *fakeRoleRepository) List(_ context.Context, offset, limit int, sort, or
 	return r.roles, r.total, nil
 }
 
-func (r *fakeRoleRepository) Create(context.Context, *domain.Role) error { return r.createErr }
+func (r *fakeRoleRepository) Create(_ context.Context, role *domain.Role) error {
+	if r.createErr == nil {
+		r.created = append(r.created, role.Name)
+	}
+	return r.createErr
+}
 func (r *fakeRoleRepository) Update(context.Context, *domain.Role) error { return r.updateErr }
 func (r *fakeRoleRepository) Delete(context.Context, uint64) error       { return r.deleteErr }
 func (r *fakeRoleRepository) AssignPermissions(context.Context, uint64, []uint64) error {
@@ -102,4 +119,32 @@ func roleAppCode(err error) int {
 		return appErr.Code
 	}
 	return 0
+}
+
+// fakeTenantQuota 只返回预设的配额校验结果
+type fakeTenantQuota struct {
+	err     error
+	checked []uint64
+}
+
+func (f *fakeTenantQuota) CheckRoleQuota(_ context.Context, tenantID uint64) error {
+	f.checked = append(f.checked, tenantID)
+	return f.err
+}
+
+func TestRoleServiceCreateRejectsWhenQuotaExceeded(t *testing.T) {
+	quota := &fakeTenantQuota{err: apperrors.New(apperrors.CodeQuotaExceeded, "roles quota exceeded")}
+	repo := &fakeRoleRepository{}
+	service := NewRoleService(repo).WithQuota(quota)
+
+	_, err := service.Create(tenant.WithTenant(context.Background(), 7), CreateRoleRequest{Name: "auditor"})
+	if roleAppCode(err) != apperrors.CodeQuotaExceeded {
+		t.Fatalf("code = %d, want %d", roleAppCode(err), apperrors.CodeQuotaExceeded)
+	}
+	if len(repo.created) != 0 {
+		t.Fatalf("配额超限时不应创建角色: %+v", repo.created)
+	}
+	if len(quota.checked) != 1 || quota.checked[0] != 7 {
+		t.Fatalf("应按上下文租户校验配额, checked = %v", quota.checked)
+	}
 }

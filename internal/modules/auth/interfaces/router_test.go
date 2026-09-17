@@ -51,6 +51,22 @@ func TestLogoutRouteRequiresAccessToken(t *testing.T) {
 	}
 }
 
+func TestTrustedDeviceRoutesRequireAccessToken(t *testing.T) {
+	r := testRouter(false)
+	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), testAuthConfig(), nil, nil, config.CaptchaConfig{})
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/auth/devices"},
+		{http.MethodDelete, "/api/v1/auth/devices/1"},
+		{http.MethodDelete, "/api/v1/auth/devices"},
+	} {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, nil))
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("%s %s status = %d, want %d", tc.method, tc.path, w.Code, http.StatusUnauthorized)
+		}
+	}
+}
+
 func TestRefreshRouteStaysPublic(t *testing.T) {
 	r := testRouter(false)
 	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), testAuthConfig(), nil, nil, config.CaptchaConfig{})
@@ -196,5 +212,40 @@ func routerLimiterInt(value interface{}) (int, error) {
 		return strconv.Atoi(v)
 	default:
 		return strconv.Atoi(fmt.Sprint(value))
+	}
+}
+
+func TestWebAuthnRoutesSplitPublicAndProtected(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	// 不配置 WebAuthn 的服务：公开路由会返回业务错误（而非 401），据此区分是否挂在认证中间件之后
+	RegisterAuthRoutes(r.Group("/api/v1"), newHandlerService(t), auth.New(strings.Repeat("s", 32), "jimu", 30, 7), testAuthConfig(), nil, nil, config.CaptchaConfig{})
+
+	public := []string{
+		"POST /api/v1/auth/webauthn/login/begin",
+		"POST /api/v1/auth/webauthn/login/finish",
+	}
+	for _, route := range public {
+		parts := strings.SplitN(route, " ", 2)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(parts[0], parts[1], strings.NewReader("{}")))
+		if w.Code == http.StatusUnauthorized {
+			t.Fatalf("%s 应为公开端点，实际返回 401", route)
+		}
+	}
+
+	protected := []struct{ method, path string }{
+		{http.MethodPost, "/api/v1/auth/webauthn/register/begin"},
+		{http.MethodPost, "/api/v1/auth/webauthn/register/finish"},
+		{http.MethodGet, "/api/v1/auth/webauthn/credentials"},
+		{http.MethodPut, "/api/v1/auth/webauthn/credentials/1"},
+		{http.MethodDelete, "/api/v1/auth/webauthn/credentials/1"},
+	}
+	for _, tc := range protected {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, nil))
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("%s %s status = %d, want %d", tc.method, tc.path, w.Code, http.StatusUnauthorized)
+		}
 	}
 }
