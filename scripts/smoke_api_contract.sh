@@ -23,6 +23,8 @@ compose() {
   COMPOSE_DB_ROOT_PASSWORD_FILE="$SECRET_DIR/db_root_password.txt" \
   COMPOSE_DB_PASSWORD_FILE="$SECRET_DIR/db_password.txt" \
   COMPOSE_JWT_SECRET_FILE="$SECRET_DIR/jwt_secret.txt" \
+  COMPOSE_OTEL_AUTH_PASSWORD_FILE="$SECRET_DIR/otel_auth_password.txt" \
+  COMPOSE_ZO_AUTH_TOKEN_FILE="$SECRET_DIR/zo_auth_token.txt" \
   COMPOSE_DB_HOST=mariadb \
   COMPOSE_DB_PORT=3306 \
   COMPOSE_DB_USER=jimu \
@@ -44,6 +46,9 @@ mkdir -p "$SECRET_DIR"
 printf '%s\n' 'jimu-api-root-password' > "$SECRET_DIR/db_root_password.txt"
 printf '%s\n' 'jimu-api-db-password' > "$SECRET_DIR/db_password.txt"
 printf '%s\n' '01234567890123456789012345678901' > "$SECRET_DIR/jwt_secret.txt"
+# compose 声明的其余 secret 也必须存在，否则干净检出（CI）里 server 的 bind mount 会直接失败
+printf '%s\n' 'jimu-api-otel-password' > "$SECRET_DIR/otel_auth_password.txt"
+printf '%s\n' 'jimu-api-zo-token' > "$SECRET_DIR/zo_auth_token.txt"
 cat > "$ENV_FILE" <<ENV
 APP_ENV=dev
 HTTP_HOST_PORT=$HTTP_HOST_PORT

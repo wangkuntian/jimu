@@ -155,7 +155,8 @@ secrets:
   jwt_secret:
     file: ${COMPOSE_JWT_SECRET_FILE:-./secrets/jwt_secret.txt}
   # OpenObserve 认证（由 make secrets 从 .env 生成；openobserve 自身因无 _FILE 支持仍用环境变量）
+  # 同样支持环境变量覆盖：隔离校验（scripts/test_runtime_security.sh 等）在无 secrets/ 的干净检出中运行
   otel_auth_password:
-    file: ./secrets/otel_auth_password.txt
+    file: ${COMPOSE_OTEL_AUTH_PASSWORD_FILE:-./secrets/otel_auth_password.txt}
   zo_auth_token:
-    file: ./secrets/zo_auth_token.txt
+    file: ${COMPOSE_ZO_AUTH_TOKEN_FILE:-./secrets/zo_auth_token.txt}
