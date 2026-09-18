@@ -1,4 +1,4 @@
-package http
+package apidocs
 
 import (
 	_ "jimu/docs/openapi"

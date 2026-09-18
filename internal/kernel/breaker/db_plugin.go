@@ -1,4 +1,4 @@
-package db
+package breaker
 
 import (
 	"context"
@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"jimu/internal/config"
-	"jimu/internal/kernel/breaker"
 
 	"gorm.io/gorm"
 )
@@ -53,14 +52,14 @@ func isDBTransportError(err error) bool {
 	return false
 }
 
-// attachBreaker 在 gorm 回调层挂载语句级熔断：语句执行前 Allow，执行后按错误类型记成功/失败。
+// AttachDBBreaker 在 gorm 回调层挂载语句级熔断：语句执行前 Allow，执行后按错误类型记成功/失败。
 // 走回调而不是包装 ConnPool，因此读写分离（dbresolver 为每个主/从库建独立连接池）同样生效，
 // 且不会影响 gorm.DB()、连接池上限等对底层 *sql.DB 的操作。
-func attachBreaker(db *gorm.DB, cfg config.BreakerConfig) error {
+func AttachDBBreaker(db *gorm.DB, cfg config.BreakerConfig) error {
 	if !cfg.Enabled {
 		return nil
 	}
-	plugin := &breakerPlugin{b: breaker.New("db", breaker.Config{
+	plugin := &breakerPlugin{b: New("db", Config{
 		MaxFailures:  cfg.MaxFailures,
 		ResetTimeout: time.Duration(cfg.ResetTimeoutSec) * time.Second,
 	})}
@@ -72,7 +71,7 @@ func attachBreaker(db *gorm.DB, cfg config.BreakerConfig) error {
 
 // breakerPlugin 以 gorm 插件形式在每种语句处理器的首尾挂载熔断。
 type breakerPlugin struct {
-	b *breaker.Breaker
+	b *Breaker
 }
 
 func (p *breakerPlugin) Name() string { return "jimu:db-breaker" }
@@ -122,7 +121,7 @@ func (p *breakerPlugin) allow(db *gorm.DB) {
 
 // record 结算本次语句：熔断拒绝已计入 rejected，不重复计数。
 func (p *breakerPlugin) record(db *gorm.DB) {
-	if errors.Is(db.Error, breaker.ErrOpen) {
+	if errors.Is(db.Error, ErrOpen) {
 		return
 	}
 	if isDBTransportError(db.Error) {

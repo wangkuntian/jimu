@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"jimu/internal/config"
+	"jimu/internal/kernel/breaker"
 	"jimu/internal/kernel/logger"
 
 	"gorm.io/driver/postgres"
@@ -71,7 +72,7 @@ func openPostgres(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {
 		}
 	}
 
-	if err := attachBreaker(db, cfg.Breaker); err != nil {
+	if err := breaker.AttachDBBreaker(db, cfg.Breaker); err != nil {
 		return nil, err
 	}
 

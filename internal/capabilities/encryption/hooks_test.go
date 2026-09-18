@@ -1,10 +1,8 @@
-package db
+package encryption
 
 import (
 	"fmt"
 	"testing"
-
-	"jimu/internal/capabilities/encryption"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -39,13 +37,13 @@ func newEncryptionTestDB(t *testing.T, key string) *gorm.DB {
 	// 每个测试独立内存库，避免共享 cache 串数据
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
 	require.NoError(t, err)
-	RegisterEncryptionHooks(db, encryption.New(key))
+	RegisterHooks(db, New(key))
 	require.NoError(t, db.AutoMigrate(&contact{}))
 	return db
 }
 
 func TestEncryptionHookEncryptsOnWriteDecryptsOnRead(t *testing.T) {
-	cipher := encryption.New(encTestKey)
+	cipher := New(encTestKey)
 	db := newEncryptionTestDB(t, encTestKey)
 
 	require.NoError(t, db.Create(&contact{Email: "user@example.com", Phone: "13800138000"}).Error)

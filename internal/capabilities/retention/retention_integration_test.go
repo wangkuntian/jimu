@@ -1,11 +1,10 @@
-package db_test
+package retention
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	dbutil "jimu/internal/kernel/db"
 	"jimu/internal/shared/testutil"
 
 	"github.com/stretchr/testify/assert"
@@ -44,7 +43,7 @@ func TestRetentionServiceMySQLIntegration(t *testing.T) {
 	require.NoError(t, tdb.DB.Exec("INSERT INTO retention_probe (id, created_at) VALUES (?, ?)", 99, fresh).Error)
 
 	// BatchSize 2 触发多轮删除，覆盖派生表子查询语法
-	svc := dbutil.NewRetentionServiceWithRules(tdb.DB, []dbutil.RetentionRule{
+	svc := NewRetentionServiceWithRules(tdb.DB, []RetentionRule{
 		{Table: "retention_probe", Model: &retentionProbeRow{}, TimeColumn: "created_at", Days: 30},
 	}, 2)
 

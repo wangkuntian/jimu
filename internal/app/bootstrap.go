@@ -7,12 +7,13 @@ import (
 	"strings"
 	"time"
 
+	"jimu/internal/capabilities/apidocs"
 	"jimu/internal/capabilities/notification"
 	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/queue"
+	"jimu/internal/capabilities/retention"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/db"
 	platformhttp "jimu/internal/kernel/http"
 	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/kernel/logger"
@@ -154,7 +155,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
 	if cfg.HTTP.Mode != "release" {
-		platformhttp.RegisterSwagger(router.Group("/swagger"))
+		apidocs.RegisterSwagger(router.Group("/swagger"))
 	}
 
 	// 租户维度限流（Redis 滑动窗口）：挂在受保护中间件之后，平台级视角跳过
@@ -265,7 +266,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			}}
 		}
 		if container.DB != nil {
-			cleanupSvc := db.NewCleanupService(container.DB, db.DefaultCleanupConfig())
+			cleanupSvc := retention.NewCleanupService(container.DB, retention.DefaultCleanupConfig())
 			jobFns["cleanup"] = jobDef{name: "Data Cleanup", spec: "0 3 * * *", fn: func() {
 				results, err := cleanupSvc.Run(context.Background())
 				if err != nil {
@@ -281,7 +282,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		}
 
 		if container.DB != nil && cfg.Retention.Enabled {
-			retentionSvc := db.NewRetentionService(container.DB, cfg.Retention)
+			retentionSvc := retention.NewRetentionService(container.DB, cfg.Retention)
 			spec := cfg.Retention.Cron
 			if spec == "" {
 				spec = "30 3 * * *"

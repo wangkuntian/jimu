@@ -1,24 +1,22 @@
-// internal/kernel/db/encryption.go
-package db
+// internal/capabilities/encryption/hooks.go
+package encryption
 
 import (
 	"reflect"
 	"strings"
 
-	"jimu/internal/capabilities/encryption"
-
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 )
 
-// RegisterEncryptionHooks 注册字段级加密回调：
+// RegisterHooks 注册字段级加密回调：
 //   - 写入（Create/Update）：对带 `encryption:"true"` tag 的字段加密落库；
 //     对带 `blind:"<field>"` tag 的字段用对应明文计算确定性盲索引（唯一约束/精确查询用）。
 //   - 读取（Query/Update 后）：对 `encryption:"true"` 字段解密回内存明文。
 //
 // cipher 为明文模式（密钥空）时透传，功能等价于不加密，但盲索引仍计算，
 // 保证 email_hash/phone_hash 唯一约束与查找始终可用。
-func RegisterEncryptionHooks(g *gorm.DB, c *encryption.Cipher) {
+func RegisterHooks(g *gorm.DB, c *Cipher) {
 	if g == nil || c == nil {
 		return
 	}
@@ -110,6 +108,17 @@ func applyBlindIndexFields(d *gorm.DB, fn func(f *schema.Field, sourceValue stri
 		}
 	}
 	walkElements(d, each)
+}
+
+// indirect 解引用指针/接口，返回底层值（与 gorm 内部一致）
+func indirect(v reflect.Value) reflect.Value {
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return v
+		}
+		v = v.Elem()
+	}
+	return v
 }
 
 // walkElements 遍历 d.Statement.ReflectValue（结构体/指针或批量 slice），逐元素调用 fn。
