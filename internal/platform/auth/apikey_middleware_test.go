@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	adminapi "jimu/internal/modules/admin/domain"
+	adminapi "jimu/internal/capabilities/admin/domain"
 	"jimu/internal/platform/tenant"
 
 	"github.com/gin-gonic/gin"

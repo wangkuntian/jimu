@@ -8,15 +8,15 @@ import (
 	"fmt"
 	"strings"
 
+	adminmodule "jimu/internal/capabilities/admin"
+	auditmodule "jimu/internal/capabilities/audit"
+	authmodule "jimu/internal/capabilities/auth"
+	oauthmodule "jimu/internal/capabilities/oauth"
+	"jimu/internal/capabilities/permission"
+	"jimu/internal/capabilities/role"
+	tenantmodule "jimu/internal/capabilities/tenant"
+	"jimu/internal/capabilities/user"
 	"jimu/internal/contract"
-	adminmodule "jimu/internal/modules/admin"
-	auditmodule "jimu/internal/modules/audit"
-	authmodule "jimu/internal/modules/auth"
-	oauthmodule "jimu/internal/modules/oauth"
-	"jimu/internal/modules/permission"
-	"jimu/internal/modules/role"
-	tenantmodule "jimu/internal/modules/tenant"
-	"jimu/internal/modules/user"
 )
 
 // entries 是唯一的能力清单，顺序即默认启用顺序（同时是依赖拓扑序）。

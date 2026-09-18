@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	adminapi "jimu/internal/modules/admin/domain"
+	adminapi "jimu/internal/capabilities/admin/domain"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"

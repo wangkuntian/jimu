@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"jimu/internal/modules/role/domain"
-	tenantDomain "jimu/internal/modules/tenant/domain"
-	userdomain "jimu/internal/modules/user/domain"
+	"jimu/internal/capabilities/role/domain"
+	tenantDomain "jimu/internal/capabilities/tenant/domain"
+	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/platform/auth"
 	"jimu/internal/platform/tenant"
 

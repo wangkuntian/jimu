@@ -15,7 +15,7 @@
 | FR-005 健康检查 | implemented | `internal/platform/observability/health.go` `/livez` `/readyz` |
 | FR-006 优雅停机 | implemented | `internal/app/container.go` 逆序 Stop；HTTP `Shutdown(ctx)` |
 | FR-007 分布式 ID | implemented | `internal/shared/id/id.go` snowflake + workerID 校验 |
-| FR-008 注册登录 | implemented | `internal/modules/auth/interfaces/router.go`；凭据错误不枚举 |
+| FR-008 注册登录 | implemented | `internal/capabilities/auth/interfaces/router.go`；凭据错误不枚举 |
 | FR-009 令牌+刷新+登出 | implemented | auth router `/refresh` `/logout`；`internal/platform/auth/jwt.go` |
 | FR-010 RBAC | implemented | `internal/platform/auth/casbin.go`；role/permission 模块 + 策略种子 |
 | FR-011 API 密钥认证 | implemented | `internal/platform/auth/apikey.go` + middleware；按需挂载 |
@@ -24,7 +24,7 @@
 | FR-014 限流 | implemented（措辞偏差） | 登录=固定窗口 `auth/limiter.go`；用户=滑动窗口 `ratelimit_user.go`；**全局=令牌桶 `ratelimit.go`** |
 | FR-015 HTTP 安全边界 | implemented | 体积/超时/可信代理/CORS/安全头 |
 | FR-016 CSRF+签名 | implemented | `middleware/signature.go` HMAC+nonce；`csrf.go` double-submit |
-| FR-017 审计日志 | implemented | `modules/audit/application/worker.go` 批量写；不记敏感请求体 |
+| FR-017 审计日志 | implemented | `internal/capabilities/audit/application/worker.go` 批量写；不记敏感请求体 |
 | FR-018 迁移+种子 | implemented | `cmd/cli/main.go` migrate/seed；goose |
 | FR-019 事务封装 | implemented | `internal/platform/db/transaction.go` |
 | FR-020 读写分离 | implemented | `config.go` ReadHosts/ReadPorts；`db/mysql.go` Replicas |
@@ -38,7 +38,7 @@
 | **FR-028 通知** | **implemented** ✅（2026-08-12 修复） | email/websocket/webhook/log 真实；`sendAliyun` 已用阿里云 dysmsapi v5 SDK 实现（含契约测试），`sendTencent` 报"not configured" |
 | FR-029 OTel+Prometheus | implemented | `platform/observability/tracing.go`；metrics 中间件 + deploy 配置 |
 | FR-030 校验+i18n | implemented | `shared/validator/`；`shared/i18n/` |
-| FR-031 管理能力 | implemented | `modules/admin/module.go` status/users/apikeys/error-codes/features/tasks/jobs/import 全接线 |
+| FR-031 管理能力 | implemented | `internal/capabilities/admin/module.go` status/users/apikeys/error-codes/features/tasks/jobs/import 全接线 |
 | FR-032 脚手架 | implemented | `jimu module create` → `tools/generator` |
 | FR-033 Swagger | implemented | swag 注解 + swagger.yaml/json + UI |
 | **FR-034 部署+门禁** | **implemented** ✅（2026-08-12 修复） | deploy/k8s 真实；`make release-check` 已含 govulncheck，ci.yml 增加 tag 触发使发布路径跑完整门禁 |

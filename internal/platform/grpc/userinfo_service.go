@@ -3,7 +3,7 @@ package grpc
 import (
 	"context"
 
-	userdomain "jimu/internal/modules/user/domain"
+	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/platform/grpc/userinfopb"
 
 	"google.golang.org/grpc/codes"

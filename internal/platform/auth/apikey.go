@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	adminapi "jimu/internal/modules/admin/domain"
+	adminapi "jimu/internal/capabilities/admin/domain"
 
 	"gorm.io/gorm"
 )

@@ -301,7 +301,16 @@ jimu/
 │   │   ├── bootstrap.go        # 应用启动装配
 │   │   ├── container.go        # 依赖容器
 │   │   └── application.go      # Application 生命周期
-│   ├── capabilities/           # 能力清单（唯一清单 + 启用集解析）
+│   ├── capabilities/           # 可插拔能力（catalog 是唯一清单；每个能力导出 Descriptor）
+│   │   ├── catalog/            # 能力清单 + 启用集解析
+│   │   ├── auth/               # 登录/注册/Token
+│   │   ├── oauth/              # 第三方登录绑定
+│   │   ├── user/               # 用户管理
+│   │   ├── role/               # 角色管理
+│   │   ├── permission/         # 权限管理
+│   │   ├── tenant/             # 租户管理
+│   │   ├── audit/              # 审计日志
+│   │   └── admin/              # 系统管理
 │   ├── config/                 # 配置加载 + 校验
 │   ├── contract/               # Module 接口定义
 │   ├── platform/               # 基础设施
@@ -329,24 +338,15 @@ jimu/
 │   │   ├── exporter/           # 数据导出（CSV/Excel）
 │   │   ├── notification/       # 通知系统（邮件/短信/WebSocket/Webhook）
 │   │   └── feature/            # Feature Flag
-│   ├── shared/                 # 跨模块通用能力
-│   │   ├── errors/             # AppError + 错误码
-│   │   ├── response/           # 统一响应格式
-│   │   ├── pagination/         # 分页
-│   │   ├── validator/          # 自定义校验规则
-│   │   ├── i18n/               # 国际化翻译
-│   │   ├── id/                 # 雪花 ID 生成器
-│   │   ├── totp/               # RFC 6238 TOTP（二次验证）
-│   │   └── testutil/           # 测试工具
-│   └── modules/                # 业务模块
-│       ├── auth/               # 登录/注册/Token
-│       ├── oauth/              # 第三方登录绑定
-│       ├── user/               # 用户管理
-│       ├── role/               # 角色管理
-│       ├── permission/         # 权限管理
-│       ├── tenant/             # 租户管理
-│       ├── audit/              # 审计日志
-│       └── admin/              # 系统管理
+│   └── shared/                 # 跨模块通用能力
+│       ├── errors/             # AppError + 错误码
+│       ├── response/           # 统一响应格式
+│       ├── pagination/         # 分页
+│       ├── validator/          # 自定义校验规则
+│       ├── i18n/               # 国际化翻译
+│       ├── id/                 # 雪花 ID 生成器
+│       ├── totp/               # RFC 6238 TOTP（二次验证）
+│       └── testutil/           # 测试工具
 ├── tools/
 │   ├── generator/                # 代码生成器
 │   └── logcheck/                 # 日志调用规范静态检查（make check-log-usage）
@@ -950,7 +950,7 @@ capabilities:
 
 - AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引，实现在 `internal/platform/encryption` + `internal/platform/db/encryption.go`（Gorm hook）。
 - 带结构体 tag `encryption:"true"` 的字段写入时加密、读取时解密；带 `blind:"<source>"` 的字段用对应明文计算确定性盲索引，支撑唯一约束与精确等值查询。
-- 当前覆盖 `users.email` / `users.phone`（见 `internal/modules/user/domain/user.go`），密文落库、`email_hash`/`phone_hash` 盲索引支撑重复校验。
+- 当前覆盖 `users.email` / `users.phone`（见 `internal/capabilities/user/domain/user.go`），密文落库、`email_hash`/`phone_hash` 盲索引支撑重复校验。
 - 密钥经 `ENCRYPTION_KEY` 环境变量或 `ENCRYPTION_KEY_FILE`（Docker Secrets）注入；**未注入时退化为明文模式**（功能不受影响，email/phone 明文落库）。
 - 密码字段 `users.password` 始终存 bcrypt 哈希，不参与字段级加密——不可逆，无需可解密。
 
@@ -971,7 +971,7 @@ capabilities:
 每个业务模块必须遵循 Clean Architecture 分层：
 
 ```text
-internal/modules/{name}/
+internal/capabilities/{name}/
   domain/           # 实体、值对象、仓储接口
   application/      # 用例服务、DTO
   infrastructure/   # 数据库/缓存实现

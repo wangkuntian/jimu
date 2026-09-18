@@ -7,9 +7,9 @@ import (
 	"log"
 	"time"
 
+	admininfra "jimu/internal/capabilities/admin/infrastructure"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	admininfra "jimu/internal/modules/admin/infrastructure"
 	"jimu/internal/platform/auth"
 	"jimu/internal/platform/breach"
 	"jimu/internal/platform/captcha"
