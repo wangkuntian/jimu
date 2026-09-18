@@ -28,7 +28,7 @@
 
 后端按**能力**组织，可插拔为正式能力（设计与清单见 [docs/design/2026-09-18-capability-plugins-design.md](docs/design/2026-09-18-capability-plugins-design.md)）：
 
-- 能力清单只维护在 `internal/capabilities/catalog`，新增/删除能力只改该文件
+- 能力清单只维护在 `internal/capabilities/catalog`；P0 阶段新增/删除能力还需同步 `cmd/server/main.go` 的实例装配（P1 起改由 profile 入口包承担）
 - 每个能力导出静态 `Descriptor`（名称 / 硬依赖 `Requires` / 挂载点 `Mount`），依赖必须单向
 - 能力之间只经 `contract` 端口调用，禁止 import 其他能力的内部包
 - 挂载点由 `Descriptor.Mount` 声明，禁止按能力名做特判

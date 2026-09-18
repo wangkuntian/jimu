@@ -34,6 +34,7 @@ var vocabulary = map[string]string{
 	"error_code":         "业务错误码（与统一响应 body.code 一致）",
 	"id":                 "实体 ID",
 	"name":               "任务/模块/事件名称",
+	"names":              "名称清单（聚合名，如当前启用的能力清单）",
 	"type":               "类型/事件类型",
 	"event_type":         "业务事件类型",
 	"user_id":            "用户 ID",
