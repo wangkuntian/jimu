@@ -1,4 +1,4 @@
-# 能力可插拔 P1-A：命名空间搬迁 实现计划
+# 能力可插拔 P1.1（P1-A）：命名空间搬迁 实现计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

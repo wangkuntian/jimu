@@ -1,3 +1,5 @@
+> 本文是 P1.2（#35 合并）与 P1.3（#37）之间的阶段间隙计划，无正式子阶段编号。
+
 # 累积技术债清理 实现计划（v0.3.0 阶段间隙）
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

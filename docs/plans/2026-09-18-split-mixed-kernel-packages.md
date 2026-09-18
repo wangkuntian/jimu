@@ -1,4 +1,4 @@
-# 能力可插拔 P1-B2：内核混装包拆分 实现计划
+# 能力可插拔 P1.3（P1-B2a）：内核混装包拆分 实现计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -21,7 +21,7 @@
 
 ## 分期说明（为什么本计划不含 `kernel/auth`）
 
-`kernel/auth` 混装三块：auth 机制（jwt/session/limiter/lockout）、access（casbin/roles/permission_middleware）、apikey（apikey/apikey_middleware）。按 §3.5.3，后两块应分别归 `capabilities/access` 与 `capabilities/apikey`。但实测 `capabilities/admin` 现在直接引用 apikey 仓库与 casbin——拆出去之后 admin 必须跨能力 import，正是设计文档禁止的形态；正确解法是 P1-D 的 `contract` 端口（`Authorizer`/`APIKeyAuthenticator`）。因此 `kernel/auth` 的拆分与 P1-D 合并为一个计划（P1-B2b/P1-D），避免制造已知违规中间态。
+`kernel/auth` 混装三块：auth 机制（jwt/session/limiter/lockout）、access（casbin/roles/permission_middleware）、apikey（apikey/apikey_middleware）。按 §3.5.3，后两块应分别归 `capabilities/access` 与 `capabilities/apikey`。但实测 `capabilities/admin` 现在直接引用 apikey 仓库与 casbin——拆出去之后 admin 必须跨能力 import，正是设计文档禁止的形态；正确解法是 P1-D 的 `contract` 端口（`Authorizer`/`APIKeyAuthenticator`）。因此 `kernel/auth` 的拆分与 P1-D 合并为一个计划 P1.4（原 P1-B2b 与 P1-D 合并），避免制造已知违规中间态。
 
 `capabilities/admin → capabilities/uploadsec`（以及既有的 `kernel/auth/apikey.go → capabilities/admin`）是 P1-B2a 之后的已知跨能力 import，与 `Authorizer`/`APIKeyAuthenticator`/`UploadScanner` 端口一起在 P1-D 收口。
 
@@ -35,7 +35,7 @@
 | `kernel/http/swagger.go` | `capabilities/apidocs/` | `app/bootstrap.go:157` | 包名 `apidocs`；`RegisterSwagger` 导出不变 |
 | `kernel/http/upload_handler.go` + `upload_handler_test.go` + `upload_handler_bench_test.go` + `clamav.go` + `clamav_integration_test.go` | `capabilities/uploadsec/` | `app/container.go:165-170`、`app/bootstrap.go` | 包名 `uploadsec`；`NewClamAVScanner`/`ClamAVConfig`/上传 handler 随之改名空间 |
 
-不动的：`kernel/db/{concurrency,transaction,migrate,mysql,postgres,gorm_logger,snowflake,seed}.go`（seed 的下沉属 P1-B3）、`kernel/http/{server,management}.go`、`kernel/http/middleware/`（中间件归位属 P1-B2b）。
+不动的：`kernel/db/{concurrency,transaction,migrate,mysql,postgres,gorm_logger,snowflake,seed}.go`（seed 的下沉属 P1.5（种子/迁移归属））、`kernel/http/{server,management}.go`、`kernel/http/middleware/`（中间件归位属 P1-B2b）。
 
 ## 风险预置（写计划时已识别）
 
