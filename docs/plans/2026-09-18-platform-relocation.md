@@ -14,7 +14,7 @@
 
 - **零语义变化**：只改文件位置、import 路径、注释/文档中的路径文本；不改任何导出符号、函数签名、行为。**唯一允许的包名变更**是 `platform/oauth` → `capabilities/oauth/provider`（包名 `oauth` → `provider`，为避让已存在的 `capabilities/oauth` 模块目录）。其余 28 个包**包名不变**
 - **能力名（`Descriptor.Name`）本阶段一律不改**：`tenant`/`notification`/`feature` 的最终能力名（`tenancy`/`notify`/`featureflag`）属 P1-E；本阶段只决定**代码放在哪个目录**，不碰 catalog 与配置值
-- **不留残余**：Go / 脚本 / 工作流 / Makefile / README / AGENTS.md / specs / configs 中不得再有 `internal/platform` 引用。四处有意的单文件历史例外：P0 计划、P1-A 计划与本计划（它们的主题就是搬迁）、设计文档 §3.5.3/§3.6 的归位表（属改造前现状，需加历史注记）；外加**已发布的历史版本日志整目录**（`docs/releases/`）。**已发布的版本日志是冻结记录，永不重写**
+- **不留残余**：Go / 脚本 / 工作流 / Makefile / README / AGENTS.md / specs / configs 中不得再有 `internal/platform` 引用。例外类只有一种——**主题就是搬迁本身的文档**：一处单文件例外（设计文档 `docs/design/2026-09-18-capability-plugins-design.md`，其 §3.5.3/§3.6 归位表属改造前现状、需加历史注记）+ 两个目录级例外（`docs/plans/`、`docs/releases/`）。**已发布的版本日志是冻结记录，永不重写**。逐个计划文件枚举例外已连续三次被下一份计划打破（P0 计划 → +namespace-move 计划 → +relocation 计划 → +本阶段计划），每加一份阶段计划都会再造一次，故计划整体按目录排除；设计文档保留单文件粒度，使未来真正需要更新的设计文档仍会被扫出
 - **残余检查必须用加宽模式**（P1-A 的教训，已由评审实测）：`grep -rnE '(^|[^A-Za-z0-9_-])(internal/)?platform\b'` —— 它同时命中 `jimu/internal/platform/…`、`./internal/platform/…`、裸 `platform/…`、`"internal/platform"`，且不误伤 `xplatform/foo`。**并保留更强判据：文档引用的每个路径都必须在磁盘上存在**
 - **全绿**：`gofmt -l .`（无输出）、`go build ./...`、`go vet ./...`、`golangci-lint run ./...`、`make check-log-usage`、`go test ./... -count=1`、`make bench-ci`、`make release-check COMPOSE_ENV=.env.example`
 - **提交信息全英文**（Conventional Commits）；提交需用户明确指令
@@ -281,15 +281,13 @@ git commit -m "refactor(platform): relocate platform packages to kernel and capa
 - [ ] **Step 3: 零残余检查（加宽模式 + 路径存在性）**
 
 ```bash
-# 3a) 加宽模式的残留：只允许命中四处单文件历史例外（P0 计划 / P1-A 计划 / 本计划 / 设计文档）+ 已发布的历史版本日志整目录
+# 3a) 加宽模式的残留：只允许命中一处单文件例外（设计文档）+ 两个目录级例外（`docs/plans/`、`docs/releases/`）
 grep -rnE '(^|[^A-Za-z0-9_-])(internal/)?platform\b' \
   --include='*.go' --include='*.md' --include='*.sh' --include='*.yml' --include='*.yaml' --include='*.json' \
   README.md AGENTS.md Makefile docs/ specs/ configs/ scripts/ .github/ internal/ tools/ 2>/dev/null \
-  | grep -v '^docs/plans/2026-09-18-capability-plugins-p0.md' \
-  | grep -v '^docs/plans/2026-09-18-capability-namespace-move.md' \
-  | grep -v '^docs/plans/2026-09-18-platform-relocation.md' \
-  | grep -v '^docs/design/2026-09-18-capability-plugins-design.md' \
-  | grep -v '^docs/releases/'
+  | grep -v '^docs/plans/' \
+  | grep -v '^docs/releases/' \
+  | grep -v '^docs/design/2026-09-18-capability-plugins-design.md'
 
 # 3b) 路径存在性：文档里引用的 internal/... 路径必须真实存在
 grep -rhoE '(jimu/)?internal/[a-z_/]+' README.md AGENTS.md docs/CONTRIBUTING.md \

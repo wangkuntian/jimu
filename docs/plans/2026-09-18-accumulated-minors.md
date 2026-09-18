@@ -392,7 +392,7 @@ git add .github/workflows/ci.yml Makefile && git commit -m "chore(ci): fetch ful
 **Files:**
 - Modify: `docs/releases/v0.3.0.md`（恢复字面路径 + `oauth/provider`）
 - Modify: `docs/plans/2026-09-18-platform-relocation.md`（过滤器链补例外 + 计数）
-- Modify: `docs/design/2026-09-18-capability-plugins-design.md`（§3.1/§3.4 附近加一条全局注记：文中 `platform/x` 指其 P1-B1 后的位置）
+- Modify: `docs/design/2026-09-18-capability-plugins-design.md`（§3.1 标题下方加一条全局注记：文中 `platform/x` 指其 P1-B1 **搬迁前**的位置）
 
 **Interfaces:**
 - Consumes: P1-B1 的映射表
@@ -410,22 +410,22 @@ git add .github/workflows/ci.yml Makefile && git commit -m "chore(ci): fetch ful
   | grep -v '^docs/releases/'
 ```
 
-并更新例外计数（五处 → 四处 + "已发布的历史版本日志整目录"）与对应说明。
+并更新例外计数为「一处单文件例外（设计文档）+ 两个目录级例外（`docs/plans/`、`docs/releases/`）」与对应说明（逐个计划文件枚举例外已连续三次被新计划打破，故计划整体按目录排除）。
 
 - [ ] **Step 3: 设计文档加全局注记**
 
 在 `docs/design/2026-09-18-capability-plugins-design.md` §3.1 标题下方加：
 
 ```markdown
-> 路径注记：本文写于 P1-B1 之前，正文中的 `platform/x` 指该包**搬迁前**的位置；搬迁后内核机制在 `internal/kernel/x`、能力实现在 `internal/capabilities/…`。§3.5.3/§3.6 的表格另有就地说明。
+> 路径注记：本文写于 P1-B1 之前，正文中的 `platform/x` 指该包**搬迁前**的位置；搬迁后**原平台层**的内核机制在 `internal/kernel/x`、能力实现在 `internal/capabilities/…`。§3.5.3/§3.6 的表格另有就地说明。
 ```
 
 - [ ] **Step 4: 验证**
 
 ```bash
 grep -rnE '(^|[^A-Za-z0-9_-])(internal/)?platform\b' README.md AGENTS.md Makefile docs/ specs/ configs/ scripts/ .github/ internal/ tools/ 2>/dev/null \
-  | grep -v '^docs/releases/' | grep -v '^docs/plans/2026-09-18-capability-plugins-p0.md' \
-  | grep -v '^docs/plans/2026-09-18-capability-namespace-move.md' | grep -v '^docs/plans/2026-09-18-platform-relocation.md' \
+  | grep -v '^docs/plans/' \
+  | grep -v '^docs/releases/' \
   | grep -v '^docs/design/2026-09-18-capability-plugins-design.md'
 grep -n 'oauth/provider' docs/releases/v0.3.0.md
 ```
