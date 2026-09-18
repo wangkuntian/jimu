@@ -2,25 +2,36 @@ package grpc
 
 import (
 	"context"
+	"errors"
 
 	"jimu/internal/capabilities/grpc/userinfopb"
-	userdomain "jimu/internal/capabilities/user/domain"
+	"jimu/internal/contract"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"gorm.io/gorm"
 )
 
-// userInfoService UserInfoService 的 gRPC 实现示例。
-// 业务逻辑直连 GORM（示例），真实项目应注入 user 模块的 repository/service。
+// userInfoService UserInfoService 的 gRPC 实现。
+// 用户数据经 contract.UserinfoSource 端口读取（user 能力提供实现），
+// 错误映射：contract.ErrNotFound -> NotFound，其余 -> Internal。
 type userInfoService struct {
 	userinfopb.UnimplementedUserInfoServiceServer
-	db *gorm.DB
+	source contract.UserinfoSource
 }
 
 // NewUserInfoGRPCService 创建业务 gRPC 服务实现
-func NewUserInfoGRPCService(db *gorm.DB) userinfopb.UserInfoServiceServer {
-	return &userInfoService{db: db}
+func NewUserInfoGRPCService(source contract.UserinfoSource) userinfopb.UserInfoServiceServer {
+	return &userInfoService{source: source}
+}
+
+// toUserInfo 端口视图转 proto 响应（CreatedAt 格式为原实现固定的 "2006-01-02 15:04:05"）
+func toUserInfo(u *contract.Userinfo) *userinfopb.UserInfo {
+	return &userinfopb.UserInfo{
+		UserId:    u.ID,
+		Username:  u.Username,
+		Status:    int32(u.Status),
+		CreatedAt: u.CreatedAt.Format("2006-01-02 15:04:05"),
+	}
 }
 
 // GetUser 按 ID 查询用户。错误通过 status/codes 表达：
@@ -30,20 +41,15 @@ func (s *userInfoService) GetUser(ctx context.Context, req *userinfopb.GetUserRe
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	var u userdomain.User
-	if err := s.db.WithContext(ctx).First(&u, req.GetUserId()).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	u, err := s.source.GetByID(ctx, req.GetUserId())
+	if err != nil {
+		if errors.Is(err, contract.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, "user %d not found", req.GetUserId())
 		}
 		return nil, status.Errorf(codes.Internal, "query user failed: %v", err)
 	}
 
-	return &userinfopb.UserInfo{
-		UserId:    u.ID,
-		Username:  u.Username,
-		Status:    int32(u.Status),
-		CreatedAt: u.CreatedAt.Format("2006-01-02 15:04:05"),
-	}, nil
+	return toUserInfo(u), nil
 }
 
 // ListUsers 分页查询用户。
@@ -57,15 +63,8 @@ func (s *userInfoService) ListUsers(ctx context.Context, req *userinfopb.ListUse
 		pageSize = 20
 	}
 
-	var total int64
-	if err := s.db.WithContext(ctx).Model(&userdomain.User{}).Count(&total).Error; err != nil {
-		return nil, status.Errorf(codes.Internal, "count users failed: %v", err)
-	}
-
-	var users []userdomain.User
-	if err := s.db.WithContext(ctx).
-		Offset((page - 1) * pageSize).Limit(pageSize).
-		Order("id DESC").Find(&users).Error; err != nil {
+	users, total, err := s.source.List(ctx, page, pageSize)
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list users failed: %v", err)
 	}
 
@@ -75,13 +74,8 @@ func (s *userInfoService) ListUsers(ctx context.Context, req *userinfopb.ListUse
 		PageSize: int32(pageSize),
 		Users:    make([]*userinfopb.UserInfo, 0, len(users)),
 	}
-	for _, u := range users {
-		resp.Users = append(resp.Users, &userinfopb.UserInfo{
-			UserId:    u.ID,
-			Username:  u.Username,
-			Status:    int32(u.Status),
-			CreatedAt: u.CreatedAt.Format("2006-01-02 15:04:05"),
-		})
+	for i := range users {
+		resp.Users = append(resp.Users, toUserInfo(&users[i]))
 	}
 	return resp, nil
 }

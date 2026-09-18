@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	apikey "jimu/internal/capabilities/apikey"
+	"jimu/internal/kernel/auth"
 	httpmw "jimu/internal/kernel/http/middleware"
 	redistore "jimu/internal/kernel/redis"
 	"jimu/internal/kernel/tenant"
@@ -34,7 +34,7 @@ func APIKeyRateLimitMiddleware(client redistore.Client, limit int, window time.D
 	return httpmw.NewUserRateLimiter(client, limit, window,
 		httpmw.WithKeyPrefix("ratelimit:apikey"),
 		httpmw.WithKeyFunc(func(c *gin.Context) string {
-			if apiKey, ok := apikey.APIKeyFromContext(c.Request.Context()); ok && apiKey != nil {
+			if apiKey, ok := auth.APIKeyFromContext(c.Request.Context()); ok && apiKey != nil {
 				return fmt.Sprintf("apikey:%d", apiKey.ID)
 			}
 			return ""

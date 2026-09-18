@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	apikey "jimu/internal/capabilities/apikey"
+	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/tenant"
 
 	"github.com/alicebob/miniredis/v2"
@@ -76,7 +76,7 @@ func TestAPIKeyRateLimitMiddleware(t *testing.T) {
 		if v := c.GetHeader("X-Test-KeyID"); v != "" {
 			if id, err := strconv.ParseUint(v, 10, 64); err == nil {
 				req := c.Request
-				c.Request = req.WithContext(apikey.ContextWithAPIKey(req.Context(), &apikey.APIKey{ID: id}))
+				c.Request = req.WithContext(auth.ContextWithAPIKey(req.Context(), &auth.APIKey{ID: id}))
 			}
 		}
 		c.Next()

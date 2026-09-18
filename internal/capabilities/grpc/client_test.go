@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/grpc/userinfopb"
+	userpkg "jimu/internal/capabilities/user"
 	userdomain "jimu/internal/capabilities/user/domain"
+	userinfrastructure "jimu/internal/capabilities/user/infrastructure"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -30,7 +32,7 @@ func startEchoServer(t *testing.T, withUser bool) string {
 	}
 
 	srv := grpc.NewServer()
-	userinfopb.RegisterUserInfoServiceServer(srv, NewUserInfoGRPCService(db))
+	userinfopb.RegisterUserInfoServiceServer(srv, NewUserInfoGRPCService(userpkg.NewUserinfoSource(userinfrastructure.NewMysqlRepository(db))))
 	lis := startMemoryListener(t)
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)

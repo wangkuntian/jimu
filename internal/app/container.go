@@ -19,6 +19,8 @@ import (
 	"jimu/internal/capabilities/queue"
 	"jimu/internal/capabilities/storage"
 	"jimu/internal/capabilities/uploadsec"
+	userpkg "jimu/internal/capabilities/user"
+	userinfrastructure "jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/db"
@@ -304,8 +306,9 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	if err != nil {
 		return nil, fmt.Errorf("init grpc server: %w", err)
 	}
-	// 业务示例：注册 UserInfoService（真实业务模块可在此注入自己的 service）
-	grpcServer.RegisterUserInfoService(dbConn)
+	// 业务示例：注册 UserInfoService，用户数据经 contract.UserinfoSource 端口读取
+	// （user 能力提供适配实现，grpc 能力不直接依赖 user/domain）
+	grpcServer.RegisterUserInfoService(userpkg.NewUserinfoSource(userinfrastructure.NewMysqlRepository(dbConn)))
 
 	return &Container{
 		Config:         cfg,

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	admindomain "jimu/internal/capabilities/admin/domain"
+	apikeydomain "jimu/internal/capabilities/apikey/domain"
 	qdomain "jimu/internal/capabilities/queue/domain"
 
 	"github.com/glebarez/sqlite"
@@ -17,7 +18,7 @@ func newRepoTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err)
 	assert.NoError(t, db.AutoMigrate(
-		&admindomain.APIKey{},
+		&apikeydomain.APIKey{},
 		&admindomain.ImportJob{},
 		&qdomain.Job{},
 		&qdomain.DeadLetter{},
@@ -31,7 +32,7 @@ func TestMysqlAPIKeyRepository(t *testing.T) {
 	ctx := context.Background()
 
 	// Create + FindByID（含租户字段）
-	key := &admindomain.APIKey{ID: 1, TenantID: 1, Name: "web", KeyPrefix: "jimu_ab", KeyHash: "h1", Scopes: "[\"read\"]", Enabled: true, CreatedBy: 3}
+	key := &apikeydomain.APIKey{ID: 1, TenantID: 1, Name: "web", KeyPrefix: "jimu_ab", KeyHash: "h1", Scopes: "[\"read\"]", Enabled: true, CreatedBy: 3}
 	assert.NoError(t, repo.Create(ctx, key))
 	got, err := repo.FindByID(ctx, 1)
 	assert.NoError(t, err)
@@ -50,7 +51,7 @@ func TestMysqlAPIKeyRepository(t *testing.T) {
 	assert.Equal(t, int64(1), total)
 
 	// List：按租户过滤（其他租户的 Key 不可见）
-	other := &admindomain.APIKey{ID: 2, TenantID: 2, Name: "other", KeyPrefix: "jimu_cd", KeyHash: "h2", Enabled: true}
+	other := &apikeydomain.APIKey{ID: 2, TenantID: 2, Name: "other", KeyPrefix: "jimu_cd", KeyHash: "h2", Enabled: true}
 	assert.NoError(t, repo.Create(ctx, other))
 	keys, total, err = repo.List(ctx, 1, 0, 10)
 	assert.NoError(t, err)
