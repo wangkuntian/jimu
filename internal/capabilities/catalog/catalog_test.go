@@ -145,6 +145,9 @@ func TestDescriptorsAreWellFormed(t *testing.T) {
 			}
 		}
 	}
+	if !reflect.DeepEqual(All(), fixture()) {
+		t.Fatalf("catalog descriptors drifted from the expected fixture:\n got %+v\nwant %+v", All(), fixture())
+	}
 }
 
 func namesOf(ds []contract.Descriptor) []string {

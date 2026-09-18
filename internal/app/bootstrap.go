@@ -375,11 +375,13 @@ type registerRouter interface {
 }
 
 func registerHTTP(router registerRouter, log moduleLogger, extraProtected []gin.HandlerFunc, modules ...contract.Module) error {
+	// 全局中间件：所有能力声明的前置中间件（如审计写入）
 	for _, module := range modules {
 		if provider, ok := module.(contract.HTTPMiddlewareProvider); ok {
 			router.Use(provider.HTTPMiddleware()...)
 		}
 	}
+	// 受保护中间件：由声明该能力者提供（当前为 auth），首个提供者生效
 	var protected []gin.HandlerFunc
 	for _, module := range modules {
 		if provider, ok := module.(contract.ProtectedHTTPMiddlewareProvider); ok {
@@ -394,17 +396,14 @@ func registerHTTP(router registerRouter, log moduleLogger, extraProtected []gin.
 	// 追加外部注入的受保护中间件（如租户维度限流），顺序在认证/租户注入之后
 	protected = append(protected, extraProtected...)
 	for _, module := range modules {
-		if len(protected) > 0 && module.Name() != "auth" && module.Name() != "oauth" {
-			group := router.Group("", protected...)
-			module.RegisterHTTP(group)
-			if log != nil {
-				log.Infow("module registered", "name", module.Name())
-			}
-			continue
+		desc := contract.Describe(module)
+		if desc.Normalized() == contract.MountProtected && len(protected) > 0 {
+			module.RegisterHTTP(router.Group("", protected...))
+		} else {
+			module.RegisterHTTP(router)
 		}
-		module.RegisterHTTP(router)
 		if log != nil {
-			log.Infow("module registered", "name", module.Name())
+			log.Infow("capability registered", "name", desc.Name, "mount", string(desc.Normalized()))
 		}
 	}
 	return nil
