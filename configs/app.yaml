@@ -305,3 +305,8 @@ grpc:
     cert_file: ""
     key_file: ""
     client_ca_file: ""
+
+# 能力开关（v0.3.0 可插拔能力；留空表示全部启用）
+# 可选值见 internal/capabilities/catalog；留空时行为与本字段不存在时完全一致。
+capabilities:
+  enabled: []   # 例如 ["user", "role", "permission", "tenant", "auth", "audit", "admin"]

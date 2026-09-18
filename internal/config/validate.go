@@ -147,6 +147,9 @@ func (c *Config) validateCommon() error {
 			return errors.New("invalid redis cluster config: cluster_addrs is required")
 		}
 	}
+	if err := validateCapabilities(c.Capabilities); err != nil {
+		return err
+	}
 	if c.Captcha.Enabled && c.Captcha.TTLMin <= 0 {
 		return errors.New("invalid captcha.ttl_min")
 	}
@@ -251,6 +254,22 @@ func validateTLS(key string, cfg TLSConfig) error {
 	}
 	if cfg.CertFile == "" || cfg.KeyFile == "" {
 		return fmt.Errorf("invalid %s: cert_file and key_file are required when enabled", key)
+	}
+	return nil
+}
+
+// validateCapabilities 校验能力开关：名称非空且不重复（能力名是否存在由 catalog 解析时校验）
+func validateCapabilities(cfg CapabilitiesConfig) error {
+	seen := make(map[string]bool, len(cfg.Enabled))
+	for i, name := range cfg.Enabled {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return fmt.Errorf("invalid capabilities.enabled[%d]: name must not be blank", i)
+		}
+		if seen[name] {
+			return fmt.Errorf("duplicate capabilities.enabled entry: %q", name)
+		}
+		seen[name] = true
 	}
 	return nil
 }

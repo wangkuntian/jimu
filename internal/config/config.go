@@ -172,6 +172,7 @@ type Config struct {
 	ErrorReport  reporter.ReporterConfig     `mapstructure:"error_reporting"`
 	HTTPClient   HTTPClientConfig            `mapstructure:"http_client"`
 	GRPC         GRPCConfig                  `mapstructure:"grpc"`
+	Capabilities CapabilitiesConfig          `mapstructure:"capabilities"`
 	// 元数据（非 YAML 配置，运行时注入）
 	Version     string `mapstructure:"-"`
 	Environment string `mapstructure:"-"`
@@ -203,6 +204,12 @@ type GRPCConfig struct {
 	Port       int       `mapstructure:"port"`        // 监听端口
 	TimeoutSec int       `mapstructure:"timeout_sec"` // 单请求处理超时（秒），0 不限
 	TLS        TLSConfig `mapstructure:"tls"`         // TLS/mTLS 配置（与 HTTP 侧同构）
+}
+
+// CapabilitiesConfig 能力启用开关（v0.3.0 可插拔能力）
+type CapabilitiesConfig struct {
+	// Enabled 启用的能力名清单；留空表示全部启用（保持向后兼容）
+	Enabled []string `mapstructure:"enabled"`
 }
 
 // ServerConfig 服务运行时配置
