@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -79,6 +80,10 @@ func TestResolveClosureIsTransitive(t *testing.T) {
 			t.Fatalf("unexpected capability %q in closure %v", d.Name, namesOf(got))
 		}
 	}
+	wantOrder := []string{"user", "role", "tenant", "auth", "oauth"}
+	if gotOrder := namesOf(got); !reflect.DeepEqual(gotOrder, wantOrder) {
+		t.Fatalf("Resolve([oauth]) order = %v, want %v", gotOrder, wantOrder)
+	}
 }
 
 func TestResolveIsSubsetOfAll(t *testing.T) {
@@ -122,6 +127,21 @@ func TestDescriptorsAreWellFormed(t *testing.T) {
 			case contract.MountPublic, contract.MountProtected, contract.MountSelfManaged:
 			default:
 				t.Fatalf("%s: capability %q has invalid mount %q", label, d.Name, d.Mount)
+			}
+		}
+		index := make(map[string]int, len(list))
+		for i, d := range list {
+			if _, dup := index[d.Name]; dup {
+				t.Fatalf("%s: duplicate capability name %q", label, d.Name)
+			}
+			index[d.Name] = i
+		}
+		for _, d := range list {
+			for _, dep := range d.Requires {
+				if index[dep] >= index[d.Name] {
+					t.Fatalf("%s: capability %q at index %d must follow its dependency %q at index %d",
+						label, d.Name, index[d.Name], dep, index[dep])
+				}
 			}
 		}
 	}

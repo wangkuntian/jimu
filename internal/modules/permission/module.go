@@ -23,6 +23,16 @@ func (m *Module) Name() string {
 	return "permission"
 }
 
+// Descriptor 声明权限能力的静态描述。
+var Descriptor = contract.Descriptor{
+	Name:     "permission",
+	Requires: []string{"role"},
+	Mount:    contract.MountProtected,
+}
+
+// Descriptor 实现 contract.Describable。
+func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
+
 func (m *Module) RegisterHTTP(r contract.Router) {
 	interfaces.RegisterPermissionRoutes(r.Group("/api/v1"), m.service)
 }

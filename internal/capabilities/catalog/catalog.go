@@ -9,10 +9,27 @@ import (
 	"strings"
 
 	"jimu/internal/contract"
+	adminmodule "jimu/internal/modules/admin"
+	auditmodule "jimu/internal/modules/audit"
+	authmodule "jimu/internal/modules/auth"
+	oauthmodule "jimu/internal/modules/oauth"
+	"jimu/internal/modules/permission"
+	"jimu/internal/modules/role"
+	tenantmodule "jimu/internal/modules/tenant"
+	"jimu/internal/modules/user"
 )
 
 // entries 是唯一的能力清单，顺序即默认启用顺序（同时是依赖拓扑序）。
-var entries []contract.Descriptor
+var entries = []contract.Descriptor{
+	user.Descriptor,
+	role.Descriptor,
+	permission.Descriptor,
+	tenantmodule.Descriptor,
+	authmodule.Descriptor,
+	auditmodule.Descriptor,
+	adminmodule.Descriptor,
+	oauthmodule.Descriptor,
+}
 
 // All 返回清单中的全部能力描述（副本，调用方修改不影响清单）。
 func All() []contract.Descriptor {

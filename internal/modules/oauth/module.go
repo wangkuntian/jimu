@@ -66,6 +66,16 @@ func buildProviders(cfg config.OAuthConfig, client *httpclient.Client) map[strin
 // Name 模块名
 func (m *Module) Name() string { return "oauth" }
 
+// Descriptor 声明 OAuth 能力的静态描述。
+var Descriptor = contract.Descriptor{
+	Name:     "oauth",
+	Requires: []string{"auth", "user"},
+	Mount:    contract.MountPublic,
+}
+
+// Descriptor 实现 contract.Describable。
+func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
+
 // RegisterHTTP 注册 HTTP 路由
 func (m *Module) RegisterHTTP(r contract.Router) {
 	rg := r.Group("/api/v1")

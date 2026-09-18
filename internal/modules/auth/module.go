@@ -78,6 +78,16 @@ func (m *Module) Name() string {
 	return "auth"
 }
 
+// Descriptor 声明认证能力的静态描述。
+var Descriptor = contract.Descriptor{
+	Name:     "auth",
+	Requires: []string{"user", "role", "tenant"},
+	Mount:    contract.MountSelfManaged,
+}
+
+// Descriptor 实现 contract.Describable。
+func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
+
 func (m *Module) RegisterHTTP(r contract.Router) {
 	interfaces.RegisterAuthRoutes(r.Group("/api/v1"), m.service, m.jwtUtil, m.cfg, m.limiter, m.captcha, m.captchaCfg)
 	interfaces.RegisterCaptchaRoute(r.Group("/api/v1"), m.captcha)
