@@ -47,6 +47,12 @@ func TestDescribeFallsBackWhenNotDescribable(t *testing.T) {
 	}
 }
 
+func TestDescribeNilReturnsEmptyDescriptor(t *testing.T) {
+	if got := Describe(nil); got.Name != "" || len(got.Requires) != 0 || got.Mount != "" {
+		t.Fatalf("Describe(nil) = %+v, want zero Descriptor", got)
+	}
+}
+
 func TestDescribeUsesDeclaredDescriptor(t *testing.T) {
 	want := Descriptor{Name: "auth", Requires: []string{"user", "role", "tenant"}, Mount: MountSelfManaged}
 	got := Describe(describableStub{stubModule: stubModule{name: "auth"}, desc: want})
