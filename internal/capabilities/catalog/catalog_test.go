@@ -132,7 +132,7 @@ func TestResolveReportsFirstDanglingDependencyInListOrder(t *testing.T) {
 		contract.Descriptor{Name: "a", Requires: []string{"ghost-a"}},
 		contract.Descriptor{Name: "b", Requires: []string{"ghost-b"}},
 	)
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 200; i++ {
 		_, err := Resolve([]string{"a", "b"})
 		if err == nil || !strings.Contains(err.Error(), `"ghost-a"`) {
 			t.Fatalf("run %d: error = %v, want the first dangling dependency in list order", i, err)

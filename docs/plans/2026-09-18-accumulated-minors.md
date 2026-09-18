@@ -230,15 +230,17 @@ var wiredCapabilities = []string{
 ```go
 	if len(all) != len(wiredCapabilities) {
 		_ = container.Stop(context.Background())
-		return fmt.Errorf("capability wiring mismatch: %d instances for %d declared names", len(all), len(wiredCapabilities))
+		return fmt.Errorf("%w: %d instances for %d declared names", errCapabilityWiringMismatch, len(all), len(wiredCapabilities))
 	}
 	for _, name := range wiredCapabilities {
 		if _, ok := all[name]; !ok {
 			_ = container.Stop(context.Background())
-			return fmt.Errorf("declared capability %q has no instance", name)
+			return fmt.Errorf("%w: %q", errCapabilityNoInstance, name)
 		}
 	}
 ```
+
+> **修订说明（执行记录）**：实际落地改用两个包装哨兵错误 `errCapabilityWiringMismatch` / `errCapabilityNoInstance`（`cmd/server/main.go` 包级声明），错误文本不变。
 
 - [ ] **Step 4: 对齐 e2e 夹具的挂载判定**
 
@@ -462,5 +464,5 @@ git add docs/ && git commit -m "docs(releases): keep the canonical platform path
 **4. 风险**：
 - Task 2 的 e2e 断言 `require.NotEmpty(t, protected, ...)`：该文件的自建路由恒包含 auth 模块，故不会触发；若将来移除了 auth，该断言会**正确地**让测试失败。
 - Task 3 的 `require.Eventually` 把"缓存过期"显式化为有界等待：3s 上限远大于 50ms TTL，且不再与 bcrypt 耗时耦合；若策略永不生效，用例仍会失败（不会静默通过）。
-- Task 4 的 `go run ...@v2.7.2` 首次执行需联网下载模块；若 CI 或本地无网络，`make lint` 会退化到本地二进制并打印提示，不会硬失败。
+- Task 4 的 `go run ...@v2.7.2` 首次执行需联网下载模块；若 CI 或本地无网络且本地二进制版本不一致，`make lint` 会**硬失败**（这是刻意的：比起吐出不可比的 lint 结论，宁可响亮失败）；只有 `golangci-lint` 完全缺失时才会退化为 `go vet`。
 - Task 5 的过滤器改动会改变 P1-B1 计划里"Expected: 无输出"的达成方式（从单文件例外改为目录例外），需同步更新该计划的说明文字，否则计划自相矛盾。

@@ -22,7 +22,8 @@ DOCKER_CONTAINER := jimu-server
 SWAG := go run -mod=mod github.com/swaggo/swag/cmd/swag
 ENV ?= dev
 # golangci-lint 版本：与 .github/workflows/ci.yml 的 GOLANGCI_LINT_VERSION 一致，
-# 使本地 `make lint` 与 CI 的 lint 结论含义相同；本地二进制版本不同时改用 go run 固定版本
+# 使本地 `make lint` 与 CI 的 lint 结论含义相同；本地二进制版本不同时改用 go run 固定版本；
+# 仅在 golangci-lint 完全缺失时才退化为 go vet（不具备版本一致性）
 LINT_VERSION ?= v2.7.2
 
 # 根据 APP_ENV 自动生成 --profile 参数：dev 环境启动 adminer
@@ -249,7 +250,7 @@ fmt-check:
 
 ## lint: 静态检查（需要 golangci-lint；版本与 CI 一致，见 LINT_VERSION）
 lint:
-	@if command -v golangci-lint >/dev/null 2>&1 && golangci-lint version 2>/dev/null | grep -q "$(LINT_VERSION:v%=%)"; then \
+	@if command -v golangci-lint >/dev/null 2>&1 && golangci-lint version 2>/dev/null | grep -qw "$(LINT_VERSION:v%=%)"; then \
 		golangci-lint run ./...; \
 	elif command -v golangci-lint >/dev/null 2>&1; then \
 		echo "本地 golangci-lint 版本与 CI（$(LINT_VERSION)）不一致，改用 go run 固定版本"; \
