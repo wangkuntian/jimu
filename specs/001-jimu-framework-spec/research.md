@@ -15,7 +15,7 @@
 | FR-005 健康检查 | implemented | `internal/platform/observability/health.go` `/livez` `/readyz` |
 | FR-006 优雅停机 | implemented | `internal/app/container.go` 逆序 Stop；HTTP `Shutdown(ctx)` |
 | FR-007 分布式 ID | implemented | `internal/shared/id/id.go` snowflake + workerID 校验 |
-| FR-008 注册登录 | implemented | `internal/modules/auth/interfaces/router.go`；凭据错误不枚举 |
+| FR-008 注册登录 | implemented | `internal/capabilities/auth/interfaces/router.go`；凭据错误不枚举 |
 | FR-009 令牌+刷新+登出 | implemented | auth router `/refresh` `/logout`；`internal/platform/auth/jwt.go` |
 | FR-010 RBAC | implemented | `internal/platform/auth/casbin.go`；role/permission 模块 + 策略种子 |
 | FR-011 API 密钥认证 | implemented | `internal/platform/auth/apikey.go` + middleware；按需挂载 |

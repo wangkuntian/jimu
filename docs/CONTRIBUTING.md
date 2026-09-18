@@ -153,7 +153,7 @@ docker run -d --rm --name jimu-test-mysql \
 
 # 2. 跑集成测试（连接参数与 CI 一致）
 DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root DB_PASSWORD=root DB_NAME=jimu_test \
-  go test ./internal/modules/user/... -run Integration -v
+  go test ./internal/capabilities/user/... -run Integration -v
 
 # 3. 结束删除容器
 docker rm -f jimu-test-mysql

@@ -950,7 +950,7 @@ capabilities:
 
 - AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引，实现在 `internal/platform/encryption` + `internal/platform/db/encryption.go`（Gorm hook）。
 - 带结构体 tag `encryption:"true"` 的字段写入时加密、读取时解密；带 `blind:"<source>"` 的字段用对应明文计算确定性盲索引，支撑唯一约束与精确等值查询。
-- 当前覆盖 `users.email` / `users.phone`（见 `internal/modules/user/domain/user.go`），密文落库、`email_hash`/`phone_hash` 盲索引支撑重复校验。
+- 当前覆盖 `users.email` / `users.phone`（见 `internal/capabilities/user/domain/user.go`），密文落库、`email_hash`/`phone_hash` 盲索引支撑重复校验。
 - 密钥经 `ENCRYPTION_KEY` 环境变量或 `ENCRYPTION_KEY_FILE`（Docker Secrets）注入；**未注入时退化为明文模式**（功能不受影响，email/phone 明文落库）。
 - 密码字段 `users.password` 始终存 bcrypt 哈希，不参与字段级加密——不可逆，无需可解密。
 
@@ -971,7 +971,7 @@ capabilities:
 每个业务模块必须遵循 Clean Architecture 分层：
 
 ```text
-internal/modules/{name}/
+internal/capabilities/{name}/
   domain/           # 实体、值对象、仓储接口
   application/      # 用例服务、DTO
   infrastructure/   # 数据库/缓存实现
