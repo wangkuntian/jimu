@@ -127,13 +127,15 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 			break
 		}
 	}
-	// 3) 路由注册（按能力声明的挂载点：受保护 / 公开或自管理）
+	// 3) 路由注册（按能力声明的挂载点；受保护能力必须存在中间件提供者）
 	for _, m := range modules {
-		if contract.Describe(m).Normalized() == contract.MountProtected && len(protected) > 0 {
-			m.RegisterHTTP(router.Group("", protected...))
-		} else {
+		desc := contract.Describe(m)
+		if desc.Normalized() != contract.MountProtected {
 			m.RegisterHTTP(router)
+			continue
 		}
+		require.NotEmpty(t, protected, "capability %q declares MountProtected but no protected middleware provider is present", desc.Name)
+		m.RegisterHTTP(router.Group("", protected...))
 	}
 
 	// 启动审计 worker，测试结束 flush 剩余日志

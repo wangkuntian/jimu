@@ -26,7 +26,7 @@ const (
 )
 
 // 以下为各历史表的最小模型：只声明清理所需字段与表名。
-// 刻意不依赖业务模块的领域模型（kernel 不应反向依赖 modules）。
+// 刻意不依赖业务能力的领域模型（kernel 不应反向依赖 capabilities）。
 type (
 	auditLogRow struct {
 		ID        uint64    `gorm:"primaryKey"`
