@@ -4,9 +4,9 @@ const moduleTemplate = `package {{.Name}}
 
 import (
 	"jimu/internal/contract"
-	"jimu/internal/modules/{{.Name}}/application"
-	"jimu/internal/modules/{{.Name}}/infrastructure"
-	"jimu/internal/modules/{{.Name}}/interfaces"
+	"jimu/internal/capabilities/{{.Name}}/application"
+	"jimu/internal/capabilities/{{.Name}}/infrastructure"
+	"jimu/internal/capabilities/{{.Name}}/interfaces"
 
 	"gorm.io/gorm"
 )
@@ -72,7 +72,7 @@ const dtoTemplate = `package application
 import (
 	"time"
 
-	"jimu/internal/modules/{{.Name}}/domain"
+	"jimu/internal/capabilities/{{.Name}}/domain"
 )
 
 type Create{{.NameCamel}}Request struct {
@@ -136,7 +136,7 @@ import (
 	"context"
 	stderrors "errors"
 
-	"jimu/internal/modules/{{.Name}}/domain"
+	"jimu/internal/capabilities/{{.Name}}/domain"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -215,7 +215,7 @@ const mysqlRepoTemplate = `package infrastructure
 import (
 	"context"
 
-	"jimu/internal/modules/{{.Name}}/domain"
+	"jimu/internal/capabilities/{{.Name}}/domain"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -270,7 +270,7 @@ const handlerTemplate = `package interfaces
 import (
 	"strconv"
 
-	"jimu/internal/modules/{{.Name}}/application"
+	"jimu/internal/capabilities/{{.Name}}/application"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"
@@ -355,7 +355,7 @@ func (h *{{.NameCamel}}Handler) Delete(c *gin.Context) {
 const routerTemplate = `package interfaces
 
 import (
-	"jimu/internal/modules/{{.Name}}/application"
+	"jimu/internal/capabilities/{{.Name}}/application"
 	"jimu/internal/platform/http/middleware"
 	"jimu/internal/shared/pagination"
 
@@ -382,7 +382,7 @@ import (
 	stderrors "errors"
 	"testing"
 
-	"jimu/internal/modules/{{.Name}}/domain"
+	"jimu/internal/capabilities/{{.Name}}/domain"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -474,8 +474,8 @@ import (
 	"strings"
 	"testing"
 
-	"jimu/internal/modules/{{.Name}}/application"
-	"jimu/internal/modules/{{.Name}}/domain"
+	"jimu/internal/capabilities/{{.Name}}/application"
+	"jimu/internal/capabilities/{{.Name}}/domain"
 	"jimu/internal/platform/http/middleware"
 
 	"github.com/gin-gonic/gin"

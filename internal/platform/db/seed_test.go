@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"jimu/internal/modules/role/domain"
-	tenantdomain "jimu/internal/modules/tenant/domain"
-	userdomain "jimu/internal/modules/user/domain"
+	"jimu/internal/capabilities/role/domain"
+	tenantdomain "jimu/internal/capabilities/tenant/domain"
+	userdomain "jimu/internal/capabilities/user/domain"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"

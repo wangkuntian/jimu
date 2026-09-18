@@ -17,7 +17,7 @@ func TestGeneratedModuleCompiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command("go", "test", "./internal/modules/product/...")
+	cmd := exec.Command("go", "test", "./internal/capabilities/product/...")
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "GOWORK=off", "GOCACHE="+filepath.Join(os.TempDir(), "jimu-go-build-cache"))
 	output, err := cmd.CombinedOutput()

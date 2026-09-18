@@ -5,7 +5,7 @@ import (
 	"net"
 	"testing"
 
-	userdomain "jimu/internal/modules/user/domain"
+	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/platform/grpc/userinfopb"
 
 	"github.com/stretchr/testify/require"

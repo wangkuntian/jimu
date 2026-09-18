@@ -24,7 +24,7 @@ func TestGenerateModuleRejectsInvalidNames(t *testing.T) {
 
 func TestGenerateModuleDoesNotOverwriteExistingTarget(t *testing.T) {
 	root := newTestRepository(t)
-	target := filepath.Join(root, "internal/modules/product/domain/entity.go")
+	target := filepath.Join(root, "internal/capabilities/product/domain/entity.go")
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestGenerateModuleRollsBackWriteFailure(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "migrations", "mysql", "001_base.sql")); err != nil {
 		t.Fatalf("base migration changed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "internal", "modules", "product")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "internal", "capabilities", "product")); !os.IsNotExist(err) {
 		t.Fatalf("module directory still exists: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "migrations", "mysql", "002_create_products.sql")); !os.IsNotExist(err) {
@@ -106,7 +106,7 @@ func newTestRepository(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	for _, dir := range []string{
-		filepath.Join(root, "internal/modules"),
+		filepath.Join(root, "internal/capabilities"),
 		filepath.Join(root, "migrations", "mysql"),
 	} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -121,7 +121,7 @@ func newTestRepository(t *testing.T) string {
 
 func assertNoGeneratedFiles(t *testing.T, root string) {
 	t.Helper()
-	entries, err := os.ReadDir(filepath.Join(root, "internal/modules"))
+	entries, err := os.ReadDir(filepath.Join(root, "internal/capabilities"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,16 +139,16 @@ func writeMigration(t *testing.T, root, name string) {
 
 func requiredFiles(name, version string) []string {
 	return []string{
-		filepath.Join("internal", "modules", name, "module.go"),
-		filepath.Join("internal", "modules", name, "domain", "entity.go"),
-		filepath.Join("internal", "modules", name, "domain", "repository.go"),
-		filepath.Join("internal", "modules", name, "application", "dto.go"),
-		filepath.Join("internal", "modules", name, "application", "service.go"),
-		filepath.Join("internal", "modules", name, "application", "service_test.go"),
-		filepath.Join("internal", "modules", name, "infrastructure", "mysql_repository.go"),
-		filepath.Join("internal", "modules", name, "interfaces", "handler.go"),
-		filepath.Join("internal", "modules", name, "interfaces", "handler_test.go"),
-		filepath.Join("internal", "modules", name, "interfaces", "router.go"),
+		filepath.Join("internal", "capabilities", name, "module.go"),
+		filepath.Join("internal", "capabilities", name, "domain", "entity.go"),
+		filepath.Join("internal", "capabilities", name, "domain", "repository.go"),
+		filepath.Join("internal", "capabilities", name, "application", "dto.go"),
+		filepath.Join("internal", "capabilities", name, "application", "service.go"),
+		filepath.Join("internal", "capabilities", name, "application", "service_test.go"),
+		filepath.Join("internal", "capabilities", name, "infrastructure", "mysql_repository.go"),
+		filepath.Join("internal", "capabilities", name, "interfaces", "handler.go"),
+		filepath.Join("internal", "capabilities", name, "interfaces", "handler_test.go"),
+		filepath.Join("internal", "capabilities", name, "interfaces", "router.go"),
 		filepath.Join("migrations", "mysql", version+"_create_order_items.sql"),
 	}
 }

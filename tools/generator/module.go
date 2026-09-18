@@ -33,7 +33,7 @@ func GenerateModuleAt(root, name string) error {
 	if err := writeAll(root, files); err != nil {
 		return err
 	}
-	fmt.Printf("Module '%s' created at internal/modules/%s/\n", name, name)
+	fmt.Printf("Module '%s' created at internal/capabilities/%s/\n", name, name)
 	return nil
 }
 
@@ -65,7 +65,7 @@ func preflight(root, name string) (templateData, []targetFile, error) {
 	if !validModuleName.MatchString(name) || goKeywords[name] {
 		return templateData{}, nil, fmt.Errorf("invalid module name: %q", name)
 	}
-	for _, rel := range []string{"go.mod", filepath.Join("internal", "modules"), filepath.Join("migrations", "mysql")} {
+	for _, rel := range []string{"go.mod", filepath.Join("internal", "capabilities"), filepath.Join("migrations", "mysql")} {
 		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
 			return templateData{}, nil, fmt.Errorf("repository missing %s: %w", rel, err)
 		}
@@ -83,17 +83,17 @@ func preflight(root, name string) (templateData, []targetFile, error) {
 		MigrationNumber: migrationNumber,
 	}
 	targets := []targetFile{
-		{filepath.Join("internal", "modules", name, "module.go"), moduleTemplate},
-		{filepath.Join("internal", "modules", name, "domain", "entity.go"), entityTemplate},
-		{filepath.Join("internal", "modules", name, "domain", "repository.go"), repositoryTemplate},
-		{filepath.Join("internal", "modules", name, "application", "dto.go"), dtoTemplate},
-		{filepath.Join("internal", "modules", name, "application", "errors.go"), errorsTemplate},
-		{filepath.Join("internal", "modules", name, "application", "service.go"), serviceTemplate},
-		{filepath.Join("internal", "modules", name, "application", "service_test.go"), serviceTestTemplate},
-		{filepath.Join("internal", "modules", name, "infrastructure", "mysql_repository.go"), mysqlRepoTemplate},
-		{filepath.Join("internal", "modules", name, "interfaces", "handler.go"), handlerTemplate},
-		{filepath.Join("internal", "modules", name, "interfaces", "handler_test.go"), handlerTestTemplate},
-		{filepath.Join("internal", "modules", name, "interfaces", "router.go"), routerTemplate},
+		{filepath.Join("internal", "capabilities", name, "module.go"), moduleTemplate},
+		{filepath.Join("internal", "capabilities", name, "domain", "entity.go"), entityTemplate},
+		{filepath.Join("internal", "capabilities", name, "domain", "repository.go"), repositoryTemplate},
+		{filepath.Join("internal", "capabilities", name, "application", "dto.go"), dtoTemplate},
+		{filepath.Join("internal", "capabilities", name, "application", "errors.go"), errorsTemplate},
+		{filepath.Join("internal", "capabilities", name, "application", "service.go"), serviceTemplate},
+		{filepath.Join("internal", "capabilities", name, "application", "service_test.go"), serviceTestTemplate},
+		{filepath.Join("internal", "capabilities", name, "infrastructure", "mysql_repository.go"), mysqlRepoTemplate},
+		{filepath.Join("internal", "capabilities", name, "interfaces", "handler.go"), handlerTemplate},
+		{filepath.Join("internal", "capabilities", name, "interfaces", "handler_test.go"), handlerTestTemplate},
+		{filepath.Join("internal", "capabilities", name, "interfaces", "router.go"), routerTemplate},
 		{filepath.Join("migrations", "mysql", migrationNumber+"_create_"+data.TableName+".sql"), migrationTemplate},
 	}
 	for _, target := range targets {
