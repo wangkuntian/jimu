@@ -98,6 +98,41 @@ func TestRegisterHTTPFailsClosedWithoutProtectedProvider(t *testing.T) {
 	}
 }
 
+// 多个能力提供受保护中间件时必须拒绝启动：catalog 顺序不应决定谁生效。
+func TestRegisterHTTPFailsClosedWithMultipleProtectedProviders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	a := &protectedProvider{probeModule{name: "probe-a", desc: contract.Descriptor{Name: "probe-a", Mount: contract.MountSelfManaged}}}
+	b := &protectedProvider{probeModule{name: "probe-b", desc: contract.Descriptor{Name: "probe-b", Mount: contract.MountSelfManaged}}}
+
+	err := registerHTTP(router, nil, nil, a, b)
+	if err == nil {
+		t.Fatal("expected error when multiple capabilities provide protected middleware")
+	}
+	for _, want := range []string{a.name, b.name} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %v, want it to name provider %q", err, want)
+		}
+	}
+	if a.registered || b.registered {
+		t.Fatal("no capability may be registered when the provider set is ambiguous")
+	}
+}
+
+// 无受保护中间件提供者且无 MountProtected 能力时不得报错（守卫不能过度触发）。
+func TestRegisterHTTPAllowsNoProtectedProviderWithoutProtectedCapability(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	pub := &probeModule{name: "probe-pub", desc: contract.Descriptor{Name: "probe-pub", Mount: contract.MountPublic}}
+
+	if err := registerHTTP(router, nil, nil, pub); err != nil {
+		t.Fatalf("registerHTTP error: %v", err)
+	}
+	if !pub.registered {
+		t.Fatalf("capability %q was not registered", pub.name)
+	}
+}
+
 // extraProtected（租户限流/幂等）非空不能替代认证中间件：受保护能力仍须拒绝启动。
 func TestRegisterHTTPFailsClosedWhenExtraProtectedIsPresent(t *testing.T) {
 	gin.SetMode(gin.TestMode)

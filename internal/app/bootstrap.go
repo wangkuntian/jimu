@@ -12,6 +12,7 @@ import (
 	"jimu/internal/platform/db"
 	platformhttp "jimu/internal/platform/http"
 	"jimu/internal/platform/http/middleware"
+	"jimu/internal/platform/logger"
 	"jimu/internal/platform/notification"
 	"jimu/internal/platform/observability"
 	"jimu/internal/platform/outbox"
@@ -112,12 +113,6 @@ func registerEventBusBridge(c *Container) {
 func Bootstrap(container *Container, modules ...contract.Module) (*Application, error) {
 	cfg := container.Config
 
-	names := make([]string, 0, len(modules))
-	for _, module := range modules {
-		names = append(names, module.Name())
-	}
-	container.Logger.Infow("capabilities enabled", "count", len(names), "names", strings.Join(names, ","))
-
 	// 初始化 OpenTelemetry 追踪
 	tp, err := observability.InitTracing(context.Background(), cfg.OTEL)
 	if err != nil {
@@ -181,6 +176,12 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	if err := registerHTTP(router, container.Logger, extraProtected, modules...); err != nil {
 		return nil, err
 	}
+	// 在 registerHTTP 成功之后打印：被 fail-closed 拒绝的启用集不应留下 "enabled" 日志。
+	names := make([]string, 0, len(modules))
+	for _, module := range modules {
+		names = append(names, contract.Describe(module).Name)
+	}
+	container.Logger.Infow("capabilities enabled", "count", len(names), "names", strings.Join(names, ","))
 
 	sqlDB, err := container.DB.DB()
 	if err != nil {
@@ -372,33 +373,36 @@ func (w workerPoolComponent) Stop(context.Context) error {
 	return nil
 }
 
-type moduleLogger interface {
-	Infow(msg string, keysAndValues ...interface{})
-}
-
 type registerRouter interface {
 	contract.Router
 	Use(...gin.HandlerFunc) gin.IRoutes
 }
 
-func registerHTTP(router registerRouter, log moduleLogger, extraProtected []gin.HandlerFunc, modules ...contract.Module) error {
+func registerHTTP(router registerRouter, log *logger.Logger, extraProtected []gin.HandlerFunc, modules ...contract.Module) error {
 	// 全局中间件：所有能力声明的前置中间件（如审计写入）
 	for _, module := range modules {
 		if provider, ok := module.(contract.HTTPMiddlewareProvider); ok {
 			router.Use(provider.HTTPMiddleware()...)
 		}
 	}
-	// 受保护中间件：由声明该能力者提供（当前为 auth），首个提供者生效
+	// 受保护中间件：必须恰好由一个能力提供。多个提供者时无法仅凭 catalog 顺序
+	// 判定认证/租户注入/限流链的组合语义，因此拒绝启动而不是"首个提供者生效"。
 	var protected []gin.HandlerFunc
+	providers := make([]string, 0, 1)
 	for _, module := range modules {
-		if provider, ok := module.(contract.ProtectedHTTPMiddlewareProvider); ok {
-			var err error
-			protected, err = provider.ProtectedHTTPMiddleware()
-			if err != nil {
-				return fmt.Errorf("configure protected middleware: %w", err)
-			}
-			break
+		provider, ok := module.(contract.ProtectedHTTPMiddlewareProvider)
+		if !ok {
+			continue
 		}
+		chain, err := provider.ProtectedHTTPMiddleware()
+		if err != nil {
+			return fmt.Errorf("configure protected middleware: %w", err)
+		}
+		providers = append(providers, contract.Describe(module).Name)
+		protected = append(protected, chain...)
+	}
+	if len(providers) > 1 {
+		return fmt.Errorf("multiple capabilities provide protected middleware (%s); an explicit ordering rule is required", strings.Join(providers, ", "))
 	}
 	// extraProtected 只含租户限流/幂等等补充中间件，不能替代认证与租户注入，
 	// 因此「是否存在受保护中间件」必须在追加 extraProtected 之前判定。

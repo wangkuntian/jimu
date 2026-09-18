@@ -31,7 +31,8 @@ var entries = []contract.Descriptor{
 	oauthmodule.Descriptor,
 }
 
-// All 返回清单中的全部能力描述（副本，调用方修改不影响清单）。
+// All 返回清单中的全部能力描述（浅拷贝，调用方增删元素不影响清单；
+// 但 Descriptor.Requires 切片仍与包级描述符共享底层数组，勿原地修改其元素）。
 func All() []contract.Descriptor {
 	return append([]contract.Descriptor(nil), entries...)
 }

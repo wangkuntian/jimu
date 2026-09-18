@@ -20,12 +20,15 @@ type Descriptor struct {
 	Mount    MountPoint // 路由挂载方式；零值等价 MountProtected
 }
 
-// Normalized 返回归一化后的挂载点，空值按 MountProtected 处理。
+// Normalized 返回归一化后的挂载点：空值与任何未识别的取值（如大小写笔误）
+// 都按 MountProtected 处理，避免特权路由被裸挂到根路由。
 func (d Descriptor) Normalized() MountPoint {
-	if d.Mount == "" {
+	switch d.Mount {
+	case MountPublic, MountSelfManaged:
+		return d.Mount
+	default:
 		return MountProtected
 	}
-	return d.Mount
 }
 
 // Describable 由能力实现以声明自身描述。
