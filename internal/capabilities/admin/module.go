@@ -9,11 +9,11 @@ import (
 	admininterfaces "jimu/internal/capabilities/admin/interfaces"
 	"jimu/internal/capabilities/feature"
 	"jimu/internal/capabilities/storage"
+	"jimu/internal/capabilities/uploadsec"
 	userinfra "jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/capabilities/ws"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
-	platformhttp "jimu/internal/kernel/http"
 	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/kernel/scheduler"
 
@@ -31,7 +31,7 @@ type Module struct {
 	db          *gorm.DB
 	sched       *scheduler.CronScheduler
 	storage     storage.Storage
-	scanner     platformhttp.Scanner
+	scanner     uploadsec.Scanner
 	feature     *feature.Manager
 	eventBus    contract.EventBus
 	wsHub       *ws.ClientHub
@@ -54,7 +54,7 @@ func New(version, env string, rdb redistore.Client, db *gorm.DB, deps ...interfa
 			m.sched = d
 		case storage.Storage:
 			m.storage = d
-		case platformhttp.Scanner:
+		case uploadsec.Scanner:
 			m.scanner = d
 		case *feature.Manager:
 			m.feature = d
@@ -202,7 +202,7 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 
 	// 文件上传端点（接入存储抽象）
 	if m.storage != nil {
-		uploadHandler := platformhttp.NewUploadHandler(platformhttp.UploadConfig{
+		uploadHandler := uploadsec.NewUploadHandler(uploadsec.UploadConfig{
 			Storage:    m.storage,
 			MaxSize:    10 * 1024 * 1024,
 			BasePrefix: "uploads",

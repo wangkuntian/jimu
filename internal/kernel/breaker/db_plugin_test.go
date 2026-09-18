@@ -1,4 +1,4 @@
-package db
+package breaker
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"jimu/internal/config"
-	"jimu/internal/kernel/breaker"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -31,14 +30,14 @@ func TestAttachBreakerOpensOnConnectFailure(t *testing.T) {
 			_ = sqlDB.Close()
 		}
 	})
-	require.NoError(t, attachBreaker(db, config.BreakerConfig{Enabled: true, MaxFailures: 2, ResetTimeoutSec: 60}))
+	require.NoError(t, AttachDBBreaker(db, config.BreakerConfig{Enabled: true, MaxFailures: 2, ResetTimeoutSec: 60}))
 
 	query := func() error { return db.Exec("SELECT 1").Error }
 	_ = query()
 	_ = query()
 	// 直接验证熔断状态：实际状态由插件内部的 breaker 持有，这里通过第三次调用的错误判断
 	err = query()
-	assert.ErrorIs(t, err, breaker.ErrOpen, "连续连接失败后熔断开启，应快速失败而不是继续等超时")
+	assert.ErrorIs(t, err, ErrOpen, "连续连接失败后熔断开启，应快速失败而不是继续等超时")
 }
 
 func TestIsDBTransportError(t *testing.T) {
@@ -57,7 +56,7 @@ func TestAttachBreakerKeepsConnPoolIntact(t *testing.T) {
 	require.NoError(t, err)
 
 	before := db.ConnPool
-	require.NoError(t, attachBreaker(db, config.BreakerConfig{Enabled: true, MaxFailures: 5, ResetTimeoutSec: 10}))
+	require.NoError(t, AttachDBBreaker(db, config.BreakerConfig{Enabled: true, MaxFailures: 5, ResetTimeoutSec: 10}))
 
 	// 回调式挂载不接管 ConnPool：连接池上限、DB() 等对 *sql.DB 的操作不受影响
 	assert.Same(t, before, db.ConnPool)
@@ -83,7 +82,7 @@ func TestAttachBreakerDisabled(t *testing.T) {
 	require.NoError(t, err)
 
 	before := db.ConnPool
-	require.NoError(t, attachBreaker(db, config.BreakerConfig{Enabled: false}))
+	require.NoError(t, AttachDBBreaker(db, config.BreakerConfig{Enabled: false}))
 	assert.Same(t, before, db.ConnPool)
 	assert.Nil(t, db.Callback().Query().Get("jimu:breaker:allow:query"), "未启用时不应注册熔断回调")
 }
@@ -104,7 +103,7 @@ func TestAttachBreakerCoversReadReplicas(t *testing.T) {
 		Replicas: []gorm.Dialector{replica},
 		Policy:   dbresolver.RandomPolicy{},
 	})))
-	require.NoError(t, attachBreaker(db, config.BreakerConfig{Enabled: true, MaxFailures: 2, ResetTimeoutSec: 60}))
+	require.NoError(t, AttachDBBreaker(db, config.BreakerConfig{Enabled: true, MaxFailures: 2, ResetTimeoutSec: 60}))
 
 	// 建表走主库（sqlite）
 	require.NoError(t, db.Exec("CREATE TABLE breaker_rows (id INTEGER)").Error)
@@ -117,7 +116,7 @@ func TestAttachBreakerCoversReadReplicas(t *testing.T) {
 
 	// 熔断开启后读请求被语句级回调拦截（错误为 ErrOpen，而不是连接失败）
 	var rows []breakerRow
-	assert.ErrorIs(t, db.Find(&rows).Error, breaker.ErrOpen,
+	assert.ErrorIs(t, db.Find(&rows).Error, ErrOpen,
 		"副本路径的失败也应驱动熔断")
 }
 

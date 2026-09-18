@@ -93,8 +93,15 @@ func TestMigrateWithRetry_WithLogger(t *testing.T) {
 	require.Error(t, err)
 }
 
+// migrateProbeModel 无软删除字段的最小模型，仅用于让 AutoMigrate 生成 DDL
+type migrateProbeModel struct {
+	ID uint64
+}
+
+func (migrateProbeModel) TableName() string { return "migrate_probe" }
+
 func TestAutoMigrate_FailsOnMockDB(t *testing.T) {
 	db, _ := newMockGormDB(t)
-	err := AutoMigrate(db, &cleanupModel{})
+	err := AutoMigrate(db, &migrateProbeModel{})
 	require.Error(t, err)
 }

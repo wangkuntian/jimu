@@ -17,12 +17,12 @@ import (
 	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/queue"
 	"jimu/internal/capabilities/storage"
+	"jimu/internal/capabilities/uploadsec"
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/db"
 	"jimu/internal/kernel/event"
-	platformhttp "jimu/internal/kernel/http"
 	"jimu/internal/kernel/httpclient"
 	"jimu/internal/kernel/logger"
 	"jimu/internal/kernel/observability"
@@ -45,7 +45,7 @@ type Container struct {
 	Scheduler      *scheduler.CronScheduler
 	Lock           *redistore.Lock
 	Storage        storage.Storage
-	UploadScanner  platformhttp.Scanner
+	UploadScanner  uploadsec.Scanner
 	Notification   notification.Dispatcher
 	FeatureFlag    *feature.Manager
 	WebSocketHub   *notification.Hub
@@ -128,7 +128,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	}
 	// 字段级加密：注册全局 gorm hook（加密 email/phone 写入 + 盲索引 + 读取解密）
 	cipher := encryption.New(cfg.Security.EncryptionKey)
-	db.RegisterEncryptionHooks(dbConn, cipher)
+	encryption.RegisterHooks(dbConn, cipher)
 	rdb, err := redistore.ConnectWithRetry(cfg.Redis, log)
 	if err != nil {
 		return nil, err
@@ -161,9 +161,9 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	}
 
 	// 文件上传病毒扫描器：未启用时为 nil（上传不扫描，向后兼容）
-	var uploadScanner platformhttp.Scanner
+	var uploadScanner uploadsec.Scanner
 	if cfg.Upload.ClamAV.Enabled {
-		uploadScanner = platformhttp.NewClamAVScanner(platformhttp.ClamAVConfig{
+		uploadScanner = uploadsec.NewClamAVScanner(uploadsec.ClamAVConfig{
 			Address: cfg.Upload.ClamAV.Address,
 			Timeout: time.Duration(cfg.Upload.ClamAV.TimeoutSec) * time.Second,
 		})

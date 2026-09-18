@@ -1,4 +1,4 @@
-package db
+package retention
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 // cleanupModel 无软删除字段，Delete 走硬删除，便于 sqlmock 断言
@@ -115,4 +117,16 @@ func TestTableName(t *testing.T) {
 	assert.Equal(t, "items", tableName(cleanupModel{}))
 	assert.Equal(t, "unknown", tableName(noTableNameModel{}))
 	assert.Equal(t, "unknown", tableName(nil))
+}
+
+// newMockGormDB 用 sqlmock 构建 gorm.DB（跳过版本初始化，避免真实连接）
+func newMockGormDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
+	t.Helper()
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	dialector := mysql.New(mysql.Config{Conn: sqlDB, SkipInitializeWithVersion: true})
+	gormDB, err := gorm.Open(dialector, &gorm.Config{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	return gormDB, mock
 }
