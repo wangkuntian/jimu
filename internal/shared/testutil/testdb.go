@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net"
 	"os"
@@ -187,9 +188,65 @@ func NewTestDBWithPool(cfg config.DBConfig) (*TestDB, error) {
 	return &TestDB{DB: gdb, cfg: cfg}, nil
 }
 
-// Migrate 执行迁移（根据 cfg.Driver 选择 dialect 与迁移目录）
+// migrationLockTimeout 迁移互斥的等待上限。
+// go test 会并行跑多个包，它们共用同一个测试库；没有互斥时两个进程会同时执行
+// 迁移里的 DDL，典型症状是 005_add_tenants.sql 报 "Duplicate column name 'tenant_id'"，
+// 或 goose 版本表出现竞态写入。
+const migrationLockTimeout = 60 * time.Second
+
+// Migrate 执行迁移（根据 cfg.Driver 选择 dialect 与迁移目录）。
+// 用数据库级咨询锁串行化迁移，使并行测试包共用同一测试库时不再互相打架。
 func (tdb *TestDB) Migrate() error {
+	release, err := tdb.lockMigrations()
+	if err != nil {
+		return err
+	}
+	defer release()
 	return db.Migrate(tdb.cfg, "up")
+}
+
+// lockMigrations 获取数据库级迁移锁并返回释放函数。
+// MySQL/MariaDB 用 GET_LOCK、PostgreSQL 用 pg_advisory_lock：两者都是**会话级**锁，
+// 必须固定在同一条连接上，因此这里取 sql.Conn 而不是走连接池。
+func (tdb *TestDB) lockMigrations() (func(), error) {
+	sqlDB, err := tdb.DB.DB()
+	if err != nil {
+		return nil, fmt.Errorf("get sql.DB for migration lock: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), migrationLockTimeout)
+	defer cancel()
+
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire migration lock connection: %w", err)
+	}
+	lockName := "jimu_test_migrate_" + tdb.cfg.Database
+
+	if tdb.cfg.Driver == "postgres" {
+		if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock(hashtext($1))", lockName); err != nil {
+			_ = conn.Close()
+			return nil, fmt.Errorf("acquire postgres migration lock: %w", err)
+		}
+		return func() {
+			_, _ = conn.ExecContext(context.Background(), "SELECT pg_advisory_unlock(hashtext($1))", lockName)
+			_ = conn.Close()
+		}, nil
+	}
+
+	var acquired sql.NullInt64
+	if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, ?)", lockName, int(migrationLockTimeout.Seconds())).Scan(&acquired); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("acquire mysql migration lock: %w", err)
+	}
+	if !acquired.Valid || acquired.Int64 != 1 {
+		_ = conn.Close()
+		return nil, fmt.Errorf("timed out waiting for mysql migration lock %q", lockName)
+	}
+	return func() {
+		_, _ = conn.ExecContext(context.Background(), "SELECT RELEASE_LOCK(?)", lockName)
+		_ = conn.Close()
+	}, nil
 }
 
 // Reset 清空所有表数据（保留表结构）
