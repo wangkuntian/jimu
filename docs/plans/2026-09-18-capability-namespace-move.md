@@ -177,25 +177,11 @@ git commit -m "refactor(capabilities): move business modules into the capabiliti
 | `specs/001-jimu-framework-spec/contracts/module.md:27` | `internal/modules/{name}/` | `internal/capabilities/{name}/` |
 | `specs/001-jimu-framework-spec/research.md:18` | `internal/modules/auth/interfaces/router.go` | `internal/capabilities/auth/interfaces/router.go` |
 
-- [ ] **Step 2: 更新设计文档的前瞻布局与历史说明**
+- [ ] **Step 2: 更新设计文档的历史说明**
 
-`docs/design/2026-09-18-capability-plugins-design.md` §3.8「最终目录形态」当前写的是 `internal/modules/`（该节写在能力命名空间定名之前，已过时）。改为：
+> **配方修订（执行时发现）**：初版说「§3.8『最终目录形态』写的是 `internal/modules/`，需要更新」——**这个前提是错的**。实测设计文档中 `internal/modules` 出现 **0 次**：当前 §3.8 是「非代码资产模块化」，文档里也**没有**任何含 `internal/modules` 的目录树块（那份布局块属于已废弃的早期草稿）。因此本节只做下面一件事。
 
-```text
-internal/
-├── contract/            module.go ports.go mount.go permission.go migration.go
-├── config/              内核配置（保留原路径）
-├── app/                 装配与生命周期（保留原路径）
-├── shared/              通用件（错误码/i18n/响应/分页/ID/校验器）
-├── kernel/              内核能力：db redis cache http logger observability breaker event
-│                        tlsconf mask httpclient reporter scheduler
-└── capabilities/        可插拔能力（每个目录导出 Descriptor）
-    ├── catalog/         唯一能力清单（含启用集解析）
-    ├── user/ role/ permission/ tenant/ auth/ audit/ admin/ oauth/
-    └── …
-```
-
-并在 §5「重点能力拆分」标题下加一行历史说明：
+在 `docs/design/2026-09-18-capability-plugins-design.md` 的 §5「重点能力拆分」标题下加一行历史说明（§5 的表格使用裸文件名，加注是为了让读者知道这些路径已随 P1-A 迁移）：
 
 ```markdown
 > 注：本节各表中的路径是**改造前的现状路径**（`internal/modules/…`）。P1-A 已把业务模块搬入 `internal/capabilities/…`，后续 P1 子计划继续拆分；表格保留原路径以便与当时的评审记录对照。
@@ -208,10 +194,13 @@ grep -rn 'internal/modules' \
   --include='*.go' --include='*.md' --include='*.sh' --include='*.yml' --include='*.yaml' --include='*.json' \
   README.md Makefile docs/ specs/ configs/ scripts/ .github/ internal/ tools/ 2>/dev/null \
   | grep -v '^docs/plans/2026-09-18-capability-plugins-p0.md' \
+  | grep -v '^docs/plans/2026-09-18-capability-namespace-move.md' \
   | grep -v '^docs/design/2026-09-18-capability-plugins-design.md'
 ```
 
-Expected: 无输出。两处例外是刻意的历史记录：P0 计划（执行当时的路径）与设计文档 §5（已加注说明）。
+Expected: 无输出。**三处例外都是刻意的**：P0 计划（当时的执行记录）、本计划（它记录的正是这次搬迁，天然大量出现旧路径）、设计文档 §5（已加注说明为历史路径）。
+
+> 修订说明：初版只列了两处例外，漏了**本计划文档自身**——它必然包含 29 处旧路径，所以字面上的"无输出"不可能达成。
 
 - [ ] **Step 4: 全量回归（发布门禁）**
 

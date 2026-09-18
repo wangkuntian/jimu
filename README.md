@@ -301,7 +301,16 @@ jimu/
 │   │   ├── bootstrap.go        # 应用启动装配
 │   │   ├── container.go        # 依赖容器
 │   │   └── application.go      # Application 生命周期
-│   ├── capabilities/           # 能力清单（唯一清单 + 启用集解析）
+│   ├── capabilities/           # 可插拔能力（catalog 是唯一清单；每个能力导出 Descriptor）
+│   │   ├── catalog/            # 能力清单 + 启用集解析
+│   │   ├── auth/               # 登录/注册/Token
+│   │   ├── oauth/              # 第三方登录绑定
+│   │   ├── user/               # 用户管理
+│   │   ├── role/               # 角色管理
+│   │   ├── permission/         # 权限管理
+│   │   ├── tenant/             # 租户管理
+│   │   ├── audit/              # 审计日志
+│   │   └── admin/              # 系统管理
 │   ├── config/                 # 配置加载 + 校验
 │   ├── contract/               # Module 接口定义
 │   ├── platform/               # 基础设施
@@ -338,15 +347,6 @@ jimu/
 │   │   ├── id/                 # 雪花 ID 生成器
 │   │   ├── totp/               # RFC 6238 TOTP（二次验证）
 │   │   └── testutil/           # 测试工具
-│   └── modules/                # 业务模块
-│       ├── auth/               # 登录/注册/Token
-│       ├── oauth/              # 第三方登录绑定
-│       ├── user/               # 用户管理
-│       ├── role/               # 角色管理
-│       ├── permission/         # 权限管理
-│       ├── tenant/             # 租户管理
-│       ├── audit/              # 审计日志
-│       └── admin/              # 系统管理
 ├── tools/
 │   ├── generator/                # 代码生成器
 │   └── logcheck/                 # 日志调用规范静态检查（make check-log-usage）

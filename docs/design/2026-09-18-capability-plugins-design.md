@@ -149,7 +149,7 @@
 | | | `swagger.go` | `apidocs` |
 | | | `upload_handler.go` `clamav.go` | `uploadsec` |
 | 顶层 `conf/rbac_model.conf` | — | Casbin 模型文件 | `access` |
-| `proto/jimu/v1/userinfo.proto` + `platform/grpc/userinfo_service.go` | — | 示例服务，且反向依赖 `modules/user/domain`（§4 的 platform→module 违规） | 移出平台层，作为 `grpc` 能力的可选示例或 `examples/` |
+| `proto/jimu/v1/userinfo.proto` + `platform/grpc/userinfo_service.go` | — | 示例服务，且反向依赖 `internal/modules/user/domain`（搬迁前路径；现为 `internal/capabilities/user/domain`，§4 的 platform→module 违规） | 移出平台层，作为 `grpc` 能力的可选示例或 `examples/` |
 | `container.go` 里的 `new_dashboard` / `beta_features` | — | 演示性 Feature Flag | 随能力或配置声明，不进内核容器 |
 
 ### 3.7 驱动级可插拔
@@ -195,7 +195,7 @@
 
 ## 5. 重点能力拆分
 
-> 注：本节各表中的路径是**改造前的现状路径**（相对 `internal/modules/<能力>/`）。P1-A 已把业务模块搬入 `internal/capabilities/…`，后续 P1 子计划继续拆分；表格保留原路径以便与当时的评审记录对照。
+> 注：本节各表中的路径是**改造前的现状路径**（搬迁前位于 `internal/modules/` 下，表内多为相对写法）。P1-A 已把业务模块搬入 `internal/capabilities/…`，后续 P1 子计划继续拆分；表格保留原路径以便与当时的评审记录对照。
 
 ### 5.1 `auth`（2914 行）→ 6 个能力
 
