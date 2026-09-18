@@ -315,10 +315,12 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 	require.Equal(t, 0, parseResp(t, w).Code)
 
 	// 5. 该用户登录后能 GET /users（原 403 → 200）
+	// 策略缓存按 TTL 异步过期，故用有界轮询等待生效，而不是依赖"登录耗时 > TTL"。
 	userToken := login(t, r, "rbacuser", "rbacpass123")
-	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, 0, parseResp(t, w).Code)
+	require.Eventually(t, func() bool {
+		w := doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
+		return w.Code == http.StatusOK
+	}, 3*time.Second, 25*time.Millisecond, "permission should take effect after the policy cache TTL")
 
 	// 6. 但不能 POST /users（未分配该权限）→ 403
 	w = doJSON(t, r, http.MethodPost, "/api/v1/users", userToken, `{"username":"nope","password":"nopepass123"}`)
