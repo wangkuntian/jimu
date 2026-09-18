@@ -295,9 +295,9 @@ bench-ci:
 loadtest:
 	@./scripts/loadtest.sh
 
-## govulncheck: 依赖漏洞扫描（go run 免安装，与 CI 命令一致）
+## govulncheck: 依赖漏洞扫描（go run 免安装；豁免清单见 scripts/govulncheck.sh）
 govulncheck:
-	@go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	@bash scripts/govulncheck.sh
 
 ## test-cover: 运行测试并生成覆盖率（与 CI Test job 一致）
 test-cover:
@@ -330,6 +330,7 @@ swagger-check:
 smoke-check:
 	@bash -n scripts/test_runtime_security.sh
 	@bash -n scripts/smoke_api_contract.sh
+	@bash -n scripts/govulncheck.sh
 	@bash -n scripts/install_db_clients.sh
 	@bash -n scripts/db_common.sh
 	@bash -n scripts/backup.sh

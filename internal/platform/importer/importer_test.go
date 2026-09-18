@@ -1,6 +1,7 @@
 package importer
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/xuri/excelize/v2"
 )
 
 func csvReader(data string) *strings.Reader {
@@ -102,4 +104,44 @@ func TestImportWithoutSinkReturnsConfigurationError(t *testing.T) {
 
 	assert.ErrorIs(t, err, ErrImportPersistenceNotConfigured)
 	assert.Nil(t, result)
+}
+
+func TestExcelParseMalformedInputReturnsErrorWithoutPanic(t *testing.T) {
+	imp := NewExcelImporter()
+
+	// 非法/构造过的 xlsx 输入：必须返回错误而不是 panic（excelize 的负共享字符串索引
+	// 一类缺陷见 GO-2026-6452，导入器已做 recover 兜底）
+	for _, data := range []string{
+		"",
+		"not-an-xlsx",
+		"PK\x03\x04this-is-not-a-zip-record",
+	} {
+		var (
+			rows []map[string]string
+			err  error
+		)
+		require.NotPanics(t, func() {
+			rows, err = imp.Parse(context.Background(), strings.NewReader(data))
+		}, "input=%q", data)
+		assert.Error(t, err, "input=%q", data)
+		assert.Nil(t, rows)
+	}
+}
+
+func TestExcelParseValidWorkbook(t *testing.T) {
+	// 正常路径：构造一个含表头与两行数据的工作簿，验证 readSheet 重构后仍可解析
+	file := excelize.NewFile()
+	sheet := file.GetSheetName(file.GetActiveSheetIndex())
+	require.NoError(t, file.SetSheetRow(sheet, "A1", &[]interface{}{"username", "email"}))
+	require.NoError(t, file.SetSheetRow(sheet, "A2", &[]interface{}{"alice", "alice@example.com"}))
+	require.NoError(t, file.SetSheetRow(sheet, "A3", &[]interface{}{"bob", "bob@example.com"}))
+	buf, err := file.WriteToBuffer()
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	rows, err := NewExcelImporter().Parse(context.Background(), bytes.NewReader(buf.Bytes()))
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	assert.Equal(t, map[string]string{"username": "alice", "email": "alice@example.com"}, rows[0])
+	assert.Equal(t, map[string]string{"username": "bob", "email": "bob@example.com"}, rows[1])
 }
