@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"jimu/internal/kernel/auth"
+	apikey "jimu/internal/capabilities/apikey"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
@@ -27,7 +27,7 @@ func TestDefaultKeyFuncPriority(t *testing.T) {
 	c2, _ := gin.CreateTestContext(httptest.NewRecorder())
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("X-API-Key", "jimu_plaintext_should_not_leak")
-	req = req.WithContext(auth.ContextWithAPIKey(req.Context(), &auth.APIKey{ID: 7}))
+	req = req.WithContext(apikey.ContextWithAPIKey(req.Context(), &apikey.APIKey{ID: 7}))
 	c2.Request = req
 	assert.Equal(t, "apikey:7", defaultKeyFunc(c2))
 

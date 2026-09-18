@@ -1,4 +1,4 @@
-package auth
+package apikey
 
 import (
 	"net/http"

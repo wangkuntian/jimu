@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"jimu/internal/kernel/auth"
+	apikey "jimu/internal/capabilities/apikey"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
@@ -63,7 +63,7 @@ func defaultKeyFunc(c *gin.Context) string {
 	if userID, exists := c.Get("user_id"); exists {
 		return fmt.Sprintf("user:%v", userID)
 	}
-	if apiKey, ok := auth.APIKeyFromContext(c.Request.Context()); ok && apiKey != nil {
+	if apiKey, ok := apikey.APIKeyFromContext(c.Request.Context()); ok && apiKey != nil {
 		return fmt.Sprintf("apikey:%d", apiKey.ID)
 	}
 	return fmt.Sprintf("ip:%s", c.ClientIP())

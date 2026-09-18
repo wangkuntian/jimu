@@ -24,7 +24,7 @@ import (
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	platformauth "jimu/internal/kernel/auth"
+	"jimu/internal/kernel/access"
 	"jimu/internal/kernel/db"
 	"jimu/internal/kernel/logger"
 
@@ -256,9 +256,9 @@ func TestAuthRefreshLogout(t *testing.T) {
 // TestRoleAssignmentAndRBAC 角色闭环：创建角色 → 分配权限 → 绑定用户 → 权限生效/撤销。
 func TestRoleAssignmentAndRBAC(t *testing.T) {
 	// 缩短策略缓存 TTL，验证权限变更在缓存过期后生效
-	oldTTL := platformauth.PolicyCacheTTL
-	platformauth.PolicyCacheTTL = 50 * time.Millisecond
-	t.Cleanup(func() { platformauth.PolicyCacheTTL = oldTTL })
+	oldTTL := access.PolicyCacheTTL
+	access.PolicyCacheTTL = 50 * time.Millisecond
+	t.Cleanup(func() { access.PolicyCacheTTL = oldTTL })
 
 	r := newTestApp(t)
 	adminToken := login(t, r, "admin", "admin123")

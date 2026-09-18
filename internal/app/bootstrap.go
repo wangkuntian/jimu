@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/apidocs"
+	apikeymw "jimu/internal/capabilities/apikey/middleware"
 	"jimu/internal/capabilities/notification"
 	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/queue"
@@ -161,7 +162,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	// 租户维度限流（Redis 滑动窗口）：挂在受保护中间件之后，平台级视角跳过
 	var extraProtected []gin.HandlerFunc
 	if container.Redis != nil && cfg.RateLimit.Tenant.Enabled && cfg.RateLimit.Tenant.Limit > 0 {
-		extraProtected = append(extraProtected, middleware.TenantRateLimitMiddleware(
+		extraProtected = append(extraProtected, apikeymw.TenantRateLimitMiddleware(
 			container.Redis,
 			cfg.RateLimit.Tenant.Limit,
 			time.Duration(cfg.RateLimit.Tenant.WindowSec)*time.Second,
