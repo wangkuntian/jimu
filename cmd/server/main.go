@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"jimu/internal/app"
+	"jimu/internal/capabilities/catalog"
 	"jimu/internal/config"
+	"jimu/internal/contract"
 	adminmodule "jimu/internal/modules/admin"
 	auditmodule "jimu/internal/modules/audit"
 	authmodule "jimu/internal/modules/auth"
@@ -32,6 +35,9 @@ import (
 
 // version 版本号，通过 ldflags 注入：-ldflags "-X main.version=v0.1.0"
 var version = "dev"
+
+// errCapabilityNotWired 表示 catalog 声明了能力但 main 未提供实例（开发期配置错误）
+var errCapabilityNotWired = errors.New("capability declared in catalog but not wired in main")
 
 func main() {
 	if err := run(); err != nil {
@@ -68,22 +74,41 @@ func run() error {
 		container.Logger.Warnw("config file watch disabled", "error", err.Error())
 	}
 
-	// 租户套餐/配额：定义在 tenant 模块，注入到创建用户/角色/API Key 的路径
+	// 租户套餐/配额：定义在 tenant 能力，注入到创建用户/角色/API Key 的路径
 	tenantMod := tenantmodule.New(container.DB, *cfg)
 
-	application, err := app.Bootstrap(
-		container,
-		user.New(container.DB, *cfg, container.Redis, container.Outbox),
-		authmodule.New(container.DB, container.Redis, cfg.Auth, cfg.HTTP.Mode == config.HTTPModeRelease, container.Captcha, cfg.Captcha, container.Outbox, container.Notification, container.Cipher, container.BreachChecker, tenantMod.Quota()),
-		role.New(container.DB, tenantMod.Quota()),
-		permission.New(container.DB),
-		tenantMod,
-		auditmodule.New(container.DB, cfg.Audit, container.Logger),
-		adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, middleware.IPAllowlist(cfg.Security.AdminIPAllowlist), container.Scheduler, container.Storage, container.UploadScanner, container.FeatureFlag, container.EventBus,
+	// 能力开关：capabilities.enabled 为空表示全部启用（向后兼容）
+	caps, err := catalog.Resolve(cfg.Capabilities.Enabled)
+	if err != nil {
+		_ = container.Stop(context.Background())
+		return fmt.Errorf("resolve capabilities: %w", err)
+	}
+
+	// 全部能力的实例：键为能力名，与 catalog 清单一一对应
+	// 过渡实现（P0）：先构造再过滤；P1 引入显式 Deps 后改为按需构造
+	all := map[string]contract.Module{
+		"user":       user.New(container.DB, *cfg, container.Redis, container.Outbox),
+		"auth":       authmodule.New(container.DB, container.Redis, cfg.Auth, cfg.HTTP.Mode == config.HTTPModeRelease, container.Captcha, cfg.Captcha, container.Outbox, container.Notification, container.Cipher, container.BreachChecker, tenantMod.Quota()),
+		"role":       role.New(container.DB, tenantMod.Quota()),
+		"permission": permission.New(container.DB),
+		"tenant":     tenantMod,
+		"audit":      auditmodule.New(container.DB, cfg.Audit, container.Logger),
+		"admin": adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, middleware.IPAllowlist(cfg.Security.AdminIPAllowlist), container.Scheduler, container.Storage, container.UploadScanner, container.FeatureFlag, container.EventBus,
 			auth.NewWithRotation(cfg.Auth.JWTSecret, cfg.Auth.JWTPreviousSecret, cfg.Auth.Issuer, cfg.Auth.AccessExpireMin, cfg.Auth.RefreshExpireDay),
 			tenantMod.Quota()),
-		oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth, container.HTTPClient),
-	)
+		"oauth": oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth, container.HTTPClient),
+	}
+	modules := make([]contract.Module, 0, len(caps))
+	for _, d := range caps {
+		module, ok := all[d.Name]
+		if !ok {
+			_ = container.Stop(context.Background())
+			return fmt.Errorf("%w: %q", errCapabilityNotWired, d.Name)
+		}
+		modules = append(modules, module)
+	}
+
+	application, err := app.Bootstrap(container, modules...)
 	if err != nil {
 		_ = container.Stop(context.Background())
 		return fmt.Errorf("bootstrap application: %w", err)

@@ -28,6 +28,15 @@ func (m *Module) Name() string {
 	return "role"
 }
 
+// Descriptor 声明角色能力的静态描述。
+var Descriptor = contract.Descriptor{
+	Name:  "role",
+	Mount: contract.MountProtected,
+}
+
+// Descriptor 实现 contract.Describable。
+func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
+
 func (m *Module) RegisterHTTP(r contract.Router) {
 	interfaces.RegisterRoleRoutes(r.Group("/api/v1"), m.service)
 }

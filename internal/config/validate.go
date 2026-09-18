@@ -147,6 +147,9 @@ func (c *Config) validateCommon() error {
 			return errors.New("invalid redis cluster config: cluster_addrs is required")
 		}
 	}
+	if err := validateCapabilities(&c.Capabilities); err != nil {
+		return err
+	}
 	if c.Captcha.Enabled && c.Captcha.TTLMin <= 0 {
 		return errors.New("invalid captcha.ttl_min")
 	}
@@ -251,6 +254,24 @@ func validateTLS(key string, cfg TLSConfig) error {
 	}
 	if cfg.CertFile == "" || cfg.KeyFile == "" {
 		return fmt.Errorf("invalid %s: cert_file and key_file are required when enabled", key)
+	}
+	return nil
+}
+
+// validateCapabilities 校验能力开关：名称非空且不重复（能力名是否存在由 catalog 解析时校验）。
+// 归一化后的名字写回配置，避免 " user" 通过校验后在 catalog.Resolve 处报 unknown capability。
+func validateCapabilities(cfg *CapabilitiesConfig) error {
+	seen := make(map[string]bool, len(cfg.Enabled))
+	for i, raw := range cfg.Enabled {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			return fmt.Errorf("invalid capabilities.enabled[%d]: name must not be blank", i)
+		}
+		if seen[name] {
+			return fmt.Errorf("duplicate capabilities.enabled entry: %q", name)
+		}
+		seen[name] = true
+		cfg.Enabled[i] = name
 	}
 	return nil
 }

@@ -27,6 +27,15 @@ func New(db *gorm.DB, cfg config.AuditConfig, log *logger.Logger) *Module {
 
 func (m *Module) Name() string { return "audit" }
 
+// Descriptor 声明审计能力的静态描述。
+var Descriptor = contract.Descriptor{
+	Name:  "audit",
+	Mount: contract.MountProtected,
+}
+
+// Descriptor 实现 contract.Describable。
+func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
+
 func (m *Module) RegisterHTTP(r contract.Router) {
 	interfaces.RegisterAuditRoutes(r.Group("/api/v1"), m.service)
 }

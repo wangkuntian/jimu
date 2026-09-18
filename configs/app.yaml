@@ -305,3 +305,11 @@ grpc:
     cert_file: ""
     key_file: ""
     client_ca_file: ""
+
+# 能力开关（v0.3.0 可插拔能力；留空表示全部启用）
+# 可选值见 internal/capabilities/catalog；留空时行为与本字段不存在时完全一致。
+# 硬依赖自动补齐（如 ["oauth"] 连带启用 auth/user/role/tenant）；受保护能力要求同时启用
+# 提供受保护中间件的能力（当前为 auth），否则启动即失败——["user"] 会被拒绝，
+# 合法的最小组合之一是 ["auth"]（闭包自动补齐 user/role/tenant）。
+capabilities:
+  enabled: []   # 例如 ["user", "role", "permission", "tenant", "auth", "audit", "admin"]

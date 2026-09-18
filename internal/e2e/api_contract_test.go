@@ -127,9 +127,9 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 			break
 		}
 	}
-	// 3) 路由注册（auth/oauth 公开，其余受保护）
+	// 3) 路由注册（按能力声明的挂载点：受保护 / 公开或自管理）
 	for _, m := range modules {
-		if len(protected) > 0 && m.Name() != "auth" && m.Name() != "oauth" {
+		if contract.Describe(m).Normalized() == contract.MountProtected && len(protected) > 0 {
 			m.RegisterHTTP(router.Group("", protected...))
 		} else {
 			m.RegisterHTTP(router)

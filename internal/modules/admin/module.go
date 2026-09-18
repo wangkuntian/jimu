@@ -95,6 +95,16 @@ func (m *Module) wsHandler() http.HandlerFunc {
 // Name 返回模块名称
 func (m *Module) Name() string { return "admin" }
 
+// Descriptor 声明管理端能力的静态描述。
+var Descriptor = contract.Descriptor{
+	Name:     "admin",
+	Requires: []string{"user", "audit"},
+	Mount:    contract.MountProtected,
+}
+
+// Descriptor 实现 contract.Describable。
+func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
+
 // RegisterHTTP 注册管理端路由
 func (m *Module) RegisterHTTP(r contract.Router) {
 	// 管理员权限中间件，统一挂载在 /api/v1/admin 前缀下

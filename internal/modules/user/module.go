@@ -54,6 +54,15 @@ func (m *Module) Name() string {
 	return "user"
 }
 
+// Descriptor 声明用户能力的静态描述。
+var Descriptor = contract.Descriptor{
+	Name:  "user",
+	Mount: contract.MountProtected,
+}
+
+// Descriptor 实现 contract.Describable。
+func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
+
 func (m *Module) RegisterHTTP(r contract.Router) {
 	interfaces.RegisterUserRoutes(r.Group("/api/v1"), m.service, m.rdb)
 }

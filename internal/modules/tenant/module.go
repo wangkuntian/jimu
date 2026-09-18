@@ -33,6 +33,15 @@ func (m *Module) Name() string {
 	return "tenant"
 }
 
+// Descriptor 声明租户能力的静态描述。
+var Descriptor = contract.Descriptor{
+	Name:  "tenant",
+	Mount: contract.MountProtected,
+}
+
+// Descriptor 实现 contract.Describable。
+func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
+
 func (m *Module) RegisterHTTP(r contract.Router) {
 	rg := r.Group("/api/v1")
 	interfaces.RegisterTenantRoutes(rg, m.service)
