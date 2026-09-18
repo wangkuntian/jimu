@@ -86,7 +86,7 @@ jobs:
           DB_USER: postgres
           DB_PASSWORD: postgres
           DB_NAME: jimu_test
-        run: go test ./internal/platform/db/... -run TestPostgresMigrationUpDown -v
+        run: go test ./internal/kernel/db/... -run TestPostgresMigrationUpDown -v
 
       - name: Check coverage, race safety, OpenAPI, scripts, and binaries
         env:

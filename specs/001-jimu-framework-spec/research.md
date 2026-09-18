@@ -11,32 +11,32 @@
 | FR-001 统一响应 | implemented | `internal/shared/response/response.go` — body.code，HTTP 恒 200 |
 | FR-002 多环境+枚举校验 | implemented | `internal/config/validate.go` 启动校验；`APP_ENV` 切换 |
 | FR-003 文件注入敏感配置 | implemented | `internal/config/config.go` `getEnvOrFile` 支持 `*_FILE` |
-| FR-004 结构化日志 | implemented | `internal/platform/logger/zap.go` + lumberjack 滚动 |
-| FR-005 健康检查 | implemented | `internal/platform/observability/health.go` `/livez` `/readyz` |
+| FR-004 结构化日志 | implemented | `internal/kernel/logger/zap.go` + lumberjack 滚动 |
+| FR-005 健康检查 | implemented | `internal/kernel/observability/health.go` `/livez` `/readyz` |
 | FR-006 优雅停机 | implemented | `internal/app/container.go` 逆序 Stop；HTTP `Shutdown(ctx)` |
 | FR-007 分布式 ID | implemented | `internal/shared/id/id.go` snowflake + workerID 校验 |
 | FR-008 注册登录 | implemented | `internal/capabilities/auth/interfaces/router.go`；凭据错误不枚举 |
-| FR-009 令牌+刷新+登出 | implemented | auth router `/refresh` `/logout`；`internal/platform/auth/jwt.go` |
-| FR-010 RBAC | implemented | `internal/platform/auth/casbin.go`；role/permission 模块 + 策略种子 |
-| FR-011 API 密钥认证 | implemented | `internal/platform/auth/apikey.go` + middleware；按需挂载 |
-| FR-012 OAuth 多提供商 | implemented | `internal/platform/oauth/{google,github,wechat}.go` 均真实 oauth2 |
-| FR-013 图形验证码 | implemented | `internal/platform/captcha/captcha.go` RedisStore 一次性消费 |
+| FR-009 令牌+刷新+登出 | implemented | auth router `/refresh` `/logout`；`internal/kernel/auth/jwt.go` |
+| FR-010 RBAC | implemented | `internal/kernel/auth/casbin.go`；role/permission 模块 + 策略种子 |
+| FR-011 API 密钥认证 | implemented | `internal/kernel/auth/apikey.go` + middleware；按需挂载 |
+| FR-012 OAuth 多提供商 | implemented | `internal/capabilities/oauth/provider/{google,github,wechat}.go` 均真实 oauth2 |
+| FR-013 图形验证码 | implemented | `internal/capabilities/captcha/captcha.go` RedisStore 一次性消费 |
 | FR-014 限流 | implemented（措辞偏差） | 登录=固定窗口 `auth/limiter.go`；用户=滑动窗口 `ratelimit_user.go`；**全局=令牌桶 `ratelimit.go`** |
 | FR-015 HTTP 安全边界 | implemented | 体积/超时/可信代理/CORS/安全头 |
 | FR-016 CSRF+签名 | implemented | `middleware/signature.go` HMAC+nonce；`csrf.go` double-submit |
 | FR-017 审计日志 | implemented | `internal/capabilities/audit/application/worker.go` 批量写；不记敏感请求体 |
 | FR-018 迁移+种子 | implemented | `cmd/cli/main.go` migrate/seed；goose |
-| FR-019 事务封装 | implemented | `internal/platform/db/transaction.go` |
+| FR-019 事务封装 | implemented | `internal/kernel/db/transaction.go` |
 | FR-020 读写分离 | implemented | `config.go` ReadHosts/ReadPorts；`db/mysql.go` Replicas |
-| FR-021 缓存+分布式锁 | implemented | `platform/cache/cache.go`；`platform/redis/lock.go` |
-| FR-022 可插拔队列 | implemented | `platform/queue/factory.go` redis/kafka/rabbitmq 均有 Submit/Consume/Ack + 契约测试 |
-| FR-023 事件总线 | implemented | `platform/event/bus.go` 同步+异步 |
-| FR-024 Outbox | implemented | `platform/outbox/` 双发布器（event_bus/mq）均真实 |
-| FR-025 定时任务 | implemented | `platform/scheduler/` MySQL store + 分布式锁去重 |
-| FR-026 特性开关 | implemented | `platform/feature/feature.go` 灰度百分比+白名单 |
-| FR-027 文件存储 | implemented | `platform/storage/factory.go` local/s3/oss/minio（OSS 复用 S3 协议） |
+| FR-021 缓存+分布式锁 | implemented | `kernel/cache/cache.go`；`kernel/redis/lock.go` |
+| FR-022 可插拔队列 | implemented | `capabilities/queue/factory.go` redis/kafka/rabbitmq 均有 Submit/Consume/Ack + 契约测试 |
+| FR-023 事件总线 | implemented | `kernel/event/bus.go` 同步+异步 |
+| FR-024 Outbox | implemented | `capabilities/outbox/` 双发布器（event_bus/mq）均真实 |
+| FR-025 定时任务 | implemented | `kernel/scheduler/` MySQL store + 分布式锁去重 |
+| FR-026 特性开关 | implemented | `capabilities/feature/feature.go` 灰度百分比+白名单 |
+| FR-027 文件存储 | implemented | `capabilities/storage/factory.go` local/s3/oss/minio（OSS 复用 S3 协议） |
 | **FR-028 通知** | **implemented** ✅（2026-08-12 修复） | email/websocket/webhook/log 真实；`sendAliyun` 已用阿里云 dysmsapi v5 SDK 实现（含契约测试），`sendTencent` 报"not configured" |
-| FR-029 OTel+Prometheus | implemented | `platform/observability/tracing.go`；metrics 中间件 + deploy 配置 |
+| FR-029 OTel+Prometheus | implemented | `kernel/observability/tracing.go`；metrics 中间件 + deploy 配置 |
 | FR-030 校验+i18n | implemented | `shared/validator/`；`shared/i18n/` |
 | FR-031 管理能力 | implemented | `internal/capabilities/admin/module.go` status/users/apikeys/error-codes/features/tasks/jobs/import 全接线 |
 | FR-032 脚手架 | implemented | `jimu module create` → `tools/generator` |

@@ -116,6 +116,8 @@
 
 `platform/auth`、`platform/tenant`、`platform/db`、`platform/http` 四个混装包的内部拆分见 §3.6；下表是其外围包的归位：
 
+> 注：下表各路径是**改造前的现状路径**（`platform/…`）。P1-B1 已按归属把 `internal/platform/` 迁到 `internal/kernel/…` 与 `internal/capabilities/…`；表格保留原路径以便与当时的评审记录对照。
+
 | 包 | 行数 | 归属 |
 |---|---|---|
 | `shared/errors` | 199 | 内核（错误码 + 多语言映射） |
@@ -133,12 +135,14 @@
 
 现有若干"混装包"横跨多个能力，必须按下表拆开 —— 否则能力边界只是目录改名：
 
+> 注：下表"现包"列是**改造前的现状路径**（`platform/…`）。P1-B1 已按整包归属把 `internal/platform/` 迁到 `internal/kernel/…` 与 `internal/capabilities/…`（`platform/tenant` → `kernel/tenant`，见该行）；包内拆分仍按本表执行。
+
 | 现包 | 行数 | 内部组成 | 归位 |
 |---|---|---|---|
 | `platform/auth` | 905 | `jwt.go` `session.go` `middleware.go` `limiter.go` `lockout.go` | `auth` |
 | | | `casbin.go` `permission_middleware.go` `roles.go` | `access` |
 | | | `apikey.go` `apikey_middleware.go` | `apikey` |
-| `platform/tenant` | 67 | 上下文注入 + 编码校验/normalize | `tenancy`；**内核同时提供 no-op 实现**（`tid=0` 平台级视角），使 `tenancy` 可以关闭而不拖垮 7 个依赖它的能力 |
+| `platform/tenant` | 67 | 上下文注入 + 编码校验/normalize | `kernel/tenant`（上下文机制；`tenancy` 能力负责租户实体/套餐/配额/开通式注册）；上下文无租户时为 `tid=0` 平台级视角，`tenancy` 关闭不影响其他能力读取租户上下文 |
 | `platform/db` | 1408 | `migrate.go` `mysql.go` `postgres.go` `transaction.go` `concurrency.go` `gorm_logger.go` | 内核 |
 | | | `snowflake.go`（与 `shared/id` 重复实现） | 内核，**两处合并去重** |
 | | | `breaker.go` | 内核 `breaker` |

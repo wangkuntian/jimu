@@ -93,15 +93,15 @@ description: "Task list for jimu-framework-spec gap closure"
 
 **Goal**: 实现 FR-028 阿里云短信渠道（用户指定 SDK 方案，research D2），消除桩代码
 
-**Independent Test**: `go test ./internal/platform/notification/ -run SMS` 通过；dispatcher 注册 SMS 渠道
+**Independent Test**: `go test ./internal/capabilities/notification/ -run SMS` 通过；dispatcher 注册 SMS 渠道
 
 ### Implementation for User Story 4
 
 - [X] T010 [P] [US4] 加阿里云 SDK 依赖：`go get github.com/alibabacloud-go/dysmsapi-20170525/v5@<T004确认版本>`（含 Tea 系传递依赖）
-- [X] T011 [US4] 实现 `sendAliyun`（internal/platform/notification/sms.go）：dysmsapi client 调 SendSms，模板码=msg.TemplateID、模板变量=msg.Data、手机号=msg.To、签名=config.SignName；错误包装统一错误信息（依赖 T010）
+- [X] T011 [US4] 实现 `sendAliyun`（internal/capabilities/notification/sms.go）：dysmsapi client 调 SendSms，模板码=msg.TemplateID、模板变量=msg.Data、手机号=msg.To、签名=config.SignName；错误包装统一错误信息（依赖 T010）
 - [X] T012 [US4] 配置接线：config.go 增 `Notification.SMS SMSConfig` 结构 + 校验；configs/app.yaml、.env.example 增 `notification.sms`（provider/api_key/api_secret/sign_name）段（依赖 T011 字段）
 - [X] T013 [US4] 装配：internal/app/container.go（参考 :124-134 email 模式）注册 SMS 渠道——未启用时 LogChannel 兜底、启用时 NewSMS（依赖 T012）
-- [X] T014 [P] [US4] 契约测试 internal/platform/notification/sms_test.go：client Endpoint 指向 httptest mock server，断言请求体（手机号/签名/模板/变量）与错误路径（依赖 T011）
+- [X] T014 [P] [US4] 契约测试 internal/capabilities/notification/sms_test.go：client Endpoint 指向 httptest mock server，断言请求体（手机号/签名/模板/变量）与错误路径（依赖 T011）
 - [X] T015 [US4] 降级 tencent 桩：`sendTencent` 改为明确报错"provider not configured"；确认 SMS 未配置时调度器正常回退
 
 **Checkpoint**: 阿里云 SMS 可调用，桩代码消除，宪法 VI 违规关闭

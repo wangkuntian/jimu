@@ -27,7 +27,7 @@ ALTER TABLE audit_logs
     ADD COLUMN tenant_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '所属租户ID（0=未归属）' AFTER user_id;
 CREATE INDEX idx_audit_logs_tenant_id ON audit_logs (tenant_id);
 
--- 存量数据迁入默认租户（id=1，与 platform/tenant.DefaultTenantID 保持一致）
+-- 存量数据迁入默认租户（id=1，与 kernel/tenant.DefaultTenantID 保持一致）
 INSERT IGNORE INTO tenants (id, code, name, status, created_at, updated_at)
 VALUES (1, 'default', '默认租户', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 

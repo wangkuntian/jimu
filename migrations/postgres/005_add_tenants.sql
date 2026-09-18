@@ -24,7 +24,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_roles_tenant_name ON roles (tenant_id, nam
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS tenant_id BIGINT NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_id ON audit_logs (tenant_id);
 
--- 存量数据迁入默认租户（id=1，与 platform/tenant.DefaultTenantID 保持一致）
+-- 存量数据迁入默认租户（id=1，与 kernel/tenant.DefaultTenantID 保持一致）
 INSERT INTO tenants (id, code, name, status, created_at, updated_at)
 VALUES (1, 'default', '默认租户', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT (id) DO NOTHING;

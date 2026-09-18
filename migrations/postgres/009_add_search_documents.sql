@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS search_documents (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uk_search_doc ON search_documents (tenant_id, doc_type, doc_id);
 CREATE INDEX IF NOT EXISTS idx_search_updated_at ON search_documents (updated_at);
--- 表达式 GIN 索引：与 platform/search 的查询表达式保持一致，无需触发器维护 tsv 列
+-- 表达式 GIN 索引：与 capabilities/search 的查询表达式保持一致，无需触发器维护 tsv 列
 CREATE INDEX IF NOT EXISTS idx_search_fts ON search_documents
     USING GIN (to_tsvector('simple', title || ' ' || coalesce(body, '')));
 

@@ -49,4 +49,4 @@
 
 ## 完整接口文档
 
-Swagger UI：`internal/platform/http/swagger.go`（中文注解），文档源 `docs/openapi/swagger.yaml`。
+Swagger UI：`internal/kernel/http/swagger.go`（中文注解），文档源 `docs/openapi/swagger.yaml`。

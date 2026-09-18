@@ -2,7 +2,7 @@
 # 依赖漏洞扫描（govulncheck），带一份**极窄**的临时豁免清单。
 #
 # 为什么需要豁免：GO-2026-6452（excelize 负共享字符串索引 panic，可达路径为
-# internal/platform/importer 的 GetRows）在上游尚未发布修复版本，govulncheck 报
+# internal/capabilities/dataops/importer 的 GetRows）在上游尚未发布修复版本，govulncheck 报
 # "Fixed in: N/A"，会把 master 上所有 PR 卡红。代码侧已在导入器加 recover 兜底，
 # 使该 panic 只表现为一个错误、不会打挂请求或任务 goroutine；因此这里临时豁免该 ID。
 # 上游修复已进主干（rows.go 的 index < 0 防护），等 excelize 发布 v2.11.1 后删除本豁免。

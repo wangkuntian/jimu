@@ -115,6 +115,6 @@ golangci-lint run    # 静态检查
 - **V1 认证闭环**：部分验证 ✅。compose 栈运行时 login 对错误凭据返回 `{"code":1006,"message":"用户名或密码错误","request_id":...}`（统一响应 + 认证路径正常）；正确登录需 `ADMIN_PASSWORD` 种子账号，本环境未配置，未做 token 全流程。
 - **V2 运维观测**：已验证 ✅。management server :9090 的 `/livez`、`/readyz`、`/metrics` 均返回 200；优雅停机、链路追踪未在本次验证。
 - **V3 模块扩展**：已验证 ✅。`go test ./tools/generator/` 全过（含 TestGeneratedModuleCompiles），脚手架生成模块骨架编译通过。
-- **V4 可选能力**：SMS 契约测试 ✅（`go test ./internal/platform/notification/` 3 用例，httptest mock server 断言手机号/签名/模板/变量与错误路径）；**真实发送未验证** —— 需阿里云 AccessKey（AccessKey ID/Secret 非本环境可用凭据），列为待验证项。
+- **V4 可选能力**：SMS 契约测试 ✅（`go test ./internal/capabilities/notification/` 3 用例，httptest mock server 断言手机号/签名/模板/变量与错误路径）；**真实发送未验证** —— 需阿里云 AccessKey（AccessKey ID/Secret 非本环境可用凭据），列为待验证项。
 - **V5 安全与限流**：未完整跑。限流/CSRF/审计需特定配置与流量，未在本阶段逐项触发。
 - **质量门禁**：`make release-check` 通过（fmt-check + vet + test + govulncheck，0 漏洞）；`golangci-lint run` 报 7 处**预存在**告警（cache.go SA4004、csrf.go unused、redis_queue.go ZRangeByScore deprecated、s3.go 端点解析 deprecated + pathStyle unused），非本次任务引入，未在本次修复。
