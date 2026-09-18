@@ -338,15 +338,15 @@ jimu/
 │   │   ├── exporter/           # 数据导出（CSV/Excel）
 │   │   ├── notification/       # 通知系统（邮件/短信/WebSocket/Webhook）
 │   │   └── feature/            # Feature Flag
-│   ├── shared/                 # 跨模块通用能力
-│   │   ├── errors/             # AppError + 错误码
-│   │   ├── response/           # 统一响应格式
-│   │   ├── pagination/         # 分页
-│   │   ├── validator/          # 自定义校验规则
-│   │   ├── i18n/               # 国际化翻译
-│   │   ├── id/                 # 雪花 ID 生成器
-│   │   ├── totp/               # RFC 6238 TOTP（二次验证）
-│   │   └── testutil/           # 测试工具
+│   └── shared/                 # 跨模块通用能力
+│       ├── errors/             # AppError + 错误码
+│       ├── response/           # 统一响应格式
+│       ├── pagination/         # 分页
+│       ├── validator/          # 自定义校验规则
+│       ├── i18n/               # 国际化翻译
+│       ├── id/                 # 雪花 ID 生成器
+│       ├── totp/               # RFC 6238 TOTP（二次验证）
+│       └── testutil/           # 测试工具
 ├── tools/
 │   ├── generator/                # 代码生成器
 │   └── logcheck/                 # 日志调用规范静态检查（make check-log-usage）

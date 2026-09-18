@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **零逻辑变化**：只改文件位置与路径字符串；不改任何标识符、函数签名、包名、行为。搬迁后包名保持不变（`auth` 目录的包仍是 `authmodule` 等），因此**不需要改任何 `package` 子句**
-- **不留残余**：Go / 脚本 / 配置 / Makefile 中的 `internal/modules` 引用必须归零（`docs/plans/2026-09-18-capability-plugins-p0.md` 是 P0 的历史执行记录，保留原样；设计文档 §5 的"现状路径"表同理，但 §3.8 的前瞻布局必须更新）
+- **不留残余**：Go / 脚本 / 配置 / Makefile 中的 `internal/modules` 引用必须归零（`docs/plans/2026-09-18-capability-plugins-p0.md` 是 P0 的历史执行记录，保留原样；设计文档 §3.6 表格单元与 §5 的"现状路径"表同理。注意：设计文档中**没有**任何含 `internal/modules` 的目录树块，§3.8 实为「非代码资产模块化」，因此本次**不改写前瞻布局**，只加历史注记）
 - **全绿**：`gofmt -l .`（无输出）、`go build ./...`、`go vet ./...`、`go test ./...`、`make check-log-usage`、`make release-check COMPOSE_ENV=.env.example`
 - **提交信息全英文**（Conventional Commits，`githooks/commit-msg` 拒绝 CJK）
 - 分支：从 `release/v0.3.0` 切 `feature/capability-namespace`，PR 目标 `release/v0.3.0`，squash 合并
@@ -28,13 +28,13 @@
 | 删除空目录 | `internal/modules/` | 搬完后必须为空 |
 | 路径重写（Go） | 132 个引用文件（含 56 测试）+ 模块内 41 处非 import 引用 | 三种字符串形态 |
 | 脚手架同步 | `tools/generator/module.go`、`templates.go`、`module_test.go`、`compile_test.go` | 新模块必须生成到 `internal/capabilities/` |
-| 文档/脚本同步 | `README.md`（×2）、`docs/CONTRIBUTING.md`、`Makefile`、`scripts/bench_ci.sh`、`specs/001-jimu-framework-spec/{contracts/module.md,research.md}`、设计文档 §3.8 | Task 2 |
+| 文档/脚本同步 | `README.md`（×2）、`docs/CONTRIBUTING.md`、`Makefile`、`scripts/bench_ci.sh`、`specs/001-jimu-framework-spec/{contracts/module.md,research.md}`、设计文档 §3.6 表格单元 + §5 标题下历史注记 | Task 2 |
 
 ## 现状基线（本计划编写时实测）
 
 - 引用 `jimu/internal/modules/` 的 Go 文件：**132**（其中测试 56）
 - `internal/modules/` 下 Go 文件：**178**
-- 非 import 形式的引用：**41 处**，其中 `filepath.Join("internal", "modules", …)` 拆分写法 **22 处**（`tools/generator/module.go` 12 处 + `module_test.go` 10 处），另有引用号包裹的无尾斜杠形态 `"internal/modules"` **2 处**（`module_test.go`）
+- 非 import 形式的引用：**41 处**，其中 `filepath.Join("internal", "modules", …)` 拆分写法 **23 处**（`tools/generator/module.go` 12 处 + `module_test.go` 11 处），另有引用号包裹的无尾斜杠形态 `"internal/modules"` **2 处**（`module_test.go`）
 - 非 Go 引用：`README.md:953,974`、`docs/CONTRIBUTING.md:156`、`Makefile:288`、`scripts/bench_ci.sh:13`、`specs/…/{contracts/module.md:27,research.md:18}`
 
 ---
@@ -159,7 +159,7 @@ git commit -m "refactor(capabilities): move business modules into the capabiliti
 
 **Files:**
 - Modify: `README.md:953,974`、`docs/CONTRIBUTING.md:156`、`Makefile:288`、`scripts/bench_ci.sh:13`、`specs/001-jimu-framework-spec/contracts/module.md:27`、`specs/001-jimu-framework-spec/research.md:18`
-- Modify: `docs/design/2026-09-18-capability-plugins-design.md`（§3.8 前瞻目录形态 + §5 前置说明）
+- Modify: `docs/design/2026-09-18-capability-plugins-design.md`（§3.6 表格单元 + §5 前置历史注记；**不含**前瞻目录形态改写——设计文档中本就没有含 `internal/modules` 的目录树块，§3.8 是「非代码资产模块化」）
 
 **Interfaces:**
 - Consumes: Task 1 的新路径
@@ -179,28 +179,40 @@ git commit -m "refactor(capabilities): move business modules into the capabiliti
 
 - [ ] **Step 2: 更新设计文档的历史说明**
 
-> **配方修订（执行时发现）**：初版说「§3.8『最终目录形态』写的是 `internal/modules/`，需要更新」——**这个前提是错的**。实测设计文档中 `internal/modules` 出现 **0 次**：当前 §3.8 是「非代码资产模块化」，文档里也**没有**任何含 `internal/modules` 的目录树块（那份布局块属于已废弃的早期草稿）。因此本节只做下面一件事。
+> **配方修订（执行时发现）**：初版说「§3.8『最终目录形态』写的是 `internal/modules/`，需要更新」——**这个前提是错的**。实测设计文档中 `internal/modules` 出现 **0 次**：当前 §3.8 是「非代码资产模块化」，文档里也**没有**任何含 `internal/modules` 的目录树块（那份布局块属于已废弃的早期草稿）。因此本节只做「加历史注记」这一件事。
 
-在 `docs/design/2026-09-18-capability-plugins-design.md` 的 §5「重点能力拆分」标题下加一行历史说明（§5 的表格使用裸文件名，加注是为了让读者知道这些路径已随 P1-A 迁移）：
+在 `docs/design/2026-09-18-capability-plugins-design.md` 的 §3.6 表格单元（`platform/grpc/userinfo_service.go` 行）与 §5「重点能力拆分」标题下各加一处历史注记（§5 的表格使用裸文件名，加注是为了让读者知道这些路径已随 P1-A 迁移）。§5 处实际落盘的措辞为：
 
 ```markdown
-> 注：本节各表中的路径是**改造前的现状路径**（`internal/modules/…`）。P1-A 已把业务模块搬入 `internal/capabilities/…`，后续 P1 子计划继续拆分；表格保留原路径以便与当时的评审记录对照。
+> 注：本节各表中的路径是**改造前的现状路径**（搬迁前位于 `internal/modules/` 下，表内多为相对写法）。P1-A 已把业务模块搬入 `internal/capabilities/…`，后续 P1 子计划继续拆分；表格保留原路径以便与当时的评审记录对照。
 ```
 
-- [ ] **Step 3: 全仓零残余检查**
+- [ ] **Step 3: 全仓零残余检查（加宽模式 + 引用路径可解析）**
+
+命令必须用**加宽模式**：字面量 `internal/modules` 抓不到裸树节点（`│   └── modules/`）与缩写形态（`modules/audit/application/worker.go`），而这两类正是本阶段实际漏掉、后又补上的（见下方修订说明）。
 
 ```bash
-grep -rn 'internal/modules' \
+grep -rnE '(^|[^A-Za-z0-9_./-])(internal/)?modules/' \
   --include='*.go' --include='*.md' --include='*.sh' --include='*.yml' --include='*.yaml' --include='*.json' \
   README.md Makefile docs/ specs/ configs/ scripts/ .github/ internal/ tools/ 2>/dev/null \
   | grep -v '^docs/plans/2026-09-18-capability-plugins-p0.md' \
   | grep -v '^docs/plans/2026-09-18-capability-namespace-move.md' \
-  | grep -v '^docs/design/2026-09-18-capability-plugins-design.md'
+  | grep -v '^docs/design/2026-09-18-capability-plugins-design.md' \
+  | grep -v '^docs/releases/'
 ```
 
-Expected: 无输出。**三处例外都是刻意的**：P0 计划（当时的执行记录）、本计划（它记录的正是这次搬迁，天然大量出现旧路径）、设计文档 §5（已加注说明为历史路径）。
+Expected: 无输出。**四处例外都是刻意的**：
 
-> 修订说明：初版只列了两处例外，漏了**本计划文档自身**——它必然包含 29 处旧路径，所以字面上的"无输出"不可能达成。
+1. `docs/plans/2026-09-18-capability-plugins-p0.md` —— P0 的历史执行记录（当时的路径就是 `internal/modules/…`）；
+2. `docs/plans/2026-09-18-capability-namespace-move.md` —— 本计划自身，它记录的正是这次搬迁，天然大量出现旧路径；
+3. `docs/design/2026-09-18-capability-plugins-design.md` —— §3.6 表格单元与 §5 标题下已加历史注记，明确标注为改造前路径；
+4. `docs/releases/` —— 发布记录属冻结文本：`docs/releases/v0.2.0.md` 是已发布版本的记录，**不得回改**；`docs/releases/v0.3.0.md` 的本版「变更」条目记载的正是这次搬迁。
+
+> **更强的判据（本次必须补做）**：grep 只能证明"没有旧字符串"，**不能证明文档引用的路径真实存在**。两种 grep 形态都放过"前缀写对、路径本身不存在"的引用，也无法保证缩写形态补全后正确。因此本步除 grep 外，还要做一次**引用路径可解析检查**：把文档中出现的 `internal/…` 代码路径逐个 `test -e` 确认落盘存在；对缩写形态（如 `modules/audit/application/worker.go`）先补全成 `internal/capabilities/audit/application/worker.go` 再检查。**每个文档引用的路径都必须在磁盘上存在**，这是比 grep 更强的要求。
+
+> **修订说明（执行记录）**：初版只 grep 字面量 `internal/modules`，结构性抓不到裸节点与缩写形态，实际漏了两处 —— ① `README.md` 目录树里的裸子节点 `│   └── modules/`（同一轮还暴露了删节点后 `shared/` 仍用 `├──` 的连接符问题）；② `specs/001-jimu-framework-spec/research.md:27` 与 `:41` 的缩写引用 `modules/audit/application/worker.go`、`modules/admin/module.go`。两处均在修复轮 `b9aa8fd` 补上；`research.md` 的这两行现已补全为 `internal/capabilities/…` 全路径。
+>
+> 初版还只列了两处例外，漏了**本计划文档自身**（它必然包含大量旧路径）与**发布记录**；字面上的"无输出"因此不可能达成。
 
 - [ ] **Step 4: 全量回归（发布门禁）**
 
@@ -230,8 +242,8 @@ git commit -m "docs(capabilities): update path references for the capabilities n
 
 | spec 要求 | 覆盖 |
 |---|---|
-| §10 P1「目录落位：`internal/capabilities/`」（P0 曾推迟） | Task 1（业务模块） |
-| §3.8 最终目录形态与 `internal/kernel/` 命名 | Task 2 Step 2 更新前瞻布局；`platform/*` → `kernel/` 的**实际搬迁**属 P1-B（本计划只同步文档表述，避免文档先行于代码——Task 2 的布局块因此标注哪些是"已就位"、哪些是"待 P1-B"） |
+| §10 **P0**「内核归位」行中的「`internal/capabilities/` 下按现有 8 模块原样落位」 | Task 1（业务模块）。注意：该行属设计文档的 **P0** 阶段，「P1-A」的阶段拆分只存在于本计划，设计文档中并无此概念 |
+| §3.8 最终目录形态与 `internal/kernel/` 命名 | 设计文档 §3.8 实为「非代码资产模块化」，全文**没有**含 `internal/modules` 的目录树块，故本计划**不改写前瞻布局**；只在 §3.6 表格单元与 §5 标题下加历史注记。`platform/*` → `kernel/` 的**实际搬迁**属 P1-B |
 | §6.1 能力清单唯一维护在 `internal/capabilities/catalog` | 已由 P0 满足；Task 1 保持其路径不变 |
 | 脚手架产出新形态骨架 | Task 1 Step 4 只保证**路径**正确；骨架内容（`capability.go`、postgres 迁移等）属 P3 |
 
@@ -241,4 +253,4 @@ git commit -m "docs(capabilities): update path references for the capabilities n
 
 **4. 已知取舍**：`internal/platform/*` 留待 P1-B 一次搬到位（含 `platform/auth` 拆分），因此本计划结束后仓库仍有 `internal/platform/` 与 `internal/kernel/` 的命名缺口 —— 已在 Task 2 的文档更新中显式标注为"待 P1-B"，不让文档承诺尚未发生的事。
 
-**5. 风险**：改动的绝对行数很大（132 文件的 import + 41 处非 import 引用），但全部是字符串替换；Step 5 的「非路径行零改动」判据是防"顺手改坏"的关键闸门，评审应以此为准而非逐行读 diff。
+**5. 风险**：改动的绝对行数很大（132 文件的 import + 41 处非 import 引用），但全部是字符串替换；Step 5 的「非路径行零改动」判据是防"顺手改坏"的关键闸门，评审应以此为准而非逐行读 diff。另外 **P1-B 将搬迁 `internal/platform/**`，其缩写形态 `platform/…` 遍布 docs/specs，因此 P1-B 的残余门禁必须在开工前就按上面 Step 3 的加宽模式写死**（沿用 `internal/modules` 那种字面量 grep 会重演本次的漏检）。
