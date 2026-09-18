@@ -31,10 +31,14 @@ var entries = []contract.Descriptor{
 	oauthmodule.Descriptor,
 }
 
-// All 返回清单中的全部能力描述（浅拷贝，调用方增删元素不影响清单；
-// 但 Descriptor.Requires 切片仍与包级描述符共享底层数组，勿原地修改其元素）。
+// All 返回清单中全部能力的深拷贝（含 Requires），调用方修改不影响清单。
 func All() []contract.Descriptor {
-	return append([]contract.Descriptor(nil), entries...)
+	out := make([]contract.Descriptor, len(entries))
+	for i, d := range entries {
+		out[i] = d
+		out[i].Requires = append([]string(nil), d.Requires...)
+	}
+	return out
 }
 
 // Names 返回清单中的能力名，按清单顺序。
@@ -47,7 +51,9 @@ func Names() []string {
 }
 
 // Resolve 解析启用集：enabled 为空表示全部启用（向后兼容默认配置）；
-// 未知能力报错；硬依赖自动补齐闭包；返回结果按清单顺序排列。
+// 未知能力报错；硬依赖自动补齐闭包；返回结果按清单顺序排列且为深拷贝
+// （含 Requires，调用方修改不影响清单）；依赖缺失时按清单顺序报出第一个
+// 违规能力，保证错误文案确定，不随 map 遍历顺序变化。
 func Resolve(enabled []string) ([]contract.Descriptor, error) {
 	if len(enabled) == 0 {
 		return All(), nil
@@ -64,12 +70,17 @@ func Resolve(enabled []string) ([]contract.Descriptor, error) {
 		on[name] = true
 	}
 	// 依赖闭包：反复补齐直到不再变化，保证传递依赖也被纳入。
+	// 按清单顺序遍历（而非 map）以保证错误文案确定：多个依赖缺失时
+	// 始终报出清单顺序里的第一个。
 	for changed := true; changed; {
 		changed = false
-		for name := range on {
-			for _, dep := range byName[name].Requires {
+		for _, d := range entries {
+			if !on[d.Name] {
+				continue
+			}
+			for _, dep := range d.Requires {
 				if _, ok := byName[dep]; !ok {
-					return nil, fmt.Errorf("capability %q requires unknown capability %q", name, dep)
+					return nil, fmt.Errorf("capability %q requires unknown capability %q", d.Name, dep)
 				}
 				if !on[dep] {
 					on[dep] = true
@@ -81,6 +92,7 @@ func Resolve(enabled []string) ([]contract.Descriptor, error) {
 	out := make([]contract.Descriptor, 0, len(on))
 	for _, d := range entries {
 		if on[d.Name] {
+			d.Requires = append([]string(nil), d.Requires...)
 			out = append(out, d)
 		}
 	}

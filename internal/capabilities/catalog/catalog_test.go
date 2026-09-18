@@ -105,6 +105,41 @@ func TestResolveRejectsUnknownDependency(t *testing.T) {
 	}
 }
 
+func TestAllReturnsDeepCopyOfRequires(t *testing.T) {
+	withEntries(t, contract.Descriptor{Name: "a", Requires: []string{"b"}}, contract.Descriptor{Name: "b"})
+	got := All()
+	got[0].Requires[0] = "mutated"
+	if All()[0].Requires[0] != "b" {
+		t.Fatal("All() must not expose the registry's Requires backing array")
+	}
+}
+
+func TestResolveReturnsDeepCopyOfRequires(t *testing.T) {
+	withEntries(t, contract.Descriptor{Name: "b"}, contract.Descriptor{Name: "a", Requires: []string{"b"}})
+	got, err := Resolve([]string{"a"})
+	if err != nil {
+		t.Fatalf("Resolve error: %v", err)
+	}
+	got[1].Requires[0] = "mutated"
+	if again, err := Resolve([]string{"a"}); err != nil || again[1].Requires[0] != "b" {
+		t.Fatalf("Resolve() must not expose the registry's Requires backing array (err = %v)", err)
+	}
+}
+
+func TestResolveReportsFirstDanglingDependencyInListOrder(t *testing.T) {
+	// 两个坏依赖：错误必须稳定指向清单顺序里的第一个，而不是 map 遍历的随机一个
+	withEntries(t,
+		contract.Descriptor{Name: "a", Requires: []string{"ghost-a"}},
+		contract.Descriptor{Name: "b", Requires: []string{"ghost-b"}},
+	)
+	for i := 0; i < 200; i++ {
+		_, err := Resolve([]string{"a", "b"})
+		if err == nil || !strings.Contains(err.Error(), `"ghost-a"`) {
+			t.Fatalf("run %d: error = %v, want the first dangling dependency in list order", i, err)
+		}
+	}
+}
+
 // TestDescriptorsAreWellFormed 同时校验夹具与真实清单。Task 3 填齐清单后，
 // 该用例对 catalog 的 8 个条目同样生效。
 func TestDescriptorsAreWellFormed(t *testing.T) {

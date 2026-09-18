@@ -127,13 +127,15 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 			break
 		}
 	}
-	// 3) 路由注册（按能力声明的挂载点：受保护 / 公开或自管理）
+	// 3) 路由注册（按能力声明的挂载点；受保护能力必须存在中间件提供者）
 	for _, m := range modules {
-		if contract.Describe(m).Normalized() == contract.MountProtected && len(protected) > 0 {
-			m.RegisterHTTP(router.Group("", protected...))
-		} else {
+		desc := contract.Describe(m)
+		if desc.Normalized() != contract.MountProtected {
 			m.RegisterHTTP(router)
+			continue
 		}
+		require.NotEmpty(t, protected, "capability %q declares MountProtected but no protected middleware provider is present", desc.Name)
+		m.RegisterHTTP(router.Group("", protected...))
 	}
 
 	// 启动审计 worker，测试结束 flush 剩余日志
@@ -313,10 +315,12 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 	require.Equal(t, 0, parseResp(t, w).Code)
 
 	// 5. 该用户登录后能 GET /users（原 403 → 200）
+	// 策略缓存按 TTL 异步过期，故用有界轮询等待生效，而不是依赖"登录耗时 > TTL"。
 	userToken := login(t, r, "rbacuser", "rbacpass123")
-	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, 0, parseResp(t, w).Code)
+	require.Eventually(t, func() bool {
+		w := doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
+		return w.Code == http.StatusOK
+	}, 3*time.Second, 25*time.Millisecond, "permission should take effect after the policy cache TTL")
 
 	// 6. 但不能 POST /users（未分配该权限）→ 403
 	w = doJSON(t, r, http.MethodPost, "/api/v1/users", userToken, `{"username":"nope","password":"nopepass123"}`)

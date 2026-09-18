@@ -36,8 +36,11 @@ type Describable interface {
 	Descriptor() Descriptor
 }
 
-// Describe 读取能力描述；未实现 Describable 时回退为"仅名称 + 受保护挂载"。
+// Describe 读取能力描述；未实现 Describable 或传入 nil 时回退为零值描述。
 func Describe(m Module) Descriptor {
+	if m == nil {
+		return Descriptor{}
+	}
 	if d, ok := m.(Describable); ok {
 		return d.Descriptor()
 	}

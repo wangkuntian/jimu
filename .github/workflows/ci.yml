@@ -49,6 +49,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # CHANGELOG 门禁用 git diff origin/<base_ref>...HEAD 判定，需要基线分支历史
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v7

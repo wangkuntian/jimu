@@ -39,6 +39,18 @@ var version = "dev"
 // errCapabilityNotWired 表示 catalog 声明了能力但 main 未提供实例（开发期配置错误）
 var errCapabilityNotWired = errors.New("capability declared in catalog but not wired in main")
 
+// errCapabilityWiringMismatch 表示装配映射与声明名册的规模不一致（开发期配置错误）
+var errCapabilityWiringMismatch = errors.New("capability wiring mismatch")
+
+// errCapabilityNoInstance 表示声明名册中的能力在装配映射里没有实例（开发期配置错误）
+var errCapabilityNoInstance = errors.New("declared capability has no instance")
+
+// wiredCapabilities 是 main 装配的能力名册；必须与 catalog.Names() 一致。
+// 单元测试（main_test.go）对账两者，run() 在启动时按它自检装配映射。
+var wiredCapabilities = []string{
+	"user", "role", "permission", "tenant", "auth", "audit", "admin", "oauth",
+}
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -97,6 +109,16 @@ func run() error {
 			auth.NewWithRotation(cfg.Auth.JWTSecret, cfg.Auth.JWTPreviousSecret, cfg.Auth.Issuer, cfg.Auth.AccessExpireMin, cfg.Auth.RefreshExpireDay),
 			tenantMod.Quota()),
 		"oauth": oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth, container.HTTPClient),
+	}
+	if len(all) != len(wiredCapabilities) {
+		_ = container.Stop(context.Background())
+		return fmt.Errorf("%w: %d instances for %d declared names", errCapabilityWiringMismatch, len(all), len(wiredCapabilities))
+	}
+	for _, name := range wiredCapabilities {
+		if _, ok := all[name]; !ok {
+			_ = container.Stop(context.Background())
+			return fmt.Errorf("%w: %q", errCapabilityNoInstance, name)
+		}
 	}
 	modules := make([]contract.Module, 0, len(caps))
 	for _, d := range caps {
