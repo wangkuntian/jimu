@@ -23,6 +23,8 @@
 
 `kernel/auth` 混装三块：auth 机制（jwt/session/limiter/lockout）、access（casbin/roles/permission_middleware）、apikey（apikey/apikey_middleware）。按 §3.5.3，后两块应分别归 `capabilities/access` 与 `capabilities/apikey`。但实测 `capabilities/admin` 现在直接引用 apikey 仓库与 casbin——拆出去之后 admin 必须跨能力 import，正是设计文档禁止的形态；正确解法是 P1-D 的 `contract` 端口（`Authorizer`/`APIKeyAuthenticator`）。因此 `kernel/auth` 的拆分与 P1-D 合并为一个计划（P1-B2b/P1-D），避免制造已知违规中间态。
 
+`capabilities/admin → capabilities/uploadsec`（以及既有的 `kernel/auth/apikey.go → capabilities/admin`）是 P1-B2a 之后的已知跨能力 import，与 `Authorizer`/`APIKeyAuthenticator`/`UploadScanner` 端口一起在 P1-D 收口。
+
 ## 拆分明细（唯一副本）
 
 | 源文件 | 去向 | 消费者（实测） | 拆分后需要做的事 |
@@ -163,4 +165,4 @@ git add -A && git commit -m "refactor(kernel): split mixed kernel packages into 
 
 **3. 类型一致性**：导出符号改名表（`AttachDBBreaker`/`RegisterHooks`）与引用方重写一一对应；新包名 `apidocs`/`uploadsec`/`retention` 与设计文档 §3.4 一致。
 
-**4. 风险**：① `kernel/breaker` 包并入后与现有 `Circuit` 类符号的命名冲突（实测无同名，执行时仍需 go build 兜底）；② `swagger.go` 的 `_ "jimu/docs/openapi"` 空导入必须随迁；③ `retention` 的 7 个 `TableName()` 模型按表名跨能力读数据，设计上接受（§3.6 已说明），拆分后不得引入对其他能力 domain 包的 import；④ e2e 的 PG 迁移测试路径在 `.github/workflows` 指向 `kernel/db`，拆分后仍正确（migrate 留在 kernel/db）。
+**4. 风险**：① `kernel/breaker` 包并入后与现有 `Circuit` 类符号的命名冲突（实测无同名，执行时仍需 go build 兜底）；② `swagger.go` 的 `_ "jimu/docs/openapi"` 空导入必须随迁；③ `retention` 的 7 个 `TableName()` 模型按表名跨能力读数据，设计上接受（§3.6 已说明），拆分后不得引入对其他能力 domain 包的 import；④ e2e 的 PG 迁移测试路径在 `.github/workflows` 指向 `kernel/db`，拆分后仍正确（migrate 留在 kernel/db）；⑤ 引用方排查清单曾漏 `capabilities/admin`，执行时靠 go build 兜底发现并更新 —— 后续计划的"引用方排查"应改用编译器驱动而非 grep 白名单。

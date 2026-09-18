@@ -38,7 +38,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **文件存储** — 本地/S3/OSS/MinIO 统一接口
 - **上传安全** — 文件大小限制 + magic-byte 嗅探覆盖可伪造的 Content-Type 头 + MIME 白名单；可选 ClamAV 病毒扫描（`upload.clamav.enabled`，stdlib 实现 INSTREAM 协议，落库前同步扫描，fail-closed：不干净或扫描不可达均拒绝落库）
 - **数据导入/导出** — CSV/Excel 模板解析、校验与导入/导出（`internal/capabilities/dataops/importer` / `internal/capabilities/dataops/exporter`）；通用 importer 保留 `Importer.Import`，通过可选逐行 `RowSink` 注入持久化，未配置时明确报错，业务应用负责事务落库，导出结果可被导入器回读验证；管理端用户导入按操作者所在租户归属（无租户上下文时归默认租户），不产生未归属数据
-- **历史数据保留** — `kernel/db` 保留服务按表分批硬删除过期历史数据（`audit_logs`/`jobs`/`job_history`/`dead_letters`/`outbox_events`/`import_jobs`），挂在定时任务上（`retention.enabled`，默认关闭）；只清理终态记录（已发布事件、已处理死信、已结束任务），指标 `jimu_retention_deleted_total`
+- **历史数据保留** — `internal/capabilities/retention` 保留服务按表分批硬删除过期历史数据（`audit_logs`/`jobs`/`job_history`/`dead_letters`/`outbox_events`/`import_jobs`），挂在定时任务上（`retention.enabled`，默认关闭）；只清理终态记录（已发布事件、已处理死信、已结束任务），指标 `jimu_retention_deleted_total`
 - **全文检索** — `capabilities/search` 统一接口（`Index`/`Delete`/`Search`）+ 公共索引表 `search_documents`：MySQL 走 FULLTEXT（`MATCH ... AGAINST`），PostgreSQL 走 `tsvector` 表达式 GIN 索引；按 `tenant_id` 隔离，`(tenant_id, doc_type, doc_id)` 唯一保证幂等覆盖。**CJK 查询自动回退**：查询含中文/日文/韩文时改用 LIKE/ILIKE 子串匹配（标题命中优先），默认分词器下也能命中，代价是不走索引（大表建议启用 MySQL ngram 或 PG zhparser）；LIKE 通配符按字面量转义
 - **通知系统** — 邮件/短信(SMS)/WebSocket/Webhook 抽象；短信支持阿里云（dysmsapi SDK，`sms.enabled` 配置开关）；Webhook 回调载荷支持 HMAC-SHA256 签名（`notification.webhook.sign_secret`，附加 `X-Jimu-Timestamp`/`X-Jimu-Signature` 头，防重放）
 - **统一出站 HTTP client** — 封装 timeout + retry/backoff（仅网络错误与 5xx）+ 熔断（复用 `kernel/breaker`，连续失败自动开启、冷却后探测恢复）+ 按目标 host 独立限流（令牌桶）+ OTel `traceparent` 注入（`internal/kernel/httpclient`），OAuth 提供商与 Webhook 共用
@@ -303,6 +303,7 @@ jimu/
 │   │   └── application.go      # Application 生命周期
 │   ├── capabilities/           # 可插拔能力（catalog 是唯一清单；每个能力导出 Descriptor）
 │   │   ├── catalog/            # 能力清单 + 启用集解析
+│   │   ├── apidocs/            # Swagger 文档注册
 │   │   ├── auth/               # 登录/注册/Token
 │   │   ├── oauth/              # 第三方登录绑定；provider/ 为 OAuth Provider 实现
 │   │   ├── user/               # 用户管理
@@ -322,8 +323,10 @@ jimu/
 │   │   ├── notification/       # 通知系统（邮件/短信/WebSocket/Webhook）
 │   │   ├── outbox/             # Outbox 模式
 │   │   ├── queue/              # 多队列抽象（Redis/Kafka/RabbitMQ）+ 死信
+│   │   ├── retention/          # 历史数据保留与清理
 │   │   ├── search/             # 全文检索（MySQL FULLTEXT / PostgreSQL tsvector）
 │   │   ├── storage/            # 文件存储抽象（本地/S3/OSS/MinIO）
+│   │   ├── uploadsec/          # 上传处理 + ClamAV 扫描
 │   │   └── ws/                 # WebSocket（Hub + 会话/频道管理）
 │   ├── config/                 # 配置加载 + 校验
 │   ├── contract/               # Module 接口定义
@@ -953,7 +956,7 @@ capabilities:
 
 **字段级加密（框架内置，`security.encryption_key`）**
 
-- AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引，实现在 `internal/capabilities/encryption` + `internal/kernel/db/encryption.go`（Gorm hook）。
+- AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引，实现在 `internal/capabilities/encryption`（Gorm hook 见 `internal/capabilities/encryption/hooks.go`）。
 - 带结构体 tag `encryption:"true"` 的字段写入时加密、读取时解密；带 `blind:"<source>"` 的字段用对应明文计算确定性盲索引，支撑唯一约束与精确等值查询。
 - 当前覆盖 `users.email` / `users.phone`（见 `internal/capabilities/user/domain/user.go`），密文落库、`email_hash`/`phone_hash` 盲索引支撑重复校验。
 - 密钥经 `ENCRYPTION_KEY` 环境变量或 `ENCRYPTION_KEY_FILE`（Docker Secrets）注入；**未注入时退化为明文模式**（功能不受影响，email/phone 明文落库）。
