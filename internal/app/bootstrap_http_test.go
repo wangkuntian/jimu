@@ -3,6 +3,7 @@ package app
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"jimu/internal/contract"
@@ -77,5 +78,41 @@ func TestRegisterHTTPAppliesProtectedMiddlewareByMountPoint(t *testing.T) {
 		if rec.Code != http.StatusNoContent {
 			t.Fatalf("path %s status = %d, want %d", c.path, rec.Code, http.StatusNoContent)
 		}
+	}
+}
+
+func TestRegisterHTTPFailsClosedWithoutProtectedProvider(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	prot := &probeModule{name: "probe-prot", desc: contract.Descriptor{Name: "probe-prot", Mount: contract.MountProtected}}
+
+	err := registerHTTP(router, nil, nil, prot)
+	if err == nil {
+		t.Fatal("expected error when a protected capability has no middleware provider")
+	}
+	if !strings.Contains(err.Error(), "MountProtected") {
+		t.Fatalf("error = %v, want it to name the mount requirement", err)
+	}
+	if prot.registered {
+		t.Fatalf("capability %q must not be registered when no middleware provider exists", prot.name)
+	}
+}
+
+// extraProtected（租户限流/幂等）非空不能替代认证中间件：受保护能力仍须拒绝启动。
+func TestRegisterHTTPFailsClosedWhenExtraProtectedIsPresent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	prot := &probeModule{name: "probe-prot", desc: contract.Descriptor{Name: "probe-prot", Mount: contract.MountProtected}}
+	extra := []gin.HandlerFunc{func(c *gin.Context) { c.Next() }}
+
+	err := registerHTTP(router, nil, extra, prot)
+	if err == nil {
+		t.Fatal("expected error when extra protected middleware masks a missing provider")
+	}
+	if !strings.Contains(err.Error(), "MountProtected") {
+		t.Fatalf("error = %v, want it to name the mount requirement", err)
+	}
+	if prot.registered {
+		t.Fatalf("capability %q must not be registered when no middleware provider exists", prot.name)
 	}
 }

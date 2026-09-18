@@ -400,11 +400,17 @@ func registerHTTP(router registerRouter, log moduleLogger, extraProtected []gin.
 			break
 		}
 	}
+	// extraProtected 只含租户限流/幂等等补充中间件，不能替代认证与租户注入，
+	// 因此「是否存在受保护中间件」必须在追加 extraProtected 之前判定。
+	hasProtectedMiddleware := len(protected) > 0
 	// 追加外部注入的受保护中间件（如租户维度限流），顺序在认证/租户注入之后
 	protected = append(protected, extraProtected...)
 	for _, module := range modules {
 		desc := contract.Describe(module)
-		if desc.Normalized() == contract.MountProtected && len(protected) > 0 {
+		if desc.Normalized() == contract.MountProtected {
+			if !hasProtectedMiddleware {
+				return fmt.Errorf("capability %q declares MountProtected but no enabled capability provides protected middleware; enable the capability that provides it (currently \"auth\")", desc.Name)
+			}
 			module.RegisterHTTP(router.Group("", protected...))
 		} else {
 			module.RegisterHTTP(router)
