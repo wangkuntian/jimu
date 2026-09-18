@@ -301,6 +301,7 @@ jimu/
 │   │   ├── bootstrap.go        # 应用启动装配
 │   │   ├── container.go        # 依赖容器
 │   │   └── application.go      # Application 生命周期
+│   ├── capabilities/           # 能力清单（唯一清单 + 启用集解析）
 │   ├── config/                 # 配置加载 + 校验
 │   ├── contract/               # Module 接口定义
 │   ├── platform/               # 基础设施
@@ -925,6 +926,20 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `grpc` 业务服务 | 示例 `UserInfoService`（`internal/platform/grpc/userinfo_service.go`，proto 在 `proto/jimu/v1/userinfo.proto`，`make proto` 重新生成）；业务模块仿照 `RegisterUserInfoService` 经 `RegisterService` 接入 | — |
 | `error_reporting.enabled` | 是否启用错误上报（结构化错误日志输出，含 trace_id；未启用时零开销） | `false`（开发）/ `true`（生产） |
 | gRPC 出站客户端 | 统一封装 `internal/platform/grpc` `Client`（`NewClient`）：超时/重试/熔断/恢复/指标 `jimu_grpc_client_*`，业务经 `Conn()` 走生成的强类型客户端 | — |
+
+### 能力开关（v0.3.0）
+
+后端由**能力**组成，可用 `capabilities.enabled` 选择启用哪些能力（留空 = 全部启用，行为与旧版本一致）：
+
+```yaml
+capabilities:
+  enabled: ["user", "role", "permission", "tenant", "auth", "audit", "admin"]
+```
+
+- 硬依赖会自动补齐：只写 `["oauth"]` 会连带启用 `auth`/`user`/`role`/`tenant`
+- 未启用的能力不挂路由、不注册定时任务与事件、不启动其后台组件
+- **受保护能力需要认证器**：声明为受保护（`MountProtected`）的能力必须有模块提供受保护中间件（当前为 `auth`）；否则进程**启动即失败**并指出缺失的提供者，而不是把路由裸挂出去。因此 `enabled: ["user"]` 这类"有业务路由、无认证器"的配置会被拒绝
+- 能力清单与依赖关系见 `internal/capabilities/catalog/catalog.go`；设计见 [能力可插拔设计](docs/design/2026-09-18-capability-plugins-design.md)
 
 ### 静态加密（Data at Rest）
 

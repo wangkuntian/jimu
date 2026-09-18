@@ -24,6 +24,15 @@
 
 每个业务模块必须遵循 Clean Architecture 分层与 `contract.Module` 注册规范，详见 README「开发规范 · 模块结构」；HTTP 路由统一注册在 `/api/v1` 前缀下。
 
+### 能力边界（v0.3.0 起）
+
+后端按**能力**组织，可插拔为正式能力（设计与清单见 [docs/design/2026-09-18-capability-plugins-design.md](docs/design/2026-09-18-capability-plugins-design.md)）：
+
+- 能力清单只维护在 `internal/capabilities/catalog`，新增/删除能力只改该文件
+- 每个能力导出静态 `Descriptor`（名称 / 硬依赖 `Requires` / 挂载点 `Mount`），依赖必须单向
+- 能力之间只经 `contract` 端口调用，禁止 import 其他能力的内部包
+- 挂载点由 `Descriptor.Mount` 声明，禁止按能力名做特判
+
 ### 租户体系
 
 多租户（v0.2.0 起）为正式能力，以下不变量修改时不得偏离（完整设计见 README「租户体系 / 开通式注册」）：
