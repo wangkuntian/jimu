@@ -44,7 +44,7 @@
 |---|---|---|---|
 | `user` | `users` | — | 身份主体，全形态必带；同时提供自助面与管理面用例（见 §5.3） |
 | `access` | `roles` `permissions` `role_permissions` `user_roles` | user | RBAC + Casbin + 鉴权中间件 + 角色分配 |
-| `tenancy` | `tenants` `tenant_plans` | — | 租户上下文 + 套餐/配额/用量 + 开通式注册 |
+| `tenancy` | `tenants` `tenant_plans` | — | 租户实体/套餐/配额/用量 + 开通式注册（上下文机制在 kernel/tenant） |
 | `audit` | `audit_logs` `audit_chain_head` | tenancy（可空） | 审计写入/哈希链/校验/导出；作为可选中间件提供者 |
 | `apikey` | `api_keys` | user，tenancy（可空） | 机器凭证 + scope + Key 维度限流 |
 | `notify` | — | — | email/sms/webhook/ws 派发；无渠道时日志降级（已有实现） |
@@ -116,6 +116,8 @@
 
 `platform/auth`、`platform/tenant`、`platform/db`、`platform/http` 四个混装包的内部拆分见 §3.6；下表是其外围包的归位：
 
+> 注：下表各路径是**改造前的现状路径**（`platform/…`）。P1-B1 已按归属把 `internal/platform/` 迁到 `internal/kernel/…` 与 `internal/capabilities/…`；表格保留原路径以便与当时的评审记录对照。
+
 | 包 | 行数 | 归属 |
 |---|---|---|
 | `shared/errors` | 199 | 内核（错误码 + 多语言映射） |
@@ -133,12 +135,14 @@
 
 现有若干"混装包"横跨多个能力，必须按下表拆开 —— 否则能力边界只是目录改名：
 
+> 注：下表"现包"列是**改造前的现状路径**（`platform/…`）。P1-B1 已按整包归属把 `internal/platform/` 迁到 `internal/kernel/…` 与 `internal/capabilities/…`（`platform/tenant` → `kernel/tenant`，见该行）；包内拆分仍按本表执行。
+
 | 现包 | 行数 | 内部组成 | 归位 |
 |---|---|---|---|
 | `platform/auth` | 905 | `jwt.go` `session.go` `middleware.go` `limiter.go` `lockout.go` | `auth` |
 | | | `casbin.go` `permission_middleware.go` `roles.go` | `access` |
 | | | `apikey.go` `apikey_middleware.go` | `apikey` |
-| `platform/tenant` | 67 | 上下文注入 + 编码校验/normalize | `tenancy`；**内核同时提供 no-op 实现**（`tid=0` 平台级视角），使 `tenancy` 可以关闭而不拖垮 7 个依赖它的能力 |
+| `platform/tenant` | 67 | 上下文注入 + 编码校验/normalize | `kernel/tenant`（上下文机制；`tenancy` 能力负责租户实体/套餐/配额/开通式注册）；上下文无租户时为 `tid=0` 平台级视角，`tenancy` 关闭不影响其他能力读取租户上下文 |
 | `platform/db` | 1408 | `migrate.go` `mysql.go` `postgres.go` `transaction.go` `concurrency.go` `gorm_logger.go` | 内核 |
 | | | `snowflake.go`（与 `shared/id` 重复实现） | 内核，**两处合并去重** |
 | | | `breaker.go` | 内核 `breaker` |
@@ -240,7 +244,7 @@
 
 ### 5.4 其余结论
 
-- `tenancy` = 租户 CRUD + 上下文中间件 + 套餐/配额/用量 + 开通式注册（从 `auth` 迁入）；它不拥有 `tenant_id` 列本身，那些列由各表所有者维护
+- `tenancy` = 租户 CRUD + 套餐/配额/用量 + 开通式注册（从 `auth` 迁入；上下文机制在 `kernel/tenant`）；它不拥有 `tenant_id` 列本身，那些列由各表所有者维护
 - `audit` 自包含（service/worker/export/chain/middleware），其 middleware 是全局写者 → 设计为"可选中间件提供者"，其他能力无需感知其存在
 - `access` = role + permission + Casbin + 鉴权中间件 + `user_roles` 分配（从 `admin` 迁入）
 
@@ -330,7 +334,7 @@ profiles/
 | 阶段 | 内容 | 完成判据 |
 |---|---|---|
 | **P0 契约与内核归位** | 定义 `contract.Capability` 与端口；建立 `internal/kernel/`；`internal/capabilities/` 下按现有 8 模块原样落位（先不改内部）；`catalog` 显式清单；运行时 `capabilities.enabled` + 依赖闭包校验；去掉 `bootstrap.go` 的 `auth`/`oauth` 字符串特判与"第一个中间件提供者"约定 | `full` 行为与 master 完全一致（测试全绿）；关闭 `oauth` 后其路由/迁移/权限点消失 |
-| **P1 边界重划** | `auth` → 6 个能力（§5.1）；`admin` 拆散到各能力（§5.2）；`user` 双写合并（§5.3）；**平台混装包归位**（§3.6：拆 `platform/auth`、`platform/db`、`platform/http`，`platform/tenant` 归 `tenancy` 并加内核 no-op 实现，`conf/rbac_model.conf` → `access`，示例服务移出平台层）；表所有权与迁移搬迁 + `adopt-capabilities`；`platform → module` 反向依赖消除；中间件归位（§3.5.2） | 16 处模块间 import 归零；迁移按能力归属并各有版本表；存量实例可平滑 adopt；`platform/` 下不再有跨能力的混装包 |
+| **P1 边界重划** | `auth` → 6 个能力（§5.1）；`admin` 拆散到各能力（§5.2）；`user` 双写合并（§5.3）；**平台混装包归位**（§3.6：拆 `platform/auth`、`platform/db`、`platform/http`，`platform/tenant` → `kernel/tenant`（上下文机制；租户实体/套餐/配额/开通式注册归 `tenancy` 能力），`conf/rbac_model.conf` → `access`，示例服务移出平台层）；表所有权与迁移搬迁 + `adopt-capabilities`；`platform → module` 反向依赖消除；中间件归位（§3.5.2） | 16 处模块间 import 归零；迁移按能力归属并各有版本表；存量实例可平滑 adopt；`platform/` 下不再有跨能力的混装包 |
 | **P2 三层机制** | `capabilities.enabled` 配置合并与校验；`profiles/{full,minimal,saas,enterprise,machine}` 入口包；**驱动级可插拔**（§3.7：`storage/{local,s3}`、`queue/{redis,kafka,rabbitmq}`、`dataops/{csv,excel}`）；**非代码资产模块化**（§3.8：deploy 资产、Helm values、CLI 子命令、契约测试）；`jimu new` / `capability add` 脚手架；`compose-report` | 5 个 profile 均能构建并启动；`minimal` 的报告数字显著低于 `full`；只用本地存储/Redis 队列/CSV 时对应重型依赖不出现 |
 | **P3 门禁与文档** | `check-capabilities` / `check-profiles` / `check-pluggable`；生成器模板同步新形态；README / CONTRIBUTING / AGENTS.md 更新（能力清单、形态、新增能力流程） | 四道门禁在 CI 生效 |
 | **P4 v0.3.0 收尾** | 版本日志补验证结果；`release-check`；`release/v0.3.0` → `master` 合并；打 tag 发布 | GitHub Release 发布成功 |

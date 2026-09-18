@@ -3,7 +3,7 @@ package interfaces
 import (
 	"strconv"
 
-	"jimu/internal/platform/ws"
+	"jimu/internal/capabilities/ws"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 

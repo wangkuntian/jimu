@@ -124,7 +124,7 @@ func Page(c *gin.Context, data interface{}, total int64, page, pageSize int) {
 `)
 	writeFileForTest(t, root, "internal/shared/errors/errors_test.go", `package errors
 `)
-	writeFileForTest(t, root, "internal/platform/http/middleware/middleware.go", `package middleware
+	writeFileForTest(t, root, "internal/kernel/http/middleware/middleware.go", `package middleware
 
 import (
 	stderrors "errors"

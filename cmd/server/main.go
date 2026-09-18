@@ -20,8 +20,8 @@ import (
 	"jimu/internal/capabilities/user"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/platform/auth"
-	"jimu/internal/platform/http/middleware"
+	"jimu/internal/kernel/auth"
+	"jimu/internal/kernel/http/middleware"
 )
 
 // @title           Jimu API

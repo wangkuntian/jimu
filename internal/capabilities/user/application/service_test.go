@@ -7,10 +7,10 @@ import (
 	stderrors "errors"
 	"testing"
 
+	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
-	"jimu/internal/platform/outbox"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 

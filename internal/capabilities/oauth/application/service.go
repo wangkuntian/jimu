@@ -9,13 +9,13 @@ import (
 
 	"jimu/internal/capabilities/auth/domain"
 	oauthdomain "jimu/internal/capabilities/oauth/domain"
+	oauthplatform "jimu/internal/capabilities/oauth/provider"
 	userdomain "jimu/internal/capabilities/user/domain"
-	"jimu/internal/platform/auth"
-	oauthplatform "jimu/internal/platform/oauth"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/auth"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 
-	redistore "jimu/internal/platform/redis"
+	redistore "jimu/internal/kernel/redis"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"

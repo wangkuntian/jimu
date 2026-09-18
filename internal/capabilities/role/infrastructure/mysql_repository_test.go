@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"jimu/internal/capabilities/role/domain"
-	dbutil "jimu/internal/platform/db"
+	dbutil "jimu/internal/kernel/db"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"

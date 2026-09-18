@@ -5,8 +5,8 @@ import (
 	stderrors "errors"
 
 	"jimu/internal/capabilities/role/domain"
-	dbutil "jimu/internal/platform/db"
-	"jimu/internal/platform/tenant"
+	dbutil "jimu/internal/kernel/db"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 

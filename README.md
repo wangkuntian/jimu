@@ -10,7 +10,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **租户运营（套餐 / 配额 / 用量）** — `tenant_plans` 定义资源上限（`max_users`/`max_roles`/`max_api_keys`，0=不限），`tenants.plan_id=0` 表示未分配套餐（不受限，保持向后兼容）；创建用户（管理端与公开注册）、角色、API Key 前校验上限，超限返回新增错误码 `5005`/403 且不影响既有数据；`GET /api/v1/tenants/usage` 返回当前租户套餐与各项用量，`/api/v1/tenant-plans` 管理套餐定义、`PUT /api/v1/tenants/{id}/plan` 分配套餐（`jimu seed` 会内置一个未分配的 `free` 示例套餐）
 - **开通式注册** — 可选的 SaaS 语义（`auth.provisioning.enabled`）：注册即单事务开通新租户，注册者成为 owner，按可配置的角色模板自动初始化租户角色与全局权限绑定（模板模式，全部可配置：开关/owner 角色/角色与权限模板）；未启用时注册用户归默认租户
 - **密码重置** — 邮箱验证码自助重置（`POST /api/v1/auth/forgot-password` + `reset-password`），6 位数字码 Redis 一次性存储，防用户枚举，重置后强制登出全部会话
-- **敏感信息脱敏** — `platform/mask` 提供手机号/邮箱/身份证/银行卡/姓名/IP 等脱敏函数与按字段名判定（`RedactByKey`/`Map`）；日志链路（文件、stdout、OTLP 导出）统一接入，凭证类字段整体替换为 `***`、PII 部分保留，避免明文落盘
+- **敏感信息脱敏** — `kernel/mask` 提供手机号/邮箱/身份证/银行卡/姓名/IP 等脱敏函数与按字段名判定（`RedactByKey`/`Map`）；日志链路（文件、stdout、OTLP 导出）统一接入，凭证类字段整体替换为 `***`、PII 部分保留，避免明文落盘
 - **敏感字段加密** — AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引（email/phone，`security.encryption_key` 配置后启用；未配置时明文模式，功能不受影响）
 - **OAuth 登录** — Google/GitHub/微信第三方登录，`oauth.providers` 配置开关；配置 `issuer_url` 的提供商按通用 OIDC 处理（授权码模式，discovery + userinfo），可接入 Keycloak/Okta/Auth0/Azure AD 等企业 IdP
 - **图形验证码** — 登录/注册验证码，Redis 存储一次性校验，`captcha.enabled` 配置开关
@@ -37,12 +37,12 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **分布式锁** — Redis 实现的分布式锁（防并发、选主）
 - **文件存储** — 本地/S3/OSS/MinIO 统一接口
 - **上传安全** — 文件大小限制 + magic-byte 嗅探覆盖可伪造的 Content-Type 头 + MIME 白名单；可选 ClamAV 病毒扫描（`upload.clamav.enabled`，stdlib 实现 INSTREAM 协议，落库前同步扫描，fail-closed：不干净或扫描不可达均拒绝落库）
-- **数据导入/导出** — CSV/Excel 模板解析、校验与导入/导出（`internal/platform/importer` / `internal/platform/exporter`）；通用 importer 保留 `Importer.Import`，通过可选逐行 `RowSink` 注入持久化，未配置时明确报错，业务应用负责事务落库，导出结果可被导入器回读验证；管理端用户导入按操作者所在租户归属（无租户上下文时归默认租户），不产生未归属数据
-- **历史数据保留** — `platform/db` 保留服务按表分批硬删除过期历史数据（`audit_logs`/`jobs`/`job_history`/`dead_letters`/`outbox_events`/`import_jobs`），挂在定时任务上（`retention.enabled`，默认关闭）；只清理终态记录（已发布事件、已处理死信、已结束任务），指标 `jimu_retention_deleted_total`
-- **全文检索** — `platform/search` 统一接口（`Index`/`Delete`/`Search`）+ 公共索引表 `search_documents`：MySQL 走 FULLTEXT（`MATCH ... AGAINST`），PostgreSQL 走 `tsvector` 表达式 GIN 索引；按 `tenant_id` 隔离，`(tenant_id, doc_type, doc_id)` 唯一保证幂等覆盖。**CJK 查询自动回退**：查询含中文/日文/韩文时改用 LIKE/ILIKE 子串匹配（标题命中优先），默认分词器下也能命中，代价是不走索引（大表建议启用 MySQL ngram 或 PG zhparser）；LIKE 通配符按字面量转义
+- **数据导入/导出** — CSV/Excel 模板解析、校验与导入/导出（`internal/capabilities/dataops/importer` / `internal/capabilities/dataops/exporter`）；通用 importer 保留 `Importer.Import`，通过可选逐行 `RowSink` 注入持久化，未配置时明确报错，业务应用负责事务落库，导出结果可被导入器回读验证；管理端用户导入按操作者所在租户归属（无租户上下文时归默认租户），不产生未归属数据
+- **历史数据保留** — `kernel/db` 保留服务按表分批硬删除过期历史数据（`audit_logs`/`jobs`/`job_history`/`dead_letters`/`outbox_events`/`import_jobs`），挂在定时任务上（`retention.enabled`，默认关闭）；只清理终态记录（已发布事件、已处理死信、已结束任务），指标 `jimu_retention_deleted_total`
+- **全文检索** — `capabilities/search` 统一接口（`Index`/`Delete`/`Search`）+ 公共索引表 `search_documents`：MySQL 走 FULLTEXT（`MATCH ... AGAINST`），PostgreSQL 走 `tsvector` 表达式 GIN 索引；按 `tenant_id` 隔离，`(tenant_id, doc_type, doc_id)` 唯一保证幂等覆盖。**CJK 查询自动回退**：查询含中文/日文/韩文时改用 LIKE/ILIKE 子串匹配（标题命中优先），默认分词器下也能命中，代价是不走索引（大表建议启用 MySQL ngram 或 PG zhparser）；LIKE 通配符按字面量转义
 - **通知系统** — 邮件/短信(SMS)/WebSocket/Webhook 抽象；短信支持阿里云（dysmsapi SDK，`sms.enabled` 配置开关）；Webhook 回调载荷支持 HMAC-SHA256 签名（`notification.webhook.sign_secret`，附加 `X-Jimu-Timestamp`/`X-Jimu-Signature` 头，防重放）
-- **统一出站 HTTP client** — 封装 timeout + retry/backoff（仅网络错误与 5xx）+ 熔断（复用 `platform/breaker`，连续失败自动开启、冷却后探测恢复）+ 按目标 host 独立限流（令牌桶）+ OTel `traceparent` 注入（`internal/platform/httpclient`），OAuth 提供商与 Webhook 共用
-- **依赖熔断** — 统一熔断器 `internal/platform/breaker`（连续失败阈值 + 冷却后半开探测）接入三类依赖：Redis（命令/连接级 hook）、DB（gorm 语句级回调，**主库与只读副本一体生效**）、HTTP 出站（`httpclient`）；依赖不可用时快速失败而非每请求等超时；只把连接/网络类错误计为失败（Redis 未命中与业务错误、DB 慢查询超时都不触发）；指标 `jimu_breaker_open` / `jimu_breaker_rejected_total` / `jimu_breaker_trip_total`（`component` 标签区分 httpclient/redis/db）
+- **统一出站 HTTP client** — 封装 timeout + retry/backoff（仅网络错误与 5xx）+ 熔断（复用 `kernel/breaker`，连续失败自动开启、冷却后探测恢复）+ 按目标 host 独立限流（令牌桶）+ OTel `traceparent` 注入（`internal/kernel/httpclient`），OAuth 提供商与 Webhook 共用
+- **依赖熔断** — 统一熔断器 `internal/kernel/breaker`（连续失败阈值 + 冷却后半开探测）接入三类依赖：Redis（命令/连接级 hook）、DB（gorm 语句级回调，**主库与只读副本一体生效**）、HTTP 出站（`httpclient`）；依赖不可用时快速失败而非每请求等超时；只把连接/网络类错误计为失败（Redis 未命中与业务错误、DB 慢查询超时都不触发）；指标 `jimu_breaker_open` / `jimu_breaker_rejected_total` / `jimu_breaker_trip_total`（`component` 标签区分 httpclient/redis/db）
 - **Outbox 模式** — 事件发布与数据库事务一致性保证，支持 MQ 跨服务发布（`outbox.publisher` 切换；`mq` 模式下通过 WorkerPool 消费事件，`event_bus` 模式通过 `outbox:*` 桥接器注入事件总线）
 - **定时任务** — Cron 调度器（robfig/cron），支持 MySQL 持久化（`scheduler.store=mysql`）与多实例分布式锁协调，启动时通过 `RestoreFromStore` 恢复持久化任务（内置任务去重）
 - **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
@@ -60,7 +60,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **追踪关联** — 访问日志自动注入 trace_id / span_id，关联 OpenTelemetry 追踪
 - **Redis 高可用** — `redis.mode` 支持 `single` / `sentinel` / `cluster` 三种部署模式（默认 single 行为不变）：哨兵模式通过 `master_name` + `sentinel_addrs` 自动故障转移，集群模式通过 `cluster_addrs` 连接分片；统一 `redis.Client` 接口，框架内 session/缓存/队列/限流/分布式锁全复用
 - **TOTP 二次验证** — RFC 6238 自研实现（`internal/shared/totp`，无外部依赖），用户可自助绑定/启用/关闭：`POST /auth/mfa/setup` 生成密钥与 otpauth URI（二维码绑定）、`/auth/mfa/enable` 首次验证码确认、`/auth/mfa/disable` 校验后关闭；启用后登录必须携带 `totp_code`（缺失 `2006`，错误 `2007`），密钥 AES-GCM 字段级加密落库
-- **统一 gRPC 客户端** — 出站调用封装（`internal/platform/grpc` `Client`）：连接管理 + 调用超时 + 指数退避重试（仅 Unavailable/ResourceExhausted 幂等安全码）+ **出站熔断**（复用 `platform/breaker`，只把 Unavailable/DeadlineExceeded 计为失败）+ panic 恢复拦截器 + Prometheus 指标（`jimu_grpc_client_*`），支持 TLS/insecure，与 HTTP client 对齐的框架风格
+- **统一 gRPC 客户端** — 出站调用封装（`internal/capabilities/grpc` `Client`）：连接管理 + 调用超时 + 指数退避重试（仅 Unavailable/ResourceExhausted 幂等安全码）+ **出站熔断**（复用 `kernel/breaker`，只把 Unavailable/DeadlineExceeded 计为失败）+ panic 恢复拦截器 + Prometheus 指标（`jimu_grpc_client_*`），支持 TLS/insecure，与 HTTP client 对齐的框架风格
 - **WebAuthn / 通行密钥** — `auth.webauthn.*`（`rp_id`/`rp_origins`/`session_ttl_min`）启用后支持 Passkey：已登录用户经 `POST /auth/webauthn/register/begin|finish` 自助注册（凭证公钥落库 `webauthn_credentials`，迁移 015，私钥永不离开认证器），`POST /auth/webauthn/login/begin|finish` 无密码登录（通行密钥是抗钓鱼强因子，不叠加密码与 TOTP），`GET/PUT/DELETE /auth/webauthn/credentials` 管理与注销；挑战经 Redis 一次性存储（`session_id` 回传，防替换/重放），签名计数器回写用于克隆检测，凭证按租户与用户隔离
 - **密码防复用** — 改密时校验新密码不等于当前密码与最近 N 个历史密码（`auth.password_history_count`，默认 5，0=关闭），历史哈希落库 `password_histories` 并按条数自动裁剪；命中返回 `2008`
 - **可信设备（记住此设备）** — 仅对启用 TOTP 的账号生效：登录时传 `remember_device: true`，成功后返回一次性明文 `device_token`（前缀 `jimu_dev_`，库中只存 SHA-256 哈希）；后续登录携带 `X-Device-Token` 头且不带 `totp_code` 即可跳过 TOTP，**密码仍必需**；令牌绑定签发用户（泄露也无法用于他人账号），改密与 `/auth/logout-all` 自动吊销，`GET/DELETE /auth/devices` 自助查看与注销；有效期 `auth.trusted_device_days`（默认 30，0=关闭）
@@ -68,7 +68,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **泄露口令检查（可选）** — `auth.breach_check_enabled` 开启后，注册（含开通式注册）与重置密码会调用 Have I Been Pwned 范围查询接口：只发送口令 SHA-1 的前 5 位（k-匿名，完整口令与哈希不出网）并在本地比对结果，命中返回新增错误码 `2009`；检查服务不可用时放行（只记日志），避免外部依赖故障阻断注册与改密
 - **请求幂等** — 客户端携带 `Idempotency-Key` 时，同键重复请求返回首次结果（响应带 `Idempotency-Replayed: true`），键按「租户 + 用户 + 方法 + 路径 + 客户端键」哈希存储于 Redis；首个请求用 `SET NX` 占位，并发同键请求返回 `409/1009` 而不是各执行一次；5xx 与超过 256KB 的响应不缓存并释放占位（可用同键安全重试）；Redis 异常时放行。`security.idempotency_enabled`（默认开）/`security.idempotency_ttl_sec`（默认 24h）
 - **错误消息多语言** — `Accept-Language: zh|en` 经中间件写入上下文，响应错误消息按错误码取本地化文案（未登记的错误码保留调用方消息，不会再出现「403 + 服务器内部错误」这类矛盾响应）；测试强制校验每个错误码都已登记中英文文案
-- **错误追踪上报** — `internal/platform/reporter`：结构化错误日志（含 trace_id/span_id），HTTP `Recovery` 中间件 panic 自动上报；日志链路接入 OpenObserve 后错误自动汇聚，配合 OpenObserve 告警覆盖错误监控场景（`error_reporting.enabled` 开关）
+- **错误追踪上报** — `internal/kernel/reporter`：结构化错误日志（含 trace_id/span_id），HTTP `Recovery` 中间件 panic 自动上报；日志链路接入 OpenObserve 后错误自动汇聚，配合 OpenObserve 告警覆盖错误监控场景（`error_reporting.enabled` 开关）
 
 ## 技术栈
 
@@ -304,40 +304,45 @@ jimu/
 │   ├── capabilities/           # 可插拔能力（catalog 是唯一清单；每个能力导出 Descriptor）
 │   │   ├── catalog/            # 能力清单 + 启用集解析
 │   │   ├── auth/               # 登录/注册/Token
-│   │   ├── oauth/              # 第三方登录绑定
+│   │   ├── oauth/              # 第三方登录绑定；provider/ 为 OAuth Provider 实现
 │   │   ├── user/               # 用户管理
 │   │   ├── role/               # 角色管理
 │   │   ├── permission/         # 权限管理
 │   │   ├── tenant/             # 租户管理
 │   │   ├── audit/              # 审计日志
-│   │   └── admin/              # 系统管理
+│   │   ├── admin/              # 系统管理
+│   │   ├── breach/             # 泄露密码检测（Have I Been Pwned）
+│   │   ├── captcha/            # 图形验证码（生成 + Redis 存储 + 校验）
+│   │   ├── dataops/
+│   │   │   ├── importer/       # 数据导入（CSV/Excel 模板解析与校验）
+│   │   │   └── exporter/       # 数据导出（CSV/Excel）
+│   │   ├── encryption/         # AES-GCM 字段级加密 + HMAC 盲索引
+│   │   ├── feature/            # Feature Flag
+│   │   ├── grpc/               # gRPC server + 统一出站 Client（健康/反射/超时/重试/熔断/恢复/指标）
+│   │   ├── notification/       # 通知系统（邮件/短信/WebSocket/Webhook）
+│   │   ├── outbox/             # Outbox 模式
+│   │   ├── queue/              # 多队列抽象（Redis/Kafka/RabbitMQ）+ 死信
+│   │   ├── search/             # 全文检索（MySQL FULLTEXT / PostgreSQL tsvector）
+│   │   ├── storage/            # 文件存储抽象（本地/S3/OSS/MinIO）
+│   │   └── ws/                 # WebSocket（Hub + 会话/频道管理）
 │   ├── config/                 # 配置加载 + 校验
 │   ├── contract/               # Module 接口定义
-│   ├── platform/               # 基础设施
-│   │   ├── http/               # HTTP Server + 中间件
-│   │   ├── db/                 # Gorm 连接 + 迁移 + Seed + 事务
-│   │   ├── redis/              # Redis 客户端 + 分布式锁
-│   │   ├── cache/              # 缓存抽象层
-│   │   ├── logger/             # Zap 日志
+│   ├── kernel/                 # 内核机制（与具体能力无关的基础设施）
 │   │   ├── auth/               # JWT + Casbin + Session + API Key
-│   │   ├── tenant/             # 租户上下文注入 + 编码校验/归一化
-│   │   ├── oauth/              # OAuth 第三方登录 Provider
-│   │   ├── captcha/            # 图形验证码（生成 + Redis 存储 + 校验）
-│   │   ├── encryption/         # AES-GCM 字段级加密 + HMAC 盲索引
+│   │   ├── breaker/            # 统一熔断器（HTTP/Redis/DB/gRPC 共用）
+│   │   ├── cache/              # 缓存抽象层
+│   │   ├── db/                 # Gorm 连接 + 迁移 + Seed + 事务
 │   │   ├── event/              # 事件总线
-│   │   ├── queue/              # 多队列抽象（Redis/Kafka/RabbitMQ）+ 死信
-│   │   ├── outbox/             # Outbox 模式
-│   │   ├── scheduler/          # Cron 调度器
-│   │   ├── observability/      # 健康检查 + Metrics + Tracing + OTLP 推送（OpenObserve）
-│   │   ├── reporter/           # 错误上报（结构化错误日志，接入 OpenObserve）
+│   │   ├── http/               # HTTP Server + 中间件
 │   │   ├── httpclient/         # 统一出站 HTTP 客户端（超时/重试/熔断/限流）
-│   │   ├── grpc/               # gRPC server + 统一出站 Client（健康/反射/超时/重试/熔断/恢复/指标）
-│   │   ├── ws/                 # WebSocket（Hub + 会话/频道管理）
-│   │   ├── storage/            # 文件存储抽象（本地/S3/OSS/MinIO）
-│   │   ├── importer/           # 数据导入（CSV/Excel 模板解析与校验）
-│   │   ├── exporter/           # 数据导出（CSV/Excel）
-│   │   ├── notification/       # 通知系统（邮件/短信/WebSocket/Webhook）
-│   │   └── feature/            # Feature Flag
+│   │   ├── logger/             # Zap 日志
+│   │   ├── mask/               # 敏感信息脱敏（手机号/邮箱/身份证/银行卡/姓名/IP）
+│   │   ├── observability/      # 健康检查 + Metrics + Tracing + OTLP 推送（OpenObserve）
+│   │   ├── redis/              # Redis 客户端 + 分布式锁
+│   │   ├── reporter/           # 错误上报（结构化错误日志，接入 OpenObserve）
+│   │   ├── scheduler/          # Cron 调度器
+│   │   ├── tenant/             # 租户上下文注入 + 编码校验/归一化（租户实体见 capabilities/tenant）
+│   │   └── tlsconf/            # TLS/mTLS 配置构建（HTTP 与 gRPC 共用）
 │   └── shared/                 # 跨模块通用能力
 │       ├── errors/             # AppError + 错误码
 │       ├── response/           # 统一响应格式
@@ -709,7 +714,7 @@ api.POST("/users", auth.RequireScope("user:write"), userHandler.Create)
 - Scope 清单由业务方定义，框架不内置强制集合；`HasScope` 已提供通配匹配（`s == scope || s == "*"`），`RequireScope` 按同一语义校验。
 - **认证与授权分离**：`APIKeyAuthMiddleware` 只校验 Key 有效性（格式、存在、启用、未过期）并注入 Key；是否需要某个 scope 由路由上的 `RequireScope` 决定，未挂载即不校验 scope。
 - **API Key 维度限流**：`middleware.APIKeyRateLimitMiddleware(rdb, limit, window)` 挂在认证之后，按 Key ID 计数（不落明文），未携带 Key 的请求跳过该维度；租户维度由 `ratelimit.tenant.*` 全局启用。配额（按天/按月上限）用同一中间件配长窗口即可（例如 `window=24h`）。
-- **API Key 归属租户**：`api_keys.tenant_id` 在创建时取自创建者所在租户（上下文无租户时归默认租户，见 `platform/tenant.DefaultTenantID`）；认证通过后中间件把该租户注入请求上下文，业务层用 `tenant.FromContext(ctx)` 读取即可完成行级隔离。租户只来自 Key 自身，**不接受客户端 header/query 传入**。未归属（`tenant_id=0`）的存量 Key 按平台级视角处理。
+- **API Key 归属租户**：`api_keys.tenant_id` 在创建时取自创建者所在租户（上下文无租户时归默认租户，见 `kernel/tenant.DefaultTenantID`）；认证通过后中间件把该租户注入请求上下文，业务层用 `tenant.FromContext(ctx)` 读取即可完成行级隔离。租户只来自 Key 自身，**不接受客户端 header/query 传入**。未归属（`tenant_id=0`）的存量 Key 按平台级视角处理。
 
 #### 管理 API
 
@@ -923,9 +928,9 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `grpc.enabled` | 是否启用 gRPC server（与 HTTP 双栈并存，默认关闭） | `false` |
 | `grpc.host` / `grpc.port` | gRPC 监听地址 / 端口 | `0.0.0.0` / `9091` |
 | `grpc.timeout_sec` | gRPC 单请求处理超时（秒），0=不限；超时由服务端拦截器返回 `DeadlineExceeded` | `30`（生产）/ `60`（开发） |
-| `grpc` 业务服务 | 示例 `UserInfoService`（`internal/platform/grpc/userinfo_service.go`，proto 在 `proto/jimu/v1/userinfo.proto`，`make proto` 重新生成）；业务模块仿照 `RegisterUserInfoService` 经 `RegisterService` 接入 | — |
+| `grpc` 业务服务 | 示例 `UserInfoService`（`internal/capabilities/grpc/userinfo_service.go`，proto 在 `proto/jimu/v1/userinfo.proto`，`make proto` 重新生成）；业务模块仿照 `RegisterUserInfoService` 经 `RegisterService` 接入 | — |
 | `error_reporting.enabled` | 是否启用错误上报（结构化错误日志输出，含 trace_id；未启用时零开销） | `false`（开发）/ `true`（生产） |
-| gRPC 出站客户端 | 统一封装 `internal/platform/grpc` `Client`（`NewClient`）：超时/重试/熔断/恢复/指标 `jimu_grpc_client_*`，业务经 `Conn()` 走生成的强类型客户端 | — |
+| gRPC 出站客户端 | 统一封装 `internal/capabilities/grpc` `Client`（`NewClient`）：超时/重试/熔断/恢复/指标 `jimu_grpc_client_*`，业务经 `Conn()` 走生成的强类型客户端 | — |
 | `capabilities.enabled` | 启用的能力清单；留空 = 全部启用（受保护能力需同时启用提供受保护中间件的能力，当前为 auth） | `[]` |
 
 ### 能力开关（v0.3.0）
@@ -948,7 +953,7 @@ capabilities:
 
 **字段级加密（框架内置，`security.encryption_key`）**
 
-- AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引，实现在 `internal/platform/encryption` + `internal/platform/db/encryption.go`（Gorm hook）。
+- AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引，实现在 `internal/capabilities/encryption` + `internal/kernel/db/encryption.go`（Gorm hook）。
 - 带结构体 tag `encryption:"true"` 的字段写入时加密、读取时解密；带 `blind:"<source>"` 的字段用对应明文计算确定性盲索引，支撑唯一约束与精确等值查询。
 - 当前覆盖 `users.email` / `users.phone`（见 `internal/capabilities/user/domain/user.go`），密文落库、`email_hash`/`phone_hash` 盲索引支撑重复校验。
 - 密钥经 `ENCRYPTION_KEY` 环境变量或 `ENCRYPTION_KEY_FILE`（Docker Secrets）注入；**未注入时退化为明文模式**（功能不受影响，email/phone 明文落库）。
@@ -1007,8 +1012,8 @@ internal/capabilities/{name}/
 - 支持读写分离（`read_hosts`、`read_ports` 配置，MySQL/MariaDB 与 PostgreSQL 均支持，从库按 `RandomPolicy` 轮询）；**注意从库存在复制延迟**：写后立即读可能读到旧数据，强一致读请走主库（框架未做写后粘主，需要强一致的查询请在业务层显式指定主库或加读己之写补偿）
 - 时间统一 **UTC**：连接固定 `loc=UTC` + MySQL 会话 `time_zone='+00:00'`（PostgreSQL `TimeZone=UTC`），驱动与服务器时区必须一致，否则 `TIMESTAMP` 列与 `DEFAULT CURRENT_TIMESTAMP` 会相差一个时区偏移；API 以 RFC3339（带 `Z`）返回，展示时区由前端/SDK 转换
 - 金额/精度：框架**不提供**decimal 抽象（避免引入依赖与过早抽象）；金额用 `DECIMAL(m,n)` 列存储、Go 侧用 `string` 或最小货币单位 `int64` 传输，**禁止用 float 表示金额**
-- 全文检索：`platform/search.New(db)` 按方言返回实现；索引写入需在业务写事务提交后调用（或经 outbox 异步补索引），避免主数据与索引不一致
-- 并发写控制：`platform/db` 提供 `LockRow`（事务内 `SELECT ... FOR UPDATE` 锁定单行，SQLite 自动降级）与 `SaveOptimistic`（`version` 列乐观锁，冲突返回 `db.ErrConcurrentUpdate`，调用方映射 409）；`users`/`roles`/`tenants` 已带 `version` 列，角色/租户更新走乐观锁，角色权限替换与用户角色分配在事务内先锁目标行
+- 全文检索：`capabilities/search.New(db)` 按方言返回实现；索引写入需在业务写事务提交后调用（或经 outbox 异步补索引），避免主数据与索引不一致
+- 并发写控制：`kernel/db` 提供 `LockRow`（事务内 `SELECT ... FOR UPDATE` 锁定单行，SQLite 自动降级）与 `SaveOptimistic`（`version` 列乐观锁，冲突返回 `db.ErrConcurrentUpdate`，调用方映射 409）；`users`/`roles`/`tenants` 已带 `version` 列，角色/租户更新走乐观锁，角色权限替换与用户角色分配在事务内先锁目标行
 
 ### 日志调用规范
 

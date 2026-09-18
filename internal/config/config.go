@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"jimu/internal/platform/observability"
-	"jimu/internal/platform/reporter"
+	"jimu/internal/kernel/observability"
+	"jimu/internal/kernel/reporter"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"

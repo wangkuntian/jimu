@@ -8,10 +8,10 @@ import (
 	"time"
 
 	authdomain "jimu/internal/capabilities/auth/domain"
+	"jimu/internal/capabilities/encryption"
 	userdomain "jimu/internal/capabilities/user/domain"
-	"jimu/internal/platform/auth"
-	"jimu/internal/platform/encryption"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/auth"
+	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/stretchr/testify/assert"

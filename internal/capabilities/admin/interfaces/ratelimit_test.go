@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"jimu/internal/platform/auth"
+	"jimu/internal/kernel/auth"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"jimu/internal/platform/ws"
+	"jimu/internal/capabilities/ws"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"

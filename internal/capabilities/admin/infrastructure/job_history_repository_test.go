@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"jimu/internal/platform/queue/domain"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/capabilities/queue/domain"
+	"jimu/internal/kernel/tenant"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"

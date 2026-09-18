@@ -2,7 +2,7 @@ package interfaces
 
 import (
 	"jimu/internal/capabilities/role/application"
-	"jimu/internal/platform/http/middleware"
+	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"

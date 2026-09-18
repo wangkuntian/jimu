@@ -4,8 +4,8 @@ import (
 	stderrors "errors"
 	"strconv"
 
-	"jimu/internal/platform/queue/domain"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/capabilities/queue/domain"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 

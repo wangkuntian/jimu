@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/admin/domain"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
 )
 
@@ -31,7 +31,7 @@ func NewAdminAPIKeyService(repo domain.APIKeyRepository) *AdminAPIKeyService {
 	return &AdminAPIKeyService{repo: repo}
 }
 
-// tenantVisible 判断资源归属租户对上下文租户是否可见（见 platform/tenant.Visible）。
+// tenantVisible 判断资源归属租户对上下文租户是否可见（见 kernel/tenant.Visible）。
 func tenantVisible(resourceTenant, ctxTenant uint64) bool {
 	return tenant.Visible(resourceTenant, ctxTenant)
 }

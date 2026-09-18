@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	qdomain "jimu/internal/platform/queue/domain"
-	"jimu/internal/platform/tenant"
+	qdomain "jimu/internal/capabilities/queue/domain"
+	"jimu/internal/kernel/tenant"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"

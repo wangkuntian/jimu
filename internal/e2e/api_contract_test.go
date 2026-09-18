@@ -24,9 +24,9 @@ import (
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	platformauth "jimu/internal/platform/auth"
-	"jimu/internal/platform/db"
-	"jimu/internal/platform/logger"
+	platformauth "jimu/internal/kernel/auth"
+	"jimu/internal/kernel/db"
+	"jimu/internal/kernel/logger"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"

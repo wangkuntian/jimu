@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/admin/domain"
+	"jimu/internal/capabilities/dataops/importer"
 	userdomain "jimu/internal/capabilities/user/domain"
-	"jimu/internal/platform/importer"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"golang.org/x/crypto/bcrypt"

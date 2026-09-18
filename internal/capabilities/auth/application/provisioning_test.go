@@ -9,7 +9,7 @@ import (
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/config"
-	"jimu/internal/platform/db"
+	"jimu/internal/kernel/db"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/glebarez/sqlite"

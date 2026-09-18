@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	redistore "jimu/internal/platform/redis"
+	redistore "jimu/internal/kernel/redis"
 
 	"github.com/redis/go-redis/v9"
 )

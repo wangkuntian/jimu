@@ -4,10 +4,10 @@ package oauth
 import (
 	"testing"
 
+	oauthplatform "jimu/internal/capabilities/oauth/provider"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/platform/httpclient"
-	oauthplatform "jimu/internal/platform/oauth"
+	"jimu/internal/kernel/httpclient"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"

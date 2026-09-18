@@ -1,0 +1,159 @@
+package db
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"jimu/internal/config"
+	"jimu/internal/kernel/logger"
+
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
+	"gorm.io/plugin/dbresolver"
+)
+
+// New 创建数据库连接（带重试和连接池配置）
+func New(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {
+	return ConnectWithRetry(cfg, log)
+}
+
+// ConnectWithRetry 带重试的数据库连接（使用自定义 logger 支持慢查询告警）
+func ConnectWithRetry(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {
+	maxRetries := cfg.MaxRetries
+	if maxRetries <= 0 {
+		maxRetries = 5
+	}
+	interval := cfg.RetryIntervalSec
+	if interval <= 0 {
+		interval = 3
+	}
+
+	var db *gorm.DB
+	var err error
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		db, err = openByDriver(cfg, log)
+		if err == nil {
+			if pingErr := pingDB(context.Background(), db); pingErr == nil {
+				if log != nil {
+					log.Infow("database connected", "attempt", attempt)
+				}
+				configurePool(db, cfg)
+				return db, nil
+			} else {
+				err = pingErr
+			}
+		}
+
+		if log != nil {
+			log.Warnw("retrying database connection",
+				"attempt", attempt,
+				"max_retries", maxRetries,
+				"interval_sec", interval,
+				"error", err.Error(),
+			)
+		}
+		time.Sleep(time.Duration(interval) * time.Second)
+	}
+
+	return nil, fmt.Errorf("database connection failed after %d attempts: %w", maxRetries, err)
+}
+
+func dsn(cfg config.DBConfig, host string, port int) string {
+	if host == "" {
+		host = cfg.Host
+	}
+	if port == 0 {
+		port = cfg.Port
+	}
+	// 时间统一按 UTC 存储与读取：驱动 loc=UTC 与服务器会话 time_zone='+00:00' 必须一致，
+	// 否则 TIMESTAMP 列与 DEFAULT CURRENT_TIMESTAMP 的写入/读取会相差一个时区偏移。
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=UTC&time_zone=%%27%%2B00%%3A00%%27",
+		cfg.User, cfg.Password, host, port, cfg.Database)
+}
+
+// openByDriver 根据 Driver 选择数据库实现
+func openByDriver(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {
+	switch cfg.Driver {
+	case "postgres", "postgresql":
+		return openPostgres(cfg, log)
+	case "", "mysql":
+		return openMySQL(cfg, log)
+	default:
+		return nil, fmt.Errorf("unsupported db driver: %s", cfg.Driver)
+	}
+}
+
+func openMySQL(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {
+	gormCfg := &gorm.Config{}
+	if log != nil {
+		gormCfg.Logger = NewGormLogger(log, SlowQueryThreshold)
+	} else {
+		gormCfg.Logger = gormlogger.Default.LogMode(gormlogger.Silent)
+	}
+	db, err := gorm.Open(mysql.Open(dsn(cfg, "", 0)), gormCfg)
+	if err != nil {
+		return nil, err
+	}
+	// 雪花 ID 主键注入（InitSnowflake 未调用时 no-op，回退数据库自增）
+	RegisterSnowflakeHook(db)
+
+	// 配置读写分离（如果有从库）
+	if len(cfg.ReadHosts) > 0 {
+		sources := []gorm.Dialector{mysql.Open(dsn(cfg, "", 0))}
+		var replicas []gorm.Dialector
+		for i, host := range cfg.ReadHosts {
+			port := 3306
+			if i < len(cfg.ReadPorts) {
+				port = cfg.ReadPorts[i]
+			}
+			replicas = append(replicas, mysql.Open(dsn(cfg, host, port)))
+		}
+
+		resolverCfg := dbresolver.Config{
+			Sources:  sources,
+			Replicas: replicas,
+			Policy:   dbresolver.RandomPolicy{},
+		}
+
+		if err := db.Use(dbresolver.Register(resolverCfg).
+			SetConnMaxIdleTime(time.Duration(cfg.ConnMaxIdleTimeSec) * time.Second).
+			SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetimeSec) * time.Second).
+			SetMaxIdleConns(cfg.MaxIdle).
+			SetMaxOpenConns(cfg.MaxOpen),
+		); err != nil {
+			return nil, fmt.Errorf("register dbresolver: %w", err)
+		}
+	}
+
+	if err := attachBreaker(db, cfg.Breaker); err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
+func pingDB(ctx context.Context, db *gorm.DB) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.PingContext(ctx)
+}
+
+func configurePool(db *gorm.DB, cfg config.DBConfig) {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return
+	}
+	sqlDB.SetMaxOpenConns(cfg.MaxOpen)
+	sqlDB.SetMaxIdleConns(cfg.MaxIdle)
+	if cfg.ConnMaxLifetimeSec > 0 {
+		sqlDB.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetimeSec) * time.Second)
+	}
+	if cfg.ConnMaxIdleTimeSec > 0 {
+		sqlDB.SetConnMaxIdleTime(time.Duration(cfg.ConnMaxIdleTimeSec) * time.Second)
+	}
+}

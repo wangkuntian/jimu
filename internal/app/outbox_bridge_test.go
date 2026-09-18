@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"testing"
 
+	"jimu/internal/capabilities/outbox"
+	"jimu/internal/capabilities/queue"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/platform/event"
-	"jimu/internal/platform/logger"
-	"jimu/internal/platform/outbox"
-	"jimu/internal/platform/queue"
+	"jimu/internal/kernel/event"
+	"jimu/internal/kernel/logger"
 
 	"github.com/stretchr/testify/assert"
 )

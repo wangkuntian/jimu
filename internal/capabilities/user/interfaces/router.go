@@ -4,10 +4,10 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/user/application"
-	"jimu/internal/platform/http/middleware"
+	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/shared/pagination"
 
-	redistore "jimu/internal/platform/redis"
+	redistore "jimu/internal/kernel/redis"
 
 	"github.com/gin-gonic/gin"
 )

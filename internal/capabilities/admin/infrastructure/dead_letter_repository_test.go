@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"jimu/internal/platform/queue/domain"
+	"jimu/internal/capabilities/queue/domain"
 
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"

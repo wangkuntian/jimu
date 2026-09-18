@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"jimu/internal/platform/auth"
-	"jimu/internal/platform/feature"
-	"jimu/internal/platform/scheduler"
+	"jimu/internal/capabilities/feature"
+	"jimu/internal/kernel/auth"
+	"jimu/internal/kernel/scheduler"
 
 	"github.com/stretchr/testify/assert"
 )

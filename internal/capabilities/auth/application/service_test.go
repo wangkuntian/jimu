@@ -7,9 +7,9 @@ import (
 	"time"
 
 	authdomain "jimu/internal/capabilities/auth/domain"
+	"jimu/internal/capabilities/encryption"
 	userdomain "jimu/internal/capabilities/user/domain"
-	"jimu/internal/platform/auth"
-	"jimu/internal/platform/encryption"
+	"jimu/internal/kernel/auth"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/totp"

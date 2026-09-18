@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
+	grpcpkg "jimu/internal/capabilities/grpc"
 	"jimu/internal/config"
-	grpcpkg "jimu/internal/platform/grpc"
-	"jimu/internal/platform/logger"
+	"jimu/internal/kernel/logger"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

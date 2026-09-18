@@ -5,13 +5,13 @@ import (
 	oauthapp "jimu/internal/capabilities/oauth/application"
 	oauthinfra "jimu/internal/capabilities/oauth/infrastructure"
 	"jimu/internal/capabilities/oauth/interfaces"
+	oauthplatform "jimu/internal/capabilities/oauth/provider"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/platform/auth"
-	"jimu/internal/platform/httpclient"
-	oauthplatform "jimu/internal/platform/oauth"
+	"jimu/internal/kernel/auth"
+	"jimu/internal/kernel/httpclient"
 
-	redistore "jimu/internal/platform/redis"
+	redistore "jimu/internal/kernel/redis"
 
 	"gorm.io/gorm"
 )

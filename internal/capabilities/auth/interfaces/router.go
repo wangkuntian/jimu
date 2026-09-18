@@ -2,10 +2,10 @@ package interfaces
 
 import (
 	"jimu/internal/capabilities/auth/application"
+	"jimu/internal/capabilities/captcha"
 	"jimu/internal/config"
-	"jimu/internal/platform/auth"
-	"jimu/internal/platform/captcha"
-	"jimu/internal/platform/http/middleware"
+	"jimu/internal/kernel/auth"
+	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"

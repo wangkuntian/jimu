@@ -4,8 +4,8 @@ import (
 	"strconv"
 
 	"jimu/internal/capabilities/tenant/application"
-	"jimu/internal/platform/http/middleware"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/http/middleware"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"

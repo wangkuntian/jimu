@@ -7,7 +7,7 @@ import (
 	"time"
 
 	admindomain "jimu/internal/capabilities/admin/domain"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 
 	"github.com/stretchr/testify/assert"
 )

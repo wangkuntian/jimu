@@ -8,7 +8,7 @@ import (
 
 	"jimu/internal/capabilities/audit/domain"
 	"jimu/internal/config"
-	"jimu/internal/platform/logger"
+	"jimu/internal/kernel/logger"
 
 	"go.uber.org/zap"
 )

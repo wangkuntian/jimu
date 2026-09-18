@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"jimu/internal/capabilities/audit/domain"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 

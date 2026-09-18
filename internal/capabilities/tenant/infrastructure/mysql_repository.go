@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"jimu/internal/capabilities/tenant/domain"
-	dbutil "jimu/internal/platform/db"
+	dbutil "jimu/internal/kernel/db"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
