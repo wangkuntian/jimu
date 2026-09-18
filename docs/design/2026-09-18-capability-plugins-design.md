@@ -44,7 +44,7 @@
 |---|---|---|---|
 | `user` | `users` | — | 身份主体，全形态必带；同时提供自助面与管理面用例（见 §5.3） |
 | `access` | `roles` `permissions` `role_permissions` `user_roles` | user | RBAC + Casbin + 鉴权中间件 + 角色分配 |
-| `tenancy` | `tenants` `tenant_plans` | — | 租户上下文 + 套餐/配额/用量 + 开通式注册 |
+| `tenancy` | `tenants` `tenant_plans` | — | 租户实体/套餐/配额/用量 + 开通式注册（上下文机制在 kernel/tenant） |
 | `audit` | `audit_logs` `audit_chain_head` | tenancy（可空） | 审计写入/哈希链/校验/导出；作为可选中间件提供者 |
 | `apikey` | `api_keys` | user，tenancy（可空） | 机器凭证 + scope + Key 维度限流 |
 | `notify` | — | — | email/sms/webhook/ws 派发；无渠道时日志降级（已有实现） |
@@ -244,7 +244,7 @@
 
 ### 5.4 其余结论
 
-- `tenancy` = 租户 CRUD + 上下文中间件 + 套餐/配额/用量 + 开通式注册（从 `auth` 迁入）；它不拥有 `tenant_id` 列本身，那些列由各表所有者维护
+- `tenancy` = 租户 CRUD + 套餐/配额/用量 + 开通式注册（从 `auth` 迁入；上下文机制在 `kernel/tenant`）；它不拥有 `tenant_id` 列本身，那些列由各表所有者维护
 - `audit` 自包含（service/worker/export/chain/middleware），其 middleware 是全局写者 → 设计为"可选中间件提供者"，其他能力无需感知其存在
 - `access` = role + permission + Casbin + 鉴权中间件 + `user_roles` 分配（从 `admin` 迁入）
 

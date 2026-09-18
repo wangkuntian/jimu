@@ -341,3 +341,8 @@ git add README.md AGENTS.md Makefile scripts/ .github/ specs/ migrations/ docs/ 
 **4. 已知取舍**：`kernel/auth`、`kernel/db`、`kernel/http` 在本阶段仍是混装包（含将分给 access/apikey/apidocs/uploadsec 的文件），这是刻意的——P1-B2 的拆分需要新包边界与端口设计，与搬迁混在一起会让 diff 无法用"重建式验证"判定。
 
 **5. 风险**：`platform/tenant` 被 33 个能力文件引用，映射表中它的替换式必须排在正确位置（无前缀冲突）；`platform/oauth` → `capabilities/oauth/provider` 是唯一包名变更，是重建验证中唯一允许的 `DIFFERS` 来源，执行者必须逐条解释。
+
+**6. 新增跨层边（终审发现）**
+
+- `internal/kernel/db` → `internal/capabilities/encryption`：base 时消费方与被消费方同在平台层内，本阶段 `encryption` 按归属落入 `capabilities/` 而消费方留在内核，遂成为 kernel→capability 边（实测 `internal/kernel/db/encryption.go` 引用它）。
+- `internal/kernel/http` → `internal/capabilities/storage`：同理（实测 `internal/kernel/http/upload_handler.go` 引用它）；这两条边的预期解法是 P1-B2 按设计文档 §3.6 拆分（`platform/db/encryption.go` → `encryption` 能力、`platform/http/upload_handler.go` → `uploadsec`），反向依赖消除由 P1-B3 跟踪。
