@@ -14,7 +14,7 @@
 
 - **零语义变化**：只改文件位置、import 路径、注释/文档中的路径文本；不改任何导出符号、函数签名、行为。**唯一允许的包名变更**是 `platform/oauth` → `capabilities/oauth/provider`（包名 `oauth` → `provider`，为避让已存在的 `capabilities/oauth` 模块目录）。其余 28 个包**包名不变**
 - **能力名（`Descriptor.Name`）本阶段一律不改**：`tenant`/`notification`/`feature` 的最终能力名（`tenancy`/`notify`/`featureflag`）属 P1-E；本阶段只决定**代码放在哪个目录**，不碰 catalog 与配置值
-- **不留残余**：Go / 脚本 / 工作流 / Makefile / README / AGENTS.md / specs / configs 中不得再有 `internal/platform` 引用。五处有意的历史例外：P0 计划、P1-A 计划与本计划（它们的主题就是搬迁）、设计文档 §3.5.3/§3.6 的归位表（属改造前现状，需加历史注记）、以及已发布的历史版本日志。**已发布的版本日志是冻结记录，永不重写**
+- **不留残余**：Go / 脚本 / 工作流 / Makefile / README / AGENTS.md / specs / configs 中不得再有 `internal/platform` 引用。四处有意的单文件历史例外：P0 计划、P1-A 计划与本计划（它们的主题就是搬迁）、设计文档 §3.5.3/§3.6 的归位表（属改造前现状，需加历史注记）；外加**已发布的历史版本日志整目录**（`docs/releases/`）。**已发布的版本日志是冻结记录，永不重写**
 - **残余检查必须用加宽模式**（P1-A 的教训，已由评审实测）：`grep -rnE '(^|[^A-Za-z0-9_-])(internal/)?platform\b'` —— 它同时命中 `jimu/internal/platform/…`、`./internal/platform/…`、裸 `platform/…`、`"internal/platform"`，且不误伤 `xplatform/foo`。**并保留更强判据：文档引用的每个路径都必须在磁盘上存在**
 - **全绿**：`gofmt -l .`（无输出）、`go build ./...`、`go vet ./...`、`golangci-lint run ./...`、`make check-log-usage`、`go test ./... -count=1`、`make bench-ci`、`make release-check COMPOSE_ENV=.env.example`
 - **提交信息全英文**（Conventional Commits）；提交需用户明确指令
@@ -70,7 +70,7 @@ ws            → internal/capabilities/ws
 
 - 引用 `jimu/internal/platform/` 的 Go 文件：**166**（其中测试 67）
 - 非 Go 引用（tracked，排除计划/设计文档）：`Makefile:288`、`scripts/bench_ci.sh:13`、`scripts/govulncheck.sh:5`（注释）、`.github/workflows/ci.yml:178`、`.github/workflows/release.yml:89`（**PG 迁移测试的包路径，改错即废掉该步骤**）、`AGENTS.md:41,42,43`、`README.md`（15 行）、`specs/**`（5 文件 15 行）、`docs/releases/v0.3.0.md`（1 行）
-- 历史例外：`docs/releases/v0.2.0.md` —— **已发布的版本日志是冻结记录，永不重写**（其中的旧路径原样保留，只与当时的发布内容对照）
+- 历史例外：`docs/releases/` 整目录 —— **已发布的版本日志是冻结记录，永不重写**（其中的旧路径原样保留，只与当时的发布内容对照；过滤链按目录而非按单文件排除）
 - 子目录情况：`platform/oauth` 为扁平结构；`platform/grpc` 含子包（如 `userinfopb`），前缀替换会一并覆盖
 
 ---
@@ -281,7 +281,7 @@ git commit -m "refactor(platform): relocate platform packages to kernel and capa
 - [ ] **Step 3: 零残余检查（加宽模式 + 路径存在性）**
 
 ```bash
-# 3a) 加宽模式的残留：只允许命中五处历史例外（P0 计划 / P1-A 计划 / 本计划 / 设计文档 / 已发布版本日志 v0.2.0）
+# 3a) 加宽模式的残留：只允许命中四处单文件历史例外（P0 计划 / P1-A 计划 / 本计划 / 设计文档）+ 已发布的历史版本日志整目录
 grep -rnE '(^|[^A-Za-z0-9_-])(internal/)?platform\b' \
   --include='*.go' --include='*.md' --include='*.sh' --include='*.yml' --include='*.yaml' --include='*.json' \
   README.md AGENTS.md Makefile docs/ specs/ configs/ scripts/ .github/ internal/ tools/ 2>/dev/null \
@@ -289,7 +289,7 @@ grep -rnE '(^|[^A-Za-z0-9_-])(internal/)?platform\b' \
   | grep -v '^docs/plans/2026-09-18-capability-namespace-move.md' \
   | grep -v '^docs/plans/2026-09-18-platform-relocation.md' \
   | grep -v '^docs/design/2026-09-18-capability-plugins-design.md' \
-  | grep -v '^docs/releases/v0.2.0.md'
+  | grep -v '^docs/releases/'
 
 # 3b) 路径存在性：文档里引用的 internal/... 路径必须真实存在
 grep -rhoE '(jimu/)?internal/[a-z_/]+' README.md AGENTS.md docs/CONTRIBUTING.md \

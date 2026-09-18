@@ -34,6 +34,8 @@
 
 ### 3.1 内核 `internal/kernel/`（不可勾选）
 
+> 路径注记：本文写于 P1-B1 之前，正文中的 `platform/x` 指该包**搬迁前**的位置；搬迁后内核机制在 `internal/kernel/x`、能力实现在 `internal/capabilities/…`。§3.5.3/§3.6 的表格另有就地说明。
+
 `config`（内核配置段 + 能力段合并）、`log`（Zap + 脱敏 + logcheck 规范）、`db`（连接池/方言/迁移执行器/事务/并发控制）、`cache`（Redis 抽象 + Cache-Aside + singleflight）、`httpx`（HTTP server + 内核中间件 + management server，见 §3.5）、`obs`（健康检查/Prometheus/OTel 追踪与导出/错误上报 reporter）、`contract`（`Capability` 契约 + 端口 + 注册表）、`app`（装配 + 生命周期）、`shared`（错误码/i18n/校验器/统一响应/分页）、`breaker`（统一熔断器，HTTP/Redis/DB/gRPC 共用）、`event`（事件总线，能力 `RegisterEvents` 的载体）、`tlsconf`（TLS/mTLS 配置构建，HTTP 与 gRPC 共用）、`mask`（敏感信息脱敏，日志链路强制）、`httpclient`（统一出站 HTTP：超时/重试/熔断/限流/traceparent 注入）、`id`（雪花 ID 生成器，与现 `platform/db/snowflake.go` 合并去重）。
 
 内核不含任何业务表（迁移执行器自建的版本表除外）。
