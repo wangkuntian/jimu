@@ -32,7 +32,7 @@
 | 7 | P1-A/P1-B1 | `internal/kernel/db/retention.go:29` 注释仍写"kernel 不应反向依赖 modules" |
 | 8 | P1-B1 终审 | CI 的 `CHANGELOG check` 因 `actions/checkout` 默认 `fetch-depth: 1` 可能取不到基线而静默通过 |
 | 9 | P1-B1 终审 | 本地 `golangci-lint`（v2.12.2）与 CI 固定版本（v2.7.2）不一致，`make lint` 结果不可比 |
-| 10 | P1-B1 终审裁定（待落地） | 版本日志恢复字面 `internal/platform/`、`oauth provider` → `oauth/provider`；计划过滤器链补 `grep -v '^docs/releases/'` |
+| 10 | P1-B1 终审裁定（待落地） | 版本日志恢复字面 `internal/platform/`、`oauth provider` 改写为 `oauth（provider 包）`（能力清单按 `/` 计数须为 14）；计划过滤器链补目录级例外（`grep -v '^docs/plans/'`、`grep -v '^docs/releases/'`） |
 
 ---
 
@@ -390,7 +390,7 @@ git add .github/workflows/ci.yml Makefile && git commit -m "chore(ci): fetch ful
 ### Task 5: 文档收尾（清单 #7、#10）
 
 **Files:**
-- Modify: `docs/releases/v0.3.0.md`（恢复字面路径 + `oauth/provider`）
+- Modify: `docs/releases/v0.3.0.md`（恢复字面路径 + `oauth provider` 改写为 `oauth（provider 包）`）
 - Modify: `docs/plans/2026-09-18-platform-relocation.md`（过滤器链补例外 + 计数）
 - Modify: `docs/design/2026-09-18-capability-plugins-design.md`（§3.1 标题下方加一条全局注记：文中 `platform/x` 指其 P1-B1 **搬迁前**的位置）
 
@@ -400,17 +400,19 @@ git add .github/workflows/ci.yml Makefile && git commit -m "chore(ci): fetch ful
 
 - [ ] **Step 1: 恢复版本日志的字面路径**
 
-`docs/releases/v0.3.0.md` 的「平台包归位」条目：把"`internal/` 下平台层"恢复为字面 `internal/platform/`，并把 `oauth provider` 写作 `oauth/provider`（列表分隔符是 `/`，否则读者会数出 15 个名字）。
+`docs/releases/v0.3.0.md` 的「平台包归位」条目：把"`internal/` 下平台层"恢复为字面 `internal/platform/`，并把 `oauth provider` 改写为 `oauth（provider 包）`（能力清单以 `/` 分隔，若写成 `oauth/provider` 读者会数出 15 个名字，与条目声明的 14 个不符）。
 
-- [ ] **Step 2: 计划过滤器链补目录级例外**
+- [ ] **Step 2: 计划过滤器链改为目录级例外**
 
-`docs/plans/2026-09-18-platform-relocation.md` 的 Step 3a 过滤器链把针对 `v0.2.0.md` 的单文件例外换成一条目录级例外：
+`docs/plans/2026-09-18-platform-relocation.md` 的 Step 3a 过滤器链：把逐个计划文件的单文件例外（P0 计划 / namespace-move 计划 / 本计划）换成一条目录级例外，`docs/releases/` 目录例外与设计文档单文件例外保留，最终为三条过滤器：
 
 ```bash
-  | grep -v '^docs/releases/'
+  | grep -v '^docs/plans/' \
+  | grep -v '^docs/releases/' \
+  | grep -v '^docs/design/2026-09-18-capability-plugins-design.md'
 ```
 
-并更新例外计数为「一处单文件例外（设计文档）+ 两个目录级例外（`docs/plans/`、`docs/releases/`）」与对应说明（逐个计划文件枚举例外已连续三次被新计划打破，故计划整体按目录排除）。
+并在该步骤的 3a 注释与「不留残余」约束里把例外写成「一处单文件例外（设计文档）+ 两个目录级例外（`docs/plans/`、`docs/releases/`）」与对应说明（逐个计划文件枚举例外已连续三次被新计划打破，故计划整体按目录排除；设计文档保留单文件粒度，使未来真正需要更新的设计文档仍会被扫出）。
 
 - [ ] **Step 3: 设计文档加全局注记**
 
@@ -423,14 +425,23 @@ git add .github/workflows/ci.yml Makefile && git commit -m "chore(ci): fetch ful
 - [ ] **Step 4: 验证**
 
 ```bash
+# 4a) 加宽模式零残留（三个例外：`docs/plans/`、`docs/releases/`、设计文档）
 grep -rnE '(^|[^A-Za-z0-9_-])(internal/)?platform\b' README.md AGENTS.md Makefile docs/ specs/ configs/ scripts/ .github/ internal/ tools/ 2>/dev/null \
   | grep -v '^docs/plans/' \
   | grep -v '^docs/releases/' \
   | grep -v '^docs/design/2026-09-18-capability-plugins-design.md'
-grep -n 'oauth/provider' docs/releases/v0.3.0.md
+
+# 4b) 版本日志确实写了字面规范路径
+grep -n 'internal/platform/' docs/releases/v0.3.0.md
+
+# 4c) 能力清单按 `/` 分隔计数必须等于条目声明的 14（`oauth（provider 包）` 不额外贡献名字）
+sed -n '19p' docs/releases/v0.3.0.md | sed 's/.*14 个能力实现：//; s/）；.*//' | awk -F'/' '{print NF}'
+
+# 4d) 旧写法不得再出现在版本日志里（`oauth/provider` 会被读成第 15 个名字）
+grep -nE 'oauth[/ ]provider' docs/releases/v0.3.0.md
 ```
 
-Expected: 第一条无输出；第二条命中版本日志条目
+Expected: 4a 无输出；4b 命中版本日志「平台包归位」条目（`docs/releases/v0.3.0.md:19`）；4c 输出 `14`；4d 无输出
 
 - [ ] **Step 5: 提交**（用户授权后执行）
 
