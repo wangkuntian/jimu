@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"jimu/internal/config"
-	"jimu/internal/platform/auth"
+	"jimu/internal/kernel/auth"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"

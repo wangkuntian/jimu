@@ -356,7 +356,7 @@ const routerTemplate = `package interfaces
 
 import (
 	"jimu/internal/capabilities/{{.Name}}/application"
-	"jimu/internal/platform/http/middleware"
+	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"
@@ -476,7 +476,7 @@ import (
 
 	"jimu/internal/capabilities/{{.Name}}/application"
 	"jimu/internal/capabilities/{{.Name}}/domain"
-	"jimu/internal/platform/http/middleware"
+	"jimu/internal/kernel/http/middleware"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

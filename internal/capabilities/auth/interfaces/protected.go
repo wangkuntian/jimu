@@ -1,8 +1,8 @@
 package interfaces
 
 import (
-	platformauth "jimu/internal/platform/auth"
-	"jimu/internal/platform/tenant"
+	platformauth "jimu/internal/kernel/auth"
+	"jimu/internal/kernel/tenant"
 
 	"github.com/casbin/casbin/v3"
 	"github.com/gin-gonic/gin"

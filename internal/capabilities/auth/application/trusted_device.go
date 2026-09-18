@@ -10,7 +10,7 @@ import (
 
 	authdomain "jimu/internal/capabilities/auth/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 
 	"gorm.io/gorm"

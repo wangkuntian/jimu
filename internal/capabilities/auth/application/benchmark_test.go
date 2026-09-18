@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	userdomain "jimu/internal/capabilities/user/domain"
-	"jimu/internal/platform/auth"
+	"jimu/internal/kernel/auth"
 
 	"golang.org/x/crypto/bcrypt"
 )

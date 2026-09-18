@@ -11,7 +11,7 @@ import (
 	"time"
 
 	authdomain "jimu/internal/capabilities/auth/domain"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 
 	"github.com/go-webauthn/webauthn/protocol"

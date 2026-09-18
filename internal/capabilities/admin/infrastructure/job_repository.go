@@ -3,7 +3,7 @@ package infrastructure
 import (
 	"context"
 
-	"jimu/internal/platform/queue/domain"
+	"jimu/internal/capabilities/queue/domain"
 
 	"gorm.io/gorm"
 )

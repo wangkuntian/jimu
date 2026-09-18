@@ -3,7 +3,7 @@ package interfaces
 import (
 	auditdomain "jimu/internal/capabilities/audit/domain"
 	auditinfra "jimu/internal/capabilities/audit/infrastructure"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/response"
 
 	"github.com/gin-gonic/gin"

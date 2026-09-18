@@ -6,7 +6,7 @@ import (
 
 	admindomain "jimu/internal/capabilities/admin/domain"
 	"jimu/internal/capabilities/user/domain"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/stretchr/testify/assert"

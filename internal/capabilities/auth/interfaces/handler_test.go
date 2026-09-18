@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/auth/application"
+	"jimu/internal/capabilities/encryption"
+	"jimu/internal/capabilities/notification"
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/config"
-	"jimu/internal/platform/auth"
-	"jimu/internal/platform/encryption"
-	"jimu/internal/platform/notification"
+	"jimu/internal/kernel/auth"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/alicebob/miniredis/v2"

@@ -10,7 +10,7 @@ import (
 	"jimu/internal/capabilities/tenant/application"
 	"jimu/internal/capabilities/tenant/domain"
 	"jimu/internal/capabilities/tenant/infrastructure"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"

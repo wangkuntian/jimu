@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/auth/application"
+	"jimu/internal/capabilities/captcha"
 	"jimu/internal/config"
-	platformauth "jimu/internal/platform/auth"
-	"jimu/internal/platform/captcha"
+	platformauth "jimu/internal/kernel/auth"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"

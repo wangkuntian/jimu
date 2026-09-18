@@ -13,7 +13,7 @@ import (
 	authdomain "jimu/internal/capabilities/auth/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/config"
-	"jimu/internal/platform/auth"
+	"jimu/internal/kernel/auth"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/alicebob/miniredis/v2"

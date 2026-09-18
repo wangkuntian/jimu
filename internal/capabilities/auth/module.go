@@ -6,14 +6,14 @@ import (
 	"jimu/internal/capabilities/auth/application"
 	authinfra "jimu/internal/capabilities/auth/infrastructure"
 	"jimu/internal/capabilities/auth/interfaces"
+	"jimu/internal/capabilities/captcha"
+	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/platform/auth"
-	"jimu/internal/platform/captcha"
-	"jimu/internal/platform/outbox"
+	"jimu/internal/kernel/auth"
 
-	redistore "jimu/internal/platform/redis"
+	redistore "jimu/internal/kernel/redis"
 
 	"github.com/go-webauthn/webauthn/webauthn"
 

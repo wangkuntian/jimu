@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	admindomain "jimu/internal/capabilities/admin/domain"
+	"jimu/internal/capabilities/dataops/importer"
 	userdomain "jimu/internal/capabilities/user/domain"
-	"jimu/internal/platform/importer"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"

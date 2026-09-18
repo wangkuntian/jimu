@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"jimu/internal/config"
-	"jimu/internal/platform/db"
-	"jimu/internal/platform/logger"
+	"jimu/internal/kernel/db"
+	"jimu/internal/kernel/logger"
 	"jimu/tools/generator"
 
 	"github.com/spf13/cobra"

@@ -12,7 +12,7 @@ import (
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/config"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 
 	mysqlerr "github.com/go-sql-driver/mysql"

@@ -8,12 +8,12 @@ import (
 	"log"
 	"time"
 
+	"jimu/internal/capabilities/encryption"
+	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
-	"jimu/internal/platform/cache"
-	"jimu/internal/platform/encryption"
-	"jimu/internal/platform/outbox"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/cache"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 

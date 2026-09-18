@@ -3,7 +3,7 @@ package application
 import (
 	"time"
 
-	redistore "jimu/internal/platform/redis"
+	redistore "jimu/internal/kernel/redis"
 )
 
 // Service 管理端服务

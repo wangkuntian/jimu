@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"jimu/internal/capabilities/admin/application"
-	"jimu/internal/platform/importer"
+	"jimu/internal/capabilities/dataops/importer"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 

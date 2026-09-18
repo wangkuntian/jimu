@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	admindomain "jimu/internal/capabilities/admin/domain"
+	qdomain "jimu/internal/capabilities/queue/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
-	qdomain "jimu/internal/platform/queue/domain"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"

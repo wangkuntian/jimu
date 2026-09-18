@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/audit/application"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"

@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"time"
 
-	redistore "jimu/internal/platform/redis"
+	redistore "jimu/internal/kernel/redis"
 )
 
 // AdminMonitoringService 运维监控服务

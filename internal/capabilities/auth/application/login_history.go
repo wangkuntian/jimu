@@ -5,7 +5,7 @@ import (
 	"log"
 
 	authdomain "jimu/internal/capabilities/auth/domain"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 )

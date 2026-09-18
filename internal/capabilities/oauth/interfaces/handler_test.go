@@ -12,8 +12,8 @@ import (
 
 	"jimu/internal/capabilities/oauth/application"
 	oauthdomain "jimu/internal/capabilities/oauth/domain"
-	"jimu/internal/platform/auth"
-	oauthplatform "jimu/internal/platform/oauth"
+	oauthplatform "jimu/internal/capabilities/oauth/provider"
+	"jimu/internal/kernel/auth"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/alicebob/miniredis/v2"

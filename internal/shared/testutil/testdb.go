@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"jimu/internal/config"
-	"jimu/internal/platform/db"
+	"jimu/internal/kernel/db"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"

@@ -10,9 +10,9 @@ import (
 
 	authdomain "jimu/internal/capabilities/auth/domain"
 	oauthdomain "jimu/internal/capabilities/oauth/domain"
+	oauthplatform "jimu/internal/capabilities/oauth/provider"
 	userdomain "jimu/internal/capabilities/user/domain"
-	"jimu/internal/platform/auth"
-	oauthplatform "jimu/internal/platform/oauth"
+	"jimu/internal/kernel/auth"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/alicebob/miniredis/v2"
@@ -27,7 +27,7 @@ import (
 
 const testJWTSecret = "01234567890123456789012345678901"
 
-// fakeProvider 实现 platform oauth.Provider
+// fakeProvider 实现 oauthplatform.Provider
 type fakeProvider struct {
 	name    string
 	authURL string

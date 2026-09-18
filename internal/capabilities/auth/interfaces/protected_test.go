@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	platformauth "jimu/internal/platform/auth"
+	platformauth "jimu/internal/kernel/auth"
 
 	"github.com/gin-gonic/gin"
 )

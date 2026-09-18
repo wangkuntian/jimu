@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"jimu/internal/capabilities/tenant/domain"
-	"jimu/internal/platform/tenant"
+	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 

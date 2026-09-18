@@ -3,17 +3,17 @@ package user
 import (
 	"fmt"
 
+	"jimu/internal/capabilities/encryption"
+	"jimu/internal/capabilities/notification"
+	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/user/application"
 	"jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/capabilities/user/interfaces"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/platform/cache"
-	"jimu/internal/platform/encryption"
-	"jimu/internal/platform/notification"
-	"jimu/internal/platform/outbox"
+	"jimu/internal/kernel/cache"
 
-	redistore "jimu/internal/platform/redis"
+	redistore "jimu/internal/kernel/redis"
 
 	"gorm.io/gorm"
 )

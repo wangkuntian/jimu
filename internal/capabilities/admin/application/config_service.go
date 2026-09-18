@@ -7,7 +7,7 @@ import (
 
 	"jimu/internal/contract"
 
-	redistore "jimu/internal/platform/redis"
+	redistore "jimu/internal/kernel/redis"
 )
 
 // AdminConfigService 配置热更新服务

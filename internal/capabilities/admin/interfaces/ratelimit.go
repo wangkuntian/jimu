@@ -4,11 +4,11 @@ import (
 	"strings"
 	"time"
 
-	"jimu/internal/platform/auth"
+	"jimu/internal/kernel/auth"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
-	redistore "jimu/internal/platform/redis"
+	redistore "jimu/internal/kernel/redis"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
