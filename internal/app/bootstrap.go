@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"jimu/internal/config"
@@ -110,6 +111,12 @@ func registerEventBusBridge(c *Container) {
 
 func Bootstrap(container *Container, modules ...contract.Module) (*Application, error) {
 	cfg := container.Config
+
+	names := make([]string, 0, len(modules))
+	for _, module := range modules {
+		names = append(names, module.Name())
+	}
+	container.Logger.Infow("capabilities enabled", "count", len(names), "names", strings.Join(names, ","))
 
 	// 初始化 OpenTelemetry 追踪
 	tp, err := observability.InitTracing(context.Background(), cfg.OTEL)

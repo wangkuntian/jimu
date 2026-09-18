@@ -74,5 +74,8 @@ func TestRegisterHTTPAppliesProtectedMiddlewareByMountPoint(t *testing.T) {
 		if got != c.protected {
 			t.Fatalf("path %s protected = %v, want %v", c.path, got, c.protected)
 		}
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("path %s status = %d, want %d", c.path, rec.Code, http.StatusNoContent)
+		}
 	}
 }

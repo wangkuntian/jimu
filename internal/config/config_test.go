@@ -465,6 +465,19 @@ func TestValidateCapabilitiesAllowsEmpty(t *testing.T) {
 	}
 }
 
+func TestValidateCapabilitiesTrimsAndDedupes(t *testing.T) {
+	cfg := minimalValidConfig(t)
+	cfg.Capabilities.Enabled = []string{"user", " user"}
+	if err := cfg.Validate("dev"); err == nil {
+		t.Fatal("expected duplicate detection after trimming")
+	}
+	cfg.Capabilities.Enabled = []string{" user ", "auth"}
+	if err := cfg.Validate("dev"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assert.Equal(t, []string{"user", "auth"}, cfg.Capabilities.Enabled)
+}
+
 // minimalValidConfig 返回一份通过 dev 校验的配置副本，供能力校验用例复用。
 func minimalValidConfig(t *testing.T) Config {
 	t.Helper()
