@@ -1,23 +1,20 @@
 package main
 
 import (
-	"sort"
+	"slices"
 	"testing"
 
 	"jimu/internal/capabilities/catalog"
 )
 
-func TestWiredCapabilitiesMatchCatalog(t *testing.T) {
-	wired := append([]string(nil), wiredCapabilities...)
+// TestWiredCapabilitiesSubsetOfCatalog main 装配的 8 个能力必须是清单的子集：
+// 清单尾部的基础设施能力（apikey/queue/outbox/dataops/search）只带迁移、
+// 尚无 Module 实例，故不在装配名册中（run() 按 catalog.Resolve 结果过滤装配）。
+func TestWiredCapabilitiesSubsetOfCatalog(t *testing.T) {
 	known := catalog.Names()
-	sort.Strings(wired)
-	sort.Strings(known)
-	if len(wired) != len(known) {
-		t.Fatalf("wired %d capabilities (%v), catalog declares %d (%v)", len(wired), wired, len(known), known)
-	}
-	for i := range wired {
-		if wired[i] != known[i] {
-			t.Fatalf("wired[%d] = %q, catalog[%d] = %q", i, wired[i], i, known[i])
+	for _, name := range wiredCapabilities {
+		if !slices.Contains(known, name) {
+			t.Fatalf("wired capability %q missing from catalog (%v)", name, known)
 		}
 	}
 }

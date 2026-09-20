@@ -9,17 +9,24 @@ import (
 	"strings"
 
 	adminmodule "jimu/internal/capabilities/admin"
+	"jimu/internal/capabilities/apikey"
 	auditmodule "jimu/internal/capabilities/audit"
 	authmodule "jimu/internal/capabilities/auth"
+	"jimu/internal/capabilities/dataops"
 	oauthmodule "jimu/internal/capabilities/oauth"
+	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/permission"
+	"jimu/internal/capabilities/queue"
 	"jimu/internal/capabilities/role"
+	"jimu/internal/capabilities/search"
 	tenantmodule "jimu/internal/capabilities/tenant"
 	"jimu/internal/capabilities/user"
 	"jimu/internal/contract"
 )
 
 // entries 是唯一的能力清单，顺序即默认启用顺序（同时是依赖拓扑序）。
+// 尾部 5 个为基础设施能力（无 Requires、无其他能力依赖它们），
+// 仅携带迁移参与迁移运行；尚无 Module 实例装配（P1 收编）。
 var entries = []contract.Descriptor{
 	user.Descriptor,
 	role.Descriptor,
@@ -29,6 +36,11 @@ var entries = []contract.Descriptor{
 	auditmodule.Descriptor,
 	adminmodule.Descriptor,
 	oauthmodule.Descriptor,
+	apikey.Descriptor,
+	queue.Descriptor,
+	outbox.Descriptor,
+	dataops.Descriptor,
+	search.Descriptor,
 }
 
 // All 返回清单中全部能力的深拷贝（含 Requires），调用方修改不影响清单。

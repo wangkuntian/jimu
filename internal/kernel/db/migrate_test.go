@@ -79,6 +79,17 @@ func TestMigrateEnabled_SkipsDialectMiss(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestMigrateEnabled_MissingRootErrors 声明了 Migrations 却没有 migrations/ 根
+// 属开发期错误：报错而非静默跳过（缺方言子目录仍是跳过）。
+func TestMigrateEnabled_MissingRootErrors(t *testing.T) {
+	caps := []contract.Descriptor{{Name: "broken", Migrations: fstest.MapFS{
+		"oracle/001_x.sql": {Data: []byte("-- +goose Up\n")},
+	}}}
+	cfg := config.DBConfig{Host: "127.0.0.1", Port: 1, User: "u", Password: "p", Database: "app"}
+	err := MigrateEnabled(cfg, caps, "up")
+	require.ErrorContains(t, err, "missing migrations/ root")
+}
+
 // TestMigrateEnabled_UnknownDirectionFailsFast 有能力迁移但方向非法时，在触达数据库前
 // （连接打开在先）报 unknown direction——保持旧运行器的方向校验语义。
 func TestMigrateEnabled_UnknownDirectionFailsFast(t *testing.T) {

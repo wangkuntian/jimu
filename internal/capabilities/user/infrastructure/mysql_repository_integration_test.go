@@ -20,9 +20,9 @@ func init() {
 	// 迁移 embed 在能力根包（user/migrations.go），infrastructure 子包测试
 	// 引用根包会构成 import cycle，故这里按源码路径直接定位迁移目录。
 	_, thisFile, _, _ := runtime.Caller(0)
-	migDir := filepath.Join(filepath.Dir(thisFile), "..", "migrations")
+	capRoot := filepath.Join(filepath.Dir(thisFile), "..")
 	testutil.SetMigrateCaps([]contract.Descriptor{
-		{Name: "user", Migrations: os.DirFS(migDir)},
+		{Name: "user", Migrations: os.DirFS(capRoot)},
 	})
 }
 

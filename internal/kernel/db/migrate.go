@@ -39,21 +39,24 @@ func MigrateEnabled(cfg config.DBConfig, caps []contract.Descriptor, direction s
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	for _, cap := range caps {
-		if cap.Migrations == nil {
+	for _, c := range caps {
+		if c.Migrations == nil {
 			continue
 		}
-		// 能力无当前方言的迁移目录时跳过（与 nil Migrations 同语义）；
-		// 否则 goose Provider 会对空 FS 报 "no migrations found"。
-		if _, err := fs.Stat(cap.Migrations, "migrations/"+cfg.Dialect()); err != nil {
+		// 声明了 Migrations 却没有 migrations/ 根属开发期错误：报错而非静默跳过
+		// （静默漏迁移）。缺当前方言子目录仍是跳过（能力可在另一方言下无迁移）。
+		if _, err := fs.Stat(c.Migrations, "migrations"); err != nil {
+			return fmt.Errorf("capability %s migrations: missing migrations/ root: %w", c.Name, err)
+		}
+		if _, err := fs.Stat(c.Migrations, "migrations/"+cfg.Dialect()); err != nil {
 			continue
 		}
-		fsys, err := fs.Sub(cap.Migrations, "migrations/"+cfg.Dialect())
+		fsys, err := fs.Sub(c.Migrations, "migrations/"+cfg.Dialect())
 		if err != nil {
-			return fmt.Errorf("capability %s migrations: %w", cap.Name, err)
+			return fmt.Errorf("capability %s migrations: %w", c.Name, err)
 		}
-		if err := migrateOne(gooseDialect, sqlDB, fsys, "goose_db_version_"+cap.Name, direction); err != nil {
-			return fmt.Errorf("capability %s: %w", cap.Name, err)
+		if err := migrateOne(gooseDialect, sqlDB, fsys, "goose_db_version_"+c.Name, direction); err != nil {
+			return fmt.Errorf("capability %s: %w", c.Name, err)
 		}
 	}
 	return nil

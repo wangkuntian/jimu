@@ -16,7 +16,7 @@ func withEntries(t *testing.T, ds ...contract.Descriptor) {
 	t.Cleanup(func() { entries = old })
 }
 
-// fixture 复刻 P0 八个能力的依赖形态（与真实清单拓扑一致）。
+// fixture 复刻真实清单（8 业务能力 + 5 基础设施能力）的依赖形态。
 // Migrations 为 fs.FS 接口值（embed.FS 无法逐值复刻），漂移检测由
 // TestCatalogMigrationsShape 单独按"有无迁移"钉住。
 func fixture() []contract.Descriptor {
@@ -29,6 +29,11 @@ func fixture() []contract.Descriptor {
 		{Name: "audit", Mount: contract.MountProtected},
 		{Name: "admin", Requires: []string{"user", "audit"}, Mount: contract.MountProtected},
 		{Name: "oauth", Requires: []string{"auth", "user"}, Mount: contract.MountPublic},
+		{Name: "apikey", Mount: contract.MountProtected},
+		{Name: "queue", Mount: contract.MountProtected},
+		{Name: "outbox", Mount: contract.MountProtected},
+		{Name: "dataops", Mount: contract.MountProtected},
+		{Name: "search", Mount: contract.MountProtected},
 	}
 }
 
@@ -38,8 +43,8 @@ func TestResolveEmptyMeansAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve(nil) error: %v", err)
 	}
-	if len(got) != 8 {
-		t.Fatalf("len = %d, want 8 (all)", len(got))
+	if len(got) != 13 {
+		t.Fatalf("len = %d, want 13 (all)", len(got))
 	}
 }
 
@@ -142,8 +147,7 @@ func TestResolveReportsFirstDanglingDependencyInListOrder(t *testing.T) {
 	}
 }
 
-// TestDescriptorsAreWellFormed 同时校验夹具与真实清单。Task 3 填齐清单后，
-// 该用例对 catalog 的 8 个条目同样生效。
+// TestDescriptorsAreWellFormed 同时校验夹具与真实清单。
 func TestDescriptorsAreWellFormed(t *testing.T) {
 	lists := map[string][]contract.Descriptor{"fixture": fixture(), "catalog": All()}
 	for label, list := range lists {
@@ -209,6 +213,7 @@ func TestCatalogMigrationsShape(t *testing.T) {
 		"user": true, "role": true, "permission": true, "tenant": true,
 		"auth": true, "audit": true, "oauth": true,
 		"admin": false,
+		"apikey": true, "queue": true, "outbox": true, "dataops": true, "search": true,
 	}
 	if got := migrationsOf(All()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("catalog Migrations shape drifted:\n got %v\nwant %v", got, want)
