@@ -8,6 +8,7 @@ import (
 	"time"
 
 	admininfra "jimu/internal/capabilities/admin/infrastructure"
+	apikey "jimu/internal/capabilities/apikey"
 	"jimu/internal/capabilities/breach"
 	"jimu/internal/capabilities/captcha"
 	"jimu/internal/capabilities/encryption"
@@ -18,9 +19,10 @@ import (
 	"jimu/internal/capabilities/queue"
 	"jimu/internal/capabilities/storage"
 	"jimu/internal/capabilities/uploadsec"
+	userpkg "jimu/internal/capabilities/user"
+	userinfrastructure "jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/db"
 	"jimu/internal/kernel/event"
 	"jimu/internal/kernel/httpclient"
@@ -56,7 +58,7 @@ type Container struct {
 	Captcha        *captcha.Service
 	Cipher         *encryption.Cipher
 	WorkerPool     *queue.WorkerPool
-	APIKeyVerifier *auth.APIKeyVerifier
+	APIKeyVerifier *apikey.APIKeyVerifier
 	// 泄露口令检查（HIBP）；auth.breach_check_enabled 关闭时为 nil
 	BreachChecker breach.Checker
 	GRPCServer    *grpcpkg.Server
@@ -286,8 +288,8 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	captchaSvc := captcha.NewService(rdb, time.Duration(cfg.Captcha.TTLMin)*time.Minute)
 
 	// API Key 验证器（服务/机器间认证，复用 admin api_keys 表）
-	// 路由组按需挂载 auth.APIKeyAuthMiddleware(c.APIKeyVerifier)
-	apiKeyVerifier := auth.NewAPIKeyVerifier(auth.NewDBAPIKeyStore(dbConn))
+	// 路由组按需挂载 apikey.APIKeyAuthMiddleware(c.APIKeyVerifier)
+	apiKeyVerifier := apikey.NewAPIKeyVerifier(apikey.NewDBAPIKeyStore(dbConn))
 
 	// 错误上报：启用时输出结构化错误日志（日志链路接入 OpenObserve 后自动汇聚）
 	// gRPC 服务端 panic 也经此上报（server recovery 拦截器）
@@ -304,8 +306,9 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	if err != nil {
 		return nil, fmt.Errorf("init grpc server: %w", err)
 	}
-	// 业务示例：注册 UserInfoService（真实业务模块可在此注入自己的 service）
-	grpcServer.RegisterUserInfoService(dbConn)
+	// 业务示例：注册 UserInfoService，用户数据经 contract.UserinfoSource 端口读取
+	// （user 能力提供适配实现，grpc 能力不直接依赖 user/domain）
+	grpcServer.RegisterUserInfoService(userpkg.NewUserinfoSource(userinfrastructure.NewMysqlRepository(dbConn)))
 
 	return &Container{
 		Config:         cfg,

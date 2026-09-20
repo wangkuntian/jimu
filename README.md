@@ -5,7 +5,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 ## 特性
 
 - **模块化架构** — Clean Architecture 分层，业务逻辑依赖接口不依赖实现
-- **统一认证** — typed JWT + Redis refresh session + Casbin RBAC v3 权限模型；API Key 认证（服务/机器间调用，`X-API-Key` 头 + `auth.APIKeyAuthMiddleware` + `auth.RequireScope` scope 校验，复用 `api_keys` 表并按 `tenant_id` 归属租户，认证后自动注入租户上下文；能力标签与 Scope 约定见 [API Key 与 Scope](#api-key-与-scope)）
+- **统一认证** — typed JWT + Redis refresh session + Casbin RBAC v3 权限模型；API Key 认证（服务/机器间调用，`X-API-Key` 头 + `apikey.APIKeyAuthMiddleware` + `apikey.RequireScope` scope 校验，复用 `api_keys` 表并按 `tenant_id` 归属租户，认证后自动注入租户上下文；能力标签与 Scope 约定见 [API Key 与 Scope](#api-key-与-scope)）
 - **租户体系** — 单归属多租户：`tenants` 表 + 租户 CRUD API（`/api/v1/tenants`），`users`/`roles`/`audit_logs`/`api_keys` 携带 `tenant_id` 做行级隔离，任务队列（`jobs`/`job_history`/`dead_letters`）、导入任务（`import_jobs`）与可信设备（`trusted_devices`）同样归属租户；租户身份写入 JWT claim（`tid`）经中间件注入请求上下文，不接受客户端 header 传入；存量数据迁移时归入默认租户（`code=default`），角色名唯一性为租户内唯一，用户名/邮箱保持全局唯一（登录无需传租户标识）；归属关系为**租户 1:N 用户、用户单归属且不可跨租户**（见 [归属模型](#归属模型)）
 - **租户运营（套餐 / 配额 / 用量）** — `tenant_plans` 定义资源上限（`max_users`/`max_roles`/`max_api_keys`，0=不限），`tenants.plan_id=0` 表示未分配套餐（不受限，保持向后兼容）；创建用户（管理端与公开注册）、角色、API Key 前校验上限，超限返回新增错误码 `5005`/403 且不影响既有数据；`GET /api/v1/tenants/usage` 返回当前租户套餐与各项用量，`/api/v1/tenant-plans` 管理套餐定义、`PUT /api/v1/tenants/{id}/plan` 分配套餐（`jimu seed` 会内置一个未分配的 `free` 示例套餐）
 - **开通式注册** — 可选的 SaaS 语义（`auth.provisioning.enabled`）：注册即单事务开通新租户，注册者成为 owner，按可配置的角色模板自动初始化租户角色与全局权限绑定（模板模式，全部可配置：开关/owner 角色/角色与权限模板）；未启用时注册用户归默认租户
@@ -305,6 +305,7 @@ jimu/
 │   │   ├── catalog/            # 能力清单 + 启用集解析
 │   │   ├── apidocs/            # Swagger 文档注册
 │   │   ├── auth/               # 登录/注册/Token
+│   │   ├── apikey/             # API Key 签发/校验 + 维度限流（apikey/middleware/）
 │   │   ├── oauth/              # 第三方登录绑定；provider/ 为 OAuth Provider 实现
 │   │   ├── user/               # 用户管理
 │   │   ├── role/               # 角色管理
@@ -331,7 +332,8 @@ jimu/
 │   ├── config/                 # 配置加载 + 校验
 │   ├── contract/               # Module 接口定义
 │   ├── kernel/                 # 内核机制（与具体能力无关的基础设施）
-│   │   ├── auth/               # JWT + Casbin + Session + API Key
+│   │   ├── access/             # RBAC（Casbin 强制器/策略/权限中间件）
+│   │   ├── auth/               # JWT + Session + 限流 + 登录失败锁定（RBAC 在 kernel/access，API Key 在 capabilities/apikey；上下文助手 apikey_context.go）
 │   │   ├── breaker/            # 统一熔断器（HTTP/Redis/DB/gRPC 共用）
 │   │   ├── cache/              # 缓存抽象层
 │   │   ├── db/                 # Gorm 连接 + 迁移 + Seed + 事务
@@ -686,15 +688,15 @@ curl http://localhost:8080/api/v1/tenants/usage \
 
 ### API Key 与 Scope
 
-API Key 用于服务/机器间调用，请求携带 `X-API-Key` 头，复用 `api_keys` 表。认证中间件为 `auth.APIKeyAuthMiddleware`，框架不默认挂载，业务模块按需加到路由组上；scope 校验用 `auth.RequireScope` 挂在认证之后：
+API Key 用于服务/机器间调用，请求携带 `X-API-Key` 头，复用 `api_keys` 表。认证中间件为 `apikey.APIKeyAuthMiddleware`（`internal/capabilities/apikey`），框架不默认挂载，业务模块按需加到路由组上；scope 校验用 `apikey.RequireScope` 挂在认证之后：
 
 ```go
 // verifier 由容器提供：container.APIKeyVerifier
-api := r.Group("/api/v1/integration", auth.APIKeyAuthMiddleware(verifier))
+api := r.Group("/api/v1/integration", apikey.APIKeyAuthMiddleware(verifier))
 // 只读接口要求 user:read
-api.GET("/users", auth.RequireScope("user:read"), userHandler.List)
+api.GET("/users", apikey.RequireScope("user:read"), userHandler.List)
 // 写接口要求 user:write
-api.POST("/users", auth.RequireScope("user:write"), userHandler.Create)
+api.POST("/users", apikey.RequireScope("user:write"), userHandler.Create)
 ```
 
 `RequireScope` 未通过时返回 `401`（缺少/未认证 API Key）或 `403`（scope 不足）。

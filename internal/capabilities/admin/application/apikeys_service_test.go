@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	admindomain "jimu/internal/capabilities/admin/domain"
+	apikeydomain "jimu/internal/capabilities/apikey/domain"
 	"jimu/internal/kernel/tenant"
 
 	"github.com/stretchr/testify/assert"
@@ -27,7 +27,7 @@ func TestAdminAPIKeyServiceCreateKey(t *testing.T) {
 	assert.NotEmpty(t, plain)
 	assert.True(t, len(plain) > len(apiKeyPrefix))
 	assert.True(t, plain[:len(apiKeyPrefix)] == apiKeyPrefix)
-	assert.Equal(t, admindomain.HashKey(plain), key.KeyHash)
+	assert.Equal(t, apikeydomain.HashKey(plain), key.KeyHash)
 	assert.Equal(t, "[\"read\",\"write\"]", key.Scopes)
 	assert.True(t, key.Enabled)
 	assert.True(t, key.ExpiresAt.IsZero())
@@ -41,7 +41,7 @@ func TestAdminAPIKeyServiceCreateKey(t *testing.T) {
 	assert.WithinDuration(t, expected, key.ExpiresAt, time.Minute)
 
 	// 仓储错误
-	svc = NewAdminAPIKeyService(&fakeAPIKeyRepo{create: func(ctx context.Context, key *admindomain.APIKey) error {
+	svc = NewAdminAPIKeyService(&fakeAPIKeyRepo{create: func(ctx context.Context, key *apikeydomain.APIKey) error {
 		return errors.New("db down")
 	}})
 	_, _, err = svc.CreateKey(ctx, CreateKeyInput{Name: "web"})
@@ -57,7 +57,7 @@ func TestAdminAPIKeyServiceListKeys(t *testing.T) {
 	assert.Equal(t, int64(1), total)
 
 	// 错误
-	svc = NewAdminAPIKeyService(&fakeAPIKeyRepo{list: func(ctx context.Context, tenantID uint64, offset, limit int) ([]admindomain.APIKey, int64, error) {
+	svc = NewAdminAPIKeyService(&fakeAPIKeyRepo{list: func(ctx context.Context, tenantID uint64, offset, limit int) ([]apikeydomain.APIKey, int64, error) {
 		return nil, 0, errors.New("db down")
 	}})
 	_, _, err = svc.ListKeys(ctx, 0, 20)
@@ -71,7 +71,7 @@ func TestAdminAPIKeyServiceGetKey(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(9), key.ID)
 
-	svc = NewAdminAPIKeyService(&fakeAPIKeyRepo{findByID: func(ctx context.Context, id uint64) (*admindomain.APIKey, error) {
+	svc = NewAdminAPIKeyService(&fakeAPIKeyRepo{findByID: func(ctx context.Context, id uint64) (*apikeydomain.APIKey, error) {
 		return nil, errors.New("not found")
 	}})
 	_, err = svc.GetKey(ctx, 9)
@@ -91,8 +91,8 @@ func TestAdminAPIKeyServiceRevokeKey(t *testing.T) {
 
 func TestAdminAPIKeyServiceTenantBinding(t *testing.T) {
 	// 创建：归属上下文租户
-	var created *admindomain.APIKey
-	svc := NewAdminAPIKeyService(&fakeAPIKeyRepo{create: func(ctx context.Context, key *admindomain.APIKey) error {
+	var created *apikeydomain.APIKey
+	svc := NewAdminAPIKeyService(&fakeAPIKeyRepo{create: func(ctx context.Context, key *apikeydomain.APIKey) error {
 		created = key
 		return nil
 	}})
@@ -107,7 +107,7 @@ func TestAdminAPIKeyServiceTenantBinding(t *testing.T) {
 
 	// 列表：上下文租户透传仓储（0=平台级视角）
 	var gotTenant uint64
-	svc = NewAdminAPIKeyService(&fakeAPIKeyRepo{list: func(ctx context.Context, tenantID uint64, offset, limit int) ([]admindomain.APIKey, int64, error) {
+	svc = NewAdminAPIKeyService(&fakeAPIKeyRepo{list: func(ctx context.Context, tenantID uint64, offset, limit int) ([]apikeydomain.APIKey, int64, error) {
 		gotTenant = tenantID
 		return nil, 0, nil
 	}})
@@ -116,8 +116,8 @@ func TestAdminAPIKeyServiceTenantBinding(t *testing.T) {
 	assert.Equal(t, uint64(7), gotTenant)
 
 	// 详情/撤销：跨租户不可见
-	svc = NewAdminAPIKeyService(&fakeAPIKeyRepo{findByID: func(ctx context.Context, id uint64) (*admindomain.APIKey, error) {
-		return &admindomain.APIKey{ID: id, TenantID: 2}, nil
+	svc = NewAdminAPIKeyService(&fakeAPIKeyRepo{findByID: func(ctx context.Context, id uint64) (*apikeydomain.APIKey, error) {
+		return &apikeydomain.APIKey{ID: id, TenantID: 2}, nil
 	}})
 	_, err = svc.GetKey(tenant.WithTenant(context.Background(), 7), 1)
 	assert.Error(t, err)

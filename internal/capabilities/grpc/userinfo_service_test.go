@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"jimu/internal/capabilities/grpc/userinfopb"
+	userpkg "jimu/internal/capabilities/user"
 	userdomain "jimu/internal/capabilities/user/domain"
+	userinfrastructure "jimu/internal/capabilities/user/infrastructure"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -31,7 +33,7 @@ func newTestGRPCService(t *testing.T) userinfopb.UserInfoServiceClient {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	srv := grpc.NewServer()
-	userinfopb.RegisterUserInfoServiceServer(srv, NewUserInfoGRPCService(gdb))
+	userinfopb.RegisterUserInfoServiceServer(srv, NewUserInfoGRPCService(userpkg.NewUserinfoSource(userinfrastructure.NewMysqlRepository(gdb))))
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 

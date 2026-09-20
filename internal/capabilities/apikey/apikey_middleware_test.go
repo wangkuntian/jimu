@@ -1,11 +1,11 @@
-package auth
+package apikey
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	adminapi "jimu/internal/capabilities/admin/domain"
+	domain "jimu/internal/capabilities/apikey/domain"
 	"jimu/internal/kernel/tenant"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +18,7 @@ func TestAPIKeyAuthMiddleware(t *testing.T) {
 
 	db := newTestDB(t)
 	fullKey := "jimu_" + "abcdef0123456789abcdef0123456789"
-	createKey(t, db, &adminapi.APIKey{
+	createKey(t, db, &domain.APIKey{
 		TenantID: 7,
 		Name:     "service-a",
 		KeyHash:  HashKey(fullKey),
@@ -72,7 +72,7 @@ func TestAPIKeyAuthMiddlewareWithoutTenant(t *testing.T) {
 
 	db := newTestDB(t)
 	fullKey := "jimu_" + "ffffffffffffffffffffffffffffffff"
-	createKey(t, db, &adminapi.APIKey{
+	createKey(t, db, &domain.APIKey{
 		Name:    "legacy",
 		KeyHash: HashKey(fullKey),
 		Enabled: true,
@@ -101,9 +101,9 @@ func TestRequireScope(t *testing.T) {
 	scopedKey := "jimu_" + "11111111111111111111111111111111"
 	wildcardKey := "jimu_" + "22222222222222222222222222222222"
 	emptyKey := "jimu_" + "33333333333333333333333333333333"
-	createKey(t, db, &adminapi.APIKey{TenantID: 1, Name: "scoped", KeyHash: HashKey(scopedKey), Scopes: `["user:read"]`, Enabled: true})
-	createKey(t, db, &adminapi.APIKey{TenantID: 1, Name: "wildcard", KeyHash: HashKey(wildcardKey), Scopes: `["*"]`, Enabled: true})
-	createKey(t, db, &adminapi.APIKey{TenantID: 1, Name: "empty", KeyHash: HashKey(emptyKey), Enabled: true})
+	createKey(t, db, &domain.APIKey{TenantID: 1, Name: "scoped", KeyHash: HashKey(scopedKey), Scopes: `["user:read"]`, Enabled: true})
+	createKey(t, db, &domain.APIKey{TenantID: 1, Name: "wildcard", KeyHash: HashKey(wildcardKey), Scopes: `["*"]`, Enabled: true})
+	createKey(t, db, &domain.APIKey{TenantID: 1, Name: "empty", KeyHash: HashKey(emptyKey), Enabled: true})
 	verifier := NewAPIKeyVerifier(NewDBAPIKeyStore(db))
 
 	r := gin.New()

@@ -11,6 +11,7 @@ import (
 	"jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/config"
 	"jimu/internal/contract"
+	"jimu/internal/kernel/access"
 	"jimu/internal/kernel/auth"
 
 	redistore "jimu/internal/kernel/redis"
@@ -94,11 +95,11 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 }
 
 func (m *Module) ProtectedHTTPMiddleware() ([]gin.HandlerFunc, error) {
-	enforcer, err := auth.NewPathEnforcer()
+	enforcer, err := access.NewPathEnforcer()
 	if err != nil {
 		return nil, err
 	}
-	return interfaces.ProtectedMiddleware(m.jwtUtil, auth.NewDBAuthorizationStore(m.db), enforcer), nil
+	return interfaces.ProtectedMiddleware(m.jwtUtil, access.NewDBAuthorizationStore(m.db), enforcer), nil
 }
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}

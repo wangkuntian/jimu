@@ -7,7 +7,7 @@ import (
 	"jimu/internal/capabilities/role/domain"
 	tenantDomain "jimu/internal/capabilities/tenant/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
-	"jimu/internal/kernel/auth"
+	"jimu/internal/kernel/access"
 	"jimu/internal/kernel/tenant"
 
 	"github.com/casbin/casbin/v3"
@@ -96,7 +96,7 @@ func RunSeed(db *gorm.DB) error {
 // SeedCasbinPolicies 同步数据库中的角色-权限关系到 Casbin
 // 应在 RunSeed 之后调用
 func SeedCasbinPolicies(db *gorm.DB) error {
-	enforcer, err := auth.NewEnforcer(db)
+	enforcer, err := access.NewEnforcer(db)
 	if err != nil {
 		return fmt.Errorf("create enforcer: %w", err)
 	}

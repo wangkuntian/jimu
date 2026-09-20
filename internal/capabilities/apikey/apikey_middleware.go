@@ -1,6 +1,7 @@
-package auth
+package apikey
 
 import (
+	auth "jimu/internal/kernel/auth"
 	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
@@ -32,7 +33,7 @@ func APIKeyAuthMiddleware(verifier *APIKeyVerifier) gin.HandlerFunc {
 
 		// 注入已验证的 API Key 与 scope
 		c.Set("api_key", apiKey)
-		ctx := ContextWithAPIKey(c.Request.Context(), apiKey)
+		ctx := auth.ContextWithAPIKey(c.Request.Context(), apiKey)
 		// 租户只来自 Key 归属，不接受客户端 header/query 传入
 		if apiKey.TenantID != 0 {
 			c.Set("tenant_id", apiKey.TenantID)
@@ -47,7 +48,7 @@ func APIKeyAuthMiddleware(verifier *APIKeyVerifier) gin.HandlerFunc {
 // 语义：空 scopes 拒绝一切，只有显式包含 "*" 才代表全权（见 APIKey.HasScope）。
 func RequireScope(scope string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		apiKey, ok := APIKeyFromContext(c.Request.Context())
+		apiKey, ok := auth.APIKeyFromContext(c.Request.Context())
 		if !ok {
 			response.Fail(c, errors.New(errors.CodeUnauthorized, "api key required"))
 			c.Abort()

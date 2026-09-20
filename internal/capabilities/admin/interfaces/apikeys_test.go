@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"jimu/internal/capabilities/admin/application"
-	admindomain "jimu/internal/capabilities/admin/domain"
+	apikeydomain "jimu/internal/capabilities/apikey/domain"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -24,7 +24,7 @@ func TestAdminAPIKeyHandlerList(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	r2 := gin.New()
-	r2.GET("/apikeys", NewAdminAPIKeyHandler(application.NewAdminAPIKeyService(&fakeAPIKeyRepo{list: func(ctx context.Context, tenantID uint64, offset, limit int) ([]admindomain.APIKey, int64, error) {
+	r2.GET("/apikeys", NewAdminAPIKeyHandler(application.NewAdminAPIKeyService(&fakeAPIKeyRepo{list: func(ctx context.Context, tenantID uint64, offset, limit int) ([]apikeydomain.APIKey, int64, error) {
 		return nil, 0, errors.New("db down")
 	}})).List)
 	w2 := httptest.NewRecorder()
@@ -54,7 +54,7 @@ func TestAdminAPIKeyHandlerCreate(t *testing.T) {
 	r2 := gin.New()
 	r2.POST("/apikeys", func(c *gin.Context) {
 		c.Set("user_id", uint64(3))
-		NewAdminAPIKeyHandler(application.NewAdminAPIKeyService(&fakeAPIKeyRepo{create: func(ctx context.Context, key *admindomain.APIKey) error {
+		NewAdminAPIKeyHandler(application.NewAdminAPIKeyService(&fakeAPIKeyRepo{create: func(ctx context.Context, key *apikeydomain.APIKey) error {
 			return errors.New("db down")
 		}})).Create(c)
 	})
@@ -79,7 +79,7 @@ func TestAdminAPIKeyHandlerGet(t *testing.T) {
 
 	// 未找到
 	r2 := gin.New()
-	r2.GET("/apikeys/:id", NewAdminAPIKeyHandler(application.NewAdminAPIKeyService(&fakeAPIKeyRepo{findByID: func(ctx context.Context, id uint64) (*admindomain.APIKey, error) {
+	r2.GET("/apikeys/:id", NewAdminAPIKeyHandler(application.NewAdminAPIKeyService(&fakeAPIKeyRepo{findByID: func(ctx context.Context, id uint64) (*apikeydomain.APIKey, error) {
 		return nil, errors.New("not found")
 	}})).Get)
 	w3 := httptest.NewRecorder()

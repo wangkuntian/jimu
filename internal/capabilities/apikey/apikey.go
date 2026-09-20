@@ -1,4 +1,4 @@
-package auth
+package apikey
 
 import (
 	"context"
@@ -9,22 +9,15 @@ import (
 	"strings"
 	"time"
 
-	adminapi "jimu/internal/capabilities/admin/domain"
+	"jimu/internal/capabilities/apikey/domain"
+	auth "jimu/internal/kernel/auth"
 
 	"gorm.io/gorm"
 )
 
-// APIKey API 密钥信息
-type APIKey struct {
-	ID        uint64    `json:"id"`
-	TenantID  uint64    `json:"tenant_id"` // 所属租户（Key 决定租户，客户端不可指定）
-	Name      string    `json:"name"`
-	KeyPrefix string    `json:"key_prefix"` // 前 8 位，用于识别
-	Scopes    []string  `json:"scopes"`     // 权限范围，如 ["read", "write"]
-	Enabled   bool      `json:"enabled"`
-	ExpiresAt time.Time `json:"expires_at,omitempty"`
-	LastUsed  time.Time `json:"last_used,omitempty"`
-}
+// APIKey 为 kernel/auth 机制视图的别名：本能力负责验证与存储，
+// context 注入/读取的中间件两侧共享同一机制类型（见 kernel/auth/apikey_context.go）。
+type APIKey = auth.APIKey
 
 // apiKeyPrefix API Key 前缀
 const apiKeyPrefix = "jimu_"
@@ -79,35 +72,6 @@ func (v *APIKeyVerifier) Verify(ctx context.Context, providedKey string) (*APIKe
 	return key, nil
 }
 
-// APIKeyContextKey context 中存储 API Key 的 key
-type APIKeyContextKey struct{}
-
-// ContextWithAPIKey 将 API Key 存入 context
-func ContextWithAPIKey(ctx context.Context, key *APIKey) context.Context {
-	return context.WithValue(ctx, APIKeyContextKey{}, key)
-}
-
-// APIKeyFromContext 从 context 获取已验证的 API Key
-func APIKeyFromContext(ctx context.Context) (*APIKey, bool) {
-	val := ctx.Value(APIKeyContextKey{})
-	if val == nil {
-		return nil, false
-	}
-	key, ok := val.(*APIKey)
-	return key, ok
-}
-
-// HasScope 检查 API Key 是否拥有指定 scope。
-// 空 scopes 表示拒绝一切；只有显式包含 "*" 才代表全权。
-func (k *APIKey) HasScope(scope string) bool {
-	for _, s := range k.Scopes {
-		if s == scope || s == "*" {
-			return true
-		}
-	}
-	return false
-}
-
 // dbAPIKeyStore 基于 api_keys 表的 API Key 存储（DB 持久化实现）
 type dbAPIKeyStore struct {
 	db *gorm.DB
@@ -119,7 +83,7 @@ func NewDBAPIKeyStore(db *gorm.DB) APIKeyStore {
 }
 
 func (s *dbAPIKeyStore) GetByKeyHash(ctx context.Context, hash string) (*APIKey, error) {
-	var row adminapi.APIKey
+	var row domain.APIKey
 	err := s.db.WithContext(ctx).Where("key_hash = ?", hash).First(&row).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -131,13 +95,13 @@ func (s *dbAPIKeyStore) GetByKeyHash(ctx context.Context, hash string) (*APIKey,
 }
 
 func (s *dbAPIKeyStore) UpdateLastUsed(ctx context.Context, id uint64, t time.Time) error {
-	return s.db.WithContext(ctx).Model(&adminapi.APIKey{}).
+	return s.db.WithContext(ctx).Model(&domain.APIKey{}).
 		Where("id = ?", id).
 		Update("last_used", t).Error
 }
 
-// rowToAPIKey 将 admin 模块实体转换为 auth.APIKey
-func rowToAPIKey(row *adminapi.APIKey) *APIKey {
+// rowToAPIKey 将 api_keys 表实体转换为 auth.APIKey 机制视图
+func rowToAPIKey(row *domain.APIKey) *APIKey {
 	key := &APIKey{
 		ID:        row.ID,
 		TenantID:  row.TenantID,

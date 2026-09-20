@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	admindomain "jimu/internal/capabilities/admin/domain"
+	apikeydomain "jimu/internal/capabilities/apikey/domain"
 	"jimu/internal/capabilities/user/domain"
 	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
@@ -62,7 +62,7 @@ func TestCreateUserChecksDefaultTenantWithoutContext(t *testing.T) {
 func TestCreateAPIKeyRejectsWhenQuotaExceeded(t *testing.T) {
 	ctx := tenant.WithTenant(context.Background(), 7)
 	quota := &fakeTenantQuota{apiKeyErr: apperrors.New(apperrors.CodeQuotaExceeded, "api_keys quota exceeded")}
-	svc := NewAdminAPIKeyService(&fakeAPIKeyRepo{create: func(_ context.Context, _ *admindomain.APIKey) error {
+	svc := NewAdminAPIKeyService(&fakeAPIKeyRepo{create: func(_ context.Context, _ *apikeydomain.APIKey) error {
 		t.Fatal("配额超限时不应写入 API Key")
 		return nil
 	}}).WithQuota(quota)

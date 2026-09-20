@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	admindomain "jimu/internal/capabilities/admin/domain"
+	apikeydomain "jimu/internal/capabilities/apikey/domain"
 	qdomain "jimu/internal/capabilities/queue/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
 
@@ -98,13 +99,13 @@ func (f *fakeUserRepository) UpdateTOTP(context.Context, uint64, string, bool) e
 
 // fakeAPIKeyRepo 可配置的 API Key 仓储 mock
 type fakeAPIKeyRepo struct {
-	create   func(ctx context.Context, key *admindomain.APIKey) error
-	findByID func(ctx context.Context, id uint64) (*admindomain.APIKey, error)
-	list     func(ctx context.Context, tenantID uint64, offset, limit int) ([]admindomain.APIKey, int64, error)
+	create   func(ctx context.Context, key *apikeydomain.APIKey) error
+	findByID func(ctx context.Context, id uint64) (*apikeydomain.APIKey, error)
+	list     func(ctx context.Context, tenantID uint64, offset, limit int) ([]apikeydomain.APIKey, int64, error)
 	delete   func(ctx context.Context, id uint64) error
 }
 
-func (f *fakeAPIKeyRepo) Create(ctx context.Context, key *admindomain.APIKey) error {
+func (f *fakeAPIKeyRepo) Create(ctx context.Context, key *apikeydomain.APIKey) error {
 	if f.create != nil {
 		return f.create(ctx, key)
 	}
@@ -112,25 +113,25 @@ func (f *fakeAPIKeyRepo) Create(ctx context.Context, key *admindomain.APIKey) er
 	return nil
 }
 
-func (f *fakeAPIKeyRepo) FindByID(ctx context.Context, id uint64) (*admindomain.APIKey, error) {
+func (f *fakeAPIKeyRepo) FindByID(ctx context.Context, id uint64) (*apikeydomain.APIKey, error) {
 	if f.findByID != nil {
 		return f.findByID(ctx, id)
 	}
-	return &admindomain.APIKey{ID: id, Name: "web"}, nil
+	return &apikeydomain.APIKey{ID: id, Name: "web"}, nil
 }
 
-func (f *fakeAPIKeyRepo) FindByKeyHash(ctx context.Context, hash string) (*admindomain.APIKey, error) {
+func (f *fakeAPIKeyRepo) FindByKeyHash(ctx context.Context, hash string) (*apikeydomain.APIKey, error) {
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeAPIKeyRepo) List(ctx context.Context, tenantID uint64, offset, limit int) ([]admindomain.APIKey, int64, error) {
+func (f *fakeAPIKeyRepo) List(ctx context.Context, tenantID uint64, offset, limit int) ([]apikeydomain.APIKey, int64, error) {
 	if f.list != nil {
 		return f.list(ctx, tenantID, offset, limit)
 	}
-	return []admindomain.APIKey{{ID: 1, Name: "web"}}, 1, nil
+	return []apikeydomain.APIKey{{ID: 1, Name: "web"}}, 1, nil
 }
 
-func (f *fakeAPIKeyRepo) Update(ctx context.Context, key *admindomain.APIKey) error { return nil }
+func (f *fakeAPIKeyRepo) Update(ctx context.Context, key *apikeydomain.APIKey) error { return nil }
 func (f *fakeAPIKeyRepo) Delete(ctx context.Context, id uint64) error {
 	if f.delete != nil {
 		return f.delete(ctx, id)

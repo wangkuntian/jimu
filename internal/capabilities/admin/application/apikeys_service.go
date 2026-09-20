@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"jimu/internal/capabilities/admin/domain"
+	apikeydomain "jimu/internal/capabilities/apikey/domain"
 	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
 )
@@ -16,7 +16,7 @@ const apiKeyPrefix = "jimu_"
 
 // AdminAPIKeyService API Key 管理服务
 type AdminAPIKeyService struct {
-	repo  domain.APIKeyRepository
+	repo  apikeydomain.APIKeyRepository
 	quota TenantQuota // nil = 未启用租户配额
 }
 
@@ -27,7 +27,7 @@ func (s *AdminAPIKeyService) WithQuota(quota TenantQuota) *AdminAPIKeyService {
 }
 
 // NewAdminAPIKeyService 创建 API Key 管理服务
-func NewAdminAPIKeyService(repo domain.APIKeyRepository) *AdminAPIKeyService {
+func NewAdminAPIKeyService(repo apikeydomain.APIKeyRepository) *AdminAPIKeyService {
 	return &AdminAPIKeyService{repo: repo}
 }
 
@@ -37,7 +37,7 @@ func tenantVisible(resourceTenant, ctxTenant uint64) bool {
 }
 
 // ListKeys 获取 API Key 列表（按上下文租户过滤；0=平台级视角不过滤）
-func (s *AdminAPIKeyService) ListKeys(ctx context.Context, offset, limit int) ([]domain.APIKey, int64, error) {
+func (s *AdminAPIKeyService) ListKeys(ctx context.Context, offset, limit int) ([]apikeydomain.APIKey, int64, error) {
 	return s.repo.List(ctx, tenant.FromContext(ctx), offset, limit)
 }
 
@@ -50,7 +50,7 @@ type CreateKeyInput struct {
 }
 
 // CreateKey 创建新 API Key（返回明文，仅此一次）
-func (s *AdminAPIKeyService) CreateKey(ctx context.Context, input CreateKeyInput) (string, *domain.APIKey, error) {
+func (s *AdminAPIKeyService) CreateKey(ctx context.Context, input CreateKeyInput) (string, *apikeydomain.APIKey, error) {
 	if input.Name == "" {
 		return "", nil, apperrors.New(apperrors.CodeInvalidParam, "name is required")
 	}
@@ -82,11 +82,11 @@ func (s *AdminAPIKeyService) CreateKey(ctx context.Context, input CreateKeyInput
 		tenantID = tenant.DefaultTenantID
 	}
 
-	key := &domain.APIKey{
+	key := &apikeydomain.APIKey{
 		TenantID:  tenantID,
 		Name:      input.Name,
 		KeyPrefix: plaintext[:min(8+len(apiKeyPrefix), len(plaintext))],
-		KeyHash:   domain.HashKey(plaintext),
+		KeyHash:   apikeydomain.HashKey(plaintext),
 		Scopes:    string(scopesJSON),
 		Enabled:   true,
 		CreatedBy: input.CreatedBy,
@@ -102,7 +102,7 @@ func (s *AdminAPIKeyService) CreateKey(ctx context.Context, input CreateKeyInput
 }
 
 // GetKey 获取 API Key 详情（跨租户不可见）
-func (s *AdminAPIKeyService) GetKey(ctx context.Context, id uint64) (*domain.APIKey, error) {
+func (s *AdminAPIKeyService) GetKey(ctx context.Context, id uint64) (*apikeydomain.APIKey, error) {
 	key, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err

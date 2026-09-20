@@ -7,15 +7,16 @@ import (
 	"strings"
 	"testing"
 
-	platformauth "jimu/internal/kernel/auth"
+	"jimu/internal/kernel/access"
+	"jimu/internal/kernel/auth"
 
 	"github.com/gin-gonic/gin"
 )
 
 func TestProtectedMiddlewareRequiresAccessToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	jwtUtil := platformauth.New(strings.Repeat("s", 32), "jimu", 30, 7)
-	enforcer, err := platformauth.NewPathEnforcer()
+	jwtUtil := auth.New(strings.Repeat("s", 32), "jimu", 30, 7)
+	enforcer, err := access.NewPathEnforcer()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,6 +37,6 @@ func (s *fakeAuthzStore) RolesForUser(context.Context, uint64) ([]string, error)
 	return []string{"admin"}, nil
 }
 
-func (s *fakeAuthzStore) Policies(context.Context) ([]platformauth.Policy, error) {
-	return []platformauth.Policy{{Role: "admin", Resource: "/api/v1/users", Action: http.MethodGet}}, nil
+func (s *fakeAuthzStore) Policies(context.Context) ([]access.Policy, error) {
+	return []access.Policy{{Role: "admin", Resource: "/api/v1/users", Action: http.MethodGet}}, nil
 }
