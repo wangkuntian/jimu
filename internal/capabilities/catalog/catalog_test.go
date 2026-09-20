@@ -134,6 +134,27 @@ func TestResolveReturnsDeepCopyOfRequires(t *testing.T) {
 	}
 }
 
+func TestAllReturnsDeepCopyOfPermissions(t *testing.T) {
+	withEntries(t, contract.Descriptor{Name: "a", Permissions: []contract.Permission{{Name: "p", Resource: "/r", Action: "GET"}}})
+	got := All()
+	got[0].Permissions[0].Resource = "mutated"
+	if All()[0].Permissions[0].Resource != "/r" {
+		t.Fatal("All() must not expose the registry's Permissions backing array")
+	}
+}
+
+func TestResolveReturnsDeepCopyOfPermissions(t *testing.T) {
+	withEntries(t, contract.Descriptor{Name: "a", Permissions: []contract.Permission{{Name: "p", Resource: "/r", Action: "GET"}}})
+	got, err := Resolve([]string{"a"})
+	if err != nil {
+		t.Fatalf("Resolve error: %v", err)
+	}
+	got[0].Permissions[0].Resource = "mutated"
+	if again, err := Resolve([]string{"a"}); err != nil || again[0].Permissions[0].Resource != "/r" {
+		t.Fatalf("Resolve() must not expose the registry's Permissions backing array (err = %v)", err)
+	}
+}
+
 func TestResolveReportsFirstDanglingDependencyInListOrder(t *testing.T) {
 	// 两个坏依赖：错误必须稳定指向清单顺序里的第一个，而不是 map 遍历的随机一个
 	withEntries(t,
@@ -215,7 +236,7 @@ func TestCatalogMigrationsShape(t *testing.T) {
 	want := map[string]bool{
 		"user": true, "role": true, "permission": true, "tenant": true,
 		"auth": true, "audit": true, "oauth": true,
-		"admin": false,
+		"admin":  false,
 		"apikey": true, "queue": true, "outbox": true, "dataops": true, "search": true,
 	}
 	if got := migrationsOf(All()); !reflect.DeepEqual(got, want) {
@@ -237,8 +258,9 @@ func TestTenantRequiresUserAndRole(t *testing.T) {
 }
 
 // TestDescriptorPermissionsCoverBusinessRoutes 钉住能力声明的权限点聚合面：
-// 与原 kernel/db.TestBasePermissionsCoverBusinessRoutes 同一批必含项；
-// 迁移后权限点改由 Descriptor 声明，聚合结果必须覆盖同样的路由面。
+// 迁移后权限点改由 Descriptor 声明，聚合结果必须逐值等于全部 32 个权限点
+// （user 5 + role 6 + permission 5 + audit 3 + tenant 9 + admin 4），
+// 既不缺失也不多出。
 func TestDescriptorPermissionsCoverBusinessRoutes(t *testing.T) {
 	required := []struct{ resource, action string }{
 		{"/api/v1/users", "GET"}, {"/api/v1/users", "POST"},
@@ -248,15 +270,24 @@ func TestDescriptorPermissionsCoverBusinessRoutes(t *testing.T) {
 		{"/api/v1/roles/*/permissions", "POST"},
 		{"/api/v1/permissions", "GET"}, {"/api/v1/permissions", "POST"},
 		{"/api/v1/permissions/*", "GET"}, {"/api/v1/permissions/*", "PUT"}, {"/api/v1/permissions/*", "DELETE"},
-		{"/api/v1/audits", "GET"}, {"/api/v1/audits/*", "GET"},
+		{"/api/v1/audits", "GET"}, {"/api/v1/audits/*", "GET"}, {"/api/v1/audits/export", "GET"},
 		{"/api/v1/tenants", "GET"}, {"/api/v1/tenants", "POST"},
 		{"/api/v1/tenants/*", "GET"}, {"/api/v1/tenants/*", "PUT"}, {"/api/v1/tenants/*", "DELETE"},
+		{"/api/v1/tenant-plans", "GET"}, {"/api/v1/tenant-plans", "POST"},
+		{"/api/v1/tenant-plans/*", "PUT"}, {"/api/v1/tenant-plans/*", "DELETE"},
+		{"/api/v1/admin/*", "GET"}, {"/api/v1/admin/*", "POST"},
+		{"/api/v1/admin/*", "PUT"}, {"/api/v1/admin/*", "DELETE"},
 	}
 	got := map[string]bool{}
+	total := 0
 	for _, d := range All() {
 		for _, p := range d.Permissions {
 			got[p.Resource+" "+p.Action] = true
+			total++
 		}
+	}
+	if total != len(required) {
+		t.Fatalf("aggregated permission points = %d, want %d", total, len(required))
 	}
 	for _, item := range required {
 		if !got[item.resource+" "+item.action] {

@@ -49,6 +49,7 @@ func All() []contract.Descriptor {
 	for i, d := range entries {
 		out[i] = d
 		out[i].Requires = append([]string(nil), d.Requires...)
+		out[i].Permissions = append([]contract.Permission(nil), d.Permissions...)
 	}
 	return out
 }
@@ -105,6 +106,7 @@ func Resolve(enabled []string) ([]contract.Descriptor, error) {
 	for _, d := range entries {
 		if on[d.Name] {
 			d.Requires = append([]string(nil), d.Requires...)
+			d.Permissions = append([]contract.Permission(nil), d.Permissions...)
 			out = append(out, d)
 		}
 	}

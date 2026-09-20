@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"jimu/internal/app"
 	"jimu/internal/capabilities/catalog"
 	"jimu/internal/config"
 	"jimu/internal/kernel/db"
@@ -172,7 +173,7 @@ var seedCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to connect database: %w", err)
 		}
-		if err := db.RunSeedWithCasbin(dbConn); err != nil {
+		if err := app.RunSeedWithCasbin(dbConn, catalog.All()); err != nil {
 			return fmt.Errorf("seed failed: %w", err)
 		}
 		fmt.Println("Seed data inserted successfully (with Casbin policies)")

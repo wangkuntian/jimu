@@ -1,4 +1,4 @@
-package db
+package app
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"jimu/internal/capabilities/role/domain"
 	tenantDomain "jimu/internal/capabilities/tenant/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
+	"jimu/internal/contract"
 	"jimu/internal/kernel/access"
 	"jimu/internal/kernel/tenant"
 
@@ -17,7 +18,8 @@ import (
 
 // RunSeed 插入初始数据
 // 管理员密码从 ADMIN_PASSWORD 环境变量获取
-func RunSeed(db *gorm.DB) error {
+// 权限点来自启用集各能力的 Descriptor.Permissions（能力自声明，未启用不种）
+func RunSeed(db *gorm.DB, caps []contract.Descriptor) error {
 	adminPassword := os.Getenv("ADMIN_PASSWORD")
 	if adminPassword == "" {
 		return fmt.Errorf("ADMIN_PASSWORD is required")
@@ -36,8 +38,13 @@ func RunSeed(db *gorm.DB) error {
 			return fmt.Errorf("seed free plan failed: %w", err)
 		}
 
-		// 2. 创建基础权限
-		permissions := basePermissions()
+		// 2. 创建权限（聚合自启用集各能力的 Descriptor.Permissions）
+		var permissions []domain.Permission
+		for _, d := range caps {
+			for _, p := range d.Permissions {
+				permissions = append(permissions, domain.Permission{Name: p.Name, Resource: p.Resource, Action: p.Action})
+			}
+		}
 
 		for i := range permissions {
 			if err := tx.Where("resource = ? AND action = ?", permissions[i].Resource, permissions[i].Action).
@@ -132,8 +139,8 @@ func SeedCasbinPolicies(db *gorm.DB) error {
 }
 
 // RunSeedWithCasbin 执行完整种子（含 Casbin 策略）
-func RunSeedWithCasbin(db *gorm.DB) error {
-	if err := RunSeed(db); err != nil {
+func RunSeedWithCasbin(db *gorm.DB, caps []contract.Descriptor) error {
+	if err := RunSeed(db, caps); err != nil {
 		return err
 	}
 	return SeedCasbinPolicies(db)
@@ -141,42 +148,3 @@ func RunSeedWithCasbin(db *gorm.DB) error {
 
 // 确保接口实现
 var _ = func() *casbin.Enforcer { return nil }
-
-func basePermissions() []domain.Permission {
-	return []domain.Permission{
-		{Name: "用户列表", Resource: "/api/v1/users", Action: "GET"},
-		{Name: "用户创建", Resource: "/api/v1/users", Action: "POST"},
-		{Name: "用户详情", Resource: "/api/v1/users/*", Action: "GET"},
-		{Name: "用户修改", Resource: "/api/v1/users/*", Action: "PUT"},
-		{Name: "用户删除", Resource: "/api/v1/users/*", Action: "DELETE"},
-		{Name: "角色列表", Resource: "/api/v1/roles", Action: "GET"},
-		{Name: "角色创建", Resource: "/api/v1/roles", Action: "POST"},
-		{Name: "角色详情", Resource: "/api/v1/roles/*", Action: "GET"},
-		{Name: "角色修改", Resource: "/api/v1/roles/*", Action: "PUT"},
-		{Name: "角色删除", Resource: "/api/v1/roles/*", Action: "DELETE"},
-		{Name: "角色分配权限", Resource: "/api/v1/roles/*/permissions", Action: "POST"},
-		{Name: "权限列表", Resource: "/api/v1/permissions", Action: "GET"},
-		{Name: "权限创建", Resource: "/api/v1/permissions", Action: "POST"},
-		{Name: "权限详情", Resource: "/api/v1/permissions/*", Action: "GET"},
-		{Name: "权限修改", Resource: "/api/v1/permissions/*", Action: "PUT"},
-		{Name: "权限删除", Resource: "/api/v1/permissions/*", Action: "DELETE"},
-		{Name: "审计列表", Resource: "/api/v1/audits", Action: "GET"},
-		{Name: "审计详情", Resource: "/api/v1/audits/*", Action: "GET"},
-		{Name: "审计导出", Resource: "/api/v1/audits/export", Action: "GET"},
-		{Name: "租户列表", Resource: "/api/v1/tenants", Action: "GET"},
-		{Name: "租户创建", Resource: "/api/v1/tenants", Action: "POST"},
-		{Name: "租户详情", Resource: "/api/v1/tenants/*", Action: "GET"},
-		{Name: "租户修改", Resource: "/api/v1/tenants/*", Action: "PUT"},
-		{Name: "租户删除", Resource: "/api/v1/tenants/*", Action: "DELETE"},
-		// 租户运营：套餐定义（用量查询与套餐分配分别由「租户详情」「租户修改」通配覆盖）
-		{Name: "套餐列表", Resource: "/api/v1/tenant-plans", Action: "GET"},
-		{Name: "套餐创建", Resource: "/api/v1/tenant-plans", Action: "POST"},
-		{Name: "套餐修改", Resource: "/api/v1/tenant-plans/*", Action: "PUT"},
-		{Name: "套餐删除", Resource: "/api/v1/tenant-plans/*", Action: "DELETE"},
-		// 管理后台端点（/api/v1/admin/* 由 keyMatch 通配覆盖全部管理 API）
-		{Name: "管理后台读取", Resource: "/api/v1/admin/*", Action: "GET"},
-		{Name: "管理后台写入", Resource: "/api/v1/admin/*", Action: "POST"},
-		{Name: "管理后台修改", Resource: "/api/v1/admin/*", Action: "PUT"},
-		{Name: "管理后台删除", Resource: "/api/v1/admin/*", Action: "DELETE"},
-	}
-}
