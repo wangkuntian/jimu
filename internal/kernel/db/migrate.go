@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"sort"
 	"strconv"
@@ -197,6 +198,146 @@ func capabilityMigrationVersions(fsys fs.FS, dialect string) ([]int64, error) {
 	sort.Slice(versions, func(i, j int) bool { return versions[i] < versions[j] })
 	return versions, nil
 }
+
+// AdoptCapabilities 为存量实例登记各能力版本表基线：读取全局 goose_db_version
+// 的最大已应用版本 V，对每个能力把原编号 <= V 的迁移版本直接写入
+// goose_db_version_<capability>（is_applied=true，不执行 SQL）。
+// 全新库（全局版本表不存在）返回错误并引导先 migrate up。
+// 返回 map[能力名]已登记版本号（升序）；未基线任何版本的能力不出现在结果中。
+// 全局 goose_db_version 表保留不动（历史记录，新运行器不再读写）。
+func AdoptCapabilities(cfg config.DBConfig, caps []contract.Descriptor) (map[string][]int64, error) {
+	gooseDialect := goose.DialectMySQL
+	if cfg.Dialect() == "postgres" {
+		gooseDialect = goose.DialectPostgres
+	}
+	sqlDB, err := openSQLForMigrate(cfg)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = sqlDB.Close() }()
+
+	// 1. 读全局版本表最大版本 V（表不存在 → 引导错误；V=0/空表为合法：不基线任何版本）
+	var maxVersion sql.NullInt64
+	err = sqlDB.QueryRow("SELECT MAX(version_id) FROM goose_db_version").Scan(&maxVersion)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"global version table goose_db_version not found: %w (fresh database? run `jimu migrate up` first — adopt is only for existing databases migrated by the legacy global-table runner)",
+			err)
+	}
+	v := maxVersion.Int64
+
+	// 2. 逐能力登记 <= V 的版本
+	result := make(map[string][]int64)
+	for _, c := range caps {
+		if c.Migrations == nil {
+			continue
+		}
+		if _, err := fs.Stat(c.Migrations, "migrations/"+cfg.Dialect()); err != nil {
+			continue
+		}
+		versions, err := capabilityMigrationVersions(c.Migrations, cfg.Dialect())
+		if err != nil {
+			return nil, fmt.Errorf("capability %s: %w", c.Name, err)
+		}
+		adopted := make([]int64, 0, len(versions))
+		for _, ver := range versions {
+			if ver <= v {
+				adopted = append(adopted, ver)
+			}
+		}
+		if len(adopted) == 0 {
+			continue
+		}
+		if err := adoptOne(gooseDialect, sqlDB, "goose_db_version_"+c.Name, adopted); err != nil {
+			return nil, fmt.Errorf("capability %s: %w", c.Name, err)
+		}
+		result[c.Name] = adopted
+	}
+	return result, nil
+}
+
+// adoptOne 用合成空迁移 FS 把 versions 登记进 table（is_applied=true），
+// 不执行任何业务迁移 SQL：goose 对无语句的 SQL 迁移只插入版本行
+// （provider_run.go runIndividually → runSQL 零语句 + maybeInsertOrDelete 插入）。
+// 注意：不调用 p.Close()——它会关闭共享的 *sql.DB。
+func adoptOne(dialect goose.Dialect, sqlDB *sql.DB, table string, versions []int64) error {
+	p, err := goose.NewProvider(dialect, sqlDB, adoptEmptyFS{versions: versions}, goose.WithTableName(table))
+	if err != nil {
+		return fmt.Errorf("create provider: %w", err)
+	}
+	ctx := context.Background()
+	for _, ver := range versions {
+		if _, err := p.ApplyVersion(ctx, ver, true); err != nil {
+			return fmt.Errorf("apply version %d: %w", ver, err)
+		}
+	}
+	return nil
+}
+
+// adoptEmptyFS 为每个要登记的版本生成一个同名空迁移文件（仅 -- +goose Up/Down
+// 注解、无语句）：goose 解析后 Up/Down 均为空语句集，ApplyVersion 只插入版本行
+// 不执行任何 SQL。文件名中的版本号是占位（不与业务迁移冲突），ApplyVersion
+// 登记的是调用方传入的版本参数。
+type adoptEmptyFS struct {
+	versions []int64
+}
+
+func (f adoptEmptyFS) Open(name string) (fs.File, error) {
+	if name == "." {
+		// fs.Glob 依赖根目录列表来发现迁移文件
+		entries := make([]fs.DirEntry, 0, len(f.versions))
+		for _, ver := range f.versions {
+			entries = append(entries, adoptDirEntry{name: fmt.Sprintf("%06d_adopt_baseline.sql", ver)})
+		}
+		return &adoptDirFile{entries: entries}, nil
+	}
+	for _, ver := range f.versions {
+		if name == fmt.Sprintf("%06d_adopt_baseline.sql", ver) {
+			return &adoptMemFile{Reader: strings.NewReader("-- +goose Up\n-- +goose Down\n")}, nil
+		}
+	}
+	return nil, fs.ErrNotExist
+}
+
+type adoptMemFile struct {
+	*strings.Reader
+}
+
+func (f *adoptMemFile) Stat() (fs.FileInfo, error) { return adoptFileInfo{}, nil }
+func (f *adoptMemFile) Close() error               { return nil }
+
+type adoptFileInfo struct{}
+
+func (adoptFileInfo) Name() string       { return "000000_adopt_baseline.sql" }
+func (adoptFileInfo) Size() int64        { return int64(len("-- +goose Up\n-- +goose Down\n")) }
+func (adoptFileInfo) Mode() fs.FileMode  { return 0o444 }
+func (adoptFileInfo) ModTime() time.Time { return time.Time{} }
+func (adoptFileInfo) IsDir() bool        { return false }
+func (adoptFileInfo) Sys() any           { return nil }
+
+type adoptDirFile struct {
+	entries []fs.DirEntry
+	pos     int
+}
+
+func (f *adoptDirFile) Stat() (fs.FileInfo, error) { return adoptFileInfo{}, nil }
+func (f *adoptDirFile) Close() error               { return nil }
+func (f *adoptDirFile) Read([]byte) (int, error)   { return 0, fmt.Errorf("cannot read directory") }
+func (f *adoptDirFile) ReadDir(int) ([]fs.DirEntry, error) {
+	if f.pos >= len(f.entries) {
+		return nil, io.EOF
+	}
+	rest := f.entries[f.pos:]
+	f.pos = len(f.entries)
+	return rest, nil
+}
+
+type adoptDirEntry struct{ name string }
+
+func (e adoptDirEntry) Name() string               { return e.name }
+func (e adoptDirEntry) IsDir() bool                { return false }
+func (e adoptDirEntry) Type() fs.FileMode          { return 0o444 }
+func (e adoptDirEntry) Info() (fs.FileInfo, error) { return adoptFileInfo{}, nil }
 
 // AutoMigrate 使用 Gorm 自动迁移（开发用）
 func AutoMigrate(db *gorm.DB, models ...interface{}) error {

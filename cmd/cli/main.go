@@ -108,6 +108,27 @@ var migrateRedoCmd = &cobra.Command{
 	},
 }
 
+var migrateAdoptCmd = &cobra.Command{
+	Use:   "adopt-capabilities",
+	Short: "Register per-capability version baselines for an existing database",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := config.Load()
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+		baseline, err := db.AdoptCapabilities(cfg.DB, catalog.All())
+		if err != nil {
+			return fmt.Errorf("adopt failed: %w", err)
+		}
+		for _, name := range catalog.Names() {
+			if vs, ok := baseline[name]; ok {
+				fmt.Printf("%s: %d migrations adopted\n", name, len(vs))
+			}
+		}
+		return nil
+	},
+}
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version",
@@ -165,6 +186,7 @@ func init() {
 	migrateCmd.AddCommand(migrateDownCmd)
 	migrateCmd.AddCommand(migrateStatusCmd)
 	migrateCmd.AddCommand(migrateRedoCmd)
+	migrateCmd.AddCommand(migrateAdoptCmd)
 	rootCmd.AddCommand(moduleCmd)
 	rootCmd.AddCommand(migrateCmd)
 	rootCmd.AddCommand(seedCmd)

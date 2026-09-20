@@ -246,6 +246,7 @@ make cli
 ./bin/jimu migrate down             # 回滚最后一次迁移
 ./bin/jimu migrate status           # 查看迁移状态
 ./bin/jimu migrate redo             # 重做最后一次迁移
+./bin/jimu migrate adopt-capabilities  # 存量库登记各能力版本表基线（升级到 v0.3.0 后执行一次）
 
 # 数据初始化
 ./bin/jimu seed                     # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例）
