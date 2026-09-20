@@ -100,6 +100,13 @@ var Descriptor = contract.Descriptor{
 	Name:     "admin",
 	Requires: []string{"user", "audit"},
 	Mount:    contract.MountProtected,
+	Permissions: []contract.Permission{
+		// 管理后台端点（/api/v1/admin/* 由 keyMatch 通配覆盖全部管理 API）
+		{Name: "管理后台读取", Resource: "/api/v1/admin/*", Action: "GET"},
+		{Name: "管理后台写入", Resource: "/api/v1/admin/*", Action: "POST"},
+		{Name: "管理后台修改", Resource: "/api/v1/admin/*", Action: "PUT"},
+		{Name: "管理后台删除", Resource: "/api/v1/admin/*", Action: "DELETE"},
+	},
 }
 
 // Descriptor 实现 contract.Describable。

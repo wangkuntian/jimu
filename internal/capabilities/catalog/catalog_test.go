@@ -188,10 +188,12 @@ func TestDescriptorsAreWellFormed(t *testing.T) {
 		}
 	}
 	// 精确逐值比较对 fs.FS（embed.FS）不可行，比较除 Migrations 外的全部字段；
-	// 迁移有无形态由 TestCatalogMigrationsShape 单独钉住。
+	// 迁移有无形态由 TestCatalogMigrationsShape 单独钉住；权限点聚合面由
+	// TestDescriptorPermissionsCoverBusinessRoutes 单独钉住。
 	got, want := All(), fixture()
 	for i := range want {
 		got[i].Migrations, want[i].Migrations = nil, nil
+		got[i].Permissions, want[i].Permissions = nil, nil
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("catalog descriptors drifted from the expected fixture:\n got %+v\nwant %+v", got, want)
@@ -230,6 +232,35 @@ func TestTenantRequiresUserAndRole(t *testing.T) {
 		}
 		if !slices.Contains(d.Requires, "user") || !slices.Contains(d.Requires, "role") {
 			t.Fatalf("tenant.Requires = %v, want to contain \"user\" and \"role\"", d.Requires)
+		}
+	}
+}
+
+// TestDescriptorPermissionsCoverBusinessRoutes 钉住能力声明的权限点聚合面：
+// 与原 kernel/db.TestBasePermissionsCoverBusinessRoutes 同一批必含项；
+// 迁移后权限点改由 Descriptor 声明，聚合结果必须覆盖同样的路由面。
+func TestDescriptorPermissionsCoverBusinessRoutes(t *testing.T) {
+	required := []struct{ resource, action string }{
+		{"/api/v1/users", "GET"}, {"/api/v1/users", "POST"},
+		{"/api/v1/users/*", "GET"}, {"/api/v1/users/*", "PUT"}, {"/api/v1/users/*", "DELETE"},
+		{"/api/v1/roles", "GET"}, {"/api/v1/roles", "POST"},
+		{"/api/v1/roles/*", "GET"}, {"/api/v1/roles/*", "PUT"}, {"/api/v1/roles/*", "DELETE"},
+		{"/api/v1/roles/*/permissions", "POST"},
+		{"/api/v1/permissions", "GET"}, {"/api/v1/permissions", "POST"},
+		{"/api/v1/permissions/*", "GET"}, {"/api/v1/permissions/*", "PUT"}, {"/api/v1/permissions/*", "DELETE"},
+		{"/api/v1/audits", "GET"}, {"/api/v1/audits/*", "GET"},
+		{"/api/v1/tenants", "GET"}, {"/api/v1/tenants", "POST"},
+		{"/api/v1/tenants/*", "GET"}, {"/api/v1/tenants/*", "PUT"}, {"/api/v1/tenants/*", "DELETE"},
+	}
+	got := map[string]bool{}
+	for _, d := range All() {
+		for _, p := range d.Permissions {
+			got[p.Resource+" "+p.Action] = true
+		}
+	}
+	for _, item := range required {
+		if !got[item.resource+" "+item.action] {
+			t.Fatalf("missing permission %s %s", item.action, item.resource)
 		}
 	}
 }

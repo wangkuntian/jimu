@@ -38,6 +38,12 @@ var Descriptor = contract.Descriptor{
 	Name:       "audit",
 	Migrations: migrationsFS,
 	Mount:      contract.MountProtected,
+	Permissions: []contract.Permission{
+		{Name: "审计列表", Resource: "/api/v1/audits", Action: "GET"},
+		{Name: "审计详情", Resource: "/api/v1/audits/*", Action: "GET"},
+		// 审计导出路由 /audits/export 挂在 audit 能力（handler.go:62）
+		{Name: "审计导出", Resource: "/api/v1/audits/export", Action: "GET"},
+	},
 }
 
 // Descriptor 实现 contract.Describable。

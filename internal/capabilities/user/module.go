@@ -65,6 +65,13 @@ var Descriptor = contract.Descriptor{
 	Name:       "user",
 	Migrations: migrationsFS,
 	Mount:      contract.MountProtected,
+	Permissions: []contract.Permission{
+		{Name: "用户列表", Resource: "/api/v1/users", Action: "GET"},
+		{Name: "用户创建", Resource: "/api/v1/users", Action: "POST"},
+		{Name: "用户详情", Resource: "/api/v1/users/*", Action: "GET"},
+		{Name: "用户修改", Resource: "/api/v1/users/*", Action: "PUT"},
+		{Name: "用户删除", Resource: "/api/v1/users/*", Action: "DELETE"},
+	},
 }
 
 // Descriptor 实现 contract.Describable。

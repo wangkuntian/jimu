@@ -46,6 +46,18 @@ var Descriptor = contract.Descriptor{
 	Requires:   []string{"user", "role"},
 	Migrations: migrationsFS,
 	Mount:      contract.MountProtected,
+	Permissions: []contract.Permission{
+		{Name: "租户列表", Resource: "/api/v1/tenants", Action: "GET"},
+		{Name: "租户创建", Resource: "/api/v1/tenants", Action: "POST"},
+		{Name: "租户详情", Resource: "/api/v1/tenants/*", Action: "GET"},
+		{Name: "租户修改", Resource: "/api/v1/tenants/*", Action: "PUT"},
+		{Name: "租户删除", Resource: "/api/v1/tenants/*", Action: "DELETE"},
+		// 租户运营：套餐定义（用量查询与套餐分配分别由「租户详情」「租户修改」通配覆盖）
+		{Name: "套餐列表", Resource: "/api/v1/tenant-plans", Action: "GET"},
+		{Name: "套餐创建", Resource: "/api/v1/tenant-plans", Action: "POST"},
+		{Name: "套餐修改", Resource: "/api/v1/tenant-plans/*", Action: "PUT"},
+		{Name: "套餐删除", Resource: "/api/v1/tenant-plans/*", Action: "DELETE"},
+	},
 }
 
 // Descriptor 实现 contract.Describable。
