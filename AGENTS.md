@@ -32,7 +32,7 @@
 - 每个能力导出静态 `Descriptor`（名称 / 硬依赖 `Requires` / 挂载点 `Mount`），依赖必须单向
 - 能力之间只经 `contract` 端口调用，禁止 import 其他能力的内部包
 - 挂载点由 `Descriptor.Mount` 声明，禁止按能力名做特判
-- Casbin RBAC 机制位于内核 `internal/kernel/access`（强制器/策略/权限中间件），API Key 签发/校验位于 `internal/capabilities/apikey`；`kernel/auth` 只保留 JWT/Session/限流/登录失败锁定机制
+- Casbin RBAC 机制位于内核 `internal/kernel/access`（强制器/策略/权限中间件），API Key 签发/校验位于 `internal/capabilities/apikey`；`kernel/auth` 只保留 JWT/Session/限流/登录失败锁定机制与 API Key 上下文助手（`apikey_context.go`）
 
 ### 租户体系
 

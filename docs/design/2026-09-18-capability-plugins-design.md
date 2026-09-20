@@ -103,8 +103,6 @@
 | `UserRateLimitMiddleware` | 随 `user` | 用户维度滑动窗口 |
 | `TenantRateLimitMiddleware` | 随 `tenancy` | 租户维度；平台级视角跳过 |
 | `APIKeyRateLimitMiddleware` | 随 `apikey` | Key 维度，按 Key ID 计数不落明文 |
-
-> P1.4 归位：user/tenancy/apikey 三个维度限流均已随能力落位——user 维度在 `kernel/http/middleware/ratelimit_user.go`（P1.3），tenancy/apikey 维度在 `capabilities/apikey/middleware/ratelimit_dimension.go`（tenancy 能力未落位前暂驻 apikey 能力包）；管理端准入（`admin_auth.go`）暂留 `kernel/http/middleware`，随 P1.7 `console` 能力迁出。
 | `AdminAuth` + `AdminIPAllowlist` | 随 `console` | 管理端准入，与 `console` 同生共死 |
 | `Security` / `SecurityHeadersFromConfig` | 内核 `httpx`，配置开关 | HSTS/CSP/X-Frame-Options/Referrer-Policy 等；浏览器场景才需要 |
 | `CORSMiddleware` | 内核 `httpx`，配置开关 | 有前端才需要 |
@@ -115,6 +113,8 @@
 | `GzipCompression` | 内核 `httpx`，配置开关 | 响应压缩 |
 | `GlobalRateLimit` | 内核 `httpx`，配置开关 | IP 令牌桶全局限流 |
 | `IdempotencyMiddleware` + `body_recorder` | 内核 `httpx`，配置开关 | 请求幂等（依赖 Redis） |
+
+> P1.4 归位：user/tenancy/apikey 三个维度限流均已随能力落位——user 维度在 `kernel/http/middleware/ratelimit_user.go`（P1.3），tenancy/apikey 维度在 `capabilities/apikey/middleware/ratelimit_dimension.go`（tenancy 能力未落位前暂驻 apikey 能力包）；管理端准入（`admin_auth.go`）暂留 `kernel/http/middleware`，随 P1.7 `console` 能力迁出。
 
 **3.5.3 现有 `shared/` 与 `platform/` 包的归位**
 
@@ -146,8 +146,6 @@
 | `platform/auth` | 905 | `jwt.go` `session.go` `middleware.go` `limiter.go` `lockout.go` | `auth` |
 | | | `casbin.go` `permission_middleware.go` `roles.go` | `access` |
 | | | `apikey.go` `apikey_middleware.go` | `apikey` |
-
-> P1.4 拆分结果：auth 机制（JWT/session/限流/lockout/AuthMiddleware + `apikey_context.go` 上下文助手）留 `kernel/auth`；access → `kernel/access`；apikey → `capabilities/apikey`（`APIKey` GORM 模型与仓储在 `apikey/domain/`，维度限流在 `apikey/middleware/`）。
 | `platform/tenant` | 67 | 上下文注入 + 编码校验/normalize | `kernel/tenant`（上下文机制；`tenancy` 能力负责租户实体/套餐/配额/开通式注册）；上下文无租户时为 `tid=0` 平台级视角，`tenancy` 关闭不影响其他能力读取租户上下文 |
 | `platform/db` | 1408 | `migrate.go` `mysql.go` `postgres.go` `transaction.go` `concurrency.go` `gorm_logger.go` | 内核 |
 | | | `snowflake.go`（与 `shared/id` 重复实现） | 内核，**两处合并去重** |
@@ -161,6 +159,8 @@
 | 顶层 `conf/rbac_model.conf` | — | Casbin 模型文件 | `access` |
 | `proto/jimu/v1/userinfo.proto` + `platform/grpc/userinfo_service.go` | — | 示例服务，且反向依赖 `internal/modules/user/domain`（搬迁前路径；现为 `internal/capabilities/user/domain`，§4 的 platform→module 违规） | 移出平台层，作为 `grpc` 能力的可选示例或 `examples/` |
 | `container.go` 里的 `new_dashboard` / `beta_features` | — | 演示性 Feature Flag | 随能力或配置声明，不进内核容器 |
+
+> P1.4 拆分结果：auth 机制（JWT/session/限流/lockout/AuthMiddleware + `apikey_context.go` 上下文助手）留 `kernel/auth`；access → `kernel/access`；apikey → `capabilities/apikey`（`APIKey` 模型与仓储接口在 `apikey/domain/`（仓储实现暂留 admin/infrastructure，P1.7 迁移），维度限流在 `apikey/middleware/`）。
 
 ### 3.7 驱动级可插拔
 
@@ -340,7 +340,7 @@ profiles/
 | 阶段 | 内容 | 完成判据 |
 |---|---|---|
 | **P0 契约与内核归位** | 定义 `contract.Capability` 与端口；建立 `internal/kernel/`；`internal/capabilities/` 下按现有 8 模块原样落位（先不改内部）；`catalog` 显式清单；运行时 `capabilities.enabled` + 依赖闭包校验；去掉 `bootstrap.go` 的 `auth`/`oauth` 字符串特判与"第一个中间件提供者"约定 | `full` 行为与 master 完全一致（测试全绿）；关闭 `oauth` 后其路由/迁移/权限点消失 |
-| **P1 边界重划** | `auth` → 6 个能力（§5.1）；`admin` 拆散到各能力（§5.2）；`user` 双写合并（§5.3）；**平台混装包归位**（§3.6：拆 `platform/auth`、`platform/db`、`platform/http`，`platform/tenant` → `kernel/tenant`（上下文机制；租户实体/套餐/配额/开通式注册归 `tenancy` 能力），`conf/rbac_model.conf` → `access`，示例服务移出平台层）；表所有权与迁移搬迁 + `adopt-capabilities`；`platform → module` 反向依赖消除；中间件归位（§3.5.2）（执行拆分为子阶段：P1.1 命名空间搬迁 → P1.2 平台包归位 → P1.3 内核混装包拆分 → P1.4 auth 拆分与端口（已完成：grpc userinfo 经 `contract.UserinfoSource` 端口消费、apikey 模型迁入 `capabilities/apikey/domain`，`kernel/db/seed.go` 的 kernel→capabilities import 留待 P1.5）→ P1.5 种子/迁移归属 → P1.6 auth 六能力 → P1.7 admin 拆散与 user 合并；P1.1–P1.4 已合入 release/v0.3.0） | 16 处模块间 import 归零；迁移按能力归属并各有版本表；存量实例可平滑 adopt；`platform/` 下不再有跨能力的混装包 |
+| **P1 边界重划** | `auth` → 6 个能力（§5.1）；`admin` 拆散到各能力（§5.2）；`user` 双写合并（§5.3）；**平台混装包归位**（§3.6：拆 `platform/auth`、`platform/db`、`platform/http`，`platform/tenant` → `kernel/tenant`（上下文机制；租户实体/套餐/配额/开通式注册归 `tenancy` 能力），`conf/rbac_model.conf` → `access`，示例服务移出平台层）；表所有权与迁移搬迁 + `adopt-capabilities`；`platform → module` 反向依赖消除；中间件归位（§3.5.2）（执行拆分为子阶段：P1.1 命名空间搬迁 → P1.2 平台包归位 → P1.3 内核混装包拆分 → P1.4 auth 拆分与端口（已完成：grpc userinfo 经 `contract.UserinfoSource` 端口消费、apikey 模型迁入 `capabilities/apikey/domain`，`kernel/db/seed.go` 的 kernel→capabilities import 留待 P1.5）→ P1.5 种子/迁移归属 → P1.6 auth 六能力 → P1.7 admin 拆散与 user 合并；P1.1–P1.3 已合入 release/v0.3.0；P1.4 已在本分支完成、随合并更新） | 16 处模块间 import 归零；迁移按能力归属并各有版本表；存量实例可平滑 adopt；`platform/` 下不再有跨能力的混装包 |
 | **P2 三层机制** | `capabilities.enabled` 配置合并与校验；`profiles/{full,minimal,saas,enterprise,machine}` 入口包；**驱动级可插拔**（§3.7：`storage/{local,s3}`、`queue/{redis,kafka,rabbitmq}`、`dataops/{csv,excel}`）；**非代码资产模块化**（§3.8：deploy 资产、Helm values、CLI 子命令、契约测试）；`jimu new` / `capability add` 脚手架；`compose-report` | 5 个 profile 均能构建并启动；`minimal` 的报告数字显著低于 `full`；只用本地存储/Redis 队列/CSV 时对应重型依赖不出现 |
 | **P3 门禁与文档** | `check-capabilities` / `check-profiles` / `check-pluggable`；生成器模板同步新形态；README / CONTRIBUTING / AGENTS.md 更新（能力清单、形态、新增能力流程） | 四道门禁在 CI 生效 |
 | **P4 v0.3.0 收尾** | 版本日志补验证结果；`release-check`；`release/v0.3.0` → `master` 合并；打 tag 发布 | GitHub Release 发布成功 |
