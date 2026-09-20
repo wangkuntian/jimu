@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -24,7 +25,7 @@ func fixture() []contract.Descriptor {
 		{Name: "user", Mount: contract.MountProtected},
 		{Name: "role", Mount: contract.MountProtected},
 		{Name: "permission", Requires: []string{"role"}, Mount: contract.MountProtected},
-		{Name: "tenant", Mount: contract.MountProtected},
+		{Name: "tenant", Requires: []string{"user", "role"}, Mount: contract.MountProtected},
 		{Name: "auth", Requires: []string{"user", "role", "tenant"}, Mount: contract.MountSelfManaged},
 		{Name: "audit", Mount: contract.MountProtected},
 		{Name: "admin", Requires: []string{"user", "audit"}, Mount: contract.MountProtected},
@@ -217,6 +218,19 @@ func TestCatalogMigrationsShape(t *testing.T) {
 	}
 	if got := migrationsOf(All()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("catalog Migrations shape drifted:\n got %v\nwant %v", got, want)
+	}
+}
+
+// TestTenantRequiresUserAndRole：tenant 的 005_tenants.sql 会 ALTER users/roles，
+// 迁移执行顺序由 Resolve 闭包序保证，故 tenant.Requires 必须含 user 与 role。
+func TestTenantRequiresUserAndRole(t *testing.T) {
+	for _, d := range All() {
+		if d.Name != "tenant" {
+			continue
+		}
+		if !slices.Contains(d.Requires, "user") || !slices.Contains(d.Requires, "role") {
+			t.Fatalf("tenant.Requires = %v, want to contain \"user\" and \"role\"", d.Requires)
+		}
 	}
 }
 
