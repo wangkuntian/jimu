@@ -1,6 +1,7 @@
 package tenant
 
 import (
+	"embed"
 	"jimu/internal/capabilities/tenant/application"
 	"jimu/internal/capabilities/tenant/infrastructure"
 	"jimu/internal/capabilities/tenant/interfaces"
@@ -33,10 +34,16 @@ func (m *Module) Name() string {
 	return "tenant"
 }
 
+// migrationsFS 能力自带迁移（Task 3：能力迁移经 embed 进二进制）。
+//
+//go:embed migrations
+var migrationsFS embed.FS
+
 // Descriptor 声明租户能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:  "tenant",
-	Mount: contract.MountProtected,
+	Name:       "tenant",
+	Migrations: migrationsFS,
+	Mount:      contract.MountProtected,
 }
 
 // Descriptor 实现 contract.Describable。

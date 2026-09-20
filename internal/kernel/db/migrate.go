@@ -1,15 +1,18 @@
 package db
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
+	"io/fs"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"jimu/internal/config"
+	"jimu/internal/contract"
 	"jimu/internal/kernel/logger"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // 注册 pgx driver，供 goose postgres 迁移使用
@@ -17,20 +20,128 @@ import (
 	"gorm.io/gorm"
 )
 
-// Migrate 执行数据库迁移（兼容旧接口，无重试）
-func Migrate(cfg config.DBConfig, direction string) error {
-	driver, dsnStr, err := sqlDriverAndDSN(cfg)
+// Migrate 执行全能力迁移（兼容旧接口，无重试）。caps 传启用集
+// （生产路径 catalog.Resolve 结果，测试路径 catalog.All()）；caps 为 nil 时无迁移可执行。
+func Migrate(cfg config.DBConfig, caps []contract.Descriptor, direction string) error {
+	return MigrateEnabled(cfg, caps, direction)
+}
+
+// MigrateEnabled 按能力拓扑序逐个执行迁移：每个能力用独立 goose Provider
+// 与独立版本表 goose_db_version_<capability>，互不干扰；删除能力即删其表与记录。
+func MigrateEnabled(cfg config.DBConfig, caps []contract.Descriptor, direction string) error {
+	gooseDialect := goose.DialectMySQL
+	if cfg.Dialect() == "postgres" {
+		gooseDialect = goose.DialectPostgres
+	}
+	sqlDB, err := openSQLForMigrate(cfg)
 	if err != nil {
 		return err
 	}
-
-	sqlDB, err := sql.Open(driver, dsnStr)
-	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
-	}
 	defer func() { _ = sqlDB.Close() }()
 
-	return runMigration(sqlDB, cfg, direction)
+	for _, cap := range caps {
+		if cap.Migrations == nil {
+			continue
+		}
+		// 能力无当前方言的迁移目录时跳过（与 nil Migrations 同语义）；
+		// 否则 goose Provider 会对空 FS 报 "no migrations found"。
+		if _, err := fs.Stat(cap.Migrations, "migrations/"+cfg.Dialect()); err != nil {
+			continue
+		}
+		fsys, err := fs.Sub(cap.Migrations, "migrations/"+cfg.Dialect())
+		if err != nil {
+			return fmt.Errorf("capability %s migrations: %w", cap.Name, err)
+		}
+		if err := migrateOne(gooseDialect, sqlDB, fsys, "goose_db_version_"+cap.Name, direction); err != nil {
+			return fmt.Errorf("capability %s: %w", cap.Name, err)
+		}
+	}
+	return nil
+}
+
+// openSQLForMigrate 按 Driver 配置返回迁移用的 *sql.DB（调用方负责关闭）
+func openSQLForMigrate(cfg config.DBConfig) (*sql.DB, error) {
+	driver, dsnStr, err := sqlDriverAndDSN(cfg)
+	if err != nil {
+		return nil, err
+	}
+	sqlDB, err := sql.Open(driver, dsnStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+	return sqlDB, nil
+}
+
+func migrateOne(dialect goose.Dialect, sqlDB *sql.DB, fsys fs.FS, table, direction string) error {
+	p, err := goose.NewProvider(dialect, sqlDB, fsys, goose.WithTableName(table))
+	if err != nil {
+		return fmt.Errorf("create provider: %w", err)
+	}
+	// 注意：不调用 p.Close()——它会关闭共享的 *sql.DB，导致后续能力拿到已关闭的库；
+	// Provider 的连接按操作内部管理，无显式释放需求。
+	ctx := context.Background()
+	switch direction {
+	case "up":
+		_, err = p.Up(ctx)
+	case "down":
+		_, err = p.Down(ctx)
+	case "redo":
+		if _, err = p.Down(ctx); err == nil {
+			_, err = p.Up(ctx)
+		}
+	case "status":
+		err = printStatus(ctx, p, table)
+	default:
+		return fmt.Errorf("unknown direction: %s", direction)
+	}
+	return err
+}
+
+// printStatus 逐条打印该能力版本表的迁移状态（沿用旧 status 输出风格）
+func printStatus(ctx context.Context, p *goose.Provider, table string) error {
+	statuses, err := p.Status(ctx)
+	if err != nil {
+		return err
+	}
+	for _, s := range statuses {
+		state := "Pending"
+		if s.State == goose.StateApplied {
+			state = "Applied"
+		}
+		fmt.Printf("%s: %d %s (%s)\n", table, s.Source.Version, s.Source.Path, state)
+	}
+	return nil
+}
+
+// MigrateWithRetry 带重试的数据库迁移
+func MigrateWithRetry(cfg config.DBConfig, caps []contract.Descriptor, log *logger.Logger, direction string) error {
+	maxRetries := cfg.MaxRetries
+	if maxRetries <= 0 {
+		maxRetries = 5
+	}
+	interval := cfg.RetryIntervalSec
+	if interval <= 0 {
+		interval = 3
+	}
+
+	var lastErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if err := Migrate(cfg, caps, direction); err != nil {
+			lastErr = err
+			if log != nil {
+				log.Warnw("retrying database migration",
+					"direction", direction,
+					"attempt", attempt,
+					"max_retries", maxRetries,
+					"error", err.Error(),
+				)
+			}
+			time.Sleep(time.Duration(interval) * time.Second)
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("migration %s failed after %d attempts: %w", direction, maxRetries, lastErr)
 }
 
 // sqlDriverAndDSN 根据 Driver 配置返回 database/sql driver 名与 DSN
@@ -51,113 +162,37 @@ func mysqlDSN(cfg config.DBConfig) string {
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
 }
 
-// MigrateWithRetry 带重试的数据库迁移
-func MigrateWithRetry(cfg config.DBConfig, log *logger.Logger, direction string) error {
-	maxRetries := cfg.MaxRetries
-	if maxRetries <= 0 {
-		maxRetries = 5
+// capabilityMigrationVersions 列出能力 Migrations FS 中指定方言子目录的迁移版本号
+// （文件名形如 004_user_totp.sql，取前缀数字），升序返回。目录缺失返回空集；
+// 存在无数字前缀的 .sql 文件时报错，避免静默漏迁移。AdoptCapabilities（Task 5）
+// 基线登记复用此解析。
+func capabilityMigrationVersions(fsys fs.FS, dialect string) ([]int64, error) {
+	entries, err := fs.ReadDir(fsys, "migrations/"+dialect)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	interval := cfg.RetryIntervalSec
-	if interval <= 0 {
-		interval = 3
-	}
-
-	var lastErr error
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		if err := Migrate(cfg, direction); err != nil {
-			lastErr = err
-			if log != nil {
-				log.Warnw("retrying database migration",
-					"direction", direction,
-					"attempt", attempt,
-					"max_retries", maxRetries,
-					"error", err.Error(),
-				)
-			}
-			time.Sleep(time.Duration(interval) * time.Second)
+	versions := make([]int64, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
 			continue
 		}
-		return nil
-	}
-	return fmt.Errorf("migration %s failed after %d attempts: %w", direction, maxRetries, lastErr)
-}
-
-// MigrationDir 定位 MySQL 迁移目录：从本文件源码路径向上找项目根的 migrations，
-// 不依赖工作目录，go test 在包目录运行也能找到。
-func MigrationDir() string {
-	return migrationDir("mysql")
-}
-
-// PostgresMigrationDir 定位 PostgreSQL 迁移目录（migrations/postgres）
-func PostgresMigrationDir() string {
-	return migrationDir("postgres")
-}
-
-// migrationDir 按子目录定位迁移目录
-func migrationDir(sub string) string {
-	if _, file, _, ok := runtime.Caller(0); ok {
-		if dir := findUp(filepath.Dir(file), "migrations"); dir != "" {
-			if sub == "" {
-				return dir
-			}
-			return filepath.Join(dir, sub)
+		name := e.Name()
+		// 约定：文件名 = 数字前缀 + "_" + 描述 + ".sql"（如 004_user_totp.sql）
+		prefix := name
+		if idx := strings.IndexByte(name, '_'); idx > 0 {
+			prefix = name[:idx]
 		}
-	}
-	if sub == "" {
-		return "migrations"
-	}
-	return filepath.Join("migrations", sub)
-}
-
-// findUp 从 start 逐级向父目录查找包含 target 的目录
-func findUp(start, target string) string {
-	dir := start
-	for {
-		if isDir(filepath.Join(dir, target)) {
-			return filepath.Join(dir, target)
+		v, perr := strconv.ParseInt(prefix, 10, 64)
+		if perr != nil {
+			return nil, fmt.Errorf("invalid migration filename %q: %w", name, perr)
 		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
+		versions = append(versions, v)
 	}
-}
-
-func isDir(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
-}
-
-func runMigration(sqlDB *sql.DB, cfg config.DBConfig, direction string) error {
-	dialect := cfg.Dialect()
-	if err := goose.SetDialect(dialect); err != nil {
-		return fmt.Errorf("failed to set dialect: %w", err)
-	}
-
-	var dir string
-	if dialect == "postgres" {
-		dir = PostgresMigrationDir()
-	} else {
-		dir = MigrationDir()
-	}
-
-	switch direction {
-	case "up":
-		return goose.Up(sqlDB, dir)
-	case "up-by-one":
-		return goose.UpByOne(sqlDB, dir)
-	case "down":
-		return goose.Down(sqlDB, dir)
-	case "redo":
-		return goose.Redo(sqlDB, dir)
-	case "status":
-		return goose.Status(sqlDB, dir)
-	case "reset":
-		return goose.Reset(sqlDB, dir)
-	default:
-		return fmt.Errorf("unknown direction: %s", direction)
-	}
+	sort.Slice(versions, func(i, j int) bool { return versions[i] < versions[j] })
+	return versions, nil
 }
 
 // AutoMigrate 使用 Gorm 自动迁移（开发用）

@@ -17,6 +17,8 @@ func withEntries(t *testing.T, ds ...contract.Descriptor) {
 }
 
 // fixture 复刻 P0 八个能力的依赖形态（与真实清单拓扑一致）。
+// Migrations 为 fs.FS 接口值（embed.FS 无法逐值复刻），漂移检测由
+// TestCatalogMigrationsShape 单独按"有无迁移"钉住。
 func fixture() []contract.Descriptor {
 	return []contract.Descriptor{
 		{Name: "user", Mount: contract.MountProtected},
@@ -180,8 +182,36 @@ func TestDescriptorsAreWellFormed(t *testing.T) {
 			}
 		}
 	}
-	if !reflect.DeepEqual(All(), fixture()) {
-		t.Fatalf("catalog descriptors drifted from the expected fixture:\n got %+v\nwant %+v", All(), fixture())
+	// 精确逐值比较对 fs.FS（embed.FS）不可行，比较除 Migrations 外的全部字段；
+	// 迁移有无形态由 TestCatalogMigrationsShape 单独钉住。
+	got, want := All(), fixture()
+	for i := range want {
+		got[i].Migrations, want[i].Migrations = nil, nil
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("catalog descriptors drifted from the expected fixture:\n got %+v\nwant %+v", got, want)
+	}
+}
+
+// migrationsOf 便于漂移比较：embed.FS 无法逐值构造，只比较"有无迁移"。
+func migrationsOf(ds []contract.Descriptor) map[string]bool {
+	out := make(map[string]bool, len(ds))
+	for _, d := range ds {
+		out[d.Name] = d.Migrations != nil
+	}
+	return out
+}
+
+// TestCatalogMigrationsShape 钉住：除 admin 外的清单能力都必须自带迁移，
+// admin（无迁移）必须为 nil。
+func TestCatalogMigrationsShape(t *testing.T) {
+	want := map[string]bool{
+		"user": true, "role": true, "permission": true, "tenant": true,
+		"auth": true, "audit": true, "oauth": true,
+		"admin": false,
+	}
+	if got := migrationsOf(All()); !reflect.DeepEqual(got, want) {
+		t.Fatalf("catalog Migrations shape drifted:\n got %v\nwant %v", got, want)
 	}
 }
 

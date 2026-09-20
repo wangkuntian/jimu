@@ -1,6 +1,7 @@
 package permission
 
 import (
+	"embed"
 	"jimu/internal/capabilities/permission/application"
 	"jimu/internal/capabilities/permission/infrastructure"
 	"jimu/internal/capabilities/permission/interfaces"
@@ -23,11 +24,17 @@ func (m *Module) Name() string {
 	return "permission"
 }
 
+// migrationsFS 能力自带迁移（Task 3：能力迁移经 embed 进二进制）。
+//
+//go:embed migrations
+var migrationsFS embed.FS
+
 // Descriptor 声明权限能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:     "permission",
-	Requires: []string{"role"},
-	Mount:    contract.MountProtected,
+	Name:       "permission",
+	Migrations: migrationsFS,
+	Requires:   []string{"role"},
+	Mount:      contract.MountProtected,
 }
 
 // Descriptor 实现 contract.Describable。

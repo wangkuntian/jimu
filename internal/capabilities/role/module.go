@@ -1,6 +1,7 @@
 package role
 
 import (
+	"embed"
 	"jimu/internal/capabilities/role/application"
 	"jimu/internal/capabilities/role/infrastructure"
 	"jimu/internal/capabilities/role/interfaces"
@@ -28,10 +29,16 @@ func (m *Module) Name() string {
 	return "role"
 }
 
+// migrationsFS 能力自带迁移（Task 3：能力迁移经 embed 进二进制）。
+//
+//go:embed migrations
+var migrationsFS embed.FS
+
 // Descriptor 声明角色能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:  "role",
-	Mount: contract.MountProtected,
+	Name:       "role",
+	Migrations: migrationsFS,
+	Mount:      contract.MountProtected,
 }
 
 // Descriptor 实现 contract.Describable。

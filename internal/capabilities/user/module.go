@@ -1,6 +1,7 @@
 package user
 
 import (
+	"embed"
 	"fmt"
 
 	"jimu/internal/capabilities/encryption"
@@ -54,10 +55,16 @@ func (m *Module) Name() string {
 	return "user"
 }
 
+// migrationsFS 能力自带迁移（Task 3：能力迁移经 embed 进二进制）。
+//
+//go:embed migrations
+var migrationsFS embed.FS
+
 // Descriptor 声明用户能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:  "user",
-	Mount: contract.MountProtected,
+	Name:       "user",
+	Migrations: migrationsFS,
+	Mount:      contract.MountProtected,
 }
 
 // Descriptor 实现 contract.Describable。

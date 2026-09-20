@@ -1,5 +1,7 @@
 package contract
 
+import "io/fs"
+
 // MountPoint 决定能力的 HTTP 路由挂载方式。
 type MountPoint string
 
@@ -28,6 +30,10 @@ type Descriptor struct {
 
 	// Permissions 能力拥有的权限点；种子时由启用集聚合写入，未启用的能力不种。
 	Permissions []Permission
+
+	// Migrations 能力自带迁移的嵌入文件系统（根下应有 mysql/ 与 postgres/ 子目录）；
+	// nil 表示该能力无迁移。
+	Migrations fs.FS
 }
 
 // Normalized 返回归一化后的挂载点：空值与任何未识别的取值（如大小写笔误）

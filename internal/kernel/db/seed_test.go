@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -40,10 +41,14 @@ func newSeedSqliteDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// repoRoot 项目根目录：migrations 位于根下，MySQL 迁移在 migrations/mysql 子目录
+// repoRoot 项目根目录：按本文件源码路径向上两级定位，
+// 不依赖工作目录（迁移已迁入能力目录，顶层 migrations/ 不复存在）。
 func repoRoot(t *testing.T) string {
 	t.Helper()
-	return filepath.Dir(filepath.Dir(MigrationDir()))
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller failed")
+	// internal/kernel/db/seed_test.go → 仓库根（向上三级）
+	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", ".."))
 }
 
 // expectDefaultTenantQuery 编排默认租户 FirstOrCreate 的 SELECT+INSERT 预期

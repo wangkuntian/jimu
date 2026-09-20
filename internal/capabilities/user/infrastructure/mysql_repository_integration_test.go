@@ -2,14 +2,29 @@ package infrastructure
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
+	"jimu/internal/contract"
 	"jimu/internal/shared/testutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+func init() {
+	// 本包集成测试依赖 users 表：注入用户能力的迁移。
+	// 迁移 embed 在能力根包（user/migrations.go），infrastructure 子包测试
+	// 引用根包会构成 import cycle，故这里按源码路径直接定位迁移目录。
+	_, thisFile, _, _ := runtime.Caller(0)
+	migDir := filepath.Join(filepath.Dir(thisFile), "..", "migrations")
+	testutil.SetMigrateCaps([]contract.Descriptor{
+		{Name: "user", Migrations: os.DirFS(migDir)},
+	})
+}
 
 // TestMysqlRepositoryMySQLIntegration 针对真实 MariaDB/MySQL 的集成测试。
 // CI 通过 services.mariadb 提供；本地无数据库时由 SkipUnlessMysql 自动跳过。
