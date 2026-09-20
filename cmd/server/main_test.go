@@ -28,3 +28,35 @@ func TestWiredCapabilitiesHaveNoDuplicates(t *testing.T) {
 		seen[name] = true
 	}
 }
+
+// TestAssemblyFilterYieldsWiredOnly run() 按 wiredCapabilities 过滤
+// catalog.Resolve 结果后进入 Bootstrap 的模块应恰好是名册本身。
+func TestAssemblyFilterYieldsWiredOnly(t *testing.T) {
+	caps, err := catalog.Resolve(nil)
+	if err != nil {
+		t.Fatalf("resolve all capabilities: %v", err)
+	}
+
+	wired := make(map[string]bool, len(wiredCapabilities))
+	for _, name := range wiredCapabilities {
+		wired[name] = true
+	}
+
+	var modules []string
+	for _, d := range caps {
+		if wired[d.Name] {
+			modules = append(modules, d.Name)
+		}
+	}
+
+	if len(modules) != len(wiredCapabilities) {
+		t.Fatalf("filtered modules %v (%d) != wiredCapabilities %v (%d)",
+			modules, len(modules), wiredCapabilities, len(wiredCapabilities))
+	}
+	slices.Sort(modules)
+	expected := slices.Clone(wiredCapabilities)
+	slices.Sort(expected)
+	if !slices.Equal(modules, expected) {
+		t.Fatalf("filtered modules %v != wiredCapabilities %v", modules, expected)
+	}
+}
