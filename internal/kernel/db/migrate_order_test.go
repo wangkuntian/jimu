@@ -11,10 +11,44 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMigrateEnabled_DownReversesCapabilityOrder 验证 down/redo 按反向能力序迭代：
-// 声明了 Migrations 却缺 migrations/ 根的能力会报开发期错误，错误信息带能力名，
-// 借此观测迭代顺序——up 按清单正向序、down/redo 按反向序。不触库（首个 fs.Stat 即报错）。
-// 回归 F2：旧实现 down 也按正向迭代，第二轮起访问已被回滚的表报 "Table doesn't exist"。
+// capNames 取能力名列表（断言辅助）
+func capNames(caps []contract.Descriptor) []string {
+	out := make([]string, len(caps))
+	for i, c := range caps {
+		out[i] = c.Name
+	}
+	return out
+}
+
+// TestCapabilitiesInRunOrder 钉死迭代序选择：up/status 按清单正向序，
+// down/redo 恰好是清单切片的反转（slices.Reverse），不是按名排序。
+// 回归 F2：旧实现按 Name 降序 sort——名字序 ≠ 清单序（真实清单 user, role,
+// permission, tenant, ... 按名降序会把 user 排到 tenant 前），叠加各能力迁移
+// 深度不齐时 down 中途撞 "Table doesn't exist"。
+func TestCapabilitiesInRunOrder(t *testing.T) {
+	// 清单序仿真实 catalog 前缀（user, role, permission, tenant），名字序与反转序不同
+	caps := []contract.Descriptor{
+		{Name: "user"}, {Name: "role"}, {Name: "permission"}, {Name: "tenant"},
+	}
+
+	require.Equal(t, []string{"user", "role", "permission", "tenant"},
+		capNames(db.CapabilitiesInRunOrder(caps, "up")), "up 应按清单正向序")
+	require.Equal(t, []string{"user", "role", "permission", "tenant"},
+		capNames(db.CapabilitiesInRunOrder(caps, "status")), "status 应按清单正向序")
+	require.Equal(t, []string{"tenant", "permission", "role", "user"},
+		capNames(db.CapabilitiesInRunOrder(caps, "down")), "down 应恰为清单切片反转")
+	require.Equal(t, []string{"tenant", "permission", "role", "user"},
+		capNames(db.CapabilitiesInRunOrder(caps, "redo")), "redo 应恰为清单切片反转")
+
+	// 不改动调用方切片
+	require.Equal(t, []string{"user", "role", "permission", "tenant"}, capNames(caps),
+		"迭代序选择不得改动调用方切片")
+}
+
+// TestMigrateEnabled_DownReversesCapabilityOrder 验证 MigrateEnabled 实际按
+// capabilitiesInRunOrder 的选择迭代：声明了 Migrations 却缺 migrations/ 根的
+// 能力会报开发期错误，错误信息带能力名，借此观测迭代顺序。不触库（首个
+// fs.Stat 即报错）。钉住"运行器确实使用了该辅助函数"这一接线。
 func TestMigrateEnabled_DownReversesCapabilityOrder(t *testing.T) {
 	// 两个声明了 Migrations 但缺 migrations/ 根的夹具能力
 	caps := []contract.Descriptor{

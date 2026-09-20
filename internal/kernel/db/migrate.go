@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,6 +30,18 @@ func Migrate(cfg config.DBConfig, caps []contract.Descriptor, direction string) 
 	return MigrateEnabled(cfg, caps, direction)
 }
 
+// capabilitiesInRunOrder 选择 MigrateEnabled 的能力迭代序：up/status 按清单正向
+// 序；down/redo 恰为清单切片的反转（不排序、不改动调用方切片）。回滚顺序必须
+// 与依赖方向相反（依赖方先回滚，其基表才不被先删），清单序即依赖拓扑序。
+func capabilitiesInRunOrder(caps []contract.Descriptor, direction string) []contract.Descriptor {
+	if direction != "down" && direction != "redo" {
+		return caps
+	}
+	iter := slices.Clone(caps)
+	slices.Reverse(iter)
+	return iter
+}
+
 // MigrateEnabled 按能力拓扑序逐个执行迁移：每个能力用独立 goose Provider
 // 与独立版本表 goose_db_version_<capability>，互不干扰；删除能力即删其表与记录。
 // down/redo 按反向能力序迭代（Down 依赖的表须先于其基表回滚：如 tenant 005
@@ -45,12 +58,7 @@ func MigrateEnabled(cfg config.DBConfig, caps []contract.Descriptor, direction s
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	iter := caps
-	if direction == "down" || direction == "redo" {
-		iter = make([]contract.Descriptor, len(caps))
-		copy(iter, caps)
-		sort.Slice(iter, func(i, j int) bool { return iter[i].Name > iter[j].Name })
-	}
+	iter := capabilitiesInRunOrder(caps, direction)
 	for _, c := range iter {
 		if c.Migrations == nil {
 			continue

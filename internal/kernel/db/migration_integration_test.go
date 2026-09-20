@@ -24,8 +24,9 @@ func TestMigrationIntegration(t *testing.T) {
 
 	caps := testCaps(t)
 	cfg := tdb.Config()
-	versionTables := []string{"goose_db_version_user", "goose_db_version_auditsvc"}
-	businessTables := []string{"capmig_users", "capmig_audit_events"}
+	versionTables := []string{"goose_db_version_user", "goose_db_version_auditsvc",
+		"goose_db_version_zsvc", "goose_db_version_advc"} // zsvc/advc: testCaps 增补的不等深夹具
+	businessTables := []string{"capmig_users", "capmig_audit_events", "capmig_zitems", "capmig_zshared"}
 
 	// 清理上一轮遗留，保证从零开始
 	cleanupTables(t, tdb, append(versionTables, businessTables...))
@@ -70,8 +71,69 @@ func TestMigrationIntegration(t *testing.T) {
 	cleanupTables(t, tdb, append(versionTables, businessTables...))
 }
 
+// TestMigrationIntegration_UnequalDepths 回归 F2 第二问（不等深夹具）：
+// 基础能力 zsvc（2 条迁移，002 建 capmig_zshared）在前、依赖能力 advc（1 条迁移，
+// ALTER capmig_zshared）在后，传入序仿真实清单的拓扑序 [基础, 依赖]。各能力每轮
+// down 只回滚一条迁移：
+//   - 轮 1：advc 回滚 001（删 tag 列），zsvc 回滚 002——若序错（zsvc 后回滚），
+//     zsvc 002 的 Down DROP TABLE capmig_zshared 会先于 advc 001 Down 执行而报错；
+//   - 轮 2：advc 已空，zsvc 回滚 001；
+//   - 轮 3：两者均空，纯哨兵轮。
+//
+// 名字陷阱：zsvc > advc 按名降序——旧 sort 实现（Name 降序）在此传入序下第 1 轮
+// down 即失败（zsvc 002 Down 先删 capmig_zshared，advc 001 Down 撞
+// "Table doesn't exist"）；正向序同样失败。只有清单反转序（advc 先、zsvc 后）通过。
+func TestMigrationIntegration_UnequalDepths(t *testing.T) {
+	tdb := testutil.SkipUnlessDB(t)
+	defer tdb.Close()
+
+	caps := testCaps(t)
+	// 只取不等深夹具能力，保持真实清单式拓扑序：基础(zsvc)在前、依赖(advc)在后
+	var pair []contract.Descriptor
+	for _, c := range caps {
+		if c.Name == "zsvc" || c.Name == "advc" {
+			pair = append(pair, c)
+		}
+	}
+	require.Equal(t, []string{"zsvc", "advc"}, []string{pair[0].Name, pair[1].Name},
+		"夹具传入序应为 [基础 zsvc, 依赖 advc]，否则本测试失去钉住意义")
+
+	cfg := tdb.Config()
+	versionTables := []string{"goose_db_version_zsvc", "goose_db_version_advc"}
+	businessTables := []string{"capmig_zitems", "capmig_zshared"}
+	cleanupTables(t, tdb, append(versionTables, businessTables...))
+
+	require.NoError(t, db.MigrateEnabled(cfg, pair, "up"), "up 应成功")
+	require.Equal(t, 1, tableCount(t, tdb, "capmig_zitems"))
+	require.Equal(t, 1, tableCount(t, tdb, "capmig_zshared"))
+	require.Equal(t, 1, columnCount(t, tdb, "capmig_zshared", "tag"), "advc 001 的 tag 列应存在")
+	require.Equal(t, int64(3), rowCount(t, tdb, "goose_db_version_zsvc"), "zsvc 版本表应有 3 行")
+	require.Equal(t, int64(2), rowCount(t, tdb, "goose_db_version_advc"), "advc 版本表应有 2 行")
+
+	// 三轮 down 全部成功（旧 sort 实现第 1 轮即报 "Table doesn't exist"）
+	require.NoError(t, db.MigrateEnabled(cfg, pair, "down"), "第 1 轮 down 应成功：依赖先回滚")
+	require.Equal(t, 0, columnCount(t, tdb, "capmig_zshared", "tag"), "advc 001 Down 应删 tag 列")
+	require.Equal(t, 0, tableCount(t, tdb, "capmig_zshared"), "zsvc 002 Down 应删 capmig_zshared")
+	require.Equal(t, 1, tableCount(t, tdb, "capmig_zitems"), "zsvc 001 尚未回滚，capmig_zitems 应保留")
+	require.Equal(t, int64(2), rowCount(t, tdb, "goose_db_version_zsvc"), "zsvc 应回滚 002")
+	require.Equal(t, int64(1), rowCount(t, tdb, "goose_db_version_advc"), "advc 应回滚 001，仅剩 0 基线")
+
+	require.NoError(t, db.MigrateEnabled(cfg, pair, "down"), "第 2 轮 down 应成功")
+	require.Equal(t, 0, tableCount(t, tdb, "capmig_zitems"), "zsvc 001 Down 应删 capmig_zitems")
+	require.Equal(t, int64(1), rowCount(t, tdb, "goose_db_version_zsvc"), "zsvc 仅剩 0 基线行")
+	require.Equal(t, int64(1), rowCount(t, tdb, "goose_db_version_advc"), "advc 已空，行数不变")
+
+	require.NoError(t, db.MigrateEnabled(cfg, pair, "down"), "第 3 轮 down（已全部回滚）应成功")
+	require.Equal(t, int64(1), rowCount(t, tdb, "goose_db_version_zsvc"))
+	require.Equal(t, int64(1), rowCount(t, tdb, "goose_db_version_advc"))
+
+	cleanupTables(t, tdb, append(versionTables, businessTables...))
+}
+
 // testCaps 构造夹具能力清单：迁移文件在 testdata/capmigs 下，
 // 与真实能力同构（根目录 migrations/{mysql,postgres}/）。
+// user(2 条)/auditsvc(1 条) 为基础夹具；zsvc(2 条，002 建 capmig_zshared)/
+// advc(1 条，ALTER capmig_zshared) 为不等深+跨能力依赖夹具（见 README）。
 func testCaps(t *testing.T) []contract.Descriptor {
 	t.Helper()
 	_, thisFile, _, ok := runtime.Caller(0)
@@ -80,10 +142,15 @@ func testCaps(t *testing.T) []contract.Descriptor {
 
 	userFS := os.DirFS(filepath.Join(root, "user"))
 	auditFS := os.DirFS(filepath.Join(root, "auditsvc"))
+	advcFS := os.DirFS(filepath.Join(root, "advc"))
+	zsvcFS := os.DirFS(filepath.Join(root, "zsvc"))
 	return []contract.Descriptor{
 		{Name: "user", Migrations: userFS},
 		{Name: "auditsvc", Migrations: auditFS},
 		{Name: "admin"}, // nil Migrations：运行器必须跳过
+		// 不等深依赖对：基础在前、依赖在后（真实清单同为拓扑序）
+		{Name: "zsvc", Migrations: zsvcFS},
+		{Name: "advc", Migrations: advcFS},
 	}
 }
 
