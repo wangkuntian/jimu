@@ -243,9 +243,9 @@ make cli
 
 # 数据库迁移
 ./bin/jimu migrate up               # 执行所有迁移
-./bin/jimu migrate down             # 回滚最后一次迁移
+./bin/jimu migrate down             # 回滚各能力最后一次迁移（按反向能力序）
 ./bin/jimu migrate status           # 查看迁移状态
-./bin/jimu migrate redo             # 重做最后一次迁移
+./bin/jimu migrate redo             # 重做各能力最后一次迁移（按反向能力序）
 ./bin/jimu migrate adopt-capabilities  # 存量库登记各能力版本表基线（升级到 v0.3.0 后执行一次）
 
 # 数据初始化
@@ -258,7 +258,7 @@ make cli
 v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capabilities/<name>/migrations/{mysql,postgres}/`，经 `//go:embed` 打进二进制（镜像/发布物不再依赖磁盘上的 `migrations/` 目录）。顶层 `migrations/` 已删除。
 
 - **双版本表机制** — 每个能力一个独立版本表 `goose_db_version_<capability>`（由 `Descriptor.Migrations` 驱动，`internal/kernel/db.MigrateEnabled` 执行），互不干扰；删除能力即删它的表与迁移，新增迁移不再影响其他能力的版本记录。全局 `goose_db_version` 保留为历史记录，新运行器不再读写。
-- **执行顺序** — 按能力清单 `internal/capabilities/catalog` 的拓扑序（依赖在前）逐能力执行；同一能力内按迁移文件版本号升序。
+- **执行顺序** — 按能力清单 `internal/capabilities/catalog` 的拓扑序（依赖在前）逐能力执行；同一能力内按迁移文件版本号升序。`migrate down`/`migrate redo` 按**反向能力序**迭代：回滚时依赖方的迁移先回滚（如 tenant 005 `DROP COLUMN tenant_id` 先于 user 001 `DROP TABLE users`），依赖的基表才不会被先删；每能力每次回滚其最后一条迁移（该能力全部回滚后静默完成，不再报错），一次 `down` 最多产生 12 个 DDL 回滚。
 - **新迁移怎么写** — 写进**所属能力**的 `internal/capabilities/<name>/migrations/<方言>/` 目录，能力内版本号取该目录当前最大编号 +1（脚手架 `jimu module create` 自动完成）；一条 ALTER 只属于一个能力——它改变的表归谁，迁移就写谁的能力目录，避免多能力重复变更同一对象。
 - **存量实例升级路径** — 旧世界全局版本表记录 001–015：
   1. 旧二进制 `jimu migrate up` 升到旧世界最新；

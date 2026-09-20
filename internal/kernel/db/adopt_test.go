@@ -96,6 +96,33 @@ func TestAdoptCapabilities_FreshDBErrors(t *testing.T) {
 	require.Contains(t, err.Error(), "migrate up", "错误信息应引导先执行 migrate up")
 }
 
+// TestAdoptCapabilities_RerunAfterPartialFailure 回归 F5：上次 adopt 部分失败
+// （部分能力的版本行已写入）后重跑，已登记版本不重复插入。
+func TestAdoptCapabilities_RerunAfterPartialFailure(t *testing.T) {
+	tdb := testutil.SkipUnlessDB(t)
+	defer tdb.Close()
+
+	caps := testCaps(t)
+	cfg := tdb.Config()
+	cleanupTables(t, tdb, append([]string{"goose_db_version"}, append(adoptVersionTables, adoptBusinessTables...)...))
+
+	seedLegacyGlobalVersionTable(t, tdb, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15})
+
+	// 第一次 adopt：全部登记成功
+	_, err := db.AdoptCapabilities(cfg, caps)
+	require.NoError(t, err)
+	require.Equal(t, []int64{0, 1, 2}, versionIDs(t, tdb, "goose_db_version_user"))
+	require.Equal(t, []int64{0, 1}, versionIDs(t, tdb, "goose_db_version_auditsvc"))
+
+	// 重跑 adopt：模拟部分失败后的重试，不得重复插入版本行
+	_, err = db.AdoptCapabilities(cfg, caps)
+	require.NoError(t, err)
+	require.Equal(t, []int64{0, 1, 2}, versionIDs(t, tdb, "goose_db_version_user"), "重跑不得重复登记 user 基线")
+	require.Equal(t, []int64{0, 1}, versionIDs(t, tdb, "goose_db_version_auditsvc"), "重跑不得重复登记 auditsvc 基线")
+
+	cleanupTables(t, tdb, append([]string{"goose_db_version"}, append(adoptVersionTables, adoptBusinessTables...)...))
+}
+
 // TestAdoptCapabilities_PartialAdopt 存量 V 小于部分迁移版本时只基线旧版本，
 // 其余由后续 MigrateEnabled(up) 正常执行。使用 solo 夹具：001/002 互相独立
 // （各自 CREATE 一张表），基线 001 后 up 只需真实执行 002，无表依赖问题。

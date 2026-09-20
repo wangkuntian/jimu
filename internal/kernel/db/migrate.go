@@ -16,6 +16,8 @@ import (
 	"jimu/internal/contract"
 	"jimu/internal/kernel/logger"
 
+	mysqldb "github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib" // 注册 pgx driver，供 goose postgres 迁移使用
 	"github.com/pressly/goose/v3"
 	"gorm.io/gorm"
@@ -29,6 +31,9 @@ func Migrate(cfg config.DBConfig, caps []contract.Descriptor, direction string) 
 
 // MigrateEnabled 按能力拓扑序逐个执行迁移：每个能力用独立 goose Provider
 // 与独立版本表 goose_db_version_<capability>，互不干扰；删除能力即删其表与记录。
+// down/redo 按反向能力序迭代（Down 依赖的表须先于其基表回滚：如 tenant 005
+// DROP COLUMN 在 user 001 DROP TABLE 之前）；每能力单次 Down 只回滚一条迁移，
+// 全部回滚后返回 goose.ErrNoNextVersion，视为该能力已完成。
 func MigrateEnabled(cfg config.DBConfig, caps []contract.Descriptor, direction string) error {
 	gooseDialect := goose.DialectMySQL
 	if cfg.Dialect() == "postgres" {
@@ -40,7 +45,13 @@ func MigrateEnabled(cfg config.DBConfig, caps []contract.Descriptor, direction s
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	for _, c := range caps {
+	iter := caps
+	if direction == "down" || direction == "redo" {
+		iter = make([]contract.Descriptor, len(caps))
+		copy(iter, caps)
+		sort.Slice(iter, func(i, j int) bool { return iter[i].Name > iter[j].Name })
+	}
+	for _, c := range iter {
 		if c.Migrations == nil {
 			continue
 		}
@@ -89,6 +100,10 @@ func migrateOne(dialect goose.Dialect, sqlDB *sql.DB, fsys fs.FS, table, directi
 		_, err = p.Up(ctx)
 	case "down":
 		_, err = p.Down(ctx)
+		// 全部迁移已回滚（仅剩 0 基线行）视为完成，不再报错
+		if errors.Is(err, goose.ErrNoNextVersion) {
+			err = nil
+		}
 	case "redo":
 		if _, err = p.Down(ctx); err == nil {
 			_, err = p.Up(ctx)
@@ -218,7 +233,7 @@ func AdoptCapabilities(cfg config.DBConfig, caps []contract.Descriptor) (map[str
 
 	// 1. 读全局版本表最大版本 V（表不存在 → 引导错误；V=0/空表为合法：不基线任何版本）
 	var maxVersion sql.NullInt64
-	err = sqlDB.QueryRow("SELECT MAX(version_id) FROM goose_db_version").Scan(&maxVersion)
+	err = sqlDB.QueryRowContext(context.Background(), "SELECT MAX(version_id) FROM goose_db_version").Scan(&maxVersion)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"global version table goose_db_version not found: %w (fresh database? run `jimu migrate up` first — adopt is only for existing databases migrated by the legacy global-table runner)",
@@ -266,12 +281,59 @@ func adoptOne(dialect goose.Dialect, sqlDB *sql.DB, table string, versions []int
 		return fmt.Errorf("create provider: %w", err)
 	}
 	ctx := context.Background()
+	// 已存在登记（重跑 adopt / 上次部分失败）时跳过，避免版本行重复
+	existing, err := appliedVersions(ctx, sqlDB, table)
+	if err != nil {
+		return fmt.Errorf("list applied versions: %w", err)
+	}
+	skip := make(map[int64]bool, len(existing))
+	for _, v := range existing {
+		skip[v] = true
+	}
 	for _, ver := range versions {
+		if skip[ver] {
+			continue
+		}
 		if _, err := p.ApplyVersion(ctx, ver, true); err != nil {
 			return fmt.Errorf("apply version %d: %w", ver, err)
 		}
 	}
 	return nil
+}
+
+// appliedVersions 读取版本表已有的 version_id 集合；表不存在（尚未建）返回空集。
+func appliedVersions(ctx context.Context, sqlDB *sql.DB, table string) ([]int64, error) {
+	rows, err := sqlDB.QueryContext(ctx, "SELECT version_id FROM "+table)
+	if err != nil {
+		if isNoSuchTableErr(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var versions []int64
+	for rows.Next() {
+		var v int64
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		versions = append(versions, v)
+	}
+	return versions, rows.Err()
+}
+
+// isNoSuchTableErr 判断是否"表不存在"类错误（MySQL 1146/ER_NO_SUCH_TABLE、
+// Postgres 42P01/undefined_table）
+func isNoSuchTableErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	var mysqlErr *mysqldb.MySQLError
+	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1146 {
+		return true
+	}
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "42P01"
 }
 
 // adoptEmptyFS 为每个要登记的版本生成一个同名空迁移文件（仅 -- +goose Up/Down

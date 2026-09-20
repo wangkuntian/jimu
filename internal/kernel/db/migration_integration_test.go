@@ -48,6 +48,24 @@ func TestMigrationIntegration(t *testing.T) {
 	require.Equal(t, int64(3), rowCount(t, tdb, "goose_db_version_user"))
 	require.Equal(t, int64(2), rowCount(t, tdb, "goose_db_version_auditsvc"))
 
+	// 连续三轮 down 均应成功（回归：down 按反向能力序回滚，且全部回滚后
+	// goose.ErrNoNextVersion 视为完成——旧实现正向序在第二轮报 Table doesn't exist）
+	require.NoError(t, db.MigrateEnabled(cfg, caps, "down"), "第 1 轮 down 应成功")
+	require.Equal(t, int64(2), rowCount(t, tdb, "goose_db_version_user"), "user 应回滚 002")
+	require.Equal(t, int64(1), rowCount(t, tdb, "goose_db_version_auditsvc"), "auditsvc 应回滚 001")
+	require.Equal(t, 0, tableCount(t, tdb, "capmig_audit_events"), "auditsvc 业务表应被删除")
+	require.Equal(t, 1, tableCount(t, tdb, "capmig_users"), "user 业务表应保留（note 列已删）")
+	require.Equal(t, 0, columnCount(t, tdb, "capmig_users", "note"), "user 002 的 Down 应已删除 note 列")
+
+	require.NoError(t, db.MigrateEnabled(cfg, caps, "down"), "第 2 轮 down 应成功")
+	require.Equal(t, int64(1), rowCount(t, tdb, "goose_db_version_user"), "user 应回滚 001")
+	require.Equal(t, int64(1), rowCount(t, tdb, "goose_db_version_auditsvc"), "auditsvc 已空，行数不变")
+
+	require.NoError(t, db.MigrateEnabled(cfg, caps, "down"), "第 3 轮 down（已全部回滚）应成功")
+	require.Equal(t, int64(1), rowCount(t, tdb, "goose_db_version_user"), "仅剩 0 基线行")
+	require.Equal(t, int64(1), rowCount(t, tdb, "goose_db_version_auditsvc"))
+	require.Equal(t, 0, tableCount(t, tdb, "capmig_users"), "user 业务表应被删除")
+
 	// 全量清理（测试自洁，不污染共享测试库上的其他用例）
 	cleanupTables(t, tdb, append(versionTables, businessTables...))
 }
@@ -82,6 +100,14 @@ func rowCount(t *testing.T, tdb *testutil.TestDB, table string) int64 {
 	t.Helper()
 	var n int64
 	require.NoError(t, tdb.Raw("SELECT count(*) FROM "+table).Scan(&n).Error)
+	return n
+}
+
+// columnCount information_schema 中表内指定列的数量（0 = 列不存在）
+func columnCount(t *testing.T, tdb *testutil.TestDB, table, column string) int {
+	t.Helper()
+	var n int
+	require.NoError(t, tdb.Raw("SELECT count(*) FROM information_schema.columns WHERE table_name = ? AND column_name = ?", table, column).Scan(&n).Error)
 	return n
 }
 
