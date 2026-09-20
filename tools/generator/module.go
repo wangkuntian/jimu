@@ -96,7 +96,6 @@ func preflight(root, name string) (templateData, []targetFile, error) {
 		{filepath.Join("internal", "capabilities", name, "interfaces", "handler.go"), handlerTemplate},
 		{filepath.Join("internal", "capabilities", name, "interfaces", "handler_test.go"), handlerTestTemplate},
 		{filepath.Join("internal", "capabilities", name, "interfaces", "router.go"), routerTemplate},
-		{filepath.Join("internal", "capabilities", name, "interfaces", "router.go"), routerTemplate},
 		// 迁移写进能力目录：两个方言都生成（postgres 版由生成者手调方言差异），
 		// postgres/.gitkeep 占位避免能力无 postgres 迁移时 embed 缺目录编译失败。
 		{filepath.Join("internal", "capabilities", name, "migrations", "mysql", migrationNumber+"_create_"+data.TableName+".sql"), migrationTemplate},
