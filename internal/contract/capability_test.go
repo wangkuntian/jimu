@@ -53,6 +53,16 @@ func TestDescribeNilReturnsEmptyDescriptor(t *testing.T) {
 	}
 }
 
+func TestDescriptorPermissionsPassedThrough(t *testing.T) {
+	d := Descriptor{
+		Name:        "user",
+		Permissions: []Permission{{Name: "用户列表", Resource: "/api/v1/users", Action: "GET"}},
+	}
+	if len(d.Permissions) != 1 || d.Permissions[0].Resource != "/api/v1/users" {
+		t.Fatalf("unexpected permissions: %+v", d.Permissions)
+	}
+}
+
 func TestDescribeUsesDeclaredDescriptor(t *testing.T) {
 	want := Descriptor{Name: "auth", Requires: []string{"user", "role", "tenant"}, Mount: MountSelfManaged}
 	got := Describe(describableStub{stubModule: stubModule{name: "auth"}, desc: want})

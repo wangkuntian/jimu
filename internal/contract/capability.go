@@ -12,12 +12,22 @@ const (
 	MountSelfManaged MountPoint = "self-managed"
 )
 
+// Permission 能力声明的权限点：种子阶段写入 permissions 表并授予超管角色。
+type Permission struct {
+	Name     string // 中文名称（permissions.name）
+	Resource string // 资源路径（permissions.resource，支持 keyMatch 通配）
+	Action   string // HTTP 动作（permissions.action）
+}
+
 // Descriptor 能力对外的静态描述：用于启用闭包校验与路由挂载决策。
 // 静态声明（而非运行时推断）是"删除能力后仍能编译"的前提。
 type Descriptor struct {
 	Name     string     // 能力名，全仓唯一
 	Requires []string   // 硬依赖：启用本能力必须同时启用这些能力
 	Mount    MountPoint // 路由挂载方式；零值等价 MountProtected
+
+	// Permissions 能力拥有的权限点；种子时由启用集聚合写入，未启用的能力不种。
+	Permissions []Permission
 }
 
 // Normalized 返回归一化后的挂载点：空值与任何未识别的取值（如大小写笔误）
