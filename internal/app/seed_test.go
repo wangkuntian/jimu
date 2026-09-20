@@ -72,7 +72,7 @@ func seededPermissions() []contract.Permission {
 	return out
 }
 
-// repoRoot 项目根目录：按本文件源码路径向上三级定位，
+// repoRoot 项目根目录：按本文件源码路径向上两级定位，
 // 不依赖工作目录（迁移已迁入能力目录，顶层 migrations/ 不复存在）。
 func repoRoot(t *testing.T) string {
 	t.Helper()
