@@ -152,7 +152,7 @@
 | | | `breaker.go` | 内核 `breaker` |
 | | | `encryption.go` | `encryption` |
 | | | `cleanup.go` + `retention.go` | `retention` |
-| | | `seed.go`（含 `basePermissions()`） | 内核只留默认租户 + 超管角色 + Casbin 模型加载；权限点与业务种子改由能力声明（§6.1 的 `Permissions`） |
+| | | `seed.go`（含 `basePermissions()`） | 内核只留默认租户 + 超管角色 + Casbin 模型加载；权限点与业务种子改由能力声明（§6.1 的 `Permissions`）<br>P1.5 归位：种子整体迁至 `internal/app/seed.go`（kernel 不再 import capabilities），权限点聚合自启用集各能力 `Descriptor.Permissions`；默认租户/套餐/超管角色等结构性种子暂不做能力门控（随 P1 profile 落地） |
 | `platform/http` | 2254 | `server.go` `middleware/`（18 个）`management.go` | 内核 `httpx` |
 | | | `swagger.go` | `apidocs` |
 | | | `upload_handler.go` `clamav.go` | `uploadsec` |
@@ -317,6 +317,7 @@ profiles/
 - 执行顺序：kernel 基线 → 按 `Requires` 拓扑序执行各能力
 - 表归属（由现有 15 个迁移的实际内容确定）：`users`→`user`；`roles`/`permissions`/`role_permissions`/`user_roles`→`access`；`tenants`/`tenant_plans`→`tenancy`；`audit_logs`/`audit_chain_head`→`audit`；`api_keys`→`apikey`；`jobs`/`job_history`/`dead_letters`/`scheduled_jobs`→`jobs`；`import_jobs`→`dataops`；`search_documents`→`search`；`login_histories`/`password_histories`→`auth`；`trusted_devices`→`mfa`；`webauthn_credentials`→`passkey`；`user_oauth_bindings`→`sso`；`outbox_events`→`outbox`
 - **存量实例桥接**：现有实例的 `goose_db_version` 记录的是全局 001–015。迁移搬迁后新增 `jimu migrate adopt-capabilities`：读取现状 → 为各能力版本表预置"已应用到对应版本"的基线 → 之后只跑新迁移。全新生成的项目无此包袱
+- P1.5 归位注记：目录落位 `internal/capabilities/<name>/migrations/{mysql,postgres}/`；**已按原全局编号落位**——各能力迁移沿用全局 001–015 中的原编号（如 auth 011–015、queue 001/007），能力内编号只对新生成的能力从 001 起；adopt 基线按原编号对齐
 
 ## 8. 配置归属
 
@@ -340,7 +341,7 @@ profiles/
 | 阶段 | 内容 | 完成判据 |
 |---|---|---|
 | **P0 契约与内核归位** | 定义 `contract.Capability` 与端口；建立 `internal/kernel/`；`internal/capabilities/` 下按现有 8 模块原样落位（先不改内部）；`catalog` 显式清单；运行时 `capabilities.enabled` + 依赖闭包校验；去掉 `bootstrap.go` 的 `auth`/`oauth` 字符串特判与"第一个中间件提供者"约定 | `full` 行为与 master 完全一致（测试全绿）；关闭 `oauth` 后其路由/迁移/权限点消失 |
-| **P1 边界重划** | `auth` → 6 个能力（§5.1）；`admin` 拆散到各能力（§5.2）；`user` 双写合并（§5.3）；**平台混装包归位**（§3.6：拆 `platform/auth`、`platform/db`、`platform/http`，`platform/tenant` → `kernel/tenant`（上下文机制；租户实体/套餐/配额/开通式注册归 `tenancy` 能力），`conf/rbac_model.conf` → `access`，示例服务移出平台层）；表所有权与迁移搬迁 + `adopt-capabilities`；`platform → module` 反向依赖消除；中间件归位（§3.5.2）（执行拆分为子阶段：P1.1 命名空间搬迁 → P1.2 平台包归位 → P1.3 内核混装包拆分 → P1.4 auth 拆分与端口（已完成：grpc userinfo 经 `contract.UserinfoSource` 端口消费、apikey 模型迁入 `capabilities/apikey/domain`，`kernel/db/seed.go` 的 kernel→capabilities import 留待 P1.5）→ P1.5 种子/迁移归属 → P1.6 auth 六能力 → P1.7 admin 拆散与 user 合并；P1.1–P1.3 已合入 release/v0.3.0；P1.4 已在本分支完成、随合并更新） | 16 处模块间 import 归零；迁移按能力归属并各有版本表；存量实例可平滑 adopt；`platform/` 下不再有跨能力的混装包 |
+| **P1 边界重划** | `auth` → 6 个能力（§5.1）；`admin` 拆散到各能力（§5.2）；`user` 双写合并（§5.3）；**平台混装包归位**（§3.6：拆 `platform/auth`、`platform/db`、`platform/http`，`platform/tenant` → `kernel/tenant`（上下文机制；租户实体/套餐/配额/开通式注册归 `tenancy` 能力），`conf/rbac_model.conf` → `access`，示例服务移出平台层）；表所有权与迁移搬迁 + `adopt-capabilities`；`platform → module` 反向依赖消除；中间件归位（§3.5.2）（执行拆分为子阶段：P1.1 命名空间搬迁 → P1.2 平台包归位 → P1.3 内核混装包拆分 → P1.4 auth 拆分与端口（已完成：grpc userinfo 经 `contract.UserinfoSource` 端口消费、apikey 模型迁入 `capabilities/apikey/domain`，`kernel/db/seed.go` 的 kernel→capabilities import 留待 P1.5）→ P1.5 种子/迁移归属（已完成：迁移落位 `capabilities/<name>/migrations/{mysql,postgres}/` 并经 embed 进二进制，运行器按能力走独立版本表 + adopt 基线登记，种子迁至 `internal/app`、权限点由 Descriptor 声明，kernel→capabilities import 归零；迁移沿用原全局编号）→ P1.6 auth 六能力 → P1.7 admin 拆散与 user 合并；P1.1–P1.3 已合入 release/v0.3.0；P1.4 已在本分支完成、随合并更新） | 16 处模块间 import 归零；迁移按能力归属并各有版本表；存量实例可平滑 adopt；`platform/` 下不再有跨能力的混装包 |
 | **P2 三层机制** | `capabilities.enabled` 配置合并与校验；`profiles/{full,minimal,saas,enterprise,machine}` 入口包；**驱动级可插拔**（§3.7：`storage/{local,s3}`、`queue/{redis,kafka,rabbitmq}`、`dataops/{csv,excel}`）；**非代码资产模块化**（§3.8：deploy 资产、Helm values、CLI 子命令、契约测试）；`jimu new` / `capability add` 脚手架；`compose-report` | 5 个 profile 均能构建并启动；`minimal` 的报告数字显著低于 `full`；只用本地存储/Redis 队列/CSV 时对应重型依赖不出现 |
 | **P3 门禁与文档** | `check-capabilities` / `check-profiles` / `check-pluggable`；生成器模板同步新形态；README / CONTRIBUTING / AGENTS.md 更新（能力清单、形态、新增能力流程） | 四道门禁在 CI 生效 |
 | **P4 v0.3.0 收尾** | 版本日志补验证结果；`release-check`；`release/v0.3.0` → `master` 合并；打 tag 发布 | GitHub Release 发布成功 |

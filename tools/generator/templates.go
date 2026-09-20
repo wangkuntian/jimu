@@ -3,6 +3,8 @@ package generator
 const moduleTemplate = `package {{.Name}}
 
 import (
+	"embed"
+
 	"jimu/internal/contract"
 	"jimu/internal/capabilities/{{.Name}}/application"
 	"jimu/internal/capabilities/{{.Name}}/infrastructure"
@@ -10,6 +12,25 @@ import (
 
 	"gorm.io/gorm"
 )
+
+// migrationsFS 能力自带迁移（mysql/ 与 postgres/ 子目录随二进制嵌入）。
+//
+//go:embed migrations
+var migrationsFS embed.FS
+
+// Descriptor 能力静态描述：迁移与权限点由能力自声明，供迁移运行器与种子消费。
+var Descriptor = contract.Descriptor{
+	Name:       "{{.Name}}",
+	Migrations: migrationsFS,
+	Mount:      contract.MountProtected,
+	Permissions: []contract.Permission{
+		{Name: "{{.NameCamel}}列表", Resource: "/api/v1/{{.RouteName}}", Action: "GET"},
+		{Name: "{{.NameCamel}}创建", Resource: "/api/v1/{{.RouteName}}", Action: "POST"},
+		{Name: "{{.NameCamel}}详情", Resource: "/api/v1/{{.RouteName}}/*", Action: "GET"},
+		{Name: "{{.NameCamel}}修改", Resource: "/api/v1/{{.RouteName}}/*", Action: "PUT"},
+		{Name: "{{.NameCamel}}删除", Resource: "/api/v1/{{.RouteName}}/*", Action: "DELETE"},
+	},
+}
 
 type Module struct {
 	service *application.{{.NameCamel}}Service
@@ -22,6 +43,9 @@ func New(db *gorm.DB) *Module {
 }
 
 func (m *Module) Name() string { return "{{.Name}}" }
+
+// Descriptor 实现 contract.Describable。
+func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
 
 func (m *Module) RegisterHTTP(r contract.Router) {
 	interfaces.Register{{.NameCamel}}Routes(r.Group("/api/v1"), m.service)
@@ -531,6 +555,7 @@ var _ = gorm.ErrRecordNotFound
 `
 
 const migrationTemplate = `-- +goose Up
+-- MySQL 方言；PostgreSQL 差异见同编号 postgres/ 迁移
 CREATE TABLE IF NOT EXISTS {{.TableName}} (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     name VARCHAR(128) NOT NULL,
@@ -542,6 +567,26 @@ CREATE TABLE IF NOT EXISTS {{.TableName}} (
     UNIQUE KEY uk_{{.TableName}}_name (name),
     INDEX idx_{{.TableName}}_deleted_at (deleted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- +goose Down
+DROP TABLE IF EXISTS {{.TableName}};
+`
+
+// migrationPostgresTemplate 与 mysql 模板同编号成对生成：模板不做方言分支，
+// 复杂方言差异（序列主键、部分索引等）由生成者手改。
+const migrationPostgresTemplate = `-- +goose Up
+-- ponytail: PostgreSQL 模板从 MySQL 直译（SERIAL 大致等价 AUTO_INCREMENT），未覆盖
+-- 方言细节（部分索引、IDENTITY 语义等），需要时生成者手改本文件。
+CREATE TABLE IF NOT EXISTS {{.TableName}} (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(128) NOT NULL,
+    description VARCHAR(255) DEFAULT '',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL DEFAULT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_{{.TableName}}_name ON {{.TableName}} (name);
+CREATE INDEX IF NOT EXISTS idx_{{.TableName}}_deleted_at ON {{.TableName}} (deleted_at);
 
 -- +goose Down
 DROP TABLE IF EXISTS {{.TableName}};
