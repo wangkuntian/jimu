@@ -333,7 +333,7 @@ jimu/
 │   ├── contract/               # Module 接口定义
 │   ├── kernel/                 # 内核机制（与具体能力无关的基础设施）
 │   │   ├── access/             # RBAC（Casbin 强制器/策略/权限中间件）
-│   │   ├── auth/               # JWT + Session + 限流 + 防爆破（lockout）
+│   │   ├── auth/               # JWT + Session + 限流 + 登录失败锁定（RBAC 在 kernel/access，API Key 在 capabilities/apikey；上下文助手 apikey_context.go）
 │   │   ├── breaker/            # 统一熔断器（HTTP/Redis/DB/gRPC 共用）
 │   │   ├── cache/              # 缓存抽象层
 │   │   ├── db/                 # Gorm 连接 + 迁移 + Seed + 事务

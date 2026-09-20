@@ -377,7 +377,7 @@ type RetentionConfig struct {
 
 // RateLimitConfig 限流维度配置（全局 IP 令牌桶见 server.rate_limit_*）。
 // API Key 维度限流需前置 APIKeyAuthMiddleware，由业务路由按需挂载
-// middleware.APIKeyRateLimitMiddleware，因此不做全局配置。
+// capabilities/apikey/middleware.APIKeyRateLimitMiddleware，因此不做全局配置。
 type RateLimitConfig struct {
 	Tenant RateLimitDimension `mapstructure:"tenant"` // 租户维度（Redis 滑动窗口，全局挂载）
 }
