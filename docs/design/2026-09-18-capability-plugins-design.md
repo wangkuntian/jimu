@@ -348,6 +348,17 @@ profiles/
 
 P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 
+> **P2 进展（P2.1 运行时配置归属已完成）**：§8 的配置归属已落地 —— 能力配置段由能力在
+> `Descriptor.Configs`（`contract.ConfigSpec{Section, New}`）声明，段实例实现
+> `ApplyDefaults()`/`Validate()`，生产加严走可选 `ValidateProd()`；组合根
+> `app.LoadCapabilityConfigs` 按启用集统一执行「解码 → 默认值 → 校验」，**未启用能力的配置段
+> 既不出现也不校验**。`internal/config` 只保留内核段，对外 YAML 键逐一不变。`auth` 段按 §8 ¶2
+> 整体归属 `auth` 能力（含 `auth.webauthn`/`auth.provisioning`），不拆段；`mfa`/`tenant` 不 import
+> `auth`，其 JWT/开通模板参数由组合根装配期传递。非 catalog 包（`storage`/`notification`/
+> `retention`）的段暂由组合根显式加载，**是否 catalogize 是 P2.2 的决定点**。子阶段拆分与执行
+> 记录见 [`docs/plans/2026-09-21-p2-three-layer-mechanism.md`](../plans/2026-09-21-p2-three-layer-mechanism.md)
+> 与 [`docs/plans/2026-09-21-config-ownership.md`](../plans/2026-09-21-config-ownership.md)。
+
 ## 11. 风险与取舍
 
 - **破坏内部 API**：`Deps` 结构体、构造函数、包路径、目录都会变。对外 HTTP API 与配置键不变，内部一次性重构，v0.x 允许破坏

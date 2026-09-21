@@ -9,7 +9,7 @@
 ## 子阶段与依赖
 
 ```
-P2.1 运行时配置归属（§8）              ← 已完成 8/9 段（auth 段待做）
+P2.1 运行时配置归属（§8）              ← 已完成
 P2.2 能力自描述契约（§6.1）             ← 依赖 P2.1 的 Config 建模；产出 Tags/SoftRequires/Owns
 P2.3 层③ 运行时：capabilities.enabled   ← 依赖 P2.2（启用闭包改用契约的 Requires/SoftRequires）
 P2.4 层② 构建：profiles 入口包          ← 依赖 P2.2；5 个 profile + compose-report
@@ -21,16 +21,14 @@ P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后
 
 每个子阶段独立 PR、保持 `full` 全绿。feature→release 用 squash merge。
 
-## P2.1 运行时配置归属（进行中）
+## P2.1 运行时配置归属（已完成）
 
-详见 `docs/plans/2026-09-21-config-ownership.md`（含执行记录）。
+详见 `docs/plans/2026-09-21-config-ownership.md`（含执行记录与完成记录）。
 
-- **已完成**：机制（`config.LoadWithSections` + `LoadSection`）、`captcha`、`audit`、`storage`+`upload`、`queue`+`outbox`+`scheduler`、`email`+`sms`+`notification`、`oauth`、`retention`；`configs/*.yaml` 全程零改动。
-- **已完成（契约侧）**：`contract.ConfigSpec{Section, New}` + `Descriptor.Configs` + 框架加载器 `app.LoadCapabilityConfigs`（按启用集解码→默认值→校验，prod 加严走可选 `ProdValidate` 钩子），已带测试。
-- **待做**：
-  1. **`auth` 段**：按 §8 ¶2 **不拆段** —— `auth.Config` 拥有整个 `auth` 段（含嵌套 `webauthn`/`provisioning`），对应 §6.1「一个能力一份 Config」。`passkey` 可收 `auth.Config`（`Requires` 含 auth）；`tenant` 由 `main` 构造自己的 `ProvisioningConfig`（auth 依赖 tenant，反向 import 越界）。`mfa` 改为装配期传参（`Requires user`，不得 import auth）。两条跨能力校验（`provisioning.enabled`→`auth.public_registration`、`jwt_secret` 的 prod 加严）留组合根 / 机制钩子。
-  2. **把 9 个段的 `Load(dec)` 换成 `Descriptor.Configs` 声明**，`main`/`container` 改从 `CapabilityConfigs` 取（`app.SectionOf[*T]`）。
-  3. **非 catalog 包的配置段归属**：`storage`/`notification`/`retention` 目前**没有 Descriptor**，无法被框架按启用集遍历。需与 §6.1 一起定：给它们 `Descriptor`（成为 catalog 可见、可被 `capabilities.enabled` 开关）还是继续由组合根显式加载。**这是 P2.2 的第一个决定点。**
+- **已完成**：机制（`contract.ConfigSpec`/`Descriptor.Configs` + `app.LoadCapabilityConfigs`，prod 加严走可选 `ValidateProd`）；14 个段全部下沉 —— catalog 能力段 `auth`/`captcha`/`audit`/`oauth`/`queue`+`scheduler`/`outbox`/`uploadsec` 经 `Descriptor.Configs` 按启用集加载，非 catalog 包段 `storage`/`notification`（`email`+`sms`+`notification`）/`retention` 由组合根显式加载；`configs/*.yaml` 全程零改动。
+- **已完成（auth 段）**：按 §8 ¶2 **不拆段** —— `auth.Config` 拥有整个 `auth` 段（含嵌套 `webauthn`/`provisioning`）。`passkey`/`oauth` 收 `auth.Config`（`Requires` 含 auth）；`tenant` 由 `main` 构造自有的 `ProvisioningConfig`（auth 依赖 tenant，反向 import 越界）；`mfa` 改装配期传参（`Requires user`，不 import auth）。`provisioning.enabled`→`public_registration` 跨字段校验留在组合根；`jwt_secret` 的 prod 加严走 `ValidateProd` 钩子（`APP_ENV=prod` 时由 `LoadCapabilityConfigs` 按类型断言调用，已有装配级回归用例覆盖）。
+- **③ 裁定（B）**：`storage`/`notification`/`retention` 保持非 catalog、由组合根显式加载（与本文档 `config-ownership.md` 的裁定 2B 一致）；它们是否 catalogize 交由 **P2.2** 按 §6.1 逐一定夺。
+- **④ 收口**：已补「未启用能力的配置段既不出现也不校验」的装配级回归用例（`internal/app/capconfig_test.go`，用真实 descriptor + 非法 YAML）；README 配置归属与新增能力流程、设计 §10、release note 已更新。
 
 ## P2.2 能力自描述契约（§6.1）
 

@@ -842,6 +842,8 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 
 ### 配置项
 
+> **配置归属（v0.3.0 / P2.1）**：内核段（`http`/`management`/`db`/`redis`/`ratelimit`/`log`/`server`/`id`/`cache`/`security`/`otel`/`error_reporting`/`http_client`/`grpc`/`capabilities`）留在 `internal/config`；其余段由能力自身声明（`Descriptor.Configs`），装配时**按启用集**解码与校验：`auth`（含嵌套 `auth.webauthn`/`auth.provisioning`）→ `auth`；`oauth`→`oauth`；`queue`+`scheduler`→`queue`；`outbox`→`outbox`；`audit`→`audit`；`captcha`→`captcha`；`upload`→`uploadsec`；`storage`→`storage`；`email`/`sms`/`notification`→`notification`；`retention`→`retention`。其中 `storage`/`notification`/`retention` 不是 catalog 能力（不随 `capabilities.enabled` 开关），其段由组合根显式加载，行为仍由各自 `enabled` 字段驱动。对外 YAML 键名与位置逐一未变。
+
 | 字段 | 说明 | 默认值 |
 |------|------|--------|
 | `http.host` | 监听地址 | `0.0.0.0` |
@@ -974,6 +976,8 @@ capabilities:
 
 - 硬依赖会自动补齐：只写 `["oauth"]` 会连带启用 `auth`/`user`/`access`/`tenant`/`mfa`
 - 未启用的能力不挂路由、不注册定时任务与事件、不启动其后台组件
+- **配置段随能力**：能力配置段由能力在 `Descriptor.Configs` 声明（`ConfigKey` + `Config` 结构体 + `ApplyDefaults`/`Validate`，生产加严可实现可选的 `ValidateProd`），组合根按启用集统一执行「解码 → 默认值 → 校验」；**未启用能力的配置段既不出现也不校验** —— `app.yaml` 中残留的非法段不会导致启动失败。`auth` 段由 `auth` 能力整体拥有（含嵌套 `webauthn`/`provisioning`），不拆分
+- **热更新范围**：配置文件热更新（`config.Watch`）只覆盖内核段（当前仅应用 `log.level`）；能力配置段变更需重启进程
 - **受保护能力需要认证器**：声明为受保护（`MountProtected`）的能力必须有模块提供受保护中间件（当前为 `auth`）；否则进程**启动即失败**并指出缺失的提供者，而不是把路由裸挂出去。因此 `enabled: ["user"]` 这类"有业务路由、无认证器"的配置会被拒绝；合法的最小组合之一是 `["auth"]`（闭包自动补齐 `user`/`access`/`tenant`/`mfa`）
 - 能力清单与依赖关系见 `internal/capabilities/catalog/catalog.go`；设计见 [能力可插拔设计](docs/design/2026-09-18-capability-plugins-design.md)
 
@@ -1032,8 +1036,9 @@ internal/capabilities/{name}/
 
 ### 配置
 
-- 新增配置项必须在 `internal/config/config.go` 定义常量并加入校验；枚举值非法时启动报错
-- 敏感值支持 `_FILE` 后缀从文件读取（Docker Secrets 兼容）
+- **能力配置放进能力自己**：能力段在所属能力包内新增 `config.go`，导出 `ConfigKey`（YAML 点分键，对外位置不变）+ `Config`（带 `mapstructure` 标签）+ `ApplyDefaults()`/`Validate()`（`APP_ENV=prod` 需加严时另实现 `ValidateProd() error`），并在该能力 `Descriptor.Configs` 里声明 `contract.ConfigSpec{Section, New}`；组合根（`internal/app` + `cmd/server`）按启用集统一解码校验，**不要在 `internal/config` 里直接加能力字段**
+- 内核段（`http`/`db`/`redis`/`log`/`security`/`grpc`/`capabilities` 等）仍定义在 `internal/config/config.go`，枚举值非法时启动报错
+- 敏感值支持 `_FILE` 后缀从文件读取（Docker Secrets 兼容）；能力段的环境覆盖写在该能力的 `ApplyDefaults()` 里（用 `config.GetEnvOrFile`）
 
 ### 数据库
 

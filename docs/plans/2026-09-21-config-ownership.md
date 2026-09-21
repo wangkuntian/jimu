@@ -203,19 +203,46 @@ require.NoError(t, app.ValidateCapabilityConfigs(cfg, caps))
   段必须实现 `config.SectionConfig`，否则**立即报错**（避免校验被静默跳过）。
 - `app.SectionOf[*T](cfgs, section)` 供组合根取回强类型配置。
 
-**待做**：把 9 个段的 `Load(dec)` 换成 `Descriptor.Configs` 声明并让 `main`/`container`
-从 `CapabilityConfigs` 取值；`storage`/`notification`/`retention` 无 `Descriptor`，
-其段归属需在 P2.2 决定（见总纲）。
+**已落地（本次会话完成）**：9 个段的 `Load(dec)` 全部换成 `Descriptor.Configs` 声明
+（`captcha`/`audit`/`oauth`/`queue`+`scheduler`/`outbox`/`uploadsec`/`auth`），
+`main`/`container` 改从 `CapabilityConfigs` 取值（`app.SectionOf[*T]`）；
+`storage`/`notification`/`retention` 经裁定 **(B)** 保持非 catalog、由组合根显式加载
+（`config.LoadSection` 保留给这三个包），是否 catalogize 交 P2.2（见总纲）。详见下方完成记录。
 
 ---
 
-## 接手须知（P2.1 未完成，交接给下一个会话）
+## 接手须知（P2.1 已完成，留档）
+
+> **完成记录（本次会话）**：下文 ①–④ 已全部落地，`configs/*.yaml` 仍为零改动、全量门禁全绿。
+> 具体落地与本计划的差异：
+>
+> - **① auth 段**：`internal/capabilities/auth/config.go` 已建（`ConfigKey="auth"`、`Config` 含嵌套
+>   `WebAuthn`/`Provisioning`、`ApplyDefaults`/`Validate`/`ValidateProd`），并**经 `Descriptor.Configs`
+>   走 `app.LoadCapabilityConfigs`**（而非早期的能力自持 `Load(dec)`），使 `ValidateProd` 成为真实的
+>   生产调用路径。`tools` 侧无 `LoadSection` 依赖残留。
+> - **依赖方向**：`passkey`/`oauth` 收 `auth.Config`；`mfa` 新增自有 `mfa.Config`（JWT 参数 + 可信设备，
+>   装配期由 `main` 从 auth 段取值）；`tenant` 在 `application` 包定义自有 `ProvisioningConfig`
+>   （package tenant 用类型别名对外暴露），`main` 做显式转换。
+> - **组合根**：`auth.provisioning.enabled` → `auth.public_registration` 的跨字段校验落在
+>   `cmd/server/main.go:validateAuthConfig`（与裁定一致，便于 provisioning 未来归属变化）；
+>   `auth.Config.Validate()` 只做段内校验。
+> - **② 段迁移**：catalog 能力段全部改为 `Descriptor.Configs` 声明并删除其 `Load`：
+>   `captcha`/`audit`/`oauth`/`queue`(+`scheduler`)/`outbox`/`uploadsec`（`auth` 见上）；
+>   `main`/`container` 改从 `app.CapabilityConfigs` 取（`app.SectionOf[*T]`）。
+> - **③ 裁定（B，经用户确认）**：`storage`/`notification`/`retention` 保持非 catalog，段由组合根显式
+>   加载，`config.LoadSection` 保留给这三个包；是否 catalogize 交 P2.2。`catalog` 项数仍为 18。
+> - **④ 收口**：`internal/app/capconfig_test.go` 新增装配级回归 —— 真实 descriptor + 非法 YAML，
+>   未启用能力段「既不出现也不校验」，同一份非法配置在能力启用后 fail-closed；另有 prod
+>   `jwt_secret` 加严的装配级用例。README（配置归属、新增能力流程、热更新范围）、设计 §10、release note 已更新。
+> - **catalog 漂移护栏**：`catalog.All()`/`Resolve()` 现深拷贝 `Configs`；
+>   `catalog_test.go` 的逐值比较排除 `Configs`（函数值不可比），改由
+>   `TestCatalogConfigSectionsShape` 单独钉住段键与 `SectionConfig` 契约。
 
 **分支**：`feature/config-ownership`（**仅本地**，未 push；从 `release/v0.3.0` 的 `822009e` 切出）
-**状态**：12 个提交、全绿、工作区干净、`configs/*.yaml` 零改动
+**状态**：P2.1 完成、全绿、`configs/*.yaml` 零改动
 **先读**：[2026-09-21-p2-three-layer-mechanism.md](2026-09-21-p2-three-layer-mechanism.md)（P2 总纲）→ 本文件
 
-### 剩余工作（按顺序）
+### 原剩余工作（已完成，清单留档）
 
 #### ① `auth` 段下沉（唯一未下沉的能力段）
 
