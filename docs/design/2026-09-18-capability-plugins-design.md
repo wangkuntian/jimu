@@ -131,7 +131,7 @@
 | `shared/pagination` | 67 | 内核 |
 | `shared/validator` | 70 | 内核（自定义校验规则） |
 | `shared/testutil` | 472 | 开发期内核（testdb + 迁移锁，不进生产二进制） |
-| `shared/totp` | 128 | **迁出到 `mfa` 能力内部**（`shared` 应是跨能力通用件，TOTP 只有一个消费者） |
+| `shared/totp` | 128 | **已迁入 `mfa` 能力内部**（`internal/capabilities/mfa/totp`，P1.6） |
 | `platform/importer` / `platform/exporter` | 494 / 147 | **`dataops` 能力内部** |
 | `platform/breaker`、`event`、`tlsconf`、`mask`、`httpclient`、`ws` | 167 / 73 / 57 / 201 / 195 / 965 | 见 §3.1（前五个内核）与 §3.4（`ws` 为可选能力包） |
 
@@ -341,7 +341,7 @@ profiles/
 | 阶段 | 内容 | 完成判据 |
 |---|---|---|
 | **P0 契约与内核归位** | 定义 `contract.Capability` 与端口；建立 `internal/kernel/`；`internal/capabilities/` 下按现有 8 模块原样落位（先不改内部）；`catalog` 显式清单；运行时 `capabilities.enabled` + 依赖闭包校验；去掉 `bootstrap.go` 的 `auth`/`oauth` 字符串特判与"第一个中间件提供者"约定 | `full` 行为与 master 完全一致（测试全绿）；关闭 `oauth` 后其路由/迁移/权限点消失 |
-| **P1 边界重划** | `auth` → 6 个能力（§5.1）；`admin` 拆散到各能力（§5.2）；`user` 双写合并（§5.3）；**平台混装包归位**（§3.6：拆 `platform/auth`、`platform/db`、`platform/http`，`platform/tenant` → `kernel/tenant`（上下文机制；租户实体/套餐/配额/开通式注册归 `tenancy` 能力），`conf/rbac_model.conf` → `access`，示例服务移出平台层）；表所有权与迁移搬迁 + `adopt-capabilities`；`platform → module` 反向依赖消除；中间件归位（§3.5.2）（执行拆分为子阶段：P1.1 命名空间搬迁 → P1.2 平台包归位 → P1.3 内核混装包拆分 → P1.4 auth 拆分与端口（已完成：grpc userinfo 经 `contract.UserinfoSource` 端口消费、apikey 模型迁入 `capabilities/apikey/domain`，`kernel/db/seed.go` 的 kernel→capabilities import 留待 P1.5）→ P1.5 种子/迁移归属（已完成：迁移落位 `capabilities/<name>/migrations/{mysql,postgres}/` 并经 embed 进二进制，运行器按能力走独立版本表 + adopt 基线登记，种子迁至 `internal/app`、权限点由 Descriptor 声明，kernel→capabilities import 归零；迁移沿用原全局编号）→ P1.6 auth 六能力 → P1.7 admin 拆散与 user 合并；P1.1–P1.3 已合入 release/v0.3.0；P1.4 已在本分支完成、随合并更新） | 16 处模块间 import 归零；迁移按能力归属并各有版本表；存量实例可平滑 adopt；`platform/` 下不再有跨能力的混装包 |
+| **P1 边界重划** | `auth` → 6 个能力（§5.1）；`admin` 拆散到各能力（§5.2）；`user` 双写合并（§5.3）；**平台混装包归位**（§3.6：拆 `platform/auth`、`platform/db`、`platform/http`，`platform/tenant` → `kernel/tenant`（上下文机制；租户实体/套餐/配额/开通式注册归 `tenancy` 能力），`conf/rbac_model.conf` → `access`，示例服务移出平台层）；表所有权与迁移搬迁 + `adopt-capabilities`；`platform → module` 反向依赖消除；中间件归位（§3.5.2）（执行拆分为子阶段：P1.1 命名空间搬迁 → P1.2 平台包归位 → P1.3 内核混装包拆分 → P1.4 auth 拆分与端口（已完成：grpc userinfo 经 `contract.UserinfoSource` 端口消费、apikey 模型迁入 `capabilities/apikey/domain`，`kernel/db/seed.go` 的 kernel→capabilities import 留待 P1.5）→ P1.5 种子/迁移归属（已完成：迁移落位 `capabilities/<name>/migrations/{mysql,postgres}/` 并经 embed 进二进制，运行器按能力走独立版本表 + adopt 基线登记，种子迁至 `internal/app`、权限点由 Descriptor 声明，kernel→capabilities import 归零；迁移沿用原全局编号）→ P1.6 auth 六能力（已完成：auth/mfa/passkey 三能力落位 + breach/captcha catalogize + 开通式注册迁入 tenant；TOTP 由 `users.totp_*` 迁到 mfa 自有 `user_mfa` 表（迁移 016，密文原样搬迁、可回滚）；五条 contract 端口 MFAVerifier/LoginFinalizer/TenantProvisioner/BreachChecker/CaptchaVerifier 消除跨能力 import）→ P1.7 admin 拆散与 user 合并；P1.1–P1.3 已合入 release/v0.3.0；P1.4 已在本分支完成、随合并更新） | 16 处模块间 import 归零；迁移按能力归属并各有版本表；存量实例可平滑 adopt；`platform/` 下不再有跨能力的混装包 |
 | **P2 三层机制** | `capabilities.enabled` 配置合并与校验；`profiles/{full,minimal,saas,enterprise,machine}` 入口包；**驱动级可插拔**（§3.7：`storage/{local,s3}`、`queue/{redis,kafka,rabbitmq}`、`dataops/{csv,excel}`）；**非代码资产模块化**（§3.8：deploy 资产、Helm values、CLI 子命令、契约测试）；`jimu new` / `capability add` 脚手架；`compose-report` | 5 个 profile 均能构建并启动；`minimal` 的报告数字显著低于 `full`；只用本地存储/Redis 队列/CSV 时对应重型依赖不出现 |
 | **P3 门禁与文档** | `check-capabilities` / `check-profiles` / `check-pluggable`；生成器模板同步新形态；README / CONTRIBUTING / AGENTS.md 更新（能力清单、形态、新增能力流程） | 四道门禁在 CI 生效 |
 | **P4 v0.3.0 收尾** | 版本日志补验证结果；`release-check`；`release/v0.3.0` → `master` 合并；打 tag 发布 | GitHub Release 发布成功 |

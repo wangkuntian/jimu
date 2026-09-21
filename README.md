@@ -59,11 +59,11 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **静态检查** — golangci-lint + pre-commit 钩子（fmt / vet / golangci-lint）
 - **追踪关联** — 访问日志自动注入 trace_id / span_id，关联 OpenTelemetry 追踪
 - **Redis 高可用** — `redis.mode` 支持 `single` / `sentinel` / `cluster` 三种部署模式（默认 single 行为不变）：哨兵模式通过 `master_name` + `sentinel_addrs` 自动故障转移，集群模式通过 `cluster_addrs` 连接分片；统一 `redis.Client` 接口，框架内 session/缓存/队列/限流/分布式锁全复用
-- **TOTP 二次验证** — RFC 6238 自研实现（`internal/shared/totp`，无外部依赖），用户可自助绑定/启用/关闭：`POST /auth/mfa/setup` 生成密钥与 otpauth URI（二维码绑定）、`/auth/mfa/enable` 首次验证码确认、`/auth/mfa/disable` 校验后关闭；启用后登录必须携带 `totp_code`（缺失 `2006`，错误 `2007`），密钥 AES-GCM 字段级加密落库
+- **TOTP 二次验证（`mfa` 能力）** — RFC 6238 自研实现（`internal/capabilities/mfa/totp`，无外部依赖），用户可自助绑定/启用/关闭：`POST /auth/mfa/setup` 生成密钥与 otpauth URI（二维码绑定）、`/auth/mfa/enable` 首次验证码确认、`/auth/mfa/disable` 校验后关闭；启用后登录必须携带 `totp_code`（缺失 `2006`，错误 `2007`），密钥 AES-GCM 字段级加密落库到 `user_mfa` 表（迁移 016，独立于 `users`）
 - **统一 gRPC 客户端** — 出站调用封装（`internal/capabilities/grpc` `Client`）：连接管理 + 调用超时 + 指数退避重试（仅 Unavailable/ResourceExhausted 幂等安全码）+ **出站熔断**（复用 `kernel/breaker`，只把 Unavailable/DeadlineExceeded 计为失败）+ panic 恢复拦截器 + Prometheus 指标（`jimu_grpc_client_*`），支持 TLS/insecure，与 HTTP client 对齐的框架风格
-- **WebAuthn / 通行密钥** — `auth.webauthn.*`（`rp_id`/`rp_origins`/`session_ttl_min`）启用后支持 Passkey：已登录用户经 `POST /auth/webauthn/register/begin|finish` 自助注册（凭证公钥落库 `webauthn_credentials`，auth 能力迁移 015，沿用原全局编号，私钥永不离开认证器），`POST /auth/webauthn/login/begin|finish` 无密码登录（通行密钥是抗钓鱼强因子，不叠加密码与 TOTP），`GET/PUT/DELETE /auth/webauthn/credentials` 管理与注销；挑战经 Redis 一次性存储（`session_id` 回传，防替换/重放），签名计数器回写用于克隆检测，凭证按租户与用户隔离
+- **WebAuthn / 通行密钥（`passkey` 能力）** — `auth.webauthn.*`（`rp_id`/`rp_origins`/`session_ttl_min`）启用后支持 Passkey：已登录用户经 `POST /auth/webauthn/register/begin|finish` 自助注册（凭证公钥落库 `webauthn_credentials`，passkey 能力迁移 015，沿用原全局编号，私钥永不离开认证器），`POST /auth/webauthn/login/begin|finish` 无密码登录（通行密钥是抗钓鱼强因子，不叠加密码与 TOTP），`GET/PUT/DELETE /auth/webauthn/credentials` 管理与注销；挑战经 Redis 一次性存储（`session_id` 回传，防替换/重放），签名计数器回写用于克隆检测，凭证按租户与用户隔离
 - **密码防复用** — 改密时校验新密码不等于当前密码与最近 N 个历史密码（`auth.password_history_count`，默认 5，0=关闭），历史哈希落库 `password_histories` 并按条数自动裁剪；命中返回 `2008`
-- **可信设备（记住此设备）** — 仅对启用 TOTP 的账号生效：登录时传 `remember_device: true`，成功后返回一次性明文 `device_token`（前缀 `jimu_dev_`，库中只存 SHA-256 哈希）；后续登录携带 `X-Device-Token` 头且不带 `totp_code` 即可跳过 TOTP，**密码仍必需**；令牌绑定签发用户（泄露也无法用于他人账号），改密与 `/auth/logout-all` 自动吊销，`GET/DELETE /auth/devices` 自助查看与注销；有效期 `auth.trusted_device_days`（默认 30，0=关闭）
+- **可信设备（记住此设备，`mfa` 能力）** — 仅对启用 TOTP 的账号生效：登录时传 `remember_device: true`，成功后返回一次性明文 `device_token`（前缀 `jimu_dev_`，库中只存 SHA-256 哈希）；后续登录携带 `X-Device-Token` 头且不带 `totp_code` 即可跳过 TOTP，**密码仍必需**；令牌绑定签发用户（泄露也无法用于他人账号），改密与 `/auth/logout-all` 自动吊销，`GET/DELETE /auth/devices` 自助查看与注销；有效期 `auth.trusted_device_days`（默认 30，0=关闭）
 - **登录历史** — 每次登录尝试落库 `login_histories`（成功/失败/锁定 + 原因 + IP + User-Agent，账号不存在也记录用户名），`GET /api/v1/auth/login-history` 供用户自助排查异常登录；写入失败只记日志，不影响登录主流程
 - **泄露口令检查（可选）** — `auth.breach_check_enabled` 开启后，注册（含开通式注册）与重置密码会调用 Have I Been Pwned 范围查询接口：只发送口令 SHA-1 的前 5 位（k-匿名，完整口令与哈希不出网）并在本地比对结果，命中返回新增错误码 `2009`；检查服务不可用时放行（只记日志），避免外部依赖故障阻断注册与改密
 - **请求幂等** — 客户端携带 `Idempotency-Key` 时，同键重复请求返回首次结果（响应带 `Idempotency-Replayed: true`），键按「租户 + 用户 + 方法 + 路径 + 客户端键」哈希存储于 Redis；首个请求用 `SET NX` 占位，并发同键请求返回 `409/1009` 而不是各执行一次；5xx 与超过 256KB 的响应不缓存并释放占位（可用同键安全重试）；Redis 异常时放行。`security.idempotency_enabled`（默认开）/`security.idempotency_ttl_sec`（默认 24h）
@@ -258,7 +258,7 @@ make cli
 v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capabilities/<name>/migrations/{mysql,postgres}/`，经 `//go:embed` 打进二进制（镜像/发布物不再依赖磁盘上的 `migrations/` 目录）。顶层 `migrations/` 已删除。
 
 - **双版本表机制** — 每个能力一个独立版本表 `goose_db_version_<capability>`（由 `Descriptor.Migrations` 驱动，`internal/kernel/db.MigrateEnabled` 执行），互不干扰；删除能力即删它的表与迁移，新增迁移不再影响其他能力的版本记录。全局 `goose_db_version` 保留为历史记录，新运行器不再读写。
-- **执行顺序** — 按能力清单 `internal/capabilities/catalog` 的拓扑序（依赖在前）逐能力执行；同一能力内按迁移文件版本号升序。`migrate down`/`migrate redo` 按**反向能力序**迭代：回滚时依赖方的迁移先回滚（如 tenant 005 `DROP COLUMN tenant_id` 先于 user 001 `DROP TABLE users`），依赖的基表才不会被先删；每能力每次回滚其最后一条迁移（该能力全部回滚后静默完成，不再报错），一次 `down` 最多产生 12 个 DDL 回滚。**已知限制**：各能力迁移深度不一时，多轮 `down` 回滚到底（drain-to-empty）可能因跨能力表依赖失败（如 role 先回滚完删了 `roles`，tenant 的 005 Down 下一轮还要用它）；日常回滚最近一步不受影响，需要整库清空时重建库最简（按能力逐个 `down` 需走代码/测试路径，CLI 暂无按能力过滤参数）。
+- **执行顺序** — 按能力清单 `internal/capabilities/catalog` 的拓扑序（依赖在前）逐能力执行；同一能力内按迁移文件版本号升序。`migrate down`/`migrate redo` 按**反向能力序**迭代：回滚时依赖方的迁移先回滚（如 tenant 005 `DROP COLUMN tenant_id` 先于 user 001 `DROP TABLE users`），依赖的基表才不会被先删；每能力每次回滚其最后一条迁移（该能力全部回滚后静默完成，不再报错），一次 `down` 最多产生 14 个 DDL 回滚（每个带迁移的能力各回滚一条）。**已知限制**：各能力迁移深度不一时，多轮 `down` 回滚到底（drain-to-empty）可能因跨能力表依赖失败（如 role 先回滚完删了 `roles`，tenant 的 005 Down 下一轮还要用它）；日常回滚最近一步不受影响，需要整库清空时重建库最简（按能力逐个 `down` 需走代码/测试路径，CLI 暂无按能力过滤参数）。
 - **新迁移怎么写** — 写进**所属能力**的 `internal/capabilities/<name>/migrations/<方言>/` 目录，能力内版本号取该目录当前最大编号 +1（脚手架 `jimu module create` 自动完成）；一条 ALTER 只属于一个能力——它改变的表归谁，迁移就写谁的能力目录，避免多能力重复变更同一对象。
 - **存量实例升级路径** — 旧世界全局版本表记录 001–015：
   1. 旧二进制 `jimu migrate up` 升到旧世界最新；
@@ -323,7 +323,9 @@ jimu/
 │   ├── capabilities/           # 可插拔能力（catalog 是唯一清单；每个能力导出 Descriptor）
 │   │   ├── catalog/            # 能力清单 + 启用集解析
 │   │   ├── apidocs/            # Swagger 文档注册
-│   │   ├── auth/               # 登录/注册/Token
+│   │   ├── auth/               # 会话与凭证本体（登录/注册/改密/Token/登录历史）
+│   │   ├── mfa/                # TOTP 二次验证 + 可信设备（跳过 MFA）+ 自有 totp/ 实现
+│   │   ├── passkey/            # WebAuthn 通行密钥（无密码登录）
 │   │   ├── apikey/             # API Key 签发/校验 + 维度限流（apikey/middleware/）
 │   │   ├── oauth/              # 第三方登录绑定；provider/ 为 OAuth Provider 实现
 │   │   ├── user/               # 用户管理
@@ -349,7 +351,7 @@ jimu/
 │   │   ├── storage/            # 文件存储抽象（本地/S3/OSS/MinIO）
 │   │   ├── uploadsec/          # 上传处理 + ClamAV 扫描
 │   │   └── ws/                 # WebSocket（Hub + 会话/频道管理）
-│   │   # 注：user/role/permission/tenant/auth/audit/apikey/queue/outbox/dataops/search
+│   │   # 注：user/role/permission/tenant/auth/mfa/passkey/audit/apikey/queue/outbox/dataops/search
 │   │   # 等带表的能力目录下均有 migrations/{mysql,postgres}/（树上不逐个展开）
 │   ├── config/                 # 配置加载 + 校验
 │   ├── contract/               # Module 接口定义
@@ -377,7 +379,6 @@ jimu/
 │       ├── validator/          # 自定义校验规则
 │       ├── i18n/               # 国际化翻译
 │       ├── id/                 # 雪花 ID 生成器
-│       ├── totp/               # RFC 6238 TOTP（二次验证）
 │       └── testutil/           # 测试工具
 ├── tools/
 │   ├── generator/                # 代码生成器
@@ -971,7 +972,7 @@ capabilities:
 
 - 硬依赖会自动补齐：只写 `["oauth"]` 会连带启用 `auth`/`user`/`role`/`tenant`
 - 未启用的能力不挂路由、不注册定时任务与事件、不启动其后台组件
-- **受保护能力需要认证器**：声明为受保护（`MountProtected`）的能力必须有模块提供受保护中间件（当前为 `auth`）；否则进程**启动即失败**并指出缺失的提供者，而不是把路由裸挂出去。因此 `enabled: ["user"]` 这类"有业务路由、无认证器"的配置会被拒绝；合法的最小组合之一是 `["auth"]`（闭包自动补齐 `user`/`role`/`tenant`）
+- **受保护能力需要认证器**：声明为受保护（`MountProtected`）的能力必须有模块提供受保护中间件（当前为 `auth`）；否则进程**启动即失败**并指出缺失的提供者，而不是把路由裸挂出去。因此 `enabled: ["user"]` 这类"有业务路由、无认证器"的配置会被拒绝；合法的最小组合之一是 `["auth"]`（闭包自动补齐 `user`/`role`/`tenant`/`mfa`）
 - 能力清单与依赖关系见 `internal/capabilities/catalog/catalog.go`；设计见 [能力可插拔设计](docs/design/2026-09-18-capability-plugins-design.md)
 
 ### 静态加密（Data at Rest）
