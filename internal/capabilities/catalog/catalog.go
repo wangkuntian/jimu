@@ -9,13 +9,14 @@ import (
 	"strings"
 
 	accessmodule "jimu/internal/capabilities/access"
-	adminmodule "jimu/internal/capabilities/admin"
 	"jimu/internal/capabilities/apikey"
 	auditmodule "jimu/internal/capabilities/audit"
 	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/breach"
 	"jimu/internal/capabilities/captcha"
+	consolemodule "jimu/internal/capabilities/console"
 	"jimu/internal/capabilities/dataops"
+	"jimu/internal/capabilities/feature"
 	mfamodule "jimu/internal/capabilities/mfa"
 	oauthmodule "jimu/internal/capabilities/oauth"
 	"jimu/internal/capabilities/outbox"
@@ -23,6 +24,7 @@ import (
 	"jimu/internal/capabilities/queue"
 	"jimu/internal/capabilities/search"
 	tenantmodule "jimu/internal/capabilities/tenant"
+	"jimu/internal/capabilities/uploadsec"
 	"jimu/internal/capabilities/user"
 	"jimu/internal/contract"
 )
@@ -38,7 +40,7 @@ var entries = []contract.Descriptor{
 	authmodule.Descriptor,
 	passkeymodule.Descriptor,
 	auditmodule.Descriptor,
-	adminmodule.Descriptor,
+	consolemodule.Descriptor,
 	oauthmodule.Descriptor,
 	apikey.Descriptor,
 	queue.Descriptor,
@@ -46,6 +48,8 @@ var entries = []contract.Descriptor{
 	dataops.Descriptor,
 	search.Descriptor,
 	captcha.Descriptor,
+	feature.Descriptor,
+	uploadsec.Descriptor,
 	breach.Descriptor,
 }
 

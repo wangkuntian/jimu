@@ -15,7 +15,6 @@ import (
 	"jimu/internal/app"
 	accessmodule "jimu/internal/capabilities/access"
 	roledomain "jimu/internal/capabilities/access/domain"
-	adminmodule "jimu/internal/capabilities/admin"
 	"jimu/internal/capabilities/apikey"
 	auditmodule "jimu/internal/capabilities/audit"
 	auditdomain "jimu/internal/capabilities/audit/domain"
@@ -23,6 +22,7 @@ import (
 	authdomain "jimu/internal/capabilities/auth/domain"
 	captchamodule "jimu/internal/capabilities/captcha"
 	"jimu/internal/capabilities/catalog"
+	consolemodule "jimu/internal/capabilities/console"
 	"jimu/internal/capabilities/dataops"
 	"jimu/internal/capabilities/feature"
 	mfamodule "jimu/internal/capabilities/mfa"
@@ -134,15 +134,15 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 	accessMod := accessmodule.New(gdb)
 
 	auditMod := auditmodule.New(gdb, cfg.Audit, log)
-	adminMod := adminmodule.New("test", "test", rdb, gdb,
-		feature.NewManager())
+	consoleMod := consolemodule.New("test", "test", rdb, gdb, nil, nil)
+	featureMod := feature.New(gdb)
 	queueMod := queue.NewModule(gdb, nil)
 	apikeyMod := apikey.New(gdb)
 	dataopsMod := dataops.New(gdb)
 
 	router := gin.New()
 
-	modules := []contract.Module{authMod, mfaMod, passkeyMod, captchaMod, userMod, accessMod, auditMod, adminMod, queueMod, apikeyMod, dataopsMod}
+	modules := []contract.Module{authMod, mfaMod, passkeyMod, captchaMod, userMod, accessMod, auditMod, consoleMod, featureMod, queueMod, apikeyMod, dataopsMod}
 	// 1) 模块级 HTTP 中间件（审计记录）
 	for _, m := range modules {
 		if p, ok := m.(contract.HTTPMiddlewareProvider); ok {

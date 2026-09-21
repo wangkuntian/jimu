@@ -1,7 +1,7 @@
 package interfaces
 
 import (
-	"jimu/internal/capabilities/admin/application"
+	"jimu/internal/capabilities/console/application"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 

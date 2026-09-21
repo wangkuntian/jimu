@@ -11,18 +11,20 @@ import (
 
 	"jimu/internal/app"
 	accessmodule "jimu/internal/capabilities/access"
-	adminmodule "jimu/internal/capabilities/admin"
 	"jimu/internal/capabilities/apikey"
 	auditmodule "jimu/internal/capabilities/audit"
 	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/captcha"
 	"jimu/internal/capabilities/catalog"
+	consolemodule "jimu/internal/capabilities/console"
 	"jimu/internal/capabilities/dataops"
+	"jimu/internal/capabilities/feature"
 	mfamodule "jimu/internal/capabilities/mfa"
 	oauthmodule "jimu/internal/capabilities/oauth"
 	passkeymodule "jimu/internal/capabilities/passkey"
 	"jimu/internal/capabilities/queue"
 	tenantmodule "jimu/internal/capabilities/tenant"
+	"jimu/internal/capabilities/uploadsec"
 	"jimu/internal/capabilities/user"
 	userinfra "jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/config"
@@ -57,7 +59,7 @@ var errCapabilityNoInstance = errors.New("declared capability has no instance")
 // 单元测试（main_test.go）对账两者，run() 启动时按它过滤装配并自检实例映射。
 var wiredCapabilities = []string{
 	"user", "access", "tenant", "auth", "mfa", "passkey", "queue", "apikey", "dataops",
-	"audit", "admin", "oauth", "captcha",
+	"audit", "console", "feature", "uploadsec", "oauth", "captcha",
 }
 
 func main() {
@@ -160,10 +162,12 @@ func run() error {
 		"dataops": dataops.New(container.DB),
 		"tenant":  tenantMod,
 		"audit":   auditmodule.New(container.DB, cfg.Audit, container.Logger),
-		"admin": adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, middleware.IPAllowlist(cfg.Security.AdminIPAllowlist), container.Scheduler, container.Storage, container.UploadScanner, container.FeatureFlag, container.EventBus,
+		"console": consolemodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB,
 			auth.NewWithRotation(cfg.Auth.JWTSecret, cfg.Auth.JWTPreviousSecret, cfg.Auth.Issuer, cfg.Auth.AccessExpireMin, cfg.Auth.RefreshExpireDay),
-			tenantMod.Quota()),
-		"oauth": oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth, container.HTTPClient),
+			container.EventBus, middleware.IPAllowlist(cfg.Security.AdminIPAllowlist)),
+		"feature":   feature.New(container.DB),
+		"uploadsec": uploadsec.New(container.Storage, container.UploadScanner),
+		"oauth":     oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth, container.HTTPClient),
 	}
 	if len(all) != len(wiredCapabilities) {
 		_ = container.Stop(context.Background())

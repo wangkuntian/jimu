@@ -9,8 +9,20 @@ import (
 	auditdomain "jimu/internal/capabilities/audit/domain"
 
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
+
+// newSqliteDB 创建内存 sqlite 并迁移给定模型
+func newSqliteDB(t *testing.T, models ...interface{}) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(models...))
+	return db
+}
 
 func TestAdminAuditHandlerList(t *testing.T) {
 	gin.SetMode(gin.TestMode)

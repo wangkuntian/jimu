@@ -1,12 +1,10 @@
-package interfaces
+package feature
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"jimu/internal/capabilities/feature"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -23,8 +21,8 @@ func TestAdminFeatureHandlerList(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// 有 flag
-	mgr := feature.NewManager()
-	mgr.Register(feature.Flag{Name: "dark_mode", Enabled: true})
+	mgr := NewManager()
+	mgr.Register(Flag{Name: "dark_mode", Enabled: true})
 	r2 := gin.New()
 	r2.GET("/features", NewAdminFeatureHandler(mgr).List)
 	w2 := httptest.NewRecorder()
@@ -36,8 +34,8 @@ func TestAdminFeatureHandlerList(t *testing.T) {
 func TestAdminFeatureHandlerUpdate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	mgr := feature.NewManager()
-	mgr.Register(feature.Flag{Name: "dark_mode", Enabled: false, Percentage: 0})
+	mgr := NewManager()
+	mgr.Register(Flag{Name: "dark_mode", Enabled: false, Percentage: 0})
 	h := NewAdminFeatureHandler(mgr)
 	r := gin.New()
 	r.PUT("/features/:name", h.Update)

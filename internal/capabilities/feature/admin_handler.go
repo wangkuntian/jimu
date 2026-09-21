@@ -1,7 +1,6 @@
-package interfaces
+package feature
 
 import (
-	"jimu/internal/capabilities/feature"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
@@ -10,11 +9,11 @@ import (
 
 // AdminFeatureHandler Feature Flag 管理 handler
 type AdminFeatureHandler struct {
-	manager *feature.Manager
+	manager *Manager
 }
 
 // NewAdminFeatureHandler 创建 Feature Flag 管理 handler
-func NewAdminFeatureHandler(manager *feature.Manager) *AdminFeatureHandler {
+func NewAdminFeatureHandler(manager *Manager) *AdminFeatureHandler {
 	return &AdminFeatureHandler{manager: manager}
 }
 
@@ -43,7 +42,7 @@ func (h *AdminFeatureHandler) Update(c *gin.Context) {
 		return
 	}
 
-	updated := h.manager.Update(name, func(flag *feature.Flag) {
+	updated := h.manager.Update(name, func(flag *Flag) {
 		if req.Enabled != nil {
 			flag.Enabled = *req.Enabled
 		}

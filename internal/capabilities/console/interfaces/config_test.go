@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"jimu/internal/capabilities/admin/application"
+	"jimu/internal/capabilities/console/application"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"

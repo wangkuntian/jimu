@@ -29,7 +29,7 @@ func fixture() []contract.Descriptor {
 		{Name: "auth", Requires: []string{"user", "access", "tenant", "mfa"}, Mount: contract.MountSelfManaged},
 		{Name: "passkey", Requires: []string{"user", "auth"}, Mount: contract.MountSelfManaged},
 		{Name: "audit", Mount: contract.MountProtected},
-		{Name: "admin", Requires: []string{"user", "audit"}, Mount: contract.MountProtected},
+		{Name: "console", Requires: []string{"auth", "access"}, Mount: contract.MountSelfManaged},
 		{Name: "oauth", Requires: []string{"auth", "user"}, Mount: contract.MountPublic},
 		{Name: "apikey", Mount: contract.MountProtected},
 		{Name: "queue", Mount: contract.MountProtected},
@@ -37,6 +37,8 @@ func fixture() []contract.Descriptor {
 		{Name: "dataops", Mount: contract.MountProtected},
 		{Name: "search", Mount: contract.MountProtected},
 		{Name: "captcha", Mount: contract.MountPublic},
+		{Name: "feature", Mount: contract.MountProtected},
+		{Name: "uploadsec", Mount: contract.MountProtected},
 		{Name: "breach", Mount: contract.MountProtected},
 	}
 }
@@ -47,8 +49,8 @@ func TestResolveEmptyMeansAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve(nil) error: %v", err)
 	}
-	if len(got) != 16 {
-		t.Fatalf("len = %d, want 16 (all)", len(got))
+	if len(got) != 18 {
+		t.Fatalf("len = %d, want 18 (all)", len(got))
 	}
 }
 
@@ -239,8 +241,8 @@ func TestCatalogMigrationsShape(t *testing.T) {
 	want := map[string]bool{
 		"user": true, "access": true, "tenant": true,
 		"mfa": true, "auth": true, "passkey": true, "audit": true, "oauth": true,
-		"admin":   false,
-		"captcha": false, "breach": false,
+		"console": false,
+		"captcha": false, "breach": false, "feature": false, "uploadsec": false,
 		"apikey": true, "queue": true, "outbox": true, "dataops": true, "search": true,
 	}
 	if got := migrationsOf(All()); !reflect.DeepEqual(got, want) {

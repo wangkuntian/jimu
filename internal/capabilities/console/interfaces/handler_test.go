@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"jimu/internal/capabilities/admin/application"
+	"jimu/internal/capabilities/console/application"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"

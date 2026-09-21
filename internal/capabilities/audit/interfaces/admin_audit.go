@@ -1,9 +1,12 @@
 package interfaces
 
 import (
+	"strconv"
+
 	auditdomain "jimu/internal/capabilities/audit/domain"
 	auditinfra "jimu/internal/capabilities/audit/infrastructure"
 	"jimu/internal/kernel/tenant"
+	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
@@ -30,4 +33,19 @@ func (h *AdminAuditHandler) List(c *gin.Context) {
 		return
 	}
 	response.Page(c, logs, total, p.Page, p.PageSize)
+}
+
+// paginationFromQuery 从 query 解析分页参数（管理端列表端点共用）。
+func paginationFromQuery(c *gin.Context) pagination.Pagination {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	sort := c.DefaultQuery("sort", "id")
+	order := c.DefaultQuery("order", "desc")
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	return pagination.Pagination{Page: page, PageSize: pageSize, Sort: sort, Order: order}
 }
