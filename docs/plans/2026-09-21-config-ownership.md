@@ -171,7 +171,15 @@ require.NoError(t, app.ValidateCapabilityConfigs(cfg, caps))
 2. **`Container` 成为能力配置的解码点**：`NewContainer(cfg, sections, enabled)`；`main` 的 `catalog.Resolve` 上移到建容器之前（容器需启用集决定哪些能力段加载）。`bootstrap` 经 `Container.OutboxPublisher` 拿到 outbox 决策，不再读 `cfg.Outbox`。
 3. **段的环境覆盖随段下沉**：`config.GetEnvOrFile` 导出，`AUDIT_HASH_SECRET` 的覆盖移入 `audit.Config.ApplyDefaults`。
 
-### 剩余：Task 8（`auth` 三段）与 Task 9（收口）
+### 剩余：Task 8（`auth` 段）与 Task 9（收口）
+
+> **修正（重读设计 §8 ¶2 后）**：设计明确把 `auth.webauthn.enabled` 与 `auth.provisioning.enabled` 列为
+> **「保留为能力内配置」** 的开关，只有能力级开关改由 `capabilities.enabled` 表达。因此
+> **不拆 `auth` 段**：`auth.Config` 拥有整个 `auth` 段（含嵌套 `webauthn`/`provisioning`），
+> 对应 §6.1「一个能力一份 `Config()`」。装配期把子配置传出去：`passkey` 可收 `auth.Config`
+> （`passkey.Requires` 含 auth，方向合法）；`tenant` 必须在 `main` 里构造自己的
+> `ProvisioningConfig`（不得 import auth——auth 依赖 tenant，反向即越界，§9 门禁）。
+> 原「点分键拆三段」的方案作废。
 
 `auth` 段是唯一未下沉的段，因为它的 11 个字段被 **6 个包**消费且与内核 JWT 机制交织，拆分需先钉住两点：
 
