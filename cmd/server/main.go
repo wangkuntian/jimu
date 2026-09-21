@@ -70,7 +70,7 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.Load()
+	cfg, sections, err := config.LoadWithSections()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -113,8 +113,18 @@ func run() error {
 
 	// 用户只读端口：mfa/passkey 经 contract.UserinfoSource 读取用户，不 import user/domain
 	userinfoSource := user.NewUserinfoSource(userinfra.NewMysqlRepository(container.DB))
-	// 验证码能力：公开 GET /api/v1/captcha，并经 contract.CaptchaVerifier 注入 auth
-	captchaMod := captcha.New(container.Redis, time.Duration(cfg.Captcha.TTLMin)*time.Minute, cfg.Captcha.Enabled)
+	// 验证码能力：公开 GET /api/v1/captcha，并经 contract.CaptchaVerifier 注入 auth。
+	// 配置段仅在能力启用时解码与校验（未启用的能力配置段既不出现也不校验，设计 §8）。
+	var captchaCfg captcha.Config
+	if enabled["captcha"] {
+		loaded, err := captcha.Load(sections)
+		if err != nil {
+			_ = container.Stop(context.Background())
+			return fmt.Errorf("load captcha config: %w", err)
+		}
+		captchaCfg = *loaded
+	}
+	captchaMod := captcha.New(container.Redis, time.Duration(captchaCfg.TTLMin)*time.Minute, captchaCfg.Enabled)
 	// MFA 能力：TOTP + 可信设备，经 contract.MFAVerifier 注入 auth
 	mfaMod := mfamodule.New(container.DB, cfg.Auth, userinfoSource)
 

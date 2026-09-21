@@ -94,12 +94,6 @@ type OAuthConfig struct {
 	Providers map[string]OAuthProviderConfig `mapstructure:"providers"` // 提供商名 -> 配置（内置 google/github/wechat，或自定义 OIDC 提供商名）
 }
 
-// CaptchaConfig 验证码配置
-type CaptchaConfig struct {
-	Enabled bool `mapstructure:"enabled"` // 是否启用登录/注册验证码
-	TTLMin  int  `mapstructure:"ttl_min"` // 验证码有效期（分钟）
-}
-
 // EmailConfig 邮件通知配置
 type EmailConfig struct {
 	Enabled  bool   `mapstructure:"enabled"`  // 是否启用真实 SMTP 发送；false 时回退日志渠道
@@ -164,7 +158,6 @@ type Config struct {
 	Outbox       OutboxConfig                `mapstructure:"outbox"`
 	Scheduler    SchedulerConfig             `mapstructure:"scheduler"`
 	OAuth        OAuthConfig                 `mapstructure:"oauth"`
-	Captcha      CaptchaConfig               `mapstructure:"captcha"`
 	Email        EmailConfig                 `mapstructure:"email"`
 	SMS          SMSConfig                   `mapstructure:"sms"`
 	Notification NotificationConfig          `mapstructure:"notification"`
@@ -514,22 +507,27 @@ func LoadWithSections() (*Config, SectionDecoder, error) {
 	return cfg, sectionDecoder{v: v}, nil
 }
 
-// LoadSection 解码单个能力配置段到 out（须为指针）：解码 → 默认值 → 校验。
+// SectionConfig 能力配置段实现的加载钩子：解码后先填默认值、再自校验。
+// 两个方法都定义在**指针**接收者上，确保钩子作用于解码后的实际值
+// （方法值会在传参时绑定接收者副本，故不能把钩子当函数值传递）。
+type SectionConfig interface {
+	ApplyDefaults()
+	Validate() error
+}
+
+// LoadSection 解码单个能力配置段到 out（须为实现 SectionConfig 的指针）：
+// 解码 → 默认值 → 校验。
 //
 // 设计 §8：能力配置由能力自身声明默认值与校验。组合根只对**启用**的能力调用
 // 本函数，因此未启用能力的配置段既不出现也不校验。key 为 YAML 点分路径
 // （如 "auth.webauthn"），能力可拥有嵌套段而对外配置布局保持不变。
-func LoadSection(dec SectionDecoder, key string, out any, applyDefaults func(), validate func() error) error {
+func LoadSection[T SectionConfig](dec SectionDecoder, key string, out T) error {
 	if err := dec.UnmarshalKey(key, out); err != nil {
 		return fmt.Errorf("decode capability config %q: %w", key, err)
 	}
-	if applyDefaults != nil {
-		applyDefaults()
-	}
-	if validate != nil {
-		if err := validate(); err != nil {
-			return fmt.Errorf("invalid capability config %q: %w", key, err)
-		}
+	out.ApplyDefaults()
+	if err := out.Validate(); err != nil {
+		return fmt.Errorf("invalid capability config %q: %w", key, err)
 	}
 	return nil
 }

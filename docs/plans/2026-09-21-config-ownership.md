@@ -24,27 +24,33 @@
 1. **内核保留段**（留在 `internal/config`）：`http`、`management`、`db`、`redis`、`ratelimit`、`log`、`server`、`id`、`cache`、`security`、`otel`、`error_reporting`、`http_client`、`grpc`、`capabilities`。
    理由：均为传输/基础设施/内核中间件机制，无归属能力（`grpc` 是内核传输，`cache` 是 Redis 缓存抽象，`http_client` 是共享出站客户端，`security`/`ratelimit` 是内核中间件配置）。
 
-2. **下沉段与归属**（`ConfigKey` 为 YAML 点分路径，保持不变）：
+2. **下沉段与归属**（侦察后修正：`storage`/`notification`/`retention`/`scheduler` **不是 catalog 能力**，其「不启用」由自身 `enabled` 配置驱动，不走启用集）:
 
-   | YAML 键 | 归属能力 | 现结构体 |
+   **A. catalog 能力段 —— 按启用集校验（未启用则既不出现也不校验）**
+
+   | YAML 键 | 归属能力 | 现有校验 |
    |---|---|---|
-   | `auth`（不含 webauthn/provisioning） | `auth` | `AuthConfig` |
-   | `auth.webauthn` | `passkey` | `WebAuthnConfig` |
-   | `auth.provisioning` | `tenant` | `ProvisioningConfig` |
-   | `oauth` | `oauth` | `OAuthConfig` |
-   | `storage` | `storage` | `StorageConfig` |
-   | `upload` | `uploadsec` | `UploadConfig` |
-   | `queue` | `queue` | `QueueConfig` |
-   | `outbox` | `outbox` | `OutboxConfig` |
-   | `scheduler` | `queue` | `SchedulerConfig` |
-   | `audit` | `audit` | `AuditConfig` |
-   | `captcha` | `captcha` | `CaptchaConfig` |
-   | `email`+`sms`+`notification` | `notification` | `EmailConfig`/`SMSConfig`/`NotificationConfig` |
-   | `retention` | `retention` | `RetentionConfig` |
+   | `auth`（不含 webauthn/provisioning） | `auth` | issuer/过期/限流；jwt_secret 强度（prod） |
+   | `auth.webauthn` | `passkey` | `validateWebAuthn` |
+   | `auth.provisioning` | `tenant` | `validateProvisioning` + 依赖 `auth.public_registration` |
+   | `oauth` | `oauth` | `validateOAuthProviders` |
+   | `queue` | `queue` | `validQueueTypes` |
+   | `outbox` | `outbox` | `validOutboxPublishers` + **跨能力**：`publisher=mq` 时 `queue.type` 必须受支持 |
+   | `audit` | `audit` | queue/batch/flush 关系 |
+   | `captcha` | `captcha` | `enabled` 时 `ttl_min>0` |
+   | `upload` | `uploadsec` | 无校验（仅结构体下沉） |
 
-   跨能力嵌套段（`auth.webauthn` → passkey、`auth.provisioning` → tenant）用点分 `UnmarshalKey` 解码，**保持 YAML 布局不变**。
+   **B. 非 catalog 包段 —— 保持现有语义（不由启用集门控）**
 
-3. **`scheduler` 归 `queue`**：调度器实例（`kernel/scheduler`）由 queue 能力用于作业调度（`/admin/tasks*`、`job_history`），其配置随之归 queue。
+   | YAML 键 | 归属包 | 门控方式 | 现有校验 |
+   |---|---|---|---|
+   | `retention` | `retention` | 自身 `enabled` | enabled 时 cron 必填、batch_size 非负 |
+   | `scheduler` | `queue` | 无条件 | `validSchedulerStores` |
+   | `storage` | `storage` | 无条件 | 无校验 |
+   | `email`+`sms`+`notification` | `notification` | 无条件 | 无校验 |
+
+   `scheduler` 归 `queue`：调度器实例由 queue 能力用于作业调度（`/admin/tasks*`、`job_history`）。
+
 
 4. **`Watch` 重载语义**：`config.Watch` 只重载并校验内核段；能力段变更需重启进程（与现有「结构类变更需重启」一致，文档注明）。
 
@@ -87,17 +93,17 @@ func LoadCapabilitySection[T any](dec contract.ConfigSection, key string, applyD
 
 - [ ] **Step 5: 提交**（用户授权后）`feat(config): add capability config section loading`
 
-## Task 2: 试点 —— `retention`（最小段，验证机制端到端）
+## Task 2: 试点 —— `captcha`（最小 catalog 能力段，验证启用集门控端到端）
 
 **Files:**
-- Create: `internal/capabilities/retention/config.go`（`ConfigKey="retention"`、`Config`、`ApplyDefaults`、`Validate`）
-- Modify: `internal/config/config.go`（删 `Retention` 字段）、`validate.go`（删 retention 校验）
-- Modify: `internal/app/bootstrap.go`（改用 `retention.Config`）
-- Test: `internal/capabilities/retention/config_test.go`
+- Create: `internal/capabilities/captcha/config.go`（`ConfigKey="captcha"`、`Config`、`Validate`、`Load`）
+- Modify: `internal/config/config.go`（删 `Captcha` 字段）、`validate.go`（删 captcha 校验）
+- Modify: `cmd/server/main.go`（按 `enabled["captcha"]` 解码注入）
+- Test: `internal/capabilities/captcha/config_test.go`（含「未启用则不校验」回归）
 
-- [ ] **Step 1: retention 自有 config + 默认值 + 校验（迁移现有校验语义）**
-- [ ] **Step 2: 组合根按启用集解码注入**
-- [ ] **Step 3: 验证 + 提交** `refactor(retention): own its configuration section`
+- [ ] **Step 1: captcha 自有 config + 校验（迁移现有校验语义，不新增默认值）**
+- [ ] **Step 2: 组合根按启用集解码：仅 `enabled["captcha"]` 时执行 `Load`**
+- [ ] **Step 3: 验证 + 提交** `refactor(captcha): own its configuration section`
 
 ## Task 3–8: 逐段下沉（每段一个提交，保持全绿）
 

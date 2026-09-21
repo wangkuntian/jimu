@@ -9,7 +9,6 @@ import (
 
 	apikey "jimu/internal/capabilities/apikey"
 	"jimu/internal/capabilities/breach"
-	"jimu/internal/capabilities/captcha"
 	"jimu/internal/capabilities/encryption"
 	"jimu/internal/capabilities/feature"
 	grpcpkg "jimu/internal/capabilities/grpc"
@@ -55,7 +54,6 @@ type Container struct {
 	Outbox         *outbox.Outbox
 	DBCollector    *observability.DBCollector
 	HTTPClient     *httpclient.Client
-	Captcha        *captcha.Service
 	Cipher         *encryption.Cipher
 	WorkerPool     *queue.WorkerPool
 	APIKeyVerifier *apikey.APIKeyVerifier
@@ -284,9 +282,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		dbCollector = observability.NewDBCollector(sqlDB, "primary")
 	}
 
-	// Captcha 验证码服务（平台能力，非业务模块；auth 模块消费）
-	captchaSvc := captcha.NewServiceWithEnabled(rdb, time.Duration(cfg.Captcha.TTLMin)*time.Minute, cfg.Captcha.Enabled)
-
 	// API Key 验证器（服务/机器间认证，复用 admin api_keys 表）
 	// 路由组按需挂载 apikey.APIKeyAuthMiddleware(c.APIKeyVerifier)
 	apiKeyVerifier := apikey.NewAPIKeyVerifier(apikey.NewDBAPIKeyStore(dbConn))
@@ -328,7 +323,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		Outbox:         outboxProcessor,
 		DBCollector:    dbCollector,
 		HTTPClient:     httpClient,
-		Captcha:        captchaSvc,
 		Cipher:         cipher,
 		WorkerPool:     pendingWorkerPool,
 		APIKeyVerifier: apiKeyVerifier,

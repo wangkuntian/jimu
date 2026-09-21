@@ -150,9 +150,6 @@ func (c *Config) validateCommon() error {
 	if err := validateCapabilities(&c.Capabilities); err != nil {
 		return err
 	}
-	if c.Captcha.Enabled && c.Captcha.TTLMin <= 0 {
-		return errors.New("invalid captcha.ttl_min")
-	}
 	return nil
 }
 
