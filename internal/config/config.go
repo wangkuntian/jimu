@@ -150,8 +150,6 @@ type Config struct {
 	Server       ServerConfig                `mapstructure:"server"`
 	ID           IDConfig                    `mapstructure:"id"`
 	Cache        CacheConfig                 `mapstructure:"cache"`
-	Storage      StorageConfig               `mapstructure:"storage"`
-	Upload       UploadConfig                `mapstructure:"upload"`
 	Security     SecurityConfig              `mapstructure:"security"`
 	Queue        QueueConfig                 `mapstructure:"queue"`
 	Outbox       OutboxConfig                `mapstructure:"outbox"`
@@ -266,32 +264,6 @@ type ManagementConfig struct {
 	Port            int    `mapstructure:"port"`
 	EnablePprof     bool   `mapstructure:"enable_pprof"`
 	ProbeTimeoutSec int    `mapstructure:"probe_timeout_sec"`
-}
-
-type StorageConfig struct {
-	Type    string `mapstructure:"type"`     // local, s3, oss, minio
-	BaseDir string `mapstructure:"base_dir"` // 本地存储目录
-	BaseURL string `mapstructure:"base_url"` // 访问 URL 前缀
-
-	// S3/OSS/MinIO 通用（local 不用）
-	Endpoint  string `mapstructure:"endpoint"`   // 如 oss-cn-hangzhou.aliyuncs.com、http://localhost:9000
-	Region    string `mapstructure:"region"`     // 如 us-east-1
-	Bucket    string `mapstructure:"bucket"`     // 存储桶
-	AccessKey string `mapstructure:"access_key"` // 访问密钥
-	SecretKey string `mapstructure:"secret_key"` // 密钥
-	PathStyle bool   `mapstructure:"path_style"` // 路径风格（MinIO 必须 true）
-}
-
-// UploadConfig 文件上传配置（含安全扫描）
-type UploadConfig struct {
-	ClamAV ClamAVConfig `mapstructure:"clamav"`
-}
-
-// ClamAVConfig ClamAV 病毒扫描配置
-type ClamAVConfig struct {
-	Enabled    bool   `mapstructure:"enabled"`     // 是否启用，false 时上传不扫描
-	Address    string `mapstructure:"address"`     // clamd 监听地址，如 127.0.0.1:3310
-	TimeoutSec int    `mapstructure:"timeout_sec"` // 扫描超时（秒），0 用默认 10
 }
 
 type HTTPConfig struct {

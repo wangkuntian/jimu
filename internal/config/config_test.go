@@ -18,36 +18,6 @@ func TestLoad(t *testing.T) {
 	}
 }
 
-func TestStorageConfigFieldMapping(t *testing.T) {
-	// 验证 storage 的 S3/OSS/MinIO 字段可从 YAML 映射到结构体
-	// （直接驱动 viper，避免依赖项目 configs/ 目录的实际值）
-	v := viper.New()
-	v.SetConfigType("yaml")
-	conf := `
-storage:
-  type: "oss"
-  endpoint: "oss-cn-hangzhou.aliyuncs.com"
-  region: "cn-hangzhou"
-  bucket: "my-bucket"
-  access_key: "ak"
-  secret_key: "sk"
-  path_style: true
-`
-	if err := v.ReadConfig(strings.NewReader(conf)); err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-	var cfg Config
-	if err := v.Unmarshal(&cfg); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if cfg.Storage.Type != "oss" || cfg.Storage.Endpoint != "oss-cn-hangzhou.aliyuncs.com" {
-		t.Errorf("storage type/endpoint not mapped: %+v", cfg.Storage)
-	}
-	if cfg.Storage.Bucket != "my-bucket" || !cfg.Storage.PathStyle || cfg.Storage.Region != "cn-hangzhou" {
-		t.Errorf("storage bucket/region/path_style not mapped: %+v", cfg.Storage)
-	}
-}
-
 func TestJWTSecretOverride(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("a", 32))
 

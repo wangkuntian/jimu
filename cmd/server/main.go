@@ -79,7 +79,18 @@ func run() error {
 	cfg.Version = version
 	cfg.Environment = os.Getenv("APP_ENV")
 
-	container, err := app.NewContainer(cfg)
+	// 能力开关：capabilities.enabled 为空表示全部启用（向后兼容）。
+	// 在构建容器前解析，因为能力配置段按启用集加载（设计 §8）。
+	caps, err := catalog.Resolve(cfg.Capabilities.Enabled)
+	if err != nil {
+		return fmt.Errorf("resolve capabilities: %w", err)
+	}
+	enabled := make(map[string]bool, len(caps))
+	for _, d := range caps {
+		enabled[d.Name] = true
+	}
+
+	container, err := app.NewContainer(cfg, sections, enabled)
 	if err != nil {
 		return fmt.Errorf("create container: %w", err)
 	}
@@ -95,17 +106,6 @@ func run() error {
 		return nil
 	}); err != nil {
 		container.Logger.Warnw("config file watch disabled", "error", err.Error())
-	}
-
-	// 能力开关：capabilities.enabled 为空表示全部启用（向后兼容）
-	caps, err := catalog.Resolve(cfg.Capabilities.Enabled)
-	if err != nil {
-		_ = container.Stop(context.Background())
-		return fmt.Errorf("resolve capabilities: %w", err)
-	}
-	enabled := make(map[string]bool, len(caps))
-	for _, d := range caps {
-		enabled[d.Name] = true
 	}
 
 	// 租户套餐/配额/开通式注册：定义在 tenant 能力，注入到创建用户/角色/API Key 的路径

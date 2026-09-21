@@ -37,7 +37,11 @@ import (
 )
 
 type Container struct {
-	Config         *config.Config
+	Config *config.Config
+	// Sections 按 YAML 点分键解码能力配置段（能力配置由能力自身声明，设计 §8）
+	Sections config.SectionDecoder
+	// Enabled 已启用能力名集合（含依赖闭包）
+	Enabled        map[string]bool
 	DB             *gorm.DB
 	Redis          redistore.Client
 	Logger         *logger.Logger
@@ -100,7 +104,7 @@ func (c *Container) Stop(ctx context.Context) error {
 	return result
 }
 
-func NewContainer(cfg *config.Config) (*Container, error) {
+func NewContainer(cfg *config.Config, sections config.SectionDecoder, enabled map[string]bool) (*Container, error) {
 	// OpenObserve 日志通道：otel 启用时附加到 zap（初始化失败仅告警，不阻断启动）
 	var (
 		logExporter *observability.LogExporter
@@ -145,28 +149,24 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	} else {
 		sched = scheduler.NewWithStore(log, schedStore, nil)
 	}
-	storageSvc, err := storage.New(storage.Config{
-		Type:      storage.StorageType(cfg.Storage.Type),
-		BaseDir:   cfg.Storage.BaseDir,
-		BaseURL:   cfg.Storage.BaseURL,
-		Endpoint:  cfg.Storage.Endpoint,
-		Region:    cfg.Storage.Region,
-		Bucket:    cfg.Storage.Bucket,
-		AccessKey: cfg.Storage.AccessKey,
-		SecretKey: cfg.Storage.SecretKey,
-		PathStyle: cfg.Storage.PathStyle,
-	})
+	storageCfg, err := storage.Load(sections)
+	if err != nil {
+		return nil, fmt.Errorf("init storage: %w", err)
+	}
+	storageSvc, err := storage.New(*storageCfg)
 	if err != nil {
 		return nil, fmt.Errorf("init storage: %w", err)
 	}
 
-	// 文件上传病毒扫描器：未启用时为 nil（上传不扫描，向后兼容）
+	// 文件上传病毒扫描器：上传能力未启用、或未开启扫描时为 nil（上传不扫描，向后兼容）。
+	// 配置段仅在能力启用时解码与校验（未启用的能力配置段既不出现也不校验，设计 §8）。
 	var uploadScanner uploadsec.Scanner
-	if cfg.Upload.ClamAV.Enabled {
-		uploadScanner = uploadsec.NewClamAVScanner(uploadsec.ClamAVConfig{
-			Address: cfg.Upload.ClamAV.Address,
-			Timeout: time.Duration(cfg.Upload.ClamAV.TimeoutSec) * time.Second,
-		})
+	if enabled["uploadsec"] {
+		uploadCfg, err := uploadsec.Load(sections)
+		if err != nil {
+			return nil, fmt.Errorf("init upload config: %w", err)
+		}
+		uploadScanner = uploadCfg.Scanner()
 	}
 
 	// 统一出站 HTTP client（oauth/webhook 等外部调用复用）
