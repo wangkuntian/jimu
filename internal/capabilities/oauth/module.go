@@ -23,7 +23,7 @@ type Module struct {
 }
 
 // New 创建 OAuth 模块（自包含装配依赖）
-func New(db *gorm.DB, rdb redistore.Client, oauthCfg config.OAuthConfig, authCfg config.AuthConfig, httpClient *httpclient.Client) *Module {
+func New(db *gorm.DB, rdb redistore.Client, oauthCfg Config, authCfg config.AuthConfig, httpClient *httpclient.Client) *Module {
 	bindingRepo := oauthinfra.NewMySQLBindingRepository(db)
 	jwtUtil := auth.NewWithRotation(authCfg.JWTSecret, authCfg.JWTPreviousSecret, authCfg.Issuer, authCfg.AccessExpireMin, authCfg.RefreshExpireDay)
 	sessionStore := auth.NewRedisSessionStore(rdb)
@@ -32,7 +32,7 @@ func New(db *gorm.DB, rdb redistore.Client, oauthCfg config.OAuthConfig, authCfg
 }
 
 // buildProviders 按配置构造启用的 OAuth 提供商
-func buildProviders(cfg config.OAuthConfig, client *httpclient.Client) map[string]oauthplatform.Provider {
+func buildProviders(cfg Config, client *httpclient.Client) map[string]oauthplatform.Provider {
 	providers := make(map[string]oauthplatform.Provider)
 	for name, pc := range cfg.Providers {
 		if !pc.Enabled {

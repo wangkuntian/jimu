@@ -135,6 +135,17 @@ func run() error {
 		captchaVerifier = captchaMod.Service()
 	}
 
+	// OAuth 能力配置段：仅启用时解码与校验
+	var oauthCfg oauthmodule.Config
+	if enabled["oauth"] {
+		loaded, err := oauthmodule.Load(sections)
+		if err != nil {
+			_ = container.Stop(context.Background())
+			return fmt.Errorf("load oauth config: %w", err)
+		}
+		oauthCfg = *loaded
+	}
+
 	// 审计能力配置段：仅启用时解码与校验
 	var auditCfg auditmodule.Config
 	if enabled["audit"] {
@@ -188,7 +199,7 @@ func run() error {
 			container.EventBus, middleware.IPAllowlist(cfg.Security.AdminIPAllowlist)),
 		"feature":   feature.New(container.DB),
 		"uploadsec": uploadsec.New(container.Storage, container.UploadScanner),
-		"oauth":     oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth, container.HTTPClient),
+		"oauth":     oauthmodule.New(container.DB, container.Redis, oauthCfg, cfg.Auth, container.HTTPClient),
 	}
 	if len(all) != len(wiredCapabilities) {
 		_ = container.Stop(context.Background())

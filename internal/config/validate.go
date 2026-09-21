@@ -98,9 +98,6 @@ func (c *Config) validateCommon() error {
 	if err := validateProvisioning(c.Auth.Provisioning); err != nil {
 		return err
 	}
-	if err := validateOAuthProviders(c.OAuth); err != nil {
-		return err
-	}
 	if err := validateWebAuthn(c.Auth.WebAuthn); err != nil {
 		return err
 	}
@@ -170,25 +167,6 @@ func validateProvisioning(p ProvisioningConfig) error {
 
 // validateOAuthProviders 校验启用的 OAuth/OIDC 提供商：client_id/redirect_url 必填，
 // OIDC（配了 issuer_url）还要求 issuer_url 是 http(s) 绝对地址。
-func validateOAuthProviders(cfg OAuthConfig) error {
-	for name, p := range cfg.Providers {
-		if !p.Enabled {
-			continue
-		}
-		if p.ClientID == "" || p.RedirectURL == "" {
-			return fmt.Errorf("oauth.providers.%s requires client_id and redirect_url when enabled", name)
-		}
-		if p.IssuerURL == "" {
-			continue
-		}
-		u, err := url.Parse(p.IssuerURL)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return fmt.Errorf("oauth.providers.%s.issuer_url must be an absolute http(s) URL", name)
-		}
-	}
-	return nil
-}
-
 // validateWebAuthn 校验启用的 WebAuthn 配置：rp_id 必填，rp_origins 必须是非空绝对 http(s) 来源
 func validateWebAuthn(cfg WebAuthnConfig) error {
 	if !cfg.Enabled {

@@ -46,23 +46,6 @@ var (
 	validRedisModes = []string{RedisModeSingle, RedisModeSentinel, RedisModeCluster}
 )
 
-// OAuthProviderConfig 单个 OAuth 提供商配置。
-// 填了 issuer_url 的提供商按通用 OIDC 处理（provider 名可自定义，如 keycloak/okta/azuread）；
-// 否则按内置提供商名（google/github/wechat）匹配。
-type OAuthProviderConfig struct {
-	ClientID     string   `mapstructure:"client_id"`
-	ClientSecret string   `mapstructure:"client_secret"`
-	RedirectURL  string   `mapstructure:"redirect_url"`
-	IssuerURL    string   `mapstructure:"issuer_url"` // OIDC discovery 签发者地址
-	Scopes       []string `mapstructure:"scopes"`     // 可选，默认 openid profile email
-	Enabled      bool     `mapstructure:"enabled"`
-}
-
-// OAuthConfig OAuth 登录配置
-type OAuthConfig struct {
-	Providers map[string]OAuthProviderConfig `mapstructure:"providers"` // 提供商名 -> 配置（内置 google/github/wechat，或自定义 OIDC 提供商名）
-}
-
 // CaptchaResult 验证码返回
 type CaptchaResult struct {
 	CaptchaID    string `json:"captcha_id"`
@@ -87,7 +70,6 @@ type Config struct {
 	ID           IDConfig                    `mapstructure:"id"`
 	Cache        CacheConfig                 `mapstructure:"cache"`
 	Security     SecurityConfig              `mapstructure:"security"`
-	OAuth        OAuthConfig                 `mapstructure:"oauth"`
 	OTEL         observability.TracingConfig `mapstructure:"otel"`
 	ErrorReport  reporter.ReporterConfig     `mapstructure:"error_reporting"`
 	HTTPClient   HTTPClientConfig            `mapstructure:"http_client"`
