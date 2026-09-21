@@ -481,11 +481,57 @@ type ProvisionPermission struct {
 // Load 加载配置
 // 优先级：环境变量 > .env > app.{env}.yaml > app.yaml
 func Load() (*Config, error) {
+	cfg, _, err := LoadWithSections()
+	return cfg, err
+}
+
+// SectionDecoder 按 YAML 点分键（如 "auth.webauthn"）解码单个配置段。
+// 组合根用它解码各能力自有的配置段，从而 internal/config 无需知道能力存在。
+type SectionDecoder interface {
+	UnmarshalKey(key string, rawVal any) error
+}
+
+// sectionDecoder 把 viper 适配为 SectionDecoder：viper 的 UnmarshalKey 带变参
+// （...DecoderConfigOption），不直接满足该接口。
+type sectionDecoder struct{ v *viper.Viper }
+
+func (d sectionDecoder) UnmarshalKey(key string, rawVal any) error {
+	return d.v.UnmarshalKey(key, rawVal)
+}
+
+// LoadWithSections 加载内核配置并返回段解码器：内核段由本包解析与校验，
+// 能力段由组合根按启用集自行解码（未启用的能力不出现也不校验，见设计 §8）。
+// 解码器与内核配置同源（同一 viper 实例），确保环境覆盖文件对两者一致生效。
+func LoadWithSections() (*Config, SectionDecoder, error) {
 	v, err := buildViper()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return unmarshalConfig(v)
+	cfg, err := unmarshalConfig(v)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cfg, sectionDecoder{v: v}, nil
+}
+
+// LoadSection 解码单个能力配置段到 out（须为指针）：解码 → 默认值 → 校验。
+//
+// 设计 §8：能力配置由能力自身声明默认值与校验。组合根只对**启用**的能力调用
+// 本函数，因此未启用能力的配置段既不出现也不校验。key 为 YAML 点分路径
+// （如 "auth.webauthn"），能力可拥有嵌套段而对外配置布局保持不变。
+func LoadSection(dec SectionDecoder, key string, out any, applyDefaults func(), validate func() error) error {
+	if err := dec.UnmarshalKey(key, out); err != nil {
+		return fmt.Errorf("decode capability config %q: %w", key, err)
+	}
+	if applyDefaults != nil {
+		applyDefaults()
+	}
+	if validate != nil {
+		if err := validate(); err != nil {
+			return fmt.Errorf("invalid capability config %q: %w", key, err)
+		}
+	}
+	return nil
 }
 
 // buildViper 构造并读取配置的 viper 实例（含环境覆盖文件合并）
