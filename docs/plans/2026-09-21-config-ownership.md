@@ -1,5 +1,8 @@
 # 能力可插拔 P2.1：配置归属下沉 实现计划
 
+> 本文件是 P2 子阶段 P2.1 的详细计划；P2 的三层机制总纲见
+> [2026-09-21-p2-three-layer-mechanism.md](2026-09-21-p2-three-layer-mechanism.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 落实设计 §8：能力配置的结构体、默认值与校验由**能力自身**声明，`internal/config` 只保留内核段；装配时按启用集解码+合并，**未启用能力的配置段既不出现也不校验**。对外 YAML 键**逐一不变**。
@@ -187,3 +190,19 @@ require.NoError(t, app.ValidateCapabilityConfigs(cfg, caps))
 - **`auth.webauthn` → `passkey`**（点分键，`passkey.Requires auth` ✓）、**`auth.provisioning` → `tenant`**（点分键 + tenant 自有的 `ProvisioningConfig` 类型，`tenant` 不 Requires auth，故**不得**导入 auth 类型）。
 - **跨能力校验**：`provisioning.enabled` 要求 `auth.public_registration`，两者分属 tenant/auth → 移到组合根（与 outbox/queue 的处理一致）。
 - **机制扩展**：`jwt_secret` 强度校验仅在 `APP_ENV=prod` 执行，而 `SectionConfig.Validate()` 不接收 env → 需给机制加可选钩子（`ValidateProd() error`，`LoadSection` 在 prod 下按类型断言调用）。
+
+---
+
+## 契约侧对齐（设计 §6.1）
+
+`fc18f29` 起，配置声明改由能力契约承载（对齐设计原形）：
+
+- `contract.ConfigSpec{Section, New}` + `contract.Descriptor.Configs`（一个能力可声明多段）。
+- `app.LoadCapabilityConfigs(dec, caps, env)`：按**启用集**遍历各能力的声明段，执行
+  解码 → `ApplyDefaults` → `Validate`，`env=prod` 时追加可选的 `ValidateProd`。
+  段必须实现 `config.SectionConfig`，否则**立即报错**（避免校验被静默跳过）。
+- `app.SectionOf[*T](cfgs, section)` 供组合根取回强类型配置。
+
+**待做**：把 9 个段的 `Load(dec)` 换成 `Descriptor.Configs` 声明并让 `main`/`container`
+从 `CapabilityConfigs` 取值；`storage`/`notification`/`retention` 无 `Descriptor`，
+其段归属需在 P2.2 决定（见总纲）。
