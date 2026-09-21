@@ -3,16 +3,17 @@ package interfaces
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"jimu/internal/capabilities/auth/application"
-	authdomain "jimu/internal/capabilities/auth/domain"
-	userdomain "jimu/internal/capabilities/user/domain"
+	"jimu/internal/capabilities/passkey/application"
+	passkeydomain "jimu/internal/capabilities/passkey/domain"
 	"jimu/internal/config"
+	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
 	apperrors "jimu/internal/shared/errors"
 
@@ -25,29 +26,46 @@ import (
 	"gorm.io/gorm"
 )
 
-// webauthnHandlerRepo 提供一个固定用户，供通行密钥处理器测试使用
-type webauthnHandlerRepo struct {
-	handlerUserRepo
-	user *userdomain.User
+// handlerUserRepo 固定用户只读端口
+type handlerUserRepo struct {
+	user *contract.Userinfo
 }
 
-func (r *webauthnHandlerRepo) FindByID(context.Context, uint64) (*userdomain.User, error) {
+func (r *handlerUserRepo) GetByID(context.Context, uint64) (*contract.Userinfo, error) {
 	if r.user == nil {
-		return nil, gorm.ErrRecordNotFound
+		return nil, contract.ErrNotFound
 	}
 	return r.user, nil
 }
 
-func (r *webauthnHandlerRepo) FindByUsername(context.Context, string) (*userdomain.User, error) {
+func (r *handlerUserRepo) FindByUsername(context.Context, string) (*contract.Userinfo, error) {
 	if r.user == nil {
-		return nil, gorm.ErrRecordNotFound
+		return nil, contract.ErrNotFound
 	}
 	return r.user, nil
+}
+
+func (r *handlerUserRepo) List(context.Context, int, int) ([]contract.Userinfo, int64, error) {
+	return nil, 0, nil
+}
+
+// handlerFinalizer 记录登录收尾调用（passkey 手势测试用）
+type handlerFinalizer struct{}
+
+func (handlerFinalizer) FinalizeLogin(context.Context, uint64) (*contract.TokenPair, error) {
+	return &contract.TokenPair{AccessToken: "access", RefreshToken: "refresh", ExpiresIn: 1800}, nil
+}
+func (handlerFinalizer) CheckLocked(context.Context, string) (bool, time.Duration, error) {
+	return false, 0, nil
+}
+func (handlerFinalizer) RecordFailure(context.Context, string) {}
+func (handlerFinalizer) ResetFailure(context.Context, string)  {}
+func (handlerFinalizer) RecordLoginHistory(context.Context, uint64, uint64, string, string, string) {
 }
 
 // webauthnHandlerCredRepo 内存凭证仓储
 type webauthnHandlerCredRepo struct {
-	items  []*authdomain.WebAuthnCredential
+	items  []*passkeydomain.WebAuthnCredential
 	nextID uint64
 }
 
@@ -55,14 +73,14 @@ func newWebAuthnHandlerCredRepo() *webauthnHandlerCredRepo {
 	return &webauthnHandlerCredRepo{nextID: 1}
 }
 
-func (r *webauthnHandlerCredRepo) Create(_ context.Context, credential *authdomain.WebAuthnCredential) error {
+func (r *webauthnHandlerCredRepo) Create(_ context.Context, credential *passkeydomain.WebAuthnCredential) error {
 	credential.ID = r.nextID
 	r.nextID++
 	r.items = append(r.items, credential)
 	return nil
 }
 
-func (r *webauthnHandlerCredRepo) FindByCredentialID(_ context.Context, credentialID string) (*authdomain.WebAuthnCredential, error) {
+func (r *webauthnHandlerCredRepo) FindByCredentialID(_ context.Context, credentialID string) (*passkeydomain.WebAuthnCredential, error) {
 	for _, item := range r.items {
 		if item.CredentialID == credentialID {
 			return item, nil
@@ -71,8 +89,8 @@ func (r *webauthnHandlerCredRepo) FindByCredentialID(_ context.Context, credenti
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (r *webauthnHandlerCredRepo) ListByUser(_ context.Context, tenantID, userID uint64) ([]authdomain.WebAuthnCredential, error) {
-	var out []authdomain.WebAuthnCredential
+func (r *webauthnHandlerCredRepo) ListByUser(_ context.Context, tenantID, userID uint64) ([]passkeydomain.WebAuthnCredential, error) {
+	var out []passkeydomain.WebAuthnCredential
 	for _, item := range r.items {
 		if item.UserID == userID && (tenantID == 0 || item.TenantID == tenantID) {
 			out = append(out, *item)
@@ -124,7 +142,7 @@ func (r *webauthnHandlerCredRepo) Delete(_ context.Context, tenantID, userID, id
 }
 
 // newWebAuthnHandler 构造启用 WebAuthn 的处理器与内存仓储
-func newWebAuthnHandler(t *testing.T) (*AuthHandler, *webauthnHandlerRepo, *webauthnHandlerCredRepo) {
+func newWebAuthnHandler(t *testing.T) (*PasskeyHandler, *handlerUserRepo, *webauthnHandlerCredRepo) {
 	t.Helper()
 	mrs, err := miniredis.Run()
 	require.NoError(t, err)
@@ -139,15 +157,21 @@ func newWebAuthnHandler(t *testing.T) (*AuthHandler, *webauthnHandlerRepo, *weba
 	})
 	require.NoError(t, err)
 
-	user := &userdomain.User{ID: 42, Username: "alice", Status: 1, TenantID: 1}
-	repo := &webauthnHandlerRepo{user: user}
+	user := &contract.Userinfo{ID: 42, Username: "alice", Status: 1, TenantID: 1}
+	repo := &handlerUserRepo{user: user}
 	creds := newWebAuthnHandlerCredRepo()
-	svc := application.NewAuthService(repo, auth.New(handlerTestKey, "jimu", 30, 7), &handlerSessionStore{}, nil, 30,
-		rdb, handle, creds, application.WithWebAuthnSessionTTL(time.Minute))
-	return NewAuthHandler(svc, config.AuthConfig{}, nil, nil, config.CaptchaConfig{}), repo, creds
+	svc := application.NewPasskeyService(application.Deps{
+		Users:       repo,
+		Credentials: creds,
+		WebAuthn:    handle,
+		Redis:       rdb,
+		SessionTTL:  time.Minute,
+		Finalizer:   handlerFinalizer{},
+	})
+	return NewPasskeyHandler(svc, config.AuthConfig{}, nil), repo, creds
 }
 
-// invokeHandler 以直接调用处理器的方式发请求（与既有 handler_test 风格一致）
+// invokeHandler 以直接调用处理器的方式发请求
 func invokeHandler(t *testing.T, method, target, body string, userID uint64, fn func(*gin.Context)) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -240,8 +264,7 @@ func TestWebAuthnLoginBeginWithoutCredential(t *testing.T) {
 
 func TestWebAuthnLoginBeginRateLimited(t *testing.T) {
 	handler, _, _ := newWebAuthnHandler(t)
-	limiter := auth.NewLimiter(&routerLimiterRedis{counts: map[string]int{}}, true)
-	handler.limiter = limiter
+	handler.limiter = auth.NewLimiter(&routerLimiterRedis{counts: map[string]int{}}, true)
 	handler.cfg = config.AuthConfig{LoginRateLimit: 1, LoginRateWindowSec: 60}
 	gin.SetMode(gin.TestMode)
 
@@ -266,10 +289,10 @@ func TestWebAuthnCredentialManagementHandlers(t *testing.T) {
 	handler, _, creds := newWebAuthnHandler(t)
 
 	// 预置两条凭证（分属两个租户，用于验证按上下文租户隔离）
-	require.NoError(t, creds.Create(context.Background(), &authdomain.WebAuthnCredential{
+	require.NoError(t, creds.Create(context.Background(), &passkeydomain.WebAuthnCredential{
 		TenantID: 1, UserID: 42, CredentialID: "cred-1", PublicKey: []byte{1}, Name: "Phone",
 	}))
-	require.NoError(t, creds.Create(context.Background(), &authdomain.WebAuthnCredential{
+	require.NoError(t, creds.Create(context.Background(), &passkeydomain.WebAuthnCredential{
 		TenantID: 2, UserID: 42, CredentialID: "cred-2", PublicKey: []byte{2}, Name: "Other tenant",
 	}))
 
@@ -318,7 +341,8 @@ func TestWebAuthnCredentialManagementHandlers(t *testing.T) {
 }
 
 func TestWebAuthnHandlersWithoutConfiguration(t *testing.T) {
-	handler := NewAuthHandler(newHandlerService(t), config.AuthConfig{}, nil, nil, config.CaptchaConfig{})
+	svc := application.NewPasskeyService(application.Deps{Users: &handlerUserRepo{}})
+	handler := NewPasskeyHandler(svc, config.AuthConfig{}, nil)
 
 	cases := []struct {
 		name string
@@ -333,5 +357,65 @@ func TestWebAuthnHandlersWithoutConfiguration(t *testing.T) {
 			assert.Equal(t, http.StatusInternalServerError, w.Code)
 			assert.Equal(t, float64(apperrors.CodeInternalError), decodeBody(t, w)["code"])
 		})
+	}
+}
+
+// ---- 限流 Redis 替身（redis.Scripter） ----
+
+type routerLimiterRedis struct {
+	counts map[string]int
+}
+
+func (r *routerLimiterRedis) Eval(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd {
+	return r.eval(keys, args...)
+}
+
+func (r *routerLimiterRedis) EvalSha(ctx context.Context, sha1 string, keys []string, args ...interface{}) *redis.Cmd {
+	return r.eval(keys, args...)
+}
+
+func (r *routerLimiterRedis) EvalRO(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd {
+	return r.eval(keys, args...)
+}
+
+func (r *routerLimiterRedis) EvalShaRO(ctx context.Context, sha1 string, keys []string, args ...interface{}) *redis.Cmd {
+	return r.eval(keys, args...)
+}
+
+func (r *routerLimiterRedis) ScriptExists(ctx context.Context, hashes ...string) *redis.BoolSliceCmd {
+	exists := make([]bool, len(hashes))
+	for i := range exists {
+		exists[i] = true
+	}
+	return redis.NewBoolSliceResult(exists, nil)
+}
+
+func (r *routerLimiterRedis) ScriptLoad(ctx context.Context, script string) *redis.StringCmd {
+	return redis.NewStringResult("fake-script", nil)
+}
+
+func (r *routerLimiterRedis) eval(keys []string, args ...interface{}) *redis.Cmd {
+	if len(keys) != 1 || len(args) != 2 {
+		return redis.NewCmdResult(nil, fmt.Errorf("unexpected limiter call"))
+	}
+	limit, err := routerLimiterInt(args[1])
+	if err != nil {
+		return redis.NewCmdResult(nil, err)
+	}
+	r.counts[keys[0]]++
+	if r.counts[keys[0]] > limit {
+		return redis.NewCmdResult(int64(0), nil)
+	}
+	return redis.NewCmdResult(int64(1), nil)
+}
+
+func routerLimiterInt(v interface{}) (int, error) {
+	switch n := v.(type) {
+	case int:
+		return n, nil
+	case int64:
+		return int(n), nil
+	default:
+		return 0, fmt.Errorf("unexpected arg type %T", v)
 	}
 }

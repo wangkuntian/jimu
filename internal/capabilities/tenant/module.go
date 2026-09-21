@@ -12,23 +12,37 @@ import (
 )
 
 type Module struct {
-	service *application.TenantService
-	plans   *application.PlanService
-	quota   *application.QuotaService
+	service     *application.TenantService
+	plans       *application.PlanService
+	quota       *application.QuotaService
+	provisioner *application.GormTenantProvisioner
 }
 
-func New(db *gorm.DB, _ config.Config) *Module {
+func New(db *gorm.DB, cfg config.Config) *Module {
 	repo := infrastructure.NewMysqlRepository(db)
 	quotaRepo := infrastructure.NewMysqlQuotaRepository(db)
-	return &Module{
+	m := &Module{
 		service: application.NewTenantService(repo),
 		plans:   application.NewPlanService(infrastructure.NewMysqlPlanRepository(db), quotaRepo),
 		quota:   application.NewQuotaService(quotaRepo),
 	}
+	// 开通式注册（注册 = 开通新租户）：启用时暴露 provisioner 供 auth 经端口消费
+	if cfg.Auth.Provisioning.Enabled {
+		m.provisioner = application.NewGormTenantProvisioner(db, cfg.Auth.Provisioning)
+	}
+	return m
 }
 
 // Quota 暴露配额校验服务，供用户/角色/API Key 创建路径注入
 func (m *Module) Quota() *application.QuotaService { return m.quota }
+
+// Provisioner 实现 contract.TenantProvisioner；未启用开通式注册时返回 nil。
+func (m *Module) Provisioner() contract.TenantProvisioner {
+	if m.provisioner == nil {
+		return nil
+	}
+	return m.provisioner
+}
 
 func (m *Module) Name() string {
 	return "tenant"

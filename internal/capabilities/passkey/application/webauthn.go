@@ -10,13 +10,16 @@ import (
 	"strings"
 	"time"
 
-	authdomain "jimu/internal/capabilities/auth/domain"
+	passkeydomain "jimu/internal/capabilities/passkey/domain"
+	"jimu/internal/contract"
+	redistore "jimu/internal/kernel/redis"
 	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 const (
@@ -27,6 +30,8 @@ const (
 	// webAuthnCeremonyRegister / webAuthnCeremonyLogin 会话绑定的仪式类型，避免注册会话被用于登录
 	webAuthnCeremonyRegister = "register"
 	webAuthnCeremonyLogin    = "login"
+	// deviceLabelMaxLen 凭证名称截断上限
+	deviceLabelMaxLen = 64
 )
 
 // webAuthnSession 一次 WebAuthn 仪式的服务端状态：库的 SessionData + 归属校验信息。
@@ -51,11 +56,38 @@ type WebAuthnCredentialInfo struct {
 	CreatedAt      time.Time  `json:"created_at"`
 }
 
-// webAuthnSessionTTL 注入挑战有效期的 dep
-type webAuthnSessionTTL time.Duration
+// PasskeyService 通行密钥（WebAuthn）用例：无密码登录与凭证管理。
+// 登录收尾（令牌/会话/登录历史/锁定）经 contract.LoginFinalizer 委托 auth 能力。
+type PasskeyService struct {
+	users      contract.UserinfoSource
+	creds      passkeydomain.WebAuthnCredentialRepository
+	webauthn   *webauthn.WebAuthn
+	rdb        redistore.Client
+	sessionTTL time.Duration
+	finalizer  contract.LoginFinalizer
+}
 
-// WithWebAuthnSessionTTL 返回注入 WebAuthn 挑战有效期的 dep（0=用默认 5 分钟）
-func WithWebAuthnSessionTTL(ttl time.Duration) interface{} { return webAuthnSessionTTL(ttl) }
+// Deps PasskeyService 的显式依赖。
+type Deps struct {
+	Users       contract.UserinfoSource
+	Credentials passkeydomain.WebAuthnCredentialRepository
+	WebAuthn    *webauthn.WebAuthn
+	Redis       redistore.Client
+	SessionTTL  time.Duration
+	Finalizer   contract.LoginFinalizer
+}
+
+// NewPasskeyService 创建通行密钥服务。
+func NewPasskeyService(deps Deps) *PasskeyService {
+	return &PasskeyService{
+		users:      deps.Users,
+		creds:      deps.Credentials,
+		webauthn:   deps.WebAuthn,
+		rdb:        deps.Redis,
+		sessionTTL: deps.SessionTTL,
+		finalizer:  deps.Finalizer,
+	}
+}
 
 // webAuthnUser 适配库的 webauthn.User 接口
 type webAuthnUser struct {
@@ -78,7 +110,7 @@ func webauthnUserHandle(userID uint64) []byte {
 }
 
 // BeginWebAuthnRegistration 开始注册通行密钥（需已登录）：返回 options 与 session_id。
-func (s *AuthService) BeginWebAuthnRegistration(ctx context.Context, userID uint64, name string) (*protocol.CredentialCreation, string, error) {
+func (s *PasskeyService) BeginWebAuthnRegistration(ctx context.Context, userID uint64, name string) (*protocol.CredentialCreation, string, error) {
 	if err := s.webAuthnReady(); err != nil {
 		return nil, "", err
 	}
@@ -111,7 +143,7 @@ func (s *AuthService) BeginWebAuthnRegistration(ctx context.Context, userID uint
 }
 
 // FinishWebAuthnRegistration 完成注册：校验证明并落库凭证。body 为浏览器返回的凭证 JSON。
-func (s *AuthService) FinishWebAuthnRegistration(ctx context.Context, userID uint64, sessionID string, body []byte) (*WebAuthnCredentialInfo, error) {
+func (s *PasskeyService) FinishWebAuthnRegistration(ctx context.Context, userID uint64, sessionID string, body []byte) (*WebAuthnCredentialInfo, error) {
 	if err := s.webAuthnReady(); err != nil {
 		return nil, err
 	}
@@ -142,12 +174,12 @@ func (s *AuthService) FinishWebAuthnRegistration(ctx context.Context, userID uin
 }
 
 // BeginWebAuthnLogin 开始无密码登录：按用户名返回 allowCredentials 断言与 session_id。
-func (s *AuthService) BeginWebAuthnLogin(ctx context.Context, username string) (*protocol.CredentialAssertion, string, error) {
+func (s *PasskeyService) BeginWebAuthnLogin(ctx context.Context, username string) (*protocol.CredentialAssertion, string, error) {
 	if err := s.webAuthnReady(); err != nil {
 		return nil, "", err
 	}
 	normalized := normalizeUsername(username)
-	user, err := s.userRepo.FindByUsername(ctx, normalized)
+	user, err := s.users.FindByUsername(ctx, normalized)
 	if err != nil || user.Status != 1 {
 		// 不区分「用户不存在」与「用户禁用」，避免用户名枚举
 		return nil, "", invalidCredentials()
@@ -178,9 +210,9 @@ func (s *AuthService) BeginWebAuthnLogin(ctx context.Context, username string) (
 	return assertion, sessionID, nil
 }
 
-// FinishWebAuthnLogin 完成无密码登录：验签通过后签发 token。
+// FinishWebAuthnLogin 完成无密码登录：验签通过后经 auth 的 LoginFinalizer 签发 token。
 // 通行密钥是抗钓鱼的强因子，因此不再要求密码；TOTP 亦不叠加（其强度低于通行密钥）。
-func (s *AuthService) FinishWebAuthnLogin(ctx context.Context, sessionID string, body []byte) (*authdomain.TokenPair, error) {
+func (s *PasskeyService) FinishWebAuthnLogin(ctx context.Context, sessionID string, body []byte) (*contract.TokenPair, error) {
 	if err := s.webAuthnReady(); err != nil {
 		return nil, err
 	}
@@ -189,18 +221,18 @@ func (s *AuthService) FinishWebAuthnLogin(ctx context.Context, sessionID string,
 		return nil, err
 	}
 
-	user, err := s.userRepo.FindByID(ctx, session.UserID)
+	user, err := s.users.GetByID(ctx, session.UserID)
 	if err != nil || user.Status != 1 {
 		return nil, invalidCredentials()
 	}
-	if s.lockout != nil {
-		locked, remaining, err := s.lockout.CheckLocked(ctx, user.Username)
+	if s.finalizer != nil {
+		locked, remaining, err := s.finalizer.CheckLocked(ctx, user.Username)
 		if err != nil {
 			return nil, errors.Wrap(errors.CodeInternalError, "lockout check failed", err)
 		}
 		if locked {
-			s.recordLoginHistory(ctx, user.ID, user.TenantID, user.Username, authdomain.LoginStatusLocked, "account locked")
-			return nil, ErrAccountLocked(remaining)
+			s.finalizer.RecordLoginHistory(ctx, user.ID, user.TenantID, user.Username, contract.LoginStatusLocked, "account locked")
+			return nil, errors.AccountLocked(remaining)
 		}
 	}
 
@@ -210,14 +242,12 @@ func (s *AuthService) FinishWebAuthnLogin(ctx context.Context, sessionID string,
 	}
 	parsed, err := protocol.ParseCredentialRequestResponseBody(bytes.NewReader(body))
 	if err != nil {
-		s.recordFailure(ctx, user.Username)
-		s.recordLoginHistory(ctx, user.ID, user.TenantID, user.Username, authdomain.LoginStatusFailed, "invalid webauthn assertion")
+		s.recordFailure(ctx, user.ID, user.TenantID, user.Username)
 		return nil, errors.Wrap(errors.CodeWebAuthnVerificationFailed, "invalid webauthn login response", err)
 	}
 	updated, err := s.webauthn.ValidateLogin(waUser, session.Data, parsed)
 	if err != nil {
-		s.recordFailure(ctx, user.Username)
-		s.recordLoginHistory(ctx, user.ID, user.TenantID, user.Username, authdomain.LoginStatusFailed, "webauthn verification failed")
+		s.recordFailure(ctx, user.ID, user.TenantID, user.Username)
 		return nil, errors.Wrap(errors.CodeWebAuthnVerificationFailed, "webauthn login verification failed", err)
 	}
 
@@ -225,18 +255,24 @@ func (s *AuthService) FinishWebAuthnLogin(ctx context.Context, sessionID string,
 	if err := s.touchWebAuthnCredential(ctx, updated); err != nil {
 		return nil, err
 	}
-	if s.lockout != nil {
-		_ = s.lockout.Reset(ctx, user.Username)
+	return s.finalizer.FinalizeLogin(ctx, user.ID)
+}
+
+// recordFailure 记录一次失败登录（锁定计数 + 登录历史）；finalizer 未配置时跳过。
+func (s *PasskeyService) recordFailure(ctx context.Context, userID, tenantID uint64, username string) {
+	if s.finalizer == nil {
+		return
 	}
-	return s.finishLogin(ctx, user)
+	s.finalizer.RecordFailure(ctx, username)
+	s.finalizer.RecordLoginHistory(ctx, userID, tenantID, username, contract.LoginStatusFailed, "webauthn verification failed")
 }
 
 // ListWebAuthnCredentials 列出当前用户的通行密钥（按上下文租户隔离）
-func (s *AuthService) ListWebAuthnCredentials(ctx context.Context, userID uint64) ([]WebAuthnCredentialInfo, error) {
+func (s *PasskeyService) ListWebAuthnCredentials(ctx context.Context, userID uint64) ([]WebAuthnCredentialInfo, error) {
 	if err := s.webAuthnReady(); err != nil {
 		return nil, err
 	}
-	credentials, err := s.webauthnCreds.ListByUser(ctx, tenant.FromContext(ctx), userID)
+	credentials, err := s.creds.ListByUser(ctx, tenant.FromContext(ctx), userID)
 	if err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to list webauthn credentials", err)
 	}
@@ -248,7 +284,7 @@ func (s *AuthService) ListWebAuthnCredentials(ctx context.Context, userID uint64
 }
 
 // RenameWebAuthnCredential 重命名通行密钥
-func (s *AuthService) RenameWebAuthnCredential(ctx context.Context, userID, id uint64, name string) error {
+func (s *PasskeyService) RenameWebAuthnCredential(ctx context.Context, userID, id uint64, name string) error {
 	if err := s.webAuthnReady(); err != nil {
 		return err
 	}
@@ -256,41 +292,41 @@ func (s *AuthService) RenameWebAuthnCredential(ctx context.Context, userID, id u
 	if name == "" {
 		return errors.New(errors.CodeInvalidParam, "name is required")
 	}
-	if err := s.webauthnCreds.UpdateName(ctx, tenant.FromContext(ctx), userID, id, name); err != nil {
+	if err := s.creds.UpdateName(ctx, tenant.FromContext(ctx), userID, id, name); err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to rename webauthn credential", err)
 	}
 	return nil
 }
 
 // DeleteWebAuthnCredential 删除通行密钥
-func (s *AuthService) DeleteWebAuthnCredential(ctx context.Context, userID, id uint64) error {
+func (s *PasskeyService) DeleteWebAuthnCredential(ctx context.Context, userID, id uint64) error {
 	if err := s.webAuthnReady(); err != nil {
 		return err
 	}
-	if err := s.webauthnCreds.Delete(ctx, tenant.FromContext(ctx), userID, id); err != nil {
+	if err := s.creds.Delete(ctx, tenant.FromContext(ctx), userID, id); err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to delete webauthn credential", err)
 	}
 	return nil
 }
 
 // webAuthnReady 检查 WebAuthn 是否已配置
-func (s *AuthService) webAuthnReady() error {
-	if s.webauthn == nil || s.webauthnCreds == nil {
+func (s *PasskeyService) webAuthnReady() error {
+	if s.webauthn == nil || s.creds == nil {
 		return errors.New(errors.CodeInternalError, "webauthn is not configured")
 	}
 	return nil
 }
 
 // loadWebAuthnUser 装配库所需的用户与凭证集合
-func (s *AuthService) loadWebAuthnUser(ctx context.Context, userID uint64) (*webAuthnUser, error) {
-	user, err := s.userRepo.FindByID(ctx, userID)
+func (s *PasskeyService) loadWebAuthnUser(ctx context.Context, userID uint64) (*webAuthnUser, error) {
+	user, err := s.users.GetByID(ctx, userID)
 	if err != nil {
 		if isNotFound(err) {
 			return nil, errors.Wrap(errors.CodeUserNotFound, "user not found", err)
 		}
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to load user", err)
 	}
-	stored, err := s.webauthnCreds.ListByUser(ctx, 0, userID)
+	stored, err := s.creds.ListByUser(ctx, 0, userID)
 	if err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to load webauthn credentials", err)
 	}
@@ -302,12 +338,12 @@ func (s *AuthService) loadWebAuthnUser(ctx context.Context, userID uint64) (*web
 }
 
 // saveWebAuthnCredential 把库返回的凭证转换为领域对象并落库
-func (s *AuthService) saveWebAuthnCredential(ctx context.Context, userID, tenantID uint64, name string, credential *webauthn.Credential) (*authdomain.WebAuthnCredential, error) {
+func (s *PasskeyService) saveWebAuthnCredential(ctx context.Context, userID, tenantID uint64, name string, credential *webauthn.Credential) (*passkeydomain.WebAuthnCredential, error) {
 	transports, err := json.Marshal(credential.Transport)
 	if err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to marshal credential transports", err)
 	}
-	stored := &authdomain.WebAuthnCredential{
+	stored := &passkeydomain.WebAuthnCredential{
 		TenantID:          tenantID,
 		UserID:            userID,
 		CredentialID:      base64.RawURLEncoding.EncodeToString(credential.ID),
@@ -323,29 +359,29 @@ func (s *AuthService) saveWebAuthnCredential(ctx context.Context, userID, tenant
 		UserVerified:      credential.Flags.UserVerified,
 		Name:              name,
 	}
-	if err := s.webauthnCreds.Create(ctx, stored); err != nil {
+	if err := s.creds.Create(ctx, stored); err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to store webauthn credential", err)
 	}
 	return stored, nil
 }
 
 // touchWebAuthnCredential 回写登录后的签名计数器与备份状态
-func (s *AuthService) touchWebAuthnCredential(ctx context.Context, credential *webauthn.Credential) error {
-	stored, err := s.webauthnCreds.FindByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credential.ID))
+func (s *PasskeyService) touchWebAuthnCredential(ctx context.Context, credential *webauthn.Credential) error {
+	stored, err := s.creds.FindByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credential.ID))
 	if err != nil {
 		if isNotFound(err) {
 			return errors.New(errors.CodeWebAuthnVerificationFailed, "webauthn credential not found")
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to load webauthn credential", err)
 	}
-	if err := s.webauthnCreds.Touch(ctx, stored.ID, credential.Authenticator.SignCount, credential.Flags.BackupState, time.Now()); err != nil {
+	if err := s.creds.Touch(ctx, stored.ID, credential.Authenticator.SignCount, credential.Flags.BackupState, time.Now()); err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to update webauthn credential", err)
 	}
 	return nil
 }
 
 // storeWebAuthnSession 写入一次性挑战会话，返回客户端可见的 session_id
-func (s *AuthService) storeWebAuthnSession(ctx context.Context, session webAuthnSession) (string, error) {
+func (s *PasskeyService) storeWebAuthnSession(ctx context.Context, session webAuthnSession) (string, error) {
 	payload, err := json.Marshal(session)
 	if err != nil {
 		return "", errors.Wrap(errors.CodeInternalError, "failed to marshal webauthn session", err)
@@ -358,7 +394,7 @@ func (s *AuthService) storeWebAuthnSession(ctx context.Context, session webAuthn
 }
 
 // consumeWebAuthnSession 读取并删除挑战会话；校验仪式类型与（注册时的）用户归属。
-func (s *AuthService) consumeWebAuthnSession(ctx context.Context, sessionID, ceremony string, userID uint64) (*webAuthnSession, error) {
+func (s *PasskeyService) consumeWebAuthnSession(ctx context.Context, sessionID, ceremony string, userID uint64) (*webAuthnSession, error) {
 	if sessionID == "" {
 		return nil, errors.New(errors.CodeInvalidParam, "session_id is required")
 	}
@@ -390,15 +426,15 @@ func (s *AuthService) consumeWebAuthnSession(ctx context.Context, sessionID, cer
 }
 
 // webAuthnTTL 挑战有效期（配置为空时用默认 5 分钟）
-func (s *AuthService) webAuthnTTL() time.Duration {
-	if s.webauthnSessionTTL > 0 {
-		return s.webauthnSessionTTL
+func (s *PasskeyService) webAuthnTTL() time.Duration {
+	if s.sessionTTL > 0 {
+		return s.sessionTTL
 	}
 	return defaultWebAuthnSessionTTL
 }
 
 // toLibraryCredential 领域对象 → 库凭证（登录验签需要公钥与计数器）
-func toLibraryCredential(stored authdomain.WebAuthnCredential) webauthn.Credential {
+func toLibraryCredential(stored passkeydomain.WebAuthnCredential) webauthn.Credential {
 	id, err := base64.RawURLEncoding.DecodeString(stored.CredentialID)
 	if err != nil {
 		// 存储的凭证 ID 一定由本服务写入；解码失败说明数据被篡改，用空 ID 让库直接拒绝
@@ -432,7 +468,7 @@ func toLibraryCredential(stored authdomain.WebAuthnCredential) webauthn.Credenti
 }
 
 // toWebAuthnCredentialInfo 领域对象 → 对外信息
-func toWebAuthnCredentialInfo(stored authdomain.WebAuthnCredential) WebAuthnCredentialInfo {
+func toWebAuthnCredentialInfo(stored passkeydomain.WebAuthnCredential) WebAuthnCredentialInfo {
 	return WebAuthnCredentialInfo{
 		ID:             stored.ID,
 		Name:           stored.Name,
@@ -443,4 +479,25 @@ func toWebAuthnCredentialInfo(stored authdomain.WebAuthnCredential) WebAuthnCred
 		LastUsedAt:     stored.LastUsedAt,
 		CreatedAt:      stored.CreatedAt,
 	}
+}
+
+// isNotFound 判断 gorm 未找到记录或端口未找到。
+func isNotFound(err error) bool {
+	return err == gorm.ErrRecordNotFound || err == contract.ErrNotFound
+}
+
+func normalizeUsername(username string) string {
+	return strings.ToLower(strings.TrimSpace(username))
+}
+
+func invalidCredentials() error {
+	return errors.New(errors.CodeInvalidCredentials, "invalid credentials")
+}
+
+// truncateString 截断字符串到最大长度。
+func truncateString(s string, max int) string {
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	return s[:max]
 }

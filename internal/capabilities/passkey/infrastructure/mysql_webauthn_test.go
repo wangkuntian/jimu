@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	authdomain "jimu/internal/capabilities/auth/domain"
+	authdomain "jimu/internal/capabilities/passkey/domain"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"

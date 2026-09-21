@@ -23,16 +23,6 @@ type loginRequest struct {
 	TenantCode string `json:"tenant_code,omitempty" binding:"omitempty,max=64"`
 }
 
-// enableTOTPRequest 启用 TOTP 请求参数（先用 SetupTOTP 获取密钥，再用本接口确认）
-type enableTOTPRequest struct {
-	Code string `json:"code" binding:"required,len=6"`
-}
-
-// disableTOTPRequest 关闭 TOTP 请求参数
-type disableTOTPRequest struct {
-	Code string `json:"code" binding:"required,len=6"`
-}
-
 // refreshRequest 刷新 Token 请求参数
 type refreshRequest struct {
 	// 刷新令牌（从登录或刷新接口获取）

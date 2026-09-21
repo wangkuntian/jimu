@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"jimu/internal/capabilities/auth/domain"
+	"jimu/internal/capabilities/passkey/domain"
 
 	"gorm.io/gorm"
 )

@@ -11,19 +11,15 @@ import (
 	"time"
 
 	authdomain "jimu/internal/capabilities/auth/domain"
-	"jimu/internal/capabilities/breach"
 	"jimu/internal/capabilities/encryption"
 	"jimu/internal/capabilities/notification"
 	"jimu/internal/capabilities/outbox"
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
-	redistore "jimu/internal/kernel/redis"
 	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
-	"jimu/internal/shared/totp"
 
-	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -42,17 +38,11 @@ type AuthService struct {
 	loginHistory         authdomain.LoginHistoryRepository    // 登录历史（nil=不记录）
 	passwordHistory      authdomain.PasswordHistoryRepository // 密码历史（nil=不做防复用检查）
 	passwordHistoryCount int
-	trustedDevices       authdomain.TrustedDeviceRepository // 可信设备（nil=不支持跳过 TOTP）
-	trustedDeviceDays    int
-	resetGen             func() string     // 验证码生成器（测试注入）
-	issuer               string            // TOTP otpauth URI 的 issuer
-	provisioner          TenantProvisioner // 开通式注册（nil = 未启用，注册仅建普通用户）
-	breachChecker        breach.Checker    // 泄露口令检查（nil = 未启用）
-	quota                TenantQuota       // 租户配额（nil = 未启用）
-	rdb                  redistore.Client  // Redis（WebAuthn 挑战会话等）
-	webauthn             *webauthn.WebAuthn
-	webauthnCreds        authdomain.WebAuthnCredentialRepository // nil = 未启用 WebAuthn
-	webauthnSessionTTL   time.Duration
+	resetGen             func() string              // 验证码生成器（测试注入）
+	provisioner          contract.TenantProvisioner // 开通式注册（nil = 未启用，注册仅建普通用户）
+	breachChecker        contract.BreachChecker     // 泄露口令检查（nil = 未启用）
+	quota                TenantQuota                // 租户配额（nil = 未启用）
+	mfa                  contract.MFAVerifier       // 二次验证 + 可信设备（nil = 未启用）
 }
 
 func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int, deps ...interface{}) *AuthService {
@@ -73,42 +63,24 @@ func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessi
 			s.notifier = d
 		case *ResetStore:
 			s.resetStore = d
-		case totpIssuer:
-			s.issuer = string(d)
-		case TenantProvisioner:
+		case contract.TenantProvisioner:
 			s.provisioner = d
-		case breach.Checker:
+		case contract.BreachChecker:
 			s.breachChecker = d
 		case TenantQuota:
 			s.quota = d
-		case redistore.Client:
-			s.rdb = d
-		case *webauthn.WebAuthn:
-			s.webauthn = d
-		case authdomain.WebAuthnCredentialRepository:
-			s.webauthnCreds = d
-		case webAuthnSessionTTL:
-			s.webauthnSessionTTL = time.Duration(d)
+		case contract.MFAVerifier:
+			s.mfa = d
 		case authdomain.LoginHistoryRepository:
 			s.loginHistory = d
 		case authdomain.PasswordHistoryRepository:
 			s.passwordHistory = d
 		case passwordHistoryCount:
 			s.passwordHistoryCount = int(d)
-		case authdomain.TrustedDeviceRepository:
-			s.trustedDevices = d
-		case trustedDeviceTTLDays:
-			s.trustedDeviceDays = int(d)
 		}
 	}
 	return s
 }
-
-// totpIssuer 注入 TOTP otpauth URI 的 issuer（默认 jimu）。
-type totpIssuer string
-
-// WithIssuer 返回注入 issuer 的 dep，供 NewAuthService 使用。
-func WithIssuer(issuer string) interface{} { return totpIssuer(issuer) }
 
 func (s *AuthService) Login(ctx context.Context, username, password string) (*authdomain.TokenPair, error) {
 	// 兼容入口：不提供 TOTP 码。用户启用 TOTP 时返回 CodeMFARequired 提示二次验证。
@@ -128,7 +100,7 @@ func (s *AuthService) LoginWithTOTP(ctx context.Context, username, password, tot
 		}
 		if locked {
 			s.recordLoginHistory(ctx, 0, 0, normalized, authdomain.LoginStatusLocked, "account locked")
-			return nil, ErrAccountLocked(remaining)
+			return nil, errors.AccountLocked(remaining)
 		}
 	}
 
@@ -150,21 +122,22 @@ func (s *AuthService) LoginWithTOTP(ctx context.Context, username, password, tot
 		return nil, invalidCredentials()
 	}
 
-	// TOTP 校验：用户启用后必须提供有效验证码；携带该用户的可信设备令牌时可跳过
-	if user.TOTPEnabled {
-		skipTOTP := false
-		if totpCode == "" {
-			skipTOTP = s.isTrustedDevice(ctx, user)
+	// TOTP 校验：用户启用后必须提供有效验证码；携带该用户的可信设备令牌时可跳过。
+	// 判定与校验全部委托 mfa 能力（contract.MFAVerifier），auth 不感知密钥存储。
+	if s.mfa != nil {
+		mfaEnabled, mfaErr := s.mfa.Enabled(ctx, user.ID)
+		if mfaErr != nil {
+			return nil, errors.Wrap(errors.CodeInternalError, "mfa state check failed", mfaErr)
 		}
-		if !skipTOTP {
-			if totpCode == "" {
-				s.recordLoginHistory(ctx, user.ID, user.TenantID, normalized, authdomain.LoginStatusFailed, "totp code required")
-				return nil, errors.New(errors.CodeMFARequired, "TOTP code required")
-			}
-			if !totp.Validate(user.TOTPSecret, totpCode, time.Now(), totp.DefaultPeriod, totp.DefaultDigits, totp.DefaultSkew) {
-				s.recordFailure(ctx, normalized)
-				s.recordLoginHistory(ctx, user.ID, user.TenantID, normalized, authdomain.LoginStatusFailed, "invalid totp code")
-				return nil, errors.New(errors.CodeInvalidMFA, "invalid TOTP code")
+		if mfaEnabled {
+			if err := s.mfa.VerifyTOTP(ctx, user.ID, user.TenantID, totpCode); err != nil {
+				if appErr, ok := err.(*errors.AppError); ok && appErr.Code == errors.CodeInvalidMFA {
+					s.recordFailure(ctx, normalized)
+					s.recordLoginHistory(ctx, user.ID, user.TenantID, normalized, authdomain.LoginStatusFailed, "invalid totp code")
+				} else {
+					s.recordLoginHistory(ctx, user.ID, user.TenantID, normalized, authdomain.LoginStatusFailed, "totp code required")
+				}
+				return nil, err
 			}
 		}
 	}
@@ -179,22 +152,13 @@ func (s *AuthService) LoginWithTOTP(ctx context.Context, username, password, tot
 		return nil, err
 	}
 	// 「记住此设备」：仅在启用 TOTP 的账号上签发；签发失败不影响登录
-	if user.TOTPEnabled && clientInfoFrom(ctx).RememberDevice && s.trustedDevices != nil && s.trustedDeviceDays > 0 {
-		token, issueErr := s.issueTrustedDevice(ctx, user)
-		if issueErr != nil {
-			log.Printf("auth: issue trusted device for user %d: %v", user.ID, issueErr)
-		} else {
+	if s.mfa != nil {
+		if token := s.mfa.MaybeIssueDevice(ctx, user.ID, user.TenantID); token != "" {
 			pair.DeviceToken = token
 		}
 	}
 	return pair, nil
 }
-
-// trustedDeviceTTLDays 注入可信设备有效期（天）的 dep。
-type trustedDeviceTTLDays int
-
-// WithTrustedDeviceTTL 返回注入可信设备有效期的 dep，供 NewAuthService 使用（0=关闭该能力）。
-func WithTrustedDeviceTTL(days int) interface{} { return trustedDeviceTTLDays(days) }
 
 // finishLogin 校验通过后的公共登录收尾：签发 token + 建会话 + Outbox 事件。
 func (s *AuthService) finishLogin(ctx context.Context, user *userdomain.User) (*authdomain.TokenPair, error) {
@@ -288,7 +252,8 @@ type RegisterTenantRequest struct {
 
 // RegisterProvisioned 开通式注册（auth.provisioning.enabled）：单事务创建
 // 新租户 + owner 用户 + 模板角色与权限绑定。未启用时返回参数错误。
-func (s *AuthService) RegisterProvisioned(ctx context.Context, req RegisterTenantRequest) (*ProvisionResult, error) {
+// 实际开通事务由 tenant 能力经 contract.TenantProvisioner 端口执行。
+func (s *AuthService) RegisterProvisioned(ctx context.Context, req RegisterTenantRequest) (*contract.ProvisionResult, error) {
 	if s.provisioner == nil {
 		return nil, errors.New(errors.CodeInvalidParam, "tenant provisioning is disabled")
 	}
@@ -306,7 +271,7 @@ func (s *AuthService) RegisterProvisioned(ctx context.Context, req RegisterTenan
 	if err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to hash password", err)
 	}
-	return s.provisioner.Provision(ctx, ProvisionParams{
+	return s.provisioner.Provision(ctx, contract.ProvisionRequest{
 		Username:     username,
 		PasswordHash: string(hashedPassword),
 		Email:        req.Email,
@@ -399,7 +364,9 @@ func (s *AuthService) ResetPassword(ctx context.Context, email, code, newPasswor
 	// 记录被替换掉的旧密码，供后续防复用检查
 	s.recordPasswordHistory(ctx, user)
 	// 改密后吊销全部可信设备：旧设备不得继续跳过 TOTP
-	s.revokeTrustedDevicesQuietly(ctx, user.ID)
+	if s.mfa != nil {
+		s.mfa.RevokeDevices(ctx, user.ID)
+	}
 	if s.sessions != nil {
 		_ = s.sessions.RevokeAll(ctx, user.ID)
 	}
@@ -465,73 +432,6 @@ func (s *AuthService) recordPasswordHistory(ctx context.Context, user *userdomai
 	}
 }
 
-// SetupTOTP 为用户生成新的 TOTP 密钥并返回 otpauth URI（未启用，需 EnableTOTP 确认）。
-// 重复调用会轮换密钥（旧密钥立即失效）。
-// 返回数据仅此一次全量可见，调用方应在确认启用前保存 secret。
-func (s *AuthService) SetupTOTP(ctx context.Context, userID uint64, account string) (secret string, uri string, err error) {
-	if account == "" {
-		// 未显式提供 account 时用用户名兜底（otpauth URI 的可读标识）
-		if u, loadErr := s.userRepo.FindByID(ctx, userID); loadErr == nil && u != nil {
-			account = u.Username
-		}
-	}
-	secret, err = totp.Secret()
-	if err != nil {
-		return "", "", errors.Wrap(errors.CodeInternalError, "failed to generate totp secret", err)
-	}
-	// 保存密钥但暂不启用（enabled=false），等待 EnableTOTP 用首次验证码确认
-	if err := s.userRepo.UpdateTOTP(ctx, userID, secret, false); err != nil {
-		return "", "", errors.Wrap(errors.CodeInternalError, "failed to save totp secret", err)
-	}
-	issuer := "jimu"
-	if s.issuer != "" {
-		issuer = s.issuer
-	}
-	return secret, totp.ProvisioningURI(secret, account, issuer), nil
-}
-
-// EnableTOTP 用首次生成的验证码确认启用 TOTP。码验证通过后方可开启，防误绑。
-func (s *AuthService) EnableTOTP(ctx context.Context, userID uint64, code string) error {
-	if code == "" {
-		return errors.New(errors.CodeMFARequired, "TOTP code required")
-	}
-	user, err := s.userRepo.FindByID(ctx, userID)
-	if err != nil {
-		return errors.Wrap(errors.CodeInternalError, "failed to load user", err)
-	}
-	if user.TOTPSecret == "" {
-		return errors.New(errors.CodeInvalidMFA, "TOTP not set up, call setup first")
-	}
-	if !totp.Validate(user.TOTPSecret, code, time.Now(), totp.DefaultPeriod, totp.DefaultDigits, totp.DefaultSkew) {
-		return errors.New(errors.CodeInvalidMFA, "invalid TOTP code")
-	}
-	if err := s.userRepo.UpdateTOTP(ctx, userID, user.TOTPSecret, true); err != nil {
-		return errors.Wrap(errors.CodeInternalError, "failed to enable totp", err)
-	}
-	return nil
-}
-
-// DisableTOTP 校验当前验证码后关闭 TOTP 并清除密钥。
-func (s *AuthService) DisableTOTP(ctx context.Context, userID uint64, code string) error {
-	if code == "" {
-		return errors.New(errors.CodeMFARequired, "TOTP code required")
-	}
-	user, err := s.userRepo.FindByID(ctx, userID)
-	if err != nil {
-		return errors.Wrap(errors.CodeInternalError, "failed to load user", err)
-	}
-	if !user.TOTPEnabled || user.TOTPSecret == "" {
-		return errors.New(errors.CodeInvalidMFA, "TOTP not enabled")
-	}
-	if !totp.Validate(user.TOTPSecret, code, time.Now(), totp.DefaultPeriod, totp.DefaultDigits, totp.DefaultSkew) {
-		return errors.New(errors.CodeInvalidMFA, "invalid TOTP code")
-	}
-	if err := s.userRepo.UpdateTOTP(ctx, userID, "", false); err != nil {
-		return errors.Wrap(errors.CodeInternalError, "failed to disable totp", err)
-	}
-	return nil
-}
-
 // generateResetCode 生成 6 位数字验证码（crypto/rand；测试可注入 resetGen）
 func (s *AuthService) generateResetCode() string {
 	if s.resetGen != nil {
@@ -588,7 +488,9 @@ func (s *AuthService) LogoutAll(ctx context.Context, userID uint64) error {
 		return errors.Wrap(errors.CodeInternalError, "failed to revoke sessions", err)
 	}
 	// 登出全部设备同时吊销可信设备，避免遗留可跳过 TOTP 的凭证
-	s.revokeTrustedDevicesQuietly(ctx, userID)
+	if s.mfa != nil {
+		s.mfa.RevokeDevices(ctx, userID)
+	}
 	return nil
 }
 
@@ -627,11 +529,47 @@ func invalidCredentials() error {
 	return errors.New(errors.CodeInvalidCredentials, "invalid credentials")
 }
 
-// ErrAccountLocked 返回账号锁定错误，message 包含剩余锁定时间
-func ErrAccountLocked(remaining time.Duration) error {
-	minutes := int(remaining.Minutes())
-	if minutes < 1 {
-		minutes = 1
+// ---- contract.LoginFinalizer 实现：供 passkey 无密码登录复用登录收尾 ----
+
+// FinalizeLogin 为已验证用户签发令牌、建会话、记登录历史、发事件。
+// 返回视图不含 device_token（passkey 不签发可信设备）。
+func (s *AuthService) FinalizeLogin(ctx context.Context, userID uint64) (*contract.TokenPair, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil || user.Status != 1 {
+		return nil, invalidCredentials()
 	}
-	return errors.New(errors.CodeForbidden, fmt.Sprintf("account locked due to too many failed attempts, try again in %d minutes", minutes))
+	pair, err := s.finishLogin(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+	return &contract.TokenPair{
+		AccessToken:  pair.AccessToken,
+		RefreshToken: pair.RefreshToken,
+		ExpiresIn:    pair.ExpiresIn,
+	}, nil
+}
+
+// CheckLocked 登录前的失败锁定检查（未锁定返回 false）。
+func (s *AuthService) CheckLocked(ctx context.Context, username string) (bool, time.Duration, error) {
+	if s.lockout == nil {
+		return false, 0, nil
+	}
+	return s.lockout.CheckLocked(ctx, normalizeUsername(username))
+}
+
+// RecordFailure 实现 contract.LoginFinalizer：记录一次失败尝试（不影响主流程）。
+func (s *AuthService) RecordFailure(ctx context.Context, username string) {
+	s.recordFailure(ctx, normalizeUsername(username))
+}
+
+// ResetFailure 实现 contract.LoginFinalizer：登录成功后清除失败计数。
+func (s *AuthService) ResetFailure(ctx context.Context, username string) {
+	if s.lockout != nil {
+		_ = s.lockout.Reset(ctx, normalizeUsername(username))
+	}
+}
+
+// RecordLoginHistory 实现 contract.LoginFinalizer：记录一次登录尝试。
+func (s *AuthService) RecordLoginHistory(ctx context.Context, userID, tenantID uint64, username, status, reason string) {
+	s.recordLoginHistory(ctx, userID, tenantID, username, status, reason)
 }

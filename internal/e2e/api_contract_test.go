@@ -17,13 +17,20 @@ import (
 	auditmodule "jimu/internal/capabilities/audit"
 	auditdomain "jimu/internal/capabilities/audit/domain"
 	authmodule "jimu/internal/capabilities/auth"
+	authdomain "jimu/internal/capabilities/auth/domain"
+	captchamodule "jimu/internal/capabilities/captcha"
 	"jimu/internal/capabilities/catalog"
+	mfamodule "jimu/internal/capabilities/mfa"
+	mfadomain "jimu/internal/capabilities/mfa/domain"
+	passkeymodule "jimu/internal/capabilities/passkey"
+	passkeydomain "jimu/internal/capabilities/passkey/domain"
 	"jimu/internal/capabilities/permission"
 	"jimu/internal/capabilities/role"
 	roledomain "jimu/internal/capabilities/role/domain"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	usermodule "jimu/internal/capabilities/user"
 	userdomain "jimu/internal/capabilities/user/domain"
+	userinfrastructure "jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/access"
@@ -74,6 +81,10 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 		&tenantdomain.Tenant{},
 		&tenantdomain.Plan{},
 		&auditdomain.AuditLog{},
+		&mfadomain.UserMFA{},
+		&passkeydomain.WebAuthnCredential{},
+		&authdomain.LoginHistory{},
+		&authdomain.PasswordHistory{},
 	))
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS user_roles (user_id INTEGER NOT NULL, role_id INTEGER NOT NULL)`).Error)
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS role_permissions (role_id INTEGER NOT NULL, permission_id INTEGER NOT NULL)`).Error)
@@ -104,7 +115,18 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 
 	log := logger.New(config.LogConfig{Level: "error", Format: "console", Output: "stdout"})
 
-	authMod := authmodule.New(gdb, rdb, cfg.Auth, false, nil, config.CaptchaConfig{})
+	userinfoSource := usermodule.NewUserinfoSource(userinfrastructure.NewMysqlRepository(gdb))
+	captchaMod := captchamodule.New(rdb, time.Minute, false)
+	mfaMod := mfamodule.New(gdb, cfg.Auth, userinfoSource)
+	authMod := authmodule.New(gdb, rdb, cfg.Auth, false, captchaMod.Service(),
+		contract.MFAVerifier(mfaMod.Service()))
+	passkeyMod := passkeymodule.New(passkeymodule.Deps{
+		DB:        gdb,
+		Redis:     rdb,
+		AuthCfg:   cfg.Auth,
+		Users:     userinfoSource,
+		Finalizer: authMod.Finalizer(),
+	})
 	userMod := usermodule.New(gdb, cfg) // 不传 rdb：跳过用户维度限流（依赖 Lua），聚焦契约链路
 	roleMod := role.New(gdb)
 	permMod := permission.New(gdb)
@@ -113,7 +135,7 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 
 	router := gin.New()
 
-	modules := []contract.Module{authMod, userMod, roleMod, permMod, auditMod, adminMod}
+	modules := []contract.Module{authMod, mfaMod, passkeyMod, captchaMod, userMod, roleMod, permMod, auditMod, adminMod}
 	// 1) 模块级 HTTP 中间件（审计记录）
 	for _, m := range modules {
 		if p, ok := m.(contract.HTTPMiddlewareProvider); ok {
@@ -434,7 +456,7 @@ func TestAuthRateLimit(t *testing.T) {
 			LoginRateWindowSec: 60,
 		},
 	}
-	authMod := authmodule.New(gdb, rdb, cfg.Auth, false, nil, config.CaptchaConfig{})
+	authMod := authmodule.New(gdb, rdb, cfg.Auth, false, nil)
 	router := gin.New()
 	authMod.RegisterHTTP(router)
 

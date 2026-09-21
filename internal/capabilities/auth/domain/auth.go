@@ -22,7 +22,4 @@ type AuthServiceInterface interface {
 	Refresh(ctx context.Context, refreshToken string) (*TokenPair, error)
 	Logout(ctx context.Context, userID uint64, sessionID string) error
 	LogoutAll(ctx context.Context, userID uint64) error
-	SetupTOTP(ctx context.Context, userID uint64, account string) (secret string, uri string, err error)
-	EnableTOTP(ctx context.Context, userID uint64, code string) error
-	DisableTOTP(ctx context.Context, userID uint64, code string) error
 }

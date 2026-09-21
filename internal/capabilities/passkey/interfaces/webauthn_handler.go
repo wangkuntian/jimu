@@ -1,10 +1,15 @@
 package interfaces
 
 import (
+	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
-	"jimu/internal/capabilities/auth/application"
+	"jimu/internal/capabilities/passkey/application"
+	"jimu/internal/config"
+	"jimu/internal/contract"
+	"jimu/internal/kernel/auth"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
@@ -33,6 +38,18 @@ type webAuthnSessionResponse struct {
 	Options   interface{} `json:"options"`
 }
 
+// PasskeyHandler 通行密钥 HTTP 处理器。
+type PasskeyHandler struct {
+	service *application.PasskeyService
+	cfg     config.AuthConfig
+	limiter *auth.Limiter
+}
+
+// NewPasskeyHandler 创建通行密钥处理器。
+func NewPasskeyHandler(service *application.PasskeyService, cfg config.AuthConfig, limiter *auth.Limiter) *PasskeyHandler {
+	return &PasskeyHandler{service: service, cfg: cfg, limiter: limiter}
+}
+
 // BeginWebAuthnRegistration godoc
 // @Summary      开始注册通行密钥
 // @Description  为当前登录用户生成 WebAuthn 注册选项（publicKey）与一次性 session_id。客户端调用 navigator.credentials.create() 后，把返回的凭证 JSON 原样提交到 finish 接口。需要浏览器与 HTTPS（localhost 除外）。
@@ -45,7 +62,7 @@ type webAuthnSessionResponse struct {
 // @Failure      401  {object}  contract.ErrorResponse  "未认证"
 // @Failure      500  {object}  contract.ErrorResponse  "WebAuthn 未配置"
 // @Router       /auth/webauthn/register/begin [post]
-func (h *AuthHandler) BeginWebAuthnRegistration(c *gin.Context) {
+func (h *PasskeyHandler) BeginWebAuthnRegistration(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {
 		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
@@ -78,7 +95,7 @@ func (h *AuthHandler) BeginWebAuthnRegistration(c *gin.Context) {
 // @Failure      400  {object}  contract.ErrorResponse  "凭证校验失败（2011）"
 // @Failure      401  {object}  contract.ErrorResponse  "未认证"
 // @Router       /auth/webauthn/register/finish [post]
-func (h *AuthHandler) FinishWebAuthnRegistration(c *gin.Context) {
+func (h *PasskeyHandler) FinishWebAuthnRegistration(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {
 		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
@@ -106,7 +123,7 @@ func (h *AuthHandler) FinishWebAuthnRegistration(c *gin.Context) {
 // @Success      200  {object}  response.Body  "成功，返回通行密钥列表"
 // @Failure      401  {object}  contract.ErrorResponse  "未认证"
 // @Router       /auth/webauthn/credentials [get]
-func (h *AuthHandler) ListWebAuthnCredentials(c *gin.Context) {
+func (h *PasskeyHandler) ListWebAuthnCredentials(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {
 		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
@@ -133,7 +150,7 @@ func (h *AuthHandler) ListWebAuthnCredentials(c *gin.Context) {
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误"
 // @Failure      401  {object}  contract.ErrorResponse  "未认证"
 // @Router       /auth/webauthn/credentials/{id} [put]
-func (h *AuthHandler) RenameWebAuthnCredential(c *gin.Context) {
+func (h *PasskeyHandler) RenameWebAuthnCredential(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {
 		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
@@ -166,7 +183,7 @@ func (h *AuthHandler) RenameWebAuthnCredential(c *gin.Context) {
 // @Success      200  {object}  response.Body  "删除成功"
 // @Failure      401  {object}  contract.ErrorResponse  "未认证"
 // @Router       /auth/webauthn/credentials/{id} [delete]
-func (h *AuthHandler) DeleteWebAuthnCredential(c *gin.Context) {
+func (h *PasskeyHandler) DeleteWebAuthnCredential(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {
 		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
@@ -196,7 +213,7 @@ func (h *AuthHandler) DeleteWebAuthnCredential(c *gin.Context) {
 // @Failure      404  {object}  contract.ErrorResponse  "该用户未注册通行密钥（2010）"
 // @Failure      429  {object}  contract.ErrorResponse  "请求过于频繁"
 // @Router       /auth/webauthn/login/begin [post]
-func (h *AuthHandler) BeginWebAuthnLogin(c *gin.Context) {
+func (h *PasskeyHandler) BeginWebAuthnLogin(c *gin.Context) {
 	req, _ := c.MustGet("validated_req").(*webAuthnLoginBeginRequest)
 	if !h.allow(c, "login", "ip:"+c.ClientIP(), h.cfg.LoginRateLimit, time.Duration(h.cfg.LoginRateWindowSec)*time.Second) {
 		return
@@ -204,7 +221,7 @@ func (h *AuthHandler) BeginWebAuthnLogin(c *gin.Context) {
 	if !h.allow(c, "login", "username:"+normalizeUsername(req.Username), h.cfg.LoginRateLimit, time.Duration(h.cfg.LoginRateWindowSec)*time.Second) {
 		return
 	}
-	ctx := application.WithClientInfo(c.Request.Context(), c.ClientIP(), c.Request.UserAgent())
+	ctx := contract.WithClientInfo(c.Request.Context(), c.ClientIP(), c.Request.UserAgent())
 	assertion, sessionID, err := h.service.BeginWebAuthnLogin(ctx, req.Username)
 	if err != nil {
 		response.Fail(c, err)
@@ -224,7 +241,7 @@ func (h *AuthHandler) BeginWebAuthnLogin(c *gin.Context) {
 // @Failure      400  {object}  contract.ErrorResponse  "断言校验失败（2011）"
 // @Failure      429  {object}  contract.ErrorResponse  "请求过于频繁"
 // @Router       /auth/webauthn/login/finish [post]
-func (h *AuthHandler) FinishWebAuthnLogin(c *gin.Context) {
+func (h *PasskeyHandler) FinishWebAuthnLogin(c *gin.Context) {
 	sessionID := c.Query("session_id")
 	if !h.allow(c, "login", "ip:"+c.ClientIP(), h.cfg.LoginRateLimit, time.Duration(h.cfg.LoginRateWindowSec)*time.Second) {
 		return
@@ -234,7 +251,7 @@ func (h *AuthHandler) FinishWebAuthnLogin(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "failed to read request body"))
 		return
 	}
-	ctx := application.WithClientInfo(c.Request.Context(), c.ClientIP(), c.Request.UserAgent())
+	ctx := contract.WithClientInfo(c.Request.Context(), c.ClientIP(), c.Request.UserAgent())
 	pair, err := h.service.FinishWebAuthnLogin(ctx, sessionID, body)
 	if err != nil {
 		response.Fail(c, err)
@@ -249,4 +266,43 @@ func parseCredentialID(c *gin.Context) (uint64, error) {
 		return 0, errors.New(errors.CodeInvalidParam, "invalid credential id")
 	}
 	return id, nil
+}
+
+func currentUserID(c *gin.Context) (uint64, bool) {
+	v, exists := c.Get("user_id")
+	if !exists {
+		return 0, false
+	}
+	id, ok := v.(uint64)
+	return id, ok
+}
+
+func normalizeUsername(username string) string {
+	return strings.ToLower(strings.TrimSpace(username))
+}
+
+// allow 登录维度限流（与 auth 能力一致的响应头语义）。
+func (h *PasskeyHandler) allow(c *gin.Context, scope, key string, limit int, window time.Duration) bool {
+	if h.limiter == nil {
+		return true
+	}
+	ok, err := h.limiter.Allow(c.Request.Context(), scope, key, limit, window)
+	if err != nil && ok {
+		return true
+	}
+	if err != nil || !ok {
+		writeAuthRateLimitHeaders(c, limit, window)
+		response.Fail(c, errors.New(errors.CodeRateLimited, "too many requests"))
+		return false
+	}
+	return true
+}
+
+// writeAuthRateLimitHeaders 写入认证维度限流响应头
+func writeAuthRateLimitHeaders(c *gin.Context, limit int, window time.Duration) {
+	c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", limit))
+	c.Header("X-RateLimit-Remaining", "0")
+	if window > 0 {
+		c.Header("Retry-After", fmt.Sprintf("%d", int(window.Seconds())))
+	}
 }

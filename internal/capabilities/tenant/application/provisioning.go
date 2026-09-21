@@ -12,6 +12,7 @@ import (
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/config"
+	"jimu/internal/contract"
 	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 
@@ -19,29 +20,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// ProvisionParams 开通参数：owner 用户信息 + 租户信息
-type ProvisionParams struct {
-	Username     string
-	PasswordHash string
-	Email        string
-	Phone        string
-	TenantName   string
-	TenantCode   string // 可选；空则自动生成
-}
-
-// ProvisionResult 开通结果：新租户 + owner 用户
-type ProvisionResult struct {
-	Tenant *tenantdomain.Tenant
-	User   *userdomain.User
-}
-
-// TenantProvisioner 开通式注册的租户开通器。
-// 在单事务内创建租户、owner 用户，并按配置模板初始化租户角色与权限绑定。
-type TenantProvisioner interface {
-	Provision(ctx context.Context, params ProvisionParams) (*ProvisionResult, error)
-}
-
-// GormTenantProvisioner 基于单事务的租户开通实现
+// GormTenantProvisioner 基于单事务的租户开通实现（实现 contract.TenantProvisioner）。
 type GormTenantProvisioner struct {
 	db  *gorm.DB
 	cfg config.ProvisioningConfig
@@ -53,7 +32,7 @@ func NewGormTenantProvisioner(db *gorm.DB, cfg config.ProvisioningConfig) *GormT
 
 // Provision 创建租户 + owner 用户 + 模板角色（单事务，任一步失败整体回滚）。
 // 模板权限引用全局权限表，缺失的条目跳过（不阻塞开通）。租户编码统一转小写存储。
-func (p *GormTenantProvisioner) Provision(ctx context.Context, params ProvisionParams) (*ProvisionResult, error) {
+func (p *GormTenantProvisioner) Provision(ctx context.Context, params contract.ProvisionRequest) (*contract.ProvisionResult, error) {
 	if params.TenantName == "" {
 		return nil, errors.New(errors.CodeInvalidParam, "tenant_name is required")
 	}
@@ -62,7 +41,7 @@ func (p *GormTenantProvisioner) Provision(ctx context.Context, params ProvisionP
 		return nil, errors.New(errors.CodeTenantCodeFormat, "tenant code must match [a-zA-Z0-9_-] (1-64 chars)")
 	}
 
-	var result *ProvisionResult
+	var result *contract.ProvisionResult
 	err := p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// 1. 创建租户（编码唯一；自动生成时在事务内重试冲突）
 		tenant := &tenantdomain.Tenant{Name: params.TenantName, Status: 1}
@@ -112,7 +91,27 @@ func (p *GormTenantProvisioner) Provision(ctx context.Context, params ProvisionP
 			}
 		}
 
-		result = &ProvisionResult{Tenant: tenant, User: user}
+		result = &contract.ProvisionResult{
+			Tenant: contract.ProvisionedTenant{
+				ID:        tenant.ID,
+				Code:      tenant.Code,
+				Name:      tenant.Name,
+				Status:    tenant.Status,
+				PlanID:    tenant.PlanID,
+				CreatedAt: tenant.CreatedAt,
+				UpdatedAt: tenant.UpdatedAt,
+			},
+			User: contract.ProvisionedUser{
+				ID:        user.ID,
+				Username:  user.Username,
+				Email:     user.Email,
+				Phone:     user.Phone,
+				Status:    user.Status,
+				TenantID:  user.TenantID,
+				CreatedAt: user.CreatedAt,
+				UpdatedAt: user.UpdatedAt,
+			},
+		}
 		return nil
 	})
 	if err != nil {

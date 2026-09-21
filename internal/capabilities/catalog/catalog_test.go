@@ -26,7 +26,9 @@ func fixture() []contract.Descriptor {
 		{Name: "role", Mount: contract.MountProtected},
 		{Name: "permission", Requires: []string{"role"}, Mount: contract.MountProtected},
 		{Name: "tenant", Requires: []string{"user", "role"}, Mount: contract.MountProtected},
-		{Name: "auth", Requires: []string{"user", "role", "tenant"}, Mount: contract.MountSelfManaged},
+		{Name: "mfa", Requires: []string{"user"}, Mount: contract.MountSelfManaged},
+		{Name: "auth", Requires: []string{"user", "role", "tenant", "mfa"}, Mount: contract.MountSelfManaged},
+		{Name: "passkey", Requires: []string{"user", "auth"}, Mount: contract.MountSelfManaged},
 		{Name: "audit", Mount: contract.MountProtected},
 		{Name: "admin", Requires: []string{"user", "audit"}, Mount: contract.MountProtected},
 		{Name: "oauth", Requires: []string{"auth", "user"}, Mount: contract.MountPublic},
@@ -35,6 +37,8 @@ func fixture() []contract.Descriptor {
 		{Name: "outbox", Mount: contract.MountProtected},
 		{Name: "dataops", Mount: contract.MountProtected},
 		{Name: "search", Mount: contract.MountProtected},
+		{Name: "captcha", Mount: contract.MountPublic},
+		{Name: "breach", Mount: contract.MountProtected},
 	}
 }
 
@@ -44,8 +48,8 @@ func TestResolveEmptyMeansAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve(nil) error: %v", err)
 	}
-	if len(got) != 13 {
-		t.Fatalf("len = %d, want 13 (all)", len(got))
+	if len(got) != 17 {
+		t.Fatalf("len = %d, want 17 (all)", len(got))
 	}
 }
 
@@ -74,12 +78,12 @@ func TestResolvePullsDependenciesAndKeepsOrder(t *testing.T) {
 
 func TestResolveClosureIsTransitive(t *testing.T) {
 	withEntries(t, fixture()...)
-	// oauth -> auth -> user/role/tenant
+	// oauth -> auth -> mfa -> user/role/tenant
 	got, err := Resolve([]string{"oauth"})
 	if err != nil {
 		t.Fatalf("Resolve error: %v", err)
 	}
-	want := map[string]bool{"oauth": true, "auth": true, "user": true, "role": true, "tenant": true}
+	want := map[string]bool{"oauth": true, "auth": true, "mfa": true, "user": true, "role": true, "tenant": true}
 	if len(got) != len(want) {
 		t.Fatalf("Resolve([oauth]) = %v, want %d entries", namesOf(got), len(want))
 	}
@@ -88,7 +92,7 @@ func TestResolveClosureIsTransitive(t *testing.T) {
 			t.Fatalf("unexpected capability %q in closure %v", d.Name, namesOf(got))
 		}
 	}
-	wantOrder := []string{"user", "role", "tenant", "auth", "oauth"}
+	wantOrder := []string{"user", "role", "tenant", "mfa", "auth", "oauth"}
 	if gotOrder := namesOf(got); !reflect.DeepEqual(gotOrder, wantOrder) {
 		t.Fatalf("Resolve([oauth]) order = %v, want %v", gotOrder, wantOrder)
 	}
@@ -235,8 +239,9 @@ func migrationsOf(ds []contract.Descriptor) map[string]bool {
 func TestCatalogMigrationsShape(t *testing.T) {
 	want := map[string]bool{
 		"user": true, "role": true, "permission": true, "tenant": true,
-		"auth": true, "audit": true, "oauth": true,
-		"admin":  false,
+		"mfa": true, "auth": true, "passkey": true, "audit": true, "oauth": true,
+		"admin":   false,
+		"captcha": false, "breach": false,
 		"apikey": true, "queue": true, "outbox": true, "dataops": true, "search": true,
 	}
 	if got := migrationsOf(All()); !reflect.DeepEqual(got, want) {
@@ -277,6 +282,14 @@ func TestDescriptorPermissionsCoverBusinessRoutes(t *testing.T) {
 		{"/api/v1/tenant-plans/*", "PUT"}, {"/api/v1/tenant-plans/*", "DELETE"},
 		{"/api/v1/admin/*", "GET"}, {"/api/v1/admin/*", "POST"},
 		{"/api/v1/admin/*", "PUT"}, {"/api/v1/admin/*", "DELETE"},
+		{"/api/v1/auth/mfa/setup", "POST"}, {"/api/v1/auth/mfa/enable", "POST"},
+		{"/api/v1/auth/mfa/disable", "POST"},
+		{"/api/v1/auth/devices", "GET"}, {"/api/v1/auth/devices", "DELETE"},
+		{"/api/v1/auth/devices/*", "DELETE"},
+		{"/api/v1/auth/webauthn/login/begin", "POST"}, {"/api/v1/auth/webauthn/login/finish", "POST"},
+		{"/api/v1/auth/webauthn/register/begin", "POST"}, {"/api/v1/auth/webauthn/register/finish", "POST"},
+		{"/api/v1/auth/webauthn/credentials", "GET"},
+		{"/api/v1/auth/webauthn/credentials/*", "PUT"}, {"/api/v1/auth/webauthn/credentials/*", "DELETE"},
 	}
 	got := map[string]bool{}
 	total := 0

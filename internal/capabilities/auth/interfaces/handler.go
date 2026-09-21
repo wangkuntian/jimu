@@ -2,13 +2,12 @@ package interfaces
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
 	"jimu/internal/capabilities/auth/application"
-	"jimu/internal/capabilities/captcha"
 	"jimu/internal/config"
+	"jimu/internal/contract"
 	platformauth "jimu/internal/kernel/auth"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
@@ -21,15 +20,14 @@ import (
 const DeviceTokenHeader = "X-Device-Token"
 
 type AuthHandler struct {
-	service    *application.AuthService
-	cfg        config.AuthConfig
-	limiter    *platformauth.Limiter
-	captcha    *captcha.Service
-	captchaCfg config.CaptchaConfig
+	service *application.AuthService
+	cfg     config.AuthConfig
+	limiter *platformauth.Limiter
+	captcha contract.CaptchaVerifier
 }
 
-func NewAuthHandler(service *application.AuthService, cfg config.AuthConfig, limiter *platformauth.Limiter, captchaSvc *captcha.Service, captchaCfg config.CaptchaConfig) *AuthHandler {
-	return &AuthHandler{service: service, cfg: cfg, limiter: limiter, captcha: captchaSvc, captchaCfg: captchaCfg}
+func NewAuthHandler(service *application.AuthService, cfg config.AuthConfig, limiter *platformauth.Limiter, captchaVerifier contract.CaptchaVerifier) *AuthHandler {
+	return &AuthHandler{service: service, cfg: cfg, limiter: limiter, captcha: captchaVerifier}
 }
 
 // Login godoc
@@ -55,88 +53,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if !h.verifyCaptcha(c, req) {
 		return
 	}
-	ctx := application.WithClientInfo(c.Request.Context(), c.ClientIP(), c.Request.UserAgent())
-	ctx = application.WithLoginDevice(ctx, c.GetHeader(DeviceTokenHeader), req.RememberDevice)
+	ctx := contract.WithClientInfo(c.Request.Context(), c.ClientIP(), c.Request.UserAgent())
+	ctx = contract.WithLoginDevice(ctx, c.GetHeader(DeviceTokenHeader), req.RememberDevice)
 	tokenPair, err := h.service.LoginWithTOTP(ctx, req.Username, req.Password, req.TOTPCode)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
 	response.OK(c, tokenPair)
-}
-
-// ListDevices godoc
-// @Summary      获取可信设备列表
-// @Description  返回当前用户的可信设备（登录时可跳过 TOTP 的设备）。密码始终必需，设备令牌仅替代 TOTP 因子；改密或登出全部设备会吊销全部可信设备。
-// @Tags         认证
-// @Produce      json
-// @Security     BearerAuth
-// @Success      200  {object}  response.Body  "成功，返回可信设备列表"
-// @Failure      401  {object}  contract.ErrorResponse  "未认证"
-// @Router       /auth/devices [get]
-func (h *AuthHandler) ListDevices(c *gin.Context) {
-	userID, ok := currentUserID(c)
-	if !ok {
-		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
-		return
-	}
-	devices, err := h.service.ListTrustedDevices(c.Request.Context(), userID)
-	if err != nil {
-		response.Fail(c, err)
-		return
-	}
-	response.OK(c, devices)
-}
-
-// RevokeDevice godoc
-// @Summary      注销可信设备
-// @Description  按 ID 注销当前用户的一个可信设备，注销后该设备登录需重新提供 TOTP。
-// @Tags         认证
-// @Produce      json
-// @Security     BearerAuth
-// @Param        id   path      int  true  "设备 ID"
-// @Success      200  {object}  response.Body  "成功，返回已注销设备 ID"
-// @Failure      400  {object}  contract.ErrorResponse  "参数错误（设备 ID 非法）"
-// @Failure      401  {object}  contract.ErrorResponse  "未认证"
-// @Router       /auth/devices/{id} [delete]
-func (h *AuthHandler) RevokeDevice(c *gin.Context) {
-	userID, ok := currentUserID(c)
-	if !ok {
-		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
-		return
-	}
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid device id"))
-		return
-	}
-	if err := h.service.RevokeTrustedDevice(c.Request.Context(), userID, id); err != nil {
-		response.Fail(c, err)
-		return
-	}
-	response.OK(c, gin.H{"revoked": id})
-}
-
-// RevokeAllDevices godoc
-// @Summary      注销全部可信设备
-// @Description  注销当前用户全部可信设备，用于设备丢失或异常登录后的止损。
-// @Tags         认证
-// @Produce      json
-// @Security     BearerAuth
-// @Success      200  {object}  response.Body  "成功"
-// @Failure      401  {object}  contract.ErrorResponse  "未认证"
-// @Router       /auth/devices [delete]
-func (h *AuthHandler) RevokeAllDevices(c *gin.Context) {
-	userID, ok := currentUserID(c)
-	if !ok {
-		response.Fail(c, errors.New(errors.CodeUnauthorized, "authentication required"))
-		return
-	}
-	if err := h.service.RevokeAllTrustedDevices(c.Request.Context(), userID); err != nil {
-		response.Fail(c, err)
-		return
-	}
-	response.OK(c, gin.H{"revoked": "all"})
 }
 
 // LoginHistory godoc
@@ -340,82 +264,6 @@ func (h *AuthHandler) LogoutAll(c *gin.Context) {
 	response.OK(c, gin.H{})
 }
 
-// SetupTOTP godoc
-// @Summary      生成 TOTP 绑定密钥
-// @Description  生成新的 TOTP 密钥并返回 otpauth URI（用于二维码/认证器绑定）。重复调用会轮换密钥。绑定后需调用启用接口用首次验证码确认。
-// @Tags         认证
-// @Produce      json
-// @Security     BearerAuth
-// @Success      200  {object}  response.Body  "成功，返回 secret 与 otpauth URI"
-// @Failure      401  {object}  contract.ErrorResponse  "未认证或会话无效"
-// @Router       /auth/mfa/setup [post]
-func (h *AuthHandler) SetupTOTP(c *gin.Context) {
-	userID, _, ok := authContext(c)
-	if !ok {
-		response.Fail(c, errors.New(errors.CodeUnauthorized, "invalid session"))
-		return
-	}
-	username := c.GetString("username")
-	secret, uri, err := h.service.SetupTOTP(c.Request.Context(), userID, username)
-	if err != nil {
-		response.Fail(c, err)
-		return
-	}
-	response.OK(c, gin.H{"secret": secret, "otpauth_uri": uri})
-}
-
-// EnableTOTP godoc
-// @Summary      启用 TOTP 二次验证
-// @Description  用认证器生成的首次验证码确认启用 TOTP。验证码通过后该用户登录必须提供 TOTP 码。
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        body  body      enableTOTPRequest  true  "首次验证码"
-// @Success      200  {object}  response.Body  "成功"
-// @Failure      400  {object}  contract.ErrorResponse  "参数错误"
-// @Failure      401  {object}  contract.ErrorResponse  "未认证或验证码无效"
-// @Router       /auth/mfa/enable [post]
-func (h *AuthHandler) EnableTOTP(c *gin.Context) {
-	req, _ := c.MustGet("validated_req").(*enableTOTPRequest)
-	userID, _, ok := authContext(c)
-	if !ok {
-		response.Fail(c, errors.New(errors.CodeUnauthorized, "invalid session"))
-		return
-	}
-	if err := h.service.EnableTOTP(c.Request.Context(), userID, req.Code); err != nil {
-		response.Fail(c, err)
-		return
-	}
-	response.OK(c, gin.H{})
-}
-
-// DisableTOTP godoc
-// @Summary      关闭 TOTP 二次验证
-// @Description  校验当前验证码后关闭 TOTP 并清除密钥。关闭后登录不再要求 TOTP 码。
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        body  body      disableTOTPRequest  true  "当前验证码"
-// @Success      200  {object}  response.Body  "成功"
-// @Failure      400  {object}  contract.ErrorResponse  "参数错误"
-// @Failure      401  {object}  contract.ErrorResponse  "未认证或验证码无效"
-// @Router       /auth/mfa/disable [post]
-func (h *AuthHandler) DisableTOTP(c *gin.Context) {
-	req, _ := c.MustGet("validated_req").(*disableTOTPRequest)
-	userID, _, ok := authContext(c)
-	if !ok {
-		response.Fail(c, errors.New(errors.CodeUnauthorized, "invalid session"))
-		return
-	}
-	if err := h.service.DisableTOTP(c.Request.Context(), userID, req.Code); err != nil {
-		response.Fail(c, err)
-		return
-	}
-	response.OK(c, gin.H{})
-}
-
 func authContext(c *gin.Context) (uint64, string, bool) {
 	userID, ok := c.Get("user_id")
 	if !ok {
@@ -430,7 +278,7 @@ func authContext(c *gin.Context) (uint64, string, bool) {
 
 // verifyCaptcha 校验验证码（启用时）。放在限流检查之后，先限流防刷验证码暴力重试，再校验验证码。
 func (h *AuthHandler) verifyCaptcha(c *gin.Context, req *loginRequest) bool {
-	if !h.captchaCfg.Enabled || h.captcha == nil {
+	if h.captcha == nil || !h.captcha.Enabled() {
 		return true
 	}
 	if req.CaptchaID == "" || req.CaptchaCode == "" {

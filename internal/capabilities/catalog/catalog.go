@@ -12,9 +12,13 @@ import (
 	"jimu/internal/capabilities/apikey"
 	auditmodule "jimu/internal/capabilities/audit"
 	authmodule "jimu/internal/capabilities/auth"
+	"jimu/internal/capabilities/breach"
+	"jimu/internal/capabilities/captcha"
 	"jimu/internal/capabilities/dataops"
+	mfamodule "jimu/internal/capabilities/mfa"
 	oauthmodule "jimu/internal/capabilities/oauth"
 	"jimu/internal/capabilities/outbox"
+	passkeymodule "jimu/internal/capabilities/passkey"
 	"jimu/internal/capabilities/permission"
 	"jimu/internal/capabilities/queue"
 	"jimu/internal/capabilities/role"
@@ -25,14 +29,16 @@ import (
 )
 
 // entries 是唯一的能力清单，顺序即默认启用顺序（同时是依赖拓扑序）。
-// 尾部 5 个为基础设施能力（无 Requires、无其他能力依赖它们），
-// 仅携带迁移参与迁移运行；尚无 Module 实例装配（P1 收编）。
+// 尾部基础设施能力（breach/captcha 等）无 Requires；breach 无 Module 实例，
+// 仅携带声明与端口实现；captcha 本轮起有实例并自挂公开路由。
 var entries = []contract.Descriptor{
 	user.Descriptor,
 	role.Descriptor,
 	permission.Descriptor,
 	tenantmodule.Descriptor,
+	mfamodule.Descriptor,
 	authmodule.Descriptor,
+	passkeymodule.Descriptor,
 	auditmodule.Descriptor,
 	adminmodule.Descriptor,
 	oauthmodule.Descriptor,
@@ -41,6 +47,8 @@ var entries = []contract.Descriptor{
 	outbox.Descriptor,
 	dataops.Descriptor,
 	search.Descriptor,
+	captcha.Descriptor,
+	breach.Descriptor,
 }
 
 // All 返回清单中全部能力的深拷贝（含 Requires），调用方修改不影响清单。

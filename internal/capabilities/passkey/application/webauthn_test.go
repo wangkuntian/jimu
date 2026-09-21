@@ -9,12 +9,12 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	stderrors "errors"
 	"testing"
 	"time"
 
-	authdomain "jimu/internal/capabilities/auth/domain"
-	userdomain "jimu/internal/capabilities/user/domain"
-	"jimu/internal/kernel/auth"
+	passkeydomain "jimu/internal/capabilities/passkey/domain"
+	"jimu/internal/contract"
 	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
 
@@ -36,20 +36,20 @@ const (
 // --- 内存凭证仓储 ---
 
 type fakeWebAuthnRepo struct {
-	items  []*authdomain.WebAuthnCredential
+	items  []*passkeydomain.WebAuthnCredential
 	nextID uint64
 }
 
 func newFakeWebAuthnRepo() *fakeWebAuthnRepo { return &fakeWebAuthnRepo{nextID: 1} }
 
-func (r *fakeWebAuthnRepo) Create(_ context.Context, credential *authdomain.WebAuthnCredential) error {
+func (r *fakeWebAuthnRepo) Create(_ context.Context, credential *passkeydomain.WebAuthnCredential) error {
 	credential.ID = r.nextID
 	r.nextID++
 	r.items = append(r.items, credential)
 	return nil
 }
 
-func (r *fakeWebAuthnRepo) FindByCredentialID(_ context.Context, credentialID string) (*authdomain.WebAuthnCredential, error) {
+func (r *fakeWebAuthnRepo) FindByCredentialID(_ context.Context, credentialID string) (*passkeydomain.WebAuthnCredential, error) {
 	for _, item := range r.items {
 		if item.CredentialID == credentialID {
 			return item, nil
@@ -59,8 +59,8 @@ func (r *fakeWebAuthnRepo) FindByCredentialID(_ context.Context, credentialID st
 }
 
 // ListByUser 与真实仓储一致：按 id 倒序（最新注册的在前）
-func (r *fakeWebAuthnRepo) ListByUser(_ context.Context, tenantID, userID uint64) ([]authdomain.WebAuthnCredential, error) {
-	var out []authdomain.WebAuthnCredential
+func (r *fakeWebAuthnRepo) ListByUser(_ context.Context, tenantID, userID uint64) ([]passkeydomain.WebAuthnCredential, error) {
+	var out []passkeydomain.WebAuthnCredential
 	for i := len(r.items) - 1; i >= 0; i-- {
 		item := r.items[i]
 		if item.UserID != userID {
@@ -250,14 +250,64 @@ func sha256Sum(data []byte) []byte {
 
 // --- 服务装配 ---
 
-type webAuthnHarness struct {
-	service *AuthService
-	repo    *fakeUserRepo
-	creds   *fakeWebAuthnRepo
-	user    *userdomain.User
+// fakeUserinfoSource 内存用户只读端口
+type fakeUserinfoSource struct {
+	users map[string]*contract.Userinfo
 }
 
-// newWebAuthnHarness 装配启用 WebAuthn 的 AuthService（miniredis 存挑战）
+func (f *fakeUserinfoSource) GetByID(_ context.Context, id uint64) (*contract.Userinfo, error) {
+	for _, u := range f.users {
+		if u.ID == id {
+			return u, nil
+		}
+	}
+	return nil, contract.ErrNotFound
+}
+
+func (f *fakeUserinfoSource) FindByUsername(_ context.Context, username string) (*contract.Userinfo, error) {
+	if u, ok := f.users[username]; ok {
+		return u, nil
+	}
+	return nil, contract.ErrNotFound
+}
+
+func (f *fakeUserinfoSource) List(context.Context, int, int) ([]contract.Userinfo, int64, error) {
+	return nil, 0, nil
+}
+
+// fakeLoginFinalizer 记录登录收尾调用，返回预置令牌
+type fakeLoginFinalizer struct {
+	locked       bool
+	remaining    time.Duration
+	failures     []string
+	histories    []string
+	finalizeCall []uint64
+}
+
+func (f *fakeLoginFinalizer) FinalizeLogin(_ context.Context, userID uint64) (*contract.TokenPair, error) {
+	f.finalizeCall = append(f.finalizeCall, userID)
+	return &contract.TokenPair{AccessToken: "access", RefreshToken: "refresh", ExpiresIn: 1800}, nil
+}
+func (f *fakeLoginFinalizer) CheckLocked(context.Context, string) (bool, time.Duration, error) {
+	return f.locked, f.remaining, nil
+}
+func (f *fakeLoginFinalizer) RecordFailure(_ context.Context, username string) {
+	f.failures = append(f.failures, username)
+}
+func (f *fakeLoginFinalizer) ResetFailure(context.Context, string) {}
+func (f *fakeLoginFinalizer) RecordLoginHistory(_ context.Context, _, _ uint64, _, status, _ string) {
+	f.histories = append(f.histories, status)
+}
+
+type webAuthnHarness struct {
+	service   *PasskeyService
+	users     *fakeUserinfoSource
+	creds     *fakeWebAuthnRepo
+	finalizer *fakeLoginFinalizer
+	user      *contract.Userinfo
+}
+
+// newWebAuthnHarness 装配启用 WebAuthn 的 PasskeyService（miniredis 存挑战）
 func newWebAuthnHarness(t *testing.T) *webAuthnHarness {
 	t.Helper()
 	mrs, err := miniredis.Run()
@@ -273,15 +323,19 @@ func newWebAuthnHarness(t *testing.T) *webAuthnHarness {
 	})
 	require.NoError(t, err)
 
-	repo := &fakeUserRepo{users: map[string]*userdomain.User{}}
-	alice := userWithPassword(t, 42, "alice", "correct", 1)
-	alice.TenantID = 1
-	repo.users["alice"] = alice
-
+	alice := &contract.Userinfo{ID: 42, Username: "alice", Status: 1, TenantID: 1}
+	users := &fakeUserinfoSource{users: map[string]*contract.Userinfo{"alice": alice}}
 	creds := newFakeWebAuthnRepo()
-	svc := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7),
-		newFakeSessionStore(), nil, 30, rdb, handle, creds, WithWebAuthnSessionTTL(2*time.Minute))
-	return &webAuthnHarness{service: svc, repo: repo, creds: creds, user: alice}
+	finalizer := &fakeLoginFinalizer{}
+	svc := NewPasskeyService(Deps{
+		Users:       users,
+		Credentials: creds,
+		WebAuthn:    handle,
+		Redis:       rdb,
+		SessionTTL:  2 * time.Minute,
+		Finalizer:   finalizer,
+	})
+	return &webAuthnHarness{service: svc, users: users, creds: creds, finalizer: finalizer, user: alice}
 }
 
 // registerCredential 走完注册流程并返回虚拟认证器
@@ -406,8 +460,8 @@ func TestWebAuthnBeginLoginWithoutCredential(t *testing.T) {
 	_, _, err = h.service.BeginWebAuthnLogin(context.Background(), "nobody")
 	assert.Equal(t, apperrors.CodeInvalidCredentials, appCode(err))
 
-	disabled := userWithPassword(t, 43, "bob", "correct", 0)
-	h.repo.users["bob"] = disabled
+	disabled := &contract.Userinfo{ID: 43, Username: "bob", Status: 0, TenantID: 1}
+	h.users.users["bob"] = disabled
 	_, _, err = h.service.BeginWebAuthnLogin(context.Background(), "bob")
 	assert.Equal(t, apperrors.CodeInvalidCredentials, appCode(err))
 }
@@ -444,7 +498,7 @@ func TestWebAuthnCredentialManagement(t *testing.T) {
 }
 
 func TestWebAuthnDisabledWhenNotConfigured(t *testing.T) {
-	svc := newTestService(t, map[string]*userdomain.User{}, newFakeSessionStore())
+	svc := NewPasskeyService(Deps{Users: &fakeUserinfoSource{users: map[string]*contract.Userinfo{}}})
 	ctx := context.Background()
 
 	_, _, err := svc.BeginWebAuthnRegistration(ctx, 42, "")
@@ -467,4 +521,13 @@ func TestWebAuthnRegistrationRejectsUnparsableBody(t *testing.T) {
 	_, err = h.service.FinishWebAuthnRegistration(ctx, h.user.ID, sessionID, []byte("not json"))
 	assert.Equal(t, apperrors.CodeWebAuthnVerificationFailed, appCode(err))
 	assert.Empty(t, h.creds.items)
+}
+
+// appCode 提取 AppError 错误码。
+func appCode(err error) int {
+	var appErr *apperrors.AppError
+	if stderrors.As(err, &appErr) {
+		return appErr.Code
+	}
+	return 0
 }

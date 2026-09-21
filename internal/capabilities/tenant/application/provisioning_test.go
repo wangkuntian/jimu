@@ -9,6 +9,7 @@ import (
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/config"
+	"jimu/internal/contract"
 	"jimu/internal/kernel/db"
 	apperrors "jimu/internal/shared/errors"
 
@@ -82,7 +83,7 @@ func TestGormTenantProvisionerProvision(t *testing.T) {
 	seedProvisionPermissions(t, gdb)
 	provisioner := NewGormTenantProvisioner(gdb, provisionTestConfig())
 
-	res, err := provisioner.Provision(context.Background(), ProvisionParams{
+	res, err := provisioner.Provision(context.Background(), contract.ProvisionRequest{
 		Username:     "alice",
 		PasswordHash: "hashed",
 		Email:        "alice@example.com",
@@ -127,7 +128,7 @@ func TestGormTenantProvisionerOwnerRoleDefaultsToFirst(t *testing.T) {
 	cfg.OwnerRole = "" // 缺省 = 第一个模板角色
 	provisioner := NewGormTenantProvisioner(gdb, cfg)
 
-	res, err := provisioner.Provision(context.Background(), ProvisionParams{
+	res, err := provisioner.Provision(context.Background(), contract.ProvisionRequest{
 		Username:     "bob",
 		PasswordHash: "hashed",
 		TenantName:   "Bob Corp",
@@ -152,27 +153,27 @@ func TestGormTenantProvisionerErrors(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("租户名缺失", func(t *testing.T) {
-		_, err := provisioner.Provision(ctx, ProvisionParams{Username: "x", PasswordHash: "h"})
+		_, err := provisioner.Provision(ctx, contract.ProvisionRequest{Username: "x", PasswordHash: "h"})
 		assert.Equal(t, apperrors.CodeInvalidParam, appCodeOf(err))
 	})
 
 	t.Run("编码格式无效", func(t *testing.T) {
-		_, err := provisioner.Provision(ctx, ProvisionParams{Username: "x", PasswordHash: "h", TenantName: "T", TenantCode: "bad code"})
+		_, err := provisioner.Provision(ctx, contract.ProvisionRequest{Username: "x", PasswordHash: "h", TenantName: "T", TenantCode: "bad code"})
 		assert.Equal(t, apperrors.CodeTenantCodeFormat, appCodeOf(err))
 	})
 
 	t.Run("编码冲突", func(t *testing.T) {
 		// 先开通一个租户占用编码，再以相同编码开通 → 冲突
-		_, err := provisioner.Provision(ctx, ProvisionParams{Username: "first", PasswordHash: "h", TenantName: "First", TenantCode: "taken"})
+		_, err := provisioner.Provision(ctx, contract.ProvisionRequest{Username: "first", PasswordHash: "h", TenantName: "First", TenantCode: "taken"})
 		require.NoError(t, err)
-		_, err = provisioner.Provision(ctx, ProvisionParams{Username: "second", PasswordHash: "h", TenantName: "Second", TenantCode: "taken"})
+		_, err = provisioner.Provision(ctx, contract.ProvisionRequest{Username: "second", PasswordHash: "h", TenantName: "Second", TenantCode: "taken"})
 		assert.Equal(t, apperrors.CodeTenantExists, appCodeOf(err))
 	})
 
 	t.Run("用户名冲突（DB unique 兜底）", func(t *testing.T) {
 		// 预置同名用户，触发 user 表唯一约束 → 事务回滚，租户不应残留
 		require.NoError(t, gdb.Create(&userdomain.User{Username: "alice", Password: "h", Status: 1, TenantID: 1}).Error)
-		_, err := provisioner.Provision(ctx, ProvisionParams{Username: "alice", PasswordHash: "h", TenantName: "T2"})
+		_, err := provisioner.Provision(ctx, contract.ProvisionRequest{Username: "alice", PasswordHash: "h", TenantName: "T2"})
 		assert.Equal(t, apperrors.CodeUserExists, appCodeOf(err))
 
 		// 事务已回滚：T2 租户不存在

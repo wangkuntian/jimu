@@ -1,6 +1,9 @@
 package errors
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // 错误码定义
 // 编码规则：
@@ -90,6 +93,15 @@ func (e *AppError) Unwrap() error {
 
 func New(code int, message string) *AppError {
 	return &AppError{Code: code, Message: message}
+}
+
+// AccountLocked 返回账号锁定错误，message 包含剩余锁定时间（分钟）。
+func AccountLocked(remaining time.Duration) *AppError {
+	minutes := int(remaining.Minutes())
+	if minutes < 1 {
+		minutes = 1
+	}
+	return New(CodeForbidden, fmt.Sprintf("account locked due to too many failed attempts, try again in %d minutes", minutes))
 }
 
 func Wrap(code int, message string, cause error) *AppError {

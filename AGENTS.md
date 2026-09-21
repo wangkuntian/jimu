@@ -33,6 +33,7 @@
 - 能力之间只经 `contract` 端口调用，禁止 import 其他能力的内部包
 - 挂载点由 `Descriptor.Mount` 声明，禁止按能力名做特判
 - Casbin RBAC 机制位于内核 `internal/kernel/access`（强制器/策略/权限中间件），API Key 签发/校验位于 `internal/capabilities/apikey`；`kernel/auth` 只保留 JWT/Session/限流/登录失败锁定机制与 API Key 上下文助手（`apikey_context.go`）
+- 原 `auth` 已拆为 `auth`（会话/凭证/登录历史/密码历史）、`mfa`（TOTP + 可信设备，含自有 `totp/` 实现与 `user_mfa` 表）、`passkey`（WebAuthn）；`breach`/`captcha` 为独立能力；开通式注册（provisioned registration）属 `tenant` 能力。auth 经 `contract.MFAVerifier`/`TenantProvisioner`/`BreachChecker`/`CaptchaVerifier` 消费它们，passkey 经 `contract.LoginFinalizer` 复用 auth 的登录收尾；TOTP 状态存 `user_mfa`（迁移 016），`users` 表不再有 `totp_*` 列
 
 ### 租户体系
 

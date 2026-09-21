@@ -60,7 +60,7 @@ type Container struct {
 	WorkerPool     *queue.WorkerPool
 	APIKeyVerifier *apikey.APIKeyVerifier
 	// 泄露口令检查（HIBP）；auth.breach_check_enabled 关闭时为 nil
-	BreachChecker breach.Checker
+	BreachChecker contract.BreachChecker
 	GRPCServer    *grpcpkg.Server
 	Reporter      reporter.Reporter
 	// 观测出口（OTLP → OpenObserve；未启用时为 nil）
@@ -181,7 +181,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	})
 
 	// 泄露口令检查（HIBP k-匿名范围查询）：默认关闭，启用时复用统一出站 client（超时/重试/熔断）
-	var breachChecker breach.Checker
+	var breachChecker contract.BreachChecker
 	if cfg.Auth.BreachCheckEnabled {
 		breachChecker = breach.New(httpClient)
 	}
@@ -285,7 +285,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	}
 
 	// Captcha 验证码服务（平台能力，非业务模块；auth 模块消费）
-	captchaSvc := captcha.NewService(rdb, time.Duration(cfg.Captcha.TTLMin)*time.Minute)
+	captchaSvc := captcha.NewServiceWithEnabled(rdb, time.Duration(cfg.Captcha.TTLMin)*time.Minute, cfg.Captcha.Enabled)
 
 	// API Key 验证器（服务/机器间认证，复用 admin api_keys 表）
 	// 路由组按需挂载 apikey.APIKeyAuthMiddleware(c.APIKeyVerifier)
