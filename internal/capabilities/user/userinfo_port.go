@@ -32,6 +32,17 @@ func (a *userinfoAdapter) GetByID(ctx context.Context, id uint64) (*contract.Use
 	return toUserinfo(u), nil
 }
 
+func (a *userinfoAdapter) FindByUsername(ctx context.Context, username string) (*contract.Userinfo, error) {
+	u, err := a.repo.FindByUsername(ctx, username)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, contract.ErrNotFound
+		}
+		return nil, err
+	}
+	return toUserinfo(u), nil
+}
+
 func (a *userinfoAdapter) List(ctx context.Context, page, pageSize int) ([]contract.Userinfo, int64, error) {
 	users, total, err := a.repo.List(ctx, 0, (page-1)*pageSize, pageSize, "id", "desc")
 	if err != nil {
@@ -49,6 +60,7 @@ func toUserinfo(u *domain.User) *contract.Userinfo {
 		ID:        u.ID,
 		Username:  u.Username,
 		Status:    u.Status,
+		TenantID:  u.TenantID,
 		CreatedAt: u.CreatedAt,
 	}
 }
