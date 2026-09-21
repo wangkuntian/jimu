@@ -17,4 +17,7 @@ var Descriptor = contract.Descriptor{
 	Name:       "outbox",
 	Mount:      contract.MountProtected,
 	Migrations: migrationsFS,
+	Configs: []contract.ConfigSpec{
+		{Section: ConfigKey, New: func() any { return &Config{} }},
+	},
 }

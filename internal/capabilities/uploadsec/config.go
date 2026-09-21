@@ -2,8 +2,6 @@ package uploadsec
 
 import (
 	"time"
-
-	"jimu/internal/config"
 )
 
 // ConfigKey 本能力在 app.yaml 中的配置段键。
@@ -39,12 +37,3 @@ func (c *Config) ApplyDefaults() {}
 
 // Validate 本能力无配置校验。
 func (c *Config) Validate() error { return nil }
-
-// Load 解码本能力配置段。仅在本能力启用时由组合根调用（设计 §8）。
-func Load(dec config.SectionDecoder) (*Config, error) {
-	var c Config
-	if err := config.LoadSection(dec, ConfigKey, &c); err != nil {
-		return nil, err
-	}
-	return &c, nil
-}

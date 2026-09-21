@@ -3,6 +3,8 @@ package audit
 import (
 	"testing"
 
+	"jimu/internal/config"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,9 +26,31 @@ func TestConfigKeyIsStable(t *testing.T) {
 	assert.Equal(t, "audit", ConfigKey, "对外配置键不得变化")
 }
 
+// TestDescriptorDeclaresConfigSection 描述符必须声明本段，否则框架不会加载/校验它。
+func TestDescriptorDeclaresConfigSection(t *testing.T) {
+	for _, spec := range Descriptor.Configs {
+		if spec.Section == ConfigKey {
+			require.NotNil(t, spec.New)
+			_, ok := spec.New().(config.SectionConfig)
+			require.True(t, ok, "段实例必须实现 config.SectionConfig")
+			return
+		}
+	}
+	t.Fatalf("Descriptor 必须声明配置段 %q", ConfigKey)
+}
+
+// loadConfig 走框架同款机制（config.LoadSection：解码 → 默认值 → 校验）。
+func loadConfig(dec config.SectionDecoder) (*Config, error) {
+	var c Config
+	if err := config.LoadSection(dec, ConfigKey, &c); err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
 func TestLoadValidAuditConfig(t *testing.T) {
 	dec := &fakeDecoder{values: map[string]any{"audit": Config{QueueSize: 256, BatchSize: 50, FlushIntervalMS: 500, HashSecret: "s"}}}
-	got, err := Load(dec)
+	got, err := loadConfig(dec)
 	require.NoError(t, err)
 	assert.Equal(t, 256, got.QueueSize)
 	assert.Equal(t, "s", got.HashSecret)
@@ -45,7 +69,7 @@ func TestValidateAuditConfig(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			require.Error(t, cfg.Validate())
-			_, err := Load(&fakeDecoder{values: map[string]any{"audit": cfg}})
+			_, err := loadConfig(&fakeDecoder{values: map[string]any{"audit": cfg}})
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "audit")
 		})
@@ -55,7 +79,7 @@ func TestValidateAuditConfig(t *testing.T) {
 // TestApplyDefaultsReadsEnvOverride 段的环境覆盖随能力下沉（AUDIT_HASH_SECRET）。
 func TestApplyDefaultsReadsEnvOverride(t *testing.T) {
 	t.Setenv("AUDIT_HASH_SECRET", "from-env")
-	got, err := Load(&fakeDecoder{values: map[string]any{"audit": Config{
+	got, err := loadConfig(&fakeDecoder{values: map[string]any{"audit": Config{
 		QueueSize: 256, BatchSize: 50, FlushIntervalMS: 500, HashSecret: "from-yaml",
 	}}})
 	require.NoError(t, err)

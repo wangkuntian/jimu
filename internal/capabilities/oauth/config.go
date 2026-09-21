@@ -3,8 +3,6 @@ package oauth
 import (
 	"fmt"
 	"net/url"
-
-	"jimu/internal/config"
 )
 
 // ConfigKey 本能力在 app.yaml 中的配置段键。
@@ -48,13 +46,4 @@ func (c Config) Validate() error {
 		}
 	}
 	return nil
-}
-
-// Load 解码并校验本能力配置段。
-func Load(dec config.SectionDecoder) (*Config, error) {
-	var c Config
-	if err := config.LoadSection(dec, ConfigKey, &c); err != nil {
-		return nil, err
-	}
-	return &c, nil
 }

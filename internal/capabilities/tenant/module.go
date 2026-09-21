@@ -5,7 +5,6 @@ import (
 	"jimu/internal/capabilities/tenant/application"
 	"jimu/internal/capabilities/tenant/infrastructure"
 	"jimu/internal/capabilities/tenant/interfaces"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 
 	"gorm.io/gorm"
@@ -18,7 +17,8 @@ type Module struct {
 	provisioner *application.GormTenantProvisioner
 }
 
-func New(db *gorm.DB, cfg config.Config) *Module {
+// New 创建 tenant 模块。prov 为开通式注册配置（由组合根从 auth 段构造）。
+func New(db *gorm.DB, prov ProvisioningConfig) *Module {
 	repo := infrastructure.NewMysqlRepository(db)
 	quotaRepo := infrastructure.NewMysqlQuotaRepository(db)
 	m := &Module{
@@ -27,8 +27,8 @@ func New(db *gorm.DB, cfg config.Config) *Module {
 		quota:   application.NewQuotaService(quotaRepo),
 	}
 	// 开通式注册（注册 = 开通新租户）：启用时暴露 provisioner 供 auth 经端口消费
-	if cfg.Auth.Provisioning.Enabled {
-		m.provisioner = application.NewGormTenantProvisioner(db, cfg.Auth.Provisioning)
+	if prov.Enabled {
+		m.provisioner = application.NewGormTenantProvisioner(db, prov)
 	}
 	return m
 }

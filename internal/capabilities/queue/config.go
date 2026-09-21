@@ -2,8 +2,6 @@ package queue
 
 import (
 	"fmt"
-
-	"jimu/internal/config"
 )
 
 // ConfigKey 本能力在 app.yaml 中的配置段键。
@@ -55,24 +53,6 @@ func (c *SchedulerConfig) Validate() error {
 		}
 	}
 	return fmt.Errorf("scheduler.store: %q, must be one of %v", c.Store, validSchedulerStores)
-}
-
-// Load 解码并校验队列配置段。
-func Load(dec config.SectionDecoder) (*Config, error) {
-	var c Config
-	if err := config.LoadSection(dec, ConfigKey, &c); err != nil {
-		return nil, err
-	}
-	return &c, nil
-}
-
-// LoadScheduler 解码并校验调度器配置段。
-func LoadScheduler(dec config.SectionDecoder) (*SchedulerConfig, error) {
-	var c SchedulerConfig
-	if err := config.LoadSection(dec, SchedulerConfigKey, &c); err != nil {
-		return nil, err
-	}
-	return &c, nil
 }
 
 // SupportsOutboxMQ 报告该队列类型能否承载 outbox 的 MQ 投递。

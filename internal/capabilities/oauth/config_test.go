@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"jimu/internal/config"
+
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,6 +27,28 @@ func yamlSection(t *testing.T, yaml string) viperSection {
 
 func TestConfigKeyIsStable(t *testing.T) {
 	assert.Equal(t, "oauth", ConfigKey, "对外配置键不得变化")
+}
+
+// TestDescriptorDeclaresConfigSection 描述符必须声明本段，否则框架不会加载/校验它。
+func TestDescriptorDeclaresConfigSection(t *testing.T) {
+	for _, spec := range Descriptor.Configs {
+		if spec.Section == ConfigKey {
+			require.NotNil(t, spec.New)
+			_, ok := spec.New().(config.SectionConfig)
+			require.True(t, ok, "段实例必须实现 config.SectionConfig")
+			return
+		}
+	}
+	t.Fatalf("Descriptor 必须声明配置段 %q", ConfigKey)
+}
+
+// loadConfig 走框架同款机制（config.LoadSection：解码 → 默认值 → 校验）。
+func loadConfig(dec config.SectionDecoder) (*Config, error) {
+	var c Config
+	if err := config.LoadSection(dec, ConfigKey, &c); err != nil {
+		return nil, err
+	}
+	return &c, nil
 }
 
 // TestValidateProviders 迁移自 internal/config 的 TestValidateOAuthProviders，语义逐条不变。
@@ -55,7 +79,7 @@ func TestValidateProviders(t *testing.T) {
 
 // TestLoadMapsProviderKeys YAML 键名与下沉前一致。
 func TestLoadMapsProviderKeys(t *testing.T) {
-	cfg, err := Load(yamlSection(t, `
+	cfg, err := loadConfig(yamlSection(t, `
 oauth:
   providers:
     google:
@@ -79,7 +103,7 @@ oauth:
 
 // TestLoadRejectsInvalidProvider Load 内含校验（启用但缺必填项）。
 func TestLoadRejectsInvalidProvider(t *testing.T) {
-	_, err := Load(yamlSection(t, "oauth:\n  providers:\n    p:\n      enabled: true\n"))
+	_, err := loadConfig(yamlSection(t, "oauth:\n  providers:\n    p:\n      enabled: true\n"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "oauth.providers.p")
 }

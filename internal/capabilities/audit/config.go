@@ -33,12 +33,3 @@ func (c Config) Validate() error {
 	}
 	return nil
 }
-
-// Load 解码并校验本能力配置段。
-func Load(dec config.SectionDecoder) (*Config, error) {
-	var c Config
-	if err := config.LoadSection(dec, ConfigKey, &c); err != nil {
-		return nil, err
-	}
-	return &c, nil
-}

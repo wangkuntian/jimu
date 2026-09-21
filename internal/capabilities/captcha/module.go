@@ -29,6 +29,9 @@ func (m *Module) Service() *Service { return m.svc }
 var Descriptor = contract.Descriptor{
 	Name:  "captcha",
 	Mount: contract.MountPublic,
+	Configs: []contract.ConfigSpec{
+		{Section: ConfigKey, New: func() any { return &Config{} }},
+	},
 }
 
 // Descriptor 实现 contract.Describable。

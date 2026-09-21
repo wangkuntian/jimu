@@ -3,6 +3,8 @@ package captcha
 import (
 	"testing"
 
+	"jimu/internal/config"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,9 +34,31 @@ func TestConfigKeyIsStable(t *testing.T) {
 	assert.Equal(t, "captcha", ConfigKey)
 }
 
+// TestDescriptorDeclaresConfigSection 描述符必须声明本段，否则框架不会加载/校验它。
+func TestDescriptorDeclaresConfigSection(t *testing.T) {
+	for _, spec := range Descriptor.Configs {
+		if spec.Section == ConfigKey {
+			require.NotNil(t, spec.New)
+			_, ok := spec.New().(config.SectionConfig)
+			require.True(t, ok, "段实例必须实现 config.SectionConfig")
+			return
+		}
+	}
+	t.Fatalf("Descriptor 必须声明配置段 %q", ConfigKey)
+}
+
+// loadConfig 走框架同款机制（config.LoadSection：解码 → 默认值 → 校验）。
+func loadConfig(dec config.SectionDecoder) (*Config, error) {
+	var c Config
+	if err := config.LoadSection(dec, ConfigKey, &c); err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
 func TestLoadDecodesEnabledCaptcha(t *testing.T) {
 	dec := &fakeDecoder{values: map[string]any{"captcha": Config{Enabled: true, TTLMin: 5}}}
-	got, err := Load(dec)
+	got, err := loadConfig(dec)
 	require.NoError(t, err)
 	assert.True(t, got.Enabled)
 	assert.Equal(t, 5, got.TTLMin)
@@ -47,7 +71,7 @@ func TestValidateRejectsZeroTTLWhenEnabled(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "captcha.ttl_min")
 
-	_, err = Load(&fakeDecoder{values: map[string]any{"captcha": Config{Enabled: true}}})
+	_, err = loadConfig(&fakeDecoder{values: map[string]any{"captcha": Config{Enabled: true}}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "captcha")
 }
@@ -56,14 +80,14 @@ func TestValidateRejectsZeroTTLWhenEnabled(t *testing.T) {
 func TestValidateAllowsZeroTTLWhenDisabled(t *testing.T) {
 	require.NoError(t, Config{Enabled: false, TTLMin: 0}.Validate())
 
-	got, err := Load(&fakeDecoder{values: map[string]any{"captcha": Config{Enabled: false}}})
+	got, err := loadConfig(&fakeDecoder{values: map[string]any{"captcha": Config{Enabled: false}}})
 	require.NoError(t, err)
 	assert.False(t, got.Enabled)
 }
 
 // TestLoadMissingSectionIsZeroValue 段缺失时零值（Enabled=false，不启用）。
 func TestLoadMissingSectionIsZeroValue(t *testing.T) {
-	got, err := Load(&fakeDecoder{})
+	got, err := loadConfig(&fakeDecoder{})
 	require.NoError(t, err)
 	assert.False(t, got.Enabled)
 	assert.Zero(t, got.TTLMin)

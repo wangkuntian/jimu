@@ -13,7 +13,6 @@ import (
 	"jimu/internal/capabilities/encryption"
 	"jimu/internal/capabilities/notification"
 	userdomain "jimu/internal/capabilities/user/domain"
-	"jimu/internal/config"
 	"jimu/internal/kernel/auth"
 	apperrors "jimu/internal/shared/errors"
 
@@ -31,7 +30,7 @@ func TestForgotPasswordHandler(t *testing.T) {
 	r := gin.New()
 	r.POST("/forgot-password", func(c *gin.Context) {
 		c.Set("validated_req", &forgotPasswordRequest{Email: "user@example.com"})
-		NewAuthHandler(newHandlerService(t), config.AuthConfig{}, nil, nil).ForgotPassword(c)
+		NewAuthHandler(newHandlerService(t), Config{}, nil, nil).ForgotPassword(c)
 	})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/forgot-password", strings.NewReader(`{"email":"user@example.com"}`)))
@@ -52,7 +51,7 @@ func TestResetPasswordHandlerInvalidCode(t *testing.T) {
 	r := gin.New()
 	r.POST("/reset-password", func(c *gin.Context) {
 		c.Set("validated_req", &resetPasswordRequest{Email: "user@example.com", Code: "000000", NewPassword: "newpass123"})
-		NewAuthHandler(newHandlerService(t), config.AuthConfig{}, nil, nil).ResetPassword(c)
+		NewAuthHandler(newHandlerService(t), Config{}, nil, nil).ResetPassword(c)
 	})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/reset-password", strings.NewReader(`{}`)))

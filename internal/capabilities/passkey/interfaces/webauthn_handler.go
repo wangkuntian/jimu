@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/passkey/application"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
 	"jimu/internal/shared/errors"
@@ -41,12 +41,12 @@ type webAuthnSessionResponse struct {
 // PasskeyHandler 通行密钥 HTTP 处理器。
 type PasskeyHandler struct {
 	service *application.PasskeyService
-	cfg     config.AuthConfig
+	cfg     authmodule.Config
 	limiter *auth.Limiter
 }
 
 // NewPasskeyHandler 创建通行密钥处理器。
-func NewPasskeyHandler(service *application.PasskeyService, cfg config.AuthConfig, limiter *auth.Limiter) *PasskeyHandler {
+func NewPasskeyHandler(service *application.PasskeyService, cfg authmodule.Config, limiter *auth.Limiter) *PasskeyHandler {
 	return &PasskeyHandler{service: service, cfg: cfg, limiter: limiter}
 }
 

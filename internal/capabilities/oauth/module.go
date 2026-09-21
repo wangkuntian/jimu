@@ -3,11 +3,11 @@ package oauth
 
 import (
 	"embed"
+	authmodule "jimu/internal/capabilities/auth"
 	oauthapp "jimu/internal/capabilities/oauth/application"
 	oauthinfra "jimu/internal/capabilities/oauth/infrastructure"
 	"jimu/internal/capabilities/oauth/interfaces"
 	oauthplatform "jimu/internal/capabilities/oauth/provider"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/httpclient"
@@ -22,8 +22,8 @@ type Module struct {
 	service *oauthapp.OAuthService
 }
 
-// New 创建 OAuth 模块（自包含装配依赖）
-func New(db *gorm.DB, rdb redistore.Client, oauthCfg Config, authCfg config.AuthConfig, httpClient *httpclient.Client) *Module {
+// New 创建 OAuth 模块（自包含装配依赖）。authCfg 为 auth 能力配置（oauth.Requires 含 auth，方向合法）。
+func New(db *gorm.DB, rdb redistore.Client, oauthCfg Config, authCfg authmodule.Config, httpClient *httpclient.Client) *Module {
 	bindingRepo := oauthinfra.NewMySQLBindingRepository(db)
 	jwtUtil := auth.NewWithRotation(authCfg.JWTSecret, authCfg.JWTPreviousSecret, authCfg.Issuer, authCfg.AccessExpireMin, authCfg.RefreshExpireDay)
 	sessionStore := auth.NewRedisSessionStore(rdb)
@@ -78,6 +78,9 @@ var Descriptor = contract.Descriptor{
 	Migrations: migrationsFS,
 	Requires:   []string{"auth", "user"},
 	Mount:      contract.MountPublic,
+	Configs: []contract.ConfigSpec{
+		{Section: ConfigKey, New: func() any { return &Config{} }},
+	},
 }
 
 // Descriptor 实现 contract.Describable。

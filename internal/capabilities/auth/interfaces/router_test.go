@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"jimu/internal/config"
 	"jimu/internal/kernel/auth"
 
 	"github.com/gin-gonic/gin"
@@ -124,8 +123,8 @@ func testRouter(debug bool) *gin.Engine {
 	return gin.New()
 }
 
-func testAuthConfig() config.AuthConfig {
-	return config.AuthConfig{
+func testAuthConfig() Config {
+	return Config{
 		PublicRegistration:    false,
 		LoginRateLimit:        1,
 		LoginRateWindowSec:    60,

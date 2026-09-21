@@ -50,6 +50,9 @@ var Descriptor = contract.Descriptor{
 		// 审计导出路由 /audits/export 挂在 audit 能力（handler.go:62）
 		{Name: "审计导出", Resource: "/api/v1/audits/export", Action: "GET"},
 	},
+	Configs: []contract.ConfigSpec{
+		{Section: ConfigKey, New: func() any { return &Config{} }},
+	},
 }
 
 // Descriptor 实现 contract.Describable。

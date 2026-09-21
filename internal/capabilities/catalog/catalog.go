@@ -53,13 +53,14 @@ var entries = []contract.Descriptor{
 	breach.Descriptor,
 }
 
-// All 返回清单中全部能力的深拷贝（含 Requires），调用方修改不影响清单。
+// All 返回清单中全部能力的深拷贝（含 Requires/Configs），调用方修改不影响清单。
 func All() []contract.Descriptor {
 	out := make([]contract.Descriptor, len(entries))
 	for i, d := range entries {
 		out[i] = d
 		out[i].Requires = append([]string(nil), d.Requires...)
 		out[i].Permissions = append([]contract.Permission(nil), d.Permissions...)
+		out[i].Configs = append([]contract.ConfigSpec(nil), d.Configs...)
 	}
 	return out
 }
@@ -117,6 +118,7 @@ func Resolve(enabled []string) ([]contract.Descriptor, error) {
 		if on[d.Name] {
 			d.Requires = append([]string(nil), d.Requires...)
 			d.Permissions = append([]contract.Permission(nil), d.Permissions...)
+			d.Configs = append([]contract.ConfigSpec(nil), d.Configs...)
 			out = append(out, d)
 		}
 	}

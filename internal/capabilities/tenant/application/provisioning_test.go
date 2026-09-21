@@ -8,7 +8,6 @@ import (
 	roledomain "jimu/internal/capabilities/access/domain"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/db"
 	apperrors "jimu/internal/shared/errors"
@@ -39,15 +38,15 @@ func newProvisionTestDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
-func provisionTestConfig() config.ProvisioningConfig {
-	return config.ProvisioningConfig{
+func provisionTestConfig() ProvisioningConfig {
+	return ProvisioningConfig{
 		Enabled:   true,
 		OwnerRole: "管理员",
-		Roles: []config.ProvisionRoleTemplate{
+		Roles: []ProvisionRoleTemplate{
 			{
 				Name:        "管理员",
 				Description: "租户管理员",
-				Permissions: []config.ProvisionPermission{
+				Permissions: []ProvisionPermission{
 					{Resource: "/api/v1/users", Action: "GET"},
 					{Resource: "/api/v1/users", Action: "POST"},
 					{Resource: "/api/v1/roles", Action: "GET"},
@@ -57,7 +56,7 @@ func provisionTestConfig() config.ProvisioningConfig {
 			{
 				Name:        "成员",
 				Description: "普通成员",
-				Permissions: []config.ProvisionPermission{
+				Permissions: []ProvisionPermission{
 					{Resource: "/api/v1/audits", Action: "GET"},
 				},
 			},

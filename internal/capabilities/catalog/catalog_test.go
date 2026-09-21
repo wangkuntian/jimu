@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"jimu/internal/config"
 	"jimu/internal/contract"
 )
 
@@ -213,13 +214,15 @@ func TestDescriptorsAreWellFormed(t *testing.T) {
 			}
 		}
 	}
-	// 精确逐值比较对 fs.FS（embed.FS）不可行，比较除 Migrations 外的全部字段；
-	// 迁移有无形态由 TestCatalogMigrationsShape 单独钉住；权限点聚合面由
+	// 精确逐值比较对 fs.FS（embed.FS）与 ConfigSpec.New（函数值）不可行，比较除
+	// Migrations/Configs 外的全部字段；迁移有无形态由 TestCatalogMigrationsShape 单独钉住，
+	// 配置段形态由 TestCatalogConfigSectionsShape 单独钉住；权限点聚合面由
 	// TestDescriptorPermissionsCoverBusinessRoutes 单独钉住。
 	got, want := All(), fixture()
 	for i := range want {
 		got[i].Migrations, want[i].Migrations = nil, nil
 		got[i].Permissions, want[i].Permissions = nil, nil
+		got[i].Configs, want[i].Configs = nil, nil
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("catalog descriptors drifted from the expected fixture:\n got %+v\nwant %+v", got, want)
@@ -307,6 +310,36 @@ func TestDescriptorPermissionsCoverBusinessRoutes(t *testing.T) {
 		if !got[item.resource+" "+item.action] {
 			t.Fatalf("missing permission %s %s", item.action, item.resource)
 		}
+	}
+}
+
+// TestCatalogConfigSectionsShape 钉住各能力声明的配置段（ConfigSpec.New 是函数值，
+// 无法参与 TestDescriptorsAreWellFormed 的逐值比较，故单独钉住段键与 SectionConfig 契约）。
+// 非 catalog 包（storage/notification/retention）的段由组合根显式加载，此处不出现（③ 裁定 B）。
+func TestCatalogConfigSectionsShape(t *testing.T) {
+	want := map[string][]string{
+		"auth":      {"auth"},
+		"captcha":   {"captcha"},
+		"audit":     {"audit"},
+		"oauth":     {"oauth"},
+		"queue":     {"queue", "scheduler"},
+		"outbox":    {"outbox"},
+		"uploadsec": {"upload"},
+	}
+	got := make(map[string][]string, len(want))
+	for _, d := range All() {
+		for _, c := range d.Configs {
+			got[d.Name] = append(got[d.Name], c.Section)
+			if c.New == nil {
+				t.Fatalf("capability %q config %q has no constructor", d.Name, c.Section)
+			}
+			if _, ok := c.New().(config.SectionConfig); !ok {
+				t.Fatalf("capability %q config %q must implement config.SectionConfig", d.Name, c.Section)
+			}
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("catalog config sections drifted:\n got %v\nwant %v", got, want)
 	}
 }
 

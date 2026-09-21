@@ -64,7 +64,6 @@ type Config struct {
 	Redis        RedisConfig                 `mapstructure:"redis"`
 	RateLimit    RateLimitConfig             `mapstructure:"ratelimit"`
 	Log          LogConfig                   `mapstructure:"log"`
-	Auth         AuthConfig                  `mapstructure:"auth"`
 	Server       ServerConfig                `mapstructure:"server"`
 	ID           IDConfig                    `mapstructure:"id"`
 	Cache        CacheConfig                 `mapstructure:"cache"`
@@ -268,59 +267,6 @@ type LogConfig struct {
 	Compress   bool   `mapstructure:"compress"`    // 是否压缩
 }
 
-type AuthConfig struct {
-	JWTSecret             string             `mapstructure:"jwt_secret"`
-	JWTPreviousSecret     string             `mapstructure:"jwt_previous_secret"`
-	Issuer                string             `mapstructure:"issuer"`
-	AccessExpireMin       int                `mapstructure:"access_expire_min"`
-	RefreshExpireDay      int                `mapstructure:"refresh_expire_day"`
-	PublicRegistration    bool               `mapstructure:"public_registration"`
-	LoginRateLimit        int                `mapstructure:"login_rate_limit"`
-	LoginRateWindowSec    int                `mapstructure:"login_rate_window_sec"`
-	RegisterRateLimit     int                `mapstructure:"register_rate_limit"`
-	RegisterRateWindowSec int                `mapstructure:"register_rate_window_sec"`
-	ResetCodeTTLMin       int                `mapstructure:"reset_code_ttl_min"`     // 密码重置验证码有效期（分钟）
-	PasswordHistoryCount  int                `mapstructure:"password_history_count"` // 防复用：检查最近 N 个历史密码（0=关闭）
-	TrustedDeviceDays     int                `mapstructure:"trusted_device_days"`    // 可信设备有效期（天，0=关闭「记住此设备」）
-	BreachCheckEnabled    bool               `mapstructure:"breach_check_enabled"`   // 泄露口令检查（HIBP k-匿名范围查询，默认关闭）
-	Provisioning          ProvisioningConfig `mapstructure:"provisioning"`           // 开通式注册（注册 = 开通新租户）
-	WebAuthn              WebAuthnConfig     `mapstructure:"webauthn"`               // WebAuthn/通行密钥（无密码登录）
-}
-
-// WebAuthnConfig WebAuthn/通行密钥配置。
-// rp_id 必须是站点有效域（不带 scheme，如 example.com；本地开发用 localhost），
-// rp_origins 是允许的浏览器来源（含 scheme，如 https://example.com）。
-type WebAuthnConfig struct {
-	Enabled       bool     `mapstructure:"enabled"`         // 是否启用通行密钥
-	RPDisplayName string   `mapstructure:"rp_display_name"` // 展示给用户的站点名称
-	RPID          string   `mapstructure:"rp_id"`           // Relying Party ID（站点有效域）
-	RPOrigins     []string `mapstructure:"rp_origins"`      // 允许的来源（绝对 URL）
-	SessionTTLMin int      `mapstructure:"session_ttl_min"` // 挑战有效期（分钟），0 用默认 5
-}
-
-// ProvisioningConfig 开通式注册配置。
-// enabled 时 /auth/register 在单事务内创建新租户 + owner 用户，并按 roles 模板
-// 初始化租户角色与全局权限绑定；owner 获得绑定 owner_role 指定的角色（缺省为模板第一个角色）。
-type ProvisioningConfig struct {
-	Enabled   bool                    `mapstructure:"enabled"`
-	OwnerRole string                  `mapstructure:"owner_role"` // owner 绑定的模板角色名；空 = 模板第一个角色
-	Roles     []ProvisionRoleTemplate `mapstructure:"roles"`
-}
-
-// ProvisionRoleTemplate 开通租户时初始化的角色模板。
-// permissions 引用全局权限表（seed 写入的 resource + action），缺失的权限跳过不报错。
-type ProvisionRoleTemplate struct {
-	Name        string                `mapstructure:"name"`
-	Description string                `mapstructure:"description"`
-	Permissions []ProvisionPermission `mapstructure:"permissions"`
-}
-
-// ProvisionPermission 模板角色绑定的全局权限
-type ProvisionPermission struct {
-	Resource string `mapstructure:"resource"`
-	Action   string `mapstructure:"action"`
-}
-
 // Load 加载配置
 // 优先级：环境变量 > .env > app.{env}.yaml > app.yaml
 func Load() (*Config, error) {
@@ -491,14 +437,7 @@ func (c DBConfig) IsPostgres() bool {
 // 能力段的环境覆盖由各能力在自己的 ApplyDefaults 中处理（见 config.LoadSection）。
 // 支持 _FILE 后缀从文件读取敏感值（Docker Secrets 兼容）
 func applyEnvOverrides(cfg *Config) {
-	// 认证：优先 JWT_SECRET_FILE，其次 JWT_SECRET
-	if v := GetEnvOrFile("JWT_SECRET_FILE", "JWT_SECRET"); v != "" {
-		cfg.Auth.JWTSecret = v
-	}
-	// 密钥轮换：旧 JWT 密钥（用于验证轮换期间尚未过期的旧 token）
-	if v := GetEnvOrFile("JWT_PREVIOUS_SECRET_FILE", "JWT_PREVIOUS_SECRET"); v != "" {
-		cfg.Auth.JWTPreviousSecret = v
-	}
+	// 认证（JWT）相关覆盖由 auth 能力在自己的 ApplyDefaults 中处理（见 config.LoadSection）。
 	// 数据库
 	if v := os.Getenv("DB_DRIVER"); v != "" {
 		cfg.DB.Driver = v

@@ -2,8 +2,6 @@ package outbox
 
 import (
 	"fmt"
-
-	"jimu/internal/config"
 )
 
 // ConfigKey 本能力在 app.yaml 中的配置段键。
@@ -38,12 +36,3 @@ func (c Config) Validate() error {
 
 // UsesMQ 报告是否配置为 MQ 投递。
 func (c Config) UsesMQ() bool { return c.Publisher == PublisherMQ }
-
-// Load 解码并校验本能力配置段。
-func Load(dec config.SectionDecoder) (*Config, error) {
-	var c Config
-	if err := config.LoadSection(dec, ConfigKey, &c); err != nil {
-		return nil, err
-	}
-	return &c, nil
-}

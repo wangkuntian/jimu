@@ -8,6 +8,7 @@ import (
 	"time"
 
 	apikey "jimu/internal/capabilities/apikey"
+	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/breach"
 	"jimu/internal/capabilities/encryption"
 	"jimu/internal/capabilities/feature"
@@ -41,6 +42,8 @@ type Container struct {
 	Config *config.Config
 	// Sections 按 YAML 点分键解码能力配置段（能力配置由能力自身声明，设计 §8）
 	Sections config.SectionDecoder
+	// CapabilityConfigs 已按启用集解码并校验的能力配置段（P2.1 起，未启用的段不出现）
+	CapabilityConfigs *CapabilityConfigs
 	// Enabled 已启用能力名集合（含依赖闭包）
 	Enabled map[string]bool
 	// OutboxPublisher outbox 的发布器类型；outbox 能力未启用时为空（不接线）
@@ -109,7 +112,7 @@ func (c *Container) Stop(ctx context.Context) error {
 	return result
 }
 
-func NewContainer(cfg *config.Config, sections config.SectionDecoder, enabled map[string]bool) (*Container, error) {
+func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *CapabilityConfigs, enabled map[string]bool) (*Container, error) {
 	// OpenObserve 日志通道：otel 启用时附加到 zap（初始化失败仅告警，不阻断启动）
 	var (
 		logExporter *observability.LogExporter
@@ -145,28 +148,24 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, enabled ma
 
 	lock := redistore.NewLock(rdb, "lock")
 
-	// 能力配置段：由各能力声明默认值与校验（设计 §8）。
-	// 调度器由 queue 能力用于作业调度，其配置段随之归 queue；两者都无条件加载
-	// （container 的调度器实例与 outbox 接线不依赖能力启用集）。
-	schedulerCfg, err := queue.LoadScheduler(sections)
-	if err != nil {
-		return nil, fmt.Errorf("init scheduler config: %w", err)
+	// 能力配置段由各能力声明（Descriptor.Configs），组合根按启用集解码并校验（设计 §8）。
+	// 未启用的能力其段不出现：此处取回零值，等价于「不接线/默认行为」。
+	// 调度器由 queue 能力用于作业调度，其配置段随之归 queue。
+	var schedulerCfg queue.SchedulerConfig
+	if c, ok := SectionOf[*queue.SchedulerConfig](capCfgs, queue.SchedulerConfigKey); ok {
+		schedulerCfg = *c
 	}
-	outboxCfg, err := outbox.Load(sections)
-	if err != nil {
-		return nil, fmt.Errorf("init outbox config: %w", err)
+	var outboxCfg outbox.Config
+	if c, ok := SectionOf[*outbox.Config](capCfgs, outbox.ConfigKey); ok {
+		outboxCfg = *c
 	}
 	var queueCfg queue.Config
-	if enabled["queue"] {
-		loaded, err := queue.Load(sections)
-		if err != nil {
-			return nil, fmt.Errorf("init queue config: %w", err)
-		}
-		queueCfg = *loaded
+	if c, ok := SectionOf[*queue.Config](capCfgs, queue.ConfigKey); ok {
+		queueCfg = *c
 	}
 	// 跨能力校验（原 config.validateCommon 的 outbox.publisher=mq 依赖 queue.type）：
-	// 两个能力都启用时才能在此判定。
-	if enabled["outbox"] && enabled["queue"] && outboxCfg.UsesMQ() && !queue.SupportsOutboxMQ(queueCfg.Type) {
+	// queue 未启用时 queueCfg 为零值，同样不受支持，在此 fail-closed。
+	if outboxCfg.UsesMQ() && !queue.SupportsOutboxMQ(queueCfg.Type) {
 		return nil, fmt.Errorf("invalid queue.type %q for outbox.publisher %q", queueCfg.Type, outboxCfg.Publisher)
 	}
 
@@ -195,15 +194,10 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, enabled ma
 		return nil, fmt.Errorf("init storage: %w", err)
 	}
 
-	// 文件上传病毒扫描器：上传能力未启用、或未开启扫描时为 nil（上传不扫描，向后兼容）。
-	// 配置段仅在能力启用时解码与校验（未启用的能力配置段既不出现也不校验，设计 §8）。
+	// 文件上传病毒扫描器：uploadsec 未启用时其配置段不加载，Scanner 为 nil（不扫描）。
 	var uploadScanner uploadsec.Scanner
-	if enabled["uploadsec"] {
-		uploadCfg, err := uploadsec.Load(sections)
-		if err != nil {
-			return nil, fmt.Errorf("init upload config: %w", err)
-		}
-		uploadScanner = uploadCfg.Scanner()
+	if c, ok := SectionOf[*uploadsec.Config](capCfgs, uploadsec.ConfigKey); ok {
+		uploadScanner = c.Scanner()
 	}
 
 	// 统一出站 HTTP client（oauth/webhook 等外部调用复用）
@@ -215,9 +209,11 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, enabled ma
 		RateLimitBurst:  cfg.HTTPClient.RateLimitBurst,
 	})
 
-	// 泄露口令检查（HIBP k-匿名范围查询）：默认关闭，启用时复用统一出站 client（超时/重试/熔断）
+	// 泄露口令检查（HIBP k-匿名范围查询）：默认关闭，启用时复用统一出站 client（超时/重试/熔断）。
+	// auth 段由能力声明并已在组合根加载（未启用 auth 时该段不出现，视为关闭）。
+	authCfg, _ := SectionOf[*authmodule.Config](capCfgs, authmodule.ConfigKey)
 	var breachChecker contract.BreachChecker
-	if cfg.Auth.BreachCheckEnabled {
+	if authCfg != nil && authCfg.BreachCheckEnabled {
 		breachChecker = breach.New(httpClient)
 	}
 
@@ -343,32 +339,33 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, enabled ma
 	grpcServer.RegisterUserInfoService(userpkg.NewUserinfoSource(userinfrastructure.NewMysqlRepository(dbConn)))
 
 	return &Container{
-		Config:          cfg,
-		Sections:        sections,
-		Enabled:         enabled,
-		OutboxPublisher: outboxWire,
-		RetentionCfg:    *retentionCfg,
-		DB:              dbConn,
-		Redis:           rdb,
-		Logger:          log,
-		Reporter:        errorReporter,
-		JobRegistry:     sched,
-		Scheduler:       sched,
-		Lock:            lock,
-		Storage:         storageSvc,
-		UploadScanner:   uploadScanner,
-		Notification:    notifier,
-		FeatureFlag:     featureMgr,
-		WebSocketHub:    wsHub,
-		EventBus:        eventBus,
-		Outbox:          outboxProcessor,
-		DBCollector:     dbCollector,
-		HTTPClient:      httpClient,
-		Cipher:          cipher,
-		WorkerPool:      pendingWorkerPool,
-		APIKeyVerifier:  apiKeyVerifier,
-		BreachChecker:   breachChecker,
-		GRPCServer:      grpcServer,
-		LogExporter:     logExporter,
+		Config:            cfg,
+		Sections:          sections,
+		CapabilityConfigs: capCfgs,
+		Enabled:           enabled,
+		OutboxPublisher:   outboxWire,
+		RetentionCfg:      *retentionCfg,
+		DB:                dbConn,
+		Redis:             rdb,
+		Logger:            log,
+		Reporter:          errorReporter,
+		JobRegistry:       sched,
+		Scheduler:         sched,
+		Lock:              lock,
+		Storage:           storageSvc,
+		UploadScanner:     uploadScanner,
+		Notification:      notifier,
+		FeatureFlag:       featureMgr,
+		WebSocketHub:      wsHub,
+		EventBus:          eventBus,
+		Outbox:            outboxProcessor,
+		DBCollector:       dbCollector,
+		HTTPClient:        httpClient,
+		Cipher:            cipher,
+		WorkerPool:        pendingWorkerPool,
+		APIKeyVerifier:    apiKeyVerifier,
+		BreachChecker:     breachChecker,
+		GRPCServer:        grpcServer,
+		LogExporter:       logExporter,
 	}, nil
 }
