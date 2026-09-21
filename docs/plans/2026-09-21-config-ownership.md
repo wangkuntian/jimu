@@ -206,3 +206,81 @@ require.NoError(t, app.ValidateCapabilityConfigs(cfg, caps))
 **待做**：把 9 个段的 `Load(dec)` 换成 `Descriptor.Configs` 声明并让 `main`/`container`
 从 `CapabilityConfigs` 取值；`storage`/`notification`/`retention` 无 `Descriptor`，
 其段归属需在 P2.2 决定（见总纲）。
+
+---
+
+## 接手须知（P2.1 未完成，交接给下一个会话）
+
+**分支**：`feature/config-ownership`（**仅本地**，未 push；从 `release/v0.3.0` 的 `822009e` 切出）
+**状态**：12 个提交、全绿、工作区干净、`configs/*.yaml` 零改动
+**先读**：[2026-09-21-p2-three-layer-mechanism.md](2026-09-21-p2-three-layer-mechanism.md)（P2 总纲）→ 本文件
+
+### 剩余工作（按顺序）
+
+#### ① `auth` 段下沉（唯一未下沉的能力段）
+
+依据设计 **§8 ¶2**：`auth.webauthn.enabled` / `auth.provisioning.enabled` 属「**保留为能力内配置**」的开关，
+**不得拆段**。因此：
+
+- `internal/capabilities/auth/config.go` 新建：`ConfigKey = "auth"`，`Config` = 现 `config.AuthConfig` 的**全部字段**
+  （含嵌套 `WebAuthn` / `Provisioning` 子结构），`ApplyDefaults()` 承接 `applyEnvOverrides` 里
+  `JWT_SECRET` / `JWT_PREVIOUS_SECRET` 两项覆盖（用 `config.GetEnvOrFile`），`Validate()` 承接
+  `validateCommon` 中的 auth 检查，`ValidateProd()` 承接 prod 专属的 `jwt_secret` 强度检查
+  （机制已支持：`config.ProdConfigValidator`，`LoadCapabilityConfigs` 在 `env=="prod"` 时按类型断言调用）。
+- 删除 `internal/config` 的 `AuthConfig` / `WebAuthnConfig` / `ProvisioningConfig` / `ProvisionRoleTemplate` /
+  `ProvisionPermission` 与 `validateProvisioning` / `validateWebAuthn`，以及 `applyEnvOverrides` 里的 auth 两项。
+- **消费方改法**（注意依赖方向，§9 门禁禁止越界 import）：
+  | 消费方 | 做法 |
+  |---|---|
+  | `auth` 自身（module/router/handler/interfaces） | 改用 `auth.Config` |
+  | `passkey`（`Requires` 含 auth ✓） | 可直接收 `auth.Config` |
+  | `oauth`（`Requires` 含 auth ✓） | 可直接收 `auth.Config` |
+  | `console`（`Requires` 含 auth ✓） | 用 JWT 参数，可收 `auth.Config` 或单独参数 |
+  | `mfa`（`Requires = ["user"]`，**反向**） | **禁止** import auth；改为 `mfa.New(db, mfa.Config{TrustedDeviceDays, Issuer}, users)`，由 `main` 从 `authCfg` 取值 |
+  | `tenant`（被 auth 依赖，**反向**） | **禁止** import auth；`tenant` 定义自己的 `ProvisioningConfig`，`main` 从 `authCfg.Provisioning` 构造后传入 |
+- **两条跨能力校验移到组合根**（`cmd/server/main.go`）：
+  - `provisioning.enabled` 要求 `auth.public_registration`
+  - （如适用）prod 下 provisioning/webauthn 的组合检查
+- `container.go:220` 的 `cfg.Auth.BreachCheckEnabled` → 改用 `authCfg.BreachCheckEnabled`。
+
+#### ② 9 个段迁移到 `Descriptor.Configs`（对齐 §6.1）
+
+当前是「能力自持 `Load(dec)`」，需换成契约声明，让 `app.LoadCapabilityConfigs` 成为唯一入口：
+
+- 每个能力在 `Descriptor` 里加 `Configs: []contract.ConfigSpec{{Section: <ConfigKey>, New: func() any { return &Config{} }}}`。
+  多段能力（`queue` 的 `queue`+`scheduler`；`notification` 的 `email`+`sms`+`notification`）声明多条。
+- 删除各能力的 `Load(dec)` / `LoadScheduler(dec)`（共 10 个，见下）与其 `config.LoadSection` 依赖。
+- `main`/`container` 改为：先 `app.LoadCapabilityConfigs(sections, caps, os.Getenv("APP_ENV"))`，
+  再用 `app.SectionOf[*T](cfgs, key)` 取值。注意 `container` 需要 `CapabilityConfigs`（经 `NewContainer` 参数传入，
+  替代当前的 `Sections`+按需 `Load`）。
+- 若 `config.LoadSection` 不再有生产调用点，连同 `internal/config/capsection_test.go` 一并删除
+  （框架侧已有 `internal/app/capconfig_test.go` 覆盖同语义）。
+- 待删除的 `Load` 清单：
+  `internal/capabilities/{outbox,uploadsec,oauth,retention,notification,captcha,storage,audit,queue}/config.go`
+  （`queue` 另有 `LoadScheduler`）。
+
+#### ③ 非 catalog 包的段归属（**决定点**）
+
+`storage` / `notification` / `retention` **没有 `Descriptor`**，无法被 `LoadCapabilityConfigs` 按启用集遍历。
+二选一并在文档记录：
+- **(a)** 给它们 `Descriptor` 并加入 `catalog`（成为可由 `capabilities.enabled` 开关的能力，与 §6.1「catalog 是全仓唯一列出能力的地方」一致）；
+- **(b)** 保留组合根显式加载（则在总纲里说明为何它们不是 catalog 能力）。
+
+倾向 (a)：与设计一致，且能让框架统一驱动配置。注意 catalog 扩容会影响 `catalog_test.go` 夹具、`main.wiredCapabilities`、
+`catalog` 的能力计数断言（当前 18 项）。
+
+#### ④ 收口（总纲的 P2.1 收尾）
+
+- 加「未启用能力的配置段既不出现也不校验」的装配级回归用例（可选 `retention` + 非法配置）。
+- 文档：`README.md`（能力树/配置表标注归属能力、`capabilities.enabled` 说明）、`docs/design/2026-09-18-capability-plugins-design.md` §10 标记 P2.1 完成、`docs/releases/v0.3.0.md` 补条目与验证结果。
+- 全量回归：`gofmt -l .`、`go build ./...`、`go vet ./...`、`golangci-lint run ./...`、`make check-log-usage`、
+  `make test-cover && make test-coverage-check`（≥70%）、`make test-race`、`make swagger-check`、`make bench-ci`、
+  `make release-check COMPOSE_ENV=.env.example`（后者会跑真实 compose 迁移，注意 `access` 迁移集的既有坑已修）。
+
+### 硬约束（勿破）
+
+- **禁止自动提交/推送**：仅用户明确指令后 `git commit` / `git push`（AGENTS.md 最高优先级）。
+- **对外 YAML 键逐一不变**：每个提交后用 `git diff --stat configs/` 断言为 0 行。
+- 能力之间只经 `contract` 端口调用；`internal/config` 不得 import `capabilities`；注意
+  `mfa`/`tenant` 对 auth 的**反向**依赖（见 ①）。
+- 分支保持每步全绿、可独立提交；完成后 PR 目标 `release/v0.3.0`（squash merge）。
