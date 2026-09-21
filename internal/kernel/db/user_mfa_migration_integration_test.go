@@ -13,22 +13,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// p16TempDB 在共享测试库之外开一个**独立临时数据库**，跑完即删。
+// tempCapabilityDB 在共享测试库之外开一个**独立临时数据库**，跑完即删。
 // 016 会 DROP users.totp_* 列，不能动共享 jimu_test（其他包同时跑 Migrate()，
 // 共享库被回滚到旧结构会让它们撞 duplicate column）；这里完全隔离。
-type p16TempDB struct {
+type tempCapabilityDB struct {
 	*testutil.TestDB
 	name  string
 	admin *sql.DB // server 级连接，用于 CREATE/DROP DATABASE
 }
 
-func newP16TempDB(t *testing.T, name string) *p16TempDB {
+func newTempCapabilityDB(t *testing.T, name string) *tempCapabilityDB {
 	t.Helper()
 	base := testutil.SkipUnlessDB(t).Config()
 
 	adminCfg := base
 	adminCfg.Database = ""
-	admin, err := sql.Open(p16Driver(base.Driver), p16DSN(adminCfg))
+	admin, err := sql.Open(tempDBDriver(base.Driver), tempDBDSN(adminCfg))
 	require.NoError(t, err)
 	_, err = admin.Exec("DROP DATABASE IF EXISTS " + name)
 	require.NoError(t, err)
@@ -44,17 +44,17 @@ func newP16TempDB(t *testing.T, name string) *p16TempDB {
 		_, _ = admin.Exec("DROP DATABASE IF EXISTS " + name)
 		_ = admin.Close()
 	})
-	return &p16TempDB{TestDB: tdb, name: name, admin: admin}
+	return &tempCapabilityDB{TestDB: tdb, name: name, admin: admin}
 }
 
-func p16Driver(driver string) string {
+func tempDBDriver(driver string) string {
 	if driver == "postgres" || driver == "postgresql" {
 		return "pgx"
 	}
 	return "mysql"
 }
 
-func p16DSN(cfg config.DBConfig) string {
+func tempDBDSN(cfg config.DBConfig) string {
 	if cfg.Driver == "postgres" || cfg.Driver == "postgresql" {
 		return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=postgres sslmode=disable",
 			cfg.Host, cfg.Port, cfg.User, cfg.Password)
@@ -63,8 +63,8 @@ func p16DSN(cfg config.DBConfig) string {
 		cfg.User, cfg.Password, cfg.Host, cfg.Port)
 }
 
-// p16UserColumns users 表现有列名集合。
-func p16UserColumns(t *testing.T, tdb *testutil.TestDB) map[string]bool {
+// tempDBUserColumns users 表现有列名集合。
+func tempDBUserColumns(t *testing.T, tdb *testutil.TestDB) map[string]bool {
 	t.Helper()
 	cols, err := tdb.DB.Migrator().ColumnTypes("users")
 	require.NoError(t, err)
@@ -78,31 +78,31 @@ func p16UserColumns(t *testing.T, tdb *testutil.TestDB) map[string]bool {
 // TestUserMFAMigrationShape 验证 mfa 迁移 016：up 后 users 不再有 totp_* 列、
 // user_mfa 表存在；down 后列恢复、表删除；再次 up 幂等。
 func TestUserMFAMigrationShape(t *testing.T) {
-	tdb := newP16TempDB(t, "jimu_p16_shape").TestDB
+	tdb := newTempCapabilityDB(t, "jimu_p16_shape").TestDB
 	caps := catalog.All()
 	cfg := tdb.Config()
 
 	require.NoError(t, db.Migrate(cfg, caps, "up"))
 	require.True(t, tdb.DB.Migrator().HasTable("user_mfa"), "016 应创建 user_mfa")
-	cols := p16UserColumns(t, tdb)
+	cols := tempDBUserColumns(t, tdb)
 	require.False(t, cols["totp_secret"], "016 后 users 不应再有 totp_secret")
 	require.False(t, cols["totp_enabled"], "016 后 users 不应再有 totp_enabled")
 
 	require.NoError(t, db.Migrate(cfg, caps, "down"))
 	require.False(t, tdb.DB.Migrator().HasTable("user_mfa"), "016 Down 应删除 user_mfa")
-	cols = p16UserColumns(t, tdb)
+	cols = tempDBUserColumns(t, tdb)
 	require.True(t, cols["totp_secret"], "016 Down 应恢复 users.totp_secret")
 	require.True(t, cols["totp_enabled"], "016 Down 应恢复 users.totp_enabled")
 
 	require.NoError(t, db.Migrate(cfg, caps, "up"))
 	require.True(t, tdb.DB.Migrator().HasTable("user_mfa"))
-	require.False(t, p16UserColumns(t, tdb)["totp_secret"], "再次 up 应幂等")
+	require.False(t, tempDBUserColumns(t, tdb)["totp_secret"], "再次 up 应幂等")
 }
 
 // TestUserMFATOTPDataMigration 验证存量 TOTP 密文在 016 中原样搬迁（不重新加解密），
 // 且 Down 能把数据搬回 users；未启用 TOTP 的用户不产生 user_mfa 行。
 func TestUserMFATOTPDataMigration(t *testing.T) {
-	tdb := newP16TempDB(t, "jimu_p16_data").TestDB
+	tdb := newTempCapabilityDB(t, "jimu_p16_data").TestDB
 	caps := catalog.All()
 	cfg := tdb.Config()
 

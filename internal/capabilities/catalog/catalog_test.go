@@ -23,14 +23,13 @@ func withEntries(t *testing.T, ds ...contract.Descriptor) {
 func fixture() []contract.Descriptor {
 	return []contract.Descriptor{
 		{Name: "user", Mount: contract.MountProtected},
-		{Name: "role", Mount: contract.MountProtected},
-		{Name: "permission", Requires: []string{"role"}, Mount: contract.MountProtected},
-		{Name: "tenant", Requires: []string{"user", "role"}, Mount: contract.MountProtected},
+		{Name: "access", Requires: []string{"user"}, Mount: contract.MountProtected},
+		{Name: "tenant", Requires: []string{"user", "access"}, Mount: contract.MountProtected},
 		{Name: "mfa", Requires: []string{"user"}, Mount: contract.MountSelfManaged},
-		{Name: "auth", Requires: []string{"user", "role", "tenant", "mfa"}, Mount: contract.MountSelfManaged},
+		{Name: "auth", Requires: []string{"user", "access", "tenant", "mfa"}, Mount: contract.MountSelfManaged},
 		{Name: "passkey", Requires: []string{"user", "auth"}, Mount: contract.MountSelfManaged},
 		{Name: "audit", Mount: contract.MountProtected},
-		{Name: "admin", Requires: []string{"user", "audit"}, Mount: contract.MountProtected},
+		{Name: "console", Requires: []string{"auth", "access"}, Mount: contract.MountSelfManaged},
 		{Name: "oauth", Requires: []string{"auth", "user"}, Mount: contract.MountPublic},
 		{Name: "apikey", Mount: contract.MountProtected},
 		{Name: "queue", Mount: contract.MountProtected},
@@ -38,6 +37,8 @@ func fixture() []contract.Descriptor {
 		{Name: "dataops", Mount: contract.MountProtected},
 		{Name: "search", Mount: contract.MountProtected},
 		{Name: "captcha", Mount: contract.MountPublic},
+		{Name: "feature", Mount: contract.MountProtected},
+		{Name: "uploadsec", Mount: contract.MountProtected},
 		{Name: "breach", Mount: contract.MountProtected},
 	}
 }
@@ -48,8 +49,8 @@ func TestResolveEmptyMeansAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve(nil) error: %v", err)
 	}
-	if len(got) != 17 {
-		t.Fatalf("len = %d, want 17 (all)", len(got))
+	if len(got) != 18 {
+		t.Fatalf("len = %d, want 18 (all)", len(got))
 	}
 }
 
@@ -66,24 +67,24 @@ func TestResolveUnknownCapability(t *testing.T) {
 
 func TestResolvePullsDependenciesAndKeepsOrder(t *testing.T) {
 	withEntries(t, fixture()...)
-	// permission 依赖 role，role 无依赖；顺序必须与清单一致（依赖在前）
-	got, err := Resolve([]string{"permission"})
+	// access 依赖 user，user 无依赖；顺序必须与清单一致（依赖在前）
+	got, err := Resolve([]string{"access"})
 	if err != nil {
 		t.Fatalf("Resolve error: %v", err)
 	}
-	if len(got) != 2 || got[0].Name != "role" || got[1].Name != "permission" {
-		t.Fatalf("Resolve([permission]) = %v, want [role permission]", namesOf(got))
+	if len(got) != 2 || got[0].Name != "user" || got[1].Name != "access" {
+		t.Fatalf("Resolve([access]) = %v, want [user access]", namesOf(got))
 	}
 }
 
 func TestResolveClosureIsTransitive(t *testing.T) {
 	withEntries(t, fixture()...)
-	// oauth -> auth -> mfa -> user/role/tenant
+	// oauth -> auth -> access/tenant -> user
 	got, err := Resolve([]string{"oauth"})
 	if err != nil {
 		t.Fatalf("Resolve error: %v", err)
 	}
-	want := map[string]bool{"oauth": true, "auth": true, "mfa": true, "user": true, "role": true, "tenant": true}
+	want := map[string]bool{"oauth": true, "auth": true, "mfa": true, "user": true, "access": true, "tenant": true}
 	if len(got) != len(want) {
 		t.Fatalf("Resolve([oauth]) = %v, want %d entries", namesOf(got), len(want))
 	}
@@ -92,7 +93,7 @@ func TestResolveClosureIsTransitive(t *testing.T) {
 			t.Fatalf("unexpected capability %q in closure %v", d.Name, namesOf(got))
 		}
 	}
-	wantOrder := []string{"user", "role", "tenant", "mfa", "auth", "oauth"}
+	wantOrder := []string{"user", "access", "tenant", "mfa", "auth", "oauth"}
 	if gotOrder := namesOf(got); !reflect.DeepEqual(gotOrder, wantOrder) {
 		t.Fatalf("Resolve([oauth]) order = %v, want %v", gotOrder, wantOrder)
 	}
@@ -238,10 +239,10 @@ func migrationsOf(ds []contract.Descriptor) map[string]bool {
 // admin（无迁移）必须为 nil。
 func TestCatalogMigrationsShape(t *testing.T) {
 	want := map[string]bool{
-		"user": true, "role": true, "permission": true, "tenant": true,
+		"user": true, "access": true, "tenant": true,
 		"mfa": true, "auth": true, "passkey": true, "audit": true, "oauth": true,
-		"admin":   false,
-		"captcha": false, "breach": false,
+		"console": false,
+		"captcha": false, "breach": false, "feature": false, "uploadsec": false,
 		"apikey": true, "queue": true, "outbox": true, "dataops": true, "search": true,
 	}
 	if got := migrationsOf(All()); !reflect.DeepEqual(got, want) {
@@ -250,21 +251,21 @@ func TestCatalogMigrationsShape(t *testing.T) {
 }
 
 // TestTenantRequiresUserAndRole：tenant 的 005_tenants.sql 会 ALTER users/roles，
-// 迁移执行顺序由 Resolve 闭包序保证，故 tenant.Requires 必须含 user 与 role。
+// 迁移执行顺序由 Resolve 闭包序保证，故 tenant.Requires 必须含 user 与 access（roles 表所有者）。
 func TestTenantRequiresUserAndRole(t *testing.T) {
 	for _, d := range All() {
 		if d.Name != "tenant" {
 			continue
 		}
-		if !slices.Contains(d.Requires, "user") || !slices.Contains(d.Requires, "role") {
-			t.Fatalf("tenant.Requires = %v, want to contain \"user\" and \"role\"", d.Requires)
+		if !slices.Contains(d.Requires, "user") || !slices.Contains(d.Requires, "access") {
+			t.Fatalf("tenant.Requires = %v, want to contain \"user\" and \"access\"", d.Requires)
 		}
 	}
 }
 
 // TestDescriptorPermissionsCoverBusinessRoutes 钉住能力声明的权限点聚合面：
-// 迁移后权限点改由 Descriptor 声明，聚合结果必须逐值等于全部 32 个权限点
-// （user 5 + role 6 + permission 5 + audit 3 + tenant 9 + admin 4），
+// 迁移后权限点改由 Descriptor 声明，聚合结果必须逐值等于全部 45 个权限点
+// （user 5 + access 11 + audit 3 + tenant 9 + console 4 + mfa 6 + passkey 7），
 // 既不缺失也不多出。
 func TestDescriptorPermissionsCoverBusinessRoutes(t *testing.T) {
 	required := []struct{ resource, action string }{

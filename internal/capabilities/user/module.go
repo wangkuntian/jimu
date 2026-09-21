@@ -13,6 +13,7 @@ import (
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/cache"
+	"jimu/internal/kernel/http/middleware"
 
 	redistore "jimu/internal/kernel/redis"
 
@@ -21,6 +22,7 @@ import (
 
 type Module struct {
 	service *application.UserService
+	admin   *application.AdminUserService
 	rdb     redistore.Client
 	outbox  *outbox.Outbox
 }
@@ -41,7 +43,8 @@ func New(db *gorm.DB, cfg config.Config, deps ...interface{}) *Module {
 		}
 	}
 	service := application.NewUserService(repo, c, ob, cipher)
-	m := &Module{service: service, outbox: ob}
+	adminSvc := application.NewAdminUserService(repo, service).WithDB(db)
+	m := &Module{service: service, admin: adminSvc, outbox: ob}
 	for _, dep := range deps {
 		if rdb, ok := dep.(redistore.Client); ok {
 			m.rdb = rdb
@@ -53,6 +56,18 @@ func New(db *gorm.DB, cfg config.Config, deps ...interface{}) *Module {
 
 func (m *Module) Name() string {
 	return "user"
+}
+
+// WithRoles 注入用户角色分配端口（access 能力提供，装配期调用）。
+func (m *Module) WithRoles(roles application.UserRoleAssigner) *Module {
+	m.admin.WithRoles(roles)
+	return m
+}
+
+// WithQuota 注入租户配额校验（tenant 能力提供，装配期调用）。
+func (m *Module) WithQuota(quota application.TenantQuota) *Module {
+	m.admin.WithQuota(quota)
+	return m
 }
 
 // migrationsFS 能力自带迁移（Task 3：能力迁移经 embed 进二进制）。
@@ -78,7 +93,14 @@ var Descriptor = contract.Descriptor{
 func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
 
 func (m *Module) RegisterHTTP(r contract.Router) {
-	interfaces.RegisterUserRoutes(r.Group("/api/v1"), m.service, m.rdb)
+	rg := r.Group("/api/v1")
+	interfaces.RegisterUserRoutes(rg, m.service, m.rdb)
+
+	// 管理面用户用例：与管理面同一 repository/配额/租户可见性
+	// （/users/:id/roles 归 access 注册，此处不重复）
+	admin := rg.Group("/admin")
+	admin.Use(middleware.AdminAuth())
+	interfaces.RegisterAdminUserRoutes(admin, m.admin)
 }
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}

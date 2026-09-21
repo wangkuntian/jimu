@@ -13,20 +13,23 @@ import (
 	"time"
 
 	"jimu/internal/app"
-	adminmodule "jimu/internal/capabilities/admin"
+	accessmodule "jimu/internal/capabilities/access"
+	roledomain "jimu/internal/capabilities/access/domain"
+	"jimu/internal/capabilities/apikey"
 	auditmodule "jimu/internal/capabilities/audit"
 	auditdomain "jimu/internal/capabilities/audit/domain"
 	authmodule "jimu/internal/capabilities/auth"
 	authdomain "jimu/internal/capabilities/auth/domain"
 	captchamodule "jimu/internal/capabilities/captcha"
 	"jimu/internal/capabilities/catalog"
+	consolemodule "jimu/internal/capabilities/console"
+	"jimu/internal/capabilities/dataops"
+	"jimu/internal/capabilities/feature"
 	mfamodule "jimu/internal/capabilities/mfa"
 	mfadomain "jimu/internal/capabilities/mfa/domain"
 	passkeymodule "jimu/internal/capabilities/passkey"
 	passkeydomain "jimu/internal/capabilities/passkey/domain"
-	"jimu/internal/capabilities/permission"
-	"jimu/internal/capabilities/role"
-	roledomain "jimu/internal/capabilities/role/domain"
+	"jimu/internal/capabilities/queue"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	usermodule "jimu/internal/capabilities/user"
 	userdomain "jimu/internal/capabilities/user/domain"
@@ -128,14 +131,18 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 		Finalizer: authMod.Finalizer(),
 	})
 	userMod := usermodule.New(gdb, cfg) // 不传 rdb：跳过用户维度限流（依赖 Lua），聚焦契约链路
-	roleMod := role.New(gdb)
-	permMod := permission.New(gdb)
+	accessMod := accessmodule.New(gdb)
+
 	auditMod := auditmodule.New(gdb, cfg.Audit, log)
-	adminMod := adminmodule.New("test", "test", rdb, gdb)
+	consoleMod := consolemodule.New("test", "test", rdb, gdb, nil, nil)
+	featureMod := feature.New(gdb)
+	queueMod := queue.NewModule(gdb, nil)
+	apikeyMod := apikey.New(gdb)
+	dataopsMod := dataops.New(gdb)
 
 	router := gin.New()
 
-	modules := []contract.Module{authMod, mfaMod, passkeyMod, captchaMod, userMod, roleMod, permMod, auditMod, adminMod}
+	modules := []contract.Module{authMod, mfaMod, passkeyMod, captchaMod, userMod, accessMod, auditMod, consoleMod, featureMod, queueMod, apikeyMod, dataopsMod}
 	// 1) 模块级 HTTP 中间件（审计记录）
 	for _, m := range modules {
 		if p, ok := m.(contract.HTTPMiddlewareProvider); ok {

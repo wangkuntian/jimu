@@ -34,6 +34,7 @@
 - 挂载点由 `Descriptor.Mount` 声明，禁止按能力名做特判
 - Casbin RBAC 机制位于内核 `internal/kernel/access`（强制器/策略/权限中间件），API Key 签发/校验位于 `internal/capabilities/apikey`；`kernel/auth` 只保留 JWT/Session/限流/登录失败锁定机制与 API Key 上下文助手（`apikey_context.go`）
 - 原 `auth` 已拆为 `auth`（会话/凭证/登录历史/密码历史）、`mfa`（TOTP + 可信设备，含自有 `totp/` 实现与 `user_mfa` 表）、`passkey`（WebAuthn）；`breach`/`captcha` 为独立能力；开通式注册（provisioned registration）属 `tenant` 能力。auth 经 `contract.MFAVerifier`/`TenantProvisioner`/`BreachChecker`/`CaptchaVerifier` 消费它们，passkey 经 `contract.LoginFinalizer` 复用 auth 的登录收尾；TOTP 状态存 `user_mfa`（迁移 016），`users` 表不再有 `totp_*` 列
+- 原 `admin` 已拆散（P1.7）：`role` + `permission` 合并为 `access`（roles/permissions/role_permissions/user_roles 四表 + 用户角色分配）；管理端 `/api/v1/admin/*` 路由按用例归还各能力（用户→`user`、任务与调度→`queue`、API Key→`apikey`、用户导入→`dataops`、审计列表→`audit`、Feature Flag→`feature`、文件上传→`uploadsec`），平台级视图与**管理端准入中间件**归新能力 `console`；`/api/v1/admin/*` 通配权限点由 `console` 声明。`user` 管理面与自助面共用同一 repository/配额，角色分配经 `contract.UserRoleAssigner` 委托 `access`
 
 ### 租户体系
 

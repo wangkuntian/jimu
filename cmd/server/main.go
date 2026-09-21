@@ -10,17 +10,21 @@ import (
 	"time"
 
 	"jimu/internal/app"
-	adminmodule "jimu/internal/capabilities/admin"
+	accessmodule "jimu/internal/capabilities/access"
+	"jimu/internal/capabilities/apikey"
 	auditmodule "jimu/internal/capabilities/audit"
 	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/captcha"
 	"jimu/internal/capabilities/catalog"
+	consolemodule "jimu/internal/capabilities/console"
+	"jimu/internal/capabilities/dataops"
+	"jimu/internal/capabilities/feature"
 	mfamodule "jimu/internal/capabilities/mfa"
 	oauthmodule "jimu/internal/capabilities/oauth"
 	passkeymodule "jimu/internal/capabilities/passkey"
-	"jimu/internal/capabilities/permission"
-	"jimu/internal/capabilities/role"
+	"jimu/internal/capabilities/queue"
 	tenantmodule "jimu/internal/capabilities/tenant"
+	"jimu/internal/capabilities/uploadsec"
 	"jimu/internal/capabilities/user"
 	userinfra "jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/config"
@@ -54,8 +58,8 @@ var errCapabilityNoInstance = errors.New("declared capability has no instance")
 // （清单尾部的基础设施能力只带迁移、尚无 Module 实例，不在名册中）。
 // 单元测试（main_test.go）对账两者，run() 启动时按它过滤装配并自检实例映射。
 var wiredCapabilities = []string{
-	"user", "role", "permission", "tenant", "auth", "mfa", "passkey",
-	"audit", "admin", "oauth", "captcha",
+	"user", "access", "tenant", "auth", "mfa", "passkey", "queue", "apikey", "dataops",
+	"audit", "console", "feature", "uploadsec", "oauth", "captcha",
 }
 
 func main() {
@@ -121,6 +125,14 @@ func run() error {
 		captchaVerifier = captchaMod.Service()
 	}
 
+	// access 能力：角色/权限/用户角色分配（user_roles 表所有者），供 user 管理面注入
+	accessMod := accessmodule.New(container.DB, tenantMod.Quota())
+
+	// user 能力的装配期端口注入：access 提供角色分配、tenant 提供配额
+	userMod := user.New(container.DB, *cfg, container.Redis, container.Outbox).
+		WithRoles(accessMod.UserRoleAssigner()).
+		WithQuota(tenantMod.Quota())
+
 	// 全部装配的实例：键为能力名，仅覆盖 wiredCapabilities 名册；
 	// 清单尾部基础设施能力只参与迁移，不构造实例（P1 收编）
 	// 过渡实现（P0）：先构造再过滤；P1 引入显式 Deps 后改为按需构造
@@ -139,19 +151,23 @@ func run() error {
 	})
 
 	all := map[string]contract.Module{
-		"user":       user.New(container.DB, *cfg, container.Redis, container.Outbox),
-		"auth":       authMod,
-		"mfa":        mfaMod,
-		"passkey":    passkeyMod,
-		"captcha":    captchaMod,
-		"role":       role.New(container.DB, tenantMod.Quota()),
-		"permission": permission.New(container.DB),
-		"tenant":     tenantMod,
-		"audit":      auditmodule.New(container.DB, cfg.Audit, container.Logger),
-		"admin": adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, middleware.IPAllowlist(cfg.Security.AdminIPAllowlist), container.Scheduler, container.Storage, container.UploadScanner, container.FeatureFlag, container.EventBus,
+		"user":    userMod,
+		"auth":    authMod,
+		"mfa":     mfaMod,
+		"passkey": passkeyMod,
+		"captcha": captchaMod,
+		"access":  accessMod,
+		"queue":   queue.NewModule(container.DB, container.Scheduler),
+		"apikey":  apikey.New(container.DB, tenantMod.Quota()),
+		"dataops": dataops.New(container.DB),
+		"tenant":  tenantMod,
+		"audit":   auditmodule.New(container.DB, cfg.Audit, container.Logger),
+		"console": consolemodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB,
 			auth.NewWithRotation(cfg.Auth.JWTSecret, cfg.Auth.JWTPreviousSecret, cfg.Auth.Issuer, cfg.Auth.AccessExpireMin, cfg.Auth.RefreshExpireDay),
-			tenantMod.Quota()),
-		"oauth": oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth, container.HTTPClient),
+			container.EventBus, middleware.IPAllowlist(cfg.Security.AdminIPAllowlist)),
+		"feature":   feature.New(container.DB),
+		"uploadsec": uploadsec.New(container.Storage, container.UploadScanner),
+		"oauth":     oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth, container.HTTPClient),
 	}
 	if len(all) != len(wiredCapabilities) {
 		_ = container.Stop(context.Background())

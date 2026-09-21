@@ -7,7 +7,6 @@ import (
 	"log"
 	"time"
 
-	admininfra "jimu/internal/capabilities/admin/infrastructure"
 	apikey "jimu/internal/capabilities/apikey"
 	"jimu/internal/capabilities/breach"
 	"jimu/internal/capabilities/captcha"
@@ -17,6 +16,7 @@ import (
 	"jimu/internal/capabilities/notification"
 	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/queue"
+	queueinfra "jimu/internal/capabilities/queue/infrastructure"
 	"jimu/internal/capabilities/storage"
 	"jimu/internal/capabilities/uploadsec"
 	userpkg "jimu/internal/capabilities/user"
@@ -266,9 +266,9 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 			return nil, fmt.Errorf("queue %s does not implement consumer", cfg.Queue.Type)
 		}
 		store := queue.NewMySQLStore(
-			admininfra.NewMysqlJobRepository(dbConn),
-			admininfra.NewMysqlJobHistoryRepository(dbConn),
-			admininfra.NewMysqlDeadLetterRepository(dbConn),
+			queueinfra.NewMysqlJobRepository(dbConn),
+			queueinfra.NewMysqlJobHistoryRepository(dbConn),
+			queueinfra.NewMysqlDeadLetterRepository(dbConn),
 		)
 		workerPool := queue.NewWorkerPool(queue.DefaultWorkerConfig, consumer, store)
 		// 延迟到 Container 构造后赋值（见 Step 3）

@@ -8,22 +8,23 @@ import (
 	"fmt"
 	"strings"
 
-	adminmodule "jimu/internal/capabilities/admin"
+	accessmodule "jimu/internal/capabilities/access"
 	"jimu/internal/capabilities/apikey"
 	auditmodule "jimu/internal/capabilities/audit"
 	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/breach"
 	"jimu/internal/capabilities/captcha"
+	consolemodule "jimu/internal/capabilities/console"
 	"jimu/internal/capabilities/dataops"
+	"jimu/internal/capabilities/feature"
 	mfamodule "jimu/internal/capabilities/mfa"
 	oauthmodule "jimu/internal/capabilities/oauth"
 	"jimu/internal/capabilities/outbox"
 	passkeymodule "jimu/internal/capabilities/passkey"
-	"jimu/internal/capabilities/permission"
 	"jimu/internal/capabilities/queue"
-	"jimu/internal/capabilities/role"
 	"jimu/internal/capabilities/search"
 	tenantmodule "jimu/internal/capabilities/tenant"
+	"jimu/internal/capabilities/uploadsec"
 	"jimu/internal/capabilities/user"
 	"jimu/internal/contract"
 )
@@ -33,14 +34,13 @@ import (
 // 仅携带声明与端口实现；captcha 本轮起有实例并自挂公开路由。
 var entries = []contract.Descriptor{
 	user.Descriptor,
-	role.Descriptor,
-	permission.Descriptor,
+	accessmodule.Descriptor,
 	tenantmodule.Descriptor,
 	mfamodule.Descriptor,
 	authmodule.Descriptor,
 	passkeymodule.Descriptor,
 	auditmodule.Descriptor,
-	adminmodule.Descriptor,
+	consolemodule.Descriptor,
 	oauthmodule.Descriptor,
 	apikey.Descriptor,
 	queue.Descriptor,
@@ -48,6 +48,8 @@ var entries = []contract.Descriptor{
 	dataops.Descriptor,
 	search.Descriptor,
 	captcha.Descriptor,
+	feature.Descriptor,
+	uploadsec.Descriptor,
 	breach.Descriptor,
 }
 

@@ -89,28 +89,55 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (*UserR
 	if err := s.repo.Create(ctx, user); err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to create user", err)
 	}
+	s.publishUserCreated(ctx, user)
 	resp := ToUserResponse(*user)
-
-	// 写入 Outbox（统一事件投递路径，确保可靠投递）。
-	// 业务事务已提交，outbox 写失败不回滚业务，但必须记录，避免静默丢事件。
-	if s.outbox != nil {
-		payload, err := json.Marshal(contract.UserCreatedEvent{
-			UserID:   user.ID,
-			Username: user.Username,
-			Email:    user.Email,
-		})
-		if err != nil {
-			log.Printf("user: marshal created event: %v", err)
-		} else if err := s.outbox.Add(ctx, nil, outbox.Event{
-			AggregateID: fmt.Sprintf("user:%d", user.ID),
-			EventType:   contract.EventUserCreated,
-			Payload:     payload,
-		}); err != nil {
-			log.Printf("user: write outbox event %s: %v", contract.EventUserCreated, err)
-		}
-	}
-
 	return &resp, nil
+}
+
+// publishUserCreated 写入用户创建事件（统一可靠投递路径）。
+// 业务事务已提交，outbox 写失败不回滚业务，但必须记录，避免静默丢事件。
+func (s *UserService) publishUserCreated(ctx context.Context, user *domain.User) {
+	if s.outbox == nil {
+		return
+	}
+	payload, err := json.Marshal(contract.UserCreatedEvent{
+		UserID:   user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+	})
+	if err != nil {
+		log.Printf("user: marshal created event: %v", err)
+		return
+	}
+	if err := s.outbox.Add(ctx, nil, outbox.Event{
+		AggregateID: fmt.Sprintf("user:%d", user.ID),
+		EventType:   contract.EventUserCreated,
+		Payload:     payload,
+	}); err != nil {
+		log.Printf("user: write outbox event %s: %v", contract.EventUserCreated, err)
+	}
+}
+
+// publishUserUpdated 写入用户更新事件。
+func (s *UserService) publishUserUpdated(ctx context.Context, id uint64) {
+	if s.outbox == nil {
+		return
+	}
+	payload, err := json.Marshal(contract.UserUpdatedEvent{
+		UserID:  id,
+		Changes: []string{"status"},
+	})
+	if err != nil {
+		log.Printf("user: marshal updated event: %v", err)
+		return
+	}
+	if err := s.outbox.Add(ctx, nil, outbox.Event{
+		AggregateID: fmt.Sprintf("user:%d", id),
+		EventType:   contract.EventUserUpdated,
+		Payload:     payload,
+	}); err != nil {
+		log.Printf("user: write outbox event %s: %v", contract.EventUserUpdated, err)
+	}
 }
 
 func (s *UserService) Get(ctx context.Context, id uint64) (*UserResponse, error) {
@@ -175,22 +202,7 @@ func (s *UserService) Update(ctx context.Context, id uint64, req UpdateUserReque
 		return errors.Wrap(errors.CodeInternalError, "failed to update user", err)
 	}
 	s.invalidateUserCache(ctx, id)
-
-	if s.outbox != nil {
-		payload, err := json.Marshal(contract.UserUpdatedEvent{
-			UserID:  id,
-			Changes: []string{"status"},
-		})
-		if err != nil {
-			log.Printf("user: marshal updated event: %v", err)
-		} else if err := s.outbox.Add(ctx, nil, outbox.Event{
-			AggregateID: fmt.Sprintf("user:%d", id),
-			EventType:   contract.EventUserUpdated,
-			Payload:     payload,
-		}); err != nil {
-			log.Printf("user: write outbox event %s: %v", contract.EventUserUpdated, err)
-		}
-	}
+	s.publishUserUpdated(ctx, id)
 	return nil
 }
 
@@ -210,22 +222,27 @@ func (s *UserService) Delete(ctx context.Context, id uint64) error {
 		return errors.Wrap(errors.CodeInternalError, "failed to delete user", err)
 	}
 	s.invalidateUserCache(ctx, id)
-
-	if s.outbox != nil {
-		payload, err := json.Marshal(contract.UserDeletedEvent{
-			UserID: id,
-		})
-		if err != nil {
-			log.Printf("user: marshal deleted event: %v", err)
-		} else if err := s.outbox.Add(ctx, nil, outbox.Event{
-			AggregateID: fmt.Sprintf("user:%d", id),
-			EventType:   contract.EventUserDeleted,
-			Payload:     payload,
-		}); err != nil {
-			log.Printf("user: write outbox event %s: %v", contract.EventUserDeleted, err)
-		}
-	}
+	s.publishUserDeleted(ctx, id)
 	return nil
+}
+
+// publishUserDeleted 写入用户删除事件。
+func (s *UserService) publishUserDeleted(ctx context.Context, id uint64) {
+	if s.outbox == nil {
+		return
+	}
+	payload, err := json.Marshal(contract.UserDeletedEvent{UserID: id})
+	if err != nil {
+		log.Printf("user: marshal deleted event: %v", err)
+		return
+	}
+	if err := s.outbox.Add(ctx, nil, outbox.Event{
+		AggregateID: fmt.Sprintf("user:%d", id),
+		EventType:   contract.EventUserDeleted,
+		Payload:     payload,
+	}); err != nil {
+		log.Printf("user: write outbox event %s: %v", contract.EventUserDeleted, err)
+	}
 }
 
 // invalidateUserCache 清除用户相关缓存

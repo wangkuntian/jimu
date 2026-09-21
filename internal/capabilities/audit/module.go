@@ -7,6 +7,7 @@ import (
 	"jimu/internal/capabilities/audit/interfaces"
 	"jimu/internal/config"
 	"jimu/internal/contract"
+	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/kernel/logger"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +17,7 @@ import (
 type Module struct {
 	service *application.AuditService
 	worker  *application.Worker
+	db      *gorm.DB
 }
 
 func New(db *gorm.DB, cfg config.AuditConfig, log *logger.Logger) *Module {
@@ -23,6 +25,7 @@ func New(db *gorm.DB, cfg config.AuditConfig, log *logger.Logger) *Module {
 	return &Module{
 		service: application.NewAuditService(repo, cfg.HashSecret),
 		worker:  application.NewWorker(repo, cfg, log),
+		db:      db,
 	}
 }
 
@@ -50,7 +53,13 @@ var Descriptor = contract.Descriptor{
 func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
 
 func (m *Module) RegisterHTTP(r contract.Router) {
-	interfaces.RegisterAuditRoutes(r.Group("/api/v1"), m.service)
+	rg := r.Group("/api/v1")
+	interfaces.RegisterAuditRoutes(rg, m.service)
+
+	// 管理端审计列表（/api/v1/admin/audit）：与 /api/v1/audits 同源数据
+	admin := rg.Group("/admin")
+	admin.Use(middleware.AdminAuth())
+	admin.GET("/audit", interfaces.NewAdminAuditHandler(m.db).List)
 }
 
 func (m *Module) HTTPMiddleware() []gin.HandlerFunc {
