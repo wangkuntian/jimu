@@ -219,30 +219,36 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, enabled ma
 	}
 
 	notifier := notification.NewDispatcher()
+	// 通知配置段（email/sms/notification 三段归通知包，无条件加载）
+	notifCfg, err := notification.Load(sections)
+	if err != nil {
+		return nil, fmt.Errorf("init notification config: %w", err)
+	}
+
 	// WebSocket Hub（通知渠道 + 实时通信共用）
 	wsHub := notification.NewHub()
 
 	// 未配置真实发送渠道时，注册日志型兜底渠道，保证通知链路不报错且可观察
 	var emailChannel notification.Notification = notification.NewLogChannel(notification.ChannelEmail, log)
-	if cfg.Email.Enabled {
+	if notifCfg.Email.Enabled {
 		emailChannel = notification.NewEmail(notification.EmailConfig{
-			Host:     cfg.Email.Host,
-			Port:     cfg.Email.Port,
-			Username: cfg.Email.Username,
-			Password: cfg.Email.Password,
-			From:     cfg.Email.From,
+			Host:     notifCfg.Email.Host,
+			Port:     notifCfg.Email.Port,
+			Username: notifCfg.Email.Username,
+			Password: notifCfg.Email.Password,
+			From:     notifCfg.Email.From,
 		})
 	}
 	notifier.Register(notification.ChannelEmail, emailChannel)
 
 	// 短信：未配置真实发送时注册日志型兜底渠道，保证通知链路不报错且可观察
 	var smsChannel notification.Notification = notification.NewLogChannel(notification.ChannelSMS, log)
-	if cfg.SMS.Enabled {
+	if notifCfg.SMS.Enabled {
 		smsChannel = notification.NewSMS(notification.SMSConfig{
-			Provider:  cfg.SMS.Provider,
-			APIKey:    cfg.SMS.APIKey,
-			APISecret: cfg.SMS.APISecret,
-			SignName:  cfg.SMS.SignName,
+			Provider:  notifCfg.SMS.Provider,
+			APIKey:    notifCfg.SMS.APIKey,
+			APISecret: notifCfg.SMS.APISecret,
+			SignName:  notifCfg.SMS.SignName,
 		})
 	}
 	notifier.Register(notification.ChannelSMS, smsChannel)
@@ -250,7 +256,7 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, enabled ma
 	notifier.Register(notification.ChannelWebSocket, notification.NewWebSocket(wsHub))
 	notifier.Register(notification.ChannelWebhook, notification.NewWebhook(notification.WebhookConfig{
 		Headers:    map[string]string{},
-		SignSecret: cfg.Notification.Webhook.SignSecret,
+		SignSecret: notifCfg.Notification.Webhook.SignSecret,
 	}, httpClient))
 
 	// Feature Flag

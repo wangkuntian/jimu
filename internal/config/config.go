@@ -63,25 +63,6 @@ type OAuthConfig struct {
 	Providers map[string]OAuthProviderConfig `mapstructure:"providers"` // 提供商名 -> 配置（内置 google/github/wechat，或自定义 OIDC 提供商名）
 }
 
-// EmailConfig 邮件通知配置
-type EmailConfig struct {
-	Enabled  bool   `mapstructure:"enabled"`  // 是否启用真实 SMTP 发送；false 时回退日志渠道
-	Host     string `mapstructure:"host"`     // SMTP 服务器地址
-	Port     int    `mapstructure:"port"`     // SMTP 端口（通常 25/465/587）
-	Username string `mapstructure:"username"` // 认证用户名
-	Password string `mapstructure:"password"` // 认证密码（敏感，建议环境变量注入）
-	From     string `mapstructure:"from"`     // 发件人地址
-}
-
-// SMSConfig 短信通知配置
-type SMSConfig struct {
-	Enabled   bool   `mapstructure:"enabled"`    // 是否启用真实短信发送；false 时回退日志渠道
-	Provider  string `mapstructure:"provider"`   // 短信服务商：aliyun
-	APIKey    string `mapstructure:"api_key"`    // AccessKey ID（敏感，建议环境变量注入）
-	APISecret string `mapstructure:"api_secret"` // AccessKey Secret（敏感，建议环境变量注入）
-	SignName  string `mapstructure:"sign_name"`  // 短信签名
-}
-
 // CaptchaResult 验证码返回
 type CaptchaResult struct {
 	CaptchaID    string `json:"captcha_id"`
@@ -107,9 +88,6 @@ type Config struct {
 	Cache        CacheConfig                 `mapstructure:"cache"`
 	Security     SecurityConfig              `mapstructure:"security"`
 	OAuth        OAuthConfig                 `mapstructure:"oauth"`
-	Email        EmailConfig                 `mapstructure:"email"`
-	SMS          SMSConfig                   `mapstructure:"sms"`
-	Notification NotificationConfig          `mapstructure:"notification"`
 	OTEL         observability.TracingConfig `mapstructure:"otel"`
 	ErrorReport  reporter.ReporterConfig     `mapstructure:"error_reporting"`
 	HTTPClient   HTTPClientConfig            `mapstructure:"http_client"`
@@ -127,16 +105,6 @@ type HTTPClientConfig struct {
 	RetryIntervalMS int `mapstructure:"retry_interval_ms"` // 重试基础间隔（毫秒），0 用默认 200
 	RateLimitRate   int `mapstructure:"rate_limit_rate"`   // 每秒请求数（按目标 host 独立限流），0 不限流
 	RateLimitBurst  int `mapstructure:"rate_limit_burst"`  // 令牌桶容量，0 用 rate（桶=平均速率）
-}
-
-// NotificationConfig 通知渠道配置
-type NotificationConfig struct {
-	Webhook WebhookNotificationConfig `mapstructure:"webhook"` // Webhook 渠道配置
-}
-
-// WebhookNotificationConfig Webhook 通知配置
-type WebhookNotificationConfig struct {
-	SignSecret string `mapstructure:"sign_secret"` // 载荷签名密钥（HMAC-SHA256）；空则不签名
 }
 
 // GRPCConfig gRPC server 配置（与 HTTP 双栈并存，可选启用）
