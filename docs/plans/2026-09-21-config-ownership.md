@@ -145,3 +145,37 @@ require.NoError(t, app.ValidateCapabilityConfigs(cfg, caps))
 **2. 占位符扫描**：无 TBD；每 Task 给出文件清单与验证命令。
 
 **3. 风险**：① `auth.webauthn`/`auth.provisioning` 嵌套拆归属是本计划最易出错处 —— 必须用点分 `UnmarshalKey` 且 `configs/app.yaml` 字节不变（用 `git diff configs/` 断言）；② `outbox.publisher=mq` 校验依赖 `queue.type`，跨能力 → 必须在组合根（两者都启用时）校验，否则校验会漏；③ `Watch` 重载只覆盖内核段，能力段变更需重启，需在 README 注明；④ 51 处消费点主要在 `internal/app`，但 `capabilities/tenant/module.go`（读 `cfg.Auth`）、`capabilities/user/module.go`（读 `cfg.Cache`）、`capabilities/uploadsec/upload_handler.go`（读 storage 配置）三处需一并改为端口/注入，避免能力反向依赖 config 结构体布局。
+
+---
+
+## 执行结果（部分完成，8/9 提交）
+
+分支 `feature/config-ownership`，已完成机制与 8 个段：
+
+| commit | 内容 |
+|---|---|
+| `fcad5ca` | 机制：`config.LoadWithSections` + `config.LoadSection`（泛型约束 `SectionConfig`） |
+| `4fcc6fc` | `captcha`（catalog 能力，启用集门控试点） |
+| `b5fed9a` | `audit`（含环境覆盖随段下沉、内层与 config 结构体解耦） |
+| `661ac13` | `storage` + `upload`（Container 增加 `Sections`/`Enabled`；`configs/` 零改动） |
+| `df1c708` | `queue` + `outbox` + `scheduler`（含跨能力校验移到组合根） |
+| `8b7ef5d` | `email` + `sms` + `notification` |
+| `28b069d` | `oauth` |
+| `aa4cd6f` | `retention` |
+
+`configs/*.yaml` 全程 `git diff` 为 0 行 —— 对外配置键不变（§11）得以保持。
+
+### 机制修正（执行中发现）
+
+1. **`LoadSection` 的方法值陷阱（已修）**：初版签名 `LoadSection(dec, key, out, applyDefaults func(), validate func() error)` 把校验钩子当函数值传参，Go 在传参时就把接收者按**零值副本**绑定，导致校验永远看零值、恒通过。改为泛型约束 `SectionConfig{ApplyDefaults(); Validate() error}`，在 `LoadSection` 内部对指针动态派发，并加回归用例。此后每个能力只需实现这两个方法（无默认值/校验者写空实现）。
+2. **`Container` 成为能力配置的解码点**：`NewContainer(cfg, sections, enabled)`；`main` 的 `catalog.Resolve` 上移到建容器之前（容器需启用集决定哪些能力段加载）。`bootstrap` 经 `Container.OutboxPublisher` 拿到 outbox 决策，不再读 `cfg.Outbox`。
+3. **段的环境覆盖随段下沉**：`config.GetEnvOrFile` 导出，`AUDIT_HASH_SECRET` 的覆盖移入 `audit.Config.ApplyDefaults`。
+
+### 剩余：Task 8（`auth` 三段）与 Task 9（收口）
+
+`auth` 段是唯一未下沉的段，因为它的 11 个字段被 **6 个包**消费且与内核 JWT 机制交织，拆分需先钉住两点：
+
+- **JWT 参数归属**：`jwt_secret`/`jwt_previous_secret`/`issuer`/`access_expire_min`/`refresh_expire_day` → 归 `auth` 能力；`oauth`/`passkey`/`console` 都 `Requires auth`，导入 `auth.Config` 方向合法。唯一反向依赖是 `mfa`（`Requires user`，却用 `issuer`+`trusted_device_days`）→ 改为装配期传参（`mfa.New(db, mfa.Config{...}, users)`），不让 mfa 导入 auth 的类型。
+- **`auth.webauthn` → `passkey`**（点分键，`passkey.Requires auth` ✓）、**`auth.provisioning` → `tenant`**（点分键 + tenant 自有的 `ProvisioningConfig` 类型，`tenant` 不 Requires auth，故**不得**导入 auth 类型）。
+- **跨能力校验**：`provisioning.enabled` 要求 `auth.public_registration`，两者分属 tenant/auth → 移到组合根（与 outbox/queue 的处理一致）。
+- **机制扩展**：`jwt_secret` 强度校验仅在 `APP_ENV=prod` 执行，而 `SectionConfig.Validate()` 不接收 env → 需给机制加可选钩子（`ValidateProd() error`，`LoadSection` 在 prod 下按类型断言调用）。
