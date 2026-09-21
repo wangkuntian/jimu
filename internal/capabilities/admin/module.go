@@ -5,12 +5,10 @@ import (
 	"net/http"
 
 	adminapp "jimu/internal/capabilities/admin/application"
-	admininfra "jimu/internal/capabilities/admin/infrastructure"
 	admininterfaces "jimu/internal/capabilities/admin/interfaces"
 	"jimu/internal/capabilities/feature"
 	"jimu/internal/capabilities/storage"
 	"jimu/internal/capabilities/uploadsec"
-	userinfra "jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/capabilities/ws"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
@@ -143,19 +141,6 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 	admin.GET("/config", configHandler.Get)
 	admin.PUT("/config/:key", configHandler.Update)
 	admin.POST("/config/reload", configHandler.Reload)
-
-	// 数据导入端点
-	importHandler := admininterfaces.NewAdminImportHandler(
-		adminapp.NewImportService(
-			admininfra.NewMysqlImportJobRepository(m.db),
-			userinfra.NewMysqlRepository(m.db),
-			m.db,
-		),
-	)
-	admin.POST("/users/import/preview", importHandler.Preview)
-	admin.POST("/users/import", importHandler.Import)
-	admin.GET("/users/import/template", importHandler.Template)
-	admin.GET("/users/import/:id", importHandler.Get)
 
 	// 审计日志端点（复用 audit 模块仓储，读 006 迁移的 audit_logs 表）
 	admin.GET("/audit", admininterfaces.NewAdminAuditHandler(m.db).List)

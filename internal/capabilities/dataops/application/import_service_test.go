@@ -7,9 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	admindomain "jimu/internal/capabilities/admin/domain"
+	importdomain "jimu/internal/capabilities/dataops/domain"
 	"jimu/internal/capabilities/dataops/importer"
-	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/kernel/tenant"
 
 	"github.com/stretchr/testify/assert"
@@ -20,12 +19,12 @@ const validCSV = "username,password,email\nalice,secret123,a@b.com\n"
 const badCSV = "username,password,email\n,secret123,a@b.com\n"
 
 func newImportService(db *gorm.DB) *ImportService {
-	return NewImportService(&fakeImportJobRepo{}, &fakeUserRepository{}, db)
+	return NewImportService(&fakeImportJobRepo{}, db)
 }
 
 func TestImportServicePreview(t *testing.T) {
 	ctx := context.Background()
-	svc := newImportService(newSqliteDB(t, &userdomain.User{}))
+	svc := newImportService(newSqliteDB(t, &importUser{}))
 
 	// 成功
 	result, err := svc.Preview(ctx, importer.FormatCSV, strings.NewReader(validCSV), "users")
@@ -55,22 +54,22 @@ func TestImportServiceImport(t *testing.T) {
 	ctx := context.Background()
 
 	// 成功导入
-	db := newSqliteDB(t, &userdomain.User{})
+	db := newSqliteDB(t, &importUser{})
 	svc := newImportService(db)
 	result, job, err := svc.Import(ctx, importer.FormatCSV, strings.NewReader(validCSV), "users", 1, "users.csv")
 	assert.NoError(t, err)
 	assert.NotNil(t, job)
-	assert.Equal(t, admindomain.ImportJobCompleted, job.Status)
+	assert.Equal(t, importdomain.ImportJobCompleted, job.Status)
 	assert.Equal(t, 1, result.SuccessRows)
 	assert.Equal(t, 1, job.TotalRows)
 	assert.Equal(t, uint64(42), job.ID)
 	// 用户确实落库
 	var count int64
-	assert.NoError(t, db.Model(&userdomain.User{}).Count(&count).Error)
+	assert.NoError(t, db.Model(&importUser{}).Count(&count).Error)
 	assert.Equal(t, int64(1), count)
 
 	// 校验失败：不创建任务
-	svc = newImportService(newSqliteDB(t, &userdomain.User{}))
+	svc = newImportService(newSqliteDB(t, &importUser{}))
 	result, job, err = svc.Import(ctx, importer.FormatCSV, strings.NewReader(badCSV), "users", 1, "users.csv")
 	assert.NoError(t, err)
 	assert.Nil(t, job)
@@ -78,7 +77,7 @@ func TestImportServiceImport(t *testing.T) {
 	assert.Equal(t, 1, result.ErrorRows)
 
 	// 不支持的类型
-	svc = newImportService(newSqliteDB(t, &userdomain.User{}))
+	svc = newImportService(newSqliteDB(t, &importUser{}))
 	_, _, err = svc.Import(ctx, importer.FormatCSV, strings.NewReader(validCSV), "bogus", 1, "users.csv")
 	assert.Error(t, err)
 
@@ -91,16 +90,16 @@ func TestImportServiceImport(t *testing.T) {
 	assert.Error(t, err)
 
 	// 创建任务失败
-	svc = NewImportService(&fakeImportJobRepo{create: func(ctx context.Context, job *admindomain.ImportJob) error {
+	svc = NewImportService(&fakeImportJobRepo{create: func(ctx context.Context, job *importdomain.ImportJob) error {
 		return errors.New("db down")
-	}}, &fakeUserRepository{}, newSqliteDB(t, &userdomain.User{}))
+	}}, newSqliteDB(t, &importUser{}))
 	_, _, err = svc.Import(ctx, importer.FormatCSV, strings.NewReader(validCSV), "users", 1, "users.csv")
 	assert.Error(t, err)
 
 	// 更新任务失败（返回 result + job + err）
-	svc = NewImportService(&fakeImportJobRepo{update: func(ctx context.Context, job *admindomain.ImportJob) error {
+	svc = NewImportService(&fakeImportJobRepo{update: func(ctx context.Context, job *importdomain.ImportJob) error {
 		return errors.New("db down")
-	}}, &fakeUserRepository{}, newSqliteDB(t, &userdomain.User{}))
+	}}, newSqliteDB(t, &importUser{}))
 	result, job, err = svc.Import(ctx, importer.FormatCSV, strings.NewReader(validCSV), "users", 1, "users.csv")
 	assert.Error(t, err)
 	assert.NotNil(t, job)
@@ -116,29 +115,29 @@ func TestImportServiceGetImportJob(t *testing.T) {
 	assert.Equal(t, uint64(42), job.ID)
 
 	// 未找到
-	svc = NewImportService(&fakeImportJobRepo{findByID: func(ctx context.Context, id uint64) (*admindomain.ImportJob, error) {
+	svc = NewImportService(&fakeImportJobRepo{findByID: func(ctx context.Context, id uint64) (*importdomain.ImportJob, error) {
 		return nil, gorm.ErrRecordNotFound
-	}}, &fakeUserRepository{}, nil)
+	}}, nil)
 	_, err = svc.GetImportJob(ctx, 42)
 	assert.Error(t, err)
 
 	// 其他错误
-	svc = NewImportService(&fakeImportJobRepo{findByID: func(ctx context.Context, id uint64) (*admindomain.ImportJob, error) {
+	svc = NewImportService(&fakeImportJobRepo{findByID: func(ctx context.Context, id uint64) (*importdomain.ImportJob, error) {
 		return nil, errors.New("boom")
-	}}, &fakeUserRepository{}, nil)
+	}}, nil)
 	_, err = svc.GetImportJob(ctx, 42)
 	assert.Error(t, err)
 }
 
 func TestImportServiceInsertUser(t *testing.T) {
-	db := newSqliteDB(t, &userdomain.User{})
+	db := newSqliteDB(t, &importUser{})
 	svc := newImportService(db)
 
 	// 上下文无租户：归默认租户
 	err := svc.insertUser(context.Background(), map[string]string{"username": "carol", "password": "secret123"})
 	assert.NoError(t, err)
 
-	var user userdomain.User
+	var user importUser
 	assert.NoError(t, db.First(&user, "username = ?", "carol").Error)
 	assert.Equal(t, int8(1), user.Status)
 	assert.Equal(t, tenant.DefaultTenantID, user.TenantID)
@@ -147,7 +146,7 @@ func TestImportServiceInsertUser(t *testing.T) {
 	err = svc.insertUser(tenant.WithTenant(context.Background(), 7), map[string]string{"username": "dave", "password": "secret123"})
 	assert.NoError(t, err)
 
-	var imported userdomain.User
+	var imported importUser
 	assert.NoError(t, db.First(&imported, "username = ?", "dave").Error)
 	assert.Equal(t, uint64(7), imported.TenantID)
 }
@@ -164,7 +163,7 @@ func TestRulesFor(t *testing.T) {
 // 确保 bytes 导入仅用于显式构造 io.Reader 的场景（如已存在的 buffer 输入）
 func TestImportServicePreviewFromBuffer(t *testing.T) {
 	ctx := context.Background()
-	svc := newImportService(newSqliteDB(t, &userdomain.User{}))
+	svc := newImportService(newSqliteDB(t, &importUser{}))
 	buf := bytes.NewBufferString(validCSV)
 	result, err := svc.Preview(ctx, importer.FormatCSV, buf, "users")
 	assert.NoError(t, err)
@@ -173,20 +172,20 @@ func TestImportServicePreviewFromBuffer(t *testing.T) {
 
 func TestImportServiceJobTenant(t *testing.T) {
 	// 导入任务归属上下文租户
-	var created *admindomain.ImportJob
-	svc := NewImportService(&fakeImportJobRepo{create: func(ctx context.Context, job *admindomain.ImportJob) error {
+	var created *importdomain.ImportJob
+	svc := NewImportService(&fakeImportJobRepo{create: func(ctx context.Context, job *importdomain.ImportJob) error {
 		created = job
 		return nil
-	}}, &fakeUserRepository{}, newSqliteDB(t, &userdomain.User{}))
+	}}, newSqliteDB(t, &importUser{}))
 	_, job, err := svc.Import(tenant.WithTenant(context.Background(), 7), importer.FormatCSV, strings.NewReader(validCSV), "users", 1, "users.csv")
 	assert.NoError(t, err)
 	assert.NotNil(t, job)
 	assert.Equal(t, uint64(7), created.TenantID)
 
 	// 跨租户查询导入任务不可见，同租户可见
-	svc = NewImportService(&fakeImportJobRepo{findByID: func(ctx context.Context, id uint64) (*admindomain.ImportJob, error) {
-		return &admindomain.ImportJob{ID: id, TenantID: 2}, nil
-	}}, &fakeUserRepository{}, nil)
+	svc = NewImportService(&fakeImportJobRepo{findByID: func(ctx context.Context, id uint64) (*importdomain.ImportJob, error) {
+		return &importdomain.ImportJob{ID: id, TenantID: 2}, nil
+	}}, nil)
 	_, err = svc.GetImportJob(tenant.WithTenant(context.Background(), 7), 1)
 	assert.Error(t, err)
 	_, err = svc.GetImportJob(tenant.WithTenant(context.Background(), 2), 1)

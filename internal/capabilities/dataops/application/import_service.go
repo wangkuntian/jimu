@@ -6,9 +6,8 @@ import (
 	"io"
 	"time"
 
-	"jimu/internal/capabilities/admin/domain"
+	"jimu/internal/capabilities/dataops/domain"
 	"jimu/internal/capabilities/dataops/importer"
-	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
 
@@ -34,13 +33,12 @@ var importRegistry = func() *importer.Registry {
 // ImportService 数据导入服务
 type ImportService struct {
 	importJobs domain.ImportJobRepository
-	userRepo   userdomain.UserRepository
 	userDB     *gorm.DB
 }
 
 // NewImportService 创建导入服务
-func NewImportService(importJobs domain.ImportJobRepository, userRepo userdomain.UserRepository, userDB *gorm.DB) *ImportService {
-	return &ImportService{importJobs: importJobs, userRepo: userRepo, userDB: userDB}
+func NewImportService(importJobs domain.ImportJobRepository, userDB *gorm.DB) *ImportService {
+	return &ImportService{importJobs: importJobs, userDB: userDB}
 }
 
 // Preview 解析并校验文件，不落库
@@ -152,14 +150,25 @@ func (s *ImportService) insertUser(ctx context.Context, row map[string]string) e
 	if tenantID == 0 {
 		tenantID = tenant.DefaultTenantID
 	}
-	user := &userdomain.User{
+	return s.userDB.WithContext(ctx).Create(&importUser{
 		TenantID: tenantID,
 		Username: row["username"],
 		Password: string(hash),
 		Status:   1,
-	}
-	return s.userDB.WithContext(ctx).Create(user).Error
+	}).Error
 }
+
+// importUser 导入落库的最小用户视图（users 表由 user 能力所有；
+// dataops 只做批量插入，不引入用户领域逻辑）。
+type importUser struct {
+	ID       uint64 `gorm:"primaryKey"`
+	Username string
+	Password string
+	Status   int8
+	TenantID uint64 `gorm:"column:tenant_id"`
+}
+
+func (importUser) TableName() string { return "users" }
 
 func rulesFor(importType string) (importer.ValidationRules, error) {
 	switch importType {

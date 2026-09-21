@@ -9,9 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"jimu/internal/capabilities/admin/application"
-	admindomain "jimu/internal/capabilities/admin/domain"
-	userdomain "jimu/internal/capabilities/user/domain"
+	"jimu/internal/capabilities/dataops/application"
+	importdomain "jimu/internal/capabilities/dataops/domain"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -36,13 +35,13 @@ func multipartRequest(method, target, filename, contentType, body string) *http.
 }
 
 func newImportHandler(db *gorm.DB) *AdminImportHandler {
-	return NewAdminImportHandler(application.NewImportService(&fakeImportJobRepo{}, &fakeUserRepository{}, db))
+	return NewAdminImportHandler(application.NewImportService(&fakeImportJobRepo{}, db))
 }
 
 func TestAdminImportHandlerPreview(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.POST("/preview", newImportHandler(newSqliteDB(t, &userdomain.User{})).Preview)
+	r.POST("/preview", newImportHandler(newSqliteDB(t, &importUser{})).Preview)
 
 	// 成功
 	w := httptest.NewRecorder()
@@ -69,7 +68,7 @@ func TestAdminImportHandlerImport(t *testing.T) {
 	r := gin.New()
 	r.POST("/import", func(c *gin.Context) {
 		c.Set("user_id", uint64(1))
-		newImportHandler(newSqliteDB(t, &userdomain.User{})).Import(c)
+		newImportHandler(newSqliteDB(t, &importUser{})).Import(c)
 	})
 
 	// 成功导入
@@ -96,10 +95,10 @@ func TestAdminImportHandlerImport(t *testing.T) {
 	r2.POST("/import", func(c *gin.Context) {
 		c.Set("user_id", uint64(1))
 		NewAdminImportHandler(application.NewImportService(&fakeImportJobRepo{
-			create: func(ctx context.Context, job *admindomain.ImportJob) error {
+			create: func(ctx context.Context, job *importdomain.ImportJob) error {
 				return errors.New("db down")
 			},
-		}, &fakeUserRepository{}, newSqliteDB(t, &userdomain.User{}))).Import(c)
+		}, newSqliteDB(t, &importUser{}))).Import(c)
 	})
 	w4 := httptest.NewRecorder()
 	r2.ServeHTTP(w4, multipartRequest(http.MethodPost, "/import", "users.csv", "text/csv",
@@ -125,10 +124,10 @@ func TestAdminImportHandlerGet(t *testing.T) {
 	// 未找到
 	r2 := gin.New()
 	r2.GET("/import/:id", NewAdminImportHandler(application.NewImportService(&fakeImportJobRepo{
-		findByID: func(ctx context.Context, id uint64) (*admindomain.ImportJob, error) {
+		findByID: func(ctx context.Context, id uint64) (*importdomain.ImportJob, error) {
 			return nil, gorm.ErrRecordNotFound
 		},
-	}, &fakeUserRepository{}, nil)).Get)
+	}, nil)).Get)
 	w3 := httptest.NewRecorder()
 	r2.ServeHTTP(w3, httptest.NewRequest(http.MethodGet, "/import/1", nil))
 	assert.Equal(t, http.StatusNotFound, w3.Code)

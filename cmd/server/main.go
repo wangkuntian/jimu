@@ -17,6 +17,7 @@ import (
 	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/captcha"
 	"jimu/internal/capabilities/catalog"
+	"jimu/internal/capabilities/dataops"
 	mfamodule "jimu/internal/capabilities/mfa"
 	oauthmodule "jimu/internal/capabilities/oauth"
 	passkeymodule "jimu/internal/capabilities/passkey"
@@ -55,7 +56,7 @@ var errCapabilityNoInstance = errors.New("declared capability has no instance")
 // （清单尾部的基础设施能力只带迁移、尚无 Module 实例，不在名册中）。
 // 单元测试（main_test.go）对账两者，run() 启动时按它过滤装配并自检实例映射。
 var wiredCapabilities = []string{
-	"user", "access", "tenant", "auth", "mfa", "passkey", "queue", "apikey",
+	"user", "access", "tenant", "auth", "mfa", "passkey", "queue", "apikey", "dataops",
 	"audit", "admin", "oauth", "captcha",
 }
 
@@ -156,6 +157,7 @@ func run() error {
 		"access":  accessMod,
 		"queue":   queue.NewModule(container.DB, container.Scheduler),
 		"apikey":  apikey.New(container.DB, tenantMod.Quota()),
+		"dataops": dataops.New(container.DB),
 		"tenant":  tenantMod,
 		"audit":   auditmodule.New(container.DB, cfg.Audit, container.Logger),
 		"admin": adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, middleware.IPAllowlist(cfg.Security.AdminIPAllowlist), container.Scheduler, container.Storage, container.UploadScanner, container.FeatureFlag, container.EventBus,
