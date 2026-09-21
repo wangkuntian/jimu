@@ -357,6 +357,12 @@ func LoadWithSections() (*Config, SectionDecoder, error) {
 	return cfg, sectionDecoder{v: v}, nil
 }
 
+// ProdConfigValidator 可选接口：能力配置段在生产环境下需要追加的加严校验。
+// 框架在 APP_ENV=prod 时按类型断言调用（如 auth 的 jwt_secret 强度）。
+type ProdConfigValidator interface {
+	ValidateProd() error
+}
+
 // SectionConfig 能力配置段实现的加载钩子：解码后先填默认值、再自校验。
 // 两个方法都定义在**指针**接收者上，确保钩子作用于解码后的实际值
 // （方法值会在传参时绑定接收者副本，故不能把钩子当函数值传递）。
