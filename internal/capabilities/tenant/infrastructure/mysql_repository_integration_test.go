@@ -17,13 +17,18 @@ import (
 )
 
 func init() {
-	// 本包集成测试依赖 tenants 表：注入租户能力的迁移。
-	// 迁移 embed 在能力根包（tenants/migrations.go），infrastructure 子包测试
-	// 引用根包会构成 import cycle，故这里按源码路径直接定位迁移目录。
+	// 本包集成测试依赖完整闭包：tenant 的 005 迁移会 ALTER users/roles（补 tenant_id 列），
+	// 这两张基表来自 user/role 的迁移 —— 单独注入 tenant 在全新库上会报
+	// `Table 'jimu_test.users' doesn't exist`。三个能力的迁移必须一起注入，
+	// 顺序与 catalog 拓扑序一致（user, role 在前）。
+	// 迁移 embed 在能力根包，infrastructure 子包测试引用根包会构成 import cycle，
+	// 故这里按源码路径直接定位各能力根目录（本文件向上 4 级 = 仓库根）。
 	_, thisFile, _, _ := runtime.Caller(0)
-	capRoot := filepath.Join(filepath.Dir(thisFile), "..")
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..")
 	testutil.SetMigrateCaps([]contract.Descriptor{
-		{Name: "tenant", Migrations: os.DirFS(capRoot)},
+		{Name: "user", Migrations: os.DirFS(filepath.Join(repoRoot, "internal", "capabilities", "user"))},
+		{Name: "role", Migrations: os.DirFS(filepath.Join(repoRoot, "internal", "capabilities", "role"))},
+		{Name: "tenant", Migrations: os.DirFS(filepath.Join(repoRoot, "internal", "capabilities", "tenant"))},
 	})
 }
 
