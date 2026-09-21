@@ -153,13 +153,6 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 	admin.PUT("/config/:key", configHandler.Update)
 	admin.POST("/config/reload", configHandler.Reload)
 
-	// 任务调度端点
-	taskHandler := admininterfaces.NewAdminTaskHandler(adminapp.NewAdminTaskService(m.sched))
-	admin.GET("/tasks", taskHandler.List)
-	admin.POST("/tasks/:id/run", taskHandler.Trigger)
-	admin.POST("/tasks/:id/toggle", taskHandler.Toggle)
-	admin.GET("/tasks/:id/history", taskHandler.History)
-
 	// 数据导入端点
 	importHandler := admininterfaces.NewAdminImportHandler(
 		adminapp.NewImportService(
@@ -175,18 +168,6 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 
 	// 审计日志端点（复用 audit 模块仓储，读 006 迁移的 audit_logs 表）
 	admin.GET("/audit", admininterfaces.NewAdminAuditHandler(m.db).List)
-
-	// 任务队列端点
-	jobHandler := admininterfaces.NewAdminJobHandler(
-		admininfra.NewMysqlJobRepository(m.db),
-		admininfra.NewMysqlDeadLetterRepository(m.db),
-	)
-	admin.GET("/jobs", jobHandler.List)
-	admin.POST("/jobs", jobHandler.Submit)
-	admin.GET("/jobs/:id", jobHandler.Get)
-	admin.POST("/jobs/:id/retry", jobHandler.Retry)
-	admin.GET("/jobs/dead-letters", jobHandler.ListDeadLetters)
-	admin.POST("/jobs/dead-letters/:id/resolve", jobHandler.ResolveDeadLetter)
 
 	// WebSocket 实时通信端点
 	m.initWS()

@@ -6,7 +6,6 @@ import (
 
 	admindomain "jimu/internal/capabilities/admin/domain"
 	apikeydomain "jimu/internal/capabilities/apikey/domain"
-	qdomain "jimu/internal/capabilities/queue/domain"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -20,8 +19,6 @@ func newRepoTestDB(t *testing.T) *gorm.DB {
 	assert.NoError(t, db.AutoMigrate(
 		&apikeydomain.APIKey{},
 		&admindomain.ImportJob{},
-		&qdomain.Job{},
-		&qdomain.DeadLetter{},
 	))
 	return db
 }
@@ -99,53 +96,4 @@ func TestMysqlImportJobRepository(t *testing.T) {
 	got2, _ := repo.FindByID(ctx, 1)
 	assert.Equal(t, admindomain.ImportJobCompleted, got2.Status)
 	assert.Equal(t, 5, got2.SuccessRows)
-}
-
-func TestMysqlJobRepository(t *testing.T) {
-	db := newRepoTestDB(t)
-	repo := NewMysqlJobRepository(db)
-	ctx := context.Background()
-
-	// Create + FindByID
-	job := &qdomain.Job{ID: 1, Type: "email", Payload: "x", Status: qdomain.JobStatusPending, Priority: 5, MaxAttempts: 3}
-	assert.NoError(t, repo.Create(ctx, job))
-	got, err := repo.FindByID(ctx, 1)
-	assert.NoError(t, err)
-	assert.Equal(t, qdomain.JobStatusPending, got.Status)
-
-	// Update
-	job.Status = qdomain.JobStatusFailed
-	job.Attempts = 1
-	job.Error = "boom"
-	assert.NoError(t, repo.Update(ctx, job))
-	got, _ = repo.FindByID(ctx, 1)
-	assert.Equal(t, qdomain.JobStatusFailed, got.Status)
-
-	// List 带 status 过滤
-	assert.NoError(t, repo.Create(ctx, &qdomain.Job{ID: 2, Type: "email", Status: qdomain.JobStatusPending}))
-	jobs, total, err := repo.List(ctx, 0, 0, 10, map[string]interface{}{"status": "failed"})
-	assert.NoError(t, err)
-	assert.Equal(t, int64(1), total)
-	assert.Len(t, jobs, 1)
-	assert.Equal(t, uint64(1), jobs[0].ID)
-
-	// List 带 type 过滤
-	jobs, total, err = repo.List(ctx, 0, 0, 10, map[string]interface{}{"type": "sms"})
-	assert.NoError(t, err)
-	assert.Equal(t, int64(0), total)
-	assert.Empty(t, jobs)
-
-	// List 无过滤
-	jobs, total, err = repo.List(ctx, 0, 0, 10, map[string]interface{}{})
-	assert.NoError(t, err)
-	assert.Equal(t, int64(2), total)
-	assert.Len(t, jobs, 2)
-
-	// List 按租户过滤
-	assert.NoError(t, repo.Create(ctx, &qdomain.Job{ID: 3, TenantID: 5, Type: "email", Status: qdomain.JobStatusPending}))
-	jobs, total, err = repo.List(ctx, 5, 0, 10, map[string]interface{}{})
-	assert.NoError(t, err)
-	assert.Equal(t, int64(1), total)
-	assert.Len(t, jobs, 1)
-	assert.Equal(t, uint64(3), jobs[0].ID)
 }

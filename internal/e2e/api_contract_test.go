@@ -27,6 +27,7 @@ import (
 	mfadomain "jimu/internal/capabilities/mfa/domain"
 	passkeymodule "jimu/internal/capabilities/passkey"
 	passkeydomain "jimu/internal/capabilities/passkey/domain"
+	"jimu/internal/capabilities/queue"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	usermodule "jimu/internal/capabilities/user"
 	userdomain "jimu/internal/capabilities/user/domain"
@@ -133,10 +134,11 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 	auditMod := auditmodule.New(gdb, cfg.Audit, log)
 	adminMod := adminmodule.New("test", "test", rdb, gdb,
 		feature.NewManager())
+	queueMod := queue.NewModule(gdb, nil)
 
 	router := gin.New()
 
-	modules := []contract.Module{authMod, mfaMod, passkeyMod, captchaMod, userMod, accessMod, auditMod, adminMod}
+	modules := []contract.Module{authMod, mfaMod, passkeyMod, captchaMod, userMod, accessMod, auditMod, adminMod, queueMod}
 	// 1) 模块级 HTTP 中间件（审计记录）
 	for _, m := range modules {
 		if p, ok := m.(contract.HTTPMiddlewareProvider); ok {

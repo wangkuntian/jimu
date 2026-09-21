@@ -7,7 +7,6 @@ import (
 
 	admindomain "jimu/internal/capabilities/admin/domain"
 	apikeydomain "jimu/internal/capabilities/apikey/domain"
-	qdomain "jimu/internal/capabilities/queue/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
 
 	"github.com/glebarez/sqlite"
@@ -166,65 +165,6 @@ func (f *fakeImportJobRepo) FindByID(ctx context.Context, id uint64) (*admindoma
 func (f *fakeImportJobRepo) Update(ctx context.Context, job *admindomain.ImportJob) error {
 	if f.update != nil {
 		return f.update(ctx, job)
-	}
-	return nil
-}
-
-// fakeJobRepo 可配置的任务仓储 mock
-type fakeJobRepo struct {
-	create   func(ctx context.Context, job *qdomain.Job) error
-	findByID func(ctx context.Context, id uint64) (*qdomain.Job, error)
-	update   func(ctx context.Context, job *qdomain.Job) error
-	list     func(ctx context.Context, tenantID uint64, offset, limit int, filters map[string]interface{}) ([]qdomain.Job, int64, error)
-}
-
-func (f *fakeJobRepo) Create(ctx context.Context, job *qdomain.Job) error {
-	if f.create != nil {
-		return f.create(ctx, job)
-	}
-	job.ID = 5
-	return nil
-}
-
-func (f *fakeJobRepo) FindByID(ctx context.Context, id uint64) (*qdomain.Job, error) {
-	if f.findByID != nil {
-		return f.findByID(ctx, id)
-	}
-	return &qdomain.Job{ID: id, Type: "email", Status: qdomain.JobStatusPending}, nil
-}
-
-func (f *fakeJobRepo) Update(ctx context.Context, job *qdomain.Job) error {
-	if f.update != nil {
-		return f.update(ctx, job)
-	}
-	return nil
-}
-
-func (f *fakeJobRepo) List(ctx context.Context, tenantID uint64, offset, limit int, filters map[string]interface{}) ([]qdomain.Job, int64, error) {
-	if f.list != nil {
-		return f.list(ctx, tenantID, offset, limit, filters)
-	}
-	return []qdomain.Job{{ID: 1, Type: "email"}}, 1, nil
-}
-
-// fakeDeadLetterRepo 可配置的死信仓储 mock
-type fakeDeadLetterRepo struct {
-	list         func(ctx context.Context, tenantID uint64, offset, limit int, resolved bool) ([]qdomain.DeadLetter, int64, error)
-	markResolved func(ctx context.Context, tenantID uint64, id uint64) error
-}
-
-func (f *fakeDeadLetterRepo) Create(ctx context.Context, d *qdomain.DeadLetter) error { return nil }
-
-func (f *fakeDeadLetterRepo) List(ctx context.Context, tenantID uint64, offset, limit int, resolved bool) ([]qdomain.DeadLetter, int64, error) {
-	if f.list != nil {
-		return f.list(ctx, tenantID, offset, limit, resolved)
-	}
-	return []qdomain.DeadLetter{{ID: 1, JobID: 1}}, 1, nil
-}
-
-func (f *fakeDeadLetterRepo) MarkResolved(ctx context.Context, tenantID uint64, id uint64) error {
-	if f.markResolved != nil {
-		return f.markResolved(ctx, tenantID, id)
 	}
 	return nil
 }

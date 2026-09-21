@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"jimu/internal/capabilities/admin/application"
+	"jimu/internal/capabilities/queue/application"
 	"jimu/internal/config"
 	"jimu/internal/kernel/logger"
 	"jimu/internal/kernel/scheduler"
