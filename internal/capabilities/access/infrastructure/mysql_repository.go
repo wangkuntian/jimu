@@ -3,7 +3,7 @@ package infrastructure
 import (
 	"context"
 
-	"jimu/internal/capabilities/role/domain"
+	"jimu/internal/capabilities/access/domain"
 	dbutil "jimu/internal/kernel/db"
 
 	"gorm.io/gorm"

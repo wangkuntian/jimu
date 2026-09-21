@@ -5,7 +5,7 @@ import (
 	stderrors "errors"
 	"testing"
 
-	"jimu/internal/capabilities/role/domain"
+	"jimu/internal/capabilities/access/domain"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 

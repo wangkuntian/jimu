@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"jimu/internal/app"
+	accessmodule "jimu/internal/capabilities/access"
+	roledomain "jimu/internal/capabilities/access/domain"
 	adminmodule "jimu/internal/capabilities/admin"
 	auditmodule "jimu/internal/capabilities/audit"
 	auditdomain "jimu/internal/capabilities/audit/domain"
@@ -24,9 +26,6 @@ import (
 	mfadomain "jimu/internal/capabilities/mfa/domain"
 	passkeymodule "jimu/internal/capabilities/passkey"
 	passkeydomain "jimu/internal/capabilities/passkey/domain"
-	"jimu/internal/capabilities/permission"
-	"jimu/internal/capabilities/role"
-	roledomain "jimu/internal/capabilities/role/domain"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	usermodule "jimu/internal/capabilities/user"
 	userdomain "jimu/internal/capabilities/user/domain"
@@ -128,14 +127,14 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 		Finalizer: authMod.Finalizer(),
 	})
 	userMod := usermodule.New(gdb, cfg) // 不传 rdb：跳过用户维度限流（依赖 Lua），聚焦契约链路
-	roleMod := role.New(gdb)
-	permMod := permission.New(gdb)
+	accessMod := accessmodule.New(gdb)
+
 	auditMod := auditmodule.New(gdb, cfg.Audit, log)
 	adminMod := adminmodule.New("test", "test", rdb, gdb)
 
 	router := gin.New()
 
-	modules := []contract.Module{authMod, mfaMod, passkeyMod, captchaMod, userMod, roleMod, permMod, auditMod, adminMod}
+	modules := []contract.Module{authMod, mfaMod, passkeyMod, captchaMod, userMod, accessMod, auditMod, adminMod}
 	// 1) 模块级 HTTP 中间件（审计记录）
 	for _, m := range modules {
 		if p, ok := m.(contract.HTTPMiddlewareProvider); ok {

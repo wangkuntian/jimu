@@ -4,7 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 
-	"jimu/internal/capabilities/role/domain"
+	"jimu/internal/capabilities/access/domain"
 	dbutil "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"

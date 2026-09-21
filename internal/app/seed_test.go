@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	roledomain "jimu/internal/capabilities/access/domain"
 	"jimu/internal/capabilities/catalog"
-	roledomain "jimu/internal/capabilities/role/domain"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
@@ -373,20 +373,20 @@ func TestRunSeedWithCasbin(t *testing.T) {
 }
 
 // TestRunSeed_SkipsDisabledCapabilityPermissions 验证权限点来自启用集聚合：
-// 只启用 user+role+permission 时，audit/tenant/admin 的权限点不得落库。
+// 只启用 user+access 时，audit/tenant/admin 的权限点不得落库。
 func TestRunSeed_SkipsDisabledCapabilityPermissions(t *testing.T) {
 	t.Setenv("ADMIN_PASSWORD", "secret123")
 
 	db := newSeedSqliteDB(t)
 	migrateSeedTables(t, db)
 
-	// 只启用 user+role+permission：audit/tenant/admin 的权限点不得出现
-	caps, err := catalog.Resolve([]string{"user", "role", "permission"})
+	// 只启用 user+access：audit/tenant/console 的权限点不得出现
+	caps, err := catalog.Resolve([]string{"user", "access"})
 	require.NoError(t, err)
 	require.NoError(t, RunSeed(db, caps))
 
 	var count int64
 	require.NoError(t, db.Table("permissions").Count(&count).Error)
-	// user 5 + role 6 + permission 5 = 16；audit/tenant/admin 的 16 条不在
+	// user 5 + access 11 = 16；audit/tenant/admin 的权限点不在（access 闭包自动带 user）
 	assert.Equal(t, int64(16), count)
 }

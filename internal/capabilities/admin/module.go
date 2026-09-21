@@ -145,7 +145,6 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 	admin.GET("/users/:id", userHandler.Get)
 	admin.PUT("/users/:id", userHandler.Update)
 	admin.DELETE("/users/:id", userHandler.Disable)
-	admin.POST("/users/:id/roles", userHandler.AssignRole)
 
 	// API Key 管理端点
 	apiKeyHandler := admininterfaces.NewAdminAPIKeyHandler(

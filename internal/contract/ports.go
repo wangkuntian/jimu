@@ -130,3 +130,10 @@ type CaptchaVerifier interface {
 	Enabled() bool
 	Verify(ctx context.Context, id, code string) error
 }
+
+// UserRoleAssigner access 提供：替换用户的全部角色（user_roles 表所有者）。
+// 供 user 能力的管理面用例经端口调用，避免跨能力写他人的表。
+type UserRoleAssigner interface {
+	// AssignRoles 用 roleNames 替换该用户的全部角色；角色名在用户所属租户内解析。
+	AssignRoles(ctx context.Context, userID uint64, roleNames []string) error
+}

@@ -3,7 +3,7 @@ package infrastructure
 import (
 	"context"
 
-	"jimu/internal/capabilities/role/domain"
+	"jimu/internal/capabilities/access/domain"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

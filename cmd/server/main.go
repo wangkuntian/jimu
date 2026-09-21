@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"jimu/internal/app"
+	accessmodule "jimu/internal/capabilities/access"
 	adminmodule "jimu/internal/capabilities/admin"
 	auditmodule "jimu/internal/capabilities/audit"
 	authmodule "jimu/internal/capabilities/auth"
@@ -18,8 +19,6 @@ import (
 	mfamodule "jimu/internal/capabilities/mfa"
 	oauthmodule "jimu/internal/capabilities/oauth"
 	passkeymodule "jimu/internal/capabilities/passkey"
-	"jimu/internal/capabilities/permission"
-	"jimu/internal/capabilities/role"
 	tenantmodule "jimu/internal/capabilities/tenant"
 	"jimu/internal/capabilities/user"
 	userinfra "jimu/internal/capabilities/user/infrastructure"
@@ -54,7 +53,7 @@ var errCapabilityNoInstance = errors.New("declared capability has no instance")
 // （清单尾部的基础设施能力只带迁移、尚无 Module 实例，不在名册中）。
 // 单元测试（main_test.go）对账两者，run() 启动时按它过滤装配并自检实例映射。
 var wiredCapabilities = []string{
-	"user", "role", "permission", "tenant", "auth", "mfa", "passkey",
+	"user", "access", "tenant", "auth", "mfa", "passkey",
 	"audit", "admin", "oauth", "captcha",
 }
 
@@ -139,15 +138,14 @@ func run() error {
 	})
 
 	all := map[string]contract.Module{
-		"user":       user.New(container.DB, *cfg, container.Redis, container.Outbox),
-		"auth":       authMod,
-		"mfa":        mfaMod,
-		"passkey":    passkeyMod,
-		"captcha":    captchaMod,
-		"role":       role.New(container.DB, tenantMod.Quota()),
-		"permission": permission.New(container.DB),
-		"tenant":     tenantMod,
-		"audit":      auditmodule.New(container.DB, cfg.Audit, container.Logger),
+		"user":    user.New(container.DB, *cfg, container.Redis, container.Outbox),
+		"auth":    authMod,
+		"mfa":     mfaMod,
+		"passkey": passkeyMod,
+		"captcha": captchaMod,
+		"access":  accessmodule.New(container.DB, tenantMod.Quota()),
+		"tenant":  tenantMod,
+		"audit":   auditmodule.New(container.DB, cfg.Audit, container.Logger),
 		"admin": adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, middleware.IPAllowlist(cfg.Security.AdminIPAllowlist), container.Scheduler, container.Storage, container.UploadScanner, container.FeatureFlag, container.EventBus,
 			auth.NewWithRotation(cfg.Auth.JWTSecret, cfg.Auth.JWTPreviousSecret, cfg.Auth.Issuer, cfg.Auth.AccessExpireMin, cfg.Auth.RefreshExpireDay),
 			tenantMod.Quota()),

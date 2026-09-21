@@ -70,7 +70,7 @@ var migrationsFS embed.FS
 var Descriptor = contract.Descriptor{
 	Name:       "auth",
 	Migrations: migrationsFS,
-	Requires:   []string{"user", "role", "tenant", "mfa"},
+	Requires:   []string{"user", "access", "tenant", "mfa"},
 	Mount:      contract.MountSelfManaged,
 }
 

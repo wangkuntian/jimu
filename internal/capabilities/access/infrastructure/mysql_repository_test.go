@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"jimu/internal/capabilities/role/domain"
+	"jimu/internal/capabilities/access/domain"
 	dbutil "jimu/internal/kernel/db"
 
 	"github.com/glebarez/sqlite"

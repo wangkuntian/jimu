@@ -3,7 +3,7 @@ package application
 import (
 	"time"
 
-	"jimu/internal/capabilities/role/domain"
+	"jimu/internal/capabilities/access/domain"
 )
 
 type CreateRoleRequest struct {

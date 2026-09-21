@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"jimu/internal/capabilities/role/domain"
+	"jimu/internal/capabilities/access/domain"
 )
 
 func TestRoleResponseUsesDTO(t *testing.T) {

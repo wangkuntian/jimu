@@ -4,7 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 
-	"jimu/internal/capabilities/role/domain"
+	"jimu/internal/capabilities/access/domain"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 

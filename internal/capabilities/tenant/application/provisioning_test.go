@@ -5,7 +5,7 @@ import (
 	stderrors "errors"
 	"testing"
 
-	roledomain "jimu/internal/capabilities/role/domain"
+	roledomain "jimu/internal/capabilities/access/domain"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/config"

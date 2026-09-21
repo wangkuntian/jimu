@@ -1,7 +1,7 @@
 package interfaces
 
 import (
-	"jimu/internal/capabilities/permission/application"
+	"jimu/internal/capabilities/access/application"
 	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/shared/pagination"
 

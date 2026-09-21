@@ -56,8 +56,8 @@ var migrationsFS embed.FS
 // Descriptor 声明租户能力的静态描述。
 var Descriptor = contract.Descriptor{
 	Name: "tenant",
-	// tenant 迁移（005_tenants.sql）会 ALTER users/roles，须后于两者执行
-	Requires:   []string{"user", "role"},
+	// tenant 迁移（005_tenants.sql）会 ALTER users/roles，须后于 user/access 执行
+	Requires:   []string{"user", "access"},
 	Migrations: migrationsFS,
 	Mount:      contract.MountProtected,
 	Permissions: []contract.Permission{

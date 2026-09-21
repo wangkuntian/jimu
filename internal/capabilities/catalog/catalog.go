@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	accessmodule "jimu/internal/capabilities/access"
 	adminmodule "jimu/internal/capabilities/admin"
 	"jimu/internal/capabilities/apikey"
 	auditmodule "jimu/internal/capabilities/audit"
@@ -19,9 +20,7 @@ import (
 	oauthmodule "jimu/internal/capabilities/oauth"
 	"jimu/internal/capabilities/outbox"
 	passkeymodule "jimu/internal/capabilities/passkey"
-	"jimu/internal/capabilities/permission"
 	"jimu/internal/capabilities/queue"
-	"jimu/internal/capabilities/role"
 	"jimu/internal/capabilities/search"
 	tenantmodule "jimu/internal/capabilities/tenant"
 	"jimu/internal/capabilities/user"
@@ -33,8 +32,7 @@ import (
 // 仅携带声明与端口实现；captcha 本轮起有实例并自挂公开路由。
 var entries = []contract.Descriptor{
 	user.Descriptor,
-	role.Descriptor,
-	permission.Descriptor,
+	accessmodule.Descriptor,
 	tenantmodule.Descriptor,
 	mfamodule.Descriptor,
 	authmodule.Descriptor,

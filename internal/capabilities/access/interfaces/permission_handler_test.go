@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"jimu/internal/capabilities/permission/application"
-	"jimu/internal/capabilities/role/domain"
+	"jimu/internal/capabilities/access/application"
+	"jimu/internal/capabilities/access/domain"
 	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"
