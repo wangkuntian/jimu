@@ -136,16 +136,6 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 	// 限流状态可视化端点（仅读，不消费令牌；查看登录爆破防护等计数）
 	admin.GET("/ratelimit/auth", admininterfaces.NewAdminRateLimitHandler(m.rdb).AuthPeek)
 
-	// 用户管理端点
-	userHandler := admininterfaces.NewAdminUserHandler(
-		adminapp.NewAdminUserService(userinfra.NewMysqlRepository(m.db), m.db).WithQuota(m.quota),
-	)
-	admin.GET("/users", userHandler.List)
-	admin.POST("/users", userHandler.Create)
-	admin.GET("/users/:id", userHandler.Get)
-	admin.PUT("/users/:id", userHandler.Update)
-	admin.DELETE("/users/:id", userHandler.Disable)
-
 	// API Key 管理端点
 	apiKeyHandler := admininterfaces.NewAdminAPIKeyHandler(
 		adminapp.NewAdminAPIKeyService(admininfra.NewMysqlAPIKeyRepository(m.db)).WithQuota(m.quota),

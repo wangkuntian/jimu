@@ -22,6 +22,7 @@ import (
 	authdomain "jimu/internal/capabilities/auth/domain"
 	captchamodule "jimu/internal/capabilities/captcha"
 	"jimu/internal/capabilities/catalog"
+	"jimu/internal/capabilities/feature"
 	mfamodule "jimu/internal/capabilities/mfa"
 	mfadomain "jimu/internal/capabilities/mfa/domain"
 	passkeymodule "jimu/internal/capabilities/passkey"
@@ -130,7 +131,8 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 	accessMod := accessmodule.New(gdb)
 
 	auditMod := auditmodule.New(gdb, cfg.Audit, log)
-	adminMod := adminmodule.New("test", "test", rdb, gdb)
+	adminMod := adminmodule.New("test", "test", rdb, gdb,
+		feature.NewManager())
 
 	router := gin.New()
 
