@@ -258,7 +258,7 @@ make cli
 v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capabilities/<name>/migrations/{mysql,postgres}/`，经 `//go:embed` 打进二进制（镜像/发布物不再依赖磁盘上的 `migrations/` 目录）。顶层 `migrations/` 已删除。
 
 - **双版本表机制** — 每个能力一个独立版本表 `goose_db_version_<capability>`（由 `Descriptor.Migrations` 驱动，`internal/kernel/db.MigrateEnabled` 执行），互不干扰；删除能力即删它的表与迁移，新增迁移不再影响其他能力的版本记录。全局 `goose_db_version` 保留为历史记录，新运行器不再读写。
-- **执行顺序** — 按能力清单 `internal/capabilities/catalog` 的拓扑序（依赖在前）逐能力执行；同一能力内按迁移文件版本号升序。`migrate down`/`migrate redo` 按**反向能力序**迭代：回滚时依赖方的迁移先回滚（如 tenant 005 `DROP COLUMN tenant_id` 先于 user 001 `DROP TABLE users`），依赖的基表才不会被先删；每能力每次回滚其最后一条迁移（该能力全部回滚后静默完成，不再报错），一次 `down` 最多产生 14 个 DDL 回滚（每个带迁移的能力各回滚一条）。**已知限制**：各能力迁移深度不一时，多轮 `down` 回滚到底（drain-to-empty）可能因跨能力表依赖失败（如 role 先回滚完删了 `roles`，tenant 的 005 Down 下一轮还要用它）；日常回滚最近一步不受影响，需要整库清空时重建库最简（按能力逐个 `down` 需走代码/测试路径，CLI 暂无按能力过滤参数）。
+- **执行顺序** — 按能力清单 `internal/capabilities/catalog` 的拓扑序（依赖在前）逐能力执行；同一能力内按迁移文件版本号升序。`migrate down`/`migrate redo` 按**反向能力序**迭代：回滚时依赖方的迁移先回滚（如 tenant 005 `DROP COLUMN tenant_id` 先于 user 001 `DROP TABLE users`），依赖的基表才不会被先删；每能力每次回滚其最后一条迁移（该能力全部回滚后静默完成，不再报错），一次 `down` 最多产生 13 个 DDL 回滚（每个带迁移的能力各回滚一条）。**已知限制**：各能力迁移深度不一时，多轮 `down` 回滚到底（drain-to-empty）可能因跨能力表依赖失败（如 access 先回滚完删了 `roles`，tenant 的 005 Down 下一轮还要用它）；日常回滚最近一步不受影响，需要整库清空时重建库最简（按能力逐个 `down` 需走代码/测试路径，CLI 暂无按能力过滤参数）。
 - **新迁移怎么写** — 写进**所属能力**的 `internal/capabilities/<name>/migrations/<方言>/` 目录，能力内版本号取该目录当前最大编号 +1（脚手架 `jimu module create` 自动完成）；一条 ALTER 只属于一个能力——它改变的表归谁，迁移就写谁的能力目录，避免多能力重复变更同一对象。
 - **存量实例升级路径** — 旧世界全局版本表记录 001–015：
   1. 旧二进制 `jimu migrate up` 升到旧世界最新；
@@ -328,12 +328,11 @@ jimu/
 │   │   ├── passkey/            # WebAuthn 通行密钥（无密码登录）
 │   │   ├── apikey/             # API Key 签发/校验 + 维度限流（apikey/middleware/）
 │   │   ├── oauth/              # 第三方登录绑定；provider/ 为 OAuth Provider 实现
-│   │   ├── user/               # 用户管理
-│   │   ├── role/               # 角色管理
-│   │   ├── permission/         # 权限管理
-│   │   ├── tenant/             # 租户管理
+│   │   ├── user/               # 用户管理（自助面 + 管理面共用同一仓储与配额）
+│   │   ├── access/             # 访问控制：角色 + 权限 + 用户角色分配（user_roles 所有者）
+│   │   ├── tenant/             # 租户管理 + 套餐配额 + 开通式注册
 │   │   ├── audit/              # 审计日志
-│   │   ├── admin/              # 系统管理
+│   │   ├── console/            # 平台控制台：管理端准入 + 错误码/监控/限流查看/配置热更新/WS 管理
 │   │   ├── breach/             # 泄露密码检测（Have I Been Pwned）
 │   │   ├── captcha/            # 图形验证码（生成 + Redis 存储 + 校验）
 │   │   ├── dataops/
@@ -351,7 +350,7 @@ jimu/
 │   │   ├── storage/            # 文件存储抽象（本地/S3/OSS/MinIO）
 │   │   ├── uploadsec/          # 上传处理 + ClamAV 扫描
 │   │   └── ws/                 # WebSocket（Hub + 会话/频道管理）
-│   │   # 注：user/role/permission/tenant/auth/mfa/passkey/audit/apikey/queue/outbox/dataops/search
+│   │   # 注：user/access/tenant/auth/mfa/passkey/audit/apikey/queue/outbox/dataops/search/oauth
 │   │   # 等带表的能力目录下均有 migrations/{mysql,postgres}/（树上不逐个展开）
 │   ├── config/                 # 配置加载 + 校验
 │   ├── contract/               # Module 接口定义
@@ -963,16 +962,19 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 
 ### 能力开关（v0.3.0）
 
-后端由**能力**组成，可用 `capabilities.enabled` 选择启用哪些能力（留空 = 全部启用，行为与旧版本一致）：
+后端由**能力**组成（v0.3.0 起共 18 项：`user`/`access`/`tenant`/`mfa`/`auth`/`passkey`/`audit`/`console`/`oauth`/`apikey`/`queue`/`outbox`/`dataops`/`search`/`captcha`/`feature`/`uploadsec`/`breach`）。
+管理端 `/api/v1/admin/*` 前缀保留，但路由按用例归属各能力：用户→`user`、任务队列与调度→`queue`、API Key→`apikey`、用户导入→`dataops`、审计列表→`audit`、Feature Flag→`feature`、文件上传→`uploadsec`、其余平台级视图（错误码/监控/限流查看/配置热更新/WS 管理）与**管理端准入中间件**→`console`。能力间只经 `contract` 端口调用（如 `user` 经 `contract.UserRoleAssigner` 委托 `access` 写 `user_roles`）。
+
+可用 `capabilities.enabled` 选择启用哪些能力（留空 = 全部启用，行为与旧版本一致）：
 
 ```yaml
 capabilities:
-  enabled: ["user", "role", "permission", "tenant", "auth", "audit", "admin"]
+  enabled: ["user", "access", "tenant", "auth", "mfa", "passkey", "audit", "console", "apikey", "queue"]
 ```
 
-- 硬依赖会自动补齐：只写 `["oauth"]` 会连带启用 `auth`/`user`/`role`/`tenant`
+- 硬依赖会自动补齐：只写 `["oauth"]` 会连带启用 `auth`/`user`/`access`/`tenant`/`mfa`
 - 未启用的能力不挂路由、不注册定时任务与事件、不启动其后台组件
-- **受保护能力需要认证器**：声明为受保护（`MountProtected`）的能力必须有模块提供受保护中间件（当前为 `auth`）；否则进程**启动即失败**并指出缺失的提供者，而不是把路由裸挂出去。因此 `enabled: ["user"]` 这类"有业务路由、无认证器"的配置会被拒绝；合法的最小组合之一是 `["auth"]`（闭包自动补齐 `user`/`role`/`tenant`/`mfa`）
+- **受保护能力需要认证器**：声明为受保护（`MountProtected`）的能力必须有模块提供受保护中间件（当前为 `auth`）；否则进程**启动即失败**并指出缺失的提供者，而不是把路由裸挂出去。因此 `enabled: ["user"]` 这类"有业务路由、无认证器"的配置会被拒绝；合法的最小组合之一是 `["auth"]`（闭包自动补齐 `user`/`access`/`tenant`/`mfa`）
 - 能力清单与依赖关系见 `internal/capabilities/catalog/catalog.go`；设计见 [能力可插拔设计](docs/design/2026-09-18-capability-plugins-design.md)
 
 ### 静态加密（Data at Rest）

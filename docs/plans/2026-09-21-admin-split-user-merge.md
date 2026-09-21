@@ -307,3 +307,32 @@ make check-log-usage && go test ./... -count=1 && make bench-ci && make release-
 **3. 类型一致性**：`contract.UserRoleAssigner.AssignRoles(ctx, userID, roleNames) error` 在 Task 2 定义、Task 3 消费；`console.Descriptor.Requires=["auth","access"]` 与裁定 #6 一致。
 
 **4. 风险**：① 7 个能力同时挂 `/api/v1/admin` 前缀，gin 路由重复注册会 panic —— 必须保证每条路径只注册一次（e2e 路由清单测试钉死）；② `access` 合并时 role/permission 的 `dto.go`/`errors.go`/`service.go` 同名文件需重命名，易漏改 import；③ user 双写合并要确保管理面与自助面的租户可见性/配额语义统一（`kernel/tenant.Visible` 唯一实现），否则引入越权；④ `feature` 与 `queue` 从「仅迁移/库」升级为有实例的能力，`wiredCapabilities` 与 main 装配需同步，漏改会导致启动期 fail-closed 报错。
+
+---
+
+## 执行结果（完成后补记）
+
+分支 `feature/admin-split-user-merge`，按功能分 7 个提交：
+
+| commit | 主题 | 对应 Task |
+|---|---|---|
+| `4d25ba9` | `refactor(access)`: merge role and permission into the access capability | Task 2 |
+| `6c25203` | `refactor(user)`: merge the admin user management into the user capability | Task 3 |
+| `d3da2f7` | `refactor(queue)`: own the job and task admin endpoints | Task 4 |
+| `c00241b` | `refactor(apikey)`: own the API key admin endpoints | Task 5 |
+| `7c49c65` | `refactor(dataops)`: own the user import endpoints | Task 6 |
+| `616315e` | `refactor(capabilities)`: remove the admin namespace | Task 1 + Task 7（合并） |
+| `6b3bc11` | `fix(access)`: merge role and permission migrations into one version | Task 2 回归修复 |
+
+### 与计划的偏差（均已实测确认）
+
+1. **Task 1 与 Task 7 合并为一个提交**：`console` 要承接 `/api/v1/admin/*` 通配权限点与 AdminAuth，而 `admin` 删除前两者会**重复声明同一权限点、重复注册同一路由**（gin 直接 panic）。因此「建 console」与「删 admin」必须原子完成，无法拆成两个可编译的中间态。
+2. **`feature` 归属 `feature` 能力、`uploadsec` 承接 `/admin/files`**：计划 Task 7 只写了 audit/feature；实现时发现 `admin/module.go` 还有 `/admin/files`（storage + uploadsec）一类端点，按同一原则归 `uploadsec` 能力（它拥有 handler）。
+3. **`access` 迁移版本合并（回归修复）**：role 001 与 permission 001 合并到同一能力后出现**同能力内重复版本号**，goose 报 `found duplicate migration version 1`。`make release-check` 的 compose 隔离校验捕获了该问题（此前单能力版本表验证未覆盖合并后的能力）。修复为单个 `001_roles_permissions.sql`，存量 adopt 基线（001/008）不变。
+4. **`dataops` 导入服务去掉死参数**：原 `NewImportService(importJobs, userRepo, db)` 的 `userRepo` 只存不用；迁移时直接删除该参数，并新增最小 `importUser` 模型替代对 `user/domain` 的依赖（能力边界）。
+5. **`console` 的 `Requires`**：计划裁定 #6 修正为 `["auth","access"]`（AdminAuth 读 `roles`，roles 由 access 的受保护中间件注入），实现与之一致。
+
+### 遗留
+
+- `tenant/application/provisioning.go` 仍在单事务内直接写 `roles`/`role_permissions`（模板角色初始化），属跨能力写表；因与租户/用户创建同事务，端口化需 tx 透传，本轮未做（与 P1.6 遗留同类）。
+- `oauth` 仍 import `auth/domain.TokenPair`（未在 P1.7 范围内）。
