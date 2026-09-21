@@ -47,15 +47,29 @@ func (s *RedisStore) Verify(id, answer string, clear bool) bool {
 
 // Service 验证码服务（生成 + Redis 存储 + 校验）
 type Service struct {
-	store *RedisStore
+	store   *RedisStore
+	enabled bool
 }
 
-// NewService 创建验证码服务
+// NewService 创建验证码服务（默认启用）。
 func NewService(client redistore.Client, ttl time.Duration) *Service {
 	return &Service{
-		store: NewRedisStore(client, ttl),
+		store:   NewRedisStore(client, ttl),
+		enabled: true,
 	}
 }
+
+// NewServiceWithEnabled 创建验证码服务并显式指定启用状态。
+// enabled=false 时 Verify 直接放行（未启用验证码的站点不校验）。
+func NewServiceWithEnabled(client redistore.Client, ttl time.Duration, enabled bool) *Service {
+	return &Service{
+		store:   NewRedisStore(client, ttl),
+		enabled: enabled,
+	}
+}
+
+// Enabled 是否启用验证码校验（实现 contract.CaptchaVerifier）。
+func (s *Service) Enabled() bool { return s.enabled }
 
 // Generate 生成验证码，返回 id 与 base64 图片
 func (s *Service) Generate(ctx context.Context) (string, string, error) {
