@@ -8,6 +8,7 @@ import (
 
 	"jimu/internal/capabilities/encryption"
 	userdomain "jimu/internal/capabilities/user/domain"
+	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
@@ -36,20 +37,20 @@ func (f *fakeBreachChecker) IsBreached(_ context.Context, password string) (bool
 // fakeProvisioner 记录开通参数，用于隔离开通式注册的其余逻辑
 type fakeProvisioner struct {
 	mu     sync.Mutex
-	params []ProvisionParams
+	params []contract.ProvisionRequest
 }
 
-func (f *fakeProvisioner) Provision(_ context.Context, params ProvisionParams) (*ProvisionResult, error) {
+func (f *fakeProvisioner) Provision(_ context.Context, params contract.ProvisionRequest) (*contract.ProvisionResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.params = append(f.params, params)
-	return &ProvisionResult{User: &userdomain.User{ID: 7, Username: params.Username}}, nil
+	return &contract.ProvisionResult{User: contract.ProvisionedUser{ID: 7, Username: params.Username}}, nil
 }
 
-func (f *fakeProvisioner) called() []ProvisionParams {
+func (f *fakeProvisioner) called() []contract.ProvisionRequest {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]ProvisionParams{}, f.params...)
+	return append([]contract.ProvisionRequest{}, f.params...)
 }
 
 func newBreachService(t *testing.T, checker *fakeBreachChecker) (*AuthService, *fakeUserRepo) {

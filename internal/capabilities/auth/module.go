@@ -7,7 +7,6 @@ import (
 	"jimu/internal/capabilities/auth/application"
 	authinfra "jimu/internal/capabilities/auth/infrastructure"
 	"jimu/internal/capabilities/auth/interfaces"
-	"jimu/internal/capabilities/captcha"
 	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/config"
@@ -17,24 +16,25 @@ import (
 
 	redistore "jimu/internal/kernel/redis"
 
-	"github.com/go-webauthn/webauthn/webauthn"
-
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 type Module struct {
-	cfg        config.AuthConfig
-	service    *application.AuthService
-	jwtUtil    *auth.JWT
-	limiter    *auth.Limiter
-	db         *gorm.DB
-	captcha    *captcha.Service
-	captchaCfg config.CaptchaConfig
-	outbox     *outbox.Outbox
+	cfg     config.AuthConfig
+	service *application.AuthService
+	jwtUtil *auth.JWT
+	limiter *auth.Limiter
+	db      *gorm.DB
+	captcha contract.CaptchaVerifier
+	outbox  *outbox.Outbox
 }
 
-func New(db *gorm.DB, rdb redistore.Client, cfg config.AuthConfig, failClosed bool, captchaSvc *captcha.Service, captchaCfg config.CaptchaConfig, deps ...interface{}) *Module {
+// New 创建 auth 模块。
+// deps 接受：*outbox.Outbox、notification.Dispatcher、*encryption.Cipher、
+// application.TenantQuota、contract.MFAVerifier、contract.TenantProvisioner、
+// contract.BreachChecker、*application.ResetStore。
+func New(db *gorm.DB, rdb redistore.Client, cfg config.AuthConfig, failClosed bool, captchaVerifier contract.CaptchaVerifier, deps ...interface{}) *Module {
 	userRepo := infrastructure.NewMysqlRepository(db)
 	jwtUtil := auth.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
 	sessionStore := auth.NewRedisSessionStore(rdb)
@@ -44,30 +44,11 @@ func New(db *gorm.DB, rdb redistore.Client, cfg config.AuthConfig, failClosed bo
 	resetStore := application.NewResetStore(rdb, time.Duration(cfg.ResetCodeTTLMin)*time.Minute)
 	loginHistoryRepo := authinfra.NewMysqlLoginHistoryRepository(db)
 	passwordHistoryRepo := authinfra.NewMysqlPasswordHistoryRepository(db)
-	trustedDeviceRepo := authinfra.NewMysqlTrustedDeviceRepository(db)
-	webauthnRepo := authinfra.NewMysqlWebAuthnCredentialRepository(db)
-	allDeps := append(deps, resetStore, rdb, application.WithIssuer(cfg.Issuer), loginHistoryRepo,
-		passwordHistoryRepo, application.WithPasswordHistory(cfg.PasswordHistoryCount),
-		trustedDeviceRepo, application.WithTrustedDeviceTTL(cfg.TrustedDeviceDays),
-		webauthnRepo, application.WithWebAuthnSessionTTL(time.Duration(cfg.WebAuthn.SessionTTLMin)*time.Minute))
-	// WebAuthn/通行密钥：仅在启用时构造库句柄（配置合法性已由 config.Validate 保证）
-	if cfg.WebAuthn.Enabled {
-		handle, err := webauthn.New(&webauthn.Config{
-			RPDisplayName: cfg.WebAuthn.RPDisplayName,
-			RPID:          cfg.WebAuthn.RPID,
-			RPOrigins:     cfg.WebAuthn.RPOrigins,
-		})
-		if err != nil {
-			return nil
-		}
-		allDeps = append(allDeps, handle)
-	}
-	// 开通式注册：注册 = 开通新租户（单事务，模板模式初始化角色权限）
-	if cfg.Provisioning.Enabled {
-		allDeps = append(allDeps, application.NewGormTenantProvisioner(db, cfg.Provisioning))
-	}
+	allDeps := append([]interface{}{}, deps...)
+	allDeps = append(allDeps, resetStore, application.WithPasswordHistory(cfg.PasswordHistoryCount),
+		loginHistoryRepo, passwordHistoryRepo)
 	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin, allDeps...)
-	m := &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaSvc, captchaCfg: captchaCfg}
+	m := &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaVerifier}
 	for _, dep := range deps {
 		if ob, ok := dep.(*outbox.Outbox); ok {
 			m.outbox = ob
@@ -80,7 +61,7 @@ func (m *Module) Name() string {
 	return "auth"
 }
 
-// migrationsFS 能力自带迁移（Task 3：能力迁移经 embed 进二进制）。
+// migrationsFS 能力自带迁移（能力迁移经 embed 进二进制）。
 //
 //go:embed migrations
 var migrationsFS embed.FS
@@ -89,16 +70,18 @@ var migrationsFS embed.FS
 var Descriptor = contract.Descriptor{
 	Name:       "auth",
 	Migrations: migrationsFS,
-	Requires:   []string{"user", "role", "tenant"},
+	Requires:   []string{"user", "role", "tenant", "mfa"},
 	Mount:      contract.MountSelfManaged,
 }
 
 // Descriptor 实现 contract.Describable。
 func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
 
+// Finalizer 暴露 auth 服务作为 contract.LoginFinalizer，供 passkey 无密码登录复用登录收尾。
+func (m *Module) Finalizer() contract.LoginFinalizer { return m.service }
+
 func (m *Module) RegisterHTTP(r contract.Router) {
-	interfaces.RegisterAuthRoutes(r.Group("/api/v1"), m.service, m.jwtUtil, m.cfg, m.limiter, m.captcha, m.captchaCfg)
-	interfaces.RegisterCaptchaRoute(r.Group("/api/v1"), m.captcha)
+	interfaces.RegisterAuthRoutes(r.Group("/api/v1"), m.service, m.jwtUtil, m.cfg, m.limiter, m.captcha)
 }
 
 func (m *Module) ProtectedHTTPMiddleware() ([]gin.HandlerFunc, error) {
@@ -112,3 +95,5 @@ func (m *Module) ProtectedHTTPMiddleware() ([]gin.HandlerFunc, error) {
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}
 
 func (m *Module) RegisterEvents(e contract.EventBus) {}
+
+var _ contract.Module = (*Module)(nil)
