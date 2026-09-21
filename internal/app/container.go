@@ -16,6 +16,7 @@ import (
 	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/queue"
 	queueinfra "jimu/internal/capabilities/queue/infrastructure"
+	"jimu/internal/capabilities/retention"
 	"jimu/internal/capabilities/storage"
 	"jimu/internal/capabilities/uploadsec"
 	userpkg "jimu/internal/capabilities/user"
@@ -44,25 +45,27 @@ type Container struct {
 	Enabled map[string]bool
 	// OutboxPublisher outbox 的发布器类型；outbox 能力未启用时为空（不接线）
 	OutboxPublisher string
-	DB              *gorm.DB
-	Redis           redistore.Client
-	Logger          *logger.Logger
-	TracerProvider  *sdktrace.TracerProvider
-	JobRegistry     contract.JobRegistry
-	Scheduler       *scheduler.CronScheduler
-	Lock            *redistore.Lock
-	Storage         storage.Storage
-	UploadScanner   uploadsec.Scanner
-	Notification    notification.Dispatcher
-	FeatureFlag     *feature.Manager
-	WebSocketHub    *notification.Hub
-	EventBus        *event.EventBus
-	Outbox          *outbox.Outbox
-	DBCollector     *observability.DBCollector
-	HTTPClient      *httpclient.Client
-	Cipher          *encryption.Cipher
-	WorkerPool      *queue.WorkerPool
-	APIKeyVerifier  *apikey.APIKeyVerifier
+	// RetentionCfg 保留策略配置（bootstrap 的保留任务使用）
+	RetentionCfg   retention.Config
+	DB             *gorm.DB
+	Redis          redistore.Client
+	Logger         *logger.Logger
+	TracerProvider *sdktrace.TracerProvider
+	JobRegistry    contract.JobRegistry
+	Scheduler      *scheduler.CronScheduler
+	Lock           *redistore.Lock
+	Storage        storage.Storage
+	UploadScanner  uploadsec.Scanner
+	Notification   notification.Dispatcher
+	FeatureFlag    *feature.Manager
+	WebSocketHub   *notification.Hub
+	EventBus       *event.EventBus
+	Outbox         *outbox.Outbox
+	DBCollector    *observability.DBCollector
+	HTTPClient     *httpclient.Client
+	Cipher         *encryption.Cipher
+	WorkerPool     *queue.WorkerPool
+	APIKeyVerifier *apikey.APIKeyVerifier
 	// 泄露口令检查（HIBP）；auth.breach_check_enabled 关闭时为 nil
 	BreachChecker contract.BreachChecker
 	GRPCServer    *grpcpkg.Server
@@ -219,6 +222,12 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, enabled ma
 	}
 
 	notifier := notification.NewDispatcher()
+	// 保留策略配置段（不属 catalog 能力，无条件加载；是否启用见自身 enabled）
+	retentionCfg, err := retention.Load(sections)
+	if err != nil {
+		return nil, fmt.Errorf("init retention config: %w", err)
+	}
+
 	// 通知配置段（email/sms/notification 三段归通知包，无条件加载）
 	notifCfg, err := notification.Load(sections)
 	if err != nil {
@@ -338,6 +347,7 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, enabled ma
 		Sections:        sections,
 		Enabled:         enabled,
 		OutboxPublisher: outboxWire,
+		RetentionCfg:    *retentionCfg,
 		DB:              dbConn,
 		Redis:           rdb,
 		Logger:          log,

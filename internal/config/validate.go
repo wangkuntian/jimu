@@ -54,14 +54,6 @@ func (c *Config) validateCommon() error {
 	if err := validateCIDRs("security.admin_ip_allowlist", c.Security.AdminIPAllowlist); err != nil {
 		return err
 	}
-	if c.Retention.Enabled {
-		if strings.TrimSpace(c.Retention.Cron) == "" {
-			return errors.New("invalid retention.cron: required when retention.enabled is true")
-		}
-		if c.Retention.BatchSize < 0 {
-			return errors.New("invalid retention.batch_size: must not be negative")
-		}
-	}
 	if !contains(validLogLevels, c.Log.Level) {
 		return fmt.Errorf("invalid log.level: %q, must be one of %v", c.Log.Level, validLogLevels)
 	}

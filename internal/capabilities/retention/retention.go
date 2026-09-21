@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"jimu/internal/config"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gorm.io/gorm"
@@ -77,7 +75,7 @@ type RetentionRule struct {
 
 // DefaultRetentionRules 依据配置生成保留策略，Days<=0 的表自动跳过。
 // 条件用方言中立写法（TRUE / IN / IS NOT NULL），MySQL 与 PostgreSQL 通用。
-func DefaultRetentionRules(cfg config.RetentionConfig) []RetentionRule {
+func DefaultRetentionRules(cfg Config) []RetentionRule {
 	all := []RetentionRule{
 		{Table: "audit_logs", Model: &auditLogRow{}, TimeColumn: "created_at", Days: cfg.AuditLogDays},
 		{Table: "jobs", Model: &jobRow{}, TimeColumn: "updated_at", Condition: "status IN ('success', 'dead')", Days: cfg.JobDays},
@@ -110,7 +108,7 @@ type RetentionService struct {
 }
 
 // NewRetentionService 创建保留服务（rules 为 nil 时按配置生成默认规则）
-func NewRetentionService(db *gorm.DB, cfg config.RetentionConfig) *RetentionService {
+func NewRetentionService(db *gorm.DB, cfg Config) *RetentionService {
 	batch := cfg.BatchSize
 	if batch <= 0 {
 		batch = defaultRetentionBatchSize

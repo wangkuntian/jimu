@@ -63,7 +63,6 @@ type Config struct {
 	DB           DBConfig                    `mapstructure:"db"`
 	Redis        RedisConfig                 `mapstructure:"redis"`
 	RateLimit    RateLimitConfig             `mapstructure:"ratelimit"`
-	Retention    RetentionConfig             `mapstructure:"retention"`
 	Log          LogConfig                   `mapstructure:"log"`
 	Auth         AuthConfig                  `mapstructure:"auth"`
 	Server       ServerConfig                `mapstructure:"server"`
@@ -217,21 +216,6 @@ type BreakerConfig struct {
 	Enabled         bool `mapstructure:"enabled"`           // 是否启用熔断
 	MaxFailures     int  `mapstructure:"max_failures"`      // 连续失败阈值（默认 5）
 	ResetTimeoutSec int  `mapstructure:"reset_timeout_sec"` // 冷却时间秒（默认 10）
-}
-
-// RetentionConfig 数据保留策略（清理增长型历史表，避免无限增长）
-type RetentionConfig struct {
-	Enabled         bool   `mapstructure:"enabled"`
-	Cron            string `mapstructure:"cron"`              // 调度表达式（默认每天 03:30）
-	BatchSize       int    `mapstructure:"batch_size"`        // 每批删除行数（默认 500）
-	AuditLogDays    int    `mapstructure:"audit_log_days"`    // 审计日志保留天数，0=不清理
-	JobDays         int    `mapstructure:"job_days"`          // 已终态任务保留天数
-	JobHistoryDays  int    `mapstructure:"job_history_days"`  // 任务执行历史保留天数
-	DeadLetterDays  int    `mapstructure:"dead_letter_days"`  // 已处理死信保留天数
-	OutboxEventDays int    `mapstructure:"outbox_event_days"` // 已发布 outbox 事件保留天数
-	ImportJobDays   int    `mapstructure:"import_job_days"`   // 已结束导入任务保留天数
-	// 失效可信设备的保留天数（按 expires_at 计，留出审计窗口后清理）
-	TrustedDeviceDays int `mapstructure:"trusted_device_days"`
 }
 
 // RateLimitConfig 限流维度配置（全局 IP 令牌桶见 server.rate_limit_*）。

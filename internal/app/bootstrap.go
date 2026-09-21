@@ -281,9 +281,9 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			}}
 		}
 
-		if container.DB != nil && cfg.Retention.Enabled {
-			retentionSvc := retention.NewRetentionService(container.DB, cfg.Retention)
-			spec := cfg.Retention.Cron
+		if container.DB != nil && container.RetentionCfg.Enabled {
+			retentionSvc := retention.NewRetentionService(container.DB, container.RetentionCfg)
+			spec := container.RetentionCfg.Cron
 			if spec == "" {
 				spec = "30 3 * * *"
 			}
