@@ -29,16 +29,6 @@ const (
 	LogFormatJSON    = "json"
 	LogFormatConsole = "console"
 
-	QueueTypeRedis    = "redis"
-	QueueTypeKafka    = "kafka"
-	QueueTypeRabbitMQ = "rabbitmq"
-
-	OutboxPublisherEventBus = "event_bus"
-	OutboxPublisherMQ       = "mq"
-
-	SchedulerStoreMemory = "memory"
-	SchedulerStoreMySQL  = "mysql"
-
 	DBDriverMySQL    = "mysql"
 	DBDriverPostgres = "postgres"
 	DBDriverMariaDB  = "mariadb"
@@ -49,33 +39,12 @@ const (
 )
 
 var (
-	validHTTPModes          = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
-	validLogLevels          = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
-	validLogFormats         = []string{LogFormatJSON, LogFormatConsole}
-	validQueueTypes         = []string{QueueTypeRedis, QueueTypeKafka, QueueTypeRabbitMQ}
-	validOutboxPublishers   = []string{OutboxPublisherEventBus, OutboxPublisherMQ}
-	validOutboxMQQueueTypes = []string{QueueTypeKafka, QueueTypeRabbitMQ, QueueTypeRedis}
-	validSchedulerStores    = []string{SchedulerStoreMemory, SchedulerStoreMySQL}
-	validDBDrivers          = []string{DBDriverMySQL, DBDriverPostgres, DBDriverMariaDB, ""}
-	validRedisModes         = []string{RedisModeSingle, RedisModeSentinel, RedisModeCluster}
+	validHTTPModes  = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
+	validLogLevels  = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
+	validLogFormats = []string{LogFormatJSON, LogFormatConsole}
+	validDBDrivers  = []string{DBDriverMySQL, DBDriverPostgres, DBDriverMariaDB, ""}
+	validRedisModes = []string{RedisModeSingle, RedisModeSentinel, RedisModeCluster}
 )
-
-// QueueConfig 队列配置
-type QueueConfig struct {
-	Type     string              `mapstructure:"type"`     // 队列类型：redis, kafka, rabbitmq
-	Kafka    QueueKafkaConfig    `mapstructure:"kafka"`    // Kafka 队列配置（type=kafka 时使用）
-	RabbitMQ QueueRabbitMQConfig `mapstructure:"rabbitmq"` // RabbitMQ 队列配置（type=rabbitmq 时使用）
-}
-
-// OutboxConfig Outbox 配置
-type OutboxConfig struct {
-	Publisher string `mapstructure:"publisher"` // 发布器类型：event_bus, mq
-}
-
-// SchedulerConfig 调度器配置
-type SchedulerConfig struct {
-	Store string `mapstructure:"store"` // 任务定义存储类型：memory, mysql
-}
 
 // OAuthProviderConfig 单个 OAuth 提供商配置。
 // 填了 issuer_url 的提供商按通用 OIDC 处理（provider 名可自定义，如 keycloak/okta/azuread）；
@@ -119,20 +88,6 @@ type CaptchaResult struct {
 	CaptchaImage string `json:"captcha_image"`
 }
 
-// QueueKafkaConfig Kafka 队列配置
-type QueueKafkaConfig struct {
-	Brokers []string `mapstructure:"brokers"`  // broker 地址列表，如 ["kafka:9092"]
-	Topic   string   `mapstructure:"topic"`    // 消费/生产主题
-	GroupID string   `mapstructure:"group_id"` // 消费组 ID
-}
-
-// QueueRabbitMQConfig RabbitMQ 队列配置
-type QueueRabbitMQConfig struct {
-	URL      string `mapstructure:"url"`      // AMQP URL，如 amqp://guest:guest@rabbitmq:5672/
-	Queue    string `mapstructure:"queue"`    // 队列名
-	Exchange string `mapstructure:"exchange"` // 交换机名（留空则使用默认直连交换机）
-}
-
 // IDConfig 雪花 ID 配置
 type IDConfig struct {
 	WorkerID int64 `mapstructure:"worker_id"` // worker 编号（0-1023），多实例部署时每个副本需唯一
@@ -151,9 +106,6 @@ type Config struct {
 	ID           IDConfig                    `mapstructure:"id"`
 	Cache        CacheConfig                 `mapstructure:"cache"`
 	Security     SecurityConfig              `mapstructure:"security"`
-	Queue        QueueConfig                 `mapstructure:"queue"`
-	Outbox       OutboxConfig                `mapstructure:"outbox"`
-	Scheduler    SchedulerConfig             `mapstructure:"scheduler"`
 	OAuth        OAuthConfig                 `mapstructure:"oauth"`
 	Email        EmailConfig                 `mapstructure:"email"`
 	SMS          SMSConfig                   `mapstructure:"sms"`

@@ -67,27 +67,6 @@ func TestValidateLogLevel(t *testing.T) {
 	}
 }
 
-func TestValidateOutboxPublisher(t *testing.T) {
-	cfg := validProdConfig()
-	cfg.Outbox.Publisher = "invalid"
-	err := cfg.Validate("prod")
-	if err == nil {
-		t.Fatal("expected error for invalid outbox.publisher, got nil")
-	}
-	if !strings.Contains(err.Error(), "invalid outbox.publisher") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateOutboxMQWithRedisQueue(t *testing.T) {
-	cfg := validProdConfig()
-	cfg.Outbox.Publisher = OutboxPublisherMQ
-	cfg.Queue.Type = QueueTypeRedis
-	if err := cfg.Validate("prod"); err != nil {
-		t.Errorf("mq + redis should be valid, got: %v", err)
-	}
-}
-
 func TestValidateLogFormat(t *testing.T) {
 	cfg := validProdConfig()
 	cfg.Log.Format = "xml"
@@ -96,18 +75,6 @@ func TestValidateLogFormat(t *testing.T) {
 		t.Fatal("expected error for invalid log.format, got nil")
 	}
 	if !strings.Contains(err.Error(), "invalid log.format") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateSchedulerStore(t *testing.T) {
-	cfg := validProdConfig()
-	cfg.Scheduler.Store = "etcd"
-	err := cfg.Validate("prod")
-	if err == nil {
-		t.Fatal("expected error for invalid scheduler.store, got nil")
-	}
-	if !strings.Contains(err.Error(), "invalid scheduler.store") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -168,15 +135,6 @@ func validProdConfig() Config {
 			TimeoutSec:     30,
 			RateLimitRate:  100,
 			RateLimitBurst: 200,
-		},
-		Queue: QueueConfig{
-			Type: QueueTypeRedis,
-		},
-		Outbox: OutboxConfig{
-			Publisher: OutboxPublisherEventBus,
-		},
-		Scheduler: SchedulerConfig{
-			Store: SchedulerStoreMemory,
 		},
 	}
 }

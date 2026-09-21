@@ -15,12 +15,13 @@ const (
 	TypeRabbitMQ Type = "rabbitmq"
 )
 
-// Config 队列配置
+// Config 队列配置。Type/Kafka/RabbitMQ 来自 app.yaml 的 queue 段
+// （mapstructure 标签保证与下沉前的键名映射一致）；Redis 为装配期注入，不来自配置。
 type Config struct {
-	Type     Type
-	Redis    redistore.Client
-	Kafka    KafkaConfig
-	RabbitMQ RabbitMQConfig
+	Type     Type             `mapstructure:"type"`
+	Redis    redistore.Client `mapstructure:"-"`
+	Kafka    KafkaConfig      `mapstructure:"kafka"`
+	RabbitMQ RabbitMQConfig   `mapstructure:"rabbitmq"`
 }
 
 // New 按类型创建队列

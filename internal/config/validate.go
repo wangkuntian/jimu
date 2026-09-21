@@ -68,18 +68,6 @@ func (c *Config) validateCommon() error {
 	if !contains(validLogFormats, c.Log.Format) {
 		return fmt.Errorf("invalid log.format: %q, must be one of %v", c.Log.Format, validLogFormats)
 	}
-	if !contains(validQueueTypes, c.Queue.Type) {
-		return fmt.Errorf("invalid queue.type: %q, must be one of %v", c.Queue.Type, validQueueTypes)
-	}
-	if !contains(validOutboxPublishers, c.Outbox.Publisher) {
-		return fmt.Errorf("invalid outbox.publisher: %q, must be one of %v", c.Outbox.Publisher, validOutboxPublishers)
-	}
-	if !contains(validSchedulerStores, c.Scheduler.Store) {
-		return fmt.Errorf("invalid scheduler.store: %q, must be one of %v", c.Scheduler.Store, validSchedulerStores)
-	}
-	if c.Outbox.Publisher == OutboxPublisherMQ && !contains(validOutboxMQQueueTypes, c.Queue.Type) {
-		return fmt.Errorf("invalid queue.type %q for outbox.publisher %q, must be one of %v", c.Queue.Type, c.Outbox.Publisher, validOutboxMQQueueTypes)
-	}
 	if c.ID.WorkerID < 0 || c.ID.WorkerID > 1023 {
 		return errors.New("invalid id.worker_id, must be 0-1023")
 	}

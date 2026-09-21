@@ -41,26 +41,28 @@ type Container struct {
 	// Sections 按 YAML 点分键解码能力配置段（能力配置由能力自身声明，设计 §8）
 	Sections config.SectionDecoder
 	// Enabled 已启用能力名集合（含依赖闭包）
-	Enabled        map[string]bool
-	DB             *gorm.DB
-	Redis          redistore.Client
-	Logger         *logger.Logger
-	TracerProvider *sdktrace.TracerProvider
-	JobRegistry    contract.JobRegistry
-	Scheduler      *scheduler.CronScheduler
-	Lock           *redistore.Lock
-	Storage        storage.Storage
-	UploadScanner  uploadsec.Scanner
-	Notification   notification.Dispatcher
-	FeatureFlag    *feature.Manager
-	WebSocketHub   *notification.Hub
-	EventBus       *event.EventBus
-	Outbox         *outbox.Outbox
-	DBCollector    *observability.DBCollector
-	HTTPClient     *httpclient.Client
-	Cipher         *encryption.Cipher
-	WorkerPool     *queue.WorkerPool
-	APIKeyVerifier *apikey.APIKeyVerifier
+	Enabled map[string]bool
+	// OutboxPublisher outbox 的发布器类型；outbox 能力未启用时为空（不接线）
+	OutboxPublisher string
+	DB              *gorm.DB
+	Redis           redistore.Client
+	Logger          *logger.Logger
+	TracerProvider  *sdktrace.TracerProvider
+	JobRegistry     contract.JobRegistry
+	Scheduler       *scheduler.CronScheduler
+	Lock            *redistore.Lock
+	Storage         storage.Storage
+	UploadScanner   uploadsec.Scanner
+	Notification    notification.Dispatcher
+	FeatureFlag     *feature.Manager
+	WebSocketHub    *notification.Hub
+	EventBus        *event.EventBus
+	Outbox          *outbox.Outbox
+	DBCollector     *observability.DBCollector
+	HTTPClient      *httpclient.Client
+	Cipher          *encryption.Cipher
+	WorkerPool      *queue.WorkerPool
+	APIKeyVerifier  *apikey.APIKeyVerifier
 	// 泄露口令检查（HIBP）；auth.breach_check_enabled 关闭时为 nil
 	BreachChecker contract.BreachChecker
 	GRPCServer    *grpcpkg.Server
@@ -138,13 +140,45 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, enabled ma
 		return nil, err
 	}
 
+	lock := redistore.NewLock(rdb, "lock")
+
+	// 能力配置段：由各能力声明默认值与校验（设计 §8）。
+	// 调度器由 queue 能力用于作业调度，其配置段随之归 queue；两者都无条件加载
+	// （container 的调度器实例与 outbox 接线不依赖能力启用集）。
+	schedulerCfg, err := queue.LoadScheduler(sections)
+	if err != nil {
+		return nil, fmt.Errorf("init scheduler config: %w", err)
+	}
+	outboxCfg, err := outbox.Load(sections)
+	if err != nil {
+		return nil, fmt.Errorf("init outbox config: %w", err)
+	}
+	var queueCfg queue.Config
+	if enabled["queue"] {
+		loaded, err := queue.Load(sections)
+		if err != nil {
+			return nil, fmt.Errorf("init queue config: %w", err)
+		}
+		queueCfg = *loaded
+	}
+	// 跨能力校验（原 config.validateCommon 的 outbox.publisher=mq 依赖 queue.type）：
+	// 两个能力都启用时才能在此判定。
+	if enabled["outbox"] && enabled["queue"] && outboxCfg.UsesMQ() && !queue.SupportsOutboxMQ(queueCfg.Type) {
+		return nil, fmt.Errorf("invalid queue.type %q for outbox.publisher %q", queueCfg.Type, outboxCfg.Publisher)
+	}
+
+	// outbox 接线名：能力未启用时为空（bootstrap 不接线）
+	outboxWire := ""
+	if enabled["outbox"] {
+		outboxWire = outboxCfg.Publisher
+	}
+
 	var schedStore scheduler.Store = scheduler.NewMemoryStore()
-	if cfg.Scheduler.Store == config.SchedulerStoreMySQL {
+	if schedulerCfg.Store == queue.SchedulerStoreMySQL {
 		schedStore = scheduler.NewMySQLStore(dbConn)
 	}
-	lock := redistore.NewLock(rdb, "lock")
 	var sched *scheduler.CronScheduler
-	if cfg.Scheduler.Store == config.SchedulerStoreMySQL {
+	if schedulerCfg.Store == queue.SchedulerStoreMySQL {
 		sched = scheduler.NewWithStore(log, schedStore, lock)
 	} else {
 		sched = scheduler.NewWithStore(log, schedStore, nil)
@@ -239,29 +273,17 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, enabled ma
 	// Outbox
 	outboxStore := outbox.NewMySQLStore(dbConn)
 	var outboxPublisher outbox.Publisher
-	switch cfg.Outbox.Publisher {
-	case config.OutboxPublisherMQ:
-		q, err := queue.New(queue.Config{
-			Type:  queue.Type(cfg.Queue.Type),
-			Redis: rdb,
-			Kafka: queue.KafkaConfig{
-				Brokers: cfg.Queue.Kafka.Brokers,
-				Topic:   cfg.Queue.Kafka.Topic,
-				GroupID: cfg.Queue.Kafka.GroupID,
-			},
-			RabbitMQ: queue.RabbitMQConfig{
-				URL:       cfg.Queue.RabbitMQ.URL,
-				QueueName: cfg.Queue.RabbitMQ.Queue,
-				Exchange:  cfg.Queue.RabbitMQ.Exchange,
-			},
-		})
+	switch outboxCfg.Publisher {
+	case outbox.PublisherMQ:
+		queueCfg.Redis = rdb
+		q, err := queue.New(queueCfg)
 		if err != nil {
 			return nil, fmt.Errorf("init outbox queue: %w", err)
 		}
 		outboxPublisher = outbox.NewMQPublisher(q)
 		consumer, ok := q.(queue.Consumer)
 		if !ok {
-			return nil, fmt.Errorf("queue %s does not implement consumer", cfg.Queue.Type)
+			return nil, fmt.Errorf("queue %s does not implement consumer", queueCfg.Type)
 		}
 		store := queue.NewMySQLStore(
 			queueinfra.NewMysqlJobRepository(dbConn),
@@ -306,28 +328,31 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, enabled ma
 	grpcServer.RegisterUserInfoService(userpkg.NewUserinfoSource(userinfrastructure.NewMysqlRepository(dbConn)))
 
 	return &Container{
-		Config:         cfg,
-		DB:             dbConn,
-		Redis:          rdb,
-		Logger:         log,
-		Reporter:       errorReporter,
-		JobRegistry:    sched,
-		Scheduler:      sched,
-		Lock:           lock,
-		Storage:        storageSvc,
-		UploadScanner:  uploadScanner,
-		Notification:   notifier,
-		FeatureFlag:    featureMgr,
-		WebSocketHub:   wsHub,
-		EventBus:       eventBus,
-		Outbox:         outboxProcessor,
-		DBCollector:    dbCollector,
-		HTTPClient:     httpClient,
-		Cipher:         cipher,
-		WorkerPool:     pendingWorkerPool,
-		APIKeyVerifier: apiKeyVerifier,
-		BreachChecker:  breachChecker,
-		GRPCServer:     grpcServer,
-		LogExporter:    logExporter,
+		Config:          cfg,
+		Sections:        sections,
+		Enabled:         enabled,
+		OutboxPublisher: outboxWire,
+		DB:              dbConn,
+		Redis:           rdb,
+		Logger:          log,
+		Reporter:        errorReporter,
+		JobRegistry:     sched,
+		Scheduler:       sched,
+		Lock:            lock,
+		Storage:         storageSvc,
+		UploadScanner:   uploadScanner,
+		Notification:    notifier,
+		FeatureFlag:     featureMgr,
+		WebSocketHub:    wsHub,
+		EventBus:        eventBus,
+		Outbox:          outboxProcessor,
+		DBCollector:     dbCollector,
+		HTTPClient:      httpClient,
+		Cipher:          cipher,
+		WorkerPool:      pendingWorkerPool,
+		APIKeyVerifier:  apiKeyVerifier,
+		BreachChecker:   breachChecker,
+		GRPCServer:      grpcServer,
+		LogExporter:     logExporter,
 	}, nil
 }

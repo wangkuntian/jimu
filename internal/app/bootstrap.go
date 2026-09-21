@@ -13,7 +13,6 @@ import (
 	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/queue"
 	"jimu/internal/capabilities/retention"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 	platformhttp "jimu/internal/kernel/http"
 	"jimu/internal/kernel/http/middleware"
@@ -334,10 +333,11 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	}
 
 	// 接线 outbox 事件消费：MQ 模式注册 worker 并启动 WorkerPool；event_bus 模式注册全局总线桥接器
-	switch cfg.Outbox.Publisher {
-	case config.OutboxPublisherMQ:
+	// outbox 接线按能力配置决定；outbox 能力未启用时为空，两者都不接线
+	switch container.OutboxPublisher {
+	case outbox.PublisherMQ:
 		registerOutboxWorkers(container)
-	case config.OutboxPublisherEventBus:
+	case outbox.PublisherEventBus:
 		registerEventBusBridge(container)
 	}
 

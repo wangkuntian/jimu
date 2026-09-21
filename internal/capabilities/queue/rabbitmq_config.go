@@ -3,7 +3,7 @@ package queue
 
 // RabbitMQConfig RabbitMQ 队列配置
 type RabbitMQConfig struct {
-	URL       string // AMQP URL
-	QueueName string // 队列名
-	Exchange  string // 交换机名
+	URL       string `mapstructure:"url"`      // AMQP URL
+	QueueName string `mapstructure:"queue"`    // 队列名（YAML 键沿用 queue）
+	Exchange  string `mapstructure:"exchange"` // 交换机名
 }
