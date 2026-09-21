@@ -30,7 +30,11 @@ func writeStubPackages(t *testing.T, root string) {
 	t.Helper()
 	writeFileForTest(t, root, "internal/contract/contract.go", `package contract
 
-import "github.com/gin-gonic/gin"
+import (
+	"io/fs"
+
+	"github.com/gin-gonic/gin"
+)
 
 type Router interface {
 	Group(string, ...gin.HandlerFunc) *gin.RouterGroup
@@ -38,6 +42,24 @@ type Router interface {
 
 type JobRegistry interface{}
 type EventBus interface{}
+
+type MountPoint string
+
+const MountProtected MountPoint = "protected"
+
+type Permission struct {
+	Name     string
+	Resource string
+	Action   string
+}
+
+type Descriptor struct {
+	Name        string
+	Requires    []string
+	Mount       MountPoint
+	Permissions []Permission
+	Migrations  fs.FS
+}
 `)
 	writeFileForTest(t, root, "internal/shared/errors/errors.go", `package errors
 

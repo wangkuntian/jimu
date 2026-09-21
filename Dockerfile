@@ -30,7 +30,6 @@ WORKDIR /app
 
 COPY --from=builder /app/server .
 COPY --from=builder /app/jimu .
-COPY migrations/ ./migrations/
 COPY conf/ ./conf/
 COPY configs/ ./configs/
 COPY docs/openapi/ ./docs/openapi/

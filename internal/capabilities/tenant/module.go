@@ -1,6 +1,7 @@
 package tenant
 
 import (
+	"embed"
 	"jimu/internal/capabilities/tenant/application"
 	"jimu/internal/capabilities/tenant/infrastructure"
 	"jimu/internal/capabilities/tenant/interfaces"
@@ -33,10 +34,30 @@ func (m *Module) Name() string {
 	return "tenant"
 }
 
+// migrationsFS 能力自带迁移（Task 3：能力迁移经 embed 进二进制）。
+//
+//go:embed migrations
+var migrationsFS embed.FS
+
 // Descriptor 声明租户能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:  "tenant",
-	Mount: contract.MountProtected,
+	Name: "tenant",
+	// tenant 迁移（005_tenants.sql）会 ALTER users/roles，须后于两者执行
+	Requires:   []string{"user", "role"},
+	Migrations: migrationsFS,
+	Mount:      contract.MountProtected,
+	Permissions: []contract.Permission{
+		{Name: "租户列表", Resource: "/api/v1/tenants", Action: "GET"},
+		{Name: "租户创建", Resource: "/api/v1/tenants", Action: "POST"},
+		{Name: "租户详情", Resource: "/api/v1/tenants/*", Action: "GET"},
+		{Name: "租户修改", Resource: "/api/v1/tenants/*", Action: "PUT"},
+		{Name: "租户删除", Resource: "/api/v1/tenants/*", Action: "DELETE"},
+		// 租户运营：套餐定义（用量查询与套餐分配分别由「租户详情」「租户修改」通配覆盖）
+		{Name: "套餐列表", Resource: "/api/v1/tenant-plans", Action: "GET"},
+		{Name: "套餐创建", Resource: "/api/v1/tenant-plans", Action: "POST"},
+		{Name: "套餐修改", Resource: "/api/v1/tenant-plans/*", Action: "PUT"},
+		{Name: "套餐删除", Resource: "/api/v1/tenant-plans/*", Action: "DELETE"},
+	},
 }
 
 // Descriptor 实现 contract.Describable。

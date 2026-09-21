@@ -13,7 +13,7 @@ on:
       - "tools/**"
       - "go.mod"
       - "go.sum"
-      - "migrations/**"
+      - "internal/capabilities/*/migrations/**"
       - "proto/**"
       - "configs/**"
       - "scripts/**"
@@ -27,7 +27,7 @@ on:
       - "tools/**"
       - "go.mod"
       - "go.sum"
-      - "migrations/**"
+      - "internal/capabilities/*/migrations/**"
       - "proto/**"
       - "configs/**"
       - "scripts/**"
@@ -86,7 +86,7 @@ jobs:
         if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
         run: |
           if git diff --name-only origin/${{ github.base_ref }}...HEAD \
-            | grep -E '^(internal/|cmd/|configs/|migrations/)' \
+            | grep -E '^(internal/|cmd/|configs/)' \
             | grep -qv '^$'; then
             if ! git diff --name-only origin/${{ github.base_ref }}...HEAD \
               | grep -Eq '^CHANGELOG\.md$|^docs/releases/'; then
@@ -178,7 +178,7 @@ jobs:
           DB_USER: postgres
           DB_PASSWORD: postgres
           DB_NAME: jimu_test
-        run: go test ./internal/kernel/db/... -run TestPostgresMigrationUpDown -v
+        run: go test ./internal/kernel/db/... -run TestMigrationIntegration -v
 
       - name: "📊 Check coverage threshold"
         run: |

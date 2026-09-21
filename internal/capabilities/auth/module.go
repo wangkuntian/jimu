@@ -1,6 +1,7 @@
 package authmodule
 
 import (
+	"embed"
 	"time"
 
 	"jimu/internal/capabilities/auth/application"
@@ -79,11 +80,17 @@ func (m *Module) Name() string {
 	return "auth"
 }
 
+// migrationsFS 能力自带迁移（Task 3：能力迁移经 embed 进二进制）。
+//
+//go:embed migrations
+var migrationsFS embed.FS
+
 // Descriptor 声明认证能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:     "auth",
-	Requires: []string{"user", "role", "tenant"},
-	Mount:    contract.MountSelfManaged,
+	Name:       "auth",
+	Migrations: migrationsFS,
+	Requires:   []string{"user", "role", "tenant"},
+	Mount:      contract.MountSelfManaged,
 }
 
 // Descriptor 实现 contract.Describable。

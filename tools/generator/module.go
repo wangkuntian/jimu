@@ -65,12 +65,14 @@ func preflight(root, name string) (templateData, []targetFile, error) {
 	if !validModuleName.MatchString(name) || goKeywords[name] {
 		return templateData{}, nil, fmt.Errorf("invalid module name: %q", name)
 	}
-	for _, rel := range []string{"go.mod", filepath.Join("internal", "capabilities"), filepath.Join("migrations", "mysql")} {
+	capMigDir := filepath.Join("internal", "capabilities", name, "migrations", "mysql")
+	for _, rel := range []string{"go.mod", filepath.Join("internal", "capabilities")} {
 		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
 			return templateData{}, nil, fmt.Errorf("repository missing %s: %w", rel, err)
 		}
 	}
-	migrationNumber, err := nextMigrationNumber(filepath.Join(root, "migrations", "mysql"))
+	// 能力内自行编号：读该能力迁移目录取最大编号 +1；目录不存在（新能力）从 001 起。
+	migrationNumber, err := nextMigrationNumber(filepath.Join(root, capMigDir))
 	if err != nil {
 		return templateData{}, nil, err
 	}
@@ -94,7 +96,11 @@ func preflight(root, name string) (templateData, []targetFile, error) {
 		{filepath.Join("internal", "capabilities", name, "interfaces", "handler.go"), handlerTemplate},
 		{filepath.Join("internal", "capabilities", name, "interfaces", "handler_test.go"), handlerTestTemplate},
 		{filepath.Join("internal", "capabilities", name, "interfaces", "router.go"), routerTemplate},
-		{filepath.Join("migrations", "mysql", migrationNumber+"_create_"+data.TableName+".sql"), migrationTemplate},
+		// 迁移写进能力目录：两个方言都生成（postgres 版由生成者手调方言差异），
+		// postgres/.gitkeep 占位避免能力无 postgres 迁移时 embed 缺目录编译失败。
+		{filepath.Join("internal", "capabilities", name, "migrations", "mysql", migrationNumber+"_create_"+data.TableName+".sql"), migrationTemplate},
+		{filepath.Join("internal", "capabilities", name, "migrations", "postgres", migrationNumber+"_create_"+data.TableName+".sql"), migrationPostgresTemplate},
+		{filepath.Join("internal", "capabilities", name, "migrations", "postgres", ".gitkeep"), ""},
 	}
 	for _, target := range targets {
 		if _, err := os.Stat(filepath.Join(root, target.path)); err == nil {
@@ -109,6 +115,9 @@ func preflight(root, name string) (templateData, []targetFile, error) {
 func nextMigrationNumber(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return "001", nil
+		}
 		return "", fmt.Errorf("read migrations: %w", err)
 	}
 	max := 0

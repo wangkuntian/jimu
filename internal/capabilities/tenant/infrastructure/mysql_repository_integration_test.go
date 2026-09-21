@@ -2,15 +2,35 @@ package infrastructure
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"jimu/internal/capabilities/tenant/domain"
+	"jimu/internal/contract"
 	"jimu/internal/shared/testutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+func init() {
+	// 本包集成测试依赖完整闭包：tenant 的 005 迁移会 ALTER users/roles（补 tenant_id 列），
+	// 这两张基表来自 user/role 的迁移 —— 单独注入 tenant 在全新库上会报
+	// `Table 'jimu_test.users' doesn't exist`。三个能力的迁移必须一起注入，
+	// 顺序与 catalog 拓扑序一致（user, role 在前）。
+	// 迁移 embed 在能力根包，infrastructure 子包测试引用根包会构成 import cycle，
+	// 故这里按源码路径直接定位各能力根目录（本文件向上 4 级 = 仓库根）。
+	_, thisFile, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..")
+	testutil.SetMigrateCaps([]contract.Descriptor{
+		{Name: "user", Migrations: os.DirFS(filepath.Join(repoRoot, "internal", "capabilities", "user"))},
+		{Name: "role", Migrations: os.DirFS(filepath.Join(repoRoot, "internal", "capabilities", "role"))},
+		{Name: "tenant", Migrations: os.DirFS(filepath.Join(repoRoot, "internal", "capabilities", "tenant"))},
+	})
+}
 
 // TestMysqlRepositoryMySQLIntegration 针对真实 MariaDB/MySQL 的租户仓储集成测试。
 // CI 通过 services.mariadb 提供；本地无数据库时由 SkipUnlessMysql 自动跳过。

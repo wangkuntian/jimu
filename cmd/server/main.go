@@ -45,8 +45,9 @@ var errCapabilityWiringMismatch = errors.New("capability wiring mismatch")
 // errCapabilityNoInstance 表示声明名册中的能力在装配映射里没有实例（开发期配置错误）
 var errCapabilityNoInstance = errors.New("declared capability has no instance")
 
-// wiredCapabilities 是 main 装配的能力名册；必须与 catalog.Names() 一致。
-// 单元测试（main_test.go）对账两者，run() 在启动时按它自检装配映射。
+// wiredCapabilities 是 main 装配的能力名册；必须是 catalog.Names() 的子集
+// （清单尾部的基础设施能力只带迁移、尚无 Module 实例，不在名册中）。
+// 单元测试（main_test.go）对账两者，run() 启动时按它过滤装配并自检实例映射。
 var wiredCapabilities = []string{
 	"user", "role", "permission", "tenant", "auth", "audit", "admin", "oauth",
 }
@@ -96,7 +97,8 @@ func run() error {
 		return fmt.Errorf("resolve capabilities: %w", err)
 	}
 
-	// 全部能力的实例：键为能力名，与 catalog 清单一一对应
+	// 全部装配的实例：键为能力名，仅覆盖 wiredCapabilities 名册；
+	// 清单尾部基础设施能力只参与迁移，不构造实例（P1 收编）
 	// 过渡实现（P0）：先构造再过滤；P1 引入显式 Deps 后改为按需构造
 	all := map[string]contract.Module{
 		"user":       user.New(container.DB, *cfg, container.Redis, container.Outbox),
@@ -120,12 +122,21 @@ func run() error {
 			return fmt.Errorf("%w: %q", errCapabilityNoInstance, name)
 		}
 	}
+	// 装配过滤：catalog.Resolve 可能返回暂无 Module 实例的基础设施能力
+	// （仅参与迁移执行），它们不进入 Bootstrap。
+	wired := make(map[string]bool, len(wiredCapabilities))
+	for _, name := range wiredCapabilities {
+		wired[name] = true
+	}
 	modules := make([]contract.Module, 0, len(caps))
 	for _, d := range caps {
 		module, ok := all[d.Name]
 		if !ok {
-			_ = container.Stop(context.Background())
-			return fmt.Errorf("%w: %q", errCapabilityNotWired, d.Name)
+			if wired[d.Name] {
+				_ = container.Stop(context.Background())
+				return fmt.Errorf("%w: %q", errCapabilityNotWired, d.Name)
+			}
+			continue
 		}
 		modules = append(modules, module)
 	}

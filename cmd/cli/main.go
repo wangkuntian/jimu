@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"jimu/internal/app"
+	"jimu/internal/capabilities/catalog"
 	"jimu/internal/config"
 	"jimu/internal/kernel/db"
 	"jimu/internal/kernel/logger"
@@ -49,7 +51,7 @@ var migrateUpCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 		log := logger.New(cfg.Log)
-		if err := db.MigrateWithRetry(cfg.DB, log, "up"); err != nil {
+		if err := db.MigrateWithRetry(cfg.DB, catalog.All(), log, "up"); err != nil {
 			return fmt.Errorf("migration failed: %w", err)
 		}
 		fmt.Println("Migrations applied successfully")
@@ -66,7 +68,7 @@ var migrateDownCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 		log := logger.New(cfg.Log)
-		if err := db.MigrateWithRetry(cfg.DB, log, "down"); err != nil {
+		if err := db.MigrateWithRetry(cfg.DB, catalog.All(), log, "down"); err != nil {
 			return fmt.Errorf("rollback failed: %w", err)
 		}
 		fmt.Println("Rollback successful")
@@ -83,7 +85,7 @@ var migrateStatusCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 		log := logger.New(cfg.Log)
-		if err := db.MigrateWithRetry(cfg.DB, log, "status"); err != nil {
+		if err := db.MigrateWithRetry(cfg.DB, catalog.All(), log, "status"); err != nil {
 			return fmt.Errorf("failed to get status: %w", err)
 		}
 		return nil
@@ -99,10 +101,31 @@ var migrateRedoCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 		log := logger.New(cfg.Log)
-		if err := db.MigrateWithRetry(cfg.DB, log, "redo"); err != nil {
+		if err := db.MigrateWithRetry(cfg.DB, catalog.All(), log, "redo"); err != nil {
 			return fmt.Errorf("redo failed: %w", err)
 		}
 		fmt.Println("Redo successful")
+		return nil
+	},
+}
+
+var migrateAdoptCmd = &cobra.Command{
+	Use:   "adopt-capabilities",
+	Short: "Register per-capability version baselines for an existing database",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := config.Load()
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+		baseline, err := db.AdoptCapabilities(cfg.DB, catalog.All())
+		if err != nil {
+			return fmt.Errorf("adopt failed: %w", err)
+		}
+		for _, name := range catalog.Names() {
+			if vs, ok := baseline[name]; ok {
+				fmt.Printf("%s: %d migrations adopted\n", name, len(vs))
+			}
+		}
 		return nil
 	},
 }
@@ -150,7 +173,7 @@ var seedCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to connect database: %w", err)
 		}
-		if err := db.RunSeedWithCasbin(dbConn); err != nil {
+		if err := app.RunSeedWithCasbin(dbConn, catalog.All()); err != nil {
 			return fmt.Errorf("seed failed: %w", err)
 		}
 		fmt.Println("Seed data inserted successfully (with Casbin policies)")
@@ -164,6 +187,7 @@ func init() {
 	migrateCmd.AddCommand(migrateDownCmd)
 	migrateCmd.AddCommand(migrateStatusCmd)
 	migrateCmd.AddCommand(migrateRedoCmd)
+	migrateCmd.AddCommand(migrateAdoptCmd)
 	rootCmd.AddCommand(moduleCmd)
 	rootCmd.AddCommand(migrateCmd)
 	rootCmd.AddCommand(seedCmd)

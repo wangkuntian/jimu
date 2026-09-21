@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,17 +17,24 @@ func withEntries(t *testing.T, ds ...contract.Descriptor) {
 	t.Cleanup(func() { entries = old })
 }
 
-// fixture 复刻 P0 八个能力的依赖形态（与真实清单拓扑一致）。
+// fixture 复刻真实清单（8 业务能力 + 5 基础设施能力）的依赖形态。
+// Migrations 为 fs.FS 接口值（embed.FS 无法逐值复刻），漂移检测由
+// TestCatalogMigrationsShape 单独按"有无迁移"钉住。
 func fixture() []contract.Descriptor {
 	return []contract.Descriptor{
 		{Name: "user", Mount: contract.MountProtected},
 		{Name: "role", Mount: contract.MountProtected},
 		{Name: "permission", Requires: []string{"role"}, Mount: contract.MountProtected},
-		{Name: "tenant", Mount: contract.MountProtected},
+		{Name: "tenant", Requires: []string{"user", "role"}, Mount: contract.MountProtected},
 		{Name: "auth", Requires: []string{"user", "role", "tenant"}, Mount: contract.MountSelfManaged},
 		{Name: "audit", Mount: contract.MountProtected},
 		{Name: "admin", Requires: []string{"user", "audit"}, Mount: contract.MountProtected},
 		{Name: "oauth", Requires: []string{"auth", "user"}, Mount: contract.MountPublic},
+		{Name: "apikey", Mount: contract.MountProtected},
+		{Name: "queue", Mount: contract.MountProtected},
+		{Name: "outbox", Mount: contract.MountProtected},
+		{Name: "dataops", Mount: contract.MountProtected},
+		{Name: "search", Mount: contract.MountProtected},
 	}
 }
 
@@ -36,8 +44,8 @@ func TestResolveEmptyMeansAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve(nil) error: %v", err)
 	}
-	if len(got) != 8 {
-		t.Fatalf("len = %d, want 8 (all)", len(got))
+	if len(got) != 13 {
+		t.Fatalf("len = %d, want 13 (all)", len(got))
 	}
 }
 
@@ -126,6 +134,27 @@ func TestResolveReturnsDeepCopyOfRequires(t *testing.T) {
 	}
 }
 
+func TestAllReturnsDeepCopyOfPermissions(t *testing.T) {
+	withEntries(t, contract.Descriptor{Name: "a", Permissions: []contract.Permission{{Name: "p", Resource: "/r", Action: "GET"}}})
+	got := All()
+	got[0].Permissions[0].Resource = "mutated"
+	if All()[0].Permissions[0].Resource != "/r" {
+		t.Fatal("All() must not expose the registry's Permissions backing array")
+	}
+}
+
+func TestResolveReturnsDeepCopyOfPermissions(t *testing.T) {
+	withEntries(t, contract.Descriptor{Name: "a", Permissions: []contract.Permission{{Name: "p", Resource: "/r", Action: "GET"}}})
+	got, err := Resolve([]string{"a"})
+	if err != nil {
+		t.Fatalf("Resolve error: %v", err)
+	}
+	got[0].Permissions[0].Resource = "mutated"
+	if again, err := Resolve([]string{"a"}); err != nil || again[0].Permissions[0].Resource != "/r" {
+		t.Fatalf("Resolve() must not expose the registry's Permissions backing array (err = %v)", err)
+	}
+}
+
 func TestResolveReportsFirstDanglingDependencyInListOrder(t *testing.T) {
 	// 两个坏依赖：错误必须稳定指向清单顺序里的第一个，而不是 map 遍历的随机一个
 	withEntries(t,
@@ -140,8 +169,7 @@ func TestResolveReportsFirstDanglingDependencyInListOrder(t *testing.T) {
 	}
 }
 
-// TestDescriptorsAreWellFormed 同时校验夹具与真实清单。Task 3 填齐清单后，
-// 该用例对 catalog 的 8 个条目同样生效。
+// TestDescriptorsAreWellFormed 同时校验夹具与真实清单。
 func TestDescriptorsAreWellFormed(t *testing.T) {
 	lists := map[string][]contract.Descriptor{"fixture": fixture(), "catalog": All()}
 	for label, list := range lists {
@@ -180,8 +208,91 @@ func TestDescriptorsAreWellFormed(t *testing.T) {
 			}
 		}
 	}
-	if !reflect.DeepEqual(All(), fixture()) {
-		t.Fatalf("catalog descriptors drifted from the expected fixture:\n got %+v\nwant %+v", All(), fixture())
+	// 精确逐值比较对 fs.FS（embed.FS）不可行，比较除 Migrations 外的全部字段；
+	// 迁移有无形态由 TestCatalogMigrationsShape 单独钉住；权限点聚合面由
+	// TestDescriptorPermissionsCoverBusinessRoutes 单独钉住。
+	got, want := All(), fixture()
+	for i := range want {
+		got[i].Migrations, want[i].Migrations = nil, nil
+		got[i].Permissions, want[i].Permissions = nil, nil
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("catalog descriptors drifted from the expected fixture:\n got %+v\nwant %+v", got, want)
+	}
+}
+
+// migrationsOf 便于漂移比较：embed.FS 无法逐值构造，只比较"有无迁移"。
+func migrationsOf(ds []contract.Descriptor) map[string]bool {
+	out := make(map[string]bool, len(ds))
+	for _, d := range ds {
+		out[d.Name] = d.Migrations != nil
+	}
+	return out
+}
+
+// TestCatalogMigrationsShape 钉住：除 admin 外的清单能力都必须自带迁移，
+// admin（无迁移）必须为 nil。
+func TestCatalogMigrationsShape(t *testing.T) {
+	want := map[string]bool{
+		"user": true, "role": true, "permission": true, "tenant": true,
+		"auth": true, "audit": true, "oauth": true,
+		"admin":  false,
+		"apikey": true, "queue": true, "outbox": true, "dataops": true, "search": true,
+	}
+	if got := migrationsOf(All()); !reflect.DeepEqual(got, want) {
+		t.Fatalf("catalog Migrations shape drifted:\n got %v\nwant %v", got, want)
+	}
+}
+
+// TestTenantRequiresUserAndRole：tenant 的 005_tenants.sql 会 ALTER users/roles，
+// 迁移执行顺序由 Resolve 闭包序保证，故 tenant.Requires 必须含 user 与 role。
+func TestTenantRequiresUserAndRole(t *testing.T) {
+	for _, d := range All() {
+		if d.Name != "tenant" {
+			continue
+		}
+		if !slices.Contains(d.Requires, "user") || !slices.Contains(d.Requires, "role") {
+			t.Fatalf("tenant.Requires = %v, want to contain \"user\" and \"role\"", d.Requires)
+		}
+	}
+}
+
+// TestDescriptorPermissionsCoverBusinessRoutes 钉住能力声明的权限点聚合面：
+// 迁移后权限点改由 Descriptor 声明，聚合结果必须逐值等于全部 32 个权限点
+// （user 5 + role 6 + permission 5 + audit 3 + tenant 9 + admin 4），
+// 既不缺失也不多出。
+func TestDescriptorPermissionsCoverBusinessRoutes(t *testing.T) {
+	required := []struct{ resource, action string }{
+		{"/api/v1/users", "GET"}, {"/api/v1/users", "POST"},
+		{"/api/v1/users/*", "GET"}, {"/api/v1/users/*", "PUT"}, {"/api/v1/users/*", "DELETE"},
+		{"/api/v1/roles", "GET"}, {"/api/v1/roles", "POST"},
+		{"/api/v1/roles/*", "GET"}, {"/api/v1/roles/*", "PUT"}, {"/api/v1/roles/*", "DELETE"},
+		{"/api/v1/roles/*/permissions", "POST"},
+		{"/api/v1/permissions", "GET"}, {"/api/v1/permissions", "POST"},
+		{"/api/v1/permissions/*", "GET"}, {"/api/v1/permissions/*", "PUT"}, {"/api/v1/permissions/*", "DELETE"},
+		{"/api/v1/audits", "GET"}, {"/api/v1/audits/*", "GET"}, {"/api/v1/audits/export", "GET"},
+		{"/api/v1/tenants", "GET"}, {"/api/v1/tenants", "POST"},
+		{"/api/v1/tenants/*", "GET"}, {"/api/v1/tenants/*", "PUT"}, {"/api/v1/tenants/*", "DELETE"},
+		{"/api/v1/tenant-plans", "GET"}, {"/api/v1/tenant-plans", "POST"},
+		{"/api/v1/tenant-plans/*", "PUT"}, {"/api/v1/tenant-plans/*", "DELETE"},
+		{"/api/v1/admin/*", "GET"}, {"/api/v1/admin/*", "POST"},
+		{"/api/v1/admin/*", "PUT"}, {"/api/v1/admin/*", "DELETE"},
+	}
+	got := map[string]bool{}
+	total := 0
+	for _, d := range All() {
+		for _, p := range d.Permissions {
+			got[p.Resource+" "+p.Action] = true
+			total++
+		}
+	}
+	if total != len(required) {
+		t.Fatalf("aggregated permission points = %d, want %d", total, len(required))
+	}
+	for _, item := range required {
+		if !got[item.resource+" "+item.action] {
+			t.Fatalf("missing permission %s %s", item.action, item.resource)
+		}
 	}
 }
 

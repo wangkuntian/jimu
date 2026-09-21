@@ -17,7 +17,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **统一响应** — 标准 `{code, message, data}` 格式 + 分页
 - **多环境配置** — Viper + yaml + 环境变量覆盖，枚举值启动校验
 - **结构化日志** — Zap + lumberjack 自动滚动
-- **数据库迁移** — Goose 迁移 CLI (up/down/status/redo)
+- **数据库迁移** — Goose 迁移按能力目录组织（`internal/capabilities/<name>/migrations/{mysql,postgres}/`），每个能力独立版本表 `goose_db_version_<capability>`，按 catalog 拓扑序执行；CLI (up/down/status/redo + adopt-capabilities)
 - **数据初始化** — Seed 命令一键插入管理员和基础权限（含 Casbin 策略同步）
 - **限流保护** — 全局令牌桶（IP）+ Redis 登录/注册固定窗口 + 用户/租户/API Key 维度滑动窗口（租户维度全局挂载、平台级视角跳过；API Key 维度按路由挂载且以 Key ID 计数，不落明文）；并发上限负载保护（`server.max_concurrency`，超限可短排队后返回 `1010`/503，避免过载雪崩）
 - **HTTP 安全边界** — 请求体大小、超时、可信代理、CORS、安全 Headers；**IP 白名单**（`security.ip_allowlist` 全局 + `security.admin_ip_allowlist` 管理端，CIDR/单 IP，启动校验，客户端 IP 依赖可信代理配置）；**TLS/mTLS**（`http.tls` 与 `grpc.tls` 同构：`client_ca_file` 非空即要求并校验客户端证书，HTTP 与 gRPC 双栈一致）；CSRF 防护（配置 `security.csrf_secret` 启用，Bearer 请求自动跳过）；API 签名验证中间件（可选，服务间调用按需挂载）
@@ -49,7 +49,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **OpenTelemetry 可观测性（OpenObserve）** — 统一 OTLP gRPC 输出：分布式追踪（HTTP/Gin + Gorm 查询 + Redis 命令全链路 span，队列/Outbox 异步边界透传 `traceparent`/`tracestate`）、Prometheus 指标转 OTLP 推送、结构化日志异步推送（`otel.enabled` 开启）
 - **Prometheus 指标** — DB 连接池 + 运行时 + HTTP 请求指标（`jimu_http_*`）+ 队列执行/死信（`jimu_queue_*`）+ Outbox 发布（`jimu_outbox_*`）+ 依赖熔断（`jimu_breaker_*`）+ 定时任务执行（`jimu_scheduler_*`，成功/失败计数 + 耗时分布）；Management `/metrics` 暴露 Prometheus 格式，`otel.metrics_enabled` 时定期转 OTLP 推送 OpenObserve
 - **gRPC server** — 与 HTTP 双栈并存，内置健康检查（`grpc_health_v1`）与反射（grpcurl 可探），可选启用（`grpc.enabled`，默认端口 9091）；服务端治理拦截器：**panic 恢复**（转 `Internal` 并上报，避免 handler panic 终止进程）+ 请求量/错误量/在途/耗时指标（`jimu_grpc_server_*`）+ 单请求超时（`grpc.timeout_sec`，超时返回 `DeadlineExceeded`）；业务示例 `UserInfoService` 演示 proto 定义 → `make proto` 生成 → 服务实现 → 注册全流程，业务模块经 `RegisterService` 接入
-- **PostgreSQL 支持** — `db.driver=postgres`（或 `DB_DRIVER=postgres`）切换，迁移文件独立于 `migrations/postgres/`，与 MySQL 语法（`BIGINT UNSIGNED`/`ENGINE=InnoDB`/`ON UPDATE`）完全隔离；连接、迁移、seed、JWT/RBAC 全链路已用真实 PG 17 验证
+- **PostgreSQL 支持** — `db.driver=postgres`（或 `DB_DRIVER=postgres`）切换，各能力迁移目录下 `postgres/` 与 MySQL 方言完全隔离（MySQL 的 `BIGINT UNSIGNED`/`ENGINE=InnoDB`/`ON UPDATE` 不出现在 PG 脚本中）；连接、迁移、seed、JWT/RBAC 全链路已用真实 PG 17 验证
 - **分布式 ID** — 雪花 ID 生成器（`internal/shared/id`），所有数据库主键由应用生成，`id.worker_id` 配置多实例唯一编号
 - **Docker 支持** — Dockerfile + docker-compose 一键起服务
 - **Docker Secrets** — 敏感配置通过文件注入（`_FILE` 后缀）
@@ -61,7 +61,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **Redis 高可用** — `redis.mode` 支持 `single` / `sentinel` / `cluster` 三种部署模式（默认 single 行为不变）：哨兵模式通过 `master_name` + `sentinel_addrs` 自动故障转移，集群模式通过 `cluster_addrs` 连接分片；统一 `redis.Client` 接口，框架内 session/缓存/队列/限流/分布式锁全复用
 - **TOTP 二次验证** — RFC 6238 自研实现（`internal/shared/totp`，无外部依赖），用户可自助绑定/启用/关闭：`POST /auth/mfa/setup` 生成密钥与 otpauth URI（二维码绑定）、`/auth/mfa/enable` 首次验证码确认、`/auth/mfa/disable` 校验后关闭；启用后登录必须携带 `totp_code`（缺失 `2006`，错误 `2007`），密钥 AES-GCM 字段级加密落库
 - **统一 gRPC 客户端** — 出站调用封装（`internal/capabilities/grpc` `Client`）：连接管理 + 调用超时 + 指数退避重试（仅 Unavailable/ResourceExhausted 幂等安全码）+ **出站熔断**（复用 `kernel/breaker`，只把 Unavailable/DeadlineExceeded 计为失败）+ panic 恢复拦截器 + Prometheus 指标（`jimu_grpc_client_*`），支持 TLS/insecure，与 HTTP client 对齐的框架风格
-- **WebAuthn / 通行密钥** — `auth.webauthn.*`（`rp_id`/`rp_origins`/`session_ttl_min`）启用后支持 Passkey：已登录用户经 `POST /auth/webauthn/register/begin|finish` 自助注册（凭证公钥落库 `webauthn_credentials`，迁移 015，私钥永不离开认证器），`POST /auth/webauthn/login/begin|finish` 无密码登录（通行密钥是抗钓鱼强因子，不叠加密码与 TOTP），`GET/PUT/DELETE /auth/webauthn/credentials` 管理与注销；挑战经 Redis 一次性存储（`session_id` 回传，防替换/重放），签名计数器回写用于克隆检测，凭证按租户与用户隔离
+- **WebAuthn / 通行密钥** — `auth.webauthn.*`（`rp_id`/`rp_origins`/`session_ttl_min`）启用后支持 Passkey：已登录用户经 `POST /auth/webauthn/register/begin|finish` 自助注册（凭证公钥落库 `webauthn_credentials`，auth 能力迁移 015，沿用原全局编号，私钥永不离开认证器），`POST /auth/webauthn/login/begin|finish` 无密码登录（通行密钥是抗钓鱼强因子，不叠加密码与 TOTP），`GET/PUT/DELETE /auth/webauthn/credentials` 管理与注销；挑战经 Redis 一次性存储（`session_id` 回传，防替换/重放），签名计数器回写用于克隆检测，凭证按租户与用户隔离
 - **密码防复用** — 改密时校验新密码不等于当前密码与最近 N 个历史密码（`auth.password_history_count`，默认 5，0=关闭），历史哈希落库 `password_histories` 并按条数自动裁剪；命中返回 `2008`
 - **可信设备（记住此设备）** — 仅对启用 TOTP 的账号生效：登录时传 `remember_device: true`，成功后返回一次性明文 `device_token`（前缀 `jimu_dev_`，库中只存 SHA-256 哈希）；后续登录携带 `X-Device-Token` 头且不带 `totp_code` 即可跳过 TOTP，**密码仍必需**；令牌绑定签发用户（泄露也无法用于他人账号），改密与 `/auth/logout-all` 自动吊销，`GET/DELETE /auth/devices` 自助查看与注销；有效期 `auth.trusted_device_days`（默认 30，0=关闭）
 - **登录历史** — 每次登录尝试落库 `login_histories`（成功/失败/锁定 + 原因 + IP + User-Agent，账号不存在也记录用户名），`GET /api/v1/auth/login-history` 供用户自助排查异常登录；写入失败只记日志，不影响登录主流程
@@ -243,14 +243,35 @@ make cli
 
 # 数据库迁移
 ./bin/jimu migrate up               # 执行所有迁移
-./bin/jimu migrate down             # 回滚最后一次迁移
+./bin/jimu migrate down             # 回滚各能力最后一次迁移（按反向能力序）
 ./bin/jimu migrate status           # 查看迁移状态
-./bin/jimu migrate redo             # 重做最后一次迁移
+./bin/jimu migrate redo             # 重做各能力最后一次迁移（按反向能力序）
+./bin/jimu migrate adopt-capabilities  # 存量库登记各能力版本表基线（升级到 v0.3.0 后执行一次）
 
 # 数据初始化
 ./bin/jimu seed                     # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例）
 
 ```
+
+## 数据库迁移
+
+v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capabilities/<name>/migrations/{mysql,postgres}/`，经 `//go:embed` 打进二进制（镜像/发布物不再依赖磁盘上的 `migrations/` 目录）。顶层 `migrations/` 已删除。
+
+- **双版本表机制** — 每个能力一个独立版本表 `goose_db_version_<capability>`（由 `Descriptor.Migrations` 驱动，`internal/kernel/db.MigrateEnabled` 执行），互不干扰；删除能力即删它的表与迁移，新增迁移不再影响其他能力的版本记录。全局 `goose_db_version` 保留为历史记录，新运行器不再读写。
+- **执行顺序** — 按能力清单 `internal/capabilities/catalog` 的拓扑序（依赖在前）逐能力执行；同一能力内按迁移文件版本号升序。`migrate down`/`migrate redo` 按**反向能力序**迭代：回滚时依赖方的迁移先回滚（如 tenant 005 `DROP COLUMN tenant_id` 先于 user 001 `DROP TABLE users`），依赖的基表才不会被先删；每能力每次回滚其最后一条迁移（该能力全部回滚后静默完成，不再报错），一次 `down` 最多产生 12 个 DDL 回滚。**已知限制**：各能力迁移深度不一时，多轮 `down` 回滚到底（drain-to-empty）可能因跨能力表依赖失败（如 role 先回滚完删了 `roles`，tenant 的 005 Down 下一轮还要用它）；日常回滚最近一步不受影响，需要整库清空时重建库最简（按能力逐个 `down` 需走代码/测试路径，CLI 暂无按能力过滤参数）。
+- **新迁移怎么写** — 写进**所属能力**的 `internal/capabilities/<name>/migrations/<方言>/` 目录，能力内版本号取该目录当前最大编号 +1（脚手架 `jimu module create` 自动完成）；一条 ALTER 只属于一个能力——它改变的表归谁，迁移就写谁的能力目录，避免多能力重复变更同一对象。
+- **存量实例升级路径** — 旧世界全局版本表记录 001–015：
+  1. 旧二进制 `jimu migrate up` 升到旧世界最新；
+  2. 部署 v0.3.0 新二进制；
+  3. 执行 `jimu migrate adopt-capabilities`：读取全局版本表最大已应用版本，为各能力版本表登记"已应用到对应版本"的基线（不执行任何迁移 SQL）；
+  4. 之后正常 `jimu migrate up` 只跑各能力新增的迁移。
+  全新数据库无需 adopt，直接 `migrate up`。
+
+## 数据种子
+
+- **权限点来自能力 Descriptor** — 各能力在 `Descriptor.Permissions` 声明自己的权限点，种子时聚合启用集写入 `permissions` 表并授予超管角色；未启用的能力不种其权限点。
+- **`jimu seed` 语义不变** — CLI seed 使用完整能力清单（`catalog.All()`）：CLI 的 `migrate` 命令同样按完整清单执行迁移，若 seed 只按启用集过滤而迁移不过滤，会造成权限点与表结构不同步。
+- **边界** — 结构性种子（默认租户、free 套餐、超管角色 + admin 用户）目前**不做**能力门控，无论启用集如何都写入；只有权限点按启用集聚合。按 profile 裁剪结构种子的能力门控推迟到 P1 profile 工作落地。
 
 ## 项目结构
 
@@ -292,15 +313,13 @@ jimu/
 │   ├── releases/                 # 版本 changelog / GitHub Release body（每版本一个文件）
 │   ├── CONTRIBUTING.md           # 贡献指南（分支/PR/发布/集成测试手册）
 │   └── SECURITY.md               # 安全政策（漏洞报告流程）
-├── migrations/
-│   ├── mysql/                  # MySQL 迁移脚本（按功能合并）
-│   └── postgres/               # PostgreSQL 迁移脚本（按功能合并）
 ├── secrets/                    # Docker Secrets（gitignore）
 ├── internal/
 │   ├── app/
 │   │   ├── bootstrap.go        # 应用启动装配
 │   │   ├── container.go        # 依赖容器
-│   │   └── application.go      # Application 生命周期
+│   │   ├── application.go      # Application 生命周期
+│   │   └── seed.go             # 数据种子（权限点聚合自能力 Descriptor）
 │   ├── capabilities/           # 可插拔能力（catalog 是唯一清单；每个能力导出 Descriptor）
 │   │   ├── catalog/            # 能力清单 + 启用集解析
 │   │   ├── apidocs/            # Swagger 文档注册
@@ -317,7 +336,8 @@ jimu/
 │   │   ├── captcha/            # 图形验证码（生成 + Redis 存储 + 校验）
 │   │   ├── dataops/
 │   │   │   ├── importer/       # 数据导入（CSV/Excel 模板解析与校验）
-│   │   │   └── exporter/       # 数据导出（CSV/Excel）
+│   │   │   ├── exporter/       # 数据导出（CSV/Excel）
+│   │   │   └── migrations/{mysql,postgres}/   # 迁移脚本（按能力归属，//go:embed 进二进制）
 │   │   ├── encryption/         # AES-GCM 字段级加密 + HMAC 盲索引
 │   │   ├── feature/            # Feature Flag
 │   │   ├── grpc/               # gRPC server + 统一出站 Client（健康/反射/超时/重试/熔断/恢复/指标）
@@ -329,6 +349,8 @@ jimu/
 │   │   ├── storage/            # 文件存储抽象（本地/S3/OSS/MinIO）
 │   │   ├── uploadsec/          # 上传处理 + ClamAV 扫描
 │   │   └── ws/                 # WebSocket（Hub + 会话/频道管理）
+│   │   # 注：user/role/permission/tenant/auth/audit/apikey/queue/outbox/dataops/search
+│   │   # 等带表的能力目录下均有 migrations/{mysql,postgres}/（树上不逐个展开）
 │   ├── config/                 # 配置加载 + 校验
 │   ├── contract/               # Module 接口定义
 │   ├── kernel/                 # 内核机制（与具体能力无关的基础设施）
@@ -336,7 +358,7 @@ jimu/
 │   │   ├── auth/               # JWT + Session + 限流 + 登录失败锁定（RBAC 在 kernel/access，API Key 在 capabilities/apikey；上下文助手 apikey_context.go）
 │   │   ├── breaker/            # 统一熔断器（HTTP/Redis/DB/gRPC 共用）
 │   │   ├── cache/              # 缓存抽象层
-│   │   ├── db/                 # Gorm 连接 + 迁移 + Seed + 事务
+│   │   ├── db/                 # Gorm 连接 + 迁移运行器（MigrateEnabled/AdoptCapabilities）+ 事务
 │   │   ├── event/              # 事件总线
 │   │   ├── http/               # HTTP Server + 中间件
 │   │   ├── httpclient/         # 统一出站 HTTP 客户端（超时/重试/熔断/限流）
@@ -885,7 +907,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `upload.clamav.timeout_sec` | 单次扫描超时（秒），0 用默认 10 | `10` |
 | `queue.type` | 队列类型 (`redis`/`kafka`/`rabbitmq`)，切 Kafka/RabbitMQ 时需保证 broker 可用，否则启动失败 | `redis` |
 | `outbox.publisher` | Outbox 发布器类型 (`event_bus`/`mq`)。`mq` 支持 `queue.type=kafka/rabbitmq/redis` | `event_bus` |
-| `scheduler.store` | 任务定义存储类型 (`memory`/`mysql`)；`mysql` 需迁移表 `scheduled_jobs`（迁移 003） | `memory` |
+| `scheduler.store` | 任务定义存储类型 (`memory`/`mysql`)；`mysql` 需迁移表 `scheduled_jobs`（queue 能力迁移 001，沿用原全局编号） | `memory` |
 | `oauth.providers.{name}.enabled` | 是否启用某 OAuth 提供商 (`google`/`github`/`wechat`) | `false` |
 | `oauth.providers.{name}.client_id` | 提供商应用 Client ID | — |
 | `oauth.providers.{name}.client_secret` | 提供商应用 Client Secret（生产建议环境变量注入） | — |
@@ -1013,6 +1035,7 @@ internal/capabilities/{name}/
 ### 数据库
 
 - Gorm + Goose 迁移，命名 `{seq}_create_{table}s.sql`，迁移文件需为每个字段和表添加中文 COMMENT
+- **迁移写进能力目录**：新迁移放在所属能力的 `internal/capabilities/<name>/migrations/<方言>/`（能力内编号，MySQL 与 PostgreSQL 各一份）；一条 ALTER 只属于一个能力——表归谁，迁移就写谁的能力目录（详见「数据库迁移」章节）
 - 基础表包含 `id`、`created_at`、`updated_at`、`deleted_at`；主键由应用生成雪花 ID（gorm hook），建表不使用 `AUTO_INCREMENT`
 - 支持读写分离（`read_hosts`、`read_ports` 配置，MySQL/MariaDB 与 PostgreSQL 均支持，从库按 `RandomPolicy` 轮询）；**注意从库存在复制延迟**：写后立即读可能读到旧数据，强一致读请走主库（框架未做写后粘主，需要强一致的查询请在业务层显式指定主库或加读己之写补偿）
 - 时间统一 **UTC**：连接固定 `loc=UTC` + MySQL 会话 `time_zone='+00:00'`（PostgreSQL `TimeZone=UTC`），驱动与服务器时区必须一致，否则 `TIMESTAMP` 列与 `DEFAULT CURRENT_TIMESTAMP` 会相差一个时区偏移；API 以 RFC3339（带 `Z`）返回，展示时区由前端/SDK 转换

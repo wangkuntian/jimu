@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"jimu/internal/config"
+	"jimu/internal/contract"
 	"jimu/internal/kernel/db"
 
 	"gorm.io/driver/mysql"
@@ -194,6 +195,17 @@ func NewTestDBWithPool(cfg config.DBConfig) (*TestDB, error) {
 // 或 goose 版本表出现竞态写入。
 const migrationLockTimeout = 60 * time.Second
 
+// migrateCaps 测试侧注入的能力清单：testutil 不能 import capabilities/catalog
+// （共享层引用能力层是反向依赖）。默认 nil = 不跑能力迁移；需要能力迁移的
+// 测试进程（e2e / 能力集成测试）在 setup 时调用 SetMigrateCaps(catalog.All())。
+// ponytail: 测试夹具注入用包级变量，P2 profile 化后收口。
+var migrateCaps []contract.Descriptor
+
+// SetMigrateCaps 注入 Migrate() 执行的能力迁移清单；传 nil 复位为空。
+func SetMigrateCaps(caps []contract.Descriptor) {
+	migrateCaps = caps
+}
+
 // Migrate 执行迁移（根据 cfg.Driver 选择 dialect 与迁移目录）。
 // 用数据库级咨询锁串行化迁移，使并行测试包共用同一测试库时不再互相打架。
 func (tdb *TestDB) Migrate() error {
@@ -202,7 +214,7 @@ func (tdb *TestDB) Migrate() error {
 		return err
 	}
 	defer release()
-	return db.Migrate(tdb.cfg, "up")
+	return db.MigrateEnabled(tdb.cfg, migrateCaps, "up")
 }
 
 // lockMigrations 获取数据库级迁移锁并返回释放函数。

@@ -49,6 +49,7 @@ func TestGenerateModuleCreatesCompleteCRUD(t *testing.T) {
 	if err := GenerateModuleAt(root, "order_item"); err != nil {
 		t.Fatal(err)
 	}
+	// 存量编号沿用原全局值：能力目录已有 001/006 → 新迁移取 007
 	for _, rel := range requiredFiles("order_item", "007") {
 		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
 			t.Errorf("missing %s: %v", rel, err)
@@ -77,6 +78,14 @@ func TestGenerateModuleCreatesCompleteCRUD(t *testing.T) {
 func TestGenerateModuleRollsBackWriteFailure(t *testing.T) {
 	root := newTestRepository(t)
 	writeMigration(t, root, "001_base.sql")
+	// writeMigration 硬编码 order_item 目录；本用例生成 product，改为直接在该能力目录预置基线迁移
+	baseDir := filepath.Join(root, "internal/capabilities/product/migrations/mysql")
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(baseDir, "001_base.sql"), []byte("-- migration\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	originalWriteFile := writeFile
 	t.Cleanup(func() { writeFile = originalWriteFile })
 	writes := 0
@@ -91,14 +100,30 @@ func TestGenerateModuleRollsBackWriteFailure(t *testing.T) {
 	if err := GenerateModuleAt(root, "product"); err == nil {
 		t.Fatal("expected write failure")
 	}
-	if _, err := os.Stat(filepath.Join(root, "migrations", "mysql", "001_base.sql")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, "internal", "capabilities", "product", "migrations", "mysql", "001_base.sql")); err != nil {
 		t.Fatalf("base migration changed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "internal", "capabilities", "product")); !os.IsNotExist(err) {
-		t.Fatalf("module directory still exists: %v", err)
+	// 生成器自建的目录必须回滚；预置的 mysql/ 基线目录允许保留
+	if _, err := os.Stat(filepath.Join(root, "internal", "capabilities", "product", "module.go")); !os.IsNotExist(err) {
+		t.Fatalf("module file still exists: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "migrations", "mysql", "002_create_products.sql")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "internal", "capabilities", "product", "migrations", "postgres")); !os.IsNotExist(err) {
+		t.Fatalf("postgres migration dir still exists: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "internal", "capabilities", "product", "migrations", "mysql", "002_create_products.sql")); !os.IsNotExist(err) {
 		t.Fatalf("migration still exists: %v", err)
+	}
+}
+
+func TestGenerateModuleStartsCapabilityNumberingAt001(t *testing.T) {
+	root := newTestRepository(t)
+	// 新能力目录为空：能力内自行编号从这里开始生效（从 001 起），不受其他能力迁移影响
+	if err := GenerateModuleAt(root, "product"); err != nil {
+		t.Fatal(err)
+	}
+	mig := filepath.Join(root, "internal", "capabilities", "product", "migrations", "mysql", "001_create_products.sql")
+	if _, err := os.Stat(mig); err != nil {
+		t.Fatalf("missing %s: %v", mig, err)
 	}
 }
 
@@ -107,7 +132,6 @@ func newTestRepository(t *testing.T) string {
 	root := t.TempDir()
 	for _, dir := range []string{
 		filepath.Join(root, "internal/capabilities"),
-		filepath.Join(root, "migrations", "mysql"),
 	} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -132,23 +156,32 @@ func assertNoGeneratedFiles(t *testing.T, root string) {
 
 func writeMigration(t *testing.T, root, name string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(root, "migrations", "mysql", name), []byte("-- migration\n"), 0o644); err != nil {
+	// ponytail: 硬编码 order_item 目录（两个调用方都生成 order_item/product），
+	// 需要按能力写入时给 writeMigration 加 cap 参数即可。
+	dir := filepath.Join(root, "internal/capabilities/order_item/migrations/mysql")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("-- migration\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func requiredFiles(name, version string) []string {
+	capRoot := filepath.Join("internal", "capabilities", name)
 	return []string{
-		filepath.Join("internal", "capabilities", name, "module.go"),
-		filepath.Join("internal", "capabilities", name, "domain", "entity.go"),
-		filepath.Join("internal", "capabilities", name, "domain", "repository.go"),
-		filepath.Join("internal", "capabilities", name, "application", "dto.go"),
-		filepath.Join("internal", "capabilities", name, "application", "service.go"),
-		filepath.Join("internal", "capabilities", name, "application", "service_test.go"),
-		filepath.Join("internal", "capabilities", name, "infrastructure", "mysql_repository.go"),
-		filepath.Join("internal", "capabilities", name, "interfaces", "handler.go"),
-		filepath.Join("internal", "capabilities", name, "interfaces", "handler_test.go"),
-		filepath.Join("internal", "capabilities", name, "interfaces", "router.go"),
-		filepath.Join("migrations", "mysql", version+"_create_order_items.sql"),
+		filepath.Join(capRoot, "module.go"),
+		filepath.Join(capRoot, "domain", "entity.go"),
+		filepath.Join(capRoot, "domain", "repository.go"),
+		filepath.Join(capRoot, "application", "dto.go"),
+		filepath.Join(capRoot, "application", "service.go"),
+		filepath.Join(capRoot, "application", "service_test.go"),
+		filepath.Join(capRoot, "infrastructure", "mysql_repository.go"),
+		filepath.Join(capRoot, "interfaces", "handler.go"),
+		filepath.Join(capRoot, "interfaces", "handler_test.go"),
+		filepath.Join(capRoot, "interfaces", "router.go"),
+		filepath.Join(capRoot, "migrations", "mysql", version+"_create_order_items.sql"),
+		filepath.Join(capRoot, "migrations", "postgres", version+"_create_order_items.sql"),
+		filepath.Join(capRoot, "migrations", "postgres", ".gitkeep"),
 	}
 }

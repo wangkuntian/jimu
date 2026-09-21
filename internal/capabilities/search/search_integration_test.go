@@ -4,11 +4,19 @@ import (
 	"context"
 	"testing"
 
+	"jimu/internal/contract"
 	"jimu/internal/shared/testutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func init() {
+	// 本包集成测试依赖 search_documents 表：注入搜索能力的迁移（迁移文件与 Descriptor 同包）
+	testutil.SetMigrateCaps([]contract.Descriptor{
+		{Name: "search", Migrations: migrationsFS},
+	})
+}
 
 // TestMysqlSearcherIntegration 针对真实 MySQL/MariaDB 的检索集成测试。
 // CI 通过 services.mariadb 提供；本地无数据库时自动跳过。

@@ -2,6 +2,7 @@
 package oauth
 
 import (
+	"embed"
 	oauthapp "jimu/internal/capabilities/oauth/application"
 	oauthinfra "jimu/internal/capabilities/oauth/infrastructure"
 	"jimu/internal/capabilities/oauth/interfaces"
@@ -66,11 +67,17 @@ func buildProviders(cfg config.OAuthConfig, client *httpclient.Client) map[strin
 // Name 模块名
 func (m *Module) Name() string { return "oauth" }
 
+// migrationsFS 能力自带迁移（Task 3：能力迁移经 embed 进二进制）。
+//
+//go:embed migrations
+var migrationsFS embed.FS
+
 // Descriptor 声明 OAuth 能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:     "oauth",
-	Requires: []string{"auth", "user"},
-	Mount:    contract.MountPublic,
+	Name:       "oauth",
+	Migrations: migrationsFS,
+	Requires:   []string{"auth", "user"},
+	Mount:      contract.MountPublic,
 }
 
 // Descriptor 实现 contract.Describable。
