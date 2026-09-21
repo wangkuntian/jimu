@@ -26,7 +26,7 @@ func init() {
 	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..")
 	testutil.SetMigrateCaps([]contract.Descriptor{
 		{Name: "user", Migrations: os.DirFS(filepath.Join(repoRoot, "internal", "capabilities", "user"))},
-		{Name: "role", Migrations: os.DirFS(filepath.Join(repoRoot, "internal", "capabilities", "role"))},
+		{Name: "access", Migrations: os.DirFS(filepath.Join(repoRoot, "internal", "capabilities", "access"))},
 		{Name: "tenant", Migrations: os.DirFS(filepath.Join(repoRoot, "internal", "capabilities", "tenant"))},
 	})
 }
