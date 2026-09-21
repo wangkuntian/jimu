@@ -7,15 +7,21 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/audit/domain"
-	"jimu/internal/config"
 	"jimu/internal/kernel/logger"
 )
 
 const flushTimeout = 5 * time.Second
 
+// WorkerConfig 审计批量写入参数（内层不依赖配置结构体）。
+type WorkerConfig struct {
+	QueueSize       int
+	BatchSize       int
+	FlushIntervalMS int
+}
+
 type Worker struct {
 	repo  domain.AuditRepository
-	cfg   config.AuditConfig
+	cfg   WorkerConfig
 	log   *logger.Logger
 	queue chan domain.AuditLog
 
@@ -28,7 +34,7 @@ type Worker struct {
 	result    error
 }
 
-func NewWorker(repo domain.AuditRepository, cfg config.AuditConfig, log *logger.Logger) *Worker {
+func NewWorker(repo domain.AuditRepository, cfg WorkerConfig, log *logger.Logger) *Worker {
 	return &Worker{
 		repo:  repo,
 		cfg:   cfg,

@@ -199,11 +199,6 @@ func validProdConfig() Config {
 			RateLimitRate:  100,
 			RateLimitBurst: 200,
 		},
-		Audit: AuditConfig{
-			QueueSize:       256,
-			BatchSize:       50,
-			FlushIntervalMS: 500,
-		},
 		Queue: QueueConfig{
 			Type: QueueTypeRedis,
 		},

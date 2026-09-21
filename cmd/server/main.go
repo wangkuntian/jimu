@@ -135,6 +135,17 @@ func run() error {
 		captchaVerifier = captchaMod.Service()
 	}
 
+	// 审计能力配置段：仅启用时解码与校验
+	var auditCfg auditmodule.Config
+	if enabled["audit"] {
+		loaded, err := auditmodule.Load(sections)
+		if err != nil {
+			_ = container.Stop(context.Background())
+			return fmt.Errorf("load audit config: %w", err)
+		}
+		auditCfg = *loaded
+	}
+
 	// access 能力：角色/权限/用户角色分配（user_roles 表所有者），供 user 管理面注入
 	accessMod := accessmodule.New(container.DB, tenantMod.Quota())
 
@@ -171,7 +182,7 @@ func run() error {
 		"apikey":  apikey.New(container.DB, tenantMod.Quota()),
 		"dataops": dataops.New(container.DB),
 		"tenant":  tenantMod,
-		"audit":   auditmodule.New(container.DB, cfg.Audit, container.Logger),
+		"audit":   auditmodule.New(container.DB, auditCfg, container.Logger),
 		"console": consolemodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB,
 			auth.NewWithRotation(cfg.Auth.JWTSecret, cfg.Auth.JWTPreviousSecret, cfg.Auth.Issuer, cfg.Auth.AccessExpireMin, cfg.Auth.RefreshExpireDay),
 			container.EventBus, middleware.IPAllowlist(cfg.Security.AdminIPAllowlist)),

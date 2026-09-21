@@ -113,7 +113,6 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 			LoginRateLimit:    0,
 			RegisterRateLimit: 0,
 		},
-		Audit: config.AuditConfig{QueueSize: 1024, BatchSize: 1, FlushIntervalMS: 10},
 	}
 
 	log := logger.New(config.LogConfig{Level: "error", Format: "console", Output: "stdout"})
@@ -133,7 +132,7 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 	userMod := usermodule.New(gdb, cfg) // 不传 rdb：跳过用户维度限流（依赖 Lua），聚焦契约链路
 	accessMod := accessmodule.New(gdb)
 
-	auditMod := auditmodule.New(gdb, cfg.Audit, log)
+	auditMod := auditmodule.New(gdb, auditmodule.Config{QueueSize: 1024, BatchSize: 1, FlushIntervalMS: 10}, log)
 	consoleMod := consolemodule.New("test", "test", rdb, gdb, nil, nil)
 	featureMod := feature.New(gdb)
 	queueMod := queue.NewModule(gdb, nil)

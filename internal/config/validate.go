@@ -119,9 +119,6 @@ func (c *Config) validateCommon() error {
 	if c.Security.IdempotencyEnabled && c.Security.IdempotencyTTLSec <= 0 {
 		return errors.New("security.idempotency_ttl_sec must be positive when idempotency is enabled")
 	}
-	if c.Audit.QueueSize <= 0 || c.Audit.BatchSize <= 0 || c.Audit.BatchSize > c.Audit.QueueSize || c.Audit.FlushIntervalMS <= 0 {
-		return errors.New("invalid audit configuration")
-	}
 	if c.DB.MaxOpen <= 0 || c.DB.MaxIdle <= 0 || c.DB.MaxIdle > c.DB.MaxOpen {
 		return errors.New("invalid db pool configuration")
 	}

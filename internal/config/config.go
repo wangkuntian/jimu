@@ -150,7 +150,6 @@ type Config struct {
 	Server       ServerConfig                `mapstructure:"server"`
 	ID           IDConfig                    `mapstructure:"id"`
 	Cache        CacheConfig                 `mapstructure:"cache"`
-	Audit        AuditConfig                 `mapstructure:"audit"`
 	Storage      StorageConfig               `mapstructure:"storage"`
 	Upload       UploadConfig                `mapstructure:"upload"`
 	Security     SecurityConfig              `mapstructure:"security"`
@@ -267,13 +266,6 @@ type ManagementConfig struct {
 	Port            int    `mapstructure:"port"`
 	EnablePprof     bool   `mapstructure:"enable_pprof"`
 	ProbeTimeoutSec int    `mapstructure:"probe_timeout_sec"`
-}
-
-type AuditConfig struct {
-	QueueSize       int    `mapstructure:"queue_size"`
-	BatchSize       int    `mapstructure:"batch_size"`
-	FlushIntervalMS int    `mapstructure:"flush_interval_ms"`
-	HashSecret      string `mapstructure:"hash_secret"` // 审计链 HMAC 密钥；为空时退化为 SHA-256
 }
 
 type StorageConfig struct {
@@ -631,20 +623,17 @@ func (c DBConfig) IsPostgres() bool {
 	return c.Dialect() == "postgres"
 }
 
-// applyEnvOverrides 应用环境变量覆盖（简洁命名，无 JIMU_ 前缀）
+// applyEnvOverrides 应用**内核段**环境变量覆盖（简洁命名，无 JIMU_ 前缀）。
+// 能力段的环境覆盖由各能力在自己的 ApplyDefaults 中处理（见 config.LoadSection）。
 // 支持 _FILE 后缀从文件读取敏感值（Docker Secrets 兼容）
 func applyEnvOverrides(cfg *Config) {
 	// 认证：优先 JWT_SECRET_FILE，其次 JWT_SECRET
-	if v := getEnvOrFile("JWT_SECRET_FILE", "JWT_SECRET"); v != "" {
+	if v := GetEnvOrFile("JWT_SECRET_FILE", "JWT_SECRET"); v != "" {
 		cfg.Auth.JWTSecret = v
 	}
 	// 密钥轮换：旧 JWT 密钥（用于验证轮换期间尚未过期的旧 token）
-	if v := getEnvOrFile("JWT_PREVIOUS_SECRET_FILE", "JWT_PREVIOUS_SECRET"); v != "" {
+	if v := GetEnvOrFile("JWT_PREVIOUS_SECRET_FILE", "JWT_PREVIOUS_SECRET"); v != "" {
 		cfg.Auth.JWTPreviousSecret = v
-	}
-	// 审计链 HMAC 密钥：配置后篡改者无法重算整条链
-	if v := getEnvOrFile("AUDIT_HASH_SECRET_FILE", "AUDIT_HASH_SECRET"); v != "" {
-		cfg.Audit.HashSecret = v
 	}
 	// 数据库
 	if v := os.Getenv("DB_DRIVER"); v != "" {
@@ -662,7 +651,7 @@ func applyEnvOverrides(cfg *Config) {
 		cfg.DB.User = v
 	}
 	// 密码：优先 DB_PASSWORD_FILE，其次 DB_PASSWORD
-	if v := getEnvOrFile("DB_PASSWORD_FILE", "DB_PASSWORD"); v != "" {
+	if v := GetEnvOrFile("DB_PASSWORD_FILE", "DB_PASSWORD"); v != "" {
 		cfg.DB.Password = v
 	}
 	if v := os.Getenv("DB_NAME"); v != "" {
@@ -672,7 +661,7 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("REDIS_ADDR"); v != "" {
 		cfg.Redis.Addr = v
 	}
-	if v := getEnvOrFile("REDIS_PASSWORD_FILE", "REDIS_PASSWORD"); v != "" {
+	if v := GetEnvOrFile("REDIS_PASSWORD_FILE", "REDIS_PASSWORD"); v != "" {
 		cfg.Redis.Password = v
 	}
 	if v := os.Getenv("REDIS_DB"); v != "" {
@@ -696,7 +685,7 @@ func applyEnvOverrides(cfg *Config) {
 		}
 	}
 	// 字段级加密密钥
-	if v := getEnvOrFile("ENCRYPTION_KEY_FILE", "ENCRYPTION_KEY"); v != "" {
+	if v := GetEnvOrFile("ENCRYPTION_KEY_FILE", "ENCRYPTION_KEY"); v != "" {
 		cfg.Security.EncryptionKey = v
 	}
 	// OpenTelemetry（OpenObserve 接入；compose 场景通过环境变量覆盖端点/开关/凭据）
@@ -706,7 +695,7 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("OTEL_ENDPOINT"); v != "" {
 		cfg.OTEL.Endpoint = v
 	}
-	if v := getEnvOrFile("OTEL_AUTH_PASSWORD_FILE", "OTEL_AUTH_PASSWORD"); v != "" {
+	if v := GetEnvOrFile("OTEL_AUTH_PASSWORD_FILE", "OTEL_AUTH_PASSWORD"); v != "" {
 		cfg.OTEL.AuthPassword = v
 	}
 	if v := os.Getenv("OTEL_AUTH_EMAIL"); v != "" {
@@ -723,8 +712,9 @@ func applyEnvOverrides(cfg *Config) {
 	}
 }
 
-// getEnvOrFile 优先从 _FILE 指向的文件读取，其次直接读取环境变量
-func getEnvOrFile(fileKey, directKey string) string {
+// GetEnvOrFile 优先从 _FILE 指向的文件读取，其次直接读取环境变量。
+// 导出供能力段在自己的 ApplyDefaults 中应用同类覆盖（Docker Secrets 兼容）。
+func GetEnvOrFile(fileKey, directKey string) string {
 	// 优先从文件读取（Docker Secrets）
 	if path := os.Getenv(fileKey); path != "" {
 		if data, err := os.ReadFile(path); err == nil {
