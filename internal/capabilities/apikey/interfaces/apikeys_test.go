@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"jimu/internal/capabilities/admin/application"
+	"jimu/internal/capabilities/apikey/application"
 	apikeydomain "jimu/internal/capabilities/apikey/domain"
 
 	"github.com/gin-gonic/gin"

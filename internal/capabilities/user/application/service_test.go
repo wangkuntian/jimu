@@ -142,6 +142,7 @@ type fakeUserRepository struct {
 	sort      string
 	order     string
 	tenantID  uint64
+	create    func(ctx context.Context, user *domain.User) error
 }
 
 func (r *fakeUserRepository) FindByID(context.Context, uint64) (*domain.User, error) {
@@ -161,7 +162,10 @@ func (r *fakeUserRepository) List(_ context.Context, tenantID uint64, offset, li
 	return r.users, r.total, r.listErr
 }
 
-func (r *fakeUserRepository) Create(_ context.Context, user *domain.User) error {
+func (r *fakeUserRepository) Create(ctx context.Context, user *domain.User) error {
+	if r.create != nil {
+		return r.create(ctx, user)
+	}
 	r.created = user
 	return nil
 }

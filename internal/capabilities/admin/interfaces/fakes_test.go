@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	admindomain "jimu/internal/capabilities/admin/domain"
-	apikeydomain "jimu/internal/capabilities/apikey/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
 
 	"github.com/glebarez/sqlite"
@@ -24,22 +23,6 @@ func newSqliteDB(t *testing.T, models ...interface{}) *gorm.DB {
 	}
 	return db
 }
-
-// 测试用角色模型（roles 表）
-type testRole struct {
-	ID   uint64 `gorm:"primaryKey"`
-	Name string
-}
-
-func (testRole) TableName() string { return "roles" }
-
-// 测试用用户角色关联（user_roles 表）
-type testUserRole struct {
-	UserID uint64 `gorm:"primaryKey"`
-	RoleID uint64 `gorm:"primaryKey"`
-}
-
-func (testUserRole) TableName() string { return "user_roles" }
 
 // fakeUserRepository 可配置的用户仓储 mock
 type fakeUserRepository struct {
@@ -95,50 +78,6 @@ func (f *fakeUserRepository) FindByPhoneHash(context.Context, string) (*userdoma
 func (f *fakeUserRepository) UpdatePassword(context.Context, uint64, string) error { return nil }
 
 func (f *fakeUserRepository) UpdateTOTP(context.Context, uint64, string, bool) error { return nil }
-
-// fakeAPIKeyRepo 可配置的 API Key 仓储 mock
-type fakeAPIKeyRepo struct {
-	create   func(ctx context.Context, key *apikeydomain.APIKey) error
-	findByID func(ctx context.Context, id uint64) (*apikeydomain.APIKey, error)
-	list     func(ctx context.Context, tenantID uint64, offset, limit int) ([]apikeydomain.APIKey, int64, error)
-	delete   func(ctx context.Context, id uint64) error
-}
-
-func (f *fakeAPIKeyRepo) Create(ctx context.Context, key *apikeydomain.APIKey) error {
-	if f.create != nil {
-		return f.create(ctx, key)
-	}
-	key.ID = 9
-	return nil
-}
-
-func (f *fakeAPIKeyRepo) FindByID(ctx context.Context, id uint64) (*apikeydomain.APIKey, error) {
-	if f.findByID != nil {
-		return f.findByID(ctx, id)
-	}
-	return &apikeydomain.APIKey{ID: id, Name: "web"}, nil
-}
-
-func (f *fakeAPIKeyRepo) FindByKeyHash(ctx context.Context, hash string) (*apikeydomain.APIKey, error) {
-	return nil, gorm.ErrRecordNotFound
-}
-
-func (f *fakeAPIKeyRepo) List(ctx context.Context, tenantID uint64, offset, limit int) ([]apikeydomain.APIKey, int64, error) {
-	if f.list != nil {
-		return f.list(ctx, tenantID, offset, limit)
-	}
-	return []apikeydomain.APIKey{{ID: 1, Name: "web"}}, 1, nil
-}
-
-func (f *fakeAPIKeyRepo) Update(ctx context.Context, key *apikeydomain.APIKey) error { return nil }
-func (f *fakeAPIKeyRepo) Delete(ctx context.Context, id uint64) error {
-	if f.delete != nil {
-		return f.delete(ctx, id)
-	}
-	return nil
-}
-
-func (f *fakeAPIKeyRepo) IncrementUseCount(ctx context.Context, id uint64) error { return nil }
 
 // fakeImportJobRepo 可配置的导入任务仓储 mock
 type fakeImportJobRepo struct {
