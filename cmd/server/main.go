@@ -85,7 +85,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: queue.Descriptor, Wire: queue.Wire},
 			{Descriptor: outbox.Descriptor, Wire: outbox.Wire},
 			{Descriptor: breach.Descriptor, Wire: breach.Wire},
-			{Descriptor: tenantmodule.Descriptor, Wire: wireTenant},
+			{Descriptor: tenantmodule.Descriptor, Wire: tenantmodule.Wire},
 			{Descriptor: accessmodule.Descriptor, Wire: accessmodule.Wire},
 			{Descriptor: user.Descriptor, Wire: user.Wire},
 			{Descriptor: captcha.Descriptor, Wire: captcha.Wire}, // 已搬迁的试点能力
@@ -106,17 +106,6 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: ws.Descriptor, Wire: ws.Wire},
 		},
 	}
-}
-
-func wireTenant(ctx *assembly.Context) (contract.Module, error) {
-	mod := tenantmodule.New(ctx.DB(), tenantProvisioningConfig(authConfig(ctx).Provisioning))
-	if err := ctx.Provide(tenantmodule.PortName, mod.Quota()); err != nil {
-		return nil, err
-	}
-	if err := ctx.Provide(tenantmodule.ProvisionerPortName, mod.Provisioner()); err != nil {
-		return nil, err
-	}
-	return mod, nil
 }
 
 func wireMFA(ctx *assembly.Context) (contract.Module, error) {
@@ -298,22 +287,4 @@ func validateAuthConfig(cfg *authmodule.Config) error {
 		return errProvisioningRequiresPublicRegistration
 	}
 	return nil
-}
-
-// tenantProvisioningConfig 把 auth 段的 provisioning 配置映射为 tenant 自有的输入视图。
-// tenant 被 auth 依赖、不得 import auth，故两边类型独立，在此显式转换（P2.1 裁定）。
-func tenantProvisioningConfig(p authmodule.ProvisioningConfig) tenantmodule.ProvisioningConfig {
-	roles := make([]tenantmodule.ProvisionRoleTemplate, 0, len(p.Roles))
-	for _, role := range p.Roles {
-		perms := make([]tenantmodule.ProvisionPermission, 0, len(role.Permissions))
-		for _, perm := range role.Permissions {
-			perms = append(perms, tenantmodule.ProvisionPermission{Resource: perm.Resource, Action: perm.Action})
-		}
-		roles = append(roles, tenantmodule.ProvisionRoleTemplate{
-			Name:        role.Name,
-			Description: role.Description,
-			Permissions: perms,
-		})
-	}
-	return tenantmodule.ProvisioningConfig{Enabled: p.Enabled, OwnerRole: p.OwnerRole, Roles: roles}
 }
