@@ -8,6 +8,7 @@ import (
 	"testing/fstest"
 
 	"jimu/internal/contract"
+	"jimu/tools/internal/heavydeps"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -75,14 +76,15 @@ func TestRouteCountRegistersIntoBareEngine(t *testing.T) {
 // 验收断言与「go.mod 逐形态相同」的结论，渲染逻辑变化会让本用例失败。
 func TestRenderReportPinsTheCommittedShape(t *testing.T) {
 	ms := []Metrics{
-		{Profile: "full", BinaryBytes: 200_000_000, Routes: 100, Migrations: 20, Tables: 20, Files: 300, Lines: 30_000, Capabilities: []string{"auth", "user"}},
+		{Profile: "full", BinaryBytes: 200_000_000, Routes: 100, Migrations: 20, Tables: 20, Files: 300, Lines: 30_000, HeavyDeps: []string{"aws-sdk-go-v2", "excelize"}, Capabilities: []string{"auth", "user"}},
 		{Profile: "minimal", BinaryBytes: 100_000_000, Routes: 30, Migrations: 5, Tables: 5, Files: 150, Lines: 10_000, Capabilities: []string{"auth"}},
 	}
 	out := renderReport(ms, 64)
 
-	assert.Contains(t, out, "| 形态 | 二进制 (MB) | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 |")
-	assert.Contains(t, out, "| `full` | 200.0 | 100.0% | 100 | 20 | 20 | 300 | 30000 |")
-	assert.Contains(t, out, "| `minimal` | 100.0 | 50.0% | 30 | 5 | 5 | 150 | 10000 |")
+	assert.Contains(t, out, "| 形态 | 二进制 (MB) | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 | 重型依赖 |")
+	assert.Contains(t, out, "| `full` | 200.0 | 100.0% | 100 | 20 | 20 | 300 | 30000 | aws-sdk-go-v2, excelize |")
+	assert.Contains(t, out, "| `minimal` | 100.0 | 50.0% | 30 | 5 | 5 | 150 | 10000 | - |")
+	assert.Contains(t, out, "| 重型依赖 | 同一闭包（含第三方包）命中 `tools/internal/heavydeps` 前缀表的展示名，`-` 表示零 |")
 	assert.Contains(t, out, "- 二进制：`minimal` 是 `full` 的 50.0%（要求 ≤ 85%）")
 	assert.Contains(t, out, "- 路由数：`minimal` 30 < `full` 100")
 	assert.Contains(t, out, "五个形态的 go.mod 直接依赖数**逐形态完全相同**（各 64 个）")
@@ -168,6 +170,15 @@ func TestMinimalCompiledSurfaceIsMateriallySmaller(t *testing.T) {
 	assert.Less(t, minM.Tables, fullM.Tables, "minimal 表数应少于 full")
 	assert.Less(t, minM.Files, fullM.Files, "minimal 本仓 Go 文件数应少于 full")
 	assert.Less(t, minM.Lines, fullM.Lines, "minimal 本仓代码行数应少于 full")
+
+	// 驱动拆包后的重型依赖列：full 编进全部四类驱动，其余形态的编译面为零
+	// （可插拔的实际效果；enterprise 已收敛为 local + csv）。
+	assert.ElementsMatch(t, heavydeps.Names(), fullM.HeavyDeps, "full 应含全部四类重型依赖")
+	for _, name := range []string{"minimal", "saas", "enterprise", "machine"} {
+		m, ok := byName[name]
+		require.True(t, ok, "报告缺少形态 %s", name)
+		assert.Empty(t, m.HeavyDeps, "%s 不应把重型依赖编进编译面", name)
+	}
 }
 
 // repoRoot 返回仓库根（本文件位于 tools/composereport/）。

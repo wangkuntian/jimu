@@ -12,6 +12,7 @@
 | 迁移数 | 各 `Descriptor.Migrations` 中 `migrations/mysql/*.sql` 的文件数（postgres 同名同数） |
 | 表数 | 各 `Descriptor.Owns` 的并集大小 |
 | 本仓 Go 文件 / 代码行 | `golang.org/x/tools/go/packages` 载入 `./profiles/<name>` 的 import 闭包，只统计本模块（`jimu/...`）的非 `_test.go` 文件 |
+| 重型依赖 | 同一闭包（含第三方包）命中 `tools/internal/heavydeps` 前缀表的展示名，`-` 表示零 |
 | go.mod 直接依赖 | `go list -m -f '{{if not .Indirect}}{{.Path}}{{end}}' all` 的非空行数（不含主模块 `jimu` 自身） |
 
 「本仓闭包」严格大于「形态组成」：`user`/`auth` 直接 import 了 `outbox`/`queue`/`notification`/`ws` 的
@@ -20,24 +21,24 @@
 
 ## 编译面
 
-| 形态 | 二进制 (MB) | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| `full` | 122.6 | 100.0% | 99 | 25 | 23 | 328 | 33995 |
-| `minimal` | 85.8 | 70.0% | 32 | 7 | 7 | 182 | 17804 |
-| `saas` | 86.1 | 70.2% | 48 | 13 | 11 | 208 | 20450 |
-| `enterprise` | 99.5 | 81.1% | 55 | 13 | 11 | 248 | 23241 |
-| `machine` | 84.4 | 68.9% | 28 | 7 | 6 | 184 | 18080 |
+| 形态 | 二进制 (MB) | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 | 重型依赖 |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `full` | 123.1 | 100.0% | 99 | 25 | 23 | 330 | 34477 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
+| `minimal` | 84.7 | 68.8% | 32 | 7 | 7 | 179 | 17464 | - |
+| `saas` | 85.0 | 69.0% | 48 | 13 | 11 | 205 | 20110 | - |
+| `enterprise` | 85.3 | 69.3% | 55 | 13 | 11 | 245 | 22906 | - |
+| `machine` | 83.3 | 67.7% | 28 | 7 | 6 | 181 | 17740 | - |
 
 ## 验收断言
 
 `go test ./tools/composereport/` 的 `TestMinimalCompiledSurfaceIsMateriallySmaller` 按下面的**实测关系**断言
 （不写死数字，内核膨胀或能力增减只会让真实的裁剪失效暴露出来）：
 
-- 二进制：`minimal` 是 `full` 的 70.0%（要求 ≤ 85%）
+- 二进制：`minimal` 是 `full` 的 68.8%（要求 ≤ 85%）
 - 路由数：`minimal` 32 < `full` 99
 - 表数：`minimal` 7 < `full` 23
-- 本仓 Go 文件：`minimal` 182 < `full` 328
-- 本仓代码行：`minimal` 17804 < `full` 33995
+- 本仓 Go 文件：`minimal` 179 < `full` 330
+- 本仓代码行：`minimal` 17464 < `full` 34477
 
 ## 层②边界：go.mod 直接依赖
 

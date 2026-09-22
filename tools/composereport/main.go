@@ -13,9 +13,11 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -26,6 +28,7 @@ import (
 	"jimu/internal/profiles/machine"
 	"jimu/internal/profiles/minimal"
 	"jimu/internal/profiles/saas"
+	"jimu/tools/internal/heavydeps"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/tools/go/packages"
@@ -50,6 +53,7 @@ type Metrics struct {
 	Tables       int
 	Files        int
 	Lines        int
+	HeavyDeps    []string
 	Capabilities []string
 }
 
@@ -120,7 +124,7 @@ func measureAll(root string) ([]Metrics, error) {
 		if err != nil {
 			return nil, fmt.Errorf("count migrations of %s: %w", name, err)
 		}
-		files, lines, err := closureSize(root, name)
+		files, lines, heavy, err := closureSize(root, name)
 		if err != nil {
 			return nil, fmt.Errorf("measure closure of %s: %w", name, err)
 		}
@@ -132,6 +136,7 @@ func measureAll(root string) ([]Metrics, error) {
 			Tables:       tableCount(descs),
 			Files:        files,
 			Lines:        lines,
+			HeavyDeps:    heavy,
 			Capabilities: res.Capabilities,
 		})
 	}
@@ -235,26 +240,31 @@ func buildSize(root, name string) (int64, error) {
 	return info.Size(), nil
 }
 
-// closureSize 统计该形态 import 闭包中本模块（jimu/...）非 _test.go 的 .go 文件数与行数。
+// closureSize 统计该形态 import 闭包中本模块（jimu/...）非 _test.go 的 .go 文件数与行数，
+// 并收集闭包（含第三方包）命中的重型依赖展示名（去重升序）。
 // go/packages 在只请求名称/文件/import 图时等价于 go list -deps，不做类型检查。
-func closureSize(root, name string) (files, lines int, err error) {
+func closureSize(root, name string) (files, lines int, heavy []string, err error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedImports | packages.NeedDeps,
 		Dir:  root,
 	}
 	pkgs, err := packages.Load(cfg, "./profiles/"+name)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, nil, err
 	}
 	if len(pkgs) == 0 {
-		return 0, 0, fmt.Errorf("no packages matched ./profiles/%s", name)
+		return 0, 0, nil, fmt.Errorf("no packages matched ./profiles/%s", name)
 	}
 
 	var loadErrs []string
 	seenFile := map[string]bool{}
+	heavySet := map[string]bool{}
 	packages.Visit(pkgs, func(p *packages.Package) bool {
 		for _, e := range p.Errors {
 			loadErrs = append(loadErrs, e.Error())
+		}
+		if dep := heavydeps.Of(p.PkgPath); dep != "" {
+			heavySet[dep] = true
 		}
 		if !strings.HasPrefix(p.PkgPath, modulePath+"/") {
 			return true
@@ -275,9 +285,9 @@ func closureSize(root, name string) (files, lines int, err error) {
 		return true
 	}, nil)
 	if len(loadErrs) > 0 {
-		return 0, 0, fmt.Errorf("load package graph: %s", strings.Join(loadErrs, "; "))
+		return 0, 0, nil, fmt.Errorf("load package graph: %s", strings.Join(loadErrs, "; "))
 	}
-	return files, lines, nil
+	return files, lines, slices.Sorted(maps.Keys(heavySet)), nil
 }
 
 // countLines 计文件行数：换行符个数，末行无换行时补 1。
@@ -313,18 +323,19 @@ func renderReport(ms []Metrics, deps int) string {
 	b.WriteString("| 迁移数 | 各 `Descriptor.Migrations` 中 `migrations/mysql/*.sql` 的文件数（postgres 同名同数） |\n")
 	b.WriteString("| 表数 | 各 `Descriptor.Owns` 的并集大小 |\n")
 	b.WriteString("| 本仓 Go 文件 / 代码行 | `golang.org/x/tools/go/packages` 载入 `./profiles/<name>` 的 import 闭包，只统计本模块（`jimu/...`）的非 `_test.go` 文件 |\n")
+	b.WriteString("| 重型依赖 | 同一闭包（含第三方包）命中 `tools/internal/heavydeps` 前缀表的展示名，`-` 表示零 |\n")
 	b.WriteString("| go.mod 直接依赖 | `go list -m -f '{{if not .Indirect}}{{.Path}}{{end}}' all` 的非空行数（不含主模块 `jimu` 自身） |\n\n")
 	b.WriteString("「本仓闭包」严格大于「形态组成」：`user`/`auth` 直接 import 了 `outbox`/`queue`/`notification`/`ws` 的\n")
 	b.WriteString("具体类型（`*outbox.Outbox`、`notification.Message`、`outbox.Event`），编译期会链上这些能力包，\n")
 	b.WriteString("但装配期一个都不构造（详见 README「形态（profile）」的编译期脚注）。\n\n")
 
 	b.WriteString("## 编译面\n\n")
-	b.WriteString("| 形态 | 二进制 (MB) | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 |\n")
-	b.WriteString("|---|---:|---:|---:|---:|---:|---:|---:|\n")
+	b.WriteString("| 形态 | 二进制 (MB) | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 | 重型依赖 |\n")
+	b.WriteString("|---|---:|---:|---:|---:|---:|---:|---:|---|\n")
 	for _, m := range ms {
-		fmt.Fprintf(&b, "| `%s` | %s | %s | %d | %d | %d | %d | %d |\n",
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %d | %d | %d | %d | %d | %s |\n",
 			m.Profile, mb(m.BinaryBytes), percent(m.BinaryBytes, base.BinaryBytes),
-			m.Routes, m.Migrations, m.Tables, m.Files, m.Lines)
+			m.Routes, m.Migrations, m.Tables, m.Files, m.Lines, heavyDepsCell(m.HeavyDeps))
 	}
 	b.WriteString("\n")
 
@@ -364,6 +375,14 @@ func findByProfile(ms []Metrics, name string) (Metrics, bool) {
 		}
 	}
 	return Metrics{}, false
+}
+
+// heavyDepsCell 渲染重型依赖列：空集为 `-`，否则逗号分隔（HeavyDeps 已去重升序）。
+func heavyDepsCell(deps []string) string {
+	if len(deps) == 0 {
+		return "-"
+	}
+	return strings.Join(deps, ", ")
 }
 
 // mb 以 MB（10^6 字节）呈现二进制大小，保留一位小数。

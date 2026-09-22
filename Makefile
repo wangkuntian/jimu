@@ -55,7 +55,7 @@ help:
 	@echo "  make fmt                  格式化代码"
 	@echo "  make lint                 静态检查"
 	@echo "  make check-log-usage      检查日志调用均为 *w 系列（防 k/v 粘连）"
-	@echo "  make check-capabilities   校验能力自描述（Owns）与迁移归属一致"
+	@echo "  make check-capabilities   校验能力自描述（Owns）与驱动可用集/选中集一致"
 	@echo "  make profiles-check       构建 5 个形态入口（JIMU_PROFILES_SMOKE=1 时启动并检查 /readyz）"
 	@echo "  make compose-report       生成各形态的编译面报告 docs/profiles/compose-report.md"
 	@echo ""
@@ -268,7 +268,9 @@ lint:
 check-log-usage:
 	@go run ./tools/logcheck "./internal/..." "./cmd/..." "./tools/..."
 
-## check-capabilities: 校验能力自描述（Owns）与迁移归属一致（P2.8 门禁第一块）
+## check-capabilities: 校验能力自描述（Owns）与迁移归属一致，并静态门禁驱动选择
+##                      （可用集目录存在、核心零驱动、形态选中集==import 闭包、驱动归属）；
+##                      当前未接入 make ci/release-check，收口见 P2.8。
 check-capabilities:
 	@go run ./tools/checkcapabilities
 
@@ -280,6 +282,7 @@ profiles-check:
 
 ## compose-report: 生成各形态（profile）的编译面报告（docs/profiles/compose-report.md，入库）。
 ##                 指标：二进制大小 / 路由数 / 迁移数 / 表数 / 本仓闭包代码量与文件数 /
+##                 重型依赖（aws-sdk-go-v2 / kafka-go / amqp091-go / excelize）/
 ##                 go.mod 直接依赖数（各形态相同，见报告的「层②边界」）；不连库、不启动监听。
 compose-report:
 	@go run ./tools/composereport
