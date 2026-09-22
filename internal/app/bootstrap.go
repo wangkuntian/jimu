@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -201,7 +202,9 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	)
 	management := platformhttp.NewManagementServer(
 		cfg.Management,
-		platformhttp.HealthRouter(readiness, cfg.Management.EnablePprof),
+		platformhttp.HealthRouter(readiness, cfg.Management.EnablePprof, func(mux *http.ServeMux) {
+			mux.HandleFunc("/capabilities", capabilitiesHandler(container.Capabilities))
+		}),
 	)
 	public, err := platformhttp.NewServer(cfg.HTTP, router)
 	if err != nil {
@@ -364,6 +367,27 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	}
 	components = append(components, management, public)
 	return NewApplication(time.Duration(cfg.HTTP.ShutdownTimeoutSec)*time.Second, components...), nil
+}
+
+// capabilitiesResponse 是 /capabilities 的响应体；字段声明顺序即 JSON 键顺序。
+type capabilitiesResponse struct {
+	Enabled  []string              `json:"enabled"`
+	Degraded []catalog.Degradation `json:"degraded"`
+}
+
+// capabilitiesHandler 输出最终启用清单与降级项（设计 §6.4）。管理端口只读、不鉴权。
+func capabilitiesHandler(caps []contract.Descriptor) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		names := make([]string, 0, len(caps))
+		for _, d := range caps {
+			names = append(names, d.Name)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(capabilitiesResponse{
+			Enabled:  names,
+			Degraded: catalog.Degraded(caps),
+		})
+	}
 }
 
 // workerPoolComponent 包装 WorkerPool，实现 contract.Component 以纳入应用生命周期

@@ -11,10 +11,15 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func HealthRouter(readiness *observability.Readiness, enablePprof bool) http.Handler {
+// HealthRouter 组装管理端口路由。extra 用于注入能力清单等由组合根提供的路由，
+// 避免 kernel 反向 import capabilities。
+func HealthRouter(readiness *observability.Readiness, enablePprof bool, extra ...func(*http.ServeMux)) http.Handler {
 	mux := http.NewServeMux()
 	observability.RegisterHealth(mux, readiness)
 	mux.Handle("/metrics", promhttp.Handler())
+	for _, register := range extra {
+		register(mux)
+	}
 	if enablePprof {
 		mux.HandleFunc("/debug/pprof/", pprof.Index)
 		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)

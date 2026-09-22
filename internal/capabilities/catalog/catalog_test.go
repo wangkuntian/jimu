@@ -472,6 +472,22 @@ func TestDegradedEmptyWhenAllSoftDepsPresent(t *testing.T) {
 	assert.Empty(t, Degraded(caps))
 }
 
+// TestDegradedWithRealCatalog 关闭软依赖后对应能力出现在降级清单里。
+func TestDegradedWithRealCatalog(t *testing.T) {
+	// 只启用 auth 的硬依赖闭包，captcha/breach 缺席
+	caps, err := Resolve([]string{"auth"})
+	require.NoError(t, err)
+	got := Degraded(caps)
+	require.Len(t, got, 1, "只有 auth 声明了缺失的软依赖")
+	assert.Equal(t, "auth", got[0].Capability)
+	assert.ElementsMatch(t, []string{"captcha", "breach"}, got[0].Missing)
+}
+
+// TestDegradedNoneOnFullCatalog 全部启用（默认）时无降级项。
+func TestDegradedNoneOnFullCatalog(t *testing.T) {
+	assert.Empty(t, Degraded(All()))
+}
+
 func namesOf(ds []contract.Descriptor) []string {
 	out := make([]string, 0, len(ds))
 	for _, d := range ds {

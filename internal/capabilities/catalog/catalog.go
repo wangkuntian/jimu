@@ -111,8 +111,8 @@ func Names() []string {
 
 // Degradation 描述一个能力因缺失软依赖而降级运行。
 type Degradation struct {
-	Capability string
-	Missing    []string
+	Capability string   `json:"capability"`
+	Missing    []string `json:"missing"`
 }
 
 // Degraded 计算已解析启用集里的降级项：SoftRequires 中不在集合内的目标。
