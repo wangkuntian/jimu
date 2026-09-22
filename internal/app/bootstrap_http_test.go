@@ -119,6 +119,32 @@ func TestRegisterHTTPFailsClosedWithMultipleProtectedProviders(t *testing.T) {
 	}
 }
 
+// emptyProtectedProvider 显式让位：返回空链，表示本能力不充当受保护中间件提供者。
+type emptyProtectedProvider struct{ probeModule }
+
+func (p *emptyProtectedProvider) ProtectedHTTPMiddleware() ([]gin.HandlerFunc, error) {
+	return nil, nil
+}
+
+// 返回空链的提供者不构成第二个提供者：auth 已在时 apikey 让位，单提供者规则不受影响。
+func TestRegisterHTTPIgnoresEmptyProtectedProvider(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	real := &protectedProvider{probeModule{name: "probe-a", desc: contract.Descriptor{Name: "probe-a", Mount: contract.MountSelfManaged}}}
+	yield := &emptyProtectedProvider{probeModule{name: "probe-b", desc: contract.Descriptor{Name: "probe-b", Mount: contract.MountSelfManaged}}}
+	prot := &probeModule{name: "probe-prot", desc: contract.Descriptor{Name: "probe-prot", Mount: contract.MountProtected}}
+
+	if err := registerHTTP(router, nil, nil, real, yield, prot); err != nil {
+		t.Fatalf("registerHTTP error: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/probe-prot/probe", nil)
+	router.ServeHTTP(rec, req)
+	if rec.Header().Get("X-Protected") != "1" {
+		t.Fatal("受保护路由必须套用非空链提供者的中间件")
+	}
+}
+
 // 无受保护中间件提供者且无 MountProtected 能力时不得报错（守卫不能过度触发）。
 func TestRegisterHTTPAllowsNoProtectedProviderWithoutProtectedCapability(t *testing.T) {
 	gin.SetMode(gin.TestMode)

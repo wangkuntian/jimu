@@ -12,6 +12,10 @@ import (
 // APIKeyHeader API Key 请求头
 const APIKeyHeader = "X-API-Key"
 
+// ScopeProtected 受保护路由（受保护挂载点的全部能力）要求的最小 scope：
+// machine 形态无 auth/会话，服务密钥需显式携带它（"*" 视为全权，见 APIKey.HasScope）。
+const ScopeProtected = "api:access"
+
 // APIKeyAuthMiddleware API Key 认证中间件（服务/机器间调用）
 // 验证 X-API-Key 头，通过后把 APIKey 注入 context（APIKeyFromContext 读取），
 // 并按 Key 自身归属租户注入请求上下文（与 JWT 路径的 tenant_id 约定一致）。

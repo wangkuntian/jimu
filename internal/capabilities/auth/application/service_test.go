@@ -214,6 +214,34 @@ func TestRegisterProvisionedRejectsMissingTenantName(t *testing.T) {
 	}
 }
 
+// TestLoginDegradesWithoutMFA 缺 MFAVerifier 端口（minimal profile）时登录成功、
+// 不要求 TOTP、不 panic：mfa 是 auth 的软依赖，缺失只降级为「不做二次验证」。
+func TestLoginDegradesWithoutMFA(t *testing.T) {
+	service := newTestService(t, map[string]*userdomain.User{
+		"alice": userWithPassword(t, 42, "alice", "secret1234", 1),
+	}, newFakeSessionStore(), contract.MFAVerifier(nil), contract.TenantProvisioner(nil))
+
+	pair, err := service.LoginWithTOTP(context.Background(), "alice", "secret1234", "")
+	require.NoError(t, err)
+	require.NotEmpty(t, pair.AccessToken)
+	require.Empty(t, pair.DeviceToken, "缺 MFA 端口时不签发可信设备")
+}
+
+// TestProvisionedRegisterWithoutTenantFails 缺 TenantProvisioner 端口（minimal profile）
+// 时开通式注册返回明确的 shared/errors 错误码，而不是 nil 解引用 panic。
+func TestProvisionedRegisterWithoutTenantFails(t *testing.T) {
+	service := newTestService(t, map[string]*userdomain.User{}, newFakeSessionStore(),
+		contract.MFAVerifier(nil), contract.TenantProvisioner(nil))
+
+	_, err := service.RegisterProvisioned(context.Background(), RegisterTenantRequest{
+		Username: "owner", Password: "secret1234", TenantName: "acme",
+	})
+	require.Error(t, err)
+	var appErr *apperrors.AppError
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperrors.CodeInvalidParam, appErr.Code)
+}
+
 // fakeTenantProvisioner 记录 Provision 入参，返回预置结果/错误
 type fakeTenantProvisioner struct {
 	params contract.ProvisionRequest
@@ -351,9 +379,9 @@ func (s *fakeSessionStore) RevokeAll(_ context.Context, userID uint64) error {
 	return nil
 }
 
-func newTestService(t *testing.T, users map[string]*userdomain.User, store auth.SessionStore) *AuthService {
+func newTestService(t *testing.T, users map[string]*userdomain.User, store auth.SessionStore, deps ...interface{}) *AuthService {
 	t.Helper()
-	return NewAuthService(&fakeUserRepo{users: users}, auth.New("01234567890123456789012345678901", "jimu", 30, 7), store, nil, 30)
+	return NewAuthService(&fakeUserRepo{users: users}, auth.New("01234567890123456789012345678901", "jimu", 30, 7), store, nil, 30, deps...)
 }
 
 func userWithPassword(t *testing.T, id uint64, username, password string, status int8) *userdomain.User {

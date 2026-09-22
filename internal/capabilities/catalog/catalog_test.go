@@ -34,8 +34,8 @@ func fixture() []contract.Descriptor {
 			Owns: []string{"tenants", "tenant_plans"}, Mount: contract.MountProtected},
 		{Name: "mfa", Requires: []string{"user"}, SoftRequires: []string{"auth"},
 			Owns: []string{"user_mfa", "trusted_devices"}, Mount: contract.MountSelfManaged},
-		{Name: "auth", Requires: []string{"user", "access", "tenant", "mfa"},
-			SoftRequires: []string{"captcha", "breach"},
+		{Name: "auth", Requires: []string{"user", "access"},
+			SoftRequires: []string{"tenant", "mfa", "captcha", "breach"},
 			Owns:         []string{"login_histories", "password_histories"},
 			Mount:        contract.MountSelfManaged},
 		{Name: "passkey", Requires: []string{"user", "auth"},
@@ -208,7 +208,7 @@ func TestCatalogSoftRequiresShape(t *testing.T) {
 		"user":   {"access", "tenant"},
 		"access": {"tenant"},
 		"mfa":    {"auth"},
-		"auth":   {"captcha", "breach"},
+		"auth":   {"tenant", "mfa", "captcha", "breach"},
 		"apikey": {"tenant"},
 		"outbox": {"queue"},
 	}
@@ -313,16 +313,35 @@ func TestCatalogConfigSectionsShape(t *testing.T) {
 	}
 }
 
+// TestResolveAuthDoesNotPullTenantOrMFA auth 的 tenant/mfa 是软依赖：显式启用 auth
+// 只补齐硬依赖 user/access，不再自动带入租户与二次验证（minimal profile 的前提）。
+func TestResolveAuthDoesNotPullTenantOrMFA(t *testing.T) {
+	got, err := Resolve([]string{"auth"})
+	require.NoError(t, err)
+
+	names := make([]string, 0, len(got))
+	for _, d := range got {
+		names = append(names, d.Name)
+	}
+	assert.Equal(t, []string{"user", "access", "auth"}, names)
+	assert.NotContains(t, names, "tenant")
+	assert.NotContains(t, names, "mfa")
+}
+
 // TestDegradedWithRealCatalog 关闭软依赖后对应能力出现在降级清单里。
-// 解析与降级算法在 internal/assembly，此处钉住 catalog 薄封装对真实清单的行为。
+// 解析与降级算法在 internal/capability，此处钉住 catalog 薄封装对真实清单的行为。
 func TestDegradedWithRealCatalog(t *testing.T) {
-	// 只启用 auth 的硬依赖闭包，captcha/breach 缺席
+	// 只启用 auth 的硬依赖闭包（user/access），tenant/mfa/captcha/breach 缺席
 	caps, err := Resolve([]string{"auth"})
 	require.NoError(t, err)
 	got := Degraded(caps)
-	require.Len(t, got, 1, "只有 auth 声明了缺失的软依赖")
-	assert.Equal(t, "auth", got[0].Capability)
-	assert.ElementsMatch(t, []string{"captcha", "breach"}, got[0].Missing)
+	require.Len(t, got, 3, "user/access/auth 声明了缺失的软依赖")
+	assert.Equal(t, "user", got[0].Capability)
+	assert.Equal(t, []string{"tenant"}, got[0].Missing)
+	assert.Equal(t, "access", got[1].Capability)
+	assert.Equal(t, []string{"tenant"}, got[1].Missing)
+	assert.Equal(t, "auth", got[2].Capability)
+	assert.Equal(t, []string{"tenant", "mfa", "captcha", "breach"}, got[2].Missing)
 }
 
 // TestDegradedNoneOnFullCatalog 全部启用（默认）时无降级项。

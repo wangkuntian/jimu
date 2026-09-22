@@ -734,6 +734,7 @@ api.POST("/users", apikey.RequireScope("user:write"), userHandler.Create)
 | `user:write` | 创建、更新、删除用户 | 自动化开通与回收账号 |
 | `job:submit` | 提交异步任务 | 触发批量导入等后台作业 |
 | `audit:read` | 读取审计日志 | 合规系统拉取操作记录 |
+| `api:access` | 访问受保护路由的基线（`apikey.ScopeProtected`） | 无 `auth` 形态下的服务间调用 |
 | `*` | 全部能力 | 内部服务全权 Key |
 
 约定：
@@ -741,6 +742,7 @@ api.POST("/users", apikey.RequireScope("user:write"), userHandler.Create)
 - **空 `scopes` 表示拒绝一切**：`APIKey.HasScope` 对空列表恒返回 false；只有显式包含 `*` 才代表全权，不要依赖"不填即全权"的隐式行为。
 - Scope 清单由业务方定义，框架不内置强制集合；`HasScope` 已提供通配匹配（`s == scope || s == "*"`），`RequireScope` 按同一语义校验。
 - **认证与授权分离**：`APIKeyAuthMiddleware` 只校验 Key 有效性（格式、存在、启用、未过期）并注入 Key；是否需要某个 scope 由路由上的 `RequireScope` 决定，未挂载即不校验 scope。
+- **无 `auth` 形态的受保护路由**：启用集没有 `auth` 时（如 `machine` 形态，无登录/会话端点），`apikey` 实现 `contract.ProtectedHTTPMiddlewareProvider`，组合根把 `APIKeyAuthMiddleware` + `RequireScope(apikey.ScopeProtected)`（`api:access`，`*` 为全权）挂到所有声明 `MountProtected` 的能力路由上；启用集含 `auth` 时 `apikey` 返回空链让位，同一启用集仍只有一个受保护中间件提供者。
 - **API Key 维度限流**：`middleware.APIKeyRateLimitMiddleware(rdb, limit, window)` 挂在认证之后，按 Key ID 计数（不落明文），未携带 Key 的请求跳过该维度；租户维度由 `ratelimit.tenant.*` 全局启用。配额（按天/按月上限）用同一中间件配长窗口即可（例如 `window=24h`）。
 - **API Key 归属租户**：`api_keys.tenant_id` 在创建时取自创建者所在租户（上下文无租户时归默认租户，见 `kernel/tenant.DefaultTenantID`）；认证通过后中间件把该租户注入请求上下文，业务层用 `tenant.FromContext(ctx)` 读取即可完成行级隔离。租户只来自 Key 自身，**不接受客户端 header/query 传入**。未归属（`tenant_id=0`）的存量 Key 按平台级视角处理。
 
@@ -819,12 +821,16 @@ curl http://127.0.0.1:9090/metrics
 curl http://127.0.0.1:9090/capabilities
 ```
 
-`capabilities.enabled: ["auth"]` 时（硬依赖闭包补齐 `user`/`access`/`tenant`/`mfa`，`captcha`/`breach` 是软依赖不补齐）：
+`capabilities.enabled: ["auth"]` 时（硬依赖闭包补齐 `user`/`access`；`tenant`/`mfa`/`captcha`/`breach` 是软依赖，不补齐但会在 `degraded` 中列为缺失）：
 
 ```json
 {
-  "enabled": ["user", "access", "tenant", "mfa", "auth"],
-  "degraded": [{"capability": "auth", "missing": ["captcha", "breach"]}]
+  "enabled": ["user", "access", "auth"],
+  "degraded": [
+    {"capability": "user", "missing": ["tenant"]},
+    {"capability": "access", "missing": ["tenant"]},
+    {"capability": "auth", "missing": ["tenant", "mfa", "captcha", "breach"]}
+  ]
 }
 ```
 
@@ -978,7 +984,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `grpc` 业务服务 | 示例 `UserInfoService`（`internal/capabilities/grpc/userinfo_service.go`，proto 在 `proto/jimu/v1/userinfo.proto`，`make proto` 重新生成）；业务模块仿照 `RegisterUserInfoService` 经 `RegisterService` 接入 | — |
 | `error_reporting.enabled` | 是否启用错误上报（结构化错误日志输出，含 trace_id；未启用时零开销） | `false`（开发）/ `true`（生产） |
 | gRPC 出站客户端 | 统一封装 `internal/capabilities/grpc` `Client`（`NewClient`）：超时/重试/熔断/恢复/指标 `jimu_grpc_client_*`，业务经 `Conn()` 走生成的强类型客户端 | — |
-| `capabilities.enabled` | 启用的能力清单；留空 = 全部启用（受保护能力需同时启用提供受保护中间件的能力，当前为 auth） | `[]` |
+| `capabilities.enabled` | 启用的能力清单；留空 = 全部启用（受保护能力需同时启用提供受保护中间件的能力：`auth`，无 `auth` 时由 `apikey` 接管） | `[]` |
 
 ### 能力开关（v0.3.0）
 
@@ -992,14 +998,14 @@ capabilities:
   enabled: ["user", "access", "tenant", "auth", "mfa", "passkey", "audit", "console", "apikey", "queue"]
 ```
 
-- 硬依赖会自动补齐：只写 `["oauth"]` 会连带启用 `auth`/`user`/`access`/`tenant`/`mfa`
+- 硬依赖会自动补齐：只写 `["oauth"]` 会连带启用 `auth`/`user`/`access`（`auth` 的 `tenant`/`mfa` 是软依赖，不补齐）
 - 未启用的能力不挂路由、不注册定时任务与事件、不启动其后台组件
-- **软依赖只降级、不自动补齐**：`Descriptor.SoftRequires` 声明可选依赖（当前 `user`→`access`/`tenant`、`access`→`tenant`、`mfa`→`auth`、`auth`→`captcha`/`breach`、`apikey`→`tenant`、`outbox`→`queue`）；目标能力不在启用集时**不会被自动启用**，本能力降级运行，降级项在启动日志（`capability degraded`，字段 `name`/`missing`）与 `GET /capabilities` 的 `degraded` 中列出。该清单是**声明层**的静态比对（只读 `Descriptor`，不观测运行时装配），组合根改为按启用集驱动（P1 显式 `Deps`）之前可能多报
+- **软依赖只降级、不自动补齐**：`Descriptor.SoftRequires` 声明可选依赖（当前 `user`→`access`/`tenant`、`access`→`tenant`、`mfa`→`auth`、`auth`→`tenant`/`mfa`/`captcha`/`breach`、`apikey`→`tenant`、`outbox`→`queue`）；目标能力不在启用集时**不会被自动启用**，本能力降级运行，降级项在启动日志（`capability degraded`，字段 `name`/`missing`）与 `GET /capabilities` 的 `degraded` 中列出。该清单是**声明层**的静态比对（只读 `Descriptor`，不观测运行时装配），组合根改为按启用集驱动（P1 显式 `Deps`）之前可能多报
 - **表归属自描述**：`Descriptor.Owns` 声明本能力迁移 `CREATE` 的表（如 `user`→`users`、`access`→`roles`/`permissions`/`role_permissions`/`user_roles`、`mfa`→`user_mfa`/`trusted_devices`），`make check-capabilities` 校验「单表唯一归属、无未声明的建表、声明的表确有迁移创建」（只扫描 mysql 迁移，PostgreSQL 迁移表名与 mysql 一致，暂以 mysql 为准）
 - `Descriptor`（`Requires`/`SoftRequires`/`Owns`/`Configs`/`Permissions`/`Mount`/`Migrations`）是能力元数据的**唯一来源**：启用闭包、配置段加载、权限点种子、路由挂载与能力门禁都只读它；`cmd/server/main.go` 的装配名册 `wiredCapabilities` 只负责实例化并与 `catalog.Names()` 对账（`cmd/server/main_test.go`），新增/删除能力时须同步
 - **配置段随能力**：能力配置段由能力在 `Descriptor.Configs` 声明（`ConfigKey` + `Config` 结构体 + `ApplyDefaults`/`Validate`，生产加严可实现可选的 `ValidateProd`），组合根按启用集统一执行「解码 → 默认值 → 校验」；**未启用能力的配置段既不出现也不校验** —— `app.yaml` 中残留的非法段不会导致启动失败。`auth` 段由 `auth` 能力整体拥有（含嵌套 `webauthn`/`provisioning`），不拆分
 - **热更新范围**：配置文件热更新（`config.Watch`）只覆盖内核段（当前仅应用 `log.level`）；能力配置段变更需重启进程
-- **受保护能力需要认证器**：声明为受保护（`MountProtected`）的能力必须有模块提供受保护中间件（当前为 `auth`）；否则进程**启动即失败**并指出缺失的提供者，而不是把路由裸挂出去。因此 `enabled: ["user"]` 这类"有业务路由、无认证器"的配置会被拒绝；合法的最小组合之一是 `["auth"]`（闭包自动补齐 `user`/`access`/`tenant`/`mfa`）
+- **受保护能力需要认证器**：声明为受保护（`MountProtected`）的能力必须有模块提供受保护中间件 —— 启用集含 `auth` 时由它提供（JWT + RBAC），无 `auth` 时由 `apikey` 提供（`X-API-Key` 认证 + `ScopeProtected`（`api:access`）scope 校验 + Key 归属租户注入）；两者都没有时进程**启动即失败**并指出缺失的提供者，而不是把路由裸挂出去。因此 `enabled: ["user"]` 这类"有业务路由、无认证器"的配置会被拒绝；合法的最小组合之一是 `["auth"]`（闭包自动补齐 `user`/`access`）或无 `auth` 的 `["user", "access", "apikey"]`
 - 能力清单与依赖关系见 `internal/capabilities/catalog/catalog.go`；设计见 [能力可插拔设计](docs/design/2026-09-18-capability-plugins-design.md)
 
 ### 静态加密（Data at Rest）

@@ -27,8 +27,8 @@ func fixture() []contract.Descriptor {
 			Owns: []string{"tenants", "tenant_plans"}, Mount: contract.MountProtected},
 		{Name: "mfa", Requires: []string{"user"}, SoftRequires: []string{"auth"},
 			Owns: []string{"user_mfa", "trusted_devices"}, Mount: contract.MountSelfManaged},
-		{Name: "auth", Requires: []string{"user", "access", "tenant", "mfa"},
-			SoftRequires: []string{"captcha", "breach"},
+		{Name: "auth", Requires: []string{"user", "access"},
+			SoftRequires: []string{"tenant", "mfa", "captcha", "breach"},
 			Owns:         []string{"login_histories", "password_histories"},
 			Mount:        contract.MountSelfManaged},
 		{Name: "passkey", Requires: []string{"user", "auth"},
@@ -95,12 +95,12 @@ func TestResolvePullsDependenciesAndKeepsOrder(t *testing.T) {
 }
 
 func TestResolveClosureIsTransitive(t *testing.T) {
-	// oauth -> auth -> access/tenant -> user
+	// oauth -> auth -> access -> user；auth 的 tenant/mfa 是软依赖，不进闭包
 	got, err := Resolve(fixture(), []string{"oauth"})
 	if err != nil {
 		t.Fatalf("Resolve error: %v", err)
 	}
-	want := map[string]bool{"oauth": true, "auth": true, "mfa": true, "user": true, "access": true, "tenant": true}
+	want := map[string]bool{"oauth": true, "auth": true, "user": true, "access": true}
 	if len(got) != len(want) {
 		t.Fatalf("Resolve([oauth]) = %v, want %d entries", namesOf(got), len(want))
 	}
@@ -109,7 +109,7 @@ func TestResolveClosureIsTransitive(t *testing.T) {
 			t.Fatalf("unexpected capability %q in closure %v", d.Name, namesOf(got))
 		}
 	}
-	wantOrder := []string{"user", "access", "tenant", "mfa", "auth", "oauth"}
+	wantOrder := []string{"user", "access", "auth", "oauth"}
 	if gotOrder := namesOf(got); !reflect.DeepEqual(gotOrder, wantOrder) {
 		t.Fatalf("Resolve([oauth]) order = %v, want %v", gotOrder, wantOrder)
 	}

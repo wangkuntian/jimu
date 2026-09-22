@@ -247,6 +247,7 @@ func registerHTTP(router registerRouter, log *logger.Logger, extraProtected []gi
 	}
 	// 受保护中间件：必须恰好由一个能力提供。多个提供者时无法仅凭 catalog 顺序
 	// 判定认证/租户注入/限流链的组合语义，因此拒绝启动而不是"首个提供者生效"。
+	// 返回空链的提供者视为显式让位（如 auth 已在时 apikey 不接管），不构成第二个提供者。
 	var protected []gin.HandlerFunc
 	providers := make([]string, 0, 1)
 	for _, module := range modules {
@@ -257,6 +258,9 @@ func registerHTTP(router registerRouter, log *logger.Logger, extraProtected []gi
 		chain, err := provider.ProtectedHTTPMiddleware()
 		if err != nil {
 			return fmt.Errorf("configure protected middleware: %w", err)
+		}
+		if len(chain) == 0 {
+			continue
 		}
 		providers = append(providers, contract.Describe(module).Name)
 		protected = append(protected, chain...)
@@ -273,7 +277,7 @@ func registerHTTP(router registerRouter, log *logger.Logger, extraProtected []gi
 		desc := contract.Describe(module)
 		if desc.Normalized() == contract.MountProtected {
 			if !hasProtectedMiddleware {
-				return fmt.Errorf("capability %q declares MountProtected but no enabled capability provides protected middleware; enable the capability that provides it (currently \"auth\")", desc.Name)
+				return fmt.Errorf("capability %q declares MountProtected but no enabled capability provides protected middleware; enable the capability that provides it (currently \"auth\" or \"apikey\")", desc.Name)
 			}
 			module.RegisterHTTP(router.Group("", protected...))
 		} else {
