@@ -19,6 +19,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// PortName auth 能力对外提供的端口名：contract.LoginFinalizer（供 passkey 复用登录收尾）。
+const PortName = "auth"
+
 type Module struct {
 	cfg     Config
 	service *application.AuthService

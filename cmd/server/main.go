@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"jimu/internal/assembly"
 	accessmodule "jimu/internal/capabilities/access"
+	"jimu/internal/capabilities/apidocs"
 	"jimu/internal/capabilities/apikey"
 	auditmodule "jimu/internal/capabilities/audit"
 	authmodule "jimu/internal/capabilities/auth"
@@ -14,12 +17,16 @@ import (
 	"jimu/internal/capabilities/captcha"
 	consolemodule "jimu/internal/capabilities/console"
 	"jimu/internal/capabilities/dataops"
+	"jimu/internal/capabilities/encryption"
 	"jimu/internal/capabilities/feature"
+	grpcpkg "jimu/internal/capabilities/grpc"
 	mfamodule "jimu/internal/capabilities/mfa"
+	"jimu/internal/capabilities/notification"
 	oauthmodule "jimu/internal/capabilities/oauth"
 	"jimu/internal/capabilities/outbox"
 	passkeymodule "jimu/internal/capabilities/passkey"
 	"jimu/internal/capabilities/queue"
+	"jimu/internal/capabilities/retention"
 	"jimu/internal/capabilities/search"
 	"jimu/internal/capabilities/storage"
 	tenantmodule "jimu/internal/capabilities/tenant"
@@ -27,10 +34,12 @@ import (
 	"jimu/internal/capabilities/user"
 	userapplication "jimu/internal/capabilities/user/application"
 	userinfra "jimu/internal/capabilities/user/infrastructure"
+	"jimu/internal/capabilities/ws"
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/http/middleware"
+	"jimu/internal/kernel/scheduler"
 )
 
 // @title           Jimu API
@@ -48,6 +57,13 @@ var version = "dev"
 // errProvisioningRequiresPublicRegistration 开通式注册要求公开注册（组合根跨字段校验）
 var errProvisioningRequiresPublicRegistration = errors.New("auth.provisioning.enabled requires auth.public_registration")
 
+// outbox 跨能力接线错误（err113：组合根的错误必须是稳定错误值）。
+var (
+	errInvalidQueueTypeForOutbox     = errors.New("invalid queue.type for outbox.publisher")
+	errOutboxMQRequiresQueue         = errors.New("outbox.publisher=mq requires the queue capability")
+	errQueueDoesNotImplementConsumer = errors.New("queue does not implement consumer")
+)
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -59,19 +75,25 @@ func run() error {
 	return assembly.Run(fullAssembly())
 }
 
-// fullAssembly 是本阶段的过渡形态：已搬迁的能力用真实 Wire，未搬迁的能力用内联
-// Wire 闭包持有今天的构造代码；Task 3 逐个搬迁后，内联闭包会被 <name>.Wire 取代。
+// fullAssembly 是本阶段的过渡形态：能力清单 + 逐能力的内联 Wire。Task 3 会把每个
+// 内联闭包搬到 internal/capabilities/<name>/wire.go，此处只剩清单。
 //
-// 顺序即装配顺序：tenant/access 必须排在 user 之前（user 的角色分配/配额端口由二者
-// 提供），captcha/mfa 必须排在 auth 之前。这是过渡期的接线顺序，与 catalog 的声明
-// 顺序不同（catalog 把 user 放在最前，user 对 access/tenant 是软依赖）。
-// 无 Module 实例的能力（outbox/search/breach）保留条目并给出空 Wire，使启用集与
-// /capabilities 报告和今天逐值一致。
+// 顺序即装配顺序：提供端口的能力必须排在消费它的能力之前（encryption/storage/
+// notification/queue/outbox/breach 先于 tenant/user/auth/uploadsec/grpc；
+// tenant/access 先于 user；captcha/mfa 先于 auth）。
+// 无 Module 实例的能力（outbox/search/breach/ws 等）保留条目并给出空 Wire，
+// 使启用集与 /capabilities 报告逐值一致。
 func fullAssembly() assembly.Assembly {
 	return assembly.Assembly{
 		Name:    "full",
 		Version: version,
 		Capabilities: []assembly.Capability{
+			{Descriptor: encryption.Descriptor, Wire: wireEncryption},
+			{Descriptor: storage.Descriptor, Wire: wireStorage},
+			{Descriptor: notification.Descriptor, Wire: wireNotification},
+			{Descriptor: queue.Descriptor, Wire: wireQueue},
+			{Descriptor: outbox.Descriptor, Wire: wireOutbox},
+			{Descriptor: breach.Descriptor, Wire: wireBreach},
 			{Descriptor: tenantmodule.Descriptor, Wire: wireTenant},
 			{Descriptor: accessmodule.Descriptor, Wire: wireAccess},
 			{Descriptor: user.Descriptor, Wire: wireUser},
@@ -83,47 +105,224 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: consolemodule.Descriptor, Wire: wireConsole},
 			{Descriptor: oauthmodule.Descriptor, Wire: wireOAuth},
 			{Descriptor: apikey.Descriptor, Wire: wireAPIKey},
-			{Descriptor: queue.Descriptor, Wire: wireQueue},
 			{Descriptor: dataops.Descriptor, Wire: wireDataops},
 			{Descriptor: feature.Descriptor, Wire: wireFeature},
 			{Descriptor: uploadsec.Descriptor, Wire: wireUploadsec},
-			{Descriptor: outbox.Descriptor, Wire: noModule},
-			{Descriptor: search.Descriptor, Wire: noModule},
-			{Descriptor: breach.Descriptor, Wire: noModule},
+			{Descriptor: search.Descriptor, Wire: wireSearch},
+			{Descriptor: retention.Descriptor, Wire: wireRetention},
+			{Descriptor: apidocs.Descriptor, Wire: wireAPIDocs},
+			{Descriptor: grpcpkg.Descriptor, Wire: wireGRPC},
+			{Descriptor: ws.Descriptor, Wire: noModule},
 		},
 	}
 }
 
-func wireTenant(ctx *assembly.Context) (contract.Module, error) {
-	mod := tenantmodule.New(ctx.DB(), tenantProvisioningConfig(authConfig(ctx).Provisioning))
-	if err := ctx.Provide("tenant", mod.Quota()); err != nil {
+func wireEncryption(ctx *assembly.Context) (contract.Module, error) {
+	cipher := encryption.New(ctx.Config().Security.EncryptionKey)
+	// 字段级加密：注册全局 gorm hook（加密 email/phone 写入 + 盲索引 + 读取解密）
+	encryption.RegisterHooks(ctx.DB(), cipher)
+	if err := ctx.Provide(encryption.PortName, cipher); err != nil {
+		return nil, fmt.Errorf("provide encryption port: %w", err)
+	}
+	return nil, nil
+}
+
+func wireStorage(ctx *assembly.Context) (contract.Module, error) {
+	cfg, err := storage.Load(ctx.Sections())
+	if err != nil {
+		return nil, fmt.Errorf("init storage: %w", err)
+	}
+	svc, err := storage.New(*cfg)
+	if err != nil {
+		return nil, fmt.Errorf("init storage: %w", err)
+	}
+	if err := ctx.Provide(storage.PortName, svc); err != nil {
+		return nil, fmt.Errorf("provide storage port: %w", err)
+	}
+	return nil, nil
+}
+
+func wireNotification(ctx *assembly.Context) (contract.Module, error) {
+	notifCfg, err := notification.Load(ctx.Sections())
+	if err != nil {
+		return nil, fmt.Errorf("init notification config: %w", err)
+	}
+	log := ctx.Logger()
+	notifier := notification.NewDispatcher()
+	// WebSocket Hub（通知渠道 + 实时通信共用）
+	wsHub := notification.NewHub()
+
+	// 未配置真实发送渠道时，注册日志型兜底渠道，保证通知链路不报错且可观察
+	var emailChannel notification.Notification = notification.NewLogChannel(notification.ChannelEmail, log)
+	if notifCfg.Email.Enabled {
+		emailChannel = notification.NewEmail(notification.EmailConfig{
+			Host:     notifCfg.Email.Host,
+			Port:     notifCfg.Email.Port,
+			Username: notifCfg.Email.Username,
+			Password: notifCfg.Email.Password,
+			From:     notifCfg.Email.From,
+		})
+	}
+	notifier.Register(notification.ChannelEmail, emailChannel)
+
+	var smsChannel notification.Notification = notification.NewLogChannel(notification.ChannelSMS, log)
+	if notifCfg.SMS.Enabled {
+		smsChannel = notification.NewSMS(notification.SMSConfig{
+			Provider:  notifCfg.SMS.Provider,
+			APIKey:    notifCfg.SMS.APIKey,
+			APISecret: notifCfg.SMS.APISecret,
+			SignName:  notifCfg.SMS.SignName,
+		})
+	}
+	notifier.Register(notification.ChannelSMS, smsChannel)
+
+	notifier.Register(notification.ChannelWebSocket, notification.NewWebSocket(wsHub))
+	notifier.Register(notification.ChannelWebhook, notification.NewWebhook(notification.WebhookConfig{
+		Headers:    map[string]string{},
+		SignSecret: notifCfg.Notification.Webhook.SignSecret,
+	}, ctx.HTTPClient()))
+
+	if err := ctx.Provide(notification.PortName, notifier); err != nil {
+		return nil, fmt.Errorf("provide notification port: %w", err)
+	}
+	ctx.RegisterComponent(notification.NewHubComponent(wsHub))
+
+	// 注册全局事件处理器：将领域事件桥接到通知系统
+	ctx.EventBus().Subscribe(contract.UserCreatedEmailNotification, func(payload interface{}) {
+		if msg, ok := payload.(notification.Message); ok {
+			if err := notifier.Dispatch(context.Background(), msg); err != nil {
+				ctx.Logger().Errorw("notification dispatch failed", "error", err.Error())
+			}
+		}
+	})
+	return nil, nil
+}
+
+func wireQueue(ctx *assembly.Context) (contract.Module, error) {
+	queueCfg := assembly.MustSection[*queue.Config](ctx, queue.ConfigKey)
+	if queueCfg == nil {
+		queueCfg = &queue.Config{}
+	}
+	cfg := *queueCfg
+	cfg.Redis = ctx.Redis()
+	q, err := queue.New(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("init queue: %w", err)
+	}
+	if err := ctx.Provide(queue.PortName, q); err != nil {
+		return nil, fmt.Errorf("provide queue port: %w", err)
+	}
+	return queue.NewModule(ctx.DB(), ctx.Scheduler()), nil
+}
+
+func wireOutbox(ctx *assembly.Context) (contract.Module, error) {
+	outboxCfg := assembly.MustSection[*outbox.Config](ctx, outbox.ConfigKey)
+	if outboxCfg == nil {
+		outboxCfg = &outbox.Config{}
+	}
+	// 跨能力校验（原 config.validateCommon 的 outbox.publisher=mq 依赖 queue.type）
+	queueCfg := assembly.MustSection[*queue.Config](ctx, queue.ConfigKey)
+	if outboxCfg.UsesMQ() {
+		if queueCfg == nil || !queue.SupportsOutboxMQ(queueCfg.Type) {
+			return nil, fmt.Errorf("%w: queue.type %q, publisher %q", errInvalidQueueTypeForOutbox, queueTypeOf(queueCfg), outboxCfg.Publisher)
+		}
+	}
+
+	outboxStore := outbox.NewMySQLStore(ctx.DB())
+	var publisher outbox.Publisher
+	switch outboxCfg.Publisher {
+	case outbox.PublisherMQ:
+		q, ok := ctx.Port(queue.PortName).(queue.Queue)
+		if !ok {
+			return nil, fmt.Errorf("%w: publisher %q", errOutboxMQRequiresQueue, outbox.PublisherMQ)
+		}
+		consumer, ok := q.(queue.Consumer)
+		if !ok {
+			return nil, fmt.Errorf("%w: queue %s", errQueueDoesNotImplementConsumer, queueCfg.Type)
+		}
+		publisher = outbox.NewMQPublisher(q)
+		store := queue.NewMySQLStoreForDB(ctx.DB())
+		pool := queue.NewWorkerPool(queue.DefaultWorkerConfig, consumer, store)
+		outbox.RegisterMQWorkers(ctx.EventBus())
+		ctx.RegisterComponent(queue.NewWorkerPoolComponent(pool))
+	default:
+		publisher = outbox.NewEventBusPublisher(ctx.EventBus())
+		outbox.RegisterEventBusBridge(ctx.EventBus(), ctx.Logger())
+	}
+	processor := outbox.New(outboxStore, publisher)
+	if err := ctx.Provide(outbox.PortName, processor); err != nil {
+		return nil, fmt.Errorf("provide outbox port: %w", err)
+	}
+	if err := ctx.RegisterJob(scheduler.Job{ID: "outbox_process", Name: "Process Outbox Events", Spec: "@every 10s", Run: func() {
+		n, err := processor.Process(context.Background(), 100)
+		if err != nil {
+			ctx.Logger().Errorw("outbox process error", "error", err.Error())
+		} else if n > 0 {
+			ctx.Logger().Debugw("outbox processed", "count", n)
+		}
+	}}); err != nil {
 		return nil, err
 	}
-	if err := ctx.Provide("tenant.provisioner", mod.Provisioner()); err != nil {
+	return nil, nil
+}
+
+// queueTypeOf 读取 queue 配置的类型（queue 未启用时为零值）。
+func queueTypeOf(cfg *queue.Config) queue.Type {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.Type
+}
+
+func wireBreach(ctx *assembly.Context) (contract.Module, error) {
+	// 泄露口令检查（HIBP k-匿名范围查询）：默认关闭，启用时复用统一出站 client。
+	// 端口始终注册（关闭时为零值 Checker），与旧容器桥接语义一致：auth 取回 nil 即降级。
+	authCfg := assembly.MustSection[*authmodule.Config](ctx, authmodule.ConfigKey)
+	var checker contract.BreachChecker
+	if authCfg != nil && authCfg.BreachCheckEnabled {
+		checker = breach.New(ctx.HTTPClient())
+	}
+	if err := ctx.Provide(breach.PortName, checker); err != nil {
+		return nil, fmt.Errorf("provide breach port: %w", err)
+	}
+	return nil, nil
+}
+
+func wireTenant(ctx *assembly.Context) (contract.Module, error) {
+	mod := tenantmodule.New(ctx.DB(), tenantProvisioningConfig(authConfig(ctx).Provisioning))
+	if err := ctx.Provide(tenantmodule.PortName, mod.Quota()); err != nil {
+		return nil, err
+	}
+	if err := ctx.Provide(tenantmodule.ProvisionerPortName, mod.Provisioner()); err != nil {
 		return nil, err
 	}
 	return mod, nil
 }
 
 func wireAccess(ctx *assembly.Context) (contract.Module, error) {
-	mod := accessmodule.New(ctx.DB(), ctx.Port("tenant"))
+	mod := accessmodule.New(ctx.DB(), ctx.Port(tenantmodule.PortName))
 	// access 是 user_roles 表所有者：把角色分配端口交给排在其后的 user（缺此 Provide 时
 	// user 的 AssignRoles 会退化为 "role assignment is not configured"）。
-	if err := ctx.Provide("access", mod.UserRoleAssigner()); err != nil {
+	if err := ctx.Provide(accessmodule.PortName, mod.UserRoleAssigner()); err != nil {
 		return nil, err
 	}
 	return mod, nil
 }
 
 func wireUser(ctx *assembly.Context) (contract.Module, error) {
-	roles, _ := ctx.Port("access").(userapplication.UserRoleAssigner)
-	quota, _ := ctx.Port("tenant").(userapplication.TenantQuota)
-	outboxMod, _ := ctx.Port("outbox").(*outbox.Outbox)
-	return user.New(ctx.DB(), *ctx.Config(), ctx.Redis(), outboxMod).WithRoles(roles).WithQuota(quota), nil
+	roles, _ := ctx.Port(accessmodule.PortName).(userapplication.UserRoleAssigner)
+	quota, _ := ctx.Port(tenantmodule.PortName).(userapplication.TenantQuota)
+	outboxMod, _ := ctx.Port(outbox.PortName).(*outbox.Outbox)
+	mod := user.New(ctx.DB(), *ctx.Config(), ctx.Redis(), outboxMod).WithRoles(roles).WithQuota(quota)
+	if err := ctx.Provide(user.UserinfoPortName, user.NewUserinfoSource(userinfra.NewMysqlRepository(ctx.DB()))); err != nil {
+		return nil, err
+	}
+	return mod, nil
 }
 
 func wireMFA(ctx *assembly.Context) (contract.Module, error) {
 	authCfg := authConfig(ctx)
+	users, _ := ctx.Port(user.UserinfoPortName).(contract.UserinfoSource)
 	mod := mfamodule.New(ctx.DB(), mfamodule.Config{
 		JWTSecret:         authCfg.JWTSecret,
 		JWTPreviousSecret: authCfg.JWTPreviousSecret,
@@ -131,8 +330,8 @@ func wireMFA(ctx *assembly.Context) (contract.Module, error) {
 		AccessExpireMin:   authCfg.AccessExpireMin,
 		RefreshExpireDay:  authCfg.RefreshExpireDay,
 		TrustedDeviceDays: authCfg.TrustedDeviceDays,
-	}, user.NewUserinfoSource(userinfra.NewMysqlRepository(ctx.DB())))
-	if err := ctx.Provide("mfa", mod.Service()); err != nil {
+	}, users)
+	if err := ctx.Provide(mfamodule.PortName, mod.Service()); err != nil {
 		return nil, err
 	}
 	return mod, nil
@@ -149,21 +348,22 @@ func wireAuth(ctx *assembly.Context) (contract.Module, error) {
 	mod := authmodule.New(ctx.DB(), ctx.Redis(), *authCfg,
 		ctx.Config().HTTP.Mode == config.HTTPModeRelease,
 		captchaVerifier,
-		ctx.Port("outbox"), ctx.Port("notification"), ctx.Port("encryption"),
-		ctx.Port("tenant"), ctx.Port("mfa"), ctx.Port("tenant.provisioner"), ctx.Port("breach"))
-	if err := ctx.Provide("auth", mod.Finalizer()); err != nil {
+		ctx.Port(outbox.PortName), ctx.Port(notification.PortName), ctx.Port(encryption.PortName),
+		ctx.Port(tenantmodule.PortName), ctx.Port(mfamodule.PortName), ctx.Port(tenantmodule.ProvisionerPortName), ctx.Port(breach.PortName))
+	if err := ctx.Provide(authmodule.PortName, mod.Finalizer()); err != nil {
 		return nil, err
 	}
 	return mod, nil
 }
 
 func wirePasskey(ctx *assembly.Context) (contract.Module, error) {
-	finalizer, _ := ctx.Port("auth").(contract.LoginFinalizer)
+	finalizer, _ := ctx.Port(authmodule.PortName).(contract.LoginFinalizer)
+	users, _ := ctx.Port(user.UserinfoPortName).(contract.UserinfoSource)
 	return passkeymodule.New(passkeymodule.Deps{
 		DB:         ctx.DB(),
 		Redis:      ctx.Redis(),
 		AuthCfg:    *authConfig(ctx),
-		Users:      user.NewUserinfoSource(userinfra.NewMysqlRepository(ctx.DB())),
+		Users:      users,
 		Finalizer:  finalizer,
 		FailClosed: ctx.Config().HTTP.Mode == config.HTTPModeRelease,
 	}), nil
@@ -190,11 +390,7 @@ func wireOAuth(ctx *assembly.Context) (contract.Module, error) {
 }
 
 func wireAPIKey(ctx *assembly.Context) (contract.Module, error) {
-	return apikey.New(ctx.DB(), ctx.Port("tenant")), nil
-}
-
-func wireQueue(ctx *assembly.Context) (contract.Module, error) {
-	return queue.NewModule(ctx.DB(), ctx.Scheduler()), nil
+	return apikey.New(ctx.DB(), ctx.Port(tenantmodule.PortName)), nil
 }
 
 func wireDataops(ctx *assembly.Context) (contract.Module, error) {
@@ -206,13 +402,94 @@ func wireFeature(ctx *assembly.Context) (contract.Module, error) {
 }
 
 func wireUploadsec(ctx *assembly.Context) (contract.Module, error) {
-	storageSvc, _ := ctx.Port("storage").(storage.Storage)
-	scanner, _ := ctx.Port("uploadsec.scanner").(uploadsec.Scanner)
+	storageSvc, _ := ctx.Port(storage.PortName).(storage.Storage)
+	var scanner uploadsec.Scanner
+	if cfg := assembly.MustSection[*uploadsec.Config](ctx, uploadsec.ConfigKey); cfg != nil {
+		scanner = cfg.Scanner()
+	}
 	return uploadsec.New(storageSvc, scanner), nil
 }
 
-// noModule 是「无 Module 实例」能力的 Wire：只携带声明（outbox/search/breach 参与
-// 迁移与端口消费，但不注册模块）。
+func wireSearch(*assembly.Context) (contract.Module, error) { return nil, nil }
+
+func wireRetention(ctx *assembly.Context) (contract.Module, error) {
+	cfg, err := retention.Load(ctx.Sections())
+	if err != nil {
+		return nil, fmt.Errorf("init retention config: %w", err)
+	}
+	db := ctx.DB()
+	if db != nil {
+		cleanupSvc := retention.NewCleanupService(db, retention.DefaultCleanupConfig())
+		if err := ctx.RegisterJob(scheduler.Job{ID: "cleanup", Name: "Data Cleanup", Spec: "0 3 * * *", Run: func() {
+			results, err := cleanupSvc.Run(context.Background())
+			if err != nil {
+				ctx.Logger().Errorw("cleanup job failed", "error", err.Error())
+				return
+			}
+			for _, r := range results {
+				if r.Deleted > 0 {
+					ctx.Logger().Infow("cleanup completed", "table", r.Table, "deleted", r.Deleted)
+				}
+			}
+		}}); err != nil {
+			return nil, err
+		}
+	}
+	if db != nil && cfg.Enabled {
+		retentionSvc := retention.NewRetentionService(db, *cfg)
+		spec := cfg.Cron
+		if spec == "" {
+			spec = "30 3 * * *"
+		}
+		if err := ctx.RegisterJob(scheduler.Job{ID: "retention", Name: "History Retention", Spec: spec, Run: func() {
+			runCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+			defer cancel()
+			results, err := retentionSvc.Run(runCtx)
+			if err != nil {
+				ctx.Logger().Errorw("retention job failed", "error", err.Error())
+				return
+			}
+			for _, r := range results {
+				if r.Deleted > 0 {
+					ctx.Logger().Infow("retention completed", "table", r.Table, "deleted", r.Deleted)
+				}
+			}
+		}}); err != nil {
+			return nil, err
+		}
+	}
+	return nil, nil
+}
+
+func wireAPIDocs(ctx *assembly.Context) (contract.Module, error) {
+	return apidocs.NewModule(ctx.Config().HTTP.Mode != config.HTTPModeRelease), nil
+}
+
+func wireGRPC(ctx *assembly.Context) (contract.Module, error) {
+	cfg := ctx.Config()
+	// gRPC server（与 HTTP 双栈；enabled 时纳入生命周期）
+	grpcServer, err := grpcpkg.New(grpcpkg.Config{
+		Enabled:    cfg.GRPC.Enabled,
+		Host:       cfg.GRPC.Host,
+		Port:       cfg.GRPC.Port,
+		TimeoutSec: cfg.GRPC.TimeoutSec,
+		TLS:        cfg.GRPC.TLS,
+	}, ctx.Logger(), ctx.Reporter())
+	if err != nil {
+		return nil, fmt.Errorf("init grpc server: %w", err)
+	}
+	// 业务示例：注册 UserInfoService，用户数据经 contract.UserinfoSource 端口读取
+	// （user 能力提供适配实现，grpc 能力不直接依赖 user/domain）
+	if source, ok := ctx.Port(user.UserinfoPortName).(contract.UserinfoSource); ok && source != nil {
+		grpcServer.RegisterUserInfoService(source)
+	}
+	if cfg.GRPC.Enabled {
+		ctx.RegisterComponent(grpcServer)
+	}
+	return nil, nil
+}
+
+// noModule 是「无 Module 实例」能力的 Wire：只携带声明（ws 等参与装配但不注册模块）。
 func noModule(*assembly.Context) (contract.Module, error) { return nil, nil }
 
 // configSection 取能力配置段并解引用为值；段不存在（能力未启用）时用 zero 构造零值，

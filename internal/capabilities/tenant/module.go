@@ -17,6 +17,12 @@ type Module struct {
 	provisioner *application.GormTenantProvisioner
 }
 
+// PortName 租户能力对外提供的端口名：contract.TenantQuota（QuotaService）。
+const PortName = "tenant"
+
+// ProvisionerPortName 开通式注册端口名：contract.TenantProvisioner（未启用时空）。
+const ProvisionerPortName = "tenant.provisioner"
+
 // New 创建 tenant 模块。prov 为开通式注册配置（由组合根从 auth 段构造）。
 func New(db *gorm.DB, prov ProvisioningConfig) *Module {
 	repo := infrastructure.NewMysqlRepository(db)

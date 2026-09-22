@@ -10,6 +10,7 @@ import (
 	"jimu/internal/kernel/httpclient"
 	"jimu/internal/kernel/logger"
 	redistore "jimu/internal/kernel/redis"
+	"jimu/internal/kernel/reporter"
 	"jimu/internal/kernel/scheduler"
 
 	"gorm.io/gorm"
@@ -25,6 +26,9 @@ type Context struct {
 	ports       map[string]any
 	modules     []contract.Module
 	moduleNames map[string]bool
+	components  []contract.Component
+	jobs        []scheduler.Job
+	jobIDs      map[string]bool
 	// onPort 在每次 Port 读取时回调（ValidatePortFlow 用它观察读取结果；生产路径为 nil）。
 	// provided 表示该端口在读取发生时已注册。
 	onPort func(name string, provided bool)
@@ -38,6 +42,7 @@ func newContext(container *app.Container, sections config.SectionDecoder, capCfg
 		capCfgs:     capCfgs,
 		ports:       make(map[string]any),
 		moduleNames: make(map[string]bool),
+		jobIDs:      make(map[string]bool),
 	}
 }
 
@@ -67,6 +72,12 @@ func (c *Context) HTTPClient() *httpclient.Client { return c.container.HTTPClien
 
 // Scheduler 定时任务调度器。
 func (c *Context) Scheduler() *scheduler.CronScheduler { return c.container.Scheduler }
+
+// Lock 分布式锁（多实例协调）。
+func (c *Context) Lock() *redistore.Lock { return c.container.Lock }
+
+// Reporter 错误上报器。
+func (c *Context) Reporter() reporter.Reporter { return c.container.Reporter }
 
 // Provide 注册一个端口实现，供排在后面的能力经 Port 消费。
 // 同名端口重复注册报错：静默覆盖会让装配顺序的语义变得不可推断。
@@ -112,3 +123,38 @@ func MustSection[T any](ctx *Context, key string) T {
 	v, _ := app.SectionOf[T](ctx.CapabilityConfigs(), key)
 	return v
 }
+
+// MustSectionValue 取某能力配置段并解引用为值；段不存在时返回 T 的零值
+// （等价于旧组合根 configSection 的「未启用能力取零值」语义）。
+func MustSectionValue[T any](ctx *Context, key string) T {
+	if v := MustSection[*T](ctx, key); v != nil {
+		return *v
+	}
+	var zero T
+	return zero
+}
+
+// RegisterComponent 登记能力贡献的生命周期组件（按调用顺序），由 Bootstrap 纳入
+// 应用启停（如 queue 的 worker pool、notification 的 WS Hub、grpc server）。
+func (c *Context) RegisterComponent(component contract.Component) {
+	c.components = append(c.components, component)
+}
+
+// Components 返回已登记的能力组件（按登记顺序）。
+func (c *Context) Components() []contract.Component { return c.components }
+
+// RegisterJob 登记能力贡献的定时任务定义，重名报错（任务 id 全仓唯一）。
+func (c *Context) RegisterJob(job scheduler.Job) error {
+	if job.ID == "" {
+		return fmt.Errorf("assembly: scheduled job id must not be empty")
+	}
+	if c.jobIDs[job.ID] {
+		return fmt.Errorf("assembly: scheduled job %q registered twice", job.ID)
+	}
+	c.jobIDs[job.ID] = true
+	c.jobs = append(c.jobs, job)
+	return nil
+}
+
+// Jobs 返回已登记的能力定时任务（按登记顺序）。
+func (c *Context) Jobs() []scheduler.Job { return c.jobs }

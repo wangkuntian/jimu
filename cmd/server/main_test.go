@@ -15,8 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestFullAssemblyCoversCatalog 过渡形态的能力清单必须与 catalog 的 18 项逐名一致
-// （顺序刻意不同：tenant/access 必须先于 user 才能经端口提供角色分配与配额），
+// nonCatalogCapabilities 是 full 形态中的非 catalog 条目（P2.4 裁定 7）：它们是
+// assembly.Capability 但不是 catalog 成员（catalog 仍 18 项，不入迁移/权限聚合）。
+var nonCatalogCapabilities = []string{"encryption", "storage", "notification", "retention", "ws", "grpc", "apidocs"}
+
+// TestFullAssemblyCoversCatalog 过渡形态的能力清单 = catalog 全量 ∪ 固定非 catalog 条目，
 // 且每一项都必须给出 Wire（无 Module 实例的能力给出空 Wire）。
 func TestFullAssemblyCoversCatalog(t *testing.T) {
 	a := fullAssembly()
@@ -28,19 +31,25 @@ func TestFullAssemblyCoversCatalog(t *testing.T) {
 		require.NotNil(t, c.Wire, "capability %q has no Wire", c.Descriptor.Name)
 		got = append(got, c.Descriptor.Name)
 	}
-	want := catalog.Names()
+	want := append(catalog.Names(), nonCatalogCapabilities...)
 	slices.Sort(got)
 	slices.Sort(want)
-	require.Equal(t, want, got, "过渡形态的能力清单必须与 catalog 逐名一致")
+	require.Equal(t, want, got, "过渡形态的能力清单必须 = catalog 全量 ∪ 非 catalog 条目")
 }
 
 // TestFullAssemblyResolvesToCatalogDefault 默认配置（capabilities.enabled 为空）下，
-// 过渡形态解析出的启用集必须与 catalog.Resolve(nil) 逐名一致 —— full 零退化的第一道护栏。
+// 过渡形态的 catalog 能力解析集必须与 catalog.Resolve(nil) 逐名一致 —— full 零退化的第一道护栏。
 func TestFullAssemblyResolvesToCatalogDefault(t *testing.T) {
 	a := fullAssembly()
+	known := map[string]bool{}
+	for _, n := range catalog.Names() {
+		known[n] = true
+	}
 	descriptors := make([]contract.Descriptor, 0, len(a.Capabilities))
 	for _, c := range a.Capabilities {
-		descriptors = append(descriptors, c.Descriptor)
+		if known[c.Descriptor.Name] {
+			descriptors = append(descriptors, c.Descriptor)
+		}
 	}
 
 	got, err := capability.Resolve(descriptors, nil)
@@ -62,14 +71,16 @@ func TestFullAssemblyDeclarationsAreWellFormed(t *testing.T) {
 	require.NoError(t, capability.ValidateDeclarations(descriptors, catalog.Names()))
 }
 
-// TestFullAssemblyOrder 钉住过渡形态的装配顺序：tenant/access 必须先于 user（提供
-// 角色分配/配额端口），captcha/mfa 必须先于 auth（提供验证码/MFA 端口），其余保持
-// catalog 的相对顺序。Task 4 的 profile 清单会对齐 catalog 顺序，届时同步更新本断言。
+// TestFullAssemblyOrder 钉住过渡形态的装配顺序：提供端口的能力必须排在消费它的能力
+// 之前（encryption/storage/notification/queue/outbox/breach 先于 tenant/user/auth/
+// uploadsec/grpc；tenant/access 先于 user；captcha/mfa 先于 auth）。Task 4 的 profile
+// 清单会接手这份顺序。
 func TestFullAssemblyOrder(t *testing.T) {
 	want := []string{
+		"encryption", "storage", "notification", "queue", "outbox", "breach",
 		"tenant", "access", "user", "captcha", "mfa", "auth", "passkey", "audit",
-		"console", "oauth", "apikey", "queue", "dataops", "feature", "uploadsec",
-		"outbox", "search", "breach",
+		"console", "oauth", "apikey", "dataops", "feature", "uploadsec", "search",
+		"retention", "apidocs", "grpc", "ws",
 	}
 	got := make([]string, 0, len(want))
 	for _, c := range fullAssembly().Capabilities {

@@ -8,18 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"jimu/internal/capabilities/apidocs"
-	apikeymw "jimu/internal/capabilities/apikey/middleware"
-	"jimu/internal/capabilities/notification"
-	"jimu/internal/capabilities/outbox"
-	"jimu/internal/capabilities/queue"
-	"jimu/internal/capabilities/retention"
 	"jimu/internal/capability"
 	"jimu/internal/contract"
 	platformhttp "jimu/internal/kernel/http"
 	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/kernel/logger"
 	"jimu/internal/kernel/observability"
+	"jimu/internal/kernel/scheduler"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -27,93 +22,12 @@ import (
 	gormotel "gorm.io/plugin/opentelemetry/tracing"
 )
 
-// outboxTypeConverters 按事件类型将 outbox 内层 Payload 还原为强类型事件。
-// 返回 error：载荷与事件类型不匹配时拒绝发布，避免零值事件被静默发出。
-var outboxTypeConverters = map[string]func(json.RawMessage) (interface{}, error){
-	contract.EventUserCreated: func(p json.RawMessage) (interface{}, error) {
-		var e contract.UserCreatedEvent
-		if err := json.Unmarshal(p, &e); err != nil {
-			return nil, err
-		}
-		return e, nil
-	},
-	contract.EventUserUpdated: func(p json.RawMessage) (interface{}, error) {
-		var e contract.UserUpdatedEvent
-		if err := json.Unmarshal(p, &e); err != nil {
-			return nil, err
-		}
-		return e, nil
-	},
-	contract.EventUserDeleted: func(p json.RawMessage) (interface{}, error) {
-		var e contract.UserDeletedEvent
-		if err := json.Unmarshal(p, &e); err != nil {
-			return nil, err
-		}
-		return e, nil
-	},
-	contract.EventUserLoggedIn: func(p json.RawMessage) (interface{}, error) {
-		var e contract.UserLoggedInEvent
-		if err := json.Unmarshal(p, &e); err != nil {
-			return nil, err
-		}
-		return e, nil
-	},
-}
-
-// bridgeFn 反序列化 outbox 载荷并发布强类型事件到全局业务主题（裸主题）
-func bridgeFn(c *Container) queue.WorkerFunc {
-	return func(ctx context.Context, payload string) error {
-		var evt outbox.EventPayload
-		if err := json.Unmarshal([]byte(payload), &evt); err != nil {
-			return fmt.Errorf("unmarshal outbox event: %w", err)
-		}
-		conv, ok := outboxTypeConverters[evt.EventType]
-		if !ok {
-			return fmt.Errorf("no converter for outbox event type: %s", evt.EventType)
-		}
-		strong, err := conv(evt.Payload)
-		if err != nil {
-			return fmt.Errorf("convert outbox event %s: %w", evt.EventType, err)
-		}
-		c.EventBus.Publish(evt.EventType, strong)
-		return nil
-	}
-}
-
-// registerOutboxWorkers 注册 MQ 消费端的 outbox 桥接 worker
-func registerOutboxWorkers(c *Container) {
-	for eventType := range outboxTypeConverters {
-		eventType := eventType
-		queue.RegisterWorker("outbox:"+eventType, bridgeFn(c))
-	}
-}
-
-// registerEventBusBridge 订阅全局总线 outbox:* 主题，转强类型后发布到裸业务主题（event_bus 模式）
-func registerEventBusBridge(c *Container) {
-	for eventType := range outboxTypeConverters {
-		eventType := eventType
-		c.EventBus.Subscribe("outbox:"+eventType, func(payload interface{}) {
-			evt, ok := payload.(outbox.EventPayload)
-			if !ok {
-				c.Logger.Error("outbox bridge: unexpected payload type")
-				return
-			}
-			conv, ok := outboxTypeConverters[evt.EventType]
-			if !ok {
-				c.Logger.Errorw("outbox bridge: unknown event type", "type", evt.EventType)
-				return
-			}
-			strong, err := conv(evt.Payload)
-			if err != nil {
-				c.Logger.Errorw("outbox bridge: convert event failed", "type", evt.EventType, "error", err.Error())
-				return
-			}
-			c.EventBus.Publish(evt.EventType, strong)
-		})
-	}
-}
-
-func Bootstrap(container *Container, modules ...contract.Module) (*Application, error) {
+// Bootstrap 在全部能力装配完成后接管生命周期：初始化观测、路由、事件与定时任务。
+// capabilities/components/jobs 由装配驱动传入（app 不得 import 任何能力包）：
+//   - modules 经 contract.Module 注册 HTTP/事件/任务；
+//   - components 是能力贡献的 contract.Component（如 worker pool、WS Hub、gRPC server）；
+//   - jobs 是能力贡献的定时任务定义（如 outbox_process、retention）。
+func Bootstrap(container *Container, components []contract.Component, jobs []scheduler.Job, modules ...contract.Module) (*Application, error) {
 	cfg := container.Config
 
 	// 初始化 OpenTelemetry 追踪
@@ -156,14 +70,11 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	if err := platformhttp.ConfigureTrustedProxies(router, cfg.HTTP.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
-	if cfg.HTTP.Mode != "release" {
-		apidocs.RegisterSwagger(router.Group("/swagger"))
-	}
 
 	// 租户维度限流（Redis 滑动窗口）：挂在受保护中间件之后，平台级视角跳过
 	var extraProtected []gin.HandlerFunc
 	if container.Redis != nil && cfg.RateLimit.Tenant.Enabled && cfg.RateLimit.Tenant.Limit > 0 {
-		extraProtected = append(extraProtected, apikeymw.TenantRateLimitMiddleware(
+		extraProtected = append(extraProtected, middleware.TenantRateLimitMiddleware(
 			container.Redis,
 			cfg.RateLimit.Tenant.Limit,
 			time.Duration(cfg.RateLimit.Tenant.WindowSec)*time.Second,
@@ -224,17 +135,6 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		container.Logger.Infow("module events registered", "name", module.Name())
 	}
 
-	// 注册全局事件处理器：将领域事件桥接到通知系统
-	if container.Notification != nil {
-		container.EventBus.Subscribe(contract.UserCreatedEmailNotification, func(payload interface{}) {
-			if msg, ok := payload.(notification.Message); ok {
-				if err := container.Notification.Dispatch(context.Background(), msg); err != nil {
-					container.Logger.Errorw("notification dispatch failed", "error", err.Error())
-				}
-			}
-		})
-	}
-
 	// 注册配置热更新处理器
 	container.EventBus.Subscribe("config.updated", func(payload interface{}) {
 		m, ok := payload.(map[string]string)
@@ -259,75 +159,25 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			container.Logger.Infow("module jobs registered", "name", module.Name())
 		}
 
-		type jobDef struct {
-			name string
-			spec string
-			fn   func()
-		}
-		jobFns := map[string]jobDef{}
-		if container.Outbox != nil {
-			jobFns["outbox_process"] = jobDef{name: "Process Outbox Events", spec: "@every 10s", fn: func() {
-				n, err := container.Outbox.Process(context.Background(), 100)
-				if err != nil {
-					container.Logger.Errorw("outbox process error", "error", err.Error())
-				} else if n > 0 {
-					container.Logger.Debugw("outbox processed", "count", n)
-				}
-			}}
-		}
+		jobFns := map[string]scheduler.Job{}
 		if container.DBCollector != nil {
-			jobFns["metrics_collect"] = jobDef{name: "Collect DB Metrics", spec: "@every 15s", fn: func() {
+			jobFns["metrics_collect"] = scheduler.Job{ID: "metrics_collect", Name: "Collect DB Metrics", Spec: "@every 15s", Run: func() {
 				container.DBCollector.Collect()
 				observability.CollectRuntime()
 			}}
 		}
-		if container.DB != nil {
-			cleanupSvc := retention.NewCleanupService(container.DB, retention.DefaultCleanupConfig())
-			jobFns["cleanup"] = jobDef{name: "Data Cleanup", spec: "0 3 * * *", fn: func() {
-				results, err := cleanupSvc.Run(context.Background())
-				if err != nil {
-					container.Logger.Errorw("cleanup job failed", "error", err.Error())
-					return
-				}
-				for _, r := range results {
-					if r.Deleted > 0 {
-						container.Logger.Infow("cleanup completed", "table", r.Table, "deleted", r.Deleted)
-					}
-				}
-			}}
-		}
-
-		if container.DB != nil && container.RetentionCfg.Enabled {
-			retentionSvc := retention.NewRetentionService(container.DB, container.RetentionCfg)
-			spec := container.RetentionCfg.Cron
-			if spec == "" {
-				spec = "30 3 * * *"
+		// 能力贡献的定时任务（outbox_process、cleanup、retention 等）
+		for _, job := range jobs {
+			if _, dup := jobFns[job.ID]; dup {
+				return nil, fmt.Errorf("duplicate scheduled job id %q contributed by a capability", job.ID)
 			}
-			jobFns["retention"] = jobDef{name: "History Retention", spec: spec, fn: func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-				defer cancel()
-				results, err := retentionSvc.Run(ctx)
-				if err != nil {
-					container.Logger.Errorw("retention job failed", "error", err.Error())
-					return
-				}
-				for _, r := range results {
-					if r.Deleted > 0 {
-						container.Logger.Infow("retention completed", "table", r.Table, "deleted", r.Deleted)
-					}
-				}
-			}}
-		}
-
-		// 注册 WebSocket Hub 运行
-		if container.WebSocketHub != nil {
-			go container.WebSocketHub.Run(context.Background())
+			jobFns[job.ID] = job
 		}
 
 		// 从 store 恢复持久化任务，跳过已恢复 id，防双注册
 		restored, err := container.Scheduler.RestoreFromStore(context.Background(), func(id string) func() {
 			if def, ok := jobFns[id]; ok {
-				return def.fn
+				return def.Run
 			}
 			return nil
 		})
@@ -342,38 +192,24 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 			if _, ok := restoredSet[id]; ok {
 				continue
 			}
-			if err := container.Scheduler.AddNamedFunc(id, def.name, def.spec, def.fn); err != nil {
+			if err := container.Scheduler.AddNamedFunc(id, def.Name, def.Spec, def.Run); err != nil {
 				container.Logger.Errorw("register job failed", "id", id, "error", err.Error())
 			}
 		}
 	}
 
-	// 接线 outbox 事件消费：MQ 模式注册 worker 并启动 WorkerPool；event_bus 模式注册全局总线桥接器
-	// outbox 接线按能力配置决定；outbox 能力未启用时为空，两者都不接线
-	switch container.OutboxPublisher {
-	case outbox.PublisherMQ:
-		registerOutboxWorkers(container)
-	case outbox.PublisherEventBus:
-		registerEventBusBridge(container)
-	}
-
-	components := []contract.Component{container}
-	if container.WorkerPool != nil {
-		components = append(components, workerPoolComponent{pool: container.WorkerPool})
-	}
+	lifecycle := []contract.Component{container}
+	lifecycle = append(lifecycle, components...)
 	if container.Scheduler != nil {
-		components = append(components, container.Scheduler)
+		lifecycle = append(lifecycle, container.Scheduler)
 	}
 	for _, module := range modules {
 		if provider, ok := module.(contract.ComponentProvider); ok {
-			components = append(components, provider.Components()...)
+			lifecycle = append(lifecycle, provider.Components()...)
 		}
 	}
-	if cfg.GRPC.Enabled && container.GRPCServer != nil {
-		components = append(components, container.GRPCServer)
-	}
-	components = append(components, management, public)
-	return NewApplication(time.Duration(cfg.HTTP.ShutdownTimeoutSec)*time.Second, components...), nil
+	lifecycle = append(lifecycle, management, public)
+	return NewApplication(time.Duration(cfg.HTTP.ShutdownTimeoutSec)*time.Second, lifecycle...), nil
 }
 
 // capabilitiesResponse 是 /capabilities 的响应体；字段声明顺序即 JSON 键顺序。
@@ -395,21 +231,6 @@ func capabilitiesHandler(caps []contract.Descriptor) http.HandlerFunc {
 			Degraded: capability.Degraded(caps),
 		})
 	}
-}
-
-// workerPoolComponent 包装 WorkerPool，实现 contract.Component 以纳入应用生命周期
-type workerPoolComponent struct {
-	pool *queue.WorkerPool
-}
-
-func (w workerPoolComponent) Start(context.Context) error {
-	w.pool.Start()
-	return nil
-}
-
-func (w workerPoolComponent) Stop(context.Context) error {
-	w.pool.Stop()
-	return nil
 }
 
 type registerRouter interface {

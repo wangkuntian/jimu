@@ -18,6 +18,9 @@ type Module struct {
 	jwtUtil *auth.JWT
 }
 
+// PortName mfa 能力对外提供的端口名：contract.MFAVerifier。
+const PortName = "mfa"
+
 // New 创建 mfa 模块。trustedDeviceDays<=0 关闭可信设备「记住此设备」；
 // users 用于 otpauth account 兜底（可为 nil）。
 func New(db *gorm.DB, cfg Config, users contract.UserinfoSource) *Module {

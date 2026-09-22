@@ -100,10 +100,6 @@ func Run(a Assembly) error {
 	}
 
 	ctx := newContext(container, sections, capCfgs)
-	if err := provideContainerPorts(ctx, container); err != nil {
-		stop()
-		return err
-	}
 
 	if err := wireCapabilities(ctx, caps, byName); err != nil {
 		stop()
@@ -117,7 +113,7 @@ func Run(a Assembly) error {
 		}
 	}
 
-	application, err := app.Bootstrap(container, ctx.modules...)
+	application, err := app.Bootstrap(container, ctx.Components(), ctx.Jobs(), ctx.modules...)
 	if err != nil {
 		stop()
 		return fmt.Errorf("bootstrap application: %w", err)
@@ -157,29 +153,6 @@ func wireOne(ctx *Context, d contract.Descriptor, byName map[string]Capability) 
 		return nil // 无 Module 实例：只提供端口 / 仅参与迁移
 	}
 	return ctx.Register(module)
-}
-
-// provideContainerPorts 是过渡期桥接：内核容器仍持有尚未自装配的能力件，先按能力名
-// 注册为端口，供本阶段的内联 Wire 消费。Task 3 逐个能力搬迁后，对应端口改由该能力
-// 的 Wire 提供，此处逐行删除。
-func provideContainerPorts(ctx *Context, c *app.Container) error {
-	ports := []struct {
-		name  string
-		value any
-	}{
-		{"outbox", c.Outbox},
-		{"notification", c.Notification},
-		{"encryption", c.Cipher},
-		{"breach", c.BreachChecker},
-		{"storage", c.Storage},
-		{"uploadsec.scanner", c.UploadScanner},
-	}
-	for _, p := range ports {
-		if err := ctx.Provide(p.name, p.value); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // validateAssembly 在触碰配置/DB 之前自检清单：名字必填、Wire 必备、不得重名。

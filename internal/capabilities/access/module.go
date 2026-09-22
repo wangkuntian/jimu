@@ -21,6 +21,9 @@ type Module struct {
 	userRoles   *application.UserRoleService
 }
 
+// PortName access 能力对外提供的端口名：contract.UserRoleAssigner（UserRoleService）。
+const PortName = "access"
+
 // New 创建 access 模块。quota 可选（tenant 能力提供）。
 func New(db *gorm.DB, deps ...interface{}) *Module {
 	roleRepo := infrastructure.NewMysqlRepository(db)
