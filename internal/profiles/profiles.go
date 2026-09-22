@@ -10,7 +10,6 @@ import (
 
 	"jimu/internal/app"
 	"jimu/internal/assembly"
-	"jimu/internal/capabilities/catalog"
 )
 
 // Version 是形态清单默认填入的构建版本；入口包可经 ldflags 注入后覆盖
@@ -18,8 +17,11 @@ import (
 var Version = "dev"
 
 // StructuralSeed 是各形态共用的既有结构性种子：默认租户、free 套餐、超管角色、
-// admin 用户，加上按**全量清单**聚合的权限点，并同步 Casbin 策略
+// admin 用户，加上按**本形态解析集**聚合的权限点，并同步 Casbin 策略
 // （app.RunSeedWithCasbin，与 `jimu seed` 同一实现，幂等）。
+//
+// 权限点取自 assembly.Context.Capabilities()（Run 解析出的装配集），而非全量清单：
+// import catalog 会把 18 个能力的包全量拉进每个形态的依赖闭包，形态裁剪随之失效。
 //
 // 形态裁剪不门控种子：CLI 的 migrate 按完整清单建表，被形态排除的能力表同样存在
 // （profile 驱动的迁移裁剪是 P2.6/P2.8 工作，本阶段不实现）。种子需要部署期凭据
@@ -30,5 +32,5 @@ func StructuralSeed(ctx *assembly.Context) error {
 		ctx.Logger().Warnw("structural seed skipped", "missing", "ADMIN_PASSWORD")
 		return nil
 	}
-	return app.RunSeedWithCasbin(ctx.DB(), catalog.All())
+	return app.RunSeedWithCasbin(ctx.DB(), ctx.Capabilities())
 }

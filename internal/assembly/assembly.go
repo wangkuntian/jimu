@@ -102,6 +102,8 @@ func Run(a Assembly) error {
 	}
 
 	ctx := newContext(container, sections, capCfgs)
+	// 解析集写回上下文：Seed 等装配期钩子据本形态的能力（而非全量清单）决策。
+	ctx.caps = caps
 
 	if err := wireCapabilities(ctx, caps, byName); err != nil {
 		stop()

@@ -23,6 +23,7 @@ type Context struct {
 	container   *app.Container
 	sections    config.SectionDecoder
 	capCfgs     *app.CapabilityConfigs
+	caps        []contract.Descriptor
 	ports       map[string]any
 	modules     []contract.Module
 	moduleNames map[string]bool
@@ -65,6 +66,11 @@ func (c *Context) Sections() config.SectionDecoder { return c.sections }
 
 // CapabilityConfigs 已按启用集解码并校验的能力配置段。
 func (c *Context) CapabilityConfigs() *app.CapabilityConfigs { return c.capCfgs }
+
+// Capabilities 本形态解析出的装配集（形态清单 ∩ capabilities.enabled，含硬依赖闭包与
+// 非 catalog 条目；按装配顺序）。由 Run 在 Wire 之前写入，供 Seed 等装配期钩子使用：
+// 形态的种子只应处理本形态的能力 —— 退回全量清单会把所有能力的包拉进每个形态的依赖闭包。
+func (c *Context) Capabilities() []contract.Descriptor { return c.caps }
 
 // EventBus 全局事件总线。
 func (c *Context) EventBus() *event.EventBus { return c.container.EventBus }
