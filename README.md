@@ -28,7 +28,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **多队列支持** — Redis/Kafka/RabbitMQ 统一队列接口，`queue.type` 切换；三者均为 at-least-once：Redis（BLMove 原子消费 + 可见性超时重入队 + 延迟队列）、RabbitMQ（autoAck=false + requeue + 断连重投）、Kafka（FetchMessage 不自动提交 + Ack 显式 CommitMessages，崩溃重启重投未提交区间）。消费幂等：已成功/死信任务重复投递时 Ack 跳过，避免业务副作用重复执行（outbox 事件无状态机，不做去重）。失败任务按指数退避延迟重投（Redis 延迟队列），耗尽重试入死信表（`dead_letters`，可经管理 API 查询与标记解决）。任务归属提交者租户（`jobs.tenant_id`），消费时恢复该租户到执行上下文，管理端任务/死信接口按租户隔离
 - **事务封装** — 统一的事务管理 helper
 - **审计日志** — 有界队列批量写入，匿名请求安全处理；**防篡改哈希链**：每条审计按租户写入 `prev_hash`/`entry_hash`（`audit.hash_secret` 配置时用 HMAC-SHA256，否则 SHA-256），写入时锁定链头行保证多实例全序；`GET /api/v1/audits/verify` 可按范围重算校验，检测内容篡改、链接断裂与链尾截断；`GET /api/v1/audits/export` 按时间范围流式导出 CSV（含 BOM，Excel 可直接打开）或 NDJSON，单次上限 5 万条、跨度 90 天
-- **管理端点** — 独立 management server 暴露健康检查、metrics 和可选 pprof
+- **管理端点** — 独立 management server 暴露健康检查、metrics、最终启用/降级能力清单（`/capabilities`）和可选 pprof
 - **管理 API** — 系统状态、在线用户、强制下线、错误码文档
 - **脚手架** — Cobra CLI 一键生成完整模块骨架
 - **API 文档** — Swagger UI 交互式文档（中文注释）
@@ -164,7 +164,7 @@ docker compose run --rm -e ADMIN_PASSWORD=admin123 server ./jimu seed
 服务启动后访问：
 - API: http://localhost:8080
 - Swagger UI: http://localhost:8080/swagger/index.html （非 release 模式）
-- Management: `http://127.0.0.1:9090/livez`、`/readyz`、`/metrics`
+- Management: `http://127.0.0.1:9090/livez`、`/readyz`、`/metrics`、`/capabilities`
 - Adminer: `docker compose --profile dev up -d adminer` 后访问 http://127.0.0.1:8081
 
 ### 可观测性（可选）
@@ -380,6 +380,7 @@ jimu/
 │       ├── id/                 # 雪花 ID 生成器
 │       └── testutil/           # 测试工具
 ├── tools/
+│   ├── checkcapabilities/        # 能力自描述（Owns）与迁移归属校验（make check-capabilities）
 │   ├── generator/                # 代码生成器
 │   └── logcheck/                 # 日志调用规范静态检查（make check-log-usage）
 ├── .github/                    # GitHub Actions + Dependabot
@@ -810,6 +811,23 @@ curl http://127.0.0.1:9090/readyz
 curl http://127.0.0.1:9090/metrics
 ```
 
+### 能力清单
+
+最终启用清单与软依赖降级项（只读、不鉴权）：
+
+```bash
+curl http://127.0.0.1:9090/capabilities
+```
+
+`capabilities.enabled: ["auth"]` 时（硬依赖闭包补齐 `user`/`access`/`tenant`/`mfa`，`captcha`/`breach` 是软依赖不补齐）：
+
+```json
+{
+  "enabled": ["user", "access", "tenant", "mfa", "auth"],
+  "degraded": [{"capability": "auth", "missing": ["captcha", "breach"]}]
+}
+```
+
 ## 配置说明
 
 ### 多环境配置
@@ -976,6 +994,9 @@ capabilities:
 
 - 硬依赖会自动补齐：只写 `["oauth"]` 会连带启用 `auth`/`user`/`access`/`tenant`/`mfa`
 - 未启用的能力不挂路由、不注册定时任务与事件、不启动其后台组件
+- **软依赖只降级、不自动补齐**：`Descriptor.SoftRequires` 声明可选依赖（当前 `user`→`access`/`tenant`、`mfa`→`auth`、`auth`→`captcha`/`breach`、`apikey`→`tenant`、`outbox`→`queue`）；目标能力不在启用集时**不会被自动启用**，本能力降级运行，降级项在启动日志（`capability degraded`，字段 `name`/`names`）与 `GET /capabilities` 的 `degraded` 中列出
+- **表归属自描述**：`Descriptor.Owns` 声明本能力迁移 `CREATE` 的表（如 `user`→`users`、`access`→`roles`/`permissions`/`role_permissions`/`user_roles`、`mfa`→`user_mfa`/`trusted_devices`），`make check-capabilities` 校验「单表唯一归属、无未声明的建表、声明的表确有迁移创建」
+- `Descriptor`（`Requires`/`SoftRequires`/`Owns`/`Configs`/`Permissions`/`Mount`/`Migrations`）是能力元数据的**唯一来源**：启用闭包、配置段加载、权限点种子、路由挂载与能力门禁都只读它，装配代码不再另立清单
 - **配置段随能力**：能力配置段由能力在 `Descriptor.Configs` 声明（`ConfigKey` + `Config` 结构体 + `ApplyDefaults`/`Validate`，生产加严可实现可选的 `ValidateProd`），组合根按启用集统一执行「解码 → 默认值 → 校验」；**未启用能力的配置段既不出现也不校验** —— `app.yaml` 中残留的非法段不会导致启动失败。`auth` 段由 `auth` 能力整体拥有（含嵌套 `webauthn`/`provisioning`），不拆分
 - **热更新范围**：配置文件热更新（`config.Watch`）只覆盖内核段（当前仅应用 `log.level`）；能力配置段变更需重启进程
 - **受保护能力需要认证器**：声明为受保护（`MountProtected`）的能力必须有模块提供受保护中间件（当前为 `auth`）；否则进程**启动即失败**并指出缺失的提供者，而不是把路由裸挂出去。因此 `enabled: ["user"]` 这类"有业务路由、无认证器"的配置会被拒绝；合法的最小组合之一是 `["auth"]`（闭包自动补齐 `user`/`access`/`tenant`/`mfa`）
@@ -1089,6 +1110,7 @@ internal/capabilities/{name}/
 | `make fmt` | 格式化代码 |
 | `make fmt-check` | 检查代码格式 |
 | `make lint` | golangci-lint |
+| `make check-capabilities` | 校验能力自描述（`Owns`）与迁移建表一致（单表唯一归属、无未声明建表） |
 | `make swagger` | 生成 API 文档 |
 | `make cli` | 编译 CLI |
 | `make docker-build` | 构建 Docker 镜像 |
