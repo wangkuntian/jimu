@@ -1,8 +1,9 @@
-// Package assembly 承载组合根的装配原语：把能力描述符清单解析成启用集。
+// Package capability 承载能力**声明层**的解析算法：把能力描述符清单解析成启用集。
 //
-// 本包只依赖 internal/contract 与标准库 —— 不 import 任何能力包或内核包 —— 因此
-// profile 入口包（profiles/<name>）可以只带上自己的能力子集调用这里的算法。
-package assembly
+// 本包只依赖 internal/contract 与标准库 —— 不 import 任何能力包、内核包或驱动包
+// （internal/assembly）—— 因此 catalog（import 全部能力）与各能力 wire.go（import
+// 驱动包）都能安全地 import 它而不成环。
+package capability
 
 import (
 	"fmt"
@@ -18,15 +19,12 @@ type Degradation struct {
 	Missing    []string `json:"missing"`
 }
 
-// ValidateDeclarations 只校验 SoftRequires 的结构：必须是清单内能力名、不得自引用、
-// 不得与 Requires 重叠、不得重复。Owns 与迁移的一致性不在此处，由门禁
-// `make check-capabilities`（tools/checkcapabilities）负责。
-// 依赖图无环与「清单顺序满足依赖在前」由 catalog 的 TestDescriptorsAreWellFormed 钉住。
-func ValidateDeclarations(caps []contract.Descriptor) error {
-	known := make(map[string]bool, len(caps))
-	for _, d := range caps {
-		known[d.Name] = true
-	}
+// validateStructure 只做与集合无关的结构校验：SoftRequires 必须自洽 ——
+// 不得自引用、不得与 Requires 重叠、不得重复。名字是否命中某份清单不在此处判断，
+// 因此 profile 子集（部分能力缺席）也能通过结构校验。
+// Owns/Mount 与迁移的一致性不在此处，由门禁 `make check-capabilities`
+// （tools/checkcapabilities）负责。
+func validateStructure(caps []contract.Descriptor) error {
 	for _, d := range caps {
 		hard := make(map[string]bool, len(d.Requires))
 		for _, dep := range d.Requires {
@@ -34,9 +32,6 @@ func ValidateDeclarations(caps []contract.Descriptor) error {
 		}
 		seen := make(map[string]bool, len(d.SoftRequires))
 		for _, dep := range d.SoftRequires {
-			if !known[dep] {
-				return fmt.Errorf("capability %q soft-requires unknown capability %q", d.Name, dep)
-			}
 			if dep == d.Name {
 				return fmt.Errorf("capability %q soft-requires itself", d.Name)
 			}
@@ -52,12 +47,36 @@ func ValidateDeclarations(caps []contract.Descriptor) error {
 	return nil
 }
 
+// ValidateDeclarations 完整校验声明：结构校验 + 每个 SoftRequires 名字必须命中 known。
+// 用于 catalog 对**全量清单**做错别字检查（known = 全部能力名）；软依赖的目标必须是
+// 已知能力，否则是声明笔误而不是降级。
+func ValidateDeclarations(caps []contract.Descriptor, known []string) error {
+	if err := validateStructure(caps); err != nil {
+		return err
+	}
+	knownSet := make(map[string]bool, len(known))
+	for _, name := range known {
+		knownSet[name] = true
+	}
+	for _, d := range caps {
+		for _, dep := range d.SoftRequires {
+			if !knownSet[dep] {
+				return fmt.Errorf("capability %q soft-requires unknown capability %q", d.Name, dep)
+			}
+		}
+	}
+	return nil
+}
+
 // Resolve 解析启用集：enabled 为空表示全部启用（向后兼容默认配置）；
 // 未知能力报错；硬依赖自动补齐闭包；返回结果按清单顺序排列且为深拷贝
 // （含 Requires，调用方修改不影响清单）；依赖缺失时按清单顺序报出第一个
 // 违规能力，保证错误文案确定，不随 map 遍历顺序变化。
+//
+// 只做结构校验与**硬依赖**成员校验：缺失的软依赖必须合法（降级，不报错），
+// 否则 profile 子集（如 minimal = {user, access, auth}）永远无法解析。
 func Resolve(caps []contract.Descriptor, enabled []string) ([]contract.Descriptor, error) {
-	if err := ValidateDeclarations(caps); err != nil {
+	if err := validateStructure(caps); err != nil {
 		return nil, err
 	}
 	if len(enabled) == 0 {

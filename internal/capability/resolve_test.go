@@ -1,4 +1,4 @@
-package assembly
+package capability
 
 import (
 	"reflect"
@@ -49,6 +49,17 @@ func fixture() []contract.Descriptor {
 		{Name: "feature", Mount: contract.MountProtected},
 		{Name: "uploadsec", Mount: contract.MountProtected},
 		{Name: "breach", Mount: contract.MountProtected},
+	}
+}
+
+// minimalShape 复刻 minimal profile 的形态（Task 5 放宽 auth.Requires 之后）：
+// auth 的 tenant/mfa 是软依赖，因此 {user, access, auth} 是合法子集，tenant/mfa
+// 缺席必须只降级、不报错。
+func minimalShape() []contract.Descriptor {
+	return []contract.Descriptor{
+		{Name: "user", SoftRequires: []string{"access", "tenant"}},
+		{Name: "access", Requires: []string{"user"}, SoftRequires: []string{"tenant"}},
+		{Name: "auth", SoftRequires: []string{"tenant", "mfa", "captcha", "breach"}},
 	}
 }
 
@@ -174,13 +185,39 @@ func TestResolveReportsFirstDanglingDependencyInListOrder(t *testing.T) {
 	}
 }
 
-// TestValidateDeclarationsRejectsBadSoftRequires 声明结构不合法必须报错。
-func TestValidateDeclarationsRejectsBadSoftRequires(t *testing.T) {
+// TestResolveAllowsMissingSoftRequires minimal profile 子集：软依赖缺席必须解析成功，
+// 且 Degraded 把它报告为降级项（user → tenant）。
+func TestResolveAllowsMissingSoftRequires(t *testing.T) {
+	got, err := Resolve(minimalShape(), []string{"user", "access", "auth"})
+	require.NoError(t, err, "profile 子集允许软依赖缺席")
+	require.Equal(t, []string{"user", "access", "auth"}, namesOf(got))
+
+	degraded := Degraded(got)
+	require.Len(t, degraded, 3)
+	assert.Equal(t, Degradation{Capability: "user", Missing: []string{"tenant"}}, degraded[0])
+	assert.Equal(t, Degradation{Capability: "access", Missing: []string{"tenant"}}, degraded[1])
+	assert.Equal(t, Degradation{Capability: "auth", Missing: []string{"tenant", "mfa", "captcha", "breach"}}, degraded[2])
+}
+
+// TestResolveStillPullsHardRequiresWhenSoftMissing 软依赖可以被省略，硬依赖不行。
+func TestResolveStillPullsHardRequiresWhenSoftMissing(t *testing.T) {
+	got, err := Resolve(minimalShape(), []string{"access"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"user", "access"}, namesOf(got))
+}
+
+// TestValidateStructureIgnoresUnknownSoftDep 结构校验与集合无关：未知软依赖名不是
+// 结构缺陷（catalog 的错别字检查由 ValidateDeclarations 用 known 完成）。
+func TestValidateStructureIgnoresUnknownSoftDep(t *testing.T) {
+	require.NoError(t, validateStructure([]contract.Descriptor{{Name: "a", SoftRequires: []string{"ghost"}}}))
+}
+
+// TestValidateStructureRejectsBadSoftRequires 结构缺陷（自引用/与硬依赖重叠/重复）必须报错。
+func TestValidateStructureRejectsBadSoftRequires(t *testing.T) {
 	cases := []struct {
 		name string
 		ds   []contract.Descriptor
 	}{
-		{"unknown soft dep", []contract.Descriptor{{Name: "a", SoftRequires: []string{"ghost"}}}},
 		{"self soft dep", []contract.Descriptor{{Name: "a", SoftRequires: []string{"a"}}}},
 		{"soft overlaps hard", []contract.Descriptor{
 			{Name: "b"},
@@ -190,9 +227,28 @@ func TestValidateDeclarationsRejectsBadSoftRequires(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Error(t, ValidateDeclarations(tc.ds))
+			require.Error(t, validateStructure(tc.ds))
 		})
 	}
+}
+
+// TestValidateDeclarationsChecksKnownAgainstList 软依赖必须命中 known（而不是 caps 本身）：
+// 全量清单的错别字检查靠它，即使目标能力就在 caps 里，只要不在 known 内也算未知。
+func TestValidateDeclarationsChecksKnownAgainstList(t *testing.T) {
+	caps := []contract.Descriptor{{Name: "a", SoftRequires: []string{"b"}}, {Name: "b"}}
+
+	require.NoError(t, ValidateDeclarations(caps, []string{"a", "b"}))
+	require.Error(t, ValidateDeclarations(caps, []string{"a"}), "known 少一项时软依赖名不得命中")
+	require.Error(t, ValidateDeclarations(caps, nil))
+}
+
+// TestValidateDeclarationsRejectsStructureDefects 完整校验包含结构校验。
+func TestValidateDeclarationsRejectsStructureDefects(t *testing.T) {
+	require.Error(t, ValidateDeclarations([]contract.Descriptor{{Name: "a", SoftRequires: []string{"a"}}}, []string{"a"}))
+	require.Error(t, ValidateDeclarations([]contract.Descriptor{
+		{Name: "b"},
+		{Name: "a", Requires: []string{"b"}, SoftRequires: []string{"b"}},
+	}, []string{"a", "b"}))
 }
 
 // TestDegradedListsMissingSoftDeps 只报告缺失的软依赖，硬依赖缺失由 Resolve 报错。

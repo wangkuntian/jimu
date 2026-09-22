@@ -10,11 +10,11 @@ import (
 
 	"jimu/internal/capabilities/apidocs"
 	apikeymw "jimu/internal/capabilities/apikey/middleware"
-	"jimu/internal/capabilities/catalog"
 	"jimu/internal/capabilities/notification"
 	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/queue"
 	"jimu/internal/capabilities/retention"
+	"jimu/internal/capability"
 	"jimu/internal/contract"
 	platformhttp "jimu/internal/kernel/http"
 	"jimu/internal/kernel/http/middleware"
@@ -185,7 +185,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		names = append(names, contract.Describe(module).Name)
 	}
 	container.Logger.Infow("capabilities enabled", "count", len(names), "names", strings.Join(names, ","))
-	// 上一行的 count/names 是「已装配模块」集合；下面这行是 catalog 解析出的启用集
+	// 上一行的 count/names 是「已装配模块」集合；下面这行是组合根解析出的启用集
 	// （可能含 outbox/search/breach 等无 Module 实例的能力），两者刻意分开打印。
 	resolvedNames := make([]string, 0, len(container.Capabilities))
 	for _, d := range container.Capabilities {
@@ -194,7 +194,7 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	container.Logger.Infow("capabilities resolved", "count", len(container.Capabilities), "names", strings.Join(resolvedNames, ","))
 	// 软依赖缺失只降级、不阻断启用（设计 §6.4）：在 enabled 日志之后报告，
 	// 被 fail-closed 拒绝的启用集不会留下降级噪音。
-	for _, d := range catalog.Degraded(container.Capabilities) {
+	for _, d := range capability.Degraded(container.Capabilities) {
 		container.Logger.Warnw("capability degraded", "name", d.Capability, "missing", strings.Join(d.Missing, ","))
 	}
 
@@ -378,8 +378,8 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 
 // capabilitiesResponse 是 /capabilities 的响应体；字段声明顺序即 JSON 键顺序。
 type capabilitiesResponse struct {
-	Enabled  []string              `json:"enabled"`
-	Degraded []catalog.Degradation `json:"degraded"`
+	Enabled  []string                 `json:"enabled"`
+	Degraded []capability.Degradation `json:"degraded"`
 }
 
 // capabilitiesHandler 输出最终启用清单与降级项（设计 §6.4）。管理端口只读、不鉴权。
@@ -392,7 +392,7 @@ func capabilitiesHandler(caps []contract.Descriptor) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(capabilitiesResponse{
 			Enabled:  names,
-			Degraded: catalog.Degraded(caps),
+			Degraded: capability.Degraded(caps),
 		})
 	}
 }

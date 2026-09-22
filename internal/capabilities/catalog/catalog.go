@@ -1,6 +1,6 @@
 // Package catalog 维护全仓库唯一的能力清单。
 //
-// 解析算法（Resolve/ValidateDeclarations/Degraded）已迁至 internal/assembly，
+// 解析算法（Resolve/ValidateDeclarations/Degraded）已迁至叶子包 internal/capability，
 // 本包只提供全量清单 All()/Names()，并保留同名薄封装以免破坏既有调用点。
 //
 // 新增能力：在 entries 中追加一行（位置必须在它的依赖之后）。
@@ -8,7 +8,6 @@
 package catalog
 
 import (
-	"jimu/internal/assembly"
 	accessmodule "jimu/internal/capabilities/access"
 	"jimu/internal/capabilities/apikey"
 	auditmodule "jimu/internal/capabilities/audit"
@@ -27,6 +26,7 @@ import (
 	tenantmodule "jimu/internal/capabilities/tenant"
 	"jimu/internal/capabilities/uploadsec"
 	"jimu/internal/capabilities/user"
+	"jimu/internal/capability"
 	"jimu/internal/contract"
 )
 
@@ -54,9 +54,9 @@ var entries = []contract.Descriptor{
 	breach.Descriptor,
 }
 
-// ValidateDeclarations 校验全量清单的声明结构（薄封装，算法见 internal/assembly）。
+// ValidateDeclarations 校验全量清单的声明结构 + 软依赖错别字（薄封装，算法见 internal/capability）。
 func ValidateDeclarations() error {
-	return assembly.ValidateDeclarations(entries)
+	return capability.ValidateDeclarations(entries, Names())
 }
 
 // All 返回清单中全部能力的深拷贝（含 Requires/SoftRequires/Owns/Permissions/Configs），
@@ -83,15 +83,15 @@ func Names() []string {
 	return out
 }
 
-// Degradation 是 assembly.Degradation 的别名，保留能力清单侧的既有引用。
-type Degradation = assembly.Degradation
+// Degradation 是 capability.Degradation 的别名，保留能力清单侧的既有引用。
+type Degradation = capability.Degradation
 
-// Degraded 返回已解析启用集里被声明但缺失的软依赖（薄封装，算法见 internal/assembly）。
+// Degraded 返回已解析启用集里被声明但缺失的软依赖（薄封装，算法见 internal/capability）。
 func Degraded(caps []contract.Descriptor) []Degradation {
-	return assembly.Degraded(caps)
+	return capability.Degraded(caps)
 }
 
-// Resolve 解析全量清单上的启用集（薄封装，算法见 internal/assembly）。
+// Resolve 解析全量清单上的启用集（薄封装，算法见 internal/capability）。
 func Resolve(enabled []string) ([]contract.Descriptor, error) {
-	return assembly.Resolve(entries, enabled)
+	return capability.Resolve(entries, enabled)
 }

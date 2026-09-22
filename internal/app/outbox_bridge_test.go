@@ -1,10 +1,11 @@
-package app
+package app_test
 
 import (
 	"context"
 	"encoding/json"
 	"testing"
 
+	"jimu/internal/app"
 	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/queue"
 	"jimu/internal/config"
@@ -16,8 +17,8 @@ import (
 )
 
 // fakeContainer 最小 Container：EventBus + Logger（registerEventBusBridge 需 Logger）
-func fakeContainer() *Container {
-	return &Container{
+func fakeContainer() *app.Container {
+	return &app.Container{
 		EventBus: event.New(),
 		Logger:   newTestLogger(),
 	}
@@ -46,7 +47,7 @@ func TestBridgeWorkerPublishesStrongTypeToBareTopic(t *testing.T) {
 		Payload:     payload,
 	})
 
-	err := bridgeFn(c)(context.Background(), string(evtPayload))
+	err := app.BridgeFn(c)(context.Background(), string(evtPayload))
 	assert.NoError(t, err)
 }
 
@@ -57,7 +58,7 @@ func TestBridgeWorkerUnknownTypeErrors(t *testing.T) {
 		EventType: "order.created",
 		Payload:   json.RawMessage(`{}`),
 	})
-	err := bridgeFn(c)(context.Background(), string(evtPayload))
+	err := app.BridgeFn(c)(context.Background(), string(evtPayload))
 	assert.Error(t, err)
 }
 
@@ -69,7 +70,7 @@ func TestBridgeWorkerConversionFailureErrors(t *testing.T) {
 		EventType: contract.EventUserCreated,
 		Payload:   json.RawMessage(`[1,2,3]`),
 	})
-	err := bridgeFn(c)(context.Background(), string(evtPayload))
+	err := app.BridgeFn(c)(context.Background(), string(evtPayload))
 	assert.Error(t, err)
 }
 
@@ -82,7 +83,7 @@ func TestEventBusBridgePublishesToBareTopic(t *testing.T) {
 			t.Fatalf("expected contract.UserCreatedEvent, got %T", payload)
 		}
 	})
-	registerEventBusBridge(c)
+	app.RegisterEventBusBridge(c)
 
 	payload, _ := json.Marshal(contract.UserCreatedEvent{UserID: 9, Username: "carol"})
 	c.EventBus.Publish("outbox:"+contract.EventUserCreated, outbox.EventPayload{
@@ -94,7 +95,7 @@ func TestEventBusBridgePublishesToBareTopic(t *testing.T) {
 
 func TestRegisterOutboxWorkersRegistersAll(t *testing.T) {
 	// queue 包全局 worker map 无导出清理；本测试只断言三个事件类型可注册后 GetWorker 命中，重复运行幂等
-	registerOutboxWorkers(fakeContainer())
+	app.RegisterOutboxWorkers(fakeContainer())
 	for _, et := range []string{"outbox:user.created", "outbox:user.updated", "outbox:user.deleted"} {
 		fn, ok := queue.GetWorker(et)
 		assert.True(t, ok, "worker %s not registered", et)
