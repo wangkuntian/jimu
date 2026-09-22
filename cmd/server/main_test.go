@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"jimu/internal/assembly"
-	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/catalog"
 	"jimu/internal/capability"
 	"jimu/internal/contract"
@@ -102,21 +101,6 @@ func TestFullAssemblyHasNoDuplicates(t *testing.T) {
 		require.False(t, seen[c.Descriptor.Name], "duplicate capability %q", c.Descriptor.Name)
 		seen[c.Descriptor.Name] = true
 	}
-}
-
-// TestValidateAuthConfigProvisioningRequiresPublicRegistration 组合根承担 auth 段的
-// 跨字段校验：开通式注册必须同时开启公开注册（原 config.validateCommon 语义）。
-func TestValidateAuthConfigProvisioningRequiresPublicRegistration(t *testing.T) {
-	err := validateAuthConfig(&authmodule.Config{
-		Provisioning: authmodule.ProvisioningConfig{Enabled: true},
-	})
-	require.ErrorIs(t, err, errProvisioningRequiresPublicRegistration)
-
-	require.NoError(t, validateAuthConfig(&authmodule.Config{
-		PublicRegistration: true,
-		Provisioning:       authmodule.ProvisioningConfig{Enabled: true},
-	}))
-	require.NoError(t, validateAuthConfig(&authmodule.Config{}))
 }
 
 func descriptorNames(ds []contract.Descriptor) []string {

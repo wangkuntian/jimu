@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -52,9 +51,6 @@ import (
 // version 版本号，通过 ldflags 注入：-ldflags "-X main.version=v0.1.0"
 var version = "dev"
 
-// errProvisioningRequiresPublicRegistration 开通式注册要求公开注册（组合根跨字段校验）
-var errProvisioningRequiresPublicRegistration = errors.New("auth.provisioning.enabled requires auth.public_registration")
-
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -90,7 +86,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: user.Descriptor, Wire: user.Wire},
 			{Descriptor: captcha.Descriptor, Wire: captcha.Wire}, // 已搬迁的试点能力
 			{Descriptor: mfamodule.Descriptor, Wire: mfamodule.Wire},
-			{Descriptor: authmodule.Descriptor, Wire: wireAuth},
+			{Descriptor: authmodule.Descriptor, Wire: authmodule.Wire},
 			{Descriptor: passkeymodule.Descriptor, Wire: wirePasskey},
 			{Descriptor: auditmodule.Descriptor, Wire: wireAudit},
 			{Descriptor: consolemodule.Descriptor, Wire: wireConsole},
@@ -106,25 +102,6 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: ws.Descriptor, Wire: ws.Wire},
 		},
 	}
-}
-
-func wireAuth(ctx *assembly.Context) (contract.Module, error) {
-	authCfg := authConfig(ctx)
-	if err := validateAuthConfig(authCfg); err != nil {
-		return nil, err
-	}
-	// captcha 是 auth 的可选依赖（不在 Requires 内）：能力未启用/未装配时端口取回
-	// nil，登录/注册跳过验证码校验。
-	captchaVerifier, _ := ctx.Port(captcha.PortName).(contract.CaptchaVerifier)
-	mod := authmodule.New(ctx.DB(), ctx.Redis(), *authCfg,
-		ctx.Config().HTTP.Mode == config.HTTPModeRelease,
-		captchaVerifier,
-		ctx.Port(outbox.PortName), ctx.Port(notification.PortName), ctx.Port(encryption.PortName),
-		ctx.Port(tenantmodule.PortName), ctx.Port(mfamodule.PortName), ctx.Port(tenantmodule.ProvisionerPortName), ctx.Port(breach.PortName))
-	if err := ctx.Provide(authmodule.PortName, mod.Finalizer()); err != nil {
-		return nil, err
-	}
-	return mod, nil
 }
 
 func wirePasskey(ctx *assembly.Context) (contract.Module, error) {
@@ -260,14 +237,4 @@ func authConfig(ctx *assembly.Context) *authmodule.Config {
 		return cfg
 	}
 	return &authmodule.Config{}
-}
-
-// validateAuthConfig 组合根承担的 auth 段跨字段校验。
-// 设计 §8 ¶2 不拆 auth 段，provisioning 与 public_registration 同段；但 provisioning
-// 的语义归 tenant，P2.1 裁定把这条校验留在组合根（与 outbox.publisher 依赖 queue.type 同理）。
-func validateAuthConfig(cfg *authmodule.Config) error {
-	if cfg.Provisioning.Enabled && !cfg.PublicRegistration {
-		return errProvisioningRequiresPublicRegistration
-	}
-	return nil
 }
