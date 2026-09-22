@@ -32,7 +32,6 @@ import (
 	"jimu/internal/capabilities/uploadsec"
 	"jimu/internal/capabilities/user"
 	"jimu/internal/capabilities/ws"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/scheduler"
 )
@@ -95,7 +94,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: uploadsec.Descriptor, Wire: uploadsec.Wire},
 			{Descriptor: search.Descriptor, Wire: search.Wire},
 			{Descriptor: retention.Descriptor, Wire: wireRetention},
-			{Descriptor: apidocs.Descriptor, Wire: wireAPIDocs},
+			{Descriptor: apidocs.Descriptor, Wire: apidocs.Wire},
 			{Descriptor: grpcpkg.Descriptor, Wire: wireGRPC},
 			{Descriptor: ws.Descriptor, Wire: ws.Wire},
 		},
@@ -153,10 +152,6 @@ func wireRetention(ctx *assembly.Context) (contract.Module, error) {
 		}
 	}
 	return nil, nil
-}
-
-func wireAPIDocs(ctx *assembly.Context) (contract.Module, error) {
-	return apidocs.NewModule(ctx.Config().HTTP.Mode != config.HTTPModeRelease), nil
 }
 
 func wireGRPC(ctx *assembly.Context) (contract.Module, error) {
