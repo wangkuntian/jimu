@@ -89,7 +89,7 @@ func fullAssembly() assembly.Assembly {
 		Version: version,
 		Capabilities: []assembly.Capability{
 			{Descriptor: encryption.Descriptor, Wire: encryption.Wire},
-			{Descriptor: storage.Descriptor, Wire: wireStorage},
+			{Descriptor: storage.Descriptor, Wire: storage.Wire},
 			{Descriptor: notification.Descriptor, Wire: wireNotification},
 			{Descriptor: queue.Descriptor, Wire: wireQueue},
 			{Descriptor: outbox.Descriptor, Wire: wireOutbox},
@@ -115,21 +115,6 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: ws.Descriptor, Wire: noModule},
 		},
 	}
-}
-
-func wireStorage(ctx *assembly.Context) (contract.Module, error) {
-	cfg, err := storage.Load(ctx.Sections())
-	if err != nil {
-		return nil, fmt.Errorf("init storage: %w", err)
-	}
-	svc, err := storage.New(*cfg)
-	if err != nil {
-		return nil, fmt.Errorf("init storage: %w", err)
-	}
-	if err := ctx.Provide(storage.PortName, svc); err != nil {
-		return nil, fmt.Errorf("provide storage port: %w", err)
-	}
-	return nil, nil
 }
 
 func wireNotification(ctx *assembly.Context) (contract.Module, error) {
