@@ -30,7 +30,6 @@ import (
 	"jimu/internal/capabilities/uploadsec"
 	"jimu/internal/capabilities/user"
 	"jimu/internal/capabilities/ws"
-	"jimu/internal/contract"
 )
 
 // @title           Jimu API
@@ -85,7 +84,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: auditmodule.Descriptor, Wire: auditmodule.Wire},
 			{Descriptor: consolemodule.Descriptor, Wire: consolemodule.Wire},
 			{Descriptor: oauthmodule.Descriptor, Wire: oauthmodule.Wire},
-			{Descriptor: apikey.Descriptor, Wire: wireAPIKey},
+			{Descriptor: apikey.Descriptor, Wire: apikey.Wire},
 			{Descriptor: dataops.Descriptor, Wire: dataops.Wire},
 			{Descriptor: feature.Descriptor, Wire: feature.Wire},
 			{Descriptor: uploadsec.Descriptor, Wire: uploadsec.Wire},
@@ -96,8 +95,4 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: ws.Descriptor, Wire: ws.Wire},
 		},
 	}
-}
-
-func wireAPIKey(ctx *assembly.Context) (contract.Module, error) {
-	return apikey.New(ctx.DB(), ctx.Port(tenantmodule.PortName)), nil
 }
