@@ -103,6 +103,43 @@ func TestFullAssemblyHasNoDuplicates(t *testing.T) {
 	}
 }
 
+// TestFullAssemblyUngatedUnderEnabledSubset 回归（Task 3 评审 Finding 1；P2.4 裁定 7 /
+// 设计裁定 B）：capabilities.enabled 为非空子集时，非 catalog 条目不得被裁剪 —— 它们由
+// 形态清单决定，不由配置开关门控。encryption（其 Wire 注册字段级加密 hooks 并暴露 Cipher
+// 端口）与 storage（uploadsec 消费的存储端口）是两个具体断言：二者仍在装配集内，端口仍
+// 被提供；受门控条目仍按启用集闭包裁剪。
+func TestFullAssemblyUngatedUnderEnabledSubset(t *testing.T) {
+	res, err := assembly.ProbeAssembly(fullAssembly(), []string{"user", "auth", "uploadsec"})
+	require.NoError(t, err)
+
+	for _, name := range nonCatalogCapabilities {
+		require.Contains(t, res.Capabilities, name, "非 catalog 条目 %q 不得被 capabilities.enabled 裁剪", name)
+	}
+	// 受门控条目照常裁剪：captcha 不在 ["user","auth","uploadsec"] 的硬依赖闭包内。
+	require.NotContains(t, res.Capabilities, "captcha")
+	require.Contains(t, res.Capabilities, "uploadsec", "storage 的消费方 uploadsec 应随启用集装配")
+
+	// encryption.Wire 运行 → Cipher 端口被提供（email/phone 字段级加密 hooks 随之注册）。
+	require.Contains(t, res.Provided["encryption"], "encryption")
+	// storage.Wire 运行 → Storage 端口被提供（uploadsec 取回后不再降级为 nil）。
+	require.Contains(t, res.Provided["storage"], "storage")
+}
+
+// TestFullAssemblyEventBusDoesNotConstructQueue 回归（Task 3 评审 Finding 2）：
+// shipped 配置 outbox.publisher=event_bus 下不得在启动期构造队列客户端。base 只在 outbox
+// 的 MQ 分支 queue.New（kafka/rabbitmq 构造会连 broker、缺 broker/topic 即启动失败）。
+// 因此 queue 能力（Module/作业端点）仍照常装配，但 queue.Wire 不提供任何端口 ——
+// 没有队列客户端可被构造或泄漏。
+func TestFullAssemblyEventBusDoesNotConstructQueue(t *testing.T) {
+	res, err := assembly.ProbeAssembly(fullAssembly(), nil)
+	require.NoError(t, err)
+
+	require.Contains(t, res.Capabilities, "queue", "queue 能力必须照常装配")
+	require.NotContains(t, res.Provided, "queue", "event_bus 下不得构造队列客户端")
+	// 对照：outbox 仍装配并提供端口（事件总线发布器路径）。
+	require.Contains(t, res.Provided["outbox"], "outbox")
+}
+
 func descriptorNames(ds []contract.Descriptor) []string {
 	out := make([]string, 0, len(ds))
 	for _, d := range ds {

@@ -6,13 +6,19 @@ import (
 	"strings"
 
 	"jimu/internal/app"
-	"jimu/internal/capability"
 	"jimu/internal/config"
-	"jimu/internal/contract"
 	"jimu/internal/kernel/event"
 	"jimu/internal/kernel/httpclient"
 	"jimu/internal/kernel/logger"
 )
+
+// ProbeResult 是一次装配试运行的观测结果（零值内核件，不连库/Redis、不启动监听）。
+type ProbeResult struct {
+	// Capabilities 解析出的能力名，按装配顺序（含硬依赖闭包与非 catalog 条目）。
+	Capabilities []string
+	// Provided 各能力经 Context.Provide 注册的端口名，按注册顺序。
+	Provided map[string][]string
+}
 
 // ValidatePortFlow 校验装配清单的端口流向：按清单顺序试运行每个能力的 Wire，任何经
 // Context.Port 读取的端口都必须在读取发生前已提供（更早的能力经 Provide 注册的端口）。
@@ -22,45 +28,63 @@ import (
 // （Config/Logger/EventBus/HTTPClient），不连库、不连 Redis、不启动监听；为避免
 // 本地存储等按相对路径建目录的构造污染仓库，试运行在临时工作目录内进行。
 // 完整形态（full）里每个被读取的端口都应有人提供，缺失即报错；因此它不适用于
-// 「软依赖确实缺席」的裁剪形态。
+// 「软依赖确实缺席」的裁剪形态 —— 那类形态用 ProbeAssembly 观察装配产物。
 func ValidatePortFlow(a Assembly) error {
-	if err := validateAssembly(a); err != nil {
+	_, violations, err := probeWires(a, nil)
+	if err != nil {
 		return err
+	}
+	if len(violations) > 0 {
+		return fmt.Errorf("assembly %q: port flow violations: %s", a.Name, strings.Join(violations, "; "))
+	}
+	return nil
+}
+
+// ProbeAssembly 在零值内核件上按 enabled 解析形态并试运行全部 Wire，返回解析出的能力名
+// 与各能力实际提供的端口。解析走与 Run 相同的路径：受门控（catalog）条目按
+// capabilities.enabled 裁剪并补齐硬依赖闭包，Ungated 条目恒装配。它不做读取顺序校验
+// （那是 ValidatePortFlow 的职责），供启用子集/延迟构造的回归用例观察装配产物。
+func ProbeAssembly(a Assembly, enabled []string) (ProbeResult, error) {
+	result, _, err := probeWires(a, enabled)
+	return result, err
+}
+
+// probeWires 是 ValidatePortFlow 与 ProbeAssembly 的共同实现：解析装配集 → 加载能力
+// 配置段 → 在临时工作目录内的零值内核件上试运行 Wire，返回观测结果与端口读取违规。
+func probeWires(a Assembly, enabled []string) (ProbeResult, []string, error) {
+	if err := validateAssembly(a); err != nil {
+		return ProbeResult{}, nil, err
 	}
 
 	cfg, sections, err := config.LoadWithSections()
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return ProbeResult{}, nil, fmt.Errorf("load config: %w", err)
 	}
-	descriptors := make([]contract.Descriptor, 0, len(a.Capabilities))
 	byName := make(map[string]Capability, len(a.Capabilities))
 	for _, c := range a.Capabilities {
-		descriptors = append(descriptors, c.Descriptor)
 		byName[c.Descriptor.Name] = c
 	}
-	// 校验的是清单声明的装配顺序本身，故不按 capabilities.enabled 裁剪（enabled 为空
-	// 时二者一致；非空子集下运行期行为由 Run 与 profile 各自的用例覆盖）。
-	caps, err := capability.Resolve(descriptors, nil)
+	caps, err := resolveCapabilities(a, enabled)
 	if err != nil {
-		return fmt.Errorf("resolve capabilities: %w", err)
+		return ProbeResult{}, nil, fmt.Errorf("resolve capabilities: %w", err)
 	}
 	capCfgs, err := app.LoadCapabilityConfigs(sections, caps, cfg.Environment)
 	if err != nil {
-		return fmt.Errorf("load capability configs: %w", err)
+		return ProbeResult{}, nil, fmt.Errorf("load capability configs: %w", err)
 	}
 
 	// 配置已加载，试运行不再依赖 cwd；临时目录吸收构造期的相对路径副作用。
 	tmpDir, err := os.MkdirTemp("", "jimu-portflow-")
 	if err != nil {
-		return fmt.Errorf("create port flow probe dir: %w", err)
+		return ProbeResult{}, nil, fmt.Errorf("create port flow probe dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 	workDir, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("read working directory: %w", err)
+		return ProbeResult{}, nil, fmt.Errorf("read working directory: %w", err)
 	}
 	if err := os.Chdir(tmpDir); err != nil {
-		return fmt.Errorf("enter port flow probe dir: %w", err)
+		return ProbeResult{}, nil, fmt.Errorf("enter port flow probe dir: %w", err)
 	}
 	defer func() { _ = os.Chdir(workDir) }()
 
@@ -73,6 +97,14 @@ func ValidatePortFlow(a Assembly) error {
 	}
 	ctx := newContext(container, sections, capCfgs)
 
+	result := ProbeResult{
+		Capabilities: make([]string, 0, len(caps)),
+		Provided:     make(map[string][]string, len(caps)),
+	}
+	for _, d := range caps {
+		result.Capabilities = append(result.Capabilities, d.Name)
+	}
+
 	var violations []string
 	current := ""
 	ctx.onPort = func(name string, provided bool) {
@@ -81,14 +113,14 @@ func ValidatePortFlow(a Assembly) error {
 				fmt.Sprintf("capability %q reads port %q before it is provided", current, name))
 		}
 	}
+	ctx.onProvide = func(name string) {
+		result.Provided[current] = append(result.Provided[current], name)
+	}
 	for _, d := range caps {
 		current = d.Name
 		if err := wireOne(ctx, d, byName); err != nil {
-			return fmt.Errorf("assembly %q: %w", a.Name, err)
+			return ProbeResult{}, nil, fmt.Errorf("assembly %q: %w", a.Name, err)
 		}
 	}
-	if len(violations) > 0 {
-		return fmt.Errorf("assembly %q: port flow violations: %s", a.Name, strings.Join(violations, "; "))
-	}
-	return nil
+	return result, violations, nil
 }

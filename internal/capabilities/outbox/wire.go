@@ -13,8 +13,10 @@ import (
 // Wire 装配 outbox 能力：构造事件存储与发布器，把 *Outbox 暴露为端口供 user/auth 写入
 // 事件，并注册 outbox_process 定时任务。
 //
-// publisher=event_bus（默认）：订阅事件总线 outbox:* 主题桥接到裸业务主题；
-// publisher=mq：消费 queue 端口，注册 MQ 桥接 worker 并把 WorkerPool 纳入生命周期。
+// publisher=event_bus（默认）：订阅事件总线 outbox:* 主题桥接到裸业务主题，不构造队列；
+// publisher=mq：按 queue.type 构造队列客户端（base 行为：仅在此时构造，kafka/rabbitmq
+// 会连 broker、缺 broker/topic 即启动失败），消费它注册 MQ 桥接 worker 并把 WorkerPool
+// 纳入生命周期。
 func Wire(ctx *assembly.Context) (contract.Module, error) {
 	cfg := assembly.MustSection[*Config](ctx, ConfigKey)
 	if cfg == nil {
@@ -30,9 +32,11 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	var publisher Publisher
 	switch cfg.Publisher {
 	case PublisherMQ:
-		q, ok := ctx.Port(queue.PortName).(queue.Queue)
-		if !ok {
-			return nil, fmt.Errorf("outbox.publisher=%q requires the queue capability", PublisherMQ)
+		qc := *queueCfg
+		qc.Redis = ctx.Redis()
+		q, err := queue.New(qc)
+		if err != nil {
+			return nil, fmt.Errorf("init outbox queue: %w", err)
 		}
 		consumer, ok := q.(queue.Consumer)
 		if !ok {

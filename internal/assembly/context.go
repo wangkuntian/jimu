@@ -32,6 +32,8 @@ type Context struct {
 	// onPort 在每次 Port 读取时回调（ValidatePortFlow 用它观察读取结果；生产路径为 nil）。
 	// provided 表示该端口在读取发生时已注册。
 	onPort func(name string, provided bool)
+	// onProvide 在每次 Provide 成功时回调（ProbeAssembly 用它观察提供端口；生产路径为 nil）。
+	onProvide func(name string)
 }
 
 // newContext 由内核容器与已解码的配置段构造装配上下文。
@@ -89,6 +91,9 @@ func (c *Context) Provide(name string, port any) error {
 		return fmt.Errorf("assembly: port %q provided twice", name)
 	}
 	c.ports[name] = port
+	if c.onProvide != nil {
+		c.onProvide(name)
+	}
 	return nil
 }
 

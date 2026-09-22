@@ -8,11 +8,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// PortName 队列能力对外提供的端口名：Queue（outbox 的 MQ 发布器经它消费）。
-const PortName = "queue"
-
 // NewMySQLStoreForDB 用 gorm 句柄构造工作池所需的持久化存储（装配期便利入口，
-// 供 outbox 等消费方在拿到 queue 端口后构建 WorkerPool，无需 import 本能力内部包）。
+// 供 outbox 等消费方构造 WorkerPool，无需 import 本能力内部包）。
 func NewMySQLStoreForDB(db *gorm.DB) *MySQLStore {
 	return NewMySQLStore(
 		queueinfra.NewMysqlJobRepository(db),

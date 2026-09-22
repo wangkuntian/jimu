@@ -1,27 +1,15 @@
 package queue
 
 import (
-	"fmt"
-
 	"jimu/internal/assembly"
 	"jimu/internal/contract"
 )
 
-// Wire 装配队列能力：按 queue.type 构造队列实例并暴露为端口（outbox 的 MQ 发布器经它
-// 消费），返回作业与调度管理模块（/api/v1/admin/jobs*、/admin/tasks*）。
+// Wire 装配队列能力：返回作业与调度管理模块（/api/v1/admin/jobs*、/admin/tasks*）。
+//
+// 队列客户端**不在此构造**：base 行为是只在 outbox.publisher=mq 时于 outbox 的 MQ 分支
+// 按 queue.type 构造（见 outbox.Wire），kafka/rabbitmq 的构造会连 broker 并 fail-fast，
+// event_bus 下不得发生。queue 端口随之取消：唯一的消费方 outbox 直接 import 本能力构造。
 func Wire(ctx *assembly.Context) (contract.Module, error) {
-	queueCfg := assembly.MustSection[*Config](ctx, ConfigKey)
-	if queueCfg == nil {
-		queueCfg = &Config{}
-	}
-	cfg := *queueCfg
-	cfg.Redis = ctx.Redis()
-	q, err := New(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("init queue: %w", err)
-	}
-	if err := ctx.Provide(PortName, q); err != nil {
-		return nil, fmt.Errorf("provide queue port: %w", err)
-	}
 	return NewModule(ctx.DB(), ctx.Scheduler()), nil
 }

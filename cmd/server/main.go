@@ -63,14 +63,17 @@ func run() error {
 // tenant/access 先于 user；captcha/mfa 先于 auth）。
 // 无 Module 实例的能力（outbox/search/breach/ws 等）保留条目并给出空 Wire，
 // 使启用集与 /capabilities 报告逐值一致。
+//
+// 非 catalog 条目（encryption/storage/notification/retention/apidocs/grpc/ws）标记
+// Ungated：由本清单决定是否装配，不受 capabilities.enabled 门控（P2.4 裁定 7）。
 func fullAssembly() assembly.Assembly {
 	return assembly.Assembly{
 		Name:    "full",
 		Version: version,
 		Capabilities: []assembly.Capability{
-			{Descriptor: encryption.Descriptor, Wire: encryption.Wire},
-			{Descriptor: storage.Descriptor, Wire: storage.Wire},
-			{Descriptor: notification.Descriptor, Wire: notification.Wire},
+			{Descriptor: encryption.Descriptor, Wire: encryption.Wire, Ungated: true},
+			{Descriptor: storage.Descriptor, Wire: storage.Wire, Ungated: true},
+			{Descriptor: notification.Descriptor, Wire: notification.Wire, Ungated: true},
 			{Descriptor: queue.Descriptor, Wire: queue.Wire},
 			{Descriptor: outbox.Descriptor, Wire: outbox.Wire},
 			{Descriptor: breach.Descriptor, Wire: breach.Wire},
@@ -89,10 +92,10 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: feature.Descriptor, Wire: feature.Wire},
 			{Descriptor: uploadsec.Descriptor, Wire: uploadsec.Wire},
 			{Descriptor: search.Descriptor, Wire: search.Wire},
-			{Descriptor: retention.Descriptor, Wire: retention.Wire},
-			{Descriptor: apidocs.Descriptor, Wire: apidocs.Wire},
-			{Descriptor: grpcpkg.Descriptor, Wire: grpcpkg.Wire},
-			{Descriptor: ws.Descriptor, Wire: ws.Wire},
+			{Descriptor: retention.Descriptor, Wire: retention.Wire, Ungated: true},
+			{Descriptor: apidocs.Descriptor, Wire: apidocs.Wire, Ungated: true},
+			{Descriptor: grpcpkg.Descriptor, Wire: grpcpkg.Wire, Ungated: true},
+			{Descriptor: ws.Descriptor, Wire: ws.Wire, Ungated: true},
 		},
 	}
 }

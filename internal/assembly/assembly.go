@@ -23,6 +23,10 @@ import (
 type Capability struct {
 	Descriptor contract.Descriptor
 	Wire       func(*Context) (contract.Module, error)
+	// Ungated 标记非 catalog 条目：由形态清单决定是否装配，不受 capabilities.enabled
+	// 门控（P2.4 裁定 7 / 设计裁定 B：非 catalog 包不由启用集门控）。catalog 条目为
+	// false，随 capabilities.enabled 的解析集裁剪与补齐。
+	Ungated bool
 }
 
 // Assembly 描述一个形态的完整装配。
@@ -55,15 +59,13 @@ func Run(a Assembly) error {
 	}
 	cfg.Environment = os.Getenv("APP_ENV")
 
-	descriptors := make([]contract.Descriptor, 0, len(a.Capabilities))
 	byName := make(map[string]Capability, len(a.Capabilities))
 	for _, c := range a.Capabilities {
-		descriptors = append(descriptors, c.Descriptor)
 		byName[c.Descriptor.Name] = c
 	}
-	// 能力开关：capabilities.enabled 为空表示全部启用（向后兼容）。
-	// 在构建容器前解析，因为能力配置段按启用集加载（设计 §8）。
-	caps, err := capability.Resolve(descriptors, cfg.Capabilities.Enabled)
+	// 能力开关：capabilities.enabled 为空表示全部启用（向后兼容）；非 catalog（Ungated）
+	// 条目不受门控（P2.4 裁定 7）。在构建容器前解析，因为能力配置段按启用集加载（设计 §8）。
+	caps, err := resolveCapabilities(a, cfg.Capabilities.Enabled)
 	if err != nil {
 		return fmt.Errorf("resolve capabilities: %w", err)
 	}
@@ -125,6 +127,43 @@ func Run(a Assembly) error {
 		return fmt.Errorf("run application: %w", err)
 	}
 	return nil
+}
+
+// resolveCapabilities 解析一个形态的实际装配集，是 Run 与端口流向试运行的共用入口。
+//
+// 受门控条目走 capability.Resolve：configured 为空表示全部受门控条目启用；非空时未知名
+// 报错、硬依赖自动补齐闭包（错误语义不变）。Ungated 条目（非 catalog）由形态清单决定，
+// capabilities.enabled 不得移除，故直接并入结果（P2.4 裁定 7）。最终按形态清单顺序
+// 排列，即装配顺序。
+func resolveCapabilities(a Assembly, configured []string) ([]contract.Descriptor, error) {
+	all := make([]contract.Descriptor, 0, len(a.Capabilities))
+	gated := make([]string, 0, len(a.Capabilities))
+	selected := make(map[string]contract.Descriptor, len(a.Capabilities))
+	for _, c := range a.Capabilities {
+		all = append(all, c.Descriptor)
+		if c.Ungated {
+			selected[c.Descriptor.Name] = c.Descriptor
+			continue
+		}
+		gated = append(gated, c.Descriptor.Name)
+	}
+	if len(configured) == 0 {
+		configured = gated
+	}
+	resolved, err := capability.Resolve(all, configured)
+	if err != nil {
+		return nil, err
+	}
+	for _, d := range resolved {
+		selected[d.Name] = d
+	}
+	out := make([]contract.Descriptor, 0, len(selected))
+	for _, c := range a.Capabilities {
+		if d, ok := selected[c.Descriptor.Name]; ok {
+			out = append(out, d)
+		}
+	}
+	return out, nil
 }
 
 // wireCapabilities 按解析顺序调用每个能力的 Wire，并注册非空 Module 实例。
