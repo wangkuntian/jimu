@@ -32,8 +32,6 @@ import (
 	tenantmodule "jimu/internal/capabilities/tenant"
 	"jimu/internal/capabilities/uploadsec"
 	"jimu/internal/capabilities/user"
-	userapplication "jimu/internal/capabilities/user/application"
-	userinfra "jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/capabilities/ws"
 	"jimu/internal/config"
 	"jimu/internal/contract"
@@ -89,7 +87,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: breach.Descriptor, Wire: breach.Wire},
 			{Descriptor: tenantmodule.Descriptor, Wire: wireTenant},
 			{Descriptor: accessmodule.Descriptor, Wire: accessmodule.Wire},
-			{Descriptor: user.Descriptor, Wire: wireUser},
+			{Descriptor: user.Descriptor, Wire: user.Wire},
 			{Descriptor: captcha.Descriptor, Wire: captcha.Wire}, // 已搬迁的试点能力
 			{Descriptor: mfamodule.Descriptor, Wire: wireMFA},
 			{Descriptor: authmodule.Descriptor, Wire: wireAuth},
@@ -116,17 +114,6 @@ func wireTenant(ctx *assembly.Context) (contract.Module, error) {
 		return nil, err
 	}
 	if err := ctx.Provide(tenantmodule.ProvisionerPortName, mod.Provisioner()); err != nil {
-		return nil, err
-	}
-	return mod, nil
-}
-
-func wireUser(ctx *assembly.Context) (contract.Module, error) {
-	roles, _ := ctx.Port(accessmodule.PortName).(userapplication.UserRoleAssigner)
-	quota, _ := ctx.Port(tenantmodule.PortName).(userapplication.TenantQuota)
-	outboxMod, _ := ctx.Port(outbox.PortName).(*outbox.Outbox)
-	mod := user.New(ctx.DB(), *ctx.Config(), ctx.Redis(), outboxMod).WithRoles(roles).WithQuota(quota)
-	if err := ctx.Provide(user.UserinfoPortName, user.NewUserinfoSource(userinfra.NewMysqlRepository(ctx.DB()))); err != nil {
 		return nil, err
 	}
 	return mod, nil
