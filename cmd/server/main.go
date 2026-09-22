@@ -56,8 +56,8 @@ func run() error {
 	return assembly.Run(fullAssembly())
 }
 
-// fullAssembly 是本阶段的过渡形态：能力清单 + 逐能力的内联 Wire。Task 3 会把每个
-// 内联闭包搬到 internal/capabilities/<name>/wire.go，此处只剩清单。
+// fullAssembly 是本阶段的过渡形态：能力清单（每项引用能力自导出的 Descriptor 与
+// Wire），能力件一律由 capabilities/<name>/wire.go 自装配，组合根不再构造任何能力件。
 //
 // 顺序即装配顺序：提供端口的能力必须排在消费它的能力之前（encryption/storage/
 // notification/queue/outbox/breach 先于 tenant/user/auth/uploadsec/grpc；
@@ -92,7 +92,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: search.Descriptor, Wire: search.Wire},
 			{Descriptor: retention.Descriptor, Wire: retention.Wire},
 			{Descriptor: apidocs.Descriptor, Wire: apidocs.Wire},
-			{Descriptor: grpcpkg.Descriptor, Wire: wireGRPC},
+			{Descriptor: grpcpkg.Descriptor, Wire: grpcpkg.Wire},
 			{Descriptor: ws.Descriptor, Wire: ws.Wire},
 		},
 	}
@@ -100,28 +100,4 @@ func fullAssembly() assembly.Assembly {
 
 func wireAPIKey(ctx *assembly.Context) (contract.Module, error) {
 	return apikey.New(ctx.DB(), ctx.Port(tenantmodule.PortName)), nil
-}
-
-func wireGRPC(ctx *assembly.Context) (contract.Module, error) {
-	cfg := ctx.Config()
-	// gRPC server（与 HTTP 双栈；enabled 时纳入生命周期）
-	grpcServer, err := grpcpkg.New(grpcpkg.Config{
-		Enabled:    cfg.GRPC.Enabled,
-		Host:       cfg.GRPC.Host,
-		Port:       cfg.GRPC.Port,
-		TimeoutSec: cfg.GRPC.TimeoutSec,
-		TLS:        cfg.GRPC.TLS,
-	}, ctx.Logger(), ctx.Reporter())
-	if err != nil {
-		return nil, fmt.Errorf("init grpc server: %w", err)
-	}
-	// 业务示例：注册 UserInfoService，用户数据经 contract.UserinfoSource 端口读取
-	// （user 能力提供适配实现，grpc 能力不直接依赖 user/domain）
-	if source, ok := ctx.Port(user.UserinfoPortName).(contract.UserinfoSource); ok && source != nil {
-		grpcServer.RegisterUserInfoService(source)
-	}
-	if cfg.GRPC.Enabled {
-		ctx.RegisterComponent(grpcServer)
-	}
-	return nil, nil
 }
