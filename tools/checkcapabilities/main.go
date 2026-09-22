@@ -16,7 +16,9 @@ import (
 	"jimu/internal/contract"
 )
 
-var createTableRe = regexp.MustCompile(`(?i)CREATE TABLE(?: IF NOT EXISTS)?\s+[` + "`" + `"]?([a-z0-9_]+)`)
+// createTableRe 提取 CREATE TABLE 的目标表名；容忍任意空白、可选 TEMPORARY 与
+// IF NOT EXISTS，并对表名做大小写归一（to lower）后再比较。
+var createTableRe = regexp.MustCompile(`(?i)CREATE\s+(?:TEMPORARY\s+)?TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+[` + "`" + `"]?([a-z0-9_]+)`)
 
 // checkOwnership 比较「声明拥有的表」与「迁移实际建的表」，返回首个违规说明。
 // 遍历顺序按能力名排序，保证同一份清单每次报出的违规确定。
@@ -92,7 +94,7 @@ func createdTables(d contract.Descriptor) ([]string, error) {
 			return err
 		}
 		for _, m := range createTableRe.FindAllStringSubmatch(string(b), -1) {
-			set[m[1]] = true
+			set[strings.ToLower(m[1])] = true
 		}
 		return nil
 	})

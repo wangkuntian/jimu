@@ -10,7 +10,7 @@
 
 **Architecture:** 静态声明放在各能力的 `Descriptor`（`internal/capabilities/<name>/module.go` 或 `migrations.go`）；`internal/capabilities/catalog` 负责声明校验、硬依赖闭包（不变）与软依赖降级报告；`internal/app` 在启动日志与管理端点输出最终启用清单与降级项。`kernel/*` 不得 import `capabilities/*`，管理端点经 `HealthRouter` 的可变注册器由 `internal/app` 注入。
 
-**Tech Stack:** Go 1.26 · `io/fs`（embed 迁移只读扫描）· `go/parser`（门禁静态检查）· testify
+**Tech Stack:** Go 1.26 · `io/fs`（embed 迁移只读扫描）· `regexp`（门禁静态检查）· testify
 
 **Spec:** `docs/design/2026-09-18-capability-plugins-design.md` §6.1（能力自描述）、§6.4（层③运行时）、§9（门禁）、§10 P2
 
@@ -22,6 +22,8 @@
 4. **`Migrations` 保持 `fs.FS`**：不改回路径形态（P1.5 为 embed 进二进制的既定选择，改回会推翻并牵动 `kernel/db/migrate.go` 的 `fs.Stat`/`fs.Sub`）。
 5. **带最小 `check-capabilities`**：只为让 `Owns`/`SoftRequires` 有校验者。完整四道门禁（含跨能力 import 一致性、`capabilities/A → capabilities/B/internal` 越界、`kernel → capabilities` 反向依赖）仍属 P2.8。
 6. **P2.3 与本阶段同分支**：P2.3 依赖 P2.2，且其剩余量小（P0 已做运行时门控、`bootstrap.go:185` 已打印启用清单；`configs` 装配级回归已在 P2.1 完成）。
+7. **I1 降级语义（终审裁定，已执行）**：`catalog.Degraded` 的报告是**声明层**的静态比对 —— 只比较 `Descriptor.SoftRequires` 与已解析启用集，**不观测运行时装配**。组合根当前仍无条件注入多数依赖（`cmd/server/main.go:176-178`/`:205`、`internal/app/container.go:217-220`，且 `main.go:182` 标注为「过渡实现（P0）」），故在组合根改为按启用集驱动（P1 显式 `Deps`）之前可能多报。**保留声明**（声明即契约，收窄到今天的中转装配会把实现残留固化成契约），改为把语义写进 `Degraded`/`Degradation` 文档，并在启动日志同时打印「已装配模块集」（`capabilities enabled`）与「已解析启用集」（`capabilities resolved`，键只用 `count`/`names`，避免 R3 告警）。
+8. **I2 `access` → `tenant` 软依赖（终审裁定，已执行）**：`access` 的 `RoleService` 有真实的可选配额注入（`application/service.go:18` `quota TenantQuota // nil = 未启用租户配额`，`module.go:25-33` 可选注入），且 `tenant` 硬依赖 `access`，故只能声明为 `SoftRequires`。声明取值表与「真实 SoftRequires」枚举同步加入 `access`→`tenant`。
 
 ## Global Constraints
 
@@ -39,7 +41,7 @@
 | 能力 | Requires（不变） | SoftRequires（新增） | Owns（新增） | Soft 依据 |
 |---|---|---|---|---|
 | `user` | — | `access`, `tenant` | `users` | `admin_service.go:220 s.roles==nil`、`:146 s.quota!=nil`；且 access/tenant 硬依赖 user，反向硬声明成环 |
-| `access` | `user` | — | `roles`, `permissions`, `role_permissions`, `user_roles` | — |
+| `access` | `user` | `tenant` | `roles`, `permissions`, `role_permissions`, `user_roles` | `service.go:18 quota TenantQuota // nil = 未启用租户配额`；`module.go:25-33` 可选注入 |
 | `tenant` | `user`, `access` | — | `tenants`, `tenant_plans` | — |
 | `mfa` | `user` | `auth` | `user_mfa`, `trusted_devices` | auth 硬依赖 mfa，反向硬声明成环；JWT 参数由装配期从 auth 段传入 |
 | `auth` | `user`, `access`, `tenant`, `mfa` | `captcha`, `breach` | `login_histories`, `password_histories` | `handler.go:280 h.captcha==nil` 跳过校验；`service.go:43 breachChecker nil = 未启用` |
@@ -264,6 +266,7 @@ func TestCatalogOwnsShape(t *testing.T) {
 func TestCatalogSoftRequiresShape(t *testing.T) {
 	want := map[string][]string{
 		"user":   {"access", "tenant"},
+		"access": {"tenant"},
 		"mfa":    {"auth"},
 		"auth":   {"captcha", "breach"},
 		"apikey": {"tenant"},
@@ -753,6 +756,8 @@ func capabilitiesHandler(caps []contract.Descriptor) http.HandlerFunc {
 	}
 }
 ```
+
+（执行记录：原稿的 `map[string]any` 已改为按字段声明顺序编码的结构体 `capabilitiesResponse{Enabled, Degraded}` —— map 的键按字母序 `degraded`/`enabled` 序列化，与字节钉住的契约不符。）
 
 `HealthRouter` 调用改为：
 

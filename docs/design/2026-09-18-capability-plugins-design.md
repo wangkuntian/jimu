@@ -370,8 +370,10 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > `{"enabled":[…],"degraded":[{"capability":…,"missing":[…]}]}`（`HealthRouter` 因此加了可变参数
 > `extra ...func(*http.ServeMux)`，内核包不必 import 能力）。18 个能力逐个补齐声明（`Owns`：13 个
 > 有表、5 个无表），真实软依赖为
-> `user`→`access`/`tenant`、`mfa`→`auth`、`auth`→`captcha`/`breach`、`apikey`→`tenant`、
-> `outbox`→`queue`。§9 门禁落地第一块 `make check-capabilities`（`tools/checkcapabilities`）：
+> `user`→`access`/`tenant`、`access`→`tenant`、`mfa`→`auth`、`auth`→`captcha`/`breach`、
+> `apikey`→`tenant`、`outbox`→`queue`。降级清单是**声明层**的静态比对（只读 `Descriptor`，不观测
+> 运行时装配）：组合根当前仍无条件注入多数依赖，在其改为按启用集驱动（P1 显式 `Deps`）之前可能
+> 多报。§9 门禁落地第一块 `make check-capabilities`（`tools/checkcapabilities`）：
 > 校验 `Owns` ↔ mysql 迁移「单表唯一归属、无孤儿表、无未声明建表」（PostgreSQL 迁移表名与 mysql
 > 一致，暂以 mysql 为准），其余三道门禁留 P2.8。
 >

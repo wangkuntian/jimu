@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestWiredCapabilitiesSubsetOfCatalog main 装配的 8 个能力必须是清单的子集：
-// 清单尾部的基础设施能力（apikey/queue/outbox/dataops/search）只带迁移、
-// 尚无 Module 实例，故不在装配名册中（run() 按 catalog.Resolve 结果过滤装配）。
+// TestWiredCapabilitiesSubsetOfCatalog main 装配名册（15 个能力）必须是清单（18 项）的子集：
+// 名册含 queue/apikey/dataops 等有 Module 实例的基础设施能力；不在名册中的是
+// outbox/search/breach 等无实例能力（run() 按 catalog.Resolve 结果过滤装配）。
 func TestWiredCapabilitiesSubsetOfCatalog(t *testing.T) {
 	known := catalog.Names()
 	for _, name := range wiredCapabilities {

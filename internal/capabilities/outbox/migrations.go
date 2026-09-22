@@ -11,8 +11,8 @@ import (
 //go:embed migrations
 var migrationsFS embed.FS
 
-// Descriptor 能力静态描述：queue 等基础设施能力尚无独立挂载点，
-// 此处仅携带迁移与身份信息，供迁移运行器与后续 catalog 扩展消费。
+// Descriptor 能力静态描述：受保护挂载点，拥有 outbox_events 表，
+// 可选依赖 queue（publisher=mq 时才需要，缺省时走 event_bus 降级），并声明 outbox 配置段。
 var Descriptor = contract.Descriptor{
 	Name:         "outbox",
 	SoftRequires: []string{"queue"},

@@ -57,8 +57,8 @@ var errCapabilityNoInstance = errors.New("declared capability has no instance")
 // errProvisioningRequiresPublicRegistration 开通式注册要求公开注册（组合根跨字段校验）
 var errProvisioningRequiresPublicRegistration = errors.New("auth.provisioning.enabled requires auth.public_registration")
 
-// wiredCapabilities 是 main 装配的能力名册；必须是 catalog.Names() 的子集
-// （清单尾部的基础设施能力只带迁移、尚无 Module 实例，不在名册中）。
+// wiredCapabilities 是 main 装配的能力名册（15 项）；必须是 catalog.Names()（18 项）的子集
+// （outbox/search/breach 无 Module 实例、只参与迁移，不在名册中）。
 // 单元测试（main_test.go）对账两者，run() 启动时按它过滤装配并自检实例映射。
 var wiredCapabilities = []string{
 	"user", "access", "tenant", "auth", "mfa", "passkey", "queue", "apikey", "dataops",

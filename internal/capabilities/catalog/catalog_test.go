@@ -28,7 +28,7 @@ func fixture() []contract.Descriptor {
 	return []contract.Descriptor{
 		{Name: "user", SoftRequires: []string{"access", "tenant"},
 			Owns: []string{"users"}, Mount: contract.MountProtected},
-		{Name: "access", Requires: []string{"user"},
+		{Name: "access", Requires: []string{"user"}, SoftRequires: []string{"tenant"},
 			Owns:  []string{"roles", "permissions", "role_permissions", "user_roles"},
 			Mount: contract.MountProtected},
 		{Name: "tenant", Requires: []string{"user", "access"},
@@ -177,6 +177,21 @@ func TestAllReturnsDeepCopyOfPermissions(t *testing.T) {
 	if All()[0].Permissions[0].Resource != "/r" {
 		t.Fatal("All() must not expose the registry's Permissions backing array")
 	}
+}
+
+// TestResolveReturnsDeepCopyOfSoftRequiresAndOwns 软依赖与自有表同样不得暴露清单底层数组。
+func TestResolveReturnsDeepCopyOfSoftRequiresAndOwns(t *testing.T) {
+	withEntries(t, contract.Descriptor{Name: "b"},
+		contract.Descriptor{Name: "a", SoftRequires: []string{"b"}, Owns: []string{"t1"}})
+	got, err := Resolve([]string{"a", "b"})
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	got[1].SoftRequires[0] = "mutated"
+	got[1].Owns[0] = "mutated"
+	again, err := Resolve([]string{"a", "b"})
+	require.NoError(t, err)
+	assert.Equal(t, "b", again[1].SoftRequires[0], "Resolve() must not expose the registry's SoftRequires backing array")
+	assert.Equal(t, "t1", again[1].Owns[0], "Resolve() must not expose the registry's Owns backing array")
 }
 
 func TestResolveReturnsDeepCopyOfPermissions(t *testing.T) {
@@ -342,6 +357,7 @@ func TestCatalogOwnsShape(t *testing.T) {
 func TestCatalogSoftRequiresShape(t *testing.T) {
 	want := map[string][]string{
 		"user":   {"access", "tenant"},
+		"access": {"tenant"},
 		"mfa":    {"auth"},
 		"auth":   {"captcha", "breach"},
 		"apikey": {"tenant"},

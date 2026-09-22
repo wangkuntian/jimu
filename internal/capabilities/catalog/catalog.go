@@ -53,8 +53,9 @@ var entries = []contract.Descriptor{
 	breach.Descriptor,
 }
 
-// ValidateDeclarations 校验清单内的自描述声明是否自洽：
-// SoftRequires 必须是清单内能力名、不得自引用、不得与 Requires 重叠、不得重复。
+// ValidateDeclarations 只校验 SoftRequires 的结构：必须是清单内能力名、不得自引用、
+// 不得与 Requires 重叠、不得重复。Owns 与迁移的一致性不在此处，由门禁
+// `make check-capabilities`（tools/checkcapabilities）负责。
 // 依赖图无环与「清单顺序满足依赖在前」由 TestDescriptorsAreWellFormed 钉住。
 func ValidateDeclarations() error {
 	known := make(map[string]bool, len(entries))
@@ -86,7 +87,8 @@ func ValidateDeclarations() error {
 	return nil
 }
 
-// All 返回清单中全部能力的深拷贝（含 Requires/Configs），调用方修改不影响清单。
+// All 返回清单中全部能力的深拷贝（含 Requires/SoftRequires/Owns/Permissions/Configs），
+// 调用方修改不影响清单。
 func All() []contract.Descriptor {
 	out := make([]contract.Descriptor, len(entries))
 	for i, d := range entries {
@@ -109,14 +111,20 @@ func Names() []string {
 	return out
 }
 
-// Degradation 描述一个能力因缺失软依赖而降级运行。
+// Degradation 描述一个能力**声明**的可选依赖（SoftRequires）不在已解析启用集里。
+// 这是声明层的报告，不是对运行时装配的观测。
 type Degradation struct {
 	Capability string   `json:"capability"`
 	Missing    []string `json:"missing"`
 }
 
-// Degraded 计算已解析启用集里的降级项：SoftRequires 中不在集合内的目标。
+// Degraded 返回已解析启用集里被声明但缺失的软依赖：SoftRequires 中不在集合内的目标。
 // 软依赖不会自动补齐（设计 §6.4），缺失只降级、不报错。
+//
+// 这是**静态的组合根声明层**报告，只比对 Descriptor 声明，不观测运行时装配。当前
+// 组合根（cmd/server/main.go、internal/app/container.go）仍无条件注入多数依赖，故在
+// 组合根改为按启用集驱动（P1 显式 Deps）之前本报告可能多报：声明缺失不等于该能力的
+// 可选组件没有被注入。
 func Degraded(caps []contract.Descriptor) []Degradation {
 	present := make(map[string]bool, len(caps))
 	for _, d := range caps {
