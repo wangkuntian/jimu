@@ -41,8 +41,16 @@ type Descriptor struct {
 	Requires []string   // 硬依赖：启用本能力必须同时启用这些能力
 	Mount    MountPoint // 路由挂载方式；零值等价 MountProtected
 
+	// SoftRequires 可选依赖：目标能力缺失时本能力降级运行（不自动补齐、不参与拓扑序）。
+	// 取值必须是 catalog 能力名，且不得与 Requires 重叠或自引用。
+	SoftRequires []string
+
 	// Permissions 能力拥有的权限点；种子时由启用集聚合写入，未启用的能力不种。
 	Permissions []Permission
+
+	// Owns 本能力拥有的表名；这些表只能由本能力的迁移 CREATE。
+	// 空表示本能力不拥有表。
+	Owns []string
 
 	// Migrations 能力自带迁移的嵌入文件系统（根下应有 mysql/ 与 postgres/ 子目录）；
 	// nil 表示该能力无迁移。

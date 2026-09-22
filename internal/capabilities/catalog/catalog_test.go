@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"jimu/internal/config"
 	"jimu/internal/contract"
 )
@@ -128,6 +131,20 @@ func TestAllReturnsDeepCopyOfRequires(t *testing.T) {
 	}
 }
 
+// TestAllReturnsDeepCopyOfSoftRequiresAndOwns 软依赖与自有表同样不得暴露清单底层数组。
+func TestAllReturnsDeepCopyOfSoftRequiresAndOwns(t *testing.T) {
+	withEntries(t, contract.Descriptor{
+		Name:         "a",
+		SoftRequires: []string{"b"},
+		Owns:         []string{"t1"},
+	}, contract.Descriptor{Name: "b"})
+	got := All()
+	got[0].SoftRequires[0] = "mutated"
+	got[0].Owns[0] = "mutated"
+	assert.Equal(t, "b", All()[0].SoftRequires[0], "All() must not expose the registry's SoftRequires backing array")
+	assert.Equal(t, "t1", All()[0].Owns[0], "All() must not expose the registry's Owns backing array")
+}
+
 func TestResolveReturnsDeepCopyOfRequires(t *testing.T) {
 	withEntries(t, contract.Descriptor{Name: "b"}, contract.Descriptor{Name: "a", Requires: []string{"b"}})
 	got, err := Resolve([]string{"a"})
@@ -173,6 +190,33 @@ func TestResolveReportsFirstDanglingDependencyInListOrder(t *testing.T) {
 			t.Fatalf("run %d: error = %v, want the first dangling dependency in list order", i, err)
 		}
 	}
+}
+
+// TestValidateDeclarationsRejectsBadSoftRequires 声明结构不合法必须报错。
+func TestValidateDeclarationsRejectsBadSoftRequires(t *testing.T) {
+	cases := []struct {
+		name string
+		ds   []contract.Descriptor
+	}{
+		{"unknown soft dep", []contract.Descriptor{{Name: "a", SoftRequires: []string{"ghost"}}}},
+		{"self soft dep", []contract.Descriptor{{Name: "a", SoftRequires: []string{"a"}}}},
+		{"soft overlaps hard", []contract.Descriptor{
+			{Name: "b"},
+			{Name: "a", Requires: []string{"b"}, SoftRequires: []string{"b"}},
+		}},
+		{"duplicate soft dep", []contract.Descriptor{{Name: "b"}, {Name: "a", SoftRequires: []string{"b", "b"}}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			withEntries(t, tc.ds...)
+			require.Error(t, ValidateDeclarations())
+		})
+	}
+}
+
+// TestValidateDeclarationsAcceptsCurrentCatalog 真实清单必须通过声明校验。
+func TestValidateDeclarationsAcceptsCurrentCatalog(t *testing.T) {
+	require.NoError(t, ValidateDeclarations())
 }
 
 // TestDescriptorsAreWellFormed 同时校验夹具与真实清单。

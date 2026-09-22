@@ -53,12 +53,47 @@ var entries = []contract.Descriptor{
 	breach.Descriptor,
 }
 
+// ValidateDeclarations 校验清单内的自描述声明是否自洽：
+// SoftRequires 必须是清单内能力名、不得自引用、不得与 Requires 重叠、不得重复。
+// 依赖图无环与「清单顺序满足依赖在前」由 TestDescriptorsAreWellFormed 钉住。
+func ValidateDeclarations() error {
+	known := make(map[string]bool, len(entries))
+	for _, d := range entries {
+		known[d.Name] = true
+	}
+	for _, d := range entries {
+		hard := make(map[string]bool, len(d.Requires))
+		for _, dep := range d.Requires {
+			hard[dep] = true
+		}
+		seen := make(map[string]bool, len(d.SoftRequires))
+		for _, dep := range d.SoftRequires {
+			if !known[dep] {
+				return fmt.Errorf("capability %q soft-requires unknown capability %q", d.Name, dep)
+			}
+			if dep == d.Name {
+				return fmt.Errorf("capability %q soft-requires itself", d.Name)
+			}
+			if hard[dep] {
+				return fmt.Errorf("capability %q declares %q in both Requires and SoftRequires", d.Name, dep)
+			}
+			if seen[dep] {
+				return fmt.Errorf("capability %q duplicates soft requirement %q", d.Name, dep)
+			}
+			seen[dep] = true
+		}
+	}
+	return nil
+}
+
 // All 返回清单中全部能力的深拷贝（含 Requires/Configs），调用方修改不影响清单。
 func All() []contract.Descriptor {
 	out := make([]contract.Descriptor, len(entries))
 	for i, d := range entries {
 		out[i] = d
 		out[i].Requires = append([]string(nil), d.Requires...)
+		out[i].SoftRequires = append([]string(nil), d.SoftRequires...)
+		out[i].Owns = append([]string(nil), d.Owns...)
 		out[i].Permissions = append([]contract.Permission(nil), d.Permissions...)
 		out[i].Configs = append([]contract.ConfigSpec(nil), d.Configs...)
 	}
@@ -79,6 +114,9 @@ func Names() []string {
 // （含 Requires，调用方修改不影响清单）；依赖缺失时按清单顺序报出第一个
 // 违规能力，保证错误文案确定，不随 map 遍历顺序变化。
 func Resolve(enabled []string) ([]contract.Descriptor, error) {
+	if err := ValidateDeclarations(); err != nil {
+		return nil, err
+	}
 	if len(enabled) == 0 {
 		return All(), nil
 	}
@@ -117,6 +155,8 @@ func Resolve(enabled []string) ([]contract.Descriptor, error) {
 	for _, d := range entries {
 		if on[d.Name] {
 			d.Requires = append([]string(nil), d.Requires...)
+			d.SoftRequires = append([]string(nil), d.SoftRequires...)
+			d.Owns = append([]string(nil), d.Owns...)
 			d.Permissions = append([]contract.Permission(nil), d.Permissions...)
 			d.Configs = append([]contract.ConfigSpec(nil), d.Configs...)
 			out = append(out, d)
