@@ -382,6 +382,32 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > 由组合根显式装配（能力清单仍为 18 项，`configs/*.yaml` 零改动），是否 catalogize 连同 profile
 > 入口包一起在 **P2.5/P2.6** 定夺（与 P2.1 的裁定 2B 一致）。执行记录见
 > [`docs/plans/2026-09-22-p2-contract-and-runtime.md`](../plans/2026-09-22-p2-contract-and-runtime.md)。
+>
+> **P2 进展（P2.4 层② 构建已完成）**：§6.3 的 profile 入口包与 `compose-report` 落地 ——
+> 装配从单体的 `cmd/server/main.go` 抽成 `internal/assembly`（`Assembly`/`Capability`/`Context`/
+> `Run`/`ValidatePortFlow`）+ 各能力 `wire.go` 自装配 + `internal/profiles/<name>` 形态清单，
+> 5 个入口 `profiles/{full,minimal,saas,enterprise,machine}` **只 import 本形态需要的能力**
+> （裁剪由 import 图决定，不用 build tag、无组合矩阵）；`cmd/server` 降为 `full` 的薄包装
+> （保留 swagger 注解，Dockerfile / Makefile / compose / `swag init -g cmd/server/main.go` / CI
+> 全不变）；`full` 的 descriptor / 模块 / 路由 / 权限点 / 迁移集合与改造前逐值一致，由既有 e2e
+> 路由对齐用例与 `internal/profiles/full` 的对账用例钉住。`auth.Requires` 放宽：`tenant`/`mfa`
+> 从硬依赖降为 `SoftRequires`（否则 `minimal` 无法排除租户与 MFA，设计 §2 ①），缺失时走 auth
+> 既有降级分支；无 `auth` 的 `machine` 形态（设计 §2 ④）的受保护路由改由 `apikey` 的
+> `ProtectedHTTPMiddleware` 承担（`X-API-Key` + 框架唯一基线 scope `api:access`）。新增
+> `make profiles-check`（构建 + **golden 依赖闭包裁剪门禁**：逐形态能力根包集合逐值锁定，
+> 可选 `JIMU_PROFILES_SMOKE=1` 启动冒烟）与 `make compose-report`（`tools/composereport` 逐形态
+> 实测二进制大小 / 路由数 / 迁移数 / 表数 / 本仓 import 闭包代码量与文件数，生成
+> [`docs/profiles/compose-report.md`](../profiles/compose-report.md) 入库）。实测：`minimal`
+> 二进制 85.8 MB vs `full` 122.6 MB（−30.0%），路由 32 vs 99，表 7 vs 23，本仓闭包代码行
+> 17804 vs 33995；五个形态的 `go.mod` 直接依赖数**完全相同**（各 64 个）—— §11「层②不减小
+> `go.mod`」由此变成可回归验证的事实，而不是文字约定。**已知限制与推迟**：`machine` 可启动但
+> `/api/v1/admin/apikeys` 需要它刻意排除的 JWT 链，首把 API Key 必须带外签发（CLI 路径归
+> P2.6/P2.7 §3.8）；迁移与结构种子仍按 catalog 全量清单执行，profile 驱动的迁移裁剪归
+> P2.6/P2.8；`user`/`auth` 直接 import `outbox`/`queue`/`notification`/`ws` 的具体类型，导致
+> `minimal`/`saas`/`machine`/`enterprise` 闭包里留有这些能力的**编译期残留**（装配期一个都不
+> 构造），已由 golden 闭包门禁冻结，消除它们需把这些共享类型迁到 `contract`/内核。执行记录见
+> [`docs/plans/2026-09-21-p2-three-layer-mechanism.md`](../plans/2026-09-21-p2-three-layer-mechanism.md)
+> 的 P2.4 段。
 
 ## 11. 风险与取舍
 

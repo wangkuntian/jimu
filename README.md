@@ -285,9 +285,22 @@ v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capab
 | `profiles/enterprise` | `minimal` + `console` `audit` `oauth` `dataops` `storage` | 公司内部系统（单租户，`tid=0` 平台级视角） |
 | `profiles/machine` | `user` `access` `apikey` + `grpc` `encryption` | 无界面、服务间调用（**无任何登录/注册/会话端点**，受保护路由走 `X-API-Key`） |
 
-- **构建与门禁** — `go build ./profiles/<name>`；`make profiles-check` 构建 5 个入口（构建失败即非零退出），设置 `JIMU_PROFILES_SMOKE=1` 后额外以 `APP_ENV=dev` 逐个启动并轮询管理端 `/readyz`（需 DB+Redis，端口可用 `JIMU_PROFILES_HTTP_PORT`/`JIMU_PROFILES_MGMT_PORT` 覆盖）；未设置时逐形态打印 `SKIP`，不静默跳过。
+**编译期脚注（`go list -deps` 实测，闭包 ⊋ 装配集）**：上表是**装配集**，但闭包里还会多出几个能力包 —— `minimal`/`saas` 额外链上 `outbox`/`queue`，`machine` 额外链上 `notification`/`outbox`/`queue`，`enterprise` 额外链上 `outbox`/`queue`/`ws`。这**纯粹**因为 `user`/`auth` 直接 import 了这些能力的具体 Go 类型（`*outbox.Outbox`、`notification.Message`、`outbox.Event`；`outbox` 又 import `queue`，`enterprise` 经 `console` 链上 `ws`），编译期必然带进来；**上列多出来的这些能力一个都不装配**（不在对应形态的 `Assembly` 里，没有路由/任务/组件、不建表、不 seed）。`make profiles-check` 的 golden 闭包门禁把每个形态的这份集合钉死，因此它不会无声明地增减；要消除这些残留，需要把上述共享类型移到 `contract`/内核（另一次改动）。
+
+**编译面实测（`make compose-report` 生成 [docs/profiles/compose-report.md](docs/profiles/compose-report.md)，口径见该报告）**：
+
+| 形态 | 二进制 | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `full` | 122.6 MB | 100.0% | 99 | 25 | 23 | 328 | 33995 |
+| `minimal` | 85.8 MB | 70.0% | 32 | 7 | 7 | 182 | 17804 |
+| `saas` | 86.1 MB | 70.2% | 48 | 13 | 11 | 208 | 20450 |
+| `enterprise` | 99.5 MB | 81.1% | 55 | 13 | 11 | 248 | 23241 |
+| `machine` | 84.4 MB | 68.9% | 28 | 7 | 6 | 184 | 18080 |
+
+- **层②边界：profile 改变的是编译面，不是 `go.mod`** — `go.mod`/`go.sum` 描述 module 而非包，Go 的依赖裁剪作用于**整个 module**，所以五个形态的 `go.mod` 直接依赖数**完全相同**（各 64 个）。profile 只决定哪些包与符号**编进二进制**（上表的二进制/路由/迁移/表/闭包代码量）；真正让 `go.mod` 变小的是层①（`jimu new` 生成专属 module 后 `go mod tidy`），不是换个 profile。
+- **构建、门禁与报告** — `go build ./profiles/<name>`；`make profiles-check` 构建 5 个入口（构建失败即非零退出）并校验依赖闭包裁剪门禁（每个形态的能力根包集合逐值锁定），设置 `JIMU_PROFILES_SMOKE=1` 后额外以 `APP_ENV=dev` 逐个启动并轮询管理端 `/readyz`（需 DB+Redis，端口可用 `JIMU_PROFILES_HTTP_PORT`/`JIMU_PROFILES_MGMT_PORT` 覆盖），未设置时逐形态打印 `SKIP`、不静默跳过；`make compose-report` 重算并覆盖 `docs/profiles/compose-report.md`（不连库、不启动监听，口径见报告开头）。
 - **`machine` 已知限制** — `/api/v1/admin/apikeys` 位于 `middleware.AdminAuth()` 之后，需要该形态刻意排除的 JWT 链，因此 `machine` 可以启动，但**无法自助签发第一把 API Key**：需要带外签发路径（CLI/种子，P2.6/P2.7 §3.8），本阶段不提供。
-- **种子与迁移不随形态裁剪** — 迁移仍按 catalog 全量清单执行（表先建好），结构种子（默认租户/free 套餐/超管角色/admin 用户 + 权限点聚合 + Casbin 同步）是各形态共享的既有实现，不做形态门控；`ADMIN_PASSWORD` 未设置时跳过并打 `structural seed skipped` 告警，服务不会因缺少该变量而启动失败（容器启动早于 CLI 迁移、compose 不向 server 注入该变量）。profile 驱动的迁移裁剪见 P2.6/P2.8。
+- **种子与迁移不随形态裁剪** — 迁移仍按 catalog 全量清单执行（表先建好），结构种子（默认租户/free 套餐/超管角色/admin 用户 + **按本形态解析集**聚合的权限点 + Casbin 同步）是各形态共享的既有实现，不做形态门控；`ADMIN_PASSWORD` 未设置时跳过并打 `structural seed skipped` 告警，服务不会因缺少该变量而启动失败（容器启动早于 CLI 迁移、compose 不向 server 注入该变量）。profile 驱动的迁移裁剪见 P2.6/P2.8。
 
 ## 项目结构
 
@@ -327,6 +340,7 @@ jimu/
 │   └── helm/                    # Helm Chart（含 openobserve / otel-collector 配置）
 ├── docs/                         # 文档
 │   ├── openapi/                  # Swagger 生成的 API 文档
+│   ├── profiles/                 # 形态编译面报告（make compose-report 生成）
 │   ├── releases/                 # 版本 changelog / GitHub Release body（每版本一个文件）
 │   ├── CONTRIBUTING.md           # 贡献指南（分支/PR/发布/集成测试手册）
 │   └── SECURITY.md               # 安全政策（漏洞报告流程）
@@ -337,9 +351,11 @@ jimu/
 │   │   ├── container.go        # 依赖容器
 │   │   ├── application.go      # Application 生命周期
 │   │   └── seed.go             # 数据种子（权限点聚合自能力 Descriptor）
+│   ├── assembly/               # 形态装配驱动（Assembly/Context/Wire 调用、Run、端口流向护栏）
+│   ├── capability/             # 描述符解析叶子包（启用闭包 / 声明校验 / 降级项；只 import contract）
 │   ├── profiles/               # 形态清单（每个形态一份 Assembly：full/minimal/saas/enterprise/machine）
 │   ├── capabilities/           # 可插拔能力（catalog 是唯一清单；每个能力导出 Descriptor）
-│   │   ├── catalog/            # 能力清单 + 启用集解析
+│   │   ├── catalog/            # 能力清单（全量 18 项；启用集解析在 internal/capability）
 │   │   ├── apidocs/            # Swagger 文档注册
 │   │   ├── auth/               # 会话与凭证本体（登录/注册/改密/Token/登录历史）
 │   │   ├── mfa/                # TOTP 二次验证 + 可信设备（跳过 MFA）+ 自有 totp/ 实现
@@ -399,6 +415,7 @@ jimu/
 │       └── testutil/           # 测试工具
 ├── tools/
 │   ├── checkcapabilities/        # 能力自描述（Owns）与迁移归属校验（make check-capabilities）
+│   ├── composereport/            # 形态编译面报告生成（make compose-report）
 │   ├── generator/                # 代码生成器
 │   └── logcheck/                 # 日志调用规范静态检查（make check-log-usage）
 ├── .github/                    # GitHub Actions + Dependabot
@@ -758,7 +775,7 @@ api.POST("/users", apikey.RequireScope("user:write"), userHandler.Create)
 约定：
 
 - **空 `scopes` 表示拒绝一切**：`APIKey.HasScope` 对空列表恒返回 false；只有显式包含 `*` 才代表全权，不要依赖"不填即全权"的隐式行为。
-- Scope 清单由业务方定义，框架不内置强制集合；`HasScope` 已提供通配匹配（`s == scope || s == "*"`），`RequireScope` 按同一语义校验。
+- Scope 清单由业务方定义、业务 scope 一律**追加**；框架只内置**一个**基线 scope `api:access`（`apikey.ScopeProtected`）—— 无 `auth` 形态下所有 `MountProtected` 路由共用同一条受保护链，无法按路由声明业务 scope，因此该链要求 Key 显式带上 `api:access`（或 `*`）。`HasScope` 已提供通配匹配（`s == scope || s == "*"`），`RequireScope` 按同一语义校验。
 - **认证与授权分离**：`APIKeyAuthMiddleware` 只校验 Key 有效性（格式、存在、启用、未过期）并注入 Key；是否需要某个 scope 由路由上的 `RequireScope` 决定，未挂载即不校验 scope。
 - **无 `auth` 形态的受保护路由**：启用集没有 `auth` 时（如 `machine` 形态，无登录/会话端点），`apikey` 实现 `contract.ProtectedHTTPMiddlewareProvider`，组合根把 `APIKeyAuthMiddleware` + `RequireScope(apikey.ScopeProtected)`（`api:access`，`*` 为全权）挂到所有声明 `MountProtected` 的能力路由上；启用集含 `auth` 时 `apikey` 返回空链让位，同一启用集仍只有一个受保护中间件提供者。
 - **API Key 维度限流**：`middleware.APIKeyRateLimitMiddleware(rdb, limit, window)` 挂在认证之后，按 Key ID 计数（不落明文），未携带 Key 的请求跳过该维度；租户维度由 `ratelimit.tenant.*` 全局启用。配额（按天/按月上限）用同一中间件配长窗口即可（例如 `window=24h`）。
@@ -839,18 +856,20 @@ curl http://127.0.0.1:9090/metrics
 curl http://127.0.0.1:9090/capabilities
 ```
 
-`capabilities.enabled: ["auth"]` 时（硬依赖闭包补齐 `user`/`access`；`tenant`/`mfa`/`captcha`/`breach` 是软依赖，不补齐但会在 `degraded` 中列为缺失）：
+`capabilities.enabled: ["auth"]` 时（硬依赖闭包补齐 `user`/`access`；`tenant`/`mfa`/`captcha`/`breach` 是软依赖，不补齐但会在 `degraded` 中列为缺失）。**`enabled` 是完整的解析集**：除 catalog 闭包外，它**恒含七个非 catalog（`Ungated`）条目** —— `encryption`/`storage`/`notification`/`retention`/`apidocs`/`grpc`/`ws`，它们不受 `capabilities.enabled` 门控，只要该形态清单里有就会出现（缺了才是异常，见[形态（profile）](#形态profile)）：
 
 ```json
 {
-  "enabled": ["user", "access", "auth"],
+  "enabled": ["encryption", "storage", "notification", "access", "user", "auth", "retention", "apidocs", "grpc", "ws"],
   "degraded": [
-    {"capability": "user", "missing": ["tenant"]},
     {"capability": "access", "missing": ["tenant"]},
+    {"capability": "user", "missing": ["tenant"]},
     {"capability": "auth", "missing": ["tenant", "mfa", "captcha", "breach"]}
   ]
 }
 ```
+
+裁剪后的形态（如 `machine`）解析集更小：非 catalog 条目按该形态清单取（`machine` 只有 `encryption`/`grpc`），`capabilities.enabled` 不能引入清单外的能力。
 
 ## 配置说明
 
@@ -1135,7 +1154,8 @@ internal/capabilities/{name}/
 | `make fmt-check` | 检查代码格式 |
 | `make lint` | golangci-lint |
 | `make check-capabilities` | 校验能力自描述（`Owns`）与迁移建表一致（单表唯一归属、无未声明建表；只扫描 mysql 迁移，PostgreSQL 表名与 mysql 一致） |
-| `make profiles-check` | 构建 5 个形态入口；`JIMU_PROFILES_SMOKE=1` 时额外启动各形态并轮询管理端 `/readyz`（需 DB+Redis） |
+| `make profiles-check` | 构建 5 个形态入口 + 依赖闭包裁剪门禁（golden）；`JIMU_PROFILES_SMOKE=1` 时额外启动各形态并轮询管理端 `/readyz`（需 DB+Redis） |
+| `make compose-report` | 生成形态编译面报告 `docs/profiles/compose-report.md`（二进制/路由/迁移/表/本仓闭包代码量；不连库、不启动监听） |
 | `make swagger` | 生成 API 文档 |
 | `make cli` | 编译 CLI |
 | `make docker-build` | 构建 Docker 镜像 |
