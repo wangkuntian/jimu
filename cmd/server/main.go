@@ -5,31 +5,7 @@ import (
 	"os"
 
 	"jimu/internal/assembly"
-	accessmodule "jimu/internal/capabilities/access"
-	"jimu/internal/capabilities/apidocs"
-	"jimu/internal/capabilities/apikey"
-	auditmodule "jimu/internal/capabilities/audit"
-	authmodule "jimu/internal/capabilities/auth"
-	"jimu/internal/capabilities/breach"
-	"jimu/internal/capabilities/captcha"
-	consolemodule "jimu/internal/capabilities/console"
-	"jimu/internal/capabilities/dataops"
-	"jimu/internal/capabilities/encryption"
-	"jimu/internal/capabilities/feature"
-	grpcpkg "jimu/internal/capabilities/grpc"
-	mfamodule "jimu/internal/capabilities/mfa"
-	"jimu/internal/capabilities/notification"
-	oauthmodule "jimu/internal/capabilities/oauth"
-	"jimu/internal/capabilities/outbox"
-	passkeymodule "jimu/internal/capabilities/passkey"
-	"jimu/internal/capabilities/queue"
-	"jimu/internal/capabilities/retention"
-	"jimu/internal/capabilities/search"
-	"jimu/internal/capabilities/storage"
-	tenantmodule "jimu/internal/capabilities/tenant"
-	"jimu/internal/capabilities/uploadsec"
-	"jimu/internal/capabilities/user"
-	"jimu/internal/capabilities/ws"
+	"jimu/internal/profiles/full"
 )
 
 // @title           Jimu API
@@ -44,58 +20,13 @@ import (
 // version 版本号，通过 ldflags 注入：-ldflags "-X main.version=v0.1.0"
 var version = "dev"
 
+// main 是薄包装：能力清单归 internal/profiles/full，装配与生命周期归 internal/assembly。
+// 构建版本仍由本包经 ldflags 注入后覆盖清单默认值（Makefile 的 `-X main.version` 不变）。
 func main() {
-	if err := run(); err != nil {
+	a := full.Assembly()
+	a.Version = version
+	if err := assembly.Run(a); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
-	}
-}
-
-func run() error {
-	return assembly.Run(fullAssembly())
-}
-
-// fullAssembly 是本阶段的过渡形态：能力清单（每项引用能力自导出的 Descriptor 与
-// Wire），能力件一律由 capabilities/<name>/wire.go 自装配，组合根不再构造任何能力件。
-//
-// 顺序即装配顺序：提供端口的能力必须排在消费它的能力之前（encryption/storage/
-// notification/queue/outbox/breach 先于 tenant/user/auth/uploadsec/grpc；
-// tenant/access 先于 user；captcha/mfa 先于 auth）。
-// 无 Module 实例的能力（outbox/search/breach/ws 等）保留条目并给出空 Wire，
-// 使启用集与 /capabilities 报告逐值一致。
-//
-// 非 catalog 条目（encryption/storage/notification/retention/apidocs/grpc/ws）标记
-// Ungated：由本清单决定是否装配，不受 capabilities.enabled 门控（P2.4 裁定 7）。
-func fullAssembly() assembly.Assembly {
-	return assembly.Assembly{
-		Name:    "full",
-		Version: version,
-		Capabilities: []assembly.Capability{
-			{Descriptor: encryption.Descriptor, Wire: encryption.Wire, Ungated: true},
-			{Descriptor: storage.Descriptor, Wire: storage.Wire, Ungated: true},
-			{Descriptor: notification.Descriptor, Wire: notification.Wire, Ungated: true},
-			{Descriptor: queue.Descriptor, Wire: queue.Wire},
-			{Descriptor: outbox.Descriptor, Wire: outbox.Wire},
-			{Descriptor: breach.Descriptor, Wire: breach.Wire},
-			{Descriptor: tenantmodule.Descriptor, Wire: tenantmodule.Wire},
-			{Descriptor: accessmodule.Descriptor, Wire: accessmodule.Wire},
-			{Descriptor: user.Descriptor, Wire: user.Wire},
-			{Descriptor: captcha.Descriptor, Wire: captcha.Wire}, // 已搬迁的试点能力
-			{Descriptor: mfamodule.Descriptor, Wire: mfamodule.Wire},
-			{Descriptor: authmodule.Descriptor, Wire: authmodule.Wire},
-			{Descriptor: passkeymodule.Descriptor, Wire: passkeymodule.Wire},
-			{Descriptor: auditmodule.Descriptor, Wire: auditmodule.Wire},
-			{Descriptor: consolemodule.Descriptor, Wire: consolemodule.Wire},
-			{Descriptor: oauthmodule.Descriptor, Wire: oauthmodule.Wire},
-			{Descriptor: apikey.Descriptor, Wire: apikey.Wire},
-			{Descriptor: dataops.Descriptor, Wire: dataops.Wire},
-			{Descriptor: feature.Descriptor, Wire: feature.Wire},
-			{Descriptor: uploadsec.Descriptor, Wire: uploadsec.Wire},
-			{Descriptor: search.Descriptor, Wire: search.Wire},
-			{Descriptor: retention.Descriptor, Wire: retention.Wire, Ungated: true},
-			{Descriptor: apidocs.Descriptor, Wire: apidocs.Wire, Ungated: true},
-			{Descriptor: grpcpkg.Descriptor, Wire: grpcpkg.Wire, Ungated: true},
-			{Descriptor: ws.Descriptor, Wire: ws.Wire, Ungated: true},
-		},
 	}
 }

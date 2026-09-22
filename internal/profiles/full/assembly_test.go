@@ -1,7 +1,6 @@
-package main
+package full
 
 import (
-	"slices"
 	"testing"
 
 	"jimu/internal/assembly"
@@ -12,32 +11,76 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// nonCatalogCapabilities 是 full 形态中的非 catalog 条目（P2.4 裁定 7）：它们是
+// nonCatalogEntries 是 full 形态里的非 catalog 条目（P2.4 裁定 7）：它们是
 // assembly.Capability 但不是 catalog 成员（catalog 仍 18 项，不入迁移/权限聚合）。
-var nonCatalogCapabilities = []string{"encryption", "storage", "notification", "retention", "ws", "grpc", "apidocs"}
+var nonCatalogEntries = []string{
+	"storage", "notification", "retention", "ws", "grpc", "apidocs", "encryption",
+}
 
-// TestFullAssemblyCoversCatalog 过渡形态的能力清单 = catalog 全量 ∪ 固定非 catalog 条目，
-// 且每一项都必须给出 Wire（无 Module 实例的能力给出空 Wire）。
-func TestFullAssemblyCoversCatalog(t *testing.T) {
-	a := fullAssembly()
-	require.Equal(t, "full", a.Name)
-	require.Equal(t, version, a.Version, "构建版本必须传给驱动（console 状态页依赖它）")
-
-	got := make([]string, 0, len(a.Capabilities))
-	for _, c := range a.Capabilities {
-		require.NotNil(t, c.Wire, "capability %q has no Wire", c.Descriptor.Name)
-		got = append(got, c.Descriptor.Name)
+// TestFullAssemblyShape full 形态的名字集合 = catalog 全量 ∪ 固定非 catalog 条目。
+//
+// 注意（裁定 12）：`Assembly.Capabilities` 的顺序是**装配顺序**——端口提供者必须排在
+// 消费者之前（例如 `tenant`/`access` 必须先于 `user`，而 catalog 顺序里 `user` 在最前），
+// 因此这里只断言**集合**而不是顺序。catalog 顺序只用于迁移与启用闭包，由
+// `capability.Resolve` 保证（它按传入切片顺序返回并补齐硬依赖）。
+func TestFullAssemblyShape(t *testing.T) {
+	cat := catalog.Names() // 18 项
+	extra := map[string]bool{}
+	for _, n := range nonCatalogEntries {
+		extra[n] = true
 	}
-	want := append(catalog.Names(), nonCatalogCapabilities...)
-	slices.Sort(got)
-	slices.Sort(want)
-	require.Equal(t, want, got, "过渡形态的能力清单必须 = catalog 全量 ∪ 非 catalog 条目")
+	got := capabilityNames(Assembly())
+	require.Len(t, got, len(cat)+len(extra))
+	seen := make(map[string]bool, len(got))
+	for _, n := range got {
+		require.False(t, seen[n], "duplicate capability %q", n)
+		seen[n] = true
+	}
+	for _, n := range cat {
+		require.True(t, seen[n], "missing catalog capability %q", n)
+	}
+	for n := range extra {
+		require.True(t, seen[n], "missing non-catalog entry %q", n)
+	}
+}
+
+// TestFullAssemblyModulesAreWired 每个条目都必须给出 Wire。
+func TestFullAssemblyModulesAreWired(t *testing.T) {
+	for _, c := range Assembly().Capabilities {
+		require.NotNil(t, c.Wire, "capability %q has no Wire", c.Descriptor.Name)
+	}
+}
+
+// TestFullAssemblyHasNoDuplicates 清单内不得重名。
+func TestFullAssemblyHasNoDuplicates(t *testing.T) {
+	seen := map[string]bool{}
+	for _, c := range Assembly().Capabilities {
+		require.False(t, seen[c.Descriptor.Name], "duplicate capability %q", c.Descriptor.Name)
+		seen[c.Descriptor.Name] = true
+	}
+}
+
+// TestFullAssemblyUngatedFlagsMatchesCatalogMembership Ungated 精确标记非 catalog 条目：
+// 非 catalog 条目必须 Ungated（由形态清单决定，不受 capabilities.enabled 门控），
+// catalog 条目必须受门控。
+func TestFullAssemblyUngatedFlagsMatchesCatalogMembership(t *testing.T) {
+	cat := map[string]bool{}
+	for _, n := range catalog.Names() {
+		cat[n] = true
+	}
+	for _, c := range Assembly().Capabilities {
+		if cat[c.Descriptor.Name] {
+			require.False(t, c.Ungated, "catalog 能力 %q 不得标记 Ungated", c.Descriptor.Name)
+			continue
+		}
+		require.True(t, c.Ungated, "非 catalog 条目 %q 必须标记 Ungated", c.Descriptor.Name)
+	}
 }
 
 // TestFullAssemblyResolvesToCatalogDefault 默认配置（capabilities.enabled 为空）下，
-// 过渡形态的 catalog 能力解析集必须与 catalog.Resolve(nil) 逐名一致 —— full 零退化的第一道护栏。
+// catalog 能力的解析集必须与 catalog.Resolve(nil) 逐名一致 —— full 零退化的第一道护栏。
 func TestFullAssemblyResolvesToCatalogDefault(t *testing.T) {
-	a := fullAssembly()
+	a := Assembly()
 	known := map[string]bool{}
 	for _, n := range catalog.Names() {
 		known[n] = true
@@ -57,10 +100,10 @@ func TestFullAssemblyResolvesToCatalogDefault(t *testing.T) {
 	require.ElementsMatch(t, descriptorNames(fromCatalog), descriptorNames(got))
 }
 
-// TestFullAssemblyDeclarationsAreWellFormed 过渡形态的声明必须通过全量清单同款校验
+// TestFullAssemblyDeclarationsAreWellFormed 声明必须通过全量清单同款校验
 // （软依赖不得是错别字），否则 profile 化后会带着声明缺陷上线。
 func TestFullAssemblyDeclarationsAreWellFormed(t *testing.T) {
-	a := fullAssembly()
+	a := Assembly()
 	descriptors := make([]contract.Descriptor, 0, len(a.Capabilities))
 	for _, c := range a.Capabilities {
 		descriptors = append(descriptors, c.Descriptor)
@@ -68,39 +111,11 @@ func TestFullAssemblyDeclarationsAreWellFormed(t *testing.T) {
 	require.NoError(t, capability.ValidateDeclarations(descriptors, catalog.Names()))
 }
 
-// TestFullAssemblyOrder 钉住过渡形态的装配顺序：提供端口的能力必须排在消费它的能力
-// 之前（encryption/storage/notification/queue/outbox/breach 先于 tenant/user/auth/
-// uploadsec/grpc；tenant/access 先于 user；captcha/mfa 先于 auth）。Task 4 的 profile
-// 清单会接手这份顺序。
-func TestFullAssemblyOrder(t *testing.T) {
-	want := []string{
-		"encryption", "storage", "notification", "queue", "outbox", "breach",
-		"tenant", "access", "user", "captcha", "mfa", "auth", "passkey", "audit",
-		"console", "oauth", "apikey", "dataops", "feature", "uploadsec", "search",
-		"retention", "apidocs", "grpc", "ws",
-	}
-	got := make([]string, 0, len(want))
-	for _, c := range fullAssembly().Capabilities {
-		got = append(got, c.Descriptor.Name)
-	}
-	require.Equal(t, want, got)
-}
-
 // TestFullAssemblyPortFlow 装配顺序护栏：full 清单里每个被 Wire 读取的端口都必须由内核
-// 桥接端口或排在其前的能力提供。过渡期的内联闭包无法静态内省，故该用例真实试运行各
-// Wire 并观察 Provide/Port 调用（零值内核件、只读配置段，不连库）。删掉 wireAccess 的
-// Provide("access", …) 或把 access 排到 user 之后都会让本用例失败。
+// 桥接端口或排在其前的能力提供。删掉 access.Wire 的 Provide("access", …) 或把 access
+// 排到 user 之后都会让本用例失败。
 func TestFullAssemblyPortFlow(t *testing.T) {
-	require.NoError(t, assembly.ValidatePortFlow(fullAssembly()))
-}
-
-// TestFullAssemblyHasNoDuplicates 清单内不得重名。
-func TestFullAssemblyHasNoDuplicates(t *testing.T) {
-	seen := map[string]bool{}
-	for _, c := range fullAssembly().Capabilities {
-		require.False(t, seen[c.Descriptor.Name], "duplicate capability %q", c.Descriptor.Name)
-		seen[c.Descriptor.Name] = true
-	}
+	require.NoError(t, assembly.ValidatePortFlow(Assembly()))
 }
 
 // TestFullAssemblyUngatedUnderEnabledSubset 回归（Task 3 评审 Finding 1；P2.4 裁定 7 /
@@ -109,10 +124,10 @@ func TestFullAssemblyHasNoDuplicates(t *testing.T) {
 // 端口）与 storage（uploadsec 消费的存储端口）是两个具体断言：二者仍在装配集内，端口仍
 // 被提供；受门控条目仍按启用集闭包裁剪。
 func TestFullAssemblyUngatedUnderEnabledSubset(t *testing.T) {
-	res, err := assembly.ProbeAssembly(fullAssembly(), []string{"user", "auth", "uploadsec"})
+	res, err := assembly.ProbeAssembly(Assembly(), []string{"user", "auth", "uploadsec"})
 	require.NoError(t, err)
 
-	for _, name := range nonCatalogCapabilities {
+	for _, name := range nonCatalogEntries {
 		require.Contains(t, res.Capabilities, name, "非 catalog 条目 %q 不得被 capabilities.enabled 裁剪", name)
 	}
 	// 受门控条目照常裁剪：captcha 不在 ["user","auth","uploadsec"] 的硬依赖闭包内。
@@ -131,13 +146,21 @@ func TestFullAssemblyUngatedUnderEnabledSubset(t *testing.T) {
 // 因此 queue 能力（Module/作业端点）仍照常装配，但 queue.Wire 不提供任何端口 ——
 // 没有队列客户端可被构造或泄漏。
 func TestFullAssemblyEventBusDoesNotConstructQueue(t *testing.T) {
-	res, err := assembly.ProbeAssembly(fullAssembly(), nil)
+	res, err := assembly.ProbeAssembly(Assembly(), nil)
 	require.NoError(t, err)
 
 	require.Contains(t, res.Capabilities, "queue", "queue 能力必须照常装配")
 	require.NotContains(t, res.Provided, "queue", "event_bus 下不得构造队列客户端")
 	// 对照：outbox 仍装配并提供端口（事件总线发布器路径）。
 	require.Contains(t, res.Provided["outbox"], "outbox")
+}
+
+func capabilityNames(a assembly.Assembly) []string {
+	out := make([]string, 0, len(a.Capabilities))
+	for _, c := range a.Capabilities {
+		out = append(out, c.Descriptor.Name)
+	}
+	return out
 }
 
 func descriptorNames(ds []contract.Descriptor) []string {
