@@ -101,7 +101,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: dataops.Descriptor, Wire: wireDataops},
 			{Descriptor: feature.Descriptor, Wire: wireFeature},
 			{Descriptor: uploadsec.Descriptor, Wire: uploadsec.Wire},
-			{Descriptor: search.Descriptor, Wire: wireSearch},
+			{Descriptor: search.Descriptor, Wire: search.Wire},
 			{Descriptor: retention.Descriptor, Wire: wireRetention},
 			{Descriptor: apidocs.Descriptor, Wire: wireAPIDocs},
 			{Descriptor: grpcpkg.Descriptor, Wire: wireGRPC},
@@ -236,8 +236,6 @@ func wireDataops(ctx *assembly.Context) (contract.Module, error) {
 func wireFeature(ctx *assembly.Context) (contract.Module, error) {
 	return feature.New(ctx.DB()), nil
 }
-
-func wireSearch(*assembly.Context) (contract.Module, error) { return nil, nil }
 
 func wireRetention(ctx *assembly.Context) (contract.Module, error) {
 	cfg, err := retention.Load(ctx.Sections())
