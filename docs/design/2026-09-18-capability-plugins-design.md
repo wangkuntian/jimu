@@ -355,9 +355,33 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > 既不出现也不校验**。`internal/config` 只保留内核段，对外 YAML 键逐一不变。`auth` 段按 §8 ¶2
 > 整体归属 `auth` 能力（含 `auth.webauthn`/`auth.provisioning`），不拆段；`mfa`/`tenant` 不 import
 > `auth`，其 JWT/开通模板参数由组合根装配期传递。非 catalog 包（`storage`/`notification`/
-> `retention`）的段暂由组合根显式加载，**是否 catalogize 是 P2.2 的决定点**。子阶段拆分与执行
+> `retention`）的段暂由组合根显式加载，**是否 catalogize 是 P2.2 的决定点**（P2.2 裁定推迟到
+> P2.5/P2.6，见下条）。子阶段拆分与执行
 > 记录见 [`docs/plans/2026-09-21-p2-three-layer-mechanism.md`](../plans/2026-09-21-p2-three-layer-mechanism.md)
 > 与 [`docs/plans/2026-09-21-config-ownership.md`](../plans/2026-09-21-config-ownership.md)。
+>
+> **P2 进展（P2.2 能力自描述契约 + P2.3 层③ 运行时已完成）**：§6.1 的自描述契约落地 ——
+> `contract.Descriptor` 新增 `SoftRequires`（可选依赖：目标缺失只降级，**不自动补齐、不参与拓扑序**）
+> 与 `Owns`（本能力迁移 `CREATE` 的表），`Descriptor` 由此成为能力元数据的唯一来源（启用闭包、
+> 配置段加载、权限点种子、路由挂载与门禁都只读它）。`catalog.ValidateDeclarations()` 在每次
+> `catalog.Resolve` 前校验声明自洽（必须是清单内能力名、不自引用、不与 `Requires` 重叠、不重复），
+> `catalog.Degraded(caps)` 计算已解析启用集的降级项；启动时对每个降级项打 `capability degraded`
+> warn（字段 `name`/`missing`），管理端口新增只读不鉴权的 `GET /capabilities`，返回
+> `{"enabled":[…],"degraded":[{"capability":…,"missing":[…]}]}`（`HealthRouter` 因此加了可变参数
+> `extra ...func(*http.ServeMux)`，内核包不必 import 能力）。18 个能力逐个补齐声明（`Owns`：13 个
+> 有表、5 个无表），真实软依赖为
+> `user`→`access`/`tenant`、`access`→`tenant`、`mfa`→`auth`、`auth`→`captcha`/`breach`、
+> `apikey`→`tenant`、`outbox`→`queue`。降级清单是**声明层**的静态比对（只读 `Descriptor`，不观测
+> 运行时装配）：组合根当前仍无条件注入多数依赖，在其改为按启用集驱动（P1 显式 `Deps`）之前可能
+> 多报。§9 门禁落地第一块 `make check-capabilities`（`tools/checkcapabilities`）：
+> 校验 `Owns` ↔ mysql 迁移「单表唯一归属、无孤儿表、无未声明建表」（PostgreSQL 迁移表名与 mysql
+> 一致，暂以 mysql 为准），其余三道门禁留 P2.8。
+>
+> **P2.2/P2.3 裁定与推迟**：`Tags` 在出现真实消费方之前**不加**（避免纸面字段）；
+> `storage`/`notification`/`retention`/`ws`/`grpc`/`apidocs`/`encryption` 本轮保持**非 catalog**、
+> 由组合根显式装配（能力清单仍为 18 项，`configs/*.yaml` 零改动），是否 catalogize 连同 profile
+> 入口包一起在 **P2.5/P2.6** 定夺（与 P2.1 的裁定 2B 一致）。执行记录见
+> [`docs/plans/2026-09-22-p2-contract-and-runtime.md`](../plans/2026-09-22-p2-contract-and-runtime.md)。
 
 ## 11. 风险与取舍
 

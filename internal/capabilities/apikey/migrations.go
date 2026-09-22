@@ -11,10 +11,12 @@ import (
 //go:embed migrations
 var migrationsFS embed.FS
 
-// Descriptor 能力静态描述：queue 等基础设施能力尚无独立挂载点，
-// 此处仅携带迁移与身份信息，供迁移运行器与后续 catalog 扩展消费。
+// Descriptor 能力静态描述：受保护挂载点，拥有 api_keys 表，
+// 可选依赖 tenant（缺省时不做租户配额校验）。
 var Descriptor = contract.Descriptor{
-	Name:       "apikey",
-	Mount:      contract.MountProtected,
-	Migrations: migrationsFS,
+	Name:         "apikey",
+	SoftRequires: []string{"tenant"},
+	Mount:        contract.MountProtected,
+	Migrations:   migrationsFS,
+	Owns:         []string{"api_keys"},
 }

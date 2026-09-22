@@ -76,6 +76,7 @@ var migrationsFS embed.FS
 var Descriptor = contract.Descriptor{
 	Name:       "oauth",
 	Migrations: migrationsFS,
+	Owns:       []string{"user_oauth_bindings"},
 	Requires:   []string{"auth", "user"},
 	Mount:      contract.MountPublic,
 	Configs: []contract.ConfigSpec{

@@ -10,8 +10,8 @@
 
 ```
 P2.1 运行时配置归属（§8）              ← 已完成
-P2.2 能力自描述契约（§6.1）             ← 依赖 P2.1 的 Config 建模；产出 Tags/SoftRequires/Owns
-P2.3 层③ 运行时：capabilities.enabled   ← 依赖 P2.2（启用闭包改用契约的 Requires/SoftRequires）
+P2.2 能力自描述契约（§6.1）             ← 已完成（依赖 P2.1 的 Config 建模；产出 SoftRequires/Owns，Tags 推迟）
+P2.3 层③ 运行时：capabilities.enabled   ← 已完成（依赖 P2.2；软依赖降级报告 + 管理端点 /capabilities）
 P2.4 层② 构建：profiles 入口包          ← 依赖 P2.2；5 个 profile + compose-report
 P2.5 层② 驱动级可插拔（§3.7）           ← 依赖 P2.4（profile 决定 import 哪些驱动）
 P2.6 层② 非代码资产模块化（§3.8）        ← deploy/Helm/CLI/契约测试随 profile 裁剪
@@ -30,18 +30,21 @@ P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后
 - **③ 裁定（B）**：`storage`/`notification`/`retention` 保持非 catalog、由组合根显式加载（与本文档 `config-ownership.md` 的裁定 2B 一致）；它们是否 catalogize 交由 **P2.2** 按 §6.1 逐一定夺。
 - **④ 收口**：已补「未启用能力的配置段既不出现也不校验」的装配级回归用例（`internal/app/capconfig_test.go`，用真实 descriptor + 非法 YAML）；README 配置归属与新增能力流程、设计 §10、release note 已更新。
 
-## P2.2 能力自描述契约（§6.1）
+## P2.2 能力自描述契约（§6.1）（已完成）
 
-- `contract.Descriptor` 补齐 `Tags` / `SoftRequires` / `Owns`（`Config` 已在 P2.1 建立），并决定是否改名为设计所称的 `Capability`（`Migrations` 是否从 `fs.FS` 回到路径形态：P1.5 选 `fs.FS` 是为 embed 进二进制，改动需评估）。
-- 18 个能力逐个补声明（`Owns` 取自 §7 表归属，`SoftRequires` 取实际软依赖：`auth`↔`captcha`/`breach` 等）。
-- `catalog` 的启用闭包算法从「只用 Requires」扩展为「Requires + SoftRequires 降级」。
-- 非 catalog 包（`storage`/`notification`/`retention`/`uploadsec` 之外的 `ws`/`grpc`/`apidocs`/`encryption`）是否catalogize：按 §6.1「catalog 是全仓唯一列出能力的地方」逐一定夺。
+执行记录见 `docs/plans/2026-09-22-p2-contract-and-runtime.md`。
 
-## P2.3 层③ 运行时
+- **已完成**：`contract.Descriptor` 新增 `SoftRequires` / `Owns`（`Config` 在 P2.1 建立）。`Descriptor` 是能力元数据的唯一来源：启用闭包、配置段加载、权限点种子、路由挂载与能力门禁都只读它。**不改名为 `Capability`、`Migrations` 保持 `fs.FS`**（embed 进二进制的形态不动，改名/换形态没有收益）。
+- **已完成**：18 个能力逐个补声明 —— `Owns` 按 §7 表归属、逐条对齐迁移里 `CREATE TABLE` 的实际表名（13 个能力有表、5 个无表：`console`/`captcha`/`feature`/`uploadsec`/`breach`）。有表能力：`user`→`users`；`access`→`roles`/`permissions`/`role_permissions`/`user_roles`；`tenant`→`tenants`/`tenant_plans`；`audit`→`audit_logs`/`audit_chain_head`；`apikey`→`api_keys`；`queue`→`jobs`/`job_history`/`dead_letters`/`scheduled_jobs`；`dataops`→`import_jobs`；`search`→`search_documents`；`auth`→`login_histories`/`password_histories`；`mfa`→`user_mfa`/`trusted_devices`；`passkey`→`webauthn_credentials`；`oauth`→`user_oauth_bindings`；`outbox`→`outbox_events`。`SoftRequires` 取实际软依赖：`user`→`access`/`tenant`、`access`→`tenant`、`mfa`→`auth`、`auth`→`captcha`/`breach`、`apikey`→`tenant`、`outbox`→`queue`。
+- **已完成**：`catalog.ValidateDeclarations()` 在 `catalog.Resolve` 顶部校验声明自洽（清单内能力名、不自引用、不与 `Requires` 重叠、不重复）；`catalog.Degraded(caps)` 计算降级项。启用闭包算法**不变**（仍只用 `Requires`），`SoftRequires` 只产出降级报告 —— 即「硬依赖闭包不变 + 软依赖降级报告」。
+- **③ 裁定（推迟）**：`Tags` 在出现真实消费方之前**不加**；`storage`/`notification`/`retention`/`ws`/`grpc`/`apidocs`/`encryption` 本轮**保持非 catalog**、由组合根显式装配（能力清单仍为 18 项，`configs/*.yaml` 零改动），是否 catalogize 连同 profile 入口一起在 **P2.5/P2.6** 定夺（沿用 P2.1 裁定 2B）。
+- **④ 门禁第一块**：`make check-capabilities` → `tools/checkcapabilities` 校验 `Owns` ↔ mysql 迁移「单表唯一归属、无孤儿表、无未声明建表」；PostgreSQL 迁移表名与 mysql 一致，暂以 mysql 为准；正则只认 `CREATE TABLE`，`ALTER TABLE ... ADD` 不参与归属（符合「`Owns` 只认 CREATE」）。**不接入 CI / `make ci` / `make release-check`**，完整四道门禁归 P2.8。
 
-- `capabilities.enabled` 与 `SoftRequires` 降级路径逐条测试（`auth` 缺 `captcha`/`breach`、`notify` 缺真实渠道等）。
-- 未启用能力不挂路由/不注册任务事件/不启动后台组件（P0 已建，补 SoftRequires 分支）。
-- 配置合并与校验：P2.1 完成后，未启用能力的配置段「既不出现也不校验」需补一条装配级回归用例。
+## P2.3 层③ 运行时（已完成）
+
+- **已完成**：`capabilities.enabled` 与 `SoftRequires` 降级路径 —— 启用闭包只补硬依赖；软依赖缺失时本能力降级运行：启动打 `capability degraded` warn（log 字段 `name`/`missing`），管理端口 `GET /capabilities` 输出 `{"enabled":[…],"degraded":[{"capability":…,"missing":[…]}]}`。`HealthRouter` 改可变参数 `extra ...func(*http.ServeMux)`（调用点 `bootstrap.go` 与 `management_test.go`，向后兼容），使内核包不 import 能力包。
+- **已完成**：未启用能力不挂路由/不注册任务事件/不启动后台组件（P0 已建）。
+- **已完成**：未启用能力的配置段「既不出现也不校验」的装配级回归用例（P2.1 的 `internal/app/capconfig_test.go`）。
 
 ## P2.4 层② 构建：profiles 入口包
 

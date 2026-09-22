@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"jimu/internal/config"
 	"jimu/internal/contract"
 )
@@ -23,20 +26,33 @@ func withEntries(t *testing.T, ds ...contract.Descriptor) {
 // TestCatalogMigrationsShape 单独按"有无迁移"钉住。
 func fixture() []contract.Descriptor {
 	return []contract.Descriptor{
-		{Name: "user", Mount: contract.MountProtected},
-		{Name: "access", Requires: []string{"user"}, Mount: contract.MountProtected},
-		{Name: "tenant", Requires: []string{"user", "access"}, Mount: contract.MountProtected},
-		{Name: "mfa", Requires: []string{"user"}, Mount: contract.MountSelfManaged},
-		{Name: "auth", Requires: []string{"user", "access", "tenant", "mfa"}, Mount: contract.MountSelfManaged},
-		{Name: "passkey", Requires: []string{"user", "auth"}, Mount: contract.MountSelfManaged},
-		{Name: "audit", Mount: contract.MountProtected},
+		{Name: "user", SoftRequires: []string{"access", "tenant"},
+			Owns: []string{"users"}, Mount: contract.MountProtected},
+		{Name: "access", Requires: []string{"user"}, SoftRequires: []string{"tenant"},
+			Owns:  []string{"roles", "permissions", "role_permissions", "user_roles"},
+			Mount: contract.MountProtected},
+		{Name: "tenant", Requires: []string{"user", "access"},
+			Owns: []string{"tenants", "tenant_plans"}, Mount: contract.MountProtected},
+		{Name: "mfa", Requires: []string{"user"}, SoftRequires: []string{"auth"},
+			Owns: []string{"user_mfa", "trusted_devices"}, Mount: contract.MountSelfManaged},
+		{Name: "auth", Requires: []string{"user", "access", "tenant", "mfa"},
+			SoftRequires: []string{"captcha", "breach"},
+			Owns:         []string{"login_histories", "password_histories"},
+			Mount:        contract.MountSelfManaged},
+		{Name: "passkey", Requires: []string{"user", "auth"},
+			Owns: []string{"webauthn_credentials"}, Mount: contract.MountSelfManaged},
+		{Name: "audit", Owns: []string{"audit_logs", "audit_chain_head"}, Mount: contract.MountProtected},
 		{Name: "console", Requires: []string{"auth", "access"}, Mount: contract.MountSelfManaged},
-		{Name: "oauth", Requires: []string{"auth", "user"}, Mount: contract.MountPublic},
-		{Name: "apikey", Mount: contract.MountProtected},
-		{Name: "queue", Mount: contract.MountProtected},
-		{Name: "outbox", Mount: contract.MountProtected},
-		{Name: "dataops", Mount: contract.MountProtected},
-		{Name: "search", Mount: contract.MountProtected},
+		{Name: "oauth", Requires: []string{"auth", "user"},
+			Owns: []string{"user_oauth_bindings"}, Mount: contract.MountPublic},
+		{Name: "apikey", SoftRequires: []string{"tenant"},
+			Owns: []string{"api_keys"}, Mount: contract.MountProtected},
+		{Name: "queue", Owns: []string{"jobs", "job_history", "dead_letters", "scheduled_jobs"},
+			Mount: contract.MountProtected},
+		{Name: "outbox", SoftRequires: []string{"queue"},
+			Owns: []string{"outbox_events"}, Mount: contract.MountProtected},
+		{Name: "dataops", Owns: []string{"import_jobs"}, Mount: contract.MountProtected},
+		{Name: "search", Owns: []string{"search_documents"}, Mount: contract.MountProtected},
 		{Name: "captcha", Mount: contract.MountPublic},
 		{Name: "feature", Mount: contract.MountProtected},
 		{Name: "uploadsec", Mount: contract.MountProtected},
@@ -128,6 +144,20 @@ func TestAllReturnsDeepCopyOfRequires(t *testing.T) {
 	}
 }
 
+// TestAllReturnsDeepCopyOfSoftRequiresAndOwns 软依赖与自有表同样不得暴露清单底层数组。
+func TestAllReturnsDeepCopyOfSoftRequiresAndOwns(t *testing.T) {
+	withEntries(t, contract.Descriptor{
+		Name:         "a",
+		SoftRequires: []string{"b"},
+		Owns:         []string{"t1"},
+	}, contract.Descriptor{Name: "b"})
+	got := All()
+	got[0].SoftRequires[0] = "mutated"
+	got[0].Owns[0] = "mutated"
+	assert.Equal(t, "b", All()[0].SoftRequires[0], "All() must not expose the registry's SoftRequires backing array")
+	assert.Equal(t, "t1", All()[0].Owns[0], "All() must not expose the registry's Owns backing array")
+}
+
 func TestResolveReturnsDeepCopyOfRequires(t *testing.T) {
 	withEntries(t, contract.Descriptor{Name: "b"}, contract.Descriptor{Name: "a", Requires: []string{"b"}})
 	got, err := Resolve([]string{"a"})
@@ -147,6 +177,21 @@ func TestAllReturnsDeepCopyOfPermissions(t *testing.T) {
 	if All()[0].Permissions[0].Resource != "/r" {
 		t.Fatal("All() must not expose the registry's Permissions backing array")
 	}
+}
+
+// TestResolveReturnsDeepCopyOfSoftRequiresAndOwns 软依赖与自有表同样不得暴露清单底层数组。
+func TestResolveReturnsDeepCopyOfSoftRequiresAndOwns(t *testing.T) {
+	withEntries(t, contract.Descriptor{Name: "b"},
+		contract.Descriptor{Name: "a", SoftRequires: []string{"b"}, Owns: []string{"t1"}})
+	got, err := Resolve([]string{"a", "b"})
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	got[1].SoftRequires[0] = "mutated"
+	got[1].Owns[0] = "mutated"
+	again, err := Resolve([]string{"a", "b"})
+	require.NoError(t, err)
+	assert.Equal(t, "b", again[1].SoftRequires[0], "Resolve() must not expose the registry's SoftRequires backing array")
+	assert.Equal(t, "t1", again[1].Owns[0], "Resolve() must not expose the registry's Owns backing array")
 }
 
 func TestResolveReturnsDeepCopyOfPermissions(t *testing.T) {
@@ -173,6 +218,33 @@ func TestResolveReportsFirstDanglingDependencyInListOrder(t *testing.T) {
 			t.Fatalf("run %d: error = %v, want the first dangling dependency in list order", i, err)
 		}
 	}
+}
+
+// TestValidateDeclarationsRejectsBadSoftRequires 声明结构不合法必须报错。
+func TestValidateDeclarationsRejectsBadSoftRequires(t *testing.T) {
+	cases := []struct {
+		name string
+		ds   []contract.Descriptor
+	}{
+		{"unknown soft dep", []contract.Descriptor{{Name: "a", SoftRequires: []string{"ghost"}}}},
+		{"self soft dep", []contract.Descriptor{{Name: "a", SoftRequires: []string{"a"}}}},
+		{"soft overlaps hard", []contract.Descriptor{
+			{Name: "b"},
+			{Name: "a", Requires: []string{"b"}, SoftRequires: []string{"b"}},
+		}},
+		{"duplicate soft dep", []contract.Descriptor{{Name: "b"}, {Name: "a", SoftRequires: []string{"b", "b"}}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			withEntries(t, tc.ds...)
+			require.Error(t, ValidateDeclarations())
+		})
+	}
+}
+
+// TestValidateDeclarationsAcceptsCurrentCatalog 真实清单必须通过声明校验。
+func TestValidateDeclarationsAcceptsCurrentCatalog(t *testing.T) {
+	require.NoError(t, ValidateDeclarations())
 }
 
 // TestDescriptorsAreWellFormed 同时校验夹具与真实清单。
@@ -250,6 +322,55 @@ func TestCatalogMigrationsShape(t *testing.T) {
 	}
 	if got := migrationsOf(All()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("catalog Migrations shape drifted:\n got %v\nwant %v", got, want)
+	}
+}
+
+// TestCatalogOwnsShape 钉住各能力拥有的表（空 = 不拥有表）。
+func TestCatalogOwnsShape(t *testing.T) {
+	want := map[string][]string{
+		"user":    {"users"},
+		"access":  {"roles", "permissions", "role_permissions", "user_roles"},
+		"tenant":  {"tenants", "tenant_plans"},
+		"mfa":     {"user_mfa", "trusted_devices"},
+		"auth":    {"login_histories", "password_histories"},
+		"passkey": {"webauthn_credentials"},
+		"oauth":   {"user_oauth_bindings"},
+		"apikey":  {"api_keys"},
+		"queue":   {"jobs", "job_history", "dead_letters", "scheduled_jobs"},
+		"outbox":  {"outbox_events"},
+		"dataops": {"import_jobs"},
+		"search":  {"search_documents"},
+		"audit":   {"audit_logs", "audit_chain_head"},
+	}
+	got := map[string][]string{}
+	for _, d := range All() {
+		if len(d.Owns) > 0 {
+			got[d.Name] = d.Owns
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("catalog Owns drifted:\n got %v\nwant %v", got, want)
+	}
+}
+
+// TestCatalogSoftRequiresShape 钉住可选依赖（只登记代码里真实可降级的耦合）。
+func TestCatalogSoftRequiresShape(t *testing.T) {
+	want := map[string][]string{
+		"user":   {"access", "tenant"},
+		"access": {"tenant"},
+		"mfa":    {"auth"},
+		"auth":   {"captcha", "breach"},
+		"apikey": {"tenant"},
+		"outbox": {"queue"},
+	}
+	got := map[string][]string{}
+	for _, d := range All() {
+		if len(d.SoftRequires) > 0 {
+			got[d.Name] = d.SoftRequires
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("catalog SoftRequires drifted:\n got %v\nwant %v", got, want)
 	}
 }
 
@@ -341,6 +462,46 @@ func TestCatalogConfigSectionsShape(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("catalog config sections drifted:\n got %v\nwant %v", got, want)
 	}
+}
+
+// TestDegradedListsMissingSoftDeps 只报告缺失的软依赖，硬依赖缺失由 Resolve 报错。
+func TestDegradedListsMissingSoftDeps(t *testing.T) {
+	caps := []contract.Descriptor{
+		{Name: "user", SoftRequires: []string{"access", "tenant"}, Owns: []string{"users"}},
+		{Name: "auth", SoftRequires: []string{"captcha", "breach"}, Owns: []string{"login_histories"}},
+		{Name: "captcha"},
+		{Name: "tenant"},
+		{Name: "access", Requires: []string{"user"}},
+	}
+	got := Degraded(caps)
+	require.Len(t, got, 1)
+	assert.Equal(t, "auth", got[0].Capability)
+	assert.Equal(t, []string{"breach"}, got[0].Missing)
+}
+
+// TestDegradedEmptyWhenAllSoftDepsPresent 依赖齐全时无降级项。
+func TestDegradedEmptyWhenAllSoftDepsPresent(t *testing.T) {
+	caps := []contract.Descriptor{
+		{Name: "auth", SoftRequires: []string{"captcha"}},
+		{Name: "captcha"},
+	}
+	assert.Empty(t, Degraded(caps))
+}
+
+// TestDegradedWithRealCatalog 关闭软依赖后对应能力出现在降级清单里。
+func TestDegradedWithRealCatalog(t *testing.T) {
+	// 只启用 auth 的硬依赖闭包，captcha/breach 缺席
+	caps, err := Resolve([]string{"auth"})
+	require.NoError(t, err)
+	got := Degraded(caps)
+	require.Len(t, got, 1, "只有 auth 声明了缺失的软依赖")
+	assert.Equal(t, "auth", got[0].Capability)
+	assert.ElementsMatch(t, []string{"captcha", "breach"}, got[0].Missing)
+}
+
+// TestDegradedNoneOnFullCatalog 全部启用（默认）时无降级项。
+func TestDegradedNoneOnFullCatalog(t *testing.T) {
+	assert.Empty(t, Degraded(All()))
 }
 
 func namesOf(ds []contract.Descriptor) []string {

@@ -29,6 +29,13 @@ func TestModuleNameAndContract(t *testing.T) {
 	assert.Equal(t, "apikey", m.Descriptor().Name)
 }
 
+// TestModuleDescriptor 描述符：软依赖 tenant（可选配额），自有 api_keys 表。
+func TestModuleDescriptor(t *testing.T) {
+	d := New(newAPIKeyModuleDB(t)).Descriptor()
+	assert.Equal(t, []string{"tenant"}, d.SoftRequires)
+	assert.ElementsMatch(t, []string{"api_keys"}, d.Owns)
+}
+
 // TestModuleRegisterHTTP API Key 管理端点注册且恰好一次（原 admin 归属）。
 func TestModuleRegisterHTTP(t *testing.T) {
 	gin.SetMode(gin.TestMode)

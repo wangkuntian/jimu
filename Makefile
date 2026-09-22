@@ -55,6 +55,7 @@ help:
 	@echo "  make fmt                  格式化代码"
 	@echo "  make lint                 静态检查"
 	@echo "  make check-log-usage      检查日志调用均为 *w 系列（防 k/v 粘连）"
+	@echo "  make check-capabilities   校验能力自描述（Owns）与迁移归属一致"
 	@echo ""
 	@echo "数据库:"
 	@echo "  make migrate              本地执行迁移"
@@ -264,6 +265,10 @@ lint:
 ## 禁动态 key R2 / 字段词汇表 R3 / 禁嵌套对象 R4；规则与 AGENTS.md 日志调用规范同步）
 check-log-usage:
 	@go run ./tools/logcheck "./internal/..." "./cmd/..." "./tools/..."
+
+## check-capabilities: 校验能力自描述（Owns）与迁移归属一致（P2.8 门禁第一块）
+check-capabilities:
+	@go run ./tools/checkcapabilities
 
 ## clean: 清理构建产物
 clean:

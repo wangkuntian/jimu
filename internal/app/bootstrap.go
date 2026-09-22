@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
 	"jimu/internal/capabilities/apidocs"
 	apikeymw "jimu/internal/capabilities/apikey/middleware"
+	"jimu/internal/capabilities/catalog"
 	"jimu/internal/capabilities/notification"
 	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/queue"
@@ -183,6 +185,18 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		names = append(names, contract.Describe(module).Name)
 	}
 	container.Logger.Infow("capabilities enabled", "count", len(names), "names", strings.Join(names, ","))
+	// 上一行的 count/names 是「已装配模块」集合；下面这行是 catalog 解析出的启用集
+	// （可能含 outbox/search/breach 等无 Module 实例的能力），两者刻意分开打印。
+	resolvedNames := make([]string, 0, len(container.Capabilities))
+	for _, d := range container.Capabilities {
+		resolvedNames = append(resolvedNames, d.Name)
+	}
+	container.Logger.Infow("capabilities resolved", "count", len(container.Capabilities), "names", strings.Join(resolvedNames, ","))
+	// 软依赖缺失只降级、不阻断启用（设计 §6.4）：在 enabled 日志之后报告，
+	// 被 fail-closed 拒绝的启用集不会留下降级噪音。
+	for _, d := range catalog.Degraded(container.Capabilities) {
+		container.Logger.Warnw("capability degraded", "name", d.Capability, "missing", strings.Join(d.Missing, ","))
+	}
 
 	sqlDB, err := container.DB.DB()
 	if err != nil {
@@ -195,7 +209,9 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	)
 	management := platformhttp.NewManagementServer(
 		cfg.Management,
-		platformhttp.HealthRouter(readiness, cfg.Management.EnablePprof),
+		platformhttp.HealthRouter(readiness, cfg.Management.EnablePprof, func(mux *http.ServeMux) {
+			mux.HandleFunc("/capabilities", capabilitiesHandler(container.Capabilities))
+		}),
 	)
 	public, err := platformhttp.NewServer(cfg.HTTP, router)
 	if err != nil {
@@ -358,6 +374,27 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 	}
 	components = append(components, management, public)
 	return NewApplication(time.Duration(cfg.HTTP.ShutdownTimeoutSec)*time.Second, components...), nil
+}
+
+// capabilitiesResponse 是 /capabilities 的响应体；字段声明顺序即 JSON 键顺序。
+type capabilitiesResponse struct {
+	Enabled  []string              `json:"enabled"`
+	Degraded []catalog.Degradation `json:"degraded"`
+}
+
+// capabilitiesHandler 输出最终启用清单与降级项（设计 §6.4）。管理端口只读、不鉴权。
+func capabilitiesHandler(caps []contract.Descriptor) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		names := make([]string, 0, len(caps))
+		for _, d := range caps {
+			names = append(names, d.Name)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(capabilitiesResponse{
+			Enabled:  names,
+			Degraded: catalog.Degraded(caps),
+		})
+	}
 }
 
 // workerPoolComponent 包装 WorkerPool，实现 contract.Component 以纳入应用生命周期

@@ -59,6 +59,7 @@ var Descriptor = contract.Descriptor{
 	// tenant 迁移（005_tenants.sql）会 ALTER users/roles，须后于 user/access 执行
 	Requires:   []string{"user", "access"},
 	Migrations: migrationsFS,
+	Owns:       []string{"tenants", "tenant_plans"},
 	Mount:      contract.MountProtected,
 	Permissions: []contract.Permission{
 		{Name: "租户列表", Resource: "/api/v1/tenants", Action: "GET"},

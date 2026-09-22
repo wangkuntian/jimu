@@ -46,6 +46,8 @@ type Container struct {
 	CapabilityConfigs *CapabilityConfigs
 	// Enabled 已启用能力名集合（含依赖闭包）
 	Enabled map[string]bool
+	// Capabilities 已解析启用集的能力描述符（含依赖闭包，按清单顺序）
+	Capabilities []contract.Descriptor
 	// OutboxPublisher outbox 的发布器类型；outbox 能力未启用时为空（不接线）
 	OutboxPublisher string
 	// RetentionCfg 保留策略配置（bootstrap 的保留任务使用）
@@ -112,7 +114,7 @@ func (c *Container) Stop(ctx context.Context) error {
 	return result
 }
 
-func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *CapabilityConfigs, enabled map[string]bool) (*Container, error) {
+func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *CapabilityConfigs, caps []contract.Descriptor, enabled map[string]bool) (*Container, error) {
 	// OpenObserve 日志通道：otel 启用时附加到 zap（初始化失败仅告警，不阻断启动）
 	var (
 		logExporter *observability.LogExporter
@@ -343,6 +345,7 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 		Sections:          sections,
 		CapabilityConfigs: capCfgs,
 		Enabled:           enabled,
+		Capabilities:      caps,
 		OutboxPublisher:   outboxWire,
 		RetentionCfg:      *retentionCfg,
 		DB:                dbConn,

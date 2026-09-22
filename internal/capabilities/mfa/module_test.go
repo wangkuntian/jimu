@@ -42,6 +42,8 @@ func TestModuleDescriptor(t *testing.T) {
 	assert.Equal(t, "mfa", d.Name)
 	assert.Equal(t, contract.MountSelfManaged, d.Normalized())
 	assert.ElementsMatch(t, []string{"user"}, d.Requires)
+	assert.Equal(t, []string{"auth"}, d.SoftRequires)
+	assert.ElementsMatch(t, []string{"user_mfa", "trusted_devices"}, d.Owns)
 	require.NotNil(t, d.Migrations)
 	// 3 条 MFA + 3 条设备
 	assert.Len(t, d.Permissions, 6)

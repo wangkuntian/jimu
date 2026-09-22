@@ -81,6 +81,7 @@ var Descriptor = contract.Descriptor{
 	Name:       "passkey",
 	Requires:   []string{"user", "auth"},
 	Migrations: migrationsFS,
+	Owns:       []string{"webauthn_credentials"},
 	Mount:      contract.MountSelfManaged,
 	Permissions: []contract.Permission{
 		{Name: "通行密钥登录开始", Resource: "/api/v1/auth/webauthn/login/begin", Action: "POST"},

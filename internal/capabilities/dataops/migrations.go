@@ -11,10 +11,10 @@ import (
 //go:embed migrations
 var migrationsFS embed.FS
 
-// Descriptor 能力静态描述：queue 等基础设施能力尚无独立挂载点，
-// 此处仅携带迁移与身份信息，供迁移运行器与后续 catalog 扩展消费。
+// Descriptor 能力静态描述：受保护挂载点，拥有 import_jobs 表。
 var Descriptor = contract.Descriptor{
 	Name:       "dataops",
 	Mount:      contract.MountProtected,
 	Migrations: migrationsFS,
+	Owns:       []string{"import_jobs"},
 }

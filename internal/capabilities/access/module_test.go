@@ -37,6 +37,8 @@ func TestModuleDescriptor(t *testing.T) {
 	assert.Equal(t, "access", d.Name)
 	assert.Equal(t, contract.MountProtected, d.Normalized())
 	assert.ElementsMatch(t, []string{"user"}, d.Requires)
+	assert.Equal(t, []string{"tenant"}, d.SoftRequires)
+	assert.ElementsMatch(t, []string{"roles", "permissions", "role_permissions", "user_roles"}, d.Owns)
 	// 角色 6 + 权限 5
 	require.Len(t, d.Permissions, 11)
 	assert.NotNil(t, d.Migrations)

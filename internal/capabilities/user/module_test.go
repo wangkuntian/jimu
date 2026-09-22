@@ -31,6 +31,13 @@ func TestModuleNameAndContract(t *testing.T) {
 	assert.Equal(t, "user", m.Descriptor().Name)
 }
 
+// TestModuleDescriptor 描述符：软依赖 access/tenant（可选注入），自有 users 表。
+func TestModuleDescriptor(t *testing.T) {
+	d := newUserModule(t).Descriptor()
+	assert.Equal(t, []string{"access", "tenant"}, d.SoftRequires)
+	assert.ElementsMatch(t, []string{"users"}, d.Owns)
+}
+
 // TestModuleRegisterHTTP 自助面 + 管理面用户路由（角色分配归 access，不得重复）。
 func TestModuleRegisterHTTP(t *testing.T) {
 	gin.SetMode(gin.TestMode)
