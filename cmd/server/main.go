@@ -89,7 +89,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: accessmodule.Descriptor, Wire: accessmodule.Wire},
 			{Descriptor: user.Descriptor, Wire: user.Wire},
 			{Descriptor: captcha.Descriptor, Wire: captcha.Wire}, // 已搬迁的试点能力
-			{Descriptor: mfamodule.Descriptor, Wire: wireMFA},
+			{Descriptor: mfamodule.Descriptor, Wire: mfamodule.Wire},
 			{Descriptor: authmodule.Descriptor, Wire: wireAuth},
 			{Descriptor: passkeymodule.Descriptor, Wire: wirePasskey},
 			{Descriptor: auditmodule.Descriptor, Wire: wireAudit},
@@ -106,23 +106,6 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: ws.Descriptor, Wire: ws.Wire},
 		},
 	}
-}
-
-func wireMFA(ctx *assembly.Context) (contract.Module, error) {
-	authCfg := authConfig(ctx)
-	users, _ := ctx.Port(user.UserinfoPortName).(contract.UserinfoSource)
-	mod := mfamodule.New(ctx.DB(), mfamodule.Config{
-		JWTSecret:         authCfg.JWTSecret,
-		JWTPreviousSecret: authCfg.JWTPreviousSecret,
-		Issuer:            authCfg.Issuer,
-		AccessExpireMin:   authCfg.AccessExpireMin,
-		RefreshExpireDay:  authCfg.RefreshExpireDay,
-		TrustedDeviceDays: authCfg.TrustedDeviceDays,
-	}, users)
-	if err := ctx.Provide(mfamodule.PortName, mod.Service()); err != nil {
-		return nil, err
-	}
-	return mod, nil
 }
 
 func wireAuth(ctx *assembly.Context) (contract.Module, error) {
