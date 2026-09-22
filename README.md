@@ -273,13 +273,30 @@ v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capab
 - **`jimu seed` 语义不变** — CLI seed 使用完整能力清单（`catalog.All()`）：CLI 的 `migrate` 命令同样按完整清单执行迁移，若 seed 只按启用集过滤而迁移不过滤，会造成权限点与表结构不同步。
 - **边界** — 结构性种子（默认租户、free 套餐、超管角色 + admin 用户）目前**不做**能力门控，无论启用集如何都写入；只有权限点按启用集聚合。按 profile 裁剪结构种子的能力门控推迟到 P1 profile 工作落地。
 
+## 形态（profile）
+
+形态是**编译期**概念：`profiles/<name>/main.go` 是独立入口，只 import 该形态需要的能力（能力清单声明在 `internal/profiles/<name>`），裁剪由 import 图天然决定 —— 不用 build tag，也不需要组合矩阵。`Assembly.Capabilities` 的顺序是**装配顺序**（端口提供者必须排在消费者之前），与 catalog 的迁移/闭包顺序无关。
+
+| 入口 | 组成 | 场景 |
+|---|---|---|
+| `profiles/full` | 全部 18 个 catalog 能力 + `storage` `notification` `retention` `ws` `grpc` `apidocs` `encryption` | 全功能基准；`cmd/server` 是它的薄包装（保留 swagger 注解） |
+| `profiles/minimal` | `user` `access` `auth` + `notification` `encryption` | 内部微服务 / 新项目起点（不含租户、审计、控制台、MFA） |
+| `profiles/saas` | `minimal` + `tenant` `audit` | 面向外部客户的多租户产品（真实邮件渠道由 `email.enabled` 打开） |
+| `profiles/enterprise` | `minimal` + `console` `audit` `oauth` `dataops` `storage` | 公司内部系统（单租户，`tid=0` 平台级视角） |
+| `profiles/machine` | `user` `access` `apikey` + `grpc` `encryption` | 无界面、服务间调用（**无任何登录/注册/会话端点**，受保护路由走 `X-API-Key`） |
+
+- **构建与门禁** — `go build ./profiles/<name>`；`make profiles-check` 构建 5 个入口（构建失败即非零退出），设置 `JIMU_PROFILES_SMOKE=1` 后额外以 `APP_ENV=dev` 逐个启动并轮询管理端 `/readyz`（需 DB+Redis，端口可用 `JIMU_PROFILES_HTTP_PORT`/`JIMU_PROFILES_MGMT_PORT` 覆盖）；未设置时逐形态打印 `SKIP`，不静默跳过。
+- **`machine` 已知限制** — `/api/v1/admin/apikeys` 位于 `middleware.AdminAuth()` 之后，需要该形态刻意排除的 JWT 链，因此 `machine` 可以启动，但**无法自助签发第一把 API Key**：需要带外签发路径（CLI/种子，P2.6/P2.7 §3.8），本阶段不提供。
+- **种子与迁移不随形态裁剪** — 迁移仍按 catalog 全量清单执行（表先建好），结构种子（默认租户/free 套餐/超管角色/admin 用户 + 权限点聚合 + Casbin 同步）是各形态共享的既有实现，不做形态门控；`ADMIN_PASSWORD` 未设置时跳过并打 `structural seed skipped` 告警，服务不会因缺少该变量而启动失败（容器启动早于 CLI 迁移、compose 不向 server 注入该变量）。profile 驱动的迁移裁剪见 P2.6/P2.8。
+
 ## 项目结构
 
 ```text
 jimu/
 ├── cmd/
-│   ├── server/main.go          # HTTP 服务入口
+│   ├── server/main.go          # HTTP 服务入口（full 形态的薄包装，保留 swagger 注解）
 │   └── cli/main.go             # CLI 入口
+├── profiles/                   # 形态入口（full/minimal/saas/enterprise/machine 各一个 main）
 ├── configs/
 │   ├── app.yaml                # 默认配置（开发环境）
 │   └── app.prod.yaml           # 生产环境配置
@@ -320,6 +337,7 @@ jimu/
 │   │   ├── container.go        # 依赖容器
 │   │   ├── application.go      # Application 生命周期
 │   │   └── seed.go             # 数据种子（权限点聚合自能力 Descriptor）
+│   ├── profiles/               # 形态清单（每个形态一份 Assembly：full/minimal/saas/enterprise/machine）
 │   ├── capabilities/           # 可插拔能力（catalog 是唯一清单；每个能力导出 Descriptor）
 │   │   ├── catalog/            # 能力清单 + 启用集解析
 │   │   ├── apidocs/            # Swagger 文档注册
@@ -1117,6 +1135,7 @@ internal/capabilities/{name}/
 | `make fmt-check` | 检查代码格式 |
 | `make lint` | golangci-lint |
 | `make check-capabilities` | 校验能力自描述（`Owns`）与迁移建表一致（单表唯一归属、无未声明建表；只扫描 mysql 迁移，PostgreSQL 表名与 mysql 一致） |
+| `make profiles-check` | 构建 5 个形态入口；`JIMU_PROFILES_SMOKE=1` 时额外启动各形态并轮询管理端 `/readyz`（需 DB+Redis） |
 | `make swagger` | 生成 API 文档 |
 | `make cli` | 编译 CLI |
 | `make docker-build` | 构建 Docker 镜像 |
