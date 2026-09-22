@@ -86,7 +86,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: mfamodule.Descriptor, Wire: mfamodule.Wire},
 			{Descriptor: authmodule.Descriptor, Wire: authmodule.Wire},
 			{Descriptor: passkeymodule.Descriptor, Wire: passkeymodule.Wire},
-			{Descriptor: auditmodule.Descriptor, Wire: wireAudit},
+			{Descriptor: auditmodule.Descriptor, Wire: auditmodule.Wire},
 			{Descriptor: consolemodule.Descriptor, Wire: consolemodule.Wire},
 			{Descriptor: oauthmodule.Descriptor, Wire: oauthmodule.Wire},
 			{Descriptor: apikey.Descriptor, Wire: wireAPIKey},
@@ -100,12 +100,6 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: ws.Descriptor, Wire: ws.Wire},
 		},
 	}
-}
-
-func wireAudit(ctx *assembly.Context) (contract.Module, error) {
-	return auditmodule.New(ctx.DB(), configSection(ctx, auditmodule.ConfigKey, func() *auditmodule.Config {
-		return &auditmodule.Config{}
-	}), ctx.Logger()), nil
 }
 
 func wireAPIKey(ctx *assembly.Context) (contract.Module, error) {
@@ -187,13 +181,4 @@ func wireGRPC(ctx *assembly.Context) (contract.Module, error) {
 		ctx.RegisterComponent(grpcServer)
 	}
 	return nil, nil
-}
-
-// configSection 取能力配置段并解引用为值；段不存在（能力未启用）时用 zero 构造零值，
-// 与旧装配惯例一致（未启用能力的配置段取零值即"不接线/默认行为"）。
-func configSection[T any](ctx *assembly.Context, key string, zero func() *T) T {
-	if cfg := assembly.MustSection[*T](ctx, key); cfg != nil {
-		return *cfg
-	}
-	return *zero()
 }
