@@ -90,7 +90,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: passkeymodule.Descriptor, Wire: passkeymodule.Wire},
 			{Descriptor: auditmodule.Descriptor, Wire: wireAudit},
 			{Descriptor: consolemodule.Descriptor, Wire: wireConsole},
-			{Descriptor: oauthmodule.Descriptor, Wire: wireOAuth},
+			{Descriptor: oauthmodule.Descriptor, Wire: oauthmodule.Wire},
 			{Descriptor: apikey.Descriptor, Wire: wireAPIKey},
 			{Descriptor: dataops.Descriptor, Wire: wireDataops},
 			{Descriptor: feature.Descriptor, Wire: feature.Wire},
@@ -116,12 +116,6 @@ func wireConsole(ctx *assembly.Context) (contract.Module, error) {
 	return consolemodule.New(cfg.Version, cfg.Environment, ctx.Redis(), ctx.DB(),
 		auth.NewWithRotation(authCfg.JWTSecret, authCfg.JWTPreviousSecret, authCfg.Issuer, authCfg.AccessExpireMin, authCfg.RefreshExpireDay),
 		ctx.EventBus(), middleware.IPAllowlist(cfg.Security.AdminIPAllowlist)), nil
-}
-
-func wireOAuth(ctx *assembly.Context) (contract.Module, error) {
-	return oauthmodule.New(ctx.DB(), ctx.Redis(),
-		configSection(ctx, oauthmodule.ConfigKey, func() *oauthmodule.Config { return &oauthmodule.Config{} }),
-		*authConfig(ctx), ctx.HTTPClient()), nil
 }
 
 func wireAPIKey(ctx *assembly.Context) (contract.Module, error) {
