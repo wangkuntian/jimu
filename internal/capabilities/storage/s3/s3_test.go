@@ -1,7 +1,9 @@
-package storage
+package s3
 
 import (
 	"testing"
+
+	"jimu/internal/capabilities/storage"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,21 +25,37 @@ func TestS3StorageURLWithoutBaseURL(t *testing.T) {
 
 // TestS3CompatibleStorageRequiresBucket 构造时 bucket 必填
 func TestS3CompatibleStorageRequiresBucket(t *testing.T) {
-	_, err := newS3CompatibleStorage(Config{Type: StorageTypeS3}, true)
+	_, err := newS3CompatibleStorage(storage.Config{Type: storage.StorageTypeS3}, true)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bucket is required")
+}
+
+// TestNewS3RequiresBucket 经注册表的 S3 构造同样要求 bucket
+func TestNewS3RequiresBucket(t *testing.T) {
+	_, err := storage.New(storage.Config{Type: storage.StorageTypeS3})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bucket is required")
+}
+
+// TestNewOSSAndMinioRequireBucket OSS/MinIO 复用 S3，同样要求 bucket
+func TestNewOSSAndMinioRequireBucket(t *testing.T) {
+	for _, ty := range []storage.StorageType{storage.StorageTypeOSS, storage.StorageTypeMinIO} {
+		_, err := storage.New(storage.Config{Type: ty})
+		require.Error(t, err, "type=%s", ty)
+		assert.Contains(t, err.Error(), "bucket is required")
+	}
 }
 
 // TestS3CompatibleStorageLoadsConfig 有 bucket + 静态凭证时构造成功（不发请求）
 func TestS3CompatibleStorageLoadsConfig(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		cfg  Config
+		cfg  storage.Config
 		isS3 bool
 	}{
-		{"s3", Config{Bucket: "b", AccessKey: "ak", SecretKey: "sk", Region: "us-east-1"}, true},
-		{"minio", Config{Bucket: "b", AccessKey: "ak", SecretKey: "sk", Endpoint: "http://localhost:9000"}, false},
-		{"oss", Config{Bucket: "b", AccessKey: "ak", SecretKey: "sk", Endpoint: "http://oss.example.com"}, false},
+		{"s3", storage.Config{Bucket: "b", AccessKey: "ak", SecretKey: "sk", Region: "us-east-1"}, true},
+		{"minio", storage.Config{Bucket: "b", AccessKey: "ak", SecretKey: "sk", Endpoint: "http://localhost:9000"}, false},
+		{"oss", storage.Config{Bucket: "b", AccessKey: "ak", SecretKey: "sk", Endpoint: "http://oss.example.com"}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, err := newS3CompatibleStorage(tc.cfg, tc.isS3)

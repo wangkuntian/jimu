@@ -1,4 +1,4 @@
-package storage
+package local
 
 import (
 	"context"
@@ -8,7 +8,25 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"jimu/internal/capabilities/storage"
 )
+
+func init() { storage.Register(storage.StorageTypeLocal, New) }
+
+// New 构造本地存储驱动，供 storage.New 查表调用。base_dir/base_url 的缺省值在此填充
+// （与下沉前核心 switch 的行为逐值一致）。
+func New(cfg storage.Config) (storage.Storage, error) {
+	baseDir := cfg.BaseDir
+	if baseDir == "" {
+		baseDir = "storage"
+	}
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = "/files"
+	}
+	return NewLocalStorage(baseDir, baseURL)
+}
 
 // LocalStorage 本地文件存储实现
 type LocalStorage struct {
@@ -133,4 +151,4 @@ func (s *LocalStorage) fullPath(key string) string {
 	return filepath.Join(s.baseDir, key)
 }
 
-var _ Storage = (*LocalStorage)(nil)
+var _ storage.Storage = (*LocalStorage)(nil)

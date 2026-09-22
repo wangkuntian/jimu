@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"jimu/internal/assembly"
+	"jimu/internal/capabilities/storage"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,6 +44,19 @@ func TestEnterpriseDriverSelection(t *testing.T) {
 		"storage": {"local", "s3"},
 		"dataops": {"csv", "excel"},
 	}, driverSelection(Assembly()))
+}
+
+// TestEnterpriseCompiledStorageDrivers 钉住进程内注册表：本形态实际编译进来的 storage
+// 驱动类型必须与下沉前的行为一致（T2 仍全量）。注意 s3 驱动包一个包承载 s3/minio/oss
+// 三种 S3 兼容类型（与下沉前核心 switch 的四个分支逐值一致），故注册表为 4 项，而驱动
+// **包**集合仍是 assembly 声明的 {local, s3}；收敛为 local-only 是 Task 5 的行为变更。
+func TestEnterpriseCompiledStorageDrivers(t *testing.T) {
+	assert.Equal(t, []storage.StorageType{
+		storage.StorageTypeLocal,
+		storage.StorageTypeMinIO,
+		storage.StorageTypeOSS,
+		storage.StorageTypeS3,
+	}, storage.RegisteredTypes())
 }
 
 // driverSelection 汇总清单里各能力的驱动选中集（测试辅助）。

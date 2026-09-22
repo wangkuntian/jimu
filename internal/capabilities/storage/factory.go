@@ -2,6 +2,8 @@ package storage
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 )
 
 // StorageType 存储类型
@@ -32,30 +34,54 @@ type Config struct {
 	PathStyle bool `mapstructure:"path_style"`
 }
 
-// New 创建存储实例
-func New(cfg Config) (Storage, error) {
-	switch cfg.Type {
-	case StorageTypeLocal, "":
-		if cfg.BaseDir == "" {
-			cfg.BaseDir = "storage"
-		}
-		if cfg.BaseURL == "" {
-			cfg.BaseURL = "/files"
-		}
-		return NewLocalStorage(cfg.BaseDir, cfg.BaseURL)
-	case StorageTypeS3:
-		return newS3Storage(cfg)
-	case StorageTypeOSS:
-		return newOSSStorage(cfg)
-	case StorageTypeMinIO:
-		return newMinioStorage(cfg)
-	default:
-		return nil, fmt.Errorf("unsupported storage type: %s", cfg.Type)
+// Factory 按配置构造存储实现。驱动包在 init() 中调用 Register 注册。
+type Factory func(Config) (Storage, error)
+
+// drivers 是本构建已注册的驱动表。写入只发生在包初始化期（Go 保证 init 串行且先于
+// main），启动后只读，因此不加锁。
+var drivers = map[StorageType]Factory{}
+
+// Register 注册存储驱动，仅供驱动包在 init() 中调用。重复注册是编码错误，直接 panic
+// （与 database/sql.Register 同形）。
+func Register(t StorageType, f Factory) {
+	if _, dup := drivers[t]; dup {
+		panic("storage: driver already registered: " + string(t))
 	}
+	drivers[t] = f
 }
 
-// newOSSStorage 创建阿里云 OSS 存储。
-// OSS 兼容 S3 协议，复用 S3 SDK（path style + endpoint），无需引入 aliyun-oss-go-sdk。
-func newOSSStorage(cfg Config) (Storage, error) {
-	return newS3CompatibleStorage(cfg, false)
+// RegisteredTypes 返回本构建已注册的存储类型（升序），用于 fail-closed 文案与诊断。
+func RegisteredTypes() []StorageType {
+	out := make([]StorageType, 0, len(drivers))
+	for t := range drivers {
+		out = append(out, t)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+// New 按配置创建存储实例：空类型按 local 处理（与下沉前一致）。配置的类型未编译进
+// 本构建时明确报错，不静默回退到其它驱动。
+func New(cfg Config) (Storage, error) {
+	if cfg.Type == "" {
+		cfg.Type = StorageTypeLocal
+	}
+	f, ok := drivers[cfg.Type]
+	if !ok {
+		return nil, fmt.Errorf("storage driver %q is not compiled into this build (compiled: %s)",
+			cfg.Type, typesList(RegisteredTypes()))
+	}
+	return f(cfg)
+}
+
+// typesList 渲染已注册类型清单；空集渲染为 none。
+func typesList(types []StorageType) string {
+	if len(types) == 0 {
+		return "none"
+	}
+	out := make([]string, len(types))
+	for i, t := range types {
+		out[i] = string(t)
+	}
+	return strings.Join(out, ", ")
 }

@@ -5,6 +5,7 @@ import (
 
 	"jimu/internal/assembly"
 	"jimu/internal/capabilities/catalog"
+	"jimu/internal/capabilities/storage"
 	"jimu/internal/capability"
 	"jimu/internal/contract"
 
@@ -60,6 +61,22 @@ func TestFullDriverSelection(t *testing.T) {
 		"queue":   {"redis", "kafka", "rabbitmq"},
 		"dataops": {"csv", "excel"},
 	}, driverSelection(Assembly()))
+}
+
+// TestFullCompiledStorageDrivers 钉住进程内注册表（与 enterprise 侧
+// TestEnterpriseCompiledStorageDrivers 同款）：`drivers.go` 的两个 blank import 一旦被删，
+// `go build ./...` 与 TestFullDriverSelection 仍全绿（后者只钉 Capability.Drivers 声明），
+// 失败只会在运行期的 wire.go fail-closed 文案里暴露 —— 而 full 正是出货形态
+// （cmd/server/main.go），故此处直接断言本构建实际注册的 storage 类型。
+// 注意 RegisteredTypes() 返回的是**配置取值**集合：s3 驱动包一个包承载 s3/minio/oss 三种
+// S3 兼容类型，故为 4 项；驱动**包**集合仍是 assembly 声明的 {local, s3}。
+func TestFullCompiledStorageDrivers(t *testing.T) {
+	assert.Equal(t, []storage.StorageType{
+		storage.StorageTypeLocal,
+		storage.StorageTypeMinIO,
+		storage.StorageTypeOSS,
+		storage.StorageTypeS3,
+	}, storage.RegisteredTypes())
 }
 
 // driverSelection 汇总清单里各能力的驱动选中集（测试辅助）。
