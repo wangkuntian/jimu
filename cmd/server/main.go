@@ -57,13 +57,6 @@ var version = "dev"
 // errProvisioningRequiresPublicRegistration 开通式注册要求公开注册（组合根跨字段校验）
 var errProvisioningRequiresPublicRegistration = errors.New("auth.provisioning.enabled requires auth.public_registration")
 
-// outbox 跨能力接线错误（err113：组合根的错误必须是稳定错误值）。
-var (
-	errInvalidQueueTypeForOutbox     = errors.New("invalid queue.type for outbox.publisher")
-	errOutboxMQRequiresQueue         = errors.New("outbox.publisher=mq requires the queue capability")
-	errQueueDoesNotImplementConsumer = errors.New("queue does not implement consumer")
-)
-
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -92,7 +85,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: storage.Descriptor, Wire: storage.Wire},
 			{Descriptor: notification.Descriptor, Wire: notification.Wire},
 			{Descriptor: queue.Descriptor, Wire: queue.Wire},
-			{Descriptor: outbox.Descriptor, Wire: wireOutbox},
+			{Descriptor: outbox.Descriptor, Wire: outbox.Wire},
 			{Descriptor: breach.Descriptor, Wire: wireBreach},
 			{Descriptor: tenantmodule.Descriptor, Wire: wireTenant},
 			{Descriptor: accessmodule.Descriptor, Wire: wireAccess},
@@ -115,65 +108,6 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: ws.Descriptor, Wire: ws.Wire},
 		},
 	}
-}
-
-func wireOutbox(ctx *assembly.Context) (contract.Module, error) {
-	outboxCfg := assembly.MustSection[*outbox.Config](ctx, outbox.ConfigKey)
-	if outboxCfg == nil {
-		outboxCfg = &outbox.Config{}
-	}
-	// 跨能力校验（原 config.validateCommon 的 outbox.publisher=mq 依赖 queue.type）
-	queueCfg := assembly.MustSection[*queue.Config](ctx, queue.ConfigKey)
-	if outboxCfg.UsesMQ() {
-		if queueCfg == nil || !queue.SupportsOutboxMQ(queueCfg.Type) {
-			return nil, fmt.Errorf("%w: queue.type %q, publisher %q", errInvalidQueueTypeForOutbox, queueTypeOf(queueCfg), outboxCfg.Publisher)
-		}
-	}
-
-	outboxStore := outbox.NewMySQLStore(ctx.DB())
-	var publisher outbox.Publisher
-	switch outboxCfg.Publisher {
-	case outbox.PublisherMQ:
-		q, ok := ctx.Port(queue.PortName).(queue.Queue)
-		if !ok {
-			return nil, fmt.Errorf("%w: publisher %q", errOutboxMQRequiresQueue, outbox.PublisherMQ)
-		}
-		consumer, ok := q.(queue.Consumer)
-		if !ok {
-			return nil, fmt.Errorf("%w: queue %s", errQueueDoesNotImplementConsumer, queueCfg.Type)
-		}
-		publisher = outbox.NewMQPublisher(q)
-		store := queue.NewMySQLStoreForDB(ctx.DB())
-		pool := queue.NewWorkerPool(queue.DefaultWorkerConfig, consumer, store)
-		outbox.RegisterMQWorkers(ctx.EventBus())
-		ctx.RegisterComponent(queue.NewWorkerPoolComponent(pool))
-	default:
-		publisher = outbox.NewEventBusPublisher(ctx.EventBus())
-		outbox.RegisterEventBusBridge(ctx.EventBus(), ctx.Logger())
-	}
-	processor := outbox.New(outboxStore, publisher)
-	if err := ctx.Provide(outbox.PortName, processor); err != nil {
-		return nil, fmt.Errorf("provide outbox port: %w", err)
-	}
-	if err := ctx.RegisterJob(scheduler.Job{ID: "outbox_process", Name: "Process Outbox Events", Spec: "@every 10s", Run: func() {
-		n, err := processor.Process(context.Background(), 100)
-		if err != nil {
-			ctx.Logger().Errorw("outbox process error", "error", err.Error())
-		} else if n > 0 {
-			ctx.Logger().Debugw("outbox processed", "count", n)
-		}
-	}}); err != nil {
-		return nil, err
-	}
-	return nil, nil
-}
-
-// queueTypeOf 读取 queue 配置的类型（queue 未启用时为零值）。
-func queueTypeOf(cfg *queue.Config) queue.Type {
-	if cfg == nil {
-		return ""
-	}
-	return cfg.Type
 }
 
 func wireBreach(ctx *assembly.Context) (contract.Module, error) {
