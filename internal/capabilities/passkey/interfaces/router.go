@@ -1,8 +1,8 @@
 package interfaces
 
 import (
+	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/passkey/application"
-	"jimu/internal/config"
 	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/http/middleware"
 
@@ -11,7 +11,7 @@ import (
 
 // RegisterPasskeyRoutes 注册通行密钥路由：
 // login/begin、login/finish 公开（无密码登录）；register/* 与 credentials/* 受 JWT 保护。
-func RegisterPasskeyRoutes(rg *gin.RouterGroup, service *application.PasskeyService, cfg config.AuthConfig, limiter *auth.Limiter, jwtUtil *auth.JWT) {
+func RegisterPasskeyRoutes(rg *gin.RouterGroup, service *application.PasskeyService, cfg authmodule.Config, limiter *auth.Limiter, jwtUtil *auth.JWT) {
 	handler := NewPasskeyHandler(service, cfg, limiter)
 
 	// 公开：无密码登录

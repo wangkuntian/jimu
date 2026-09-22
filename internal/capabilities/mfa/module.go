@@ -6,7 +6,6 @@ import (
 	mfaapp "jimu/internal/capabilities/mfa/application"
 	mfainfra "jimu/internal/capabilities/mfa/infrastructure"
 	"jimu/internal/capabilities/mfa/interfaces"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
 
@@ -21,11 +20,11 @@ type Module struct {
 
 // New 创建 mfa 模块。trustedDeviceDays<=0 关闭可信设备「记住此设备」；
 // users 用于 otpauth account 兜底（可为 nil）。
-func New(db *gorm.DB, authCfg config.AuthConfig, users contract.UserinfoSource) *Module {
+func New(db *gorm.DB, cfg Config, users contract.UserinfoSource) *Module {
 	repo := mfainfra.NewMysqlMFARepository(db)
 	trustedRepo := mfainfra.NewMysqlTrustedDeviceRepository(db)
-	svc := mfaapp.NewMFAService(repo, users, trustedRepo, authCfg.TrustedDeviceDays, authCfg.Issuer)
-	jwtUtil := auth.NewWithRotation(authCfg.JWTSecret, authCfg.JWTPreviousSecret, authCfg.Issuer, authCfg.AccessExpireMin, authCfg.RefreshExpireDay)
+	svc := mfaapp.NewMFAService(repo, users, trustedRepo, cfg.TrustedDeviceDays, cfg.Issuer)
+	jwtUtil := auth.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
 	return &Module{service: svc, jwtUtil: jwtUtil}
 }
 

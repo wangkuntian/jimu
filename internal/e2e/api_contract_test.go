@@ -102,38 +102,41 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cfg := config.Config{
-		Auth: config.AuthConfig{
-			JWTSecret:          "0123456789abcdef0123456789abcdef",
-			Issuer:             "jimu-e2e",
-			AccessExpireMin:    30,
-			RefreshExpireDay:   7,
-			PublicRegistration: true,
-			// 0 = 关闭限流，避免测试依赖 Redis Lua 脚本
-			LoginRateLimit:    0,
-			RegisterRateLimit: 0,
-		},
-		Audit: config.AuditConfig{QueueSize: 1024, BatchSize: 1, FlushIntervalMS: 10},
+	cfg := config.Config{}
+	authCfg := authmodule.Config{
+		JWTSecret:          "0123456789abcdef0123456789abcdef",
+		Issuer:             "jimu-e2e",
+		AccessExpireMin:    30,
+		RefreshExpireDay:   7,
+		PublicRegistration: true,
+		// 0 = 关闭限流，避免测试依赖 Redis Lua 脚本
+		LoginRateLimit:    0,
+		RegisterRateLimit: 0,
 	}
 
 	log := logger.New(config.LogConfig{Level: "error", Format: "console", Output: "stdout"})
 
 	userinfoSource := usermodule.NewUserinfoSource(userinfrastructure.NewMysqlRepository(gdb))
 	captchaMod := captchamodule.New(rdb, time.Minute, false)
-	mfaMod := mfamodule.New(gdb, cfg.Auth, userinfoSource)
-	authMod := authmodule.New(gdb, rdb, cfg.Auth, false, captchaMod.Service(),
+	mfaMod := mfamodule.New(gdb, mfamodule.Config{
+		JWTSecret:        authCfg.JWTSecret,
+		Issuer:           authCfg.Issuer,
+		AccessExpireMin:  authCfg.AccessExpireMin,
+		RefreshExpireDay: authCfg.RefreshExpireDay,
+	}, userinfoSource)
+	authMod := authmodule.New(gdb, rdb, authCfg, false, captchaMod.Service(),
 		contract.MFAVerifier(mfaMod.Service()))
 	passkeyMod := passkeymodule.New(passkeymodule.Deps{
 		DB:        gdb,
 		Redis:     rdb,
-		AuthCfg:   cfg.Auth,
+		AuthCfg:   authCfg,
 		Users:     userinfoSource,
 		Finalizer: authMod.Finalizer(),
 	})
 	userMod := usermodule.New(gdb, cfg) // 不传 rdb：跳过用户维度限流（依赖 Lua），聚焦契约链路
 	accessMod := accessmodule.New(gdb)
 
-	auditMod := auditmodule.New(gdb, cfg.Audit, log)
+	auditMod := auditmodule.New(gdb, auditmodule.Config{QueueSize: 1024, BatchSize: 1, FlushIntervalMS: 10}, log)
 	consoleMod := consolemodule.New("test", "test", rdb, gdb, nil, nil)
 	featureMod := feature.New(gdb)
 	queueMod := queue.NewModule(gdb, nil)
@@ -452,18 +455,15 @@ func TestAuthRateLimit(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cfg := config.Config{
-		Auth: config.AuthConfig{
-			JWTSecret:          "0123456789abcdef0123456789abcdef",
-			Issuer:             "jimu-e2e",
-			AccessExpireMin:    30,
-			RefreshExpireDay:   7,
-			PublicRegistration: true,
-			LoginRateLimit:     3,
-			LoginRateWindowSec: 60,
-		},
-	}
-	authMod := authmodule.New(gdb, rdb, cfg.Auth, false, nil)
+	authMod := authmodule.New(gdb, rdb, authmodule.Config{
+		JWTSecret:          "0123456789abcdef0123456789abcdef",
+		Issuer:             "jimu-e2e",
+		AccessExpireMin:    30,
+		RefreshExpireDay:   7,
+		PublicRegistration: true,
+		LoginRateLimit:     3,
+		LoginRateWindowSec: 60,
+	}, false, nil)
 	router := gin.New()
 	authMod.RegisterHTTP(router)
 

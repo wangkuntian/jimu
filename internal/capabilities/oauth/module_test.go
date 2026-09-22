@@ -4,8 +4,8 @@ package oauth
 import (
 	"testing"
 
+	authmodule "jimu/internal/capabilities/auth"
 	oauthplatform "jimu/internal/capabilities/oauth/provider"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/httpclient"
 
@@ -20,13 +20,13 @@ func newTestModule() *Module {
 	return New(
 		nil, // db：仅装配，模块方法未使用
 		&redis.Client{},
-		config.OAuthConfig{
-			Providers: map[string]config.OAuthProviderConfig{
+		Config{
+			Providers: map[string]ProviderConfig{
 				"google": {ClientID: "g-id", ClientSecret: "g-secret", RedirectURL: "https://x/g", Enabled: true},
 				"github": {ClientID: "h-id", Enabled: true},
 			},
 		},
-		config.AuthConfig{JWTSecret: "01234567890123456789012345678901", Issuer: "jimu", AccessExpireMin: 30, RefreshExpireDay: 7},
+		authmodule.Config{JWTSecret: "01234567890123456789012345678901", Issuer: "jimu", AccessExpireMin: 30, RefreshExpireDay: 7},
 		httpClient,
 	)
 }
@@ -61,8 +61,8 @@ func TestModuleRegisterHTTP(t *testing.T) {
 
 func TestBuildProvidersFiltersEnabled(t *testing.T) {
 	httpClient := httpclient.New(httpclient.Config{})
-	providers := buildProviders(config.OAuthConfig{
-		Providers: map[string]config.OAuthProviderConfig{
+	providers := buildProviders(Config{
+		Providers: map[string]ProviderConfig{
 			"google":  {ClientID: "g-id", Enabled: true},
 			"github":  {ClientID: "h-id", Enabled: false}, // 禁用应被过滤
 			"wechat":  {ClientID: "w-id", Enabled: true},
@@ -82,8 +82,8 @@ func TestBuildProvidersFiltersEnabled(t *testing.T) {
 
 func TestBuildProvidersUsesOIDCWhenIssuerConfigured(t *testing.T) {
 	httpClient := httpclient.New(httpclient.Config{})
-	providers := buildProviders(config.OAuthConfig{
-		Providers: map[string]config.OAuthProviderConfig{
+	providers := buildProviders(Config{
+		Providers: map[string]ProviderConfig{
 			// issuer_url 非空即按通用 OIDC 处理，provider 名自定义
 			"keycloak": {ClientID: "k-id", IssuerURL: "https://idp.example.com/realms/acme", RedirectURL: "https://x/k", Enabled: true},
 			// 未启用不构造

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/auth/application"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 	platformauth "jimu/internal/kernel/auth"
 	"jimu/internal/shared/errors"
@@ -21,12 +20,12 @@ const DeviceTokenHeader = "X-Device-Token"
 
 type AuthHandler struct {
 	service *application.AuthService
-	cfg     config.AuthConfig
+	cfg     Config
 	limiter *platformauth.Limiter
 	captcha contract.CaptchaVerifier
 }
 
-func NewAuthHandler(service *application.AuthService, cfg config.AuthConfig, limiter *platformauth.Limiter, captchaVerifier contract.CaptchaVerifier) *AuthHandler {
+func NewAuthHandler(service *application.AuthService, cfg Config, limiter *platformauth.Limiter, captchaVerifier contract.CaptchaVerifier) *AuthHandler {
 	return &AuthHandler{service: service, cfg: cfg, limiter: limiter, captcha: captchaVerifier}
 }
 
@@ -128,7 +127,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	// 开通式注册：注册 = 开通新租户（单事务创建租户 + owner 用户 + 模板角色）
-	if h.cfg.Provisioning.Enabled {
+	if h.cfg.ProvisioningEnabled {
 		res, err := h.service.RegisterProvisioned(c.Request.Context(), application.RegisterTenantRequest{
 			Username:   req.Username,
 			Password:   req.Password,

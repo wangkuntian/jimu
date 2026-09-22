@@ -18,48 +18,6 @@ func TestLoad(t *testing.T) {
 	}
 }
 
-func TestStorageConfigFieldMapping(t *testing.T) {
-	// 验证 storage 的 S3/OSS/MinIO 字段可从 YAML 映射到结构体
-	// （直接驱动 viper，避免依赖项目 configs/ 目录的实际值）
-	v := viper.New()
-	v.SetConfigType("yaml")
-	conf := `
-storage:
-  type: "oss"
-  endpoint: "oss-cn-hangzhou.aliyuncs.com"
-  region: "cn-hangzhou"
-  bucket: "my-bucket"
-  access_key: "ak"
-  secret_key: "sk"
-  path_style: true
-`
-	if err := v.ReadConfig(strings.NewReader(conf)); err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-	var cfg Config
-	if err := v.Unmarshal(&cfg); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if cfg.Storage.Type != "oss" || cfg.Storage.Endpoint != "oss-cn-hangzhou.aliyuncs.com" {
-		t.Errorf("storage type/endpoint not mapped: %+v", cfg.Storage)
-	}
-	if cfg.Storage.Bucket != "my-bucket" || !cfg.Storage.PathStyle || cfg.Storage.Region != "cn-hangzhou" {
-		t.Errorf("storage bucket/region/path_style not mapped: %+v", cfg.Storage)
-	}
-}
-
-func TestJWTSecretOverride(t *testing.T) {
-	t.Setenv("JWT_SECRET", strings.Repeat("a", 32))
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error: %v", err)
-	}
-	if cfg.Auth.JWTSecret != strings.Repeat("a", 32) {
-		t.Errorf("expected JWT_SECRET to override, got %q", cfg.Auth.JWTSecret)
-	}
-}
-
 func TestDBPasswordOverride(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "secret-from-env")
 
@@ -97,27 +55,6 @@ func TestValidateLogLevel(t *testing.T) {
 	}
 }
 
-func TestValidateOutboxPublisher(t *testing.T) {
-	cfg := validProdConfig()
-	cfg.Outbox.Publisher = "invalid"
-	err := cfg.Validate("prod")
-	if err == nil {
-		t.Fatal("expected error for invalid outbox.publisher, got nil")
-	}
-	if !strings.Contains(err.Error(), "invalid outbox.publisher") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateOutboxMQWithRedisQueue(t *testing.T) {
-	cfg := validProdConfig()
-	cfg.Outbox.Publisher = OutboxPublisherMQ
-	cfg.Queue.Type = QueueTypeRedis
-	if err := cfg.Validate("prod"); err != nil {
-		t.Errorf("mq + redis should be valid, got: %v", err)
-	}
-}
-
 func TestValidateLogFormat(t *testing.T) {
 	cfg := validProdConfig()
 	cfg.Log.Format = "xml"
@@ -126,18 +63,6 @@ func TestValidateLogFormat(t *testing.T) {
 		t.Fatal("expected error for invalid log.format, got nil")
 	}
 	if !strings.Contains(err.Error(), "invalid log.format") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateSchedulerStore(t *testing.T) {
-	cfg := validProdConfig()
-	cfg.Scheduler.Store = "etcd"
-	err := cfg.Validate("prod")
-	if err == nil {
-		t.Fatal("expected error for invalid scheduler.store, got nil")
-	}
-	if !strings.Contains(err.Error(), "invalid scheduler.store") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -183,35 +108,10 @@ func validProdConfig() Config {
 			Format: LogFormatJSON,
 			Output: "stdout",
 		},
-		Auth: AuthConfig{
-			JWTSecret:             strings.Repeat("x", 32),
-			Issuer:                "jimu",
-			AccessExpireMin:       30,
-			RefreshExpireDay:      7,
-			LoginRateLimit:        10,
-			LoginRateWindowSec:    60,
-			RegisterRateLimit:     5,
-			RegisterRateWindowSec: 300,
-			ResetCodeTTLMin:       15,
-		},
 		Server: ServerConfig{
 			TimeoutSec:     30,
 			RateLimitRate:  100,
 			RateLimitBurst: 200,
-		},
-		Audit: AuditConfig{
-			QueueSize:       256,
-			BatchSize:       50,
-			FlushIntervalMS: 500,
-		},
-		Queue: QueueConfig{
-			Type: QueueTypeRedis,
-		},
-		Outbox: OutboxConfig{
-			Publisher: OutboxPublisherEventBus,
-		},
-		Scheduler: SchedulerConfig{
-			Store: SchedulerStoreMemory,
 		},
 	}
 }
@@ -222,8 +122,6 @@ func TestValidateProdRejectsInsecureValues(t *testing.T) {
 		mutate func(*Config)
 		key    string
 	}{
-		{"default JWT secret", func(c *Config) { c.Auth.JWTSecret = "change-me-in-production" }, "auth.jwt_secret"},
-		{"short JWT secret", func(c *Config) { c.Auth.JWTSecret = "short" }, "auth.jwt_secret"},
 		{"default DB password", func(c *Config) { c.DB.Password = "root" }, "db.password"},
 		{"invalid management port", func(c *Config) { c.Management.Port = 0 }, "management.port"},
 		{"wildcard CORS", func(c *Config) { c.HTTP.AllowedOrigins = []string{"*"} }, "http.allowed_origins"},
@@ -237,7 +135,7 @@ func TestValidateProdRejectsInsecureValues(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), tt.key) {
 				t.Fatalf("Validate() error = %v, want key %q", err, tt.key)
 			}
-			if strings.Contains(err.Error(), cfg.Auth.JWTSecret) || strings.Contains(err.Error(), cfg.DB.Password) {
+			if strings.Contains(err.Error(), cfg.DB.Password) {
 				t.Fatalf("validation error leaked a secret: %v", err)
 			}
 		})
@@ -293,93 +191,6 @@ func TestValidateRedisEmptyModeDefaultsSingle(t *testing.T) {
 	}
 }
 
-func validProvisioningConfig() ProvisioningConfig {
-	return ProvisioningConfig{
-		Enabled:   true,
-		OwnerRole: "管理员",
-		Roles: []ProvisionRoleTemplate{
-			{
-				Name:        "管理员",
-				Description: "租户管理员",
-				Permissions: []ProvisionPermission{{Resource: "/api/v1/users", Action: "GET"}},
-			},
-		},
-	}
-}
-
-func TestValidateProvisioningDisabled(t *testing.T) {
-	cfg := validProdConfig()
-	cfg.Auth.Provisioning = ProvisioningConfig{Enabled: false}
-	if err := cfg.Validate("prod"); err != nil {
-		t.Fatalf("disabled provisioning should pass validation, got: %v", err)
-	}
-}
-
-func TestValidateProvisioningValid(t *testing.T) {
-	cfg := validProdConfig()
-	cfg.Auth.PublicRegistration = true
-	cfg.Auth.Provisioning = validProvisioningConfig()
-	if err := cfg.Validate("prod"); err != nil {
-		t.Fatalf("valid provisioning should pass validation, got: %v", err)
-	}
-}
-
-func TestValidateProvisioningRequiresPublicRegistration(t *testing.T) {
-	cfg := validProdConfig()
-	cfg.Auth.Provisioning = validProvisioningConfig()
-	cfg.Auth.PublicRegistration = false
-	err := cfg.Validate("prod")
-	if err == nil || !strings.Contains(err.Error(), "auth.public_registration") {
-		t.Fatalf("provisioning without public registration should fail, got: %v", err)
-	}
-}
-
-func TestValidateProvisioningRequiresRoles(t *testing.T) {
-	cfg := validProdConfig()
-	cfg.Auth.PublicRegistration = true
-	cfg.Auth.Provisioning = ProvisioningConfig{Enabled: true}
-	err := cfg.Validate("prod")
-	if err == nil || !strings.Contains(err.Error(), "auth.provisioning.roles") {
-		t.Fatalf("provisioning without roles should fail, got: %v", err)
-	}
-}
-
-func TestValidateProvisioningRejectsDuplicateRoleName(t *testing.T) {
-	cfg := validProdConfig()
-	cfg.Auth.PublicRegistration = true
-	p := validProvisioningConfig()
-	p.Roles = append(p.Roles, p.Roles[0])
-	cfg.Auth.Provisioning = p
-	err := cfg.Validate("prod")
-	if err == nil || !strings.Contains(err.Error(), "duplicate") {
-		t.Fatalf("duplicate template role name should fail, got: %v", err)
-	}
-}
-
-func TestValidateProvisioningRejectsUnknownOwnerRole(t *testing.T) {
-	cfg := validProdConfig()
-	cfg.Auth.PublicRegistration = true
-	p := validProvisioningConfig()
-	p.OwnerRole = "不存在"
-	cfg.Auth.Provisioning = p
-	err := cfg.Validate("prod")
-	if err == nil || !strings.Contains(err.Error(), "owner_role") {
-		t.Fatalf("unknown owner_role should fail, got: %v", err)
-	}
-}
-
-func TestValidateProvisioningRejectsIncompletePermission(t *testing.T) {
-	cfg := validProdConfig()
-	cfg.Auth.PublicRegistration = true
-	p := validProvisioningConfig()
-	p.Roles[0].Permissions = []ProvisionPermission{{Resource: "/api/v1/users"}}
-	cfg.Auth.Provisioning = p
-	err := cfg.Validate("prod")
-	if err == nil || !strings.Contains(err.Error(), "resource and action") {
-		t.Fatalf("permission without action should fail, got: %v", err)
-	}
-}
-
 func TestValidateIPAllowlist(t *testing.T) {
 	base, err := Load()
 	if err != nil {
@@ -394,31 +205,6 @@ func TestValidateIPAllowlist(t *testing.T) {
 	base.Security.AdminIPAllowlist = []string{"not-a-cidr"}
 	if err := base.Validate("dev"); err == nil {
 		t.Fatal("invalid admin allowlist should be rejected")
-	}
-}
-
-func TestValidateOAuthProviders(t *testing.T) {
-	tests := []struct {
-		name    string
-		cfg     OAuthProviderConfig
-		wantErr bool
-	}{
-		{"未启用时忽略空配置", OAuthProviderConfig{Enabled: false}, false},
-		{"启用但缺 client_id", OAuthProviderConfig{Enabled: true, RedirectURL: "https://x/cb"}, true},
-		{"启用但缺 redirect_url", OAuthProviderConfig{Enabled: true, ClientID: "id"}, true},
-		{"内置提供商合法", OAuthProviderConfig{Enabled: true, ClientID: "id", RedirectURL: "https://x/cb"}, false},
-		{"OIDC issuer 合法", OAuthProviderConfig{Enabled: true, ClientID: "id", RedirectURL: "https://x/cb", IssuerURL: "https://idp.example.com/realms/acme"}, false},
-		{"OIDC issuer 非绝对地址", OAuthProviderConfig{Enabled: true, ClientID: "id", RedirectURL: "https://x/cb", IssuerURL: "idp.example.com"}, true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateOAuthProviders(OAuthConfig{Providers: map[string]OAuthProviderConfig{"p": tt.cfg}})
-			if tt.wantErr {
-				assert.Error(t, err)
-				return
-			}
-			assert.NoError(t, err)
-		})
 	}
 }
 

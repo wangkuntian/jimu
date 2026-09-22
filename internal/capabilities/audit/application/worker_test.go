@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/audit/domain"
-	"jimu/internal/config"
 	"jimu/internal/kernel/logger"
 
 	"go.uber.org/zap"
@@ -58,7 +57,7 @@ func (r *fakeBatchRepository) ListRange(context.Context, uint64, time.Time, time
 }
 
 func testWorker(repo domain.AuditRepository, queueSize, batchSize int, flush time.Duration) *Worker {
-	return NewWorker(repo, config.AuditConfig{
+	return NewWorker(repo, WorkerConfig{
 		QueueSize:       queueSize,
 		BatchSize:       batchSize,
 		FlushIntervalMS: int(flush / time.Millisecond),

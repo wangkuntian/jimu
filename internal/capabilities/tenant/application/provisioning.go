@@ -11,7 +11,6 @@ import (
 	roledomain "jimu/internal/capabilities/access/domain"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
@@ -20,13 +19,36 @@ import (
 	"gorm.io/gorm"
 )
 
+// ProvisioningConfig 开通式注册配置（tenant 自有的输入视图）。
+//
+// `auth.provisioning` 段由 auth 能力拥有（设计 §8 ¶2 不拆段），但 tenant 被 auth 依赖，
+// **不得** import auth 能力类型，故在此定义同形类型，由组合根从 auth 段构造后传入。
+type ProvisioningConfig struct {
+	Enabled   bool
+	OwnerRole string
+	Roles     []ProvisionRoleTemplate
+}
+
+// ProvisionRoleTemplate 开通租户时初始化的角色模板（见 ProvisioningConfig）。
+type ProvisionRoleTemplate struct {
+	Name        string
+	Description string
+	Permissions []ProvisionPermission
+}
+
+// ProvisionPermission 模板角色绑定的全局权限。
+type ProvisionPermission struct {
+	Resource string
+	Action   string
+}
+
 // GormTenantProvisioner 基于单事务的租户开通实现（实现 contract.TenantProvisioner）。
 type GormTenantProvisioner struct {
 	db  *gorm.DB
-	cfg config.ProvisioningConfig
+	cfg ProvisioningConfig
 }
 
-func NewGormTenantProvisioner(db *gorm.DB, cfg config.ProvisioningConfig) *GormTenantProvisioner {
+func NewGormTenantProvisioner(db *gorm.DB, cfg ProvisioningConfig) *GormTenantProvisioner {
 	return &GormTenantProvisioner{db: db, cfg: cfg}
 }
 
@@ -122,7 +144,7 @@ func (p *GormTenantProvisioner) Provision(ctx context.Context, params contract.P
 
 // provisionTemplateRoles 按模板创建角色并绑定全局权限，返回 owner 角色ID（0 = 无可绑定角色）。
 // owner_role 匹配模板角色名；未配置或缺省时绑定第一个角色。
-func provisionTemplateRoles(tx *gorm.DB, cfg config.ProvisioningConfig, tenantID uint64) (uint64, error) {
+func provisionTemplateRoles(tx *gorm.DB, cfg ProvisioningConfig, tenantID uint64) (uint64, error) {
 	var ownerRoleID uint64
 	for _, template := range cfg.Roles {
 		role := roledomain.Role{

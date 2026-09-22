@@ -5,7 +5,6 @@ import (
 	"jimu/internal/capabilities/audit/application"
 	"jimu/internal/capabilities/audit/infrastructure"
 	"jimu/internal/capabilities/audit/interfaces"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/kernel/logger"
@@ -20,12 +19,16 @@ type Module struct {
 	db      *gorm.DB
 }
 
-func New(db *gorm.DB, cfg config.AuditConfig, log *logger.Logger) *Module {
+func New(db *gorm.DB, cfg Config, log *logger.Logger) *Module {
 	repo := infrastructure.NewMysqlAuditRepository(db, cfg.HashSecret)
 	return &Module{
 		service: application.NewAuditService(repo, cfg.HashSecret),
-		worker:  application.NewWorker(repo, cfg, log),
-		db:      db,
+		worker: application.NewWorker(repo, application.WorkerConfig{
+			QueueSize:       cfg.QueueSize,
+			BatchSize:       cfg.BatchSize,
+			FlushIntervalMS: cfg.FlushIntervalMS,
+		}, log),
+		db: db,
 	}
 }
 
@@ -46,6 +49,9 @@ var Descriptor = contract.Descriptor{
 		{Name: "审计详情", Resource: "/api/v1/audits/*", Action: "GET"},
 		// 审计导出路由 /audits/export 挂在 audit 能力（handler.go:62）
 		{Name: "审计导出", Resource: "/api/v1/audits/export", Action: "GET"},
+	},
+	Configs: []contract.ConfigSpec{
+		{Section: ConfigKey, New: func() any { return &Config{} }},
 	},
 }
 

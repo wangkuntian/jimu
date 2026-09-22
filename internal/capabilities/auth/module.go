@@ -9,7 +9,6 @@ import (
 	"jimu/internal/capabilities/auth/interfaces"
 	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/user/infrastructure"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/access"
 	"jimu/internal/kernel/auth"
@@ -21,7 +20,7 @@ import (
 )
 
 type Module struct {
-	cfg     config.AuthConfig
+	cfg     Config
 	service *application.AuthService
 	jwtUtil *auth.JWT
 	limiter *auth.Limiter
@@ -34,7 +33,7 @@ type Module struct {
 // deps 接受：*outbox.Outbox、notification.Dispatcher、*encryption.Cipher、
 // application.TenantQuota、contract.MFAVerifier、contract.TenantProvisioner、
 // contract.BreachChecker、*application.ResetStore。
-func New(db *gorm.DB, rdb redistore.Client, cfg config.AuthConfig, failClosed bool, captchaVerifier contract.CaptchaVerifier, deps ...interface{}) *Module {
+func New(db *gorm.DB, rdb redistore.Client, cfg Config, failClosed bool, captchaVerifier contract.CaptchaVerifier, deps ...interface{}) *Module {
 	userRepo := infrastructure.NewMysqlRepository(db)
 	jwtUtil := auth.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
 	sessionStore := auth.NewRedisSessionStore(rdb)
@@ -72,6 +71,10 @@ var Descriptor = contract.Descriptor{
 	Migrations: migrationsFS,
 	Requires:   []string{"user", "access", "tenant", "mfa"},
 	Mount:      contract.MountSelfManaged,
+	// auth 拥有整个 auth 段（含嵌套 webauthn/provisioning），不拆段（设计 §8 ¶2）
+	Configs: []contract.ConfigSpec{
+		{Section: ConfigKey, New: func() any { return &Config{} }},
+	},
 }
 
 // Descriptor 实现 contract.Describable。
@@ -81,7 +84,14 @@ func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
 func (m *Module) Finalizer() contract.LoginFinalizer { return m.service }
 
 func (m *Module) RegisterHTTP(r contract.Router) {
-	interfaces.RegisterAuthRoutes(r.Group("/api/v1"), m.service, m.jwtUtil, m.cfg, m.limiter, m.captcha)
+	interfaces.RegisterAuthRoutes(r.Group("/api/v1"), m.service, m.jwtUtil, interfaces.Config{
+		PublicRegistration:    m.cfg.PublicRegistration,
+		ProvisioningEnabled:   m.cfg.Provisioning.Enabled,
+		LoginRateLimit:        m.cfg.LoginRateLimit,
+		LoginRateWindowSec:    m.cfg.LoginRateWindowSec,
+		RegisterRateLimit:     m.cfg.RegisterRateLimit,
+		RegisterRateWindowSec: m.cfg.RegisterRateWindowSec,
+	}, m.limiter, m.captcha)
 }
 
 func (m *Module) ProtectedHTTPMiddleware() ([]gin.HandlerFunc, error) {

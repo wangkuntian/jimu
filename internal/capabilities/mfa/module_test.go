@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	mfaapp "jimu/internal/capabilities/mfa/application"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +17,7 @@ func newMFAModule(t *testing.T) *Module {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	return New(db, config.AuthConfig{
+	return New(db, Config{
 		JWTSecret:         "01234567890123456789012345678901",
 		Issuer:            "jimu",
 		AccessExpireMin:   30,

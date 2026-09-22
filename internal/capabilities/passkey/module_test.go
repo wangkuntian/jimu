@@ -3,7 +3,7 @@ package passkey
 import (
 	"testing"
 
-	"jimu/internal/config"
+	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/contract"
 
 	"github.com/gin-gonic/gin"
@@ -17,7 +17,7 @@ import (
 func TestModuleNameAndDescriptor(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	m := New(Deps{DB: db, AuthCfg: config.AuthConfig{Issuer: "jimu"}})
+	m := New(Deps{DB: db, AuthCfg: authmodule.Config{Issuer: "jimu"}})
 
 	assert.Equal(t, "passkey", m.Name())
 	var _ contract.Module = m
@@ -36,7 +36,7 @@ func TestModuleRegisterHTTP(t *testing.T) {
 	require.NoError(t, err)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	New(Deps{DB: db, AuthCfg: config.AuthConfig{Issuer: "jimu"}}).RegisterHTTP(r)
+	New(Deps{DB: db, AuthCfg: authmodule.Config{Issuer: "jimu"}}).RegisterHTTP(r)
 
 	got := map[string]int{}
 	for _, route := range r.Routes() {

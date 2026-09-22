@@ -29,16 +29,6 @@ const (
 	LogFormatJSON    = "json"
 	LogFormatConsole = "console"
 
-	QueueTypeRedis    = "redis"
-	QueueTypeKafka    = "kafka"
-	QueueTypeRabbitMQ = "rabbitmq"
-
-	OutboxPublisherEventBus = "event_bus"
-	OutboxPublisherMQ       = "mq"
-
-	SchedulerStoreMemory = "memory"
-	SchedulerStoreMySQL  = "mysql"
-
 	DBDriverMySQL    = "mysql"
 	DBDriverPostgres = "postgres"
 	DBDriverMariaDB  = "mariadb"
@@ -49,94 +39,17 @@ const (
 )
 
 var (
-	validHTTPModes          = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
-	validLogLevels          = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
-	validLogFormats         = []string{LogFormatJSON, LogFormatConsole}
-	validQueueTypes         = []string{QueueTypeRedis, QueueTypeKafka, QueueTypeRabbitMQ}
-	validOutboxPublishers   = []string{OutboxPublisherEventBus, OutboxPublisherMQ}
-	validOutboxMQQueueTypes = []string{QueueTypeKafka, QueueTypeRabbitMQ, QueueTypeRedis}
-	validSchedulerStores    = []string{SchedulerStoreMemory, SchedulerStoreMySQL}
-	validDBDrivers          = []string{DBDriverMySQL, DBDriverPostgres, DBDriverMariaDB, ""}
-	validRedisModes         = []string{RedisModeSingle, RedisModeSentinel, RedisModeCluster}
+	validHTTPModes  = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
+	validLogLevels  = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
+	validLogFormats = []string{LogFormatJSON, LogFormatConsole}
+	validDBDrivers  = []string{DBDriverMySQL, DBDriverPostgres, DBDriverMariaDB, ""}
+	validRedisModes = []string{RedisModeSingle, RedisModeSentinel, RedisModeCluster}
 )
-
-// QueueConfig 队列配置
-type QueueConfig struct {
-	Type     string              `mapstructure:"type"`     // 队列类型：redis, kafka, rabbitmq
-	Kafka    QueueKafkaConfig    `mapstructure:"kafka"`    // Kafka 队列配置（type=kafka 时使用）
-	RabbitMQ QueueRabbitMQConfig `mapstructure:"rabbitmq"` // RabbitMQ 队列配置（type=rabbitmq 时使用）
-}
-
-// OutboxConfig Outbox 配置
-type OutboxConfig struct {
-	Publisher string `mapstructure:"publisher"` // 发布器类型：event_bus, mq
-}
-
-// SchedulerConfig 调度器配置
-type SchedulerConfig struct {
-	Store string `mapstructure:"store"` // 任务定义存储类型：memory, mysql
-}
-
-// OAuthProviderConfig 单个 OAuth 提供商配置。
-// 填了 issuer_url 的提供商按通用 OIDC 处理（provider 名可自定义，如 keycloak/okta/azuread）；
-// 否则按内置提供商名（google/github/wechat）匹配。
-type OAuthProviderConfig struct {
-	ClientID     string   `mapstructure:"client_id"`
-	ClientSecret string   `mapstructure:"client_secret"`
-	RedirectURL  string   `mapstructure:"redirect_url"`
-	IssuerURL    string   `mapstructure:"issuer_url"` // OIDC discovery 签发者地址
-	Scopes       []string `mapstructure:"scopes"`     // 可选，默认 openid profile email
-	Enabled      bool     `mapstructure:"enabled"`
-}
-
-// OAuthConfig OAuth 登录配置
-type OAuthConfig struct {
-	Providers map[string]OAuthProviderConfig `mapstructure:"providers"` // 提供商名 -> 配置（内置 google/github/wechat，或自定义 OIDC 提供商名）
-}
-
-// CaptchaConfig 验证码配置
-type CaptchaConfig struct {
-	Enabled bool `mapstructure:"enabled"` // 是否启用登录/注册验证码
-	TTLMin  int  `mapstructure:"ttl_min"` // 验证码有效期（分钟）
-}
-
-// EmailConfig 邮件通知配置
-type EmailConfig struct {
-	Enabled  bool   `mapstructure:"enabled"`  // 是否启用真实 SMTP 发送；false 时回退日志渠道
-	Host     string `mapstructure:"host"`     // SMTP 服务器地址
-	Port     int    `mapstructure:"port"`     // SMTP 端口（通常 25/465/587）
-	Username string `mapstructure:"username"` // 认证用户名
-	Password string `mapstructure:"password"` // 认证密码（敏感，建议环境变量注入）
-	From     string `mapstructure:"from"`     // 发件人地址
-}
-
-// SMSConfig 短信通知配置
-type SMSConfig struct {
-	Enabled   bool   `mapstructure:"enabled"`    // 是否启用真实短信发送；false 时回退日志渠道
-	Provider  string `mapstructure:"provider"`   // 短信服务商：aliyun
-	APIKey    string `mapstructure:"api_key"`    // AccessKey ID（敏感，建议环境变量注入）
-	APISecret string `mapstructure:"api_secret"` // AccessKey Secret（敏感，建议环境变量注入）
-	SignName  string `mapstructure:"sign_name"`  // 短信签名
-}
 
 // CaptchaResult 验证码返回
 type CaptchaResult struct {
 	CaptchaID    string `json:"captcha_id"`
 	CaptchaImage string `json:"captcha_image"`
-}
-
-// QueueKafkaConfig Kafka 队列配置
-type QueueKafkaConfig struct {
-	Brokers []string `mapstructure:"brokers"`  // broker 地址列表，如 ["kafka:9092"]
-	Topic   string   `mapstructure:"topic"`    // 消费/生产主题
-	GroupID string   `mapstructure:"group_id"` // 消费组 ID
-}
-
-// QueueRabbitMQConfig RabbitMQ 队列配置
-type QueueRabbitMQConfig struct {
-	URL      string `mapstructure:"url"`      // AMQP URL，如 amqp://guest:guest@rabbitmq:5672/
-	Queue    string `mapstructure:"queue"`    // 队列名
-	Exchange string `mapstructure:"exchange"` // 交换机名（留空则使用默认直连交换机）
 }
 
 // IDConfig 雪花 ID 配置
@@ -150,24 +63,11 @@ type Config struct {
 	DB           DBConfig                    `mapstructure:"db"`
 	Redis        RedisConfig                 `mapstructure:"redis"`
 	RateLimit    RateLimitConfig             `mapstructure:"ratelimit"`
-	Retention    RetentionConfig             `mapstructure:"retention"`
 	Log          LogConfig                   `mapstructure:"log"`
-	Auth         AuthConfig                  `mapstructure:"auth"`
 	Server       ServerConfig                `mapstructure:"server"`
 	ID           IDConfig                    `mapstructure:"id"`
 	Cache        CacheConfig                 `mapstructure:"cache"`
-	Audit        AuditConfig                 `mapstructure:"audit"`
-	Storage      StorageConfig               `mapstructure:"storage"`
-	Upload       UploadConfig                `mapstructure:"upload"`
 	Security     SecurityConfig              `mapstructure:"security"`
-	Queue        QueueConfig                 `mapstructure:"queue"`
-	Outbox       OutboxConfig                `mapstructure:"outbox"`
-	Scheduler    SchedulerConfig             `mapstructure:"scheduler"`
-	OAuth        OAuthConfig                 `mapstructure:"oauth"`
-	Captcha      CaptchaConfig               `mapstructure:"captcha"`
-	Email        EmailConfig                 `mapstructure:"email"`
-	SMS          SMSConfig                   `mapstructure:"sms"`
-	Notification NotificationConfig          `mapstructure:"notification"`
 	OTEL         observability.TracingConfig `mapstructure:"otel"`
 	ErrorReport  reporter.ReporterConfig     `mapstructure:"error_reporting"`
 	HTTPClient   HTTPClientConfig            `mapstructure:"http_client"`
@@ -185,16 +85,6 @@ type HTTPClientConfig struct {
 	RetryIntervalMS int `mapstructure:"retry_interval_ms"` // 重试基础间隔（毫秒），0 用默认 200
 	RateLimitRate   int `mapstructure:"rate_limit_rate"`   // 每秒请求数（按目标 host 独立限流），0 不限流
 	RateLimitBurst  int `mapstructure:"rate_limit_burst"`  // 令牌桶容量，0 用 rate（桶=平均速率）
-}
-
-// NotificationConfig 通知渠道配置
-type NotificationConfig struct {
-	Webhook WebhookNotificationConfig `mapstructure:"webhook"` // Webhook 渠道配置
-}
-
-// WebhookNotificationConfig Webhook 通知配置
-type WebhookNotificationConfig struct {
-	SignSecret string `mapstructure:"sign_secret"` // 载荷签名密钥（HMAC-SHA256）；空则不签名
 }
 
 // GRPCConfig gRPC server 配置（与 HTTP 双栈并存，可选启用）
@@ -276,39 +166,6 @@ type ManagementConfig struct {
 	ProbeTimeoutSec int    `mapstructure:"probe_timeout_sec"`
 }
 
-type AuditConfig struct {
-	QueueSize       int    `mapstructure:"queue_size"`
-	BatchSize       int    `mapstructure:"batch_size"`
-	FlushIntervalMS int    `mapstructure:"flush_interval_ms"`
-	HashSecret      string `mapstructure:"hash_secret"` // 审计链 HMAC 密钥；为空时退化为 SHA-256
-}
-
-type StorageConfig struct {
-	Type    string `mapstructure:"type"`     // local, s3, oss, minio
-	BaseDir string `mapstructure:"base_dir"` // 本地存储目录
-	BaseURL string `mapstructure:"base_url"` // 访问 URL 前缀
-
-	// S3/OSS/MinIO 通用（local 不用）
-	Endpoint  string `mapstructure:"endpoint"`   // 如 oss-cn-hangzhou.aliyuncs.com、http://localhost:9000
-	Region    string `mapstructure:"region"`     // 如 us-east-1
-	Bucket    string `mapstructure:"bucket"`     // 存储桶
-	AccessKey string `mapstructure:"access_key"` // 访问密钥
-	SecretKey string `mapstructure:"secret_key"` // 密钥
-	PathStyle bool   `mapstructure:"path_style"` // 路径风格（MinIO 必须 true）
-}
-
-// UploadConfig 文件上传配置（含安全扫描）
-type UploadConfig struct {
-	ClamAV ClamAVConfig `mapstructure:"clamav"`
-}
-
-// ClamAVConfig ClamAV 病毒扫描配置
-type ClamAVConfig struct {
-	Enabled    bool   `mapstructure:"enabled"`     // 是否启用，false 时上传不扫描
-	Address    string `mapstructure:"address"`     // clamd 监听地址，如 127.0.0.1:3310
-	TimeoutSec int    `mapstructure:"timeout_sec"` // 扫描超时（秒），0 用默认 10
-}
-
 type HTTPConfig struct {
 	Host                 string    `mapstructure:"host"`
 	Port                 int       `mapstructure:"port"`
@@ -358,21 +215,6 @@ type BreakerConfig struct {
 	Enabled         bool `mapstructure:"enabled"`           // 是否启用熔断
 	MaxFailures     int  `mapstructure:"max_failures"`      // 连续失败阈值（默认 5）
 	ResetTimeoutSec int  `mapstructure:"reset_timeout_sec"` // 冷却时间秒（默认 10）
-}
-
-// RetentionConfig 数据保留策略（清理增长型历史表，避免无限增长）
-type RetentionConfig struct {
-	Enabled         bool   `mapstructure:"enabled"`
-	Cron            string `mapstructure:"cron"`              // 调度表达式（默认每天 03:30）
-	BatchSize       int    `mapstructure:"batch_size"`        // 每批删除行数（默认 500）
-	AuditLogDays    int    `mapstructure:"audit_log_days"`    // 审计日志保留天数，0=不清理
-	JobDays         int    `mapstructure:"job_days"`          // 已终态任务保留天数
-	JobHistoryDays  int    `mapstructure:"job_history_days"`  // 任务执行历史保留天数
-	DeadLetterDays  int    `mapstructure:"dead_letter_days"`  // 已处理死信保留天数
-	OutboxEventDays int    `mapstructure:"outbox_event_days"` // 已发布 outbox 事件保留天数
-	ImportJobDays   int    `mapstructure:"import_job_days"`   // 已结束导入任务保留天数
-	// 失效可信设备的保留天数（按 expires_at 计，留出审计窗口后清理）
-	TrustedDeviceDays int `mapstructure:"trusted_device_days"`
 }
 
 // RateLimitConfig 限流维度配置（全局 IP 令牌桶见 server.rate_limit_*）。
@@ -425,67 +267,71 @@ type LogConfig struct {
 	Compress   bool   `mapstructure:"compress"`    // 是否压缩
 }
 
-type AuthConfig struct {
-	JWTSecret             string             `mapstructure:"jwt_secret"`
-	JWTPreviousSecret     string             `mapstructure:"jwt_previous_secret"`
-	Issuer                string             `mapstructure:"issuer"`
-	AccessExpireMin       int                `mapstructure:"access_expire_min"`
-	RefreshExpireDay      int                `mapstructure:"refresh_expire_day"`
-	PublicRegistration    bool               `mapstructure:"public_registration"`
-	LoginRateLimit        int                `mapstructure:"login_rate_limit"`
-	LoginRateWindowSec    int                `mapstructure:"login_rate_window_sec"`
-	RegisterRateLimit     int                `mapstructure:"register_rate_limit"`
-	RegisterRateWindowSec int                `mapstructure:"register_rate_window_sec"`
-	ResetCodeTTLMin       int                `mapstructure:"reset_code_ttl_min"`     // 密码重置验证码有效期（分钟）
-	PasswordHistoryCount  int                `mapstructure:"password_history_count"` // 防复用：检查最近 N 个历史密码（0=关闭）
-	TrustedDeviceDays     int                `mapstructure:"trusted_device_days"`    // 可信设备有效期（天，0=关闭「记住此设备」）
-	BreachCheckEnabled    bool               `mapstructure:"breach_check_enabled"`   // 泄露口令检查（HIBP k-匿名范围查询，默认关闭）
-	Provisioning          ProvisioningConfig `mapstructure:"provisioning"`           // 开通式注册（注册 = 开通新租户）
-	WebAuthn              WebAuthnConfig     `mapstructure:"webauthn"`               // WebAuthn/通行密钥（无密码登录）
-}
-
-// WebAuthnConfig WebAuthn/通行密钥配置。
-// rp_id 必须是站点有效域（不带 scheme，如 example.com；本地开发用 localhost），
-// rp_origins 是允许的浏览器来源（含 scheme，如 https://example.com）。
-type WebAuthnConfig struct {
-	Enabled       bool     `mapstructure:"enabled"`         // 是否启用通行密钥
-	RPDisplayName string   `mapstructure:"rp_display_name"` // 展示给用户的站点名称
-	RPID          string   `mapstructure:"rp_id"`           // Relying Party ID（站点有效域）
-	RPOrigins     []string `mapstructure:"rp_origins"`      // 允许的来源（绝对 URL）
-	SessionTTLMin int      `mapstructure:"session_ttl_min"` // 挑战有效期（分钟），0 用默认 5
-}
-
-// ProvisioningConfig 开通式注册配置。
-// enabled 时 /auth/register 在单事务内创建新租户 + owner 用户，并按 roles 模板
-// 初始化租户角色与全局权限绑定；owner 获得绑定 owner_role 指定的角色（缺省为模板第一个角色）。
-type ProvisioningConfig struct {
-	Enabled   bool                    `mapstructure:"enabled"`
-	OwnerRole string                  `mapstructure:"owner_role"` // owner 绑定的模板角色名；空 = 模板第一个角色
-	Roles     []ProvisionRoleTemplate `mapstructure:"roles"`
-}
-
-// ProvisionRoleTemplate 开通租户时初始化的角色模板。
-// permissions 引用全局权限表（seed 写入的 resource + action），缺失的权限跳过不报错。
-type ProvisionRoleTemplate struct {
-	Name        string                `mapstructure:"name"`
-	Description string                `mapstructure:"description"`
-	Permissions []ProvisionPermission `mapstructure:"permissions"`
-}
-
-// ProvisionPermission 模板角色绑定的全局权限
-type ProvisionPermission struct {
-	Resource string `mapstructure:"resource"`
-	Action   string `mapstructure:"action"`
-}
-
 // Load 加载配置
 // 优先级：环境变量 > .env > app.{env}.yaml > app.yaml
 func Load() (*Config, error) {
+	cfg, _, err := LoadWithSections()
+	return cfg, err
+}
+
+// SectionDecoder 按 YAML 点分键（如 "auth.webauthn"）解码单个配置段。
+// 组合根用它解码各能力自有的配置段，从而 internal/config 无需知道能力存在。
+type SectionDecoder interface {
+	UnmarshalKey(key string, rawVal any) error
+}
+
+// sectionDecoder 把 viper 适配为 SectionDecoder：viper 的 UnmarshalKey 带变参
+// （...DecoderConfigOption），不直接满足该接口。
+type sectionDecoder struct{ v *viper.Viper }
+
+func (d sectionDecoder) UnmarshalKey(key string, rawVal any) error {
+	return d.v.UnmarshalKey(key, rawVal)
+}
+
+// LoadWithSections 加载内核配置并返回段解码器：内核段由本包解析与校验，
+// 能力段由组合根按启用集自行解码（未启用的能力不出现也不校验，见设计 §8）。
+// 解码器与内核配置同源（同一 viper 实例），确保环境覆盖文件对两者一致生效。
+func LoadWithSections() (*Config, SectionDecoder, error) {
 	v, err := buildViper()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return unmarshalConfig(v)
+	cfg, err := unmarshalConfig(v)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cfg, sectionDecoder{v: v}, nil
+}
+
+// ProdConfigValidator 可选接口：能力配置段在生产环境下需要追加的加严校验。
+// 框架在 APP_ENV=prod 时按类型断言调用（如 auth 的 jwt_secret 强度）。
+type ProdConfigValidator interface {
+	ValidateProd() error
+}
+
+// SectionConfig 能力配置段实现的加载钩子：解码后先填默认值、再自校验。
+// 两个方法都定义在**指针**接收者上，确保钩子作用于解码后的实际值
+// （方法值会在传参时绑定接收者副本，故不能把钩子当函数值传递）。
+type SectionConfig interface {
+	ApplyDefaults()
+	Validate() error
+}
+
+// LoadSection 解码单个能力配置段到 out（须为实现 SectionConfig 的指针）：
+// 解码 → 默认值 → 校验。
+//
+// 设计 §8：能力配置由能力自身声明默认值与校验。组合根只对**启用**的能力调用
+// 本函数，因此未启用能力的配置段既不出现也不校验。key 为 YAML 点分路径
+// （如 "auth.webauthn"），能力可拥有嵌套段而对外配置布局保持不变。
+func LoadSection[T SectionConfig](dec SectionDecoder, key string, out T) error {
+	if err := dec.UnmarshalKey(key, out); err != nil {
+		return fmt.Errorf("decode capability config %q: %w", key, err)
+	}
+	out.ApplyDefaults()
+	if err := out.Validate(); err != nil {
+		return fmt.Errorf("invalid capability config %q: %w", key, err)
+	}
+	return nil
 }
 
 // buildViper 构造并读取配置的 viper 实例（含环境覆盖文件合并）
@@ -587,21 +433,11 @@ func (c DBConfig) IsPostgres() bool {
 	return c.Dialect() == "postgres"
 }
 
-// applyEnvOverrides 应用环境变量覆盖（简洁命名，无 JIMU_ 前缀）
+// applyEnvOverrides 应用**内核段**环境变量覆盖（简洁命名，无 JIMU_ 前缀）。
+// 能力段的环境覆盖由各能力在自己的 ApplyDefaults 中处理（见 config.LoadSection）。
 // 支持 _FILE 后缀从文件读取敏感值（Docker Secrets 兼容）
 func applyEnvOverrides(cfg *Config) {
-	// 认证：优先 JWT_SECRET_FILE，其次 JWT_SECRET
-	if v := getEnvOrFile("JWT_SECRET_FILE", "JWT_SECRET"); v != "" {
-		cfg.Auth.JWTSecret = v
-	}
-	// 密钥轮换：旧 JWT 密钥（用于验证轮换期间尚未过期的旧 token）
-	if v := getEnvOrFile("JWT_PREVIOUS_SECRET_FILE", "JWT_PREVIOUS_SECRET"); v != "" {
-		cfg.Auth.JWTPreviousSecret = v
-	}
-	// 审计链 HMAC 密钥：配置后篡改者无法重算整条链
-	if v := getEnvOrFile("AUDIT_HASH_SECRET_FILE", "AUDIT_HASH_SECRET"); v != "" {
-		cfg.Audit.HashSecret = v
-	}
+	// 认证（JWT）相关覆盖由 auth 能力在自己的 ApplyDefaults 中处理（见 config.LoadSection）。
 	// 数据库
 	if v := os.Getenv("DB_DRIVER"); v != "" {
 		cfg.DB.Driver = v
@@ -618,7 +454,7 @@ func applyEnvOverrides(cfg *Config) {
 		cfg.DB.User = v
 	}
 	// 密码：优先 DB_PASSWORD_FILE，其次 DB_PASSWORD
-	if v := getEnvOrFile("DB_PASSWORD_FILE", "DB_PASSWORD"); v != "" {
+	if v := GetEnvOrFile("DB_PASSWORD_FILE", "DB_PASSWORD"); v != "" {
 		cfg.DB.Password = v
 	}
 	if v := os.Getenv("DB_NAME"); v != "" {
@@ -628,7 +464,7 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("REDIS_ADDR"); v != "" {
 		cfg.Redis.Addr = v
 	}
-	if v := getEnvOrFile("REDIS_PASSWORD_FILE", "REDIS_PASSWORD"); v != "" {
+	if v := GetEnvOrFile("REDIS_PASSWORD_FILE", "REDIS_PASSWORD"); v != "" {
 		cfg.Redis.Password = v
 	}
 	if v := os.Getenv("REDIS_DB"); v != "" {
@@ -652,7 +488,7 @@ func applyEnvOverrides(cfg *Config) {
 		}
 	}
 	// 字段级加密密钥
-	if v := getEnvOrFile("ENCRYPTION_KEY_FILE", "ENCRYPTION_KEY"); v != "" {
+	if v := GetEnvOrFile("ENCRYPTION_KEY_FILE", "ENCRYPTION_KEY"); v != "" {
 		cfg.Security.EncryptionKey = v
 	}
 	// OpenTelemetry（OpenObserve 接入；compose 场景通过环境变量覆盖端点/开关/凭据）
@@ -662,7 +498,7 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("OTEL_ENDPOINT"); v != "" {
 		cfg.OTEL.Endpoint = v
 	}
-	if v := getEnvOrFile("OTEL_AUTH_PASSWORD_FILE", "OTEL_AUTH_PASSWORD"); v != "" {
+	if v := GetEnvOrFile("OTEL_AUTH_PASSWORD_FILE", "OTEL_AUTH_PASSWORD"); v != "" {
 		cfg.OTEL.AuthPassword = v
 	}
 	if v := os.Getenv("OTEL_AUTH_EMAIL"); v != "" {
@@ -679,8 +515,9 @@ func applyEnvOverrides(cfg *Config) {
 	}
 }
 
-// getEnvOrFile 优先从 _FILE 指向的文件读取，其次直接读取环境变量
-func getEnvOrFile(fileKey, directKey string) string {
+// GetEnvOrFile 优先从 _FILE 指向的文件读取，其次直接读取环境变量。
+// 导出供能力段在自己的 ApplyDefaults 中应用同类覆盖（Docker Secrets 兼容）。
+func GetEnvOrFile(fileKey, directKey string) string {
 	// 优先从文件读取（Docker Secrets）
 	if path := os.Getenv(fileKey); path != "" {
 		if data, err := os.ReadFile(path); err == nil {

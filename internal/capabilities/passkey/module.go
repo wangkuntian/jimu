@@ -4,10 +4,10 @@ import (
 	"embed"
 	"time"
 
+	authmodule "jimu/internal/capabilities/auth"
 	passkeyapp "jimu/internal/capabilities/passkey/application"
 	passkeyinfra "jimu/internal/capabilities/passkey/infrastructure"
 	"jimu/internal/capabilities/passkey/interfaces"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
 
@@ -22,14 +22,16 @@ type Module struct {
 	service *passkeyapp.PasskeyService
 	jwtUtil *auth.JWT
 	limiter *auth.Limiter
-	cfg     config.AuthConfig
+	cfg     authmodule.Config
 }
 
 // Deps passkey 模块的装配依赖。
 type Deps struct {
-	DB        *gorm.DB
-	Redis     redistore.Client
-	AuthCfg   config.AuthConfig
+	DB    *gorm.DB
+	Redis redistore.Client
+	// AuthCfg auth 能力配置（passkey.Requires 含 auth，方向合法）。
+	// 整个 auth 段由 auth 能力拥有（含 auth.webauthn），故 passkey 不单列配置段。
+	AuthCfg   authmodule.Config
 	Users     contract.UserinfoSource
 	Finalizer contract.LoginFinalizer
 	// FailClosed 限流器在 Redis 故障时是否拒绝（与 auth 一致）

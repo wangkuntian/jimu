@@ -24,6 +24,9 @@ func (m *Module) Name() string { return "uploadsec" }
 var Descriptor = contract.Descriptor{
 	Name:  "uploadsec",
 	Mount: contract.MountProtected,
+	Configs: []contract.ConfigSpec{
+		{Section: ConfigKey, New: func() any { return &Config{} }},
+	},
 }
 
 // Descriptor 实现 contract.Describable。
