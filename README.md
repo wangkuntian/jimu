@@ -994,7 +994,7 @@ capabilities:
 
 - 硬依赖会自动补齐：只写 `["oauth"]` 会连带启用 `auth`/`user`/`access`/`tenant`/`mfa`
 - 未启用的能力不挂路由、不注册定时任务与事件、不启动其后台组件
-- **软依赖只降级、不自动补齐**：`Descriptor.SoftRequires` 声明可选依赖（当前 `user`→`access`/`tenant`、`access`→`tenant`、`mfa`→`auth`、`auth`→`captcha`/`breach`、`apikey`→`tenant`、`outbox`→`queue`）；目标能力不在启用集时**不会被自动启用**，本能力降级运行，降级项在启动日志（`capability degraded`，字段 `name`/`names`）与 `GET /capabilities` 的 `degraded` 中列出。该清单是**声明层**的静态比对（只读 `Descriptor`，不观测运行时装配），组合根改为按启用集驱动（P1 显式 `Deps`）之前可能多报
+- **软依赖只降级、不自动补齐**：`Descriptor.SoftRequires` 声明可选依赖（当前 `user`→`access`/`tenant`、`access`→`tenant`、`mfa`→`auth`、`auth`→`captcha`/`breach`、`apikey`→`tenant`、`outbox`→`queue`）；目标能力不在启用集时**不会被自动启用**，本能力降级运行，降级项在启动日志（`capability degraded`，字段 `name`/`missing`）与 `GET /capabilities` 的 `degraded` 中列出。该清单是**声明层**的静态比对（只读 `Descriptor`，不观测运行时装配），组合根改为按启用集驱动（P1 显式 `Deps`）之前可能多报
 - **表归属自描述**：`Descriptor.Owns` 声明本能力迁移 `CREATE` 的表（如 `user`→`users`、`access`→`roles`/`permissions`/`role_permissions`/`user_roles`、`mfa`→`user_mfa`/`trusted_devices`），`make check-capabilities` 校验「单表唯一归属、无未声明的建表、声明的表确有迁移创建」（只扫描 mysql 迁移，PostgreSQL 迁移表名与 mysql 一致，暂以 mysql 为准）
 - `Descriptor`（`Requires`/`SoftRequires`/`Owns`/`Configs`/`Permissions`/`Mount`/`Migrations`）是能力元数据的**唯一来源**：启用闭包、配置段加载、权限点种子、路由挂载与能力门禁都只读它；`cmd/server/main.go` 的装配名册 `wiredCapabilities` 只负责实例化并与 `catalog.Names()` 对账（`cmd/server/main_test.go`），新增/删除能力时须同步
 - **配置段随能力**：能力配置段由能力在 `Descriptor.Configs` 声明（`ConfigKey` + `Config` 结构体 + `ApplyDefaults`/`Validate`，生产加严可实现可选的 `ValidateProd`），组合根按启用集统一执行「解码 → 默认值 → 校验」；**未启用能力的配置段既不出现也不校验** —— `app.yaml` 中残留的非法段不会导致启动失败。`auth` 段由 `auth` 能力整体拥有（含嵌套 `webauthn`/`provisioning`），不拆分

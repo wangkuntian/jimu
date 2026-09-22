@@ -366,7 +366,7 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > 配置段加载、权限点种子、路由挂载与门禁都只读它）。`catalog.ValidateDeclarations()` 在每次
 > `catalog.Resolve` 前校验声明自洽（必须是清单内能力名、不自引用、不与 `Requires` 重叠、不重复），
 > `catalog.Degraded(caps)` 计算已解析启用集的降级项；启动时对每个降级项打 `capability degraded`
-> warn（字段 `name`/`names`），管理端口新增只读不鉴权的 `GET /capabilities`，返回
+> warn（字段 `name`/`missing`），管理端口新增只读不鉴权的 `GET /capabilities`，返回
 > `{"enabled":[…],"degraded":[{"capability":…,"missing":[…]}]}`（`HealthRouter` 因此加了可变参数
 > `extra ...func(*http.ServeMux)`，内核包不必 import 能力）。18 个能力逐个补齐声明（`Owns`：13 个
 > 有表、5 个无表），真实软依赖为

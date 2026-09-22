@@ -42,7 +42,7 @@ P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后
 
 ## P2.3 层③ 运行时（已完成）
 
-- **已完成**：`capabilities.enabled` 与 `SoftRequires` 降级路径 —— 启用闭包只补硬依赖；软依赖缺失时本能力降级运行：启动打 `capability degraded` warn（log 字段 `name`/`names`），管理端口 `GET /capabilities` 输出 `{"enabled":[…],"degraded":[{"capability":…,"missing":[…]}]}`。`HealthRouter` 改可变参数 `extra ...func(*http.ServeMux)`（调用点 `bootstrap.go` 与 `management_test.go`，向后兼容），使内核包不 import 能力包。
+- **已完成**：`capabilities.enabled` 与 `SoftRequires` 降级路径 —— 启用闭包只补硬依赖；软依赖缺失时本能力降级运行：启动打 `capability degraded` warn（log 字段 `name`/`missing`），管理端口 `GET /capabilities` 输出 `{"enabled":[…],"degraded":[{"capability":…,"missing":[…]}]}`。`HealthRouter` 改可变参数 `extra ...func(*http.ServeMux)`（调用点 `bootstrap.go` 与 `management_test.go`，向后兼容），使内核包不 import 能力包。
 - **已完成**：未启用能力不挂路由/不注册任务事件/不启动后台组件（P0 已建）。
 - **已完成**：未启用能力的配置段「既不出现也不校验」的装配级回归用例（P2.1 的 `internal/app/capconfig_test.go`）。
 
