@@ -108,7 +108,7 @@ func run() error {
 		return err
 	}
 
-	container, err := app.NewContainer(cfg, sections, capCfgs, enabled)
+	container, err := app.NewContainer(cfg, sections, capCfgs, caps, enabled)
 	if err != nil {
 		return fmt.Errorf("create container: %w", err)
 	}

@@ -9,6 +9,7 @@ import (
 
 	"jimu/internal/capabilities/apidocs"
 	apikeymw "jimu/internal/capabilities/apikey/middleware"
+	"jimu/internal/capabilities/catalog"
 	"jimu/internal/capabilities/notification"
 	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/queue"
@@ -183,6 +184,11 @@ func Bootstrap(container *Container, modules ...contract.Module) (*Application, 
 		names = append(names, contract.Describe(module).Name)
 	}
 	container.Logger.Infow("capabilities enabled", "count", len(names), "names", strings.Join(names, ","))
+	// 软依赖缺失只降级、不阻断启用（设计 §6.4）：在 enabled 日志之后报告，
+	// 被 fail-closed 拒绝的启用集不会留下降级噪音。
+	for _, d := range catalog.Degraded(container.Capabilities) {
+		container.Logger.Warnw("capability degraded", "name", d.Capability, "names", strings.Join(d.Missing, ","))
+	}
 
 	sqlDB, err := container.DB.DB()
 	if err != nil {

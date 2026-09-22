@@ -448,6 +448,30 @@ func TestCatalogConfigSectionsShape(t *testing.T) {
 	}
 }
 
+// TestDegradedListsMissingSoftDeps 只报告缺失的软依赖，硬依赖缺失由 Resolve 报错。
+func TestDegradedListsMissingSoftDeps(t *testing.T) {
+	caps := []contract.Descriptor{
+		{Name: "user", SoftRequires: []string{"access", "tenant"}, Owns: []string{"users"}},
+		{Name: "auth", SoftRequires: []string{"captcha", "breach"}, Owns: []string{"login_histories"}},
+		{Name: "captcha"},
+		{Name: "tenant"},
+		{Name: "access", Requires: []string{"user"}},
+	}
+	got := Degraded(caps)
+	require.Len(t, got, 1)
+	assert.Equal(t, "auth", got[0].Capability)
+	assert.Equal(t, []string{"breach"}, got[0].Missing)
+}
+
+// TestDegradedEmptyWhenAllSoftDepsPresent 依赖齐全时无降级项。
+func TestDegradedEmptyWhenAllSoftDepsPresent(t *testing.T) {
+	caps := []contract.Descriptor{
+		{Name: "auth", SoftRequires: []string{"captcha"}},
+		{Name: "captcha"},
+	}
+	assert.Empty(t, Degraded(caps))
+}
+
 func namesOf(ds []contract.Descriptor) []string {
 	out := make([]string, 0, len(ds))
 	for _, d := range ds {

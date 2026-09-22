@@ -109,6 +109,34 @@ func Names() []string {
 	return out
 }
 
+// Degradation 描述一个能力因缺失软依赖而降级运行。
+type Degradation struct {
+	Capability string
+	Missing    []string
+}
+
+// Degraded 计算已解析启用集里的降级项：SoftRequires 中不在集合内的目标。
+// 软依赖不会自动补齐（设计 §6.4），缺失只降级、不报错。
+func Degraded(caps []contract.Descriptor) []Degradation {
+	present := make(map[string]bool, len(caps))
+	for _, d := range caps {
+		present[d.Name] = true
+	}
+	out := make([]Degradation, 0, len(caps))
+	for _, d := range caps {
+		var missing []string
+		for _, dep := range d.SoftRequires {
+			if !present[dep] {
+				missing = append(missing, dep)
+			}
+		}
+		if len(missing) > 0 {
+			out = append(out, Degradation{Capability: d.Name, Missing: missing})
+		}
+	}
+	return out
+}
+
 // Resolve 解析启用集：enabled 为空表示全部启用（向后兼容默认配置）；
 // 未知能力报错；硬依赖自动补齐闭包；返回结果按清单顺序排列且为深拷贝
 // （含 Requires，调用方修改不影响清单）；依赖缺失时按清单顺序报出第一个
