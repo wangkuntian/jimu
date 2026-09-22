@@ -438,11 +438,11 @@ func Degraded(caps []contract.Descriptor) []Degradation {
 
 ```go
 	for _, d := range catalog.Degraded(container.Capabilities) {
-		container.Logger.Warnw("capability degraded", "name", d.Capability, "missing", strings.Join(d.Missing, ","))
+		container.Logger.Warnw("capability degraded", "name", d.Capability, "names", strings.Join(d.Missing, ","))
 	}
 ```
 
-（`bootstrap.go` 需 import `jimu/internal/capabilities/catalog`。）
+（`bootstrap.go` 需 import `jimu/internal/capabilities/catalog`。执行记录：原稿的 `"missing"` 键不在 `tools/logcheck` 标准词汇表（R3），实现改用已登记的 `"names"`。）
 
 - [ ] **Step 5: 验证**
 
