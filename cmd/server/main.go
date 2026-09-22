@@ -90,7 +90,7 @@ func fullAssembly() assembly.Assembly {
 		Capabilities: []assembly.Capability{
 			{Descriptor: encryption.Descriptor, Wire: encryption.Wire},
 			{Descriptor: storage.Descriptor, Wire: storage.Wire},
-			{Descriptor: notification.Descriptor, Wire: wireNotification},
+			{Descriptor: notification.Descriptor, Wire: notification.Wire},
 			{Descriptor: queue.Descriptor, Wire: wireQueue},
 			{Descriptor: outbox.Descriptor, Wire: wireOutbox},
 			{Descriptor: breach.Descriptor, Wire: wireBreach},
@@ -115,62 +115,6 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: ws.Descriptor, Wire: ws.Wire},
 		},
 	}
-}
-
-func wireNotification(ctx *assembly.Context) (contract.Module, error) {
-	notifCfg, err := notification.Load(ctx.Sections())
-	if err != nil {
-		return nil, fmt.Errorf("init notification config: %w", err)
-	}
-	log := ctx.Logger()
-	notifier := notification.NewDispatcher()
-	// WebSocket Hub（通知渠道 + 实时通信共用）
-	wsHub := notification.NewHub()
-
-	// 未配置真实发送渠道时，注册日志型兜底渠道，保证通知链路不报错且可观察
-	var emailChannel notification.Notification = notification.NewLogChannel(notification.ChannelEmail, log)
-	if notifCfg.Email.Enabled {
-		emailChannel = notification.NewEmail(notification.EmailConfig{
-			Host:     notifCfg.Email.Host,
-			Port:     notifCfg.Email.Port,
-			Username: notifCfg.Email.Username,
-			Password: notifCfg.Email.Password,
-			From:     notifCfg.Email.From,
-		})
-	}
-	notifier.Register(notification.ChannelEmail, emailChannel)
-
-	var smsChannel notification.Notification = notification.NewLogChannel(notification.ChannelSMS, log)
-	if notifCfg.SMS.Enabled {
-		smsChannel = notification.NewSMS(notification.SMSConfig{
-			Provider:  notifCfg.SMS.Provider,
-			APIKey:    notifCfg.SMS.APIKey,
-			APISecret: notifCfg.SMS.APISecret,
-			SignName:  notifCfg.SMS.SignName,
-		})
-	}
-	notifier.Register(notification.ChannelSMS, smsChannel)
-
-	notifier.Register(notification.ChannelWebSocket, notification.NewWebSocket(wsHub))
-	notifier.Register(notification.ChannelWebhook, notification.NewWebhook(notification.WebhookConfig{
-		Headers:    map[string]string{},
-		SignSecret: notifCfg.Notification.Webhook.SignSecret,
-	}, ctx.HTTPClient()))
-
-	if err := ctx.Provide(notification.PortName, notifier); err != nil {
-		return nil, fmt.Errorf("provide notification port: %w", err)
-	}
-	ctx.RegisterComponent(notification.NewHubComponent(wsHub))
-
-	// 注册全局事件处理器：将领域事件桥接到通知系统
-	ctx.EventBus().Subscribe(contract.UserCreatedEmailNotification, func(payload interface{}) {
-		if msg, ok := payload.(notification.Message); ok {
-			if err := notifier.Dispatch(context.Background(), msg); err != nil {
-				ctx.Logger().Errorw("notification dispatch failed", "error", err.Error())
-			}
-		}
-	})
-	return nil, nil
 }
 
 func wireQueue(ctx *assembly.Context) (contract.Module, error) {
