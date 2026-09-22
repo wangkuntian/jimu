@@ -28,7 +28,7 @@ func Assembly() assembly.Assembly {
 		Capabilities: []assembly.Capability{
 			{Descriptor: encryption.Descriptor, Wire: encryption.Wire, Ungated: true},
 			{Descriptor: storage.Descriptor, Wire: storage.Wire, Ungated: true,
-				Drivers: []string{"local", "s3"}},
+				Drivers: []string{"local"}},
 			{Descriptor: notification.Descriptor, Wire: notification.Wire, Ungated: true},
 			{Descriptor: accessmodule.Descriptor, Wire: accessmodule.Wire},
 			{Descriptor: user.Descriptor, Wire: user.Wire},
@@ -37,7 +37,7 @@ func Assembly() assembly.Assembly {
 			{Descriptor: consolemodule.Descriptor, Wire: consolemodule.Wire},
 			{Descriptor: oauthmodule.Descriptor, Wire: oauthmodule.Wire},
 			{Descriptor: dataops.Descriptor, Wire: dataops.Wire,
-				Drivers: []string{"csv", "excel"}},
+				Drivers: []string{"csv"}},
 		},
 		Seed: profiles.StructuralSeed,
 	}

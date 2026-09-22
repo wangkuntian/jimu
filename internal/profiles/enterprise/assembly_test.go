@@ -40,42 +40,40 @@ func TestEnterpriseAssemblyModulesAreWired(t *testing.T) {
 	}
 }
 
-// TestEnterpriseDriverSelection 钉住 enterprise 形态的驱动选中集（T1 按现状声明：
-// 仍是全量驱动，收敛到 local + csv 是 Task 5 的行为变更）。
+// TestEnterpriseDriverSelection 钉住 enterprise 形态收敛后的驱动选中集与进程内注册表
+// （Task 5 行为变更）：本形态只编入 local + csv。声明（assembly.go 的 Drivers）与 blank
+// import（drivers.go）必须逐值一致，只钉声明或只钉注册表都挡不住单侧漂移。
 func TestEnterpriseDriverSelection(t *testing.T) {
-	assert.Equal(t, map[string][]string{
-		"storage": {"local", "s3"},
-		"dataops": {"csv", "excel"},
-	}, driverSelection(Assembly()))
+	assert.Equal(t, map[string][]string{"storage": {"local"}, "dataops": {"csv"}}, driverSelection(Assembly()))
+	assert.Equal(t, []storage.StorageType{storage.StorageTypeLocal}, storage.RegisteredTypes())
+	assert.Equal(t, []importer.Format{importer.FormatCSV}, importer.RegisteredFormats())
+	assert.Equal(t, []exporter.Format{exporter.FormatCSV}, exporter.RegisteredFormats())
+	assert.Empty(t, queue.RegisteredTypes())
 }
 
-// TestEnterpriseCompiledStorageDrivers 钉住进程内注册表：本形态实际编译进来的 storage
-// 驱动类型必须与下沉前的行为一致（T2 仍全量）。注意 s3 驱动包一个包承载 s3/minio/oss
-// 三种 S3 兼容类型（与下沉前核心 switch 的四个分支逐值一致），故注册表为 4 项，而驱动
-// **包**集合仍是 assembly 声明的 {local, s3}；收敛为 local-only 是 Task 5 的行为变更。
-func TestEnterpriseCompiledStorageDrivers(t *testing.T) {
-	assert.Equal(t, []storage.StorageType{
-		storage.StorageTypeLocal,
-		storage.StorageTypeMinIO,
-		storage.StorageTypeOSS,
-		storage.StorageTypeS3,
-	}, storage.RegisteredTypes())
+// TestEnterpriseRejectsUncompiledStorageDriver 直接在本形态的**测试二进制**里构造 s3：
+// drivers.go 不再 blank import storage/s3，注册表里没有 s3，构造即 fail-closed。用进程内
+// 聚焦断言而不是启动冒烟 —— assembly.Run 先建内核容器（DB 连接）再逐个 Wire，本机无 DB 时
+// 根本走不到 storage.Wire，冒烟证不到驱动语义。
+func TestEnterpriseRejectsUncompiledStorageDriver(t *testing.T) {
+	_, err := storage.New(storage.Config{Type: storage.StorageTypeS3})
+	require.ErrorContains(t, err, `storage driver "s3" is not compiled into this build (compiled: local)`)
+}
+
+// TestEnterpriseRejectsUncompiledDataopsFormat 同理：xlsx（excel 驱动）未编入本形态，
+// 请求期取实现即 fail-closed，不静默回退到其它格式。
+func TestEnterpriseRejectsUncompiledDataopsFormat(t *testing.T) {
+	_, err := importer.Get(importer.FormatExcel)
+	require.ErrorContains(t, err, `import format "xlsx" is not compiled into this build (compiled: csv)`)
 }
 
 // TestEnterpriseCompilesNoQueueDriver 钉住进程内队列驱动注册表为空：enterprise 不装配
 // queue 能力（只经 outbox/auth/user 的类型级传递残留引用核心 queue 包），闭包里不得
-// 被动编进任何队列驱动 —— kafka/amqp 依赖随之退出本形态。本用例不影响同文件的
-// TestEnterpriseCompiledStorageDrivers（storage 驱动仍由 drivers.go 显式注册）。
+// 被动编进任何队列驱动 —— kafka/amqp 依赖随之退出本形态。上面的
+// TestEnterpriseDriverSelection 也一并钉了这条，此处保留独立用例是为了让失败信息直接
+// 指向「形态未装配 queue」这个原因。
 func TestEnterpriseCompilesNoQueueDriver(t *testing.T) {
 	assert.Empty(t, queue.RegisteredTypes(), "形态未装配 queue，不得编进任何队列驱动")
-}
-
-// TestEnterpriseCompiledDataopsFormats 钉住进程内注册表（T4：enterprise 仍全量选中
-// csv + excel）：`drivers.go` 的 blank import 一旦被删，本用例即红 —— 否则只会在
-// 请求期 importer.Get/exporter.Get 的 fail-closed 文案里暴露。
-func TestEnterpriseCompiledDataopsFormats(t *testing.T) {
-	assert.Equal(t, []importer.Format{importer.FormatCSV, importer.FormatExcel}, importer.RegisteredFormats())
-	assert.Equal(t, []exporter.Format{exporter.FormatCSV, exporter.FormatExcel}, exporter.RegisteredFormats())
 }
 
 // driverSelection 汇总清单里各能力的驱动选中集（测试辅助）。
