@@ -174,6 +174,35 @@
 
 机制：驱动独立成包，能力核心只定义接口与工厂；由 `catalog`（或 profile 入口）**显式 import** 选中的驱动包完成注册 —— 与"显式清单、不用隐式 `init()` 自注册"的既定选择一致（`init()` 注册发生在被显式 import 的包内，不违背该原则）。
 
+> **P2.5 进展（驱动级可插拔已完成）**：§3.7 落地 —— `storage/{local,s3}`、`queue/{redis,kafka,rabbitmq}`、
+> `dataops/{csv,excel}` 各自独立成包，包内 `init()` 调用能力核心的 `Register`；核心只留接口 + 注册表
+> （`New`/`Get` 查表，未注册即 fail-closed、不静默回退；`storage` 空 `type` 仍按 `local` 处理，
+> `queue.Wire` 启动即校验配置的队列类型已编译）。声明分两层：`contract.Descriptor.Drivers` 是能力声明的
+> **可用集**（驱动**包名**：`storage` = `[local s3]`、`queue` = `[redis kafka rabbitmq]`、
+> `dataops` = `[csv excel]`；`s3` 包覆盖 `s3`/`oss`/`minio` 三个配置取值），
+> `assembly.Capability.Drivers` 是形态选中的子集（装配期强制 ⊆ 可用集）。形态→驱动矩阵（终态）：
+> `full` = local+s3 / redis+kafka+rabbitmq / csv+excel；`enterprise` = local /（无 queue 能力）/ csv；
+> `minimal`/`saas`/`machine` = 无（这三个形态不含 storage/queue/dataops 能力）。**两道保险**落成
+> 静态门禁 + 启动校验（`make check-capabilities` 现有五条断言：① `Owns`↔迁移归属（既有）
+> ② 驱动可用集↔目录存在 ③ 核心包生产闭包零驱动、零重型依赖 ④ 形态选中 == 形态生产 import 闭包
+> （集合比较）⑤ 驱动归属（驱动包只被形态包 import，且形态生产代码只 import 已声明的驱动包 ——
+> 后者是「新增驱动目录 + blank import 却忘声明」的唯一捕获点：该场景对集合比较不可见，未声明项被
+> `available` 过滤），`make compose-report` 新增「重型依赖」列；两道门禁仍是手动目标，**不接入**
+> `make ci`/`release-check`（P2.8 收口）。
+>
+> **实测闭包计数**（`go list -deps ./profiles/<p> | grep -c <prefix>`）：`full` = aws-sdk-go-v2 67 /
+> excelize 1 / kafka-go 49 / amqp091-go 1；`enterprise` 与 `minimal`/`saas`/`machine` 四类均为 0
+> （`enterprise` 收敛前为 67 / 1 / 0 / 0，kafka/amqp 在队列驱动拆包时已归零）。**行为变更（仅
+> `enterprise`）**：该形态下 `storage.type: s3|oss|minio` 与 xlsx 导入/导出改为 fail-closed 报错
+> （`storage driver "s3" is not compiled into this build (compiled: local)` /
+> `import format "xlsx" is not compiled into this build (compiled: csv)`），`full` 形态含全部驱动、
+> 行为不变；`configs/app.yaml` 默认 `storage.type: local`、`queue.type: redis`，默认路径不受影响。
+> `dataops/exporter` 目前**没有生产消费方**（`/api/v1/users/export.csv` 由 `user` 能力自带 handler
+> 实现），驱动包 `dataops/excel` 仍注册导出方向供将来端点接入。govulncheck 的 `GO-2026-6452` 豁免
+> **保留**：拆包不解除可达性（`govulncheck ./...` 扫整个 module，`full` 仍 import Excel 驱动），
+> 复核条件改为「excelize 发布 v2.11.1（或含 rows.go 负索引防护的正式版本）后移除」。执行记录见
+> [`docs/plans/2026-09-22-p2.5-driver-pluggability.md`](../plans/2026-09-22-p2.5-driver-pluggability.md)。
+
 ### 3.8 非代码资产模块化
 
 代码之外，以下资产也必须随能力裁剪，否则"体积更小"只体现在 `.go` 文件上：
@@ -408,6 +437,17 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > 构造），已由 golden 闭包门禁冻结，消除它们需把这些共享类型迁到 `contract`/内核。执行记录见
 > [`docs/plans/2026-09-21-p2-three-layer-mechanism.md`](../plans/2026-09-21-p2-three-layer-mechanism.md)
 > 的 P2.4 段。
+>
+> **P2 进展（P2.5 驱动级可插拔已完成）**：§3.7 落地 —— `storage`/`queue`/`dataops` 的第三方驱动
+> 独立成包、由形态入口显式 import 注册，核心只留接口 + 注册表（未注册即 fail-closed）；
+> `Descriptor.Drivers` 声明可用集、`assembly.Capability.Drivers` 声明形态选中集，
+> `make check-capabilities` 增补驱动断言（可用集↔目录、核心零驱动、选中==闭包、驱动归属），
+> `make compose-report` 新增「重型依赖」列。`enterprise` 收敛为 `local` + `csv`（该形态下
+> `s3`/`oss`/`minio` 与 xlsx fail-closed 报错），`full` 行为不变；`minimal`/`saas`/`machine`/
+> `enterprise` 闭包的 `kafka-go`/`amqp091-go` 残留消失，`enterprise` 去掉 `aws-sdk-go-v2`（67 包）
+> 与 `excelize`。`GO-2026-6452` 豁免保留（拆包不解除可达性，复核条件 excelize ≥ v2.11.1）。
+> 机制细节与实测数字见 §3.7 的 P2.5 进展块；执行记录见
+> [`docs/plans/2026-09-22-p2.5-driver-pluggability.md`](../plans/2026-09-22-p2.5-driver-pluggability.md)。
 
 ## 11. 风险与取舍
 
