@@ -183,12 +183,12 @@
 > `assembly.Capability.Drivers` 是形态选中的子集（装配期强制 ⊆ 可用集）。形态→驱动矩阵（终态）：
 > `full` = local+s3 / redis+kafka+rabbitmq / csv+excel；`enterprise` = local /（无 queue 能力）/ csv；
 > `minimal`/`saas`/`machine` = 无（这三个形态不含 storage/queue/dataops 能力）。**两道保险**落成
-> 静态门禁 + 启动校验（`make check-capabilities` 现有五条断言：① `Owns`↔迁移归属（既有）
-> ② 驱动可用集↔目录存在 ③ 核心包生产闭包零驱动、零重型依赖 ④ 形态选中 == 形态生产 import 闭包
-> （集合比较）⑤ 驱动归属（驱动包只被形态包 import，且形态生产代码只 import 已声明的驱动包 ——
-> 后者是「新增驱动目录 + blank import 却忘声明」的唯一捕获点：该场景对集合比较不可见，未声明项被
-> `available` 过滤），`make compose-report` 新增「重型依赖」列；两道门禁仍是手动目标，**不接入**
-> `make ci`/`release-check`（P2.8 收口）。
+> 静态门禁 + 启动校验（`make check-capabilities` 由 1 项扩到 6 项：1 项既有 `Owns` ↔ 迁移归属；
+> 5 项驱动 —— 可用集 ↔ 目录存在 / 核心包生产闭包零驱动、零重型依赖 / 形态选中 == 形态**生产**
+> import 闭包（集合比较）/ 驱动归属（驱动包只被 `internal/profiles/*` import）/ 形态生产代码与入口包
+> 只 import 已声明驱动 —— 末项是「新增驱动目录 + blank import 却忘声明」的唯一捕获点：该场景对
+> 集合比较不可见，未声明项被 `available` 过滤），`make compose-report` 新增「重型依赖」列；两道门禁
+> 仍是手动目标，**不接入** `make ci`/`release-check`（P2.8 收口）。
 >
 > **实测闭包计数**（`go list -deps ./profiles/<p> | grep -c <prefix>`）：`full` = aws-sdk-go-v2 67 /
 > excelize 1 / kafka-go 49 / amqp091-go 1；`enterprise` 与 `minimal`/`saas`/`machine` 四类均为 0
@@ -441,7 +441,9 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > **P2 进展（P2.5 驱动级可插拔已完成）**：§3.7 落地 —— `storage`/`queue`/`dataops` 的第三方驱动
 > 独立成包、由形态入口显式 import 注册，核心只留接口 + 注册表（未注册即 fail-closed）；
 > `Descriptor.Drivers` 声明可用集、`assembly.Capability.Drivers` 声明形态选中集，
-> `make check-capabilities` 增补驱动断言（可用集↔目录、核心零驱动、选中==闭包、驱动归属），
+> `make check-capabilities` 由 1 项扩到 6 项（1 项既有：`Owns` ↔ 迁移归属；5 项驱动：可用集 ↔
+> 目录存在 / 核心包生产闭包零驱动且零重型依赖 / 形态选中 == 形态**生产** import 闭包（集合比较）/
+> 驱动归属（驱动包只被 `internal/profiles/*` import）/ 形态生产代码与入口包只 import 已声明驱动），
 > `make compose-report` 新增「重型依赖」列。`enterprise` 收敛为 `local` + `csv`（该形态下
 > `s3`/`oss`/`minio` 与 xlsx fail-closed 报错），`full` 行为不变；`minimal`/`saas`/`machine`/
 > `enterprise` 闭包的 `kafka-go`/`amqp091-go` 残留消失，`enterprise` 去掉 `aws-sdk-go-v2`（67 包）

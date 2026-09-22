@@ -12,8 +12,10 @@ import (
 	importdomain "jimu/internal/capabilities/dataops/domain"
 	"jimu/internal/capabilities/dataops/importer"
 	"jimu/internal/kernel/tenant"
+	apperrors "jimu/internal/shared/errors"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
@@ -106,6 +108,25 @@ func TestImportServiceImport(t *testing.T) {
 	assert.Error(t, err)
 	assert.NotNil(t, job)
 	assert.Nil(t, result)
+}
+
+// TestImportServiceUncompiledFormat 未编译的格式（本测试二进制只 blank import csv 驱动）
+// 必须按参数错误返回：驱动缺失是 fail-closed 的调用方问题（400），不是内部错误（500）。
+// Preview 与 Import 两条路径各自包了 apperrors.Wrap，两条都钉住。
+func TestImportServiceUncompiledFormat(t *testing.T) {
+	require.NotContains(t, importer.RegisteredFormats(), importer.FormatExcel,
+		"excel 驱动不该编入本测试二进制，否则本用例失去区分力")
+
+	ctx := context.Background()
+	svc := newImportService(newSqliteDB(t, &importUser{}))
+
+	_, err := svc.Preview(ctx, importer.FormatExcel, strings.NewReader(validCSV), "users")
+	require.Error(t, err)
+	assert.True(t, apperrors.IsCode(err, apperrors.CodeInvalidParam), "Preview 应返回 CodeInvalidParam，实际：%v", err)
+
+	_, _, err = svc.Import(ctx, importer.FormatExcel, strings.NewReader(validCSV), "users", 1, "users.xlsx")
+	require.Error(t, err)
+	assert.True(t, apperrors.IsCode(err, apperrors.CodeInvalidParam), "Import 应返回 CodeInvalidParam，实际：%v", err)
 }
 
 func TestImportServiceGetImportJob(t *testing.T) {

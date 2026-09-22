@@ -60,7 +60,7 @@ if [ -n "$ids" ] && [ -z "$unexpected" ]; then
     echo "ℹ️  已豁免的命中：$(echo "$ids" | tr '\n' ' ')"
     echo "   完整输出：GOVULNCHECK_VERBOSE=1 make govulncheck"
   fi
-  echo "⚠️  govulncheck: 仅命中临时豁免清单（${ALLOWLIST[*]}），已在导入器侧 recover 兜底，视为通过"
+  echo "⚠️  govulncheck: 仅命中临时豁免清单（${ALLOWLIST[*]}），已在 internal/capabilities/dataops/excel 的 readSheet recover 兜底，视为通过"
   exit 0
 fi
 

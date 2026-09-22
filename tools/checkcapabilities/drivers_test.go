@@ -39,6 +39,26 @@ func TestDriverImportViolation(t *testing.T) {
 	require.False(t, driverImportViolation("jimu/internal/profiles/full", "github.com/gin-gonic/gin", nil))
 }
 
+// TestEntryImportViolation 断言⑤的入口包半边：profiles/<name> 入口包只允许 import 能力
+// 根包，任何 capabilities 子包（含已声明的驱动包）都违规 —— 驱动选中只允许发生在
+// internal/profiles/<name>/drivers.go。
+func TestEntryImportViolation(t *testing.T) {
+	const entry = "jimu/profiles/full"
+
+	// 合法：非 capabilities 依赖（internal/assembly 与形态库包）。
+	require.False(t, entryImportViolation(entry, "jimu/internal/assembly"))
+	require.False(t, entryImportViolation(entry, "jimu/internal/profiles/full"))
+	// 合法：能力根包（取 Descriptor/Wire）。
+	require.False(t, entryImportViolation(entry, "jimu/internal/capabilities/queue"))
+	// 违规：已声明的驱动包也不许由入口包选中（选中点只在 internal/profiles/<name>/drivers.go）。
+	require.True(t, entryImportViolation(entry, "jimu/internal/capabilities/queue/redis"))
+	// 违规：未声明的 capabilities 子包（漏声明 + 从入口 blank import 的经典形态）。
+	require.True(t, entryImportViolation(entry, "jimu/internal/capabilities/dataops/importer"))
+	// 不在作用域：import 方不是形态入口包（归 internal/profiles/* 那半边）。
+	require.False(t, entryImportViolation("jimu/internal/profiles/full", "jimu/internal/capabilities/queue/redis"))
+	require.False(t, entryImportViolation(entry, "github.com/gin-gonic/gin"))
+}
+
 // TestIsCapabilityRootPackage 根包判定 = 前缀之后不含 "/"。
 func TestIsCapabilityRootPackage(t *testing.T) {
 	require.True(t, isCapabilityRootPackage("jimu/internal/capabilities/queue"))

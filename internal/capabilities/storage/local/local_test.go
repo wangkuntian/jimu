@@ -15,8 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNewDefaultsLocal 覆盖 New 的缺省值填充（BaseDir/BaseURL 为空时回填）
+// TestNewDefaultsLocal 覆盖 New 的缺省值填充（BaseDir/BaseURL 为空时回填）。
+// New 会 MkdirAll 缺省 BaseDir（"storage"），切到临时目录避免在源码树里造目录。
 func TestNewDefaultsLocal(t *testing.T) {
+	t.Chdir(t.TempDir())
 	s, err := New(storage.Config{Type: storage.StorageTypeLocal})
 	require.NoError(t, err)
 	ls, ok := s.(*LocalStorage)
@@ -25,8 +27,9 @@ func TestNewDefaultsLocal(t *testing.T) {
 	assert.Equal(t, "/files", ls.baseURL)
 }
 
-// TestNewEmptyTypeDefaultsLocal 空类型等同于 local
+// TestNewEmptyTypeDefaultsLocal 空类型等同于 local（同样切到临时目录，理由见上）
 func TestNewEmptyTypeDefaultsLocal(t *testing.T) {
+	t.Chdir(t.TempDir())
 	s, err := New(storage.Config{})
 	require.NoError(t, err)
 	_, ok := s.(*LocalStorage)

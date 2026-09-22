@@ -56,8 +56,9 @@ func TestFullAssemblyModulesAreWired(t *testing.T) {
 	}
 }
 
-// TestFullDriverSelection 钉住 full 形态的驱动选中集（T1 按现状声明：三种驱动能力
-// 均为全量选中；后续收敛选中集（Task 2–5）时本用例必须同步修改）。
+// TestFullDriverSelection 钉住 full 形态的驱动选中集：三种驱动能力均为全量选中。声明
+// （assembly.go 的 Drivers）与 blank import（drivers.go）必须逐值一致，由
+// `make check-capabilities` 的「形态选中 == 形态生产 import 闭包」断言守住单侧漂移。
 func TestFullDriverSelection(t *testing.T) {
 	assert.Equal(t, map[string][]string{
 		"storage": {"local", "s3"},
@@ -67,7 +68,7 @@ func TestFullDriverSelection(t *testing.T) {
 }
 
 // TestFullCompiledStorageDrivers 钉住进程内注册表（与 enterprise 侧
-// TestEnterpriseCompiledStorageDrivers 同款）：`drivers.go` 的两个 blank import 一旦被删，
+// TestEnterpriseDriverSelection 同款）：`drivers.go` 的两个 blank import 一旦被删，
 // `go build ./...` 与 TestFullDriverSelection 仍全绿（后者只钉 Capability.Drivers 声明），
 // 失败只会在运行期的 wire.go fail-closed 文案里暴露 —— 而 full 正是出货形态
 // （cmd/server/main.go），故此处直接断言本构建实际注册的 storage 类型。

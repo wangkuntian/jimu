@@ -5,8 +5,11 @@
 //	② 核心零驱动：能力核心的生产闭包不含任何驱动包，也不含重型第三方依赖；
 //	③ 选中 == 实际：每个形态的驱动包闭包与 Assembly().Capabilities[*].Drivers 逐值相等；
 //	④ 归属：驱动包的生产 import 方只能是 internal/profiles/*；
-//	⑤ 形态只 import 已声明驱动：形态生产代码的直接 import 中，凡 capabilities 子包必为
-//	   能力根包或已声明驱动包 —— 抓「新增驱动目录 + profile blank import 却忘声明」。
+//	⑤ 形态只 import 已声明驱动：作用域 = 形态生产代码（internal/profiles/*）与形态**入口包**
+//	   （profiles/<name>，出货二进制）。前者直接 import 的 capabilities 子包必为能力根包或
+//	   已声明驱动包；后者（入口包）直接 import 的 capabilities 子包一律违规 —— 驱动选中只
+//	   允许发生在 internal/profiles/<name>/drivers.go。抓「新增驱动目录 + profile blank
+//	   import 却忘声明」，也堵住「把 blank import 写进入口包绕过归属判定」。
 package main
 
 import (
@@ -212,11 +215,17 @@ func driverImportViolation(importer, dep string, available map[string]bool) bool
 	return !available[dep]
 }
 
-// checkProfileDriverImports 断言⑤：校验形态包（internal/profiles/*）生产代码的直接 import
-// 只允许「能力根包」与「已声明的驱动包」。任何其它 internal/capabilities/<cap>/<sub> import
-// 都视为未声明的驱动 —— 这是「驱动宇宙由已声明项推导」口径下唯一能抓住「新增驱动目录 +
-// profile blank import，却忘了在 Descriptor.Drivers/Assembly Drivers 里声明」的断言：
-// 其余断言对只查已声明项的集合比较、按 available 过滤的闭包交集全部不可见。
+// checkProfileDriverImports 断言⑤：校验形态生产代码与形态入口包的直接 import 只允许
+// 「能力根包」与「已声明的驱动包」。分两半：
+//
+//   - 生产代码（importer 前缀 jimu/internal/profiles/）：任何其它
+//     internal/capabilities/<cap>/<sub> import 都视为未声明的驱动 —— 这是「驱动宇宙由已声明项
+//     推导」口径下唯一能抓住「新增驱动目录 + profile blank import，却忘了在
+//     Descriptor.Drivers/Assembly Drivers 里声明」的断言：其余断言对只查已声明项的集合比较、
+//     按 available 过滤的闭包交集全部不可见。
+//   - 入口包（profiles/<name>，即出货二进制）：它是 ③④ 闭包的根，但既不属于
+//     internal/profiles/*、也不该承担驱动选中，故直接 import 任何 capabilities 子包
+//     （含已声明的驱动包）都违规 —— 驱动选中只允许在 internal/profiles/<name>/drivers.go。
 func checkProfileDriverImports(root string, names []string, available map[string]bool) error {
 	for _, name := range slices.Sorted(slices.Values(names)) {
 		closure, err := closureImports(root, "./internal/profiles/"+name)
@@ -232,8 +241,43 @@ func checkProfileDriverImports(root string, names []string, available map[string
 					"add it to Descriptor.Drivers and the profile Assembly Drivers", importer, dep)
 			}
 		}
+		if err := checkEntryPackageImports(root, name); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// checkEntryPackageImports 断言⑤的入口包半边：profiles/<name> 只应调用 assembly.Run，
+// 不得直接 import 任何 capabilities 子包（能力根包之外的 capabilities 包）—— 驱动选中
+// 只允许发生在 internal/profiles/<name>/drivers.go。
+func checkEntryPackageImports(root, name string) error {
+	closure, err := closureImports(root, "./profiles/"+name)
+	if err != nil {
+		return fmt.Errorf("load closure of profile entry %q: %w", name, err)
+	}
+	entry := modulePath + "/profiles/" + name
+	for _, dep := range closure[entry] {
+		if !entryImportViolation(entry, dep) {
+			continue
+		}
+		return fmt.Errorf("profile entry package %s imports %s; drivers may only be selected in %s/internal/profiles/%s/drivers.go",
+			entry, dep, modulePath, name)
+	}
+	return nil
+}
+
+// entryImportViolation 判断形态入口包（profiles/<name>）直接 import dep 是否违规：入口包
+// 不得 import 任何 capabilities 子包（能力根包之外）—— 与 driverImportViolation 不同，
+// 已声明的驱动包同样违规，因为入口包不是驱动选中的合法位置。
+func entryImportViolation(importer, dep string) bool {
+	if !strings.HasPrefix(importer, modulePath+"/profiles/") {
+		return false
+	}
+	if !strings.HasPrefix(dep, modulePath+"/internal/capabilities/") {
+		return false
+	}
+	return !isCapabilityRootPackage(dep)
 }
 
 // compareDriverSets 逐值比较声明集与 import 实际集。集合比较、不比较顺序：full 的 blank
