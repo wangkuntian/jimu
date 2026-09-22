@@ -88,7 +88,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: outbox.Descriptor, Wire: outbox.Wire},
 			{Descriptor: breach.Descriptor, Wire: breach.Wire},
 			{Descriptor: tenantmodule.Descriptor, Wire: wireTenant},
-			{Descriptor: accessmodule.Descriptor, Wire: wireAccess},
+			{Descriptor: accessmodule.Descriptor, Wire: accessmodule.Wire},
 			{Descriptor: user.Descriptor, Wire: wireUser},
 			{Descriptor: captcha.Descriptor, Wire: captcha.Wire}, // 已搬迁的试点能力
 			{Descriptor: mfamodule.Descriptor, Wire: wireMFA},
@@ -116,16 +116,6 @@ func wireTenant(ctx *assembly.Context) (contract.Module, error) {
 		return nil, err
 	}
 	if err := ctx.Provide(tenantmodule.ProvisionerPortName, mod.Provisioner()); err != nil {
-		return nil, err
-	}
-	return mod, nil
-}
-
-func wireAccess(ctx *assembly.Context) (contract.Module, error) {
-	mod := accessmodule.New(ctx.DB(), ctx.Port(tenantmodule.PortName))
-	// access 是 user_roles 表所有者：把角色分配端口交给排在其后的 user（缺此 Provide 时
-	// user 的 AssignRoles 会退化为 "role assignment is not configured"）。
-	if err := ctx.Provide(accessmodule.PortName, mod.UserRoleAssigner()); err != nil {
 		return nil, err
 	}
 	return mod, nil
