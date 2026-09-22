@@ -100,7 +100,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: apikey.Descriptor, Wire: wireAPIKey},
 			{Descriptor: dataops.Descriptor, Wire: wireDataops},
 			{Descriptor: feature.Descriptor, Wire: wireFeature},
-			{Descriptor: uploadsec.Descriptor, Wire: wireUploadsec},
+			{Descriptor: uploadsec.Descriptor, Wire: uploadsec.Wire},
 			{Descriptor: search.Descriptor, Wire: wireSearch},
 			{Descriptor: retention.Descriptor, Wire: wireRetention},
 			{Descriptor: apidocs.Descriptor, Wire: wireAPIDocs},
@@ -235,15 +235,6 @@ func wireDataops(ctx *assembly.Context) (contract.Module, error) {
 
 func wireFeature(ctx *assembly.Context) (contract.Module, error) {
 	return feature.New(ctx.DB()), nil
-}
-
-func wireUploadsec(ctx *assembly.Context) (contract.Module, error) {
-	storageSvc, _ := ctx.Port(storage.PortName).(storage.Storage)
-	var scanner uploadsec.Scanner
-	if cfg := assembly.MustSection[*uploadsec.Config](ctx, uploadsec.ConfigKey); cfg != nil {
-		scanner = cfg.Scanner()
-	}
-	return uploadsec.New(storageSvc, scanner), nil
 }
 
 func wireSearch(*assembly.Context) (contract.Module, error) { return nil, nil }
