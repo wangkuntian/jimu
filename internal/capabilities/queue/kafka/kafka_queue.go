@@ -1,5 +1,5 @@
-// internal/capabilities/queue/kafka_queue.go
-package queue
+// internal/capabilities/queue/kafka/kafka_queue.go
+package kafka
 
 import (
 	"context"
@@ -8,8 +8,15 @@ import (
 	"sync"
 	"time"
 
+	"jimu/internal/capabilities/queue"
+
 	"github.com/segmentio/kafka-go"
 )
+
+func init() { queue.Register(queue.TypeKafka, New) }
+
+// New 构造 Kafka 队列驱动（构造会连 broker，仅在 outbox.publisher=mq 时装配）。
+func New(cfg queue.Config) (queue.Queue, error) { return NewKafkaQueue(cfg.Kafka) }
 
 // KafkaMessageWriter 抽象 kafka.Writer 写消息能力，便于测试注入
 type KafkaMessageWriter interface {
@@ -36,7 +43,7 @@ type KafkaQueue struct {
 }
 
 // NewKafkaQueue 创建 Kafka 队列
-func NewKafkaQueue(cfg KafkaConfig) (*KafkaQueue, error) {
+func NewKafkaQueue(cfg queue.KafkaConfig) (*KafkaQueue, error) {
 	if len(cfg.Brokers) == 0 || cfg.Topic == "" {
 		return nil, fmt.Errorf("kafka brokers and topic required")
 	}
@@ -61,7 +68,7 @@ func NewKafkaQueue(cfg KafkaConfig) (*KafkaQueue, error) {
 }
 
 // Submit 提交任务到 Kafka topic
-func (q *KafkaQueue) Submit(ctx context.Context, job *JobData) error {
+func (q *KafkaQueue) Submit(ctx context.Context, job *queue.JobData) error {
 	data, err := json.Marshal(job)
 	if err != nil {
 		return fmt.Errorf("marshal job: %w", err)
@@ -74,21 +81,21 @@ func (q *KafkaQueue) Submit(ctx context.Context, job *JobData) error {
 
 // SubmitDelayed Kafka 无原生延迟队列，当前直接发送，延迟由业务侧处理。
 // 如需真实延迟，需引入定时中间件（如延迟 topic + 调度器）另行实现。
-func (q *KafkaQueue) SubmitDelayed(ctx context.Context, job *JobData, delay time.Duration) error {
+func (q *KafkaQueue) SubmitDelayed(ctx context.Context, job *queue.JobData, delay time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, delay+10*time.Second)
 	defer cancel()
 	return q.Submit(ctx, job)
 }
 
 // Consume 从 Kafka 拉取一条消息（不提交 offset），登记 inFlight 供 Ack 精确匹配。
-func (q *KafkaQueue) Consume(ctx context.Context, timeout time.Duration) (*JobData, error) {
+func (q *KafkaQueue) Consume(ctx context.Context, timeout time.Duration) (*queue.JobData, error) {
 	msgCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	msg, err := q.reader.FetchMessage(msgCtx)
 	if err != nil {
 		return nil, err
 	}
-	var job JobData
+	var job queue.JobData
 	if err := json.Unmarshal(msg.Value, &job); err != nil {
 		// poison message：提交该 offset 跳过，避免消费死循环卡住分区
 		_ = q.reader.CommitMessages(ctx, msg)
@@ -101,7 +108,7 @@ func (q *KafkaQueue) Consume(ctx context.Context, timeout time.Duration) (*JobDa
 }
 
 // Ack 确认任务：提交该消息 offset，任务完成（at-least-once）。
-func (q *KafkaQueue) Ack(ctx context.Context, job *JobData) error {
+func (q *KafkaQueue) Ack(ctx context.Context, job *queue.JobData) error {
 	q.mu.Lock()
 	msg, ok := q.inFlight[job.ID]
 	if ok {
@@ -116,7 +123,7 @@ func (q *KafkaQueue) Ack(ctx context.Context, job *JobData) error {
 
 // Nack 否认任务：不提交 offset，broker 在下次 poll 或崩溃重启后重新投递未提交区间。
 // （应用层 at-least-once；消息可能重复投递，消费端须幂等。）
-func (q *KafkaQueue) Nack(ctx context.Context, job *JobData) error {
+func (q *KafkaQueue) Nack(ctx context.Context, job *queue.JobData) error {
 	q.mu.Lock()
 	delete(q.inFlight, job.ID)
 	q.mu.Unlock()

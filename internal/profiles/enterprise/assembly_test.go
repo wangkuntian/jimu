@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"jimu/internal/assembly"
+	"jimu/internal/capabilities/queue"
 	"jimu/internal/capabilities/storage"
 
 	"github.com/stretchr/testify/assert"
@@ -57,6 +58,14 @@ func TestEnterpriseCompiledStorageDrivers(t *testing.T) {
 		storage.StorageTypeOSS,
 		storage.StorageTypeS3,
 	}, storage.RegisteredTypes())
+}
+
+// TestEnterpriseCompilesNoQueueDriver 钉住进程内队列驱动注册表为空：enterprise 不装配
+// queue 能力（只经 outbox/auth/user 的类型级传递残留引用核心 queue 包），闭包里不得
+// 被动编进任何队列驱动 —— kafka/amqp 依赖随之退出本形态。本用例不影响同文件的
+// TestEnterpriseCompiledStorageDrivers（storage 驱动仍由 drivers.go 显式注册）。
+func TestEnterpriseCompilesNoQueueDriver(t *testing.T) {
+	assert.Empty(t, queue.RegisteredTypes(), "形态未装配 queue，不得编进任何队列驱动")
 }
 
 // driverSelection 汇总清单里各能力的驱动选中集（测试辅助）。

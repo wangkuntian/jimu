@@ -5,6 +5,7 @@ import (
 
 	"jimu/internal/assembly"
 	"jimu/internal/capabilities/catalog"
+	"jimu/internal/capabilities/queue"
 	"jimu/internal/capabilities/storage"
 	"jimu/internal/capability"
 	"jimu/internal/contract"
@@ -77,6 +78,15 @@ func TestFullCompiledStorageDrivers(t *testing.T) {
 		storage.StorageTypeOSS,
 		storage.StorageTypeS3,
 	}, storage.RegisteredTypes())
+}
+
+// TestFullCompiledQueueDrivers 钉住进程内注册表（与 storage 侧同款）：`drivers.go` 的三个
+// queue blank import 一旦被删，`go build ./...` 与 TestFullDriverSelection 仍全绿（后者只钉
+// Capability.Drivers 声明），失败只会在运行期 queue.Wire 的 fail-closed 文案里暴露 ——
+// 而 full 正是出货形态（cmd/server/main.go），故此处直接断言本构建实际注册的队列类型。
+// 与 storage 不同，一个驱动包恰好注册一个 queue.Type，故注册表为 3 项（升序）。
+func TestFullCompiledQueueDrivers(t *testing.T) {
+	assert.Equal(t, []queue.Type{queue.TypeKafka, queue.TypeRabbitMQ, queue.TypeRedis}, queue.RegisteredTypes())
 }
 
 // driverSelection 汇总清单里各能力的驱动选中集（测试辅助）。

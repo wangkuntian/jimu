@@ -1,5 +1,5 @@
-// internal/capabilities/queue/rabbitmq_queue.go
-package queue
+// internal/capabilities/queue/rabbitmq/rabbitmq_queue.go
+package rabbitmq
 
 import (
 	"context"
@@ -8,9 +8,16 @@ import (
 	"sync"
 	"time"
 
+	"jimu/internal/capabilities/queue"
+
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
+
+func init() { queue.Register(queue.TypeRabbitMQ, New) }
+
+// New 构造 RabbitMQ 队列驱动（构造会连 broker，仅在 outbox.publisher=mq 时装配）。
+func New(cfg queue.Config) (queue.Queue, error) { return NewRabbitMQQueue(cfg.RabbitMQ) }
 
 // RabbitMQChannel 抽象 amqp.Channel 的消息收发能力，便于测试注入
 type RabbitMQChannel interface {
@@ -33,7 +40,7 @@ type RabbitMQQueue struct {
 }
 
 // NewRabbitMQQueue 创建 RabbitMQ 队列
-func NewRabbitMQQueue(cfg RabbitMQConfig) (*RabbitMQQueue, error) {
+func NewRabbitMQQueue(cfg queue.RabbitMQConfig) (*RabbitMQQueue, error) {
 	conn, err := amqp.Dial(cfg.URL)
 	if err != nil {
 		return nil, fmt.Errorf("dial rabbitmq: %w", err)
@@ -63,7 +70,7 @@ func NewRabbitMQQueue(cfg RabbitMQConfig) (*RabbitMQQueue, error) {
 }
 
 // Submit 发布任务到队列
-func (q *RabbitMQQueue) Submit(ctx context.Context, job *JobData) error {
+func (q *RabbitMQQueue) Submit(ctx context.Context, job *queue.JobData) error {
 	data, err := json.Marshal(job)
 	if err != nil {
 		return fmt.Errorf("marshal job: %w", err)
@@ -77,7 +84,7 @@ func (q *RabbitMQQueue) Submit(ctx context.Context, job *JobData) error {
 
 // SubmitDelayed RabbitMQ 无原生延迟队列，当前直接发送，延迟由业务侧处理。
 // 如需真实延迟，需引入延迟交换机 + TTL 或死信队列另行实现。
-func (q *RabbitMQQueue) SubmitDelayed(ctx context.Context, job *JobData, delay time.Duration) error {
+func (q *RabbitMQQueue) SubmitDelayed(ctx context.Context, job *queue.JobData, delay time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, delay+10*time.Second)
 	defer cancel()
 	return q.Submit(ctx, job)
@@ -85,13 +92,13 @@ func (q *RabbitMQQueue) SubmitDelayed(ctx context.Context, job *JobData, delay t
 
 // Consume 从队列取一条消息（从构造时建立的一次性订阅读取），
 // 生成 token 并登记未确认 delivery，供 Ack/Nack 精确匹配。
-func (q *RabbitMQQueue) Consume(ctx context.Context, timeout time.Duration) (*JobData, error) {
+func (q *RabbitMQQueue) Consume(ctx context.Context, timeout time.Duration) (*queue.JobData, error) {
 	select {
 	case msg, ok := <-q.msgs:
 		if !ok {
 			return nil, fmt.Errorf("consumer channel closed")
 		}
-		var job JobData
+		var job queue.JobData
 		if err := json.Unmarshal(msg.Body, &job); err != nil {
 			// 毒消息：拒绝且不重入队（丢弃或进 DLQ），避免死循环
 			_ = msg.Nack(false, false)
@@ -113,7 +120,7 @@ func (q *RabbitMQQueue) Consume(ctx context.Context, timeout time.Duration) (*Jo
 }
 
 // Ack 确认任务：向 broker 确认 delivery，任务完成。
-func (q *RabbitMQQueue) Ack(ctx context.Context, job *JobData) error {
+func (q *RabbitMQQueue) Ack(ctx context.Context, job *queue.JobData) error {
 	q.mu.Lock()
 	d, ok := q.inFlight[job.Token]
 	if ok {
@@ -127,7 +134,7 @@ func (q *RabbitMQQueue) Ack(ctx context.Context, job *JobData) error {
 }
 
 // Nack 否认任务：requeue=true 将 delivery 重新入队供重试（at-least-once）。
-func (q *RabbitMQQueue) Nack(ctx context.Context, job *JobData) error {
+func (q *RabbitMQQueue) Nack(ctx context.Context, job *queue.JobData) error {
 	q.mu.Lock()
 	d, ok := q.inFlight[job.Token]
 	if ok {
