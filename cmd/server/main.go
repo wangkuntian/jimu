@@ -86,7 +86,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: notification.Descriptor, Wire: notification.Wire},
 			{Descriptor: queue.Descriptor, Wire: queue.Wire},
 			{Descriptor: outbox.Descriptor, Wire: outbox.Wire},
-			{Descriptor: breach.Descriptor, Wire: wireBreach},
+			{Descriptor: breach.Descriptor, Wire: breach.Wire},
 			{Descriptor: tenantmodule.Descriptor, Wire: wireTenant},
 			{Descriptor: accessmodule.Descriptor, Wire: wireAccess},
 			{Descriptor: user.Descriptor, Wire: wireUser},
@@ -108,20 +108,6 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: ws.Descriptor, Wire: ws.Wire},
 		},
 	}
-}
-
-func wireBreach(ctx *assembly.Context) (contract.Module, error) {
-	// 泄露口令检查（HIBP k-匿名范围查询）：默认关闭，启用时复用统一出站 client。
-	// 端口始终注册（关闭时为零值 Checker），与旧容器桥接语义一致：auth 取回 nil 即降级。
-	authCfg := assembly.MustSection[*authmodule.Config](ctx, authmodule.ConfigKey)
-	var checker contract.BreachChecker
-	if authCfg != nil && authCfg.BreachCheckEnabled {
-		checker = breach.New(ctx.HTTPClient())
-	}
-	if err := ctx.Provide(breach.PortName, checker); err != nil {
-		return nil, fmt.Errorf("provide breach port: %w", err)
-	}
-	return nil, nil
 }
 
 func wireTenant(ctx *assembly.Context) (contract.Module, error) {
