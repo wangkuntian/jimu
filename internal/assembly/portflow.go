@@ -7,6 +7,7 @@ import (
 
 	"jimu/internal/app"
 	"jimu/internal/config"
+	"jimu/internal/contract"
 	"jimu/internal/kernel/event"
 	"jimu/internal/kernel/httpclient"
 	"jimu/internal/kernel/logger"
@@ -18,6 +19,9 @@ type ProbeResult struct {
 	Capabilities []string
 	// Provided 各能力经 Context.Provide 注册的端口名，按注册顺序。
 	Provided map[string][]string
+	// Modules 按装配顺序登记的非空 Module 实例（Wire 返回 nil、只提供端口或仅参与迁移的
+	// 条目不出现）。供「编译面」报告工具在不启动服务的前提下统计该形态的路由数。
+	Modules []contract.Module
 }
 
 // ValidatePortFlow 校验装配清单的端口流向：按清单顺序试运行每个能力的 Wire，任何经
@@ -122,5 +126,6 @@ func probeWires(a Assembly, enabled []string) (ProbeResult, []string, error) {
 			return ProbeResult{}, nil, fmt.Errorf("assembly %q: %w", a.Name, err)
 		}
 	}
+	result.Modules = ctx.modules
 	return result, violations, nil
 }
