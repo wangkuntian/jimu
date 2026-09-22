@@ -34,8 +34,6 @@ import (
 	"jimu/internal/capabilities/ws"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
-	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/kernel/scheduler"
 )
 
@@ -89,7 +87,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: authmodule.Descriptor, Wire: authmodule.Wire},
 			{Descriptor: passkeymodule.Descriptor, Wire: passkeymodule.Wire},
 			{Descriptor: auditmodule.Descriptor, Wire: wireAudit},
-			{Descriptor: consolemodule.Descriptor, Wire: wireConsole},
+			{Descriptor: consolemodule.Descriptor, Wire: consolemodule.Wire},
 			{Descriptor: oauthmodule.Descriptor, Wire: oauthmodule.Wire},
 			{Descriptor: apikey.Descriptor, Wire: wireAPIKey},
 			{Descriptor: dataops.Descriptor, Wire: wireDataops},
@@ -108,14 +106,6 @@ func wireAudit(ctx *assembly.Context) (contract.Module, error) {
 	return auditmodule.New(ctx.DB(), configSection(ctx, auditmodule.ConfigKey, func() *auditmodule.Config {
 		return &auditmodule.Config{}
 	}), ctx.Logger()), nil
-}
-
-func wireConsole(ctx *assembly.Context) (contract.Module, error) {
-	cfg := ctx.Config()
-	authCfg := authConfig(ctx)
-	return consolemodule.New(cfg.Version, cfg.Environment, ctx.Redis(), ctx.DB(),
-		auth.NewWithRotation(authCfg.JWTSecret, authCfg.JWTPreviousSecret, authCfg.Issuer, authCfg.AccessExpireMin, authCfg.RefreshExpireDay),
-		ctx.EventBus(), middleware.IPAllowlist(cfg.Security.AdminIPAllowlist)), nil
 }
 
 func wireAPIKey(ctx *assembly.Context) (contract.Module, error) {
@@ -210,12 +200,4 @@ func configSection[T any](ctx *assembly.Context, key string, zero func() *T) T {
 		return *cfg
 	}
 	return *zero()
-}
-
-// authConfig 取 auth 段；auth 未启用时该段不加载，回退为零值（旧装配惯例）。
-func authConfig(ctx *assembly.Context) *authmodule.Config {
-	if cfg := assembly.MustSection[*authmodule.Config](ctx, authmodule.ConfigKey); cfg != nil {
-		return cfg
-	}
-	return &authmodule.Config{}
 }
