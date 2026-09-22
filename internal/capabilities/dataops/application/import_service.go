@@ -22,14 +22,6 @@ var userImportFields = []importer.FieldRule{
 	{Field: "email", Type: importer.TypeEmail},
 }
 
-// importRegistry 预注册的导入器 registry
-var importRegistry = func() *importer.Registry {
-	r := importer.NewRegistry()
-	r.Register(importer.FormatCSV, importer.NewCSVImporter())
-	r.Register(importer.FormatExcel, importer.NewExcelImporter())
-	return r
-}()
-
 // ImportService 数据导入服务
 type ImportService struct {
 	importJobs domain.ImportJobRepository
@@ -47,9 +39,9 @@ func (s *ImportService) Preview(ctx context.Context, format importer.Format, fil
 	if err != nil {
 		return nil, err
 	}
-	imp, err := importRegistry.Get(format)
+	imp, err := importer.Get(format)
 	if err != nil {
-		return nil, err
+		return nil, apperrors.Wrap(apperrors.CodeInvalidParam, "unsupported import format", err)
 	}
 	rows, err := imp.Parse(ctx, file)
 	if err != nil {
@@ -64,9 +56,9 @@ func (s *ImportService) Import(ctx context.Context, format importer.Format, file
 	if err != nil {
 		return nil, nil, err
 	}
-	imp, err := importRegistry.Get(format)
+	imp, err := importer.Get(format)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, apperrors.Wrap(apperrors.CodeInvalidParam, "unsupported import format", err)
 	}
 	rows, err := imp.Parse(ctx, file)
 	if err != nil {

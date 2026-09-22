@@ -5,6 +5,8 @@ import (
 
 	"jimu/internal/assembly"
 	"jimu/internal/capabilities/catalog"
+	"jimu/internal/capabilities/dataops/exporter"
+	"jimu/internal/capabilities/dataops/importer"
 	"jimu/internal/capabilities/queue"
 	"jimu/internal/capabilities/storage"
 	"jimu/internal/capability"
@@ -87,6 +89,15 @@ func TestFullCompiledStorageDrivers(t *testing.T) {
 // 与 storage 不同，一个驱动包恰好注册一个 queue.Type，故注册表为 3 项（升序）。
 func TestFullCompiledQueueDrivers(t *testing.T) {
 	assert.Equal(t, []queue.Type{queue.TypeKafka, queue.TypeRabbitMQ, queue.TypeRedis}, queue.RegisteredTypes())
+}
+
+// TestFullCompiledDataopsFormats 钉住进程内注册表（与 storage/queue 侧同款）：
+// `drivers.go` 的 dataops blank import 一旦被删，`go build ./...` 与 TestFullDriverSelection
+// 仍全绿（后者只钉 Capability.Drivers 声明），失败只会在请求期 importer.Get/exporter.Get
+// 的 fail-closed 文案里暴露 —— 故此处直接断言本构建实际注册的导入/导出格式。
+func TestFullCompiledDataopsFormats(t *testing.T) {
+	assert.Equal(t, []importer.Format{importer.FormatCSV, importer.FormatExcel}, importer.RegisteredFormats())
+	assert.Equal(t, []exporter.Format{exporter.FormatCSV, exporter.FormatExcel}, exporter.RegisteredFormats())
 }
 
 // driverSelection 汇总清单里各能力的驱动选中集（测试辅助）。

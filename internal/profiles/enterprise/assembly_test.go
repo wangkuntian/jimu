@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"jimu/internal/assembly"
+	"jimu/internal/capabilities/dataops/exporter"
+	"jimu/internal/capabilities/dataops/importer"
 	"jimu/internal/capabilities/queue"
 	"jimu/internal/capabilities/storage"
 
@@ -66,6 +68,14 @@ func TestEnterpriseCompiledStorageDrivers(t *testing.T) {
 // TestEnterpriseCompiledStorageDrivers（storage 驱动仍由 drivers.go 显式注册）。
 func TestEnterpriseCompilesNoQueueDriver(t *testing.T) {
 	assert.Empty(t, queue.RegisteredTypes(), "形态未装配 queue，不得编进任何队列驱动")
+}
+
+// TestEnterpriseCompiledDataopsFormats 钉住进程内注册表（T4：enterprise 仍全量选中
+// csv + excel）：`drivers.go` 的 blank import 一旦被删，本用例即红 —— 否则只会在
+// 请求期 importer.Get/exporter.Get 的 fail-closed 文案里暴露。
+func TestEnterpriseCompiledDataopsFormats(t *testing.T) {
+	assert.Equal(t, []importer.Format{importer.FormatCSV, importer.FormatExcel}, importer.RegisteredFormats())
+	assert.Equal(t, []exporter.Format{exporter.FormatCSV, exporter.FormatExcel}, exporter.RegisteredFormats())
 }
 
 // driverSelection 汇总清单里各能力的驱动选中集（测试辅助）。

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	// 注册 CSV 驱动：应用层经 importer.Get 查进程级注册表，测试二进制需显式编入驱动包。
+	_ "jimu/internal/capabilities/dataops/csv"
 	importdomain "jimu/internal/capabilities/dataops/domain"
 	"jimu/internal/capabilities/dataops/importer"
 	"jimu/internal/kernel/tenant"

@@ -1,66 +1,46 @@
 package exporter
 
 import (
-	"bytes"
 	"context"
+	"io"
 	"testing"
-
-	"jimu/internal/capabilities/dataops/importer"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-var exportRows = []map[string]string{
-	{"name": "tom", "age": "30", "city": "beijing"},
-	{"name": "jerry", "age": "25", "city": "shanghai"},
-}
-var exportHeader = []string{"name", "age", "city"}
+// fakeExporter 是注册表用例使用的最小实现（无状态）。
+type fakeExporter struct{}
 
-// TestCSVExporterRoundTrip CSV 写出后能被 CSVImporter 原样读回
-func TestCSVExporterRoundTrip(t *testing.T) {
-	var buf bytes.Buffer
-	err := NewCSVExporter().Export(context.Background(), exportHeader, exportRows, &buf)
-	require.NoError(t, err)
-
-	rows, err := importer.NewCSVImporter().Parse(context.Background(), &buf)
-	require.NoError(t, err)
-	assert.Equal(t, exportRows, rows)
+func (fakeExporter) Export(ctx context.Context, header []string, rows []map[string]string, w io.Writer) error {
+	return nil
 }
 
-// TestCSVExporterMissingKey 行内缺失键补空串，不产生错位
-func TestCSVExporterMissingKey(t *testing.T) {
-	var buf bytes.Buffer
-	err := NewCSVExporter().Export(context.Background(), exportHeader,
-		[]map[string]string{{"name": "solo"}}, &buf)
-	require.NoError(t, err)
-
-	rows, err := importer.NewCSVImporter().Parse(context.Background(), &buf)
-	require.NoError(t, err)
-	assert.Equal(t, []map[string]string{{"name": "solo", "age": "", "city": ""}}, rows)
-}
-
-// TestExcelExporterRoundTrip Excel 写出后能被 ExcelImporter 原样读回
-func TestExcelExporterRoundTrip(t *testing.T) {
-	var buf bytes.Buffer
-	err := NewExcelExporter().Export(context.Background(), exportHeader, exportRows, &buf)
-	require.NoError(t, err)
-
-	rows, err := importer.NewExcelImporter().Parse(context.Background(), &buf)
-	require.NoError(t, err)
-	assert.Equal(t, exportRows, rows)
-}
-
-// TestRegistry 注册表按格式取用
-func TestRegistry(t *testing.T) {
+func TestRegistryGetUnsupported(t *testing.T) {
 	r := NewRegistry()
-	r.Register(FormatCSV, NewCSVExporter())
-	r.Register(FormatExcel, NewExcelExporter())
+	_, err := r.Get(Format("pdf"))
+	require.Error(t, err)
+}
 
-	e, err := r.Get(FormatCSV)
+// TestGetRejectsUncompiledFormat 核心包不得自注册任何格式：驱动由形态侧 blank import
+// 选中并在 init() 注册，未编进本构建的格式必须 fail-closed 报错并附已编译清单。
+func TestGetRejectsUncompiledFormat(t *testing.T) {
+	assert.Empty(t, RegisteredFormats(), "核心包不得自注册任何格式")
+	_, err := Get(FormatExcel)
+	require.ErrorContains(t, err, `export format "xlsx" is not compiled into this build`)
+	assert.False(t, Supported(FormatCSV))
+}
+
+// TestRegistryIsFactoryBased 注册表存工厂而非实例：每次 Get 构造新实例。
+func TestRegistryIsFactoryBased(t *testing.T) {
+	calls := 0
+	r := NewRegistry()
+	r.Register(FormatCSV, func() Exporter { calls++; return fakeExporter{} })
+	_, err := r.Get(FormatCSV)
 	require.NoError(t, err)
-	assert.IsType(t, &CSVExporter{}, e)
-
-	_, err = r.Get("pdf")
-	assert.Error(t, err)
+	_, err = r.Get(FormatCSV)
+	require.NoError(t, err)
+	assert.Equal(t, 2, calls, "每次 Get 构造一个新实例")
+	_, err = r.Get(FormatCSV + ".unknown")
+	require.ErrorContains(t, err, "unsupported export format")
 }
