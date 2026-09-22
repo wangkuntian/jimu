@@ -90,7 +90,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: consolemodule.Descriptor, Wire: consolemodule.Wire},
 			{Descriptor: oauthmodule.Descriptor, Wire: oauthmodule.Wire},
 			{Descriptor: apikey.Descriptor, Wire: wireAPIKey},
-			{Descriptor: dataops.Descriptor, Wire: wireDataops},
+			{Descriptor: dataops.Descriptor, Wire: dataops.Wire},
 			{Descriptor: feature.Descriptor, Wire: feature.Wire},
 			{Descriptor: uploadsec.Descriptor, Wire: uploadsec.Wire},
 			{Descriptor: search.Descriptor, Wire: search.Wire},
@@ -110,10 +110,6 @@ func wireAudit(ctx *assembly.Context) (contract.Module, error) {
 
 func wireAPIKey(ctx *assembly.Context) (contract.Module, error) {
 	return apikey.New(ctx.DB(), ctx.Port(tenantmodule.PortName)), nil
-}
-
-func wireDataops(ctx *assembly.Context) (contract.Module, error) {
-	return dataops.New(ctx.DB()), nil
 }
 
 func wireRetention(ctx *assembly.Context) (contract.Module, error) {
