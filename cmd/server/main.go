@@ -91,7 +91,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: encryption.Descriptor, Wire: encryption.Wire},
 			{Descriptor: storage.Descriptor, Wire: storage.Wire},
 			{Descriptor: notification.Descriptor, Wire: notification.Wire},
-			{Descriptor: queue.Descriptor, Wire: wireQueue},
+			{Descriptor: queue.Descriptor, Wire: queue.Wire},
 			{Descriptor: outbox.Descriptor, Wire: wireOutbox},
 			{Descriptor: breach.Descriptor, Wire: wireBreach},
 			{Descriptor: tenantmodule.Descriptor, Wire: wireTenant},
@@ -115,23 +115,6 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: ws.Descriptor, Wire: ws.Wire},
 		},
 	}
-}
-
-func wireQueue(ctx *assembly.Context) (contract.Module, error) {
-	queueCfg := assembly.MustSection[*queue.Config](ctx, queue.ConfigKey)
-	if queueCfg == nil {
-		queueCfg = &queue.Config{}
-	}
-	cfg := *queueCfg
-	cfg.Redis = ctx.Redis()
-	q, err := queue.New(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("init queue: %w", err)
-	}
-	if err := ctx.Provide(queue.PortName, q); err != nil {
-		return nil, fmt.Errorf("provide queue port: %w", err)
-	}
-	return queue.NewModule(ctx.DB(), ctx.Scheduler()), nil
 }
 
 func wireOutbox(ctx *assembly.Context) (contract.Module, error) {
