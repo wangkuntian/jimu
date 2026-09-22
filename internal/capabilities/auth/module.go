@@ -19,6 +19,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// PortName auth 能力对外提供的端口名：contract.LoginFinalizer（供 passkey 复用登录收尾）。
+const PortName = "auth"
+
 type Module struct {
 	cfg     Config
 	service *application.AuthService
@@ -66,11 +69,12 @@ func (m *Module) Name() string {
 var migrationsFS embed.FS
 
 // Descriptor 声明认证能力的静态描述。
+// tenant/mfa 是软依赖：缺失时开通式注册关闭、二次验证跳过（minimal profile 无租户/MFA）。
 var Descriptor = contract.Descriptor{
 	Name:         "auth",
 	Migrations:   migrationsFS,
-	Requires:     []string{"user", "access", "tenant", "mfa"},
-	SoftRequires: []string{"captcha", "breach"},
+	Requires:     []string{"user", "access"},
+	SoftRequires: []string{"tenant", "mfa", "captcha", "breach"},
 	Owns:         []string{"login_histories", "password_histories"},
 	Mount:        contract.MountSelfManaged,
 	// auth 拥有整个 auth 段（含嵌套 webauthn/provisioning），不拆段（设计 §8 ¶2）

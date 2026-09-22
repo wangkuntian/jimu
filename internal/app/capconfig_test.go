@@ -1,10 +1,11 @@
-package app
+package app_test
 
 import (
 	"errors"
 	"strings"
 	"testing"
 
+	"jimu/internal/app"
 	auditmodule "jimu/internal/capabilities/audit"
 	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/captcha"
@@ -67,11 +68,11 @@ func TestLoadCapabilityConfigsDecodesDefaultsValidates(t *testing.T) {
 	dec := &fakeDecoder{values: map[string]string{"retention": "from-yaml"}}
 	caps := []contract.Descriptor{desc("retention", "retention", func() any { return &fakeSectionConfig{} })}
 
-	got, err := LoadCapabilityConfigs(dec, caps, "dev")
+	got, err := app.LoadCapabilityConfigs(dec, caps, "dev")
 	require.NoError(t, err)
 	require.Equal(t, 1, got.Len())
 
-	sc, ok := SectionOf[*fakeSectionConfig](got, "retention")
+	sc, ok := app.SectionOf[*fakeSectionConfig](got, "retention")
 	require.True(t, ok)
 	assert.Equal(t, "from-yaml", sc.value)
 	assert.True(t, sc.defaultsApplied)
@@ -84,9 +85,9 @@ func TestLoadCapabilityConfigsDecodesDefaultsValidates(t *testing.T) {
 func TestLoadCapabilityConfigsProdHook(t *testing.T) {
 	caps := []contract.Descriptor{desc("auth", "auth", func() any { return &fakeSectionConfig{} })}
 
-	got, err := LoadCapabilityConfigs(&fakeDecoder{}, caps, "prod")
+	got, err := app.LoadCapabilityConfigs(&fakeDecoder{}, caps, "prod")
 	require.NoError(t, err)
-	sc, _ := SectionOf[*fakeSectionConfig](got, "auth")
+	sc, _ := app.SectionOf[*fakeSectionConfig](got, "auth")
 	assert.True(t, sc.prodValidated)
 
 	// prod 加严校验失败则上抛
@@ -94,7 +95,7 @@ func TestLoadCapabilityConfigsProdHook(t *testing.T) {
 	caps = []contract.Descriptor{desc("auth", "auth", func() any {
 		return &fakeSectionConfig{prodErr: errors.New("weak secret")}
 	})}
-	_, err = LoadCapabilityConfigs(dec, caps, "prod")
+	_, err = app.LoadCapabilityConfigs(dec, caps, "prod")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "auth")
 	assert.Contains(t, err.Error(), "weak secret")
@@ -104,7 +105,7 @@ func TestLoadCapabilityConfigsProdHook(t *testing.T) {
 func TestLoadCapabilityConfigsSkipsDisabled(t *testing.T) {
 	dec := &fakeDecoder{}
 	// 仅启用 user（无配置段）；retention 未启用
-	got, err := LoadCapabilityConfigs(dec, []contract.Descriptor{{Name: "user"}}, "dev")
+	got, err := app.LoadCapabilityConfigs(dec, []contract.Descriptor{{Name: "user"}}, "dev")
 	require.NoError(t, err)
 	assert.Zero(t, got.Len())
 	assert.Empty(t, dec.seen, "未启用能力的配置段不得被解码")
@@ -120,30 +121,30 @@ func TestLoadCapabilityConfigsMultipleSections(t *testing.T) {
 			{Section: "scheduler", New: func() any { return &fakeSectionConfig{} }},
 		},
 	}}
-	got, err := LoadCapabilityConfigs(&fakeDecoder{}, caps, "dev")
+	got, err := app.LoadCapabilityConfigs(&fakeDecoder{}, caps, "dev")
 	require.NoError(t, err)
 	assert.Equal(t, 2, got.Len())
-	_, ok := SectionOf[*fakeSectionConfig](got, "scheduler")
+	_, ok := app.SectionOf[*fakeSectionConfig](got, "scheduler")
 	assert.True(t, ok)
 }
 
 // TestLoadCapabilityConfigsErrors 声明缺陷与校验失败都 fail fast。
 func TestLoadCapabilityConfigsErrors(t *testing.T) {
 	// 未实现 SectionConfig
-	_, err := LoadCapabilityConfigs(&fakeDecoder{}, []contract.Descriptor{
+	_, err := app.LoadCapabilityConfigs(&fakeDecoder{}, []contract.Descriptor{
 		desc("bad", "bad", func() any { return &struct{}{} }),
 	}, "dev")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "SectionConfig")
 
 	// 空段键
-	_, err = LoadCapabilityConfigs(&fakeDecoder{}, []contract.Descriptor{
+	_, err = app.LoadCapabilityConfigs(&fakeDecoder{}, []contract.Descriptor{
 		{Name: "bad", Configs: []contract.ConfigSpec{{Section: "", New: func() any { return &fakeSectionConfig{} }}}},
 	}, "dev")
 	require.Error(t, err)
 
 	// 校验失败带段名
-	_, err = LoadCapabilityConfigs(&fakeDecoder{}, []contract.Descriptor{
+	_, err = app.LoadCapabilityConfigs(&fakeDecoder{}, []contract.Descriptor{
 		desc("captcha", "captcha", func() any { return &fakeSectionConfig{validateErr: errors.New("bad ttl")} }),
 	}, "dev")
 	require.Error(t, err)
@@ -151,7 +152,7 @@ func TestLoadCapabilityConfigsErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), "bad ttl")
 
 	// 解码失败
-	_, err = LoadCapabilityConfigs(&fakeDecoder{err: errors.New("boom")}, []contract.Descriptor{
+	_, err = app.LoadCapabilityConfigs(&fakeDecoder{err: errors.New("boom")}, []contract.Descriptor{
 		desc("captcha", "captcha", func() any { return &fakeSectionConfig{} }),
 	}, "dev")
 	require.Error(t, err)
@@ -198,20 +199,20 @@ auth:
 	caps := []contract.Descriptor{authmodule.Descriptor}
 
 	// dev：弱密钥可启动（prod 专属加严不得泄漏到其它环境）
-	if _, err := LoadCapabilityConfigs(newYAMLDecoder(t, doc), caps, "dev"); err != nil {
+	if _, err := app.LoadCapabilityConfigs(newYAMLDecoder(t, doc), caps, "dev"); err != nil {
 		t.Fatalf("dev 环境不应执行 prod 加严校验: %v", err)
 	}
 
 	// prod：弱密钥必须 fail-closed
-	_, err := LoadCapabilityConfigs(newYAMLDecoder(t, doc), caps, "prod")
+	_, err := app.LoadCapabilityConfigs(newYAMLDecoder(t, doc), caps, "prod")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "auth.jwt_secret")
 
 	// prod + 强密钥：通过，且段可被强类型取回
 	strong := strings.Replace(doc, `jwt_secret: "short"`, `jwt_secret: "`+strings.Repeat("a", 32)+`"`, 1)
-	got, err := LoadCapabilityConfigs(newYAMLDecoder(t, strong), caps, "prod")
+	got, err := app.LoadCapabilityConfigs(newYAMLDecoder(t, strong), caps, "prod")
 	require.NoError(t, err)
-	cfg, ok := SectionOf[*authmodule.Config](got, authmodule.ConfigKey)
+	cfg, ok := app.SectionOf[*authmodule.Config](got, authmodule.ConfigKey)
 	require.True(t, ok)
 	assert.Equal(t, "jimu", cfg.Issuer)
 }
@@ -235,7 +236,7 @@ audit:
 	// 只启用 user：captcha/audit 未启用，非法段不得被解码或校验
 	caps, err := catalog.Resolve([]string{"user"})
 	require.NoError(t, err)
-	got, err := LoadCapabilityConfigs(newYAMLDecoder(t, doc), caps, "dev")
+	got, err := app.LoadCapabilityConfigs(newYAMLDecoder(t, doc), caps, "dev")
 	require.NoError(t, err)
 	assert.Zero(t, got.Len(), "未启用能力的配置段不得出现")
 	assert.Nil(t, got.Section(captcha.ConfigKey))
@@ -244,7 +245,7 @@ audit:
 	// 启用 captcha 后同一份非法配置必须 fail-closed
 	caps, err = catalog.Resolve([]string{"user", "captcha"})
 	require.NoError(t, err)
-	_, err = LoadCapabilityConfigs(newYAMLDecoder(t, doc), caps, "dev")
+	_, err = app.LoadCapabilityConfigs(newYAMLDecoder(t, doc), caps, "dev")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), captcha.ConfigKey)
 }

@@ -10,6 +10,10 @@ import (
 	"gorm.io/gorm"
 )
 
+// UserinfoPortName 用户信息读取端口名：contract.UserinfoSource。
+// 供 mfa/passkey/grpc 等经装配接缝消费，避免它们 import 本能力的内部包。
+const UserinfoPortName = "user.info"
+
 // userinfoAdapter contract.UserinfoSource 的薄适配：读取 user 仓储，
 // 映射领域实体为端口视图。平台级视角（不过滤租户），与原 gRPC 直查语义一致。
 type userinfoAdapter struct {

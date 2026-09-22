@@ -1,5 +1,5 @@
 .PHONY: run build test vet fmt fmt-check lint clean migrate migrate-down migrate-status seed help govulncheck test-backup-restore ci
-.PHONY: test-cover test-coverage-check test-race swagger-check smoke-check compose-check
+.PHONY: test-cover test-coverage-check test-race swagger-check smoke-check compose-check profiles-check compose-report
 .PHONY: docker-build docker-run docker-stop docker-logs
 .PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
 .PHONY: bench loadtest proto secrets
@@ -56,6 +56,8 @@ help:
 	@echo "  make lint                 静态检查"
 	@echo "  make check-log-usage      检查日志调用均为 *w 系列（防 k/v 粘连）"
 	@echo "  make check-capabilities   校验能力自描述（Owns）与迁移归属一致"
+	@echo "  make profiles-check       构建 5 个形态入口（JIMU_PROFILES_SMOKE=1 时启动并检查 /readyz）"
+	@echo "  make compose-report       生成各形态的编译面报告 docs/profiles/compose-report.md"
 	@echo ""
 	@echo "数据库:"
 	@echo "  make migrate              本地执行迁移"
@@ -269,6 +271,18 @@ check-log-usage:
 ## check-capabilities: 校验能力自描述（Owns）与迁移归属一致（P2.8 门禁第一块）
 check-capabilities:
 	@go run ./tools/checkcapabilities
+
+## profiles-check: 构建 5 个形态入口（profiles/*）；构建失败即非零退出。
+##                  设置 JIMU_PROFILES_SMOKE=1 后额外以 APP_ENV=dev 启动各形态并轮询
+##                  /readyz（需 DB+Redis）；未设置时逐形态打印 SKIP，不静默跳过。
+profiles-check:
+	@bash scripts/check_profiles.sh
+
+## compose-report: 生成各形态（profile）的编译面报告（docs/profiles/compose-report.md，入库）。
+##                 指标：二进制大小 / 路由数 / 迁移数 / 表数 / 本仓闭包代码量与文件数 /
+##                 go.mod 直接依赖数（各形态相同，见报告的「层②边界」）；不连库、不启动监听。
+compose-report:
+	@go run ./tools/composereport
 
 ## clean: 清理构建产物
 clean:

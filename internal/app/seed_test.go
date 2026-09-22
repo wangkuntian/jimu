@@ -1,4 +1,4 @@
-package app
+package app_test
 
 import (
 	"errors"
@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"jimu/internal/app"
 	roledomain "jimu/internal/capabilities/access/domain"
 	"jimu/internal/capabilities/catalog"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
@@ -148,13 +149,13 @@ func TestRunSeed_HappyPath(t *testing.T) {
 
 	expectRunSeedQueries(mock)
 
-	require.NoError(t, RunSeed(db, catalog.All()))
+	require.NoError(t, app.RunSeed(db, catalog.All()))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestRunSeed_MissingAdminPassword(t *testing.T) {
 	t.Setenv("ADMIN_PASSWORD", "")
-	err := RunSeed(nil, nil)
+	err := app.RunSeed(nil, nil)
 	require.ErrorContains(t, err, "ADMIN_PASSWORD is required")
 }
 
@@ -169,7 +170,7 @@ func TestRunSeed_PermissionQueryError(t *testing.T) {
 		WillReturnError(errors.New("select boom"))
 	mock.ExpectRollback()
 
-	err := RunSeed(db, catalog.All())
+	err := app.RunSeed(db, catalog.All())
 	require.ErrorContains(t, err, "seed permission failed")
 }
 
@@ -192,7 +193,7 @@ func TestRunSeed_RoleInsertError(t *testing.T) {
 		WillReturnError(errors.New("role boom"))
 	mock.ExpectRollback()
 
-	err := RunSeed(db, catalog.All())
+	err := app.RunSeed(db, catalog.All())
 	require.ErrorContains(t, err, "seed admin role failed")
 }
 
@@ -220,7 +221,7 @@ func TestRunSeed_AssignPermissionError(t *testing.T) {
 		WillReturnError(errors.New("assign boom"))
 	mock.ExpectRollback()
 
-	err := RunSeed(db, catalog.All())
+	err := app.RunSeed(db, catalog.All())
 	require.ErrorContains(t, err, "assign permission failed")
 }
 
@@ -253,7 +254,7 @@ func TestRunSeed_AdminUserCreateError(t *testing.T) {
 		WillReturnError(errors.New("user boom"))
 	mock.ExpectRollback()
 
-	err := RunSeed(db, catalog.All())
+	err := app.RunSeed(db, catalog.All())
 	require.ErrorContains(t, err, "seed admin user failed")
 }
 
@@ -288,7 +289,7 @@ func TestRunSeed_AssignAdminRoleError(t *testing.T) {
 		WillReturnError(errors.New("userrole boom"))
 	mock.ExpectRollback()
 
-	err := RunSeed(db, catalog.All())
+	err := app.RunSeed(db, catalog.All())
 	require.ErrorContains(t, err, "assign admin role failed")
 }
 
@@ -315,20 +316,20 @@ func TestRunSeed_RolePermissionCountError(t *testing.T) {
 		WillReturnError(errors.New("count boom"))
 	mock.ExpectRollback()
 
-	err := RunSeed(db, catalog.All())
+	err := app.RunSeed(db, catalog.All())
 	require.ErrorContains(t, err, "check role permission failed")
 }
 
 func TestSeedCasbinPolicies_CreateEnforcerError(t *testing.T) {
 	// sqlmock DB 上 gormadapter 建表失败 → NewEnforcer 报错
 	db, _ := newMockGormDB(t)
-	err := SeedCasbinPolicies(db)
+	err := app.SeedCasbinPolicies(db)
 	require.ErrorContains(t, err, "create enforcer")
 }
 
 func TestRunSeedWithCasbin_SeedError(t *testing.T) {
 	t.Setenv("ADMIN_PASSWORD", "")
-	err := RunSeedWithCasbin(nil, nil)
+	err := app.RunSeedWithCasbin(nil, nil)
 	require.ErrorContains(t, err, "ADMIN_PASSWORD is required")
 }
 
@@ -341,7 +342,7 @@ func TestRunSeedWithCasbin(t *testing.T) {
 	db := newSeedSqliteDB(t)
 	migrateSeedTables(t, db)
 
-	require.NoError(t, RunSeedWithCasbin(db, catalog.All()))
+	require.NoError(t, app.RunSeedWithCasbin(db, catalog.All()))
 
 	// 管理员已创建
 	var admin userdomain.User
@@ -361,7 +362,7 @@ func TestRunSeedWithCasbin(t *testing.T) {
 	// 幂等：再次执行不报错且数据不重复（row count 不变）
 	var userCountBefore int64
 	require.NoError(t, db.Table("users").Count(&userCountBefore).Error)
-	require.NoError(t, RunSeed(db, catalog.All()))
+	require.NoError(t, app.RunSeed(db, catalog.All()))
 
 	var permCount2, rpCount2, userCount2 int64
 	require.NoError(t, db.Table("permissions").Count(&permCount2).Error)
@@ -383,7 +384,7 @@ func TestRunSeed_SkipsDisabledCapabilityPermissions(t *testing.T) {
 	// 只启用 user+access：audit/tenant/console 的权限点不得出现
 	caps, err := catalog.Resolve([]string{"user", "access"})
 	require.NoError(t, err)
-	require.NoError(t, RunSeed(db, caps))
+	require.NoError(t, app.RunSeed(db, caps))
 
 	var count int64
 	require.NoError(t, db.Table("permissions").Count(&count).Error)

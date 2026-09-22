@@ -273,13 +273,43 @@ v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capab
 - **`jimu seed` 语义不变** — CLI seed 使用完整能力清单（`catalog.All()`）：CLI 的 `migrate` 命令同样按完整清单执行迁移，若 seed 只按启用集过滤而迁移不过滤，会造成权限点与表结构不同步。
 - **边界** — 结构性种子（默认租户、free 套餐、超管角色 + admin 用户）目前**不做**能力门控，无论启用集如何都写入；只有权限点按启用集聚合。按 profile 裁剪结构种子的能力门控推迟到 P1 profile 工作落地。
 
+## 形态（profile）
+
+形态是**编译期**概念：`profiles/<name>/main.go` 是独立入口，只 import 该形态需要的能力（能力清单声明在 `internal/profiles/<name>`），裁剪由 import 图天然决定 —— 不用 build tag，也不需要组合矩阵。`Assembly.Capabilities` 的顺序是**装配顺序**（端口提供者必须排在消费者之前），与 catalog 的迁移/闭包顺序无关。
+
+| 入口 | 组成 | 场景 |
+|---|---|---|
+| `profiles/full` | 全部 18 个 catalog 能力 + `storage` `notification` `retention` `ws` `grpc` `apidocs` `encryption` | 全功能基准；`cmd/server` 是它的薄包装（保留 swagger 注解） |
+| `profiles/minimal` | `user` `access` `auth` + `notification` `encryption` | 内部微服务 / 新项目起点（不含租户、审计、控制台、MFA） |
+| `profiles/saas` | `minimal` + `tenant` `audit` | 面向外部客户的多租户产品（真实邮件渠道由 `email.enabled` 打开） |
+| `profiles/enterprise` | `minimal` + `console` `audit` `oauth` `dataops` `storage` | 公司内部系统（单租户，`tid=0` 平台级视角） |
+| `profiles/machine` | `user` `access` `apikey` + `grpc` `encryption` | 无界面、服务间调用（**无任何登录/注册/会话端点**，受保护路由走 `X-API-Key`） |
+
+**编译期脚注（`go list -deps` 实测，闭包 ⊋ 装配集）**：上表是**装配集**，但闭包里还会多出几个能力包 —— `minimal`/`saas` 额外链上 `outbox`/`queue`，`machine` 额外链上 `notification`/`outbox`/`queue`，`enterprise` 额外链上 `outbox`/`queue`/`ws`。这**纯粹**因为 `user`/`auth` 直接 import 了这些能力的具体 Go 类型（`*outbox.Outbox`、`notification.Message`、`outbox.Event`；`outbox` 又 import `queue`，`enterprise` 经 `console` 链上 `ws`），编译期必然带进来；**上列多出来的这些能力一个都不装配**（不在对应形态的 `Assembly` 里，没有路由/任务/组件、不建表、不 seed）。`make profiles-check` 的 golden 闭包门禁把每个形态的这份集合钉死，因此它不会无声明地增减；要消除这些残留，需要把上述共享类型移到 `contract`/内核（另一次改动）。
+
+**编译面实测（`make compose-report` 生成 [docs/profiles/compose-report.md](docs/profiles/compose-report.md)，口径见该报告）**：
+
+| 形态 | 二进制 | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `full` | 122.6 MB | 100.0% | 99 | 25 | 23 | 328 | 33995 |
+| `minimal` | 85.8 MB | 70.0% | 32 | 7 | 7 | 182 | 17804 |
+| `saas` | 86.1 MB | 70.2% | 48 | 13 | 11 | 208 | 20450 |
+| `enterprise` | 99.5 MB | 81.1% | 55 | 13 | 11 | 248 | 23241 |
+| `machine` | 84.4 MB | 68.9% | 28 | 7 | 6 | 184 | 18080 |
+
+- **层②边界：profile 改变的是编译面，不是 `go.mod`** — `go.mod`/`go.sum` 描述 module 而非包，Go 的依赖裁剪作用于**整个 module**，所以五个形态的 `go.mod` 直接依赖数**完全相同**（各 64 个）。profile 只决定哪些包与符号**编进二进制**（上表的二进制/路由/迁移/表/闭包代码量）；真正让 `go.mod` 变小的是层①（`jimu new` 生成专属 module 后 `go mod tidy`），不是换个 profile。
+- **构建、门禁与报告** — `go build ./profiles/<name>`；`make profiles-check` 构建 5 个入口（构建失败即非零退出）并校验依赖闭包裁剪门禁（每个形态的能力根包集合逐值锁定），设置 `JIMU_PROFILES_SMOKE=1` 后额外以 `APP_ENV=dev` 逐个启动并轮询管理端 `/readyz`（需 DB+Redis，端口可用 `JIMU_PROFILES_HTTP_PORT`/`JIMU_PROFILES_MGMT_PORT` 覆盖），未设置时逐形态打印 `SKIP`、不静默跳过；`make compose-report` 重算并覆盖 `docs/profiles/compose-report.md`（不连库、不启动监听，口径见报告开头）。
+- **`machine` 已知限制** — `/api/v1/admin/apikeys` 位于 `middleware.AdminAuth()` 之后，需要该形态刻意排除的 JWT 链，因此 `machine` 可以启动，但**无法自助签发第一把 API Key**：需要带外签发路径（CLI/种子，P2.6/P2.7 §3.8），本阶段不提供。
+- **种子与迁移不随形态裁剪** — 迁移仍按 catalog 全量清单执行（表先建好），结构种子（默认租户/free 套餐/超管角色/admin 用户 + **按本形态解析集**聚合的权限点 + Casbin 同步）是各形态共享的既有实现，不做形态门控；`ADMIN_PASSWORD` 未设置时跳过并打 `structural seed skipped` 告警，服务不会因缺少该变量而启动失败（容器启动早于 CLI 迁移、compose 不向 server 注入该变量）。profile 驱动的迁移裁剪见 P2.6/P2.8。
+
 ## 项目结构
 
 ```text
 jimu/
 ├── cmd/
-│   ├── server/main.go          # HTTP 服务入口
+│   ├── server/main.go          # HTTP 服务入口（full 形态的薄包装，保留 swagger 注解）
 │   └── cli/main.go             # CLI 入口
+├── profiles/                   # 形态入口（full/minimal/saas/enterprise/machine 各一个 main）
 ├── configs/
 │   ├── app.yaml                # 默认配置（开发环境）
 │   └── app.prod.yaml           # 生产环境配置
@@ -310,6 +340,7 @@ jimu/
 │   └── helm/                    # Helm Chart（含 openobserve / otel-collector 配置）
 ├── docs/                         # 文档
 │   ├── openapi/                  # Swagger 生成的 API 文档
+│   ├── profiles/                 # 形态编译面报告（make compose-report 生成）
 │   ├── releases/                 # 版本 changelog / GitHub Release body（每版本一个文件）
 │   ├── CONTRIBUTING.md           # 贡献指南（分支/PR/发布/集成测试手册）
 │   └── SECURITY.md               # 安全政策（漏洞报告流程）
@@ -320,8 +351,11 @@ jimu/
 │   │   ├── container.go        # 依赖容器
 │   │   ├── application.go      # Application 生命周期
 │   │   └── seed.go             # 数据种子（权限点聚合自能力 Descriptor）
+│   ├── assembly/               # 形态装配驱动（Assembly/Context/Wire 调用、Run、端口流向护栏）
+│   ├── capability/             # 描述符解析叶子包（启用闭包 / 声明校验 / 降级项；只 import contract）
+│   ├── profiles/               # 形态清单（每个形态一份 Assembly：full/minimal/saas/enterprise/machine）
 │   ├── capabilities/           # 可插拔能力（catalog 是唯一清单；每个能力导出 Descriptor）
-│   │   ├── catalog/            # 能力清单 + 启用集解析
+│   │   ├── catalog/            # 能力清单（全量 18 项；启用集解析在 internal/capability）
 │   │   ├── apidocs/            # Swagger 文档注册
 │   │   ├── auth/               # 会话与凭证本体（登录/注册/改密/Token/登录历史）
 │   │   ├── mfa/                # TOTP 二次验证 + 可信设备（跳过 MFA）+ 自有 totp/ 实现
@@ -381,6 +415,7 @@ jimu/
 │       └── testutil/           # 测试工具
 ├── tools/
 │   ├── checkcapabilities/        # 能力自描述（Owns）与迁移归属校验（make check-capabilities）
+│   ├── composereport/            # 形态编译面报告生成（make compose-report）
 │   ├── generator/                # 代码生成器
 │   └── logcheck/                 # 日志调用规范静态检查（make check-log-usage）
 ├── .github/                    # GitHub Actions + Dependabot
@@ -734,13 +769,15 @@ api.POST("/users", apikey.RequireScope("user:write"), userHandler.Create)
 | `user:write` | 创建、更新、删除用户 | 自动化开通与回收账号 |
 | `job:submit` | 提交异步任务 | 触发批量导入等后台作业 |
 | `audit:read` | 读取审计日志 | 合规系统拉取操作记录 |
+| `api:access` | 访问受保护路由的基线（`apikey.ScopeProtected`） | 无 `auth` 形态下的服务间调用 |
 | `*` | 全部能力 | 内部服务全权 Key |
 
 约定：
 
 - **空 `scopes` 表示拒绝一切**：`APIKey.HasScope` 对空列表恒返回 false；只有显式包含 `*` 才代表全权，不要依赖"不填即全权"的隐式行为。
-- Scope 清单由业务方定义，框架不内置强制集合；`HasScope` 已提供通配匹配（`s == scope || s == "*"`），`RequireScope` 按同一语义校验。
+- Scope 清单由业务方定义、业务 scope 一律**追加**；框架只内置**一个**基线 scope `api:access`（`apikey.ScopeProtected`）—— 无 `auth` 形态下所有 `MountProtected` 路由共用同一条受保护链，无法按路由声明业务 scope，因此该链要求 Key 显式带上 `api:access`（或 `*`）。`HasScope` 已提供通配匹配（`s == scope || s == "*"`），`RequireScope` 按同一语义校验。
 - **认证与授权分离**：`APIKeyAuthMiddleware` 只校验 Key 有效性（格式、存在、启用、未过期）并注入 Key；是否需要某个 scope 由路由上的 `RequireScope` 决定，未挂载即不校验 scope。
+- **无 `auth` 形态的受保护路由**：启用集没有 `auth` 时（如 `machine` 形态，无登录/会话端点），`apikey` 实现 `contract.ProtectedHTTPMiddlewareProvider`，组合根把 `APIKeyAuthMiddleware` + `RequireScope(apikey.ScopeProtected)`（`api:access`，`*` 为全权）挂到所有声明 `MountProtected` 的能力路由上；启用集含 `auth` 时 `apikey` 返回空链让位，同一启用集仍只有一个受保护中间件提供者。
 - **API Key 维度限流**：`middleware.APIKeyRateLimitMiddleware(rdb, limit, window)` 挂在认证之后，按 Key ID 计数（不落明文），未携带 Key 的请求跳过该维度；租户维度由 `ratelimit.tenant.*` 全局启用。配额（按天/按月上限）用同一中间件配长窗口即可（例如 `window=24h`）。
 - **API Key 归属租户**：`api_keys.tenant_id` 在创建时取自创建者所在租户（上下文无租户时归默认租户，见 `kernel/tenant.DefaultTenantID`）；认证通过后中间件把该租户注入请求上下文，业务层用 `tenant.FromContext(ctx)` 读取即可完成行级隔离。租户只来自 Key 自身，**不接受客户端 header/query 传入**。未归属（`tenant_id=0`）的存量 Key 按平台级视角处理。
 
@@ -819,14 +856,20 @@ curl http://127.0.0.1:9090/metrics
 curl http://127.0.0.1:9090/capabilities
 ```
 
-`capabilities.enabled: ["auth"]` 时（硬依赖闭包补齐 `user`/`access`/`tenant`/`mfa`，`captcha`/`breach` 是软依赖不补齐）：
+`capabilities.enabled: ["auth"]` 时（硬依赖闭包补齐 `user`/`access`；`tenant`/`mfa`/`captcha`/`breach` 是软依赖，不补齐但会在 `degraded` 中列为缺失）。**`enabled` 是完整的解析集**：除 catalog 闭包外，它**恒含七个非 catalog（`Ungated`）条目** —— `encryption`/`storage`/`notification`/`retention`/`apidocs`/`grpc`/`ws`，它们不受 `capabilities.enabled` 门控，只要该形态清单里有就会出现（缺了才是异常，见[形态（profile）](#形态profile)）：
 
 ```json
 {
-  "enabled": ["user", "access", "tenant", "mfa", "auth"],
-  "degraded": [{"capability": "auth", "missing": ["captcha", "breach"]}]
+  "enabled": ["encryption", "storage", "notification", "access", "user", "auth", "retention", "apidocs", "grpc", "ws"],
+  "degraded": [
+    {"capability": "access", "missing": ["tenant"]},
+    {"capability": "user", "missing": ["tenant"]},
+    {"capability": "auth", "missing": ["tenant", "mfa", "captcha", "breach"]}
+  ]
 }
 ```
+
+裁剪后的形态（如 `machine`）解析集更小：非 catalog 条目按该形态清单取（`machine` 只有 `encryption`/`grpc`），`capabilities.enabled` 不能引入清单外的能力。
 
 ## 配置说明
 
@@ -978,7 +1021,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `grpc` 业务服务 | 示例 `UserInfoService`（`internal/capabilities/grpc/userinfo_service.go`，proto 在 `proto/jimu/v1/userinfo.proto`，`make proto` 重新生成）；业务模块仿照 `RegisterUserInfoService` 经 `RegisterService` 接入 | — |
 | `error_reporting.enabled` | 是否启用错误上报（结构化错误日志输出，含 trace_id；未启用时零开销） | `false`（开发）/ `true`（生产） |
 | gRPC 出站客户端 | 统一封装 `internal/capabilities/grpc` `Client`（`NewClient`）：超时/重试/熔断/恢复/指标 `jimu_grpc_client_*`，业务经 `Conn()` 走生成的强类型客户端 | — |
-| `capabilities.enabled` | 启用的能力清单；留空 = 全部启用（受保护能力需同时启用提供受保护中间件的能力，当前为 auth） | `[]` |
+| `capabilities.enabled` | 启用的能力清单；留空 = 全部启用（受保护能力需同时启用提供受保护中间件的能力：`auth`，无 `auth` 时由 `apikey` 接管） | `[]` |
 
 ### 能力开关（v0.3.0）
 
@@ -992,14 +1035,14 @@ capabilities:
   enabled: ["user", "access", "tenant", "auth", "mfa", "passkey", "audit", "console", "apikey", "queue"]
 ```
 
-- 硬依赖会自动补齐：只写 `["oauth"]` 会连带启用 `auth`/`user`/`access`/`tenant`/`mfa`
+- 硬依赖会自动补齐：只写 `["oauth"]` 会连带启用 `auth`/`user`/`access`（`auth` 的 `tenant`/`mfa` 是软依赖，不补齐）
 - 未启用的能力不挂路由、不注册定时任务与事件、不启动其后台组件
-- **软依赖只降级、不自动补齐**：`Descriptor.SoftRequires` 声明可选依赖（当前 `user`→`access`/`tenant`、`access`→`tenant`、`mfa`→`auth`、`auth`→`captcha`/`breach`、`apikey`→`tenant`、`outbox`→`queue`）；目标能力不在启用集时**不会被自动启用**，本能力降级运行，降级项在启动日志（`capability degraded`，字段 `name`/`missing`）与 `GET /capabilities` 的 `degraded` 中列出。该清单是**声明层**的静态比对（只读 `Descriptor`，不观测运行时装配），组合根改为按启用集驱动（P1 显式 `Deps`）之前可能多报
+- **软依赖只降级、不自动补齐**：`Descriptor.SoftRequires` 声明可选依赖（当前 `user`→`access`/`tenant`、`access`→`tenant`、`mfa`→`auth`、`auth`→`tenant`/`mfa`/`captcha`/`breach`、`apikey`→`tenant`、`outbox`→`queue`）；目标能力不在启用集时**不会被自动启用**，本能力降级运行，降级项在启动日志（`capability degraded`，字段 `name`/`missing`）与 `GET /capabilities` 的 `degraded` 中列出。该清单是**声明层**的静态比对（只读 `Descriptor`，不观测运行时装配），组合根改为按启用集驱动（P1 显式 `Deps`）之前可能多报
 - **表归属自描述**：`Descriptor.Owns` 声明本能力迁移 `CREATE` 的表（如 `user`→`users`、`access`→`roles`/`permissions`/`role_permissions`/`user_roles`、`mfa`→`user_mfa`/`trusted_devices`），`make check-capabilities` 校验「单表唯一归属、无未声明的建表、声明的表确有迁移创建」（只扫描 mysql 迁移，PostgreSQL 迁移表名与 mysql 一致，暂以 mysql 为准）
-- `Descriptor`（`Requires`/`SoftRequires`/`Owns`/`Configs`/`Permissions`/`Mount`/`Migrations`）是能力元数据的**唯一来源**：启用闭包、配置段加载、权限点种子、路由挂载与能力门禁都只读它；`cmd/server/main.go` 的装配名册 `wiredCapabilities` 只负责实例化并与 `catalog.Names()` 对账（`cmd/server/main_test.go`），新增/删除能力时须同步
+- `Descriptor`（`Requires`/`SoftRequires`/`Owns`/`Configs`/`Permissions`/`Mount`/`Migrations`）是能力元数据的**唯一来源**：启用闭包、配置段加载、权限点种子、路由挂载与能力门禁都只读它；能力实例化由形态清单驱动（`internal/profiles/<name>/assembly.go`，每个能力经 `wire.go` 自装配），`cmd/server` 只是 `full.Assembly()` 的薄包装，新增/删除能力时须同步对应形态清单；清单漂移由 `scripts/check_profiles.sh` 的 golden 依赖闭包门禁（`make profiles-check`）拦截
 - **配置段随能力**：能力配置段由能力在 `Descriptor.Configs` 声明（`ConfigKey` + `Config` 结构体 + `ApplyDefaults`/`Validate`，生产加严可实现可选的 `ValidateProd`），组合根按启用集统一执行「解码 → 默认值 → 校验」；**未启用能力的配置段既不出现也不校验** —— `app.yaml` 中残留的非法段不会导致启动失败。`auth` 段由 `auth` 能力整体拥有（含嵌套 `webauthn`/`provisioning`），不拆分
 - **热更新范围**：配置文件热更新（`config.Watch`）只覆盖内核段（当前仅应用 `log.level`）；能力配置段变更需重启进程
-- **受保护能力需要认证器**：声明为受保护（`MountProtected`）的能力必须有模块提供受保护中间件（当前为 `auth`）；否则进程**启动即失败**并指出缺失的提供者，而不是把路由裸挂出去。因此 `enabled: ["user"]` 这类"有业务路由、无认证器"的配置会被拒绝；合法的最小组合之一是 `["auth"]`（闭包自动补齐 `user`/`access`/`tenant`/`mfa`）
+- **受保护能力需要认证器**：声明为受保护（`MountProtected`）的能力必须有模块提供受保护中间件 —— 启用集含 `auth` 时由它提供（JWT + RBAC），无 `auth` 时由 `apikey` 提供（`X-API-Key` 认证 + `ScopeProtected`（`api:access`）scope 校验 + Key 归属租户注入）；两者都没有时进程**启动即失败**并指出缺失的提供者，而不是把路由裸挂出去。因此 `enabled: ["user"]` 这类"有业务路由、无认证器"的配置会被拒绝；合法的最小组合之一是 `["auth"]`（闭包自动补齐 `user`/`access`）或无 `auth` 的 `["user", "access", "apikey"]`
 - 能力清单与依赖关系见 `internal/capabilities/catalog/catalog.go`；设计见 [能力可插拔设计](docs/design/2026-09-18-capability-plugins-design.md)
 
 ### 静态加密（Data at Rest）
@@ -1111,6 +1154,8 @@ internal/capabilities/{name}/
 | `make fmt-check` | 检查代码格式 |
 | `make lint` | golangci-lint |
 | `make check-capabilities` | 校验能力自描述（`Owns`）与迁移建表一致（单表唯一归属、无未声明建表；只扫描 mysql 迁移，PostgreSQL 表名与 mysql 一致） |
+| `make profiles-check` | 构建 5 个形态入口 + 依赖闭包裁剪门禁（golden）；`JIMU_PROFILES_SMOKE=1` 时额外启动各形态并轮询管理端 `/readyz`（需 DB+Redis） |
+| `make compose-report` | 生成形态编译面报告 `docs/profiles/compose-report.md`（二进制/路由/迁移/表/本仓闭包代码量；不连库、不启动监听） |
 | `make swagger` | 生成 API 文档 |
 | `make cli` | 编译 CLI |
 | `make docker-build` | 构建 Docker 镜像 |

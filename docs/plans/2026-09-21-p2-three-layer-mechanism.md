@@ -12,7 +12,7 @@
 P2.1 运行时配置归属（§8）              ← 已完成
 P2.2 能力自描述契约（§6.1）             ← 已完成（依赖 P2.1 的 Config 建模；产出 SoftRequires/Owns，Tags 推迟）
 P2.3 层③ 运行时：capabilities.enabled   ← 已完成（依赖 P2.2；软依赖降级报告 + 管理端点 /capabilities）
-P2.4 层② 构建：profiles 入口包          ← 依赖 P2.2；5 个 profile + compose-report
+P2.4 层② 构建：profiles 入口包          ← 已完成（依赖 P2.2；5 个 profile + compose-report）
 P2.5 层② 驱动级可插拔（§3.7）           ← 依赖 P2.4（profile 决定 import 哪些驱动）
 P2.6 层② 非代码资产模块化（§3.8）        ← deploy/Helm/CLI/契约测试随 profile 裁剪
 P2.7 层① 脚手架：jimu new / capability add ← 依赖 P2.2 + P2.4（生成专属 catalog 与 app.yaml）
@@ -46,12 +46,19 @@ P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后
 - **已完成**：未启用能力不挂路由/不注册任务事件/不启动后台组件（P0 已建）。
 - **已完成**：未启用能力的配置段「既不出现也不校验」的装配级回归用例（P2.1 的 `internal/app/capconfig_test.go`）。
 
-## P2.4 层② 构建：profiles 入口包
+## P2.4 层② 构建：profiles 入口包（已完成）
 
-- `profiles/{full,minimal,saas,enterprise,machine}` 入口包，各自 `catalog` 子集 + `main`。
+- `profiles/{full,minimal,saas,enterprise,machine}` 入口包，各自能力清单 + `main`（原计划写「catalog 子集」，实际按裁定 6 落地为：catalog 仍是全量 18 项，形态清单显式列出选中能力，避免引入第二份清单）。
 - `compose-report`：代码行数 / 文件数 / `go.mod` 直接依赖数 / 二进制大小 / 路由数 / 迁移数 / 表数，进 CI 归档对比。
 - **验收**：5 个 profile 均能构建启动；`minimal` 报告数字显著低于 `full`。
 - 层②边界要在文档写清：profile 入口**不减小 `go.mod`**，避免「以为换 profile 依赖就少了」的误解（§11）。
+
+- **已完成（装配接缝）**：`internal/capability`（描述符解析叶子包：`Resolve`/`ValidateDeclarations`/`Degraded`，只 import `contract`）与 `internal/assembly`（`Assembly`/`Capability`/`Context`/`Run`/`ValidatePortFlow`/`ProbeAssembly`）+ 24 个能力 `wire.go` 自装配；`internal/app` 收敛为内核容器 + 生命周期：不 import `catalog`、任何能力**根包**或 `internal/assembly`（唯一例外是 `access/domain`、`tenant/domain`、`user/domain` 三个能力 **domain 叶子包**，结构性种子所需，见下方「记录偏差」），`cmd/server` 降为 `full` 的薄包装（保留 swagger 注解，Dockerfile/Makefile/compose/`swag init -g`/CI 不变）。
+- **已完成（5 个形态）**：`internal/profiles/{full,minimal,saas,enterprise,machine}` 声明能力清单与结构性种子，`profiles/<name>/main.go` 只调用 `assembly.Run`；非 catalog 条目在清单里显式标 `Ungated`（不受 `capabilities.enabled` 门控）；能力清单仍是 18 项、`configs/*.yaml` 零改动。`auth.Requires` 放宽 —— `tenant`/`mfa` 降为 `SoftRequires`（行为变更，见 release note），无 `auth` 的 `machine` 由 `apikey.ProtectedHTTPMiddleware` 承担受保护路由。
+- **已完成（门禁与报告）**：`make profiles-check`（构建 + **golden 依赖闭包裁剪门禁**：逐形态能力根包集合逐值锁定，`JIMU_PROFILES_SMOKE=1` 时额外启动并轮询管理端 `/readyz`）与 `make compose-report`（`tools/composereport` → `docs/profiles/compose-report.md`，不连库、不启动监听）。**实测**：二进制 full 122.6 MB / minimal 85.8 MB（−30.0%）/ saas 86.1 MB / enterprise 99.5 MB / machine 84.4 MB；路由 99 / 32 / 48 / 55 / 28；表 23 / 7 / 11 / 11 / 6；迁移 25 / 7 / 13 / 13 / 7；本仓闭包代码行 33995 / 17804 / 20450 / 23241 / 18080。五个形态的 `go.mod` 直接依赖数**完全相同**（各 64 个）—— §11「层②不减小 `go.mod`」被实测钉死。
+- **已知限制（转 P2.6/P2.7）**：`machine` 可启动，但 `/api/v1/admin/apikeys` 需要它刻意排除的 JWT 链，首把 API Key 必须带外签发（CLI 归 §3.8）；迁移与结构种子仍按 catalog 全量执行，profile 驱动的迁移裁剪归 P2.6/P2.8。
+- **编译期残留（留待共享类型迁移）**：`user`/`auth` 直接 import `outbox`/`queue`/`notification`（`console` import `ws`）的具体类型，因此 `minimal`/`saas` 闭包多出 `outbox`/`queue`、`machine` 多出 `notification`/`outbox`/`queue`、`enterprise` 多出 `outbox`/`queue`/`ws`；装配期一个都不构造，已由 golden 闭包门禁冻结，消除需把 `*outbox.Outbox`/`notification.Message`/`outbox.Event` 迁到 `contract`/内核。
+- **记录偏差（`internal/app` 的能力 domain 叶子包）**：`internal/app` 不 import `catalog`、任何能力根包或 `internal/assembly`，但仍 import `access/domain`、`tenant/domain`、`user/domain` 三个能力 **domain 叶子包**（`internal/app/seed.go` 的结构性种子需要 `Tenant`/`Plan`/`Role`/`Permission`/`User` 等实体类型）；`go list -deps ./internal/app` 实测 jimu 侧能力项仅此三个。这是 P2.4 收尾裁定记录的偏差，本阶段不搬（属独立重构）：把这些类型移到 `contract`/内核后可消除该偏差，并进一步缩小每个形态的二进制。
 
 ## P2.5 层② 驱动级可插拔（§3.7）
 

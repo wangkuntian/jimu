@@ -2,6 +2,8 @@ package queue
 
 import (
 	"fmt"
+
+	"jimu/internal/kernel/scheduler"
 )
 
 // ConfigKey 本能力在 app.yaml 中的配置段键。
@@ -9,17 +11,19 @@ const ConfigKey = "queue"
 
 // SchedulerConfigKey 调度器配置段键。调度器实例由本能力用于作业调度
 // （/admin/tasks*、job_history），其配置随之归本能力。
-const SchedulerConfigKey = "scheduler"
+const SchedulerConfigKey = scheduler.ConfigKey
 
-// 调度器存储类型取值。
+// 调度器存储类型取值（类型与实现归位内核 scheduler 包，此处保留既有引用）。
 const (
-	SchedulerStoreMemory = "memory"
-	SchedulerStoreMySQL  = "mysql"
+	SchedulerStoreMemory = scheduler.StoreMemory
+	SchedulerStoreMySQL  = scheduler.StoreMySQL
 )
 
+// SchedulerConfig 调度器配置段（原 queue 自有类型，P2.4 归位内核 scheduler 包）。
+type SchedulerConfig = scheduler.Config
+
 var (
-	validQueueTypes      = []Type{TypeRedis, TypeKafka, TypeRabbitMQ}
-	validSchedulerStores = []string{SchedulerStoreMemory, SchedulerStoreMySQL}
+	validQueueTypes = []Type{TypeRedis, TypeKafka, TypeRabbitMQ}
 	// mqQueueTypes outbox 走 MQ 时允许的队列类型。
 	mqQueueTypes = []Type{TypeKafka, TypeRabbitMQ, TypeRedis}
 )
@@ -35,24 +39,6 @@ func (c *Config) Validate() error {
 		}
 	}
 	return fmt.Errorf("queue.type: %q, must be one of %v", c.Type, validQueueTypes)
-}
-
-// SchedulerConfig 调度器配置段（原 config.SchedulerConfig，P2.1 下沉）。
-type SchedulerConfig struct {
-	Store string `mapstructure:"store"` // 任务定义存储类型：memory, mysql
-}
-
-// ApplyDefaults 本配置段无配置层默认值（container 对非 mysql 一律按 memory 处理）。
-func (c *SchedulerConfig) ApplyDefaults() {}
-
-// Validate 校验调度器配置段。
-func (c *SchedulerConfig) Validate() error {
-	for _, s := range validSchedulerStores {
-		if c.Store == s {
-			return nil
-		}
-	}
-	return fmt.Errorf("scheduler.store: %q, must be one of %v", c.Store, validSchedulerStores)
 }
 
 // SupportsOutboxMQ 报告该队列类型能否承载 outbox 的 MQ 投递。
