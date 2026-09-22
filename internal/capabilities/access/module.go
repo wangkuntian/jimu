@@ -54,6 +54,7 @@ var Descriptor = contract.Descriptor{
 	Name:       "access",
 	Requires:   []string{"user"},
 	Migrations: migrationsFS,
+	Owns:       []string{"roles", "permissions", "role_permissions", "user_roles"},
 	Mount:      contract.MountProtected,
 	Permissions: []contract.Permission{
 		// 角色

@@ -26,20 +26,33 @@ func withEntries(t *testing.T, ds ...contract.Descriptor) {
 // TestCatalogMigrationsShape 单独按"有无迁移"钉住。
 func fixture() []contract.Descriptor {
 	return []contract.Descriptor{
-		{Name: "user", Mount: contract.MountProtected},
-		{Name: "access", Requires: []string{"user"}, Mount: contract.MountProtected},
-		{Name: "tenant", Requires: []string{"user", "access"}, Mount: contract.MountProtected},
-		{Name: "mfa", Requires: []string{"user"}, Mount: contract.MountSelfManaged},
-		{Name: "auth", Requires: []string{"user", "access", "tenant", "mfa"}, Mount: contract.MountSelfManaged},
-		{Name: "passkey", Requires: []string{"user", "auth"}, Mount: contract.MountSelfManaged},
-		{Name: "audit", Mount: contract.MountProtected},
+		{Name: "user", SoftRequires: []string{"access", "tenant"},
+			Owns: []string{"users"}, Mount: contract.MountProtected},
+		{Name: "access", Requires: []string{"user"},
+			Owns:  []string{"roles", "permissions", "role_permissions", "user_roles"},
+			Mount: contract.MountProtected},
+		{Name: "tenant", Requires: []string{"user", "access"},
+			Owns: []string{"tenants", "tenant_plans"}, Mount: contract.MountProtected},
+		{Name: "mfa", Requires: []string{"user"}, SoftRequires: []string{"auth"},
+			Owns: []string{"user_mfa", "trusted_devices"}, Mount: contract.MountSelfManaged},
+		{Name: "auth", Requires: []string{"user", "access", "tenant", "mfa"},
+			SoftRequires: []string{"captcha", "breach"},
+			Owns:         []string{"login_histories", "password_histories"},
+			Mount:        contract.MountSelfManaged},
+		{Name: "passkey", Requires: []string{"user", "auth"},
+			Owns: []string{"webauthn_credentials"}, Mount: contract.MountSelfManaged},
+		{Name: "audit", Owns: []string{"audit_logs", "audit_chain_head"}, Mount: contract.MountProtected},
 		{Name: "console", Requires: []string{"auth", "access"}, Mount: contract.MountSelfManaged},
-		{Name: "oauth", Requires: []string{"auth", "user"}, Mount: contract.MountPublic},
-		{Name: "apikey", Mount: contract.MountProtected},
-		{Name: "queue", Mount: contract.MountProtected},
-		{Name: "outbox", Mount: contract.MountProtected},
-		{Name: "dataops", Mount: contract.MountProtected},
-		{Name: "search", Mount: contract.MountProtected},
+		{Name: "oauth", Requires: []string{"auth", "user"},
+			Owns: []string{"user_oauth_bindings"}, Mount: contract.MountPublic},
+		{Name: "apikey", SoftRequires: []string{"tenant"},
+			Owns: []string{"api_keys"}, Mount: contract.MountProtected},
+		{Name: "queue", Owns: []string{"jobs", "job_history", "dead_letters", "scheduled_jobs"},
+			Mount: contract.MountProtected},
+		{Name: "outbox", SoftRequires: []string{"queue"},
+			Owns: []string{"outbox_events"}, Mount: contract.MountProtected},
+		{Name: "dataops", Owns: []string{"import_jobs"}, Mount: contract.MountProtected},
+		{Name: "search", Owns: []string{"search_documents"}, Mount: contract.MountProtected},
 		{Name: "captcha", Mount: contract.MountPublic},
 		{Name: "feature", Mount: contract.MountProtected},
 		{Name: "uploadsec", Mount: contract.MountProtected},
@@ -294,6 +307,54 @@ func TestCatalogMigrationsShape(t *testing.T) {
 	}
 	if got := migrationsOf(All()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("catalog Migrations shape drifted:\n got %v\nwant %v", got, want)
+	}
+}
+
+// TestCatalogOwnsShape 钉住各能力拥有的表（空 = 不拥有表）。
+func TestCatalogOwnsShape(t *testing.T) {
+	want := map[string][]string{
+		"user":    {"users"},
+		"access":  {"roles", "permissions", "role_permissions", "user_roles"},
+		"tenant":  {"tenants", "tenant_plans"},
+		"mfa":     {"user_mfa", "trusted_devices"},
+		"auth":    {"login_histories", "password_histories"},
+		"passkey": {"webauthn_credentials"},
+		"oauth":   {"user_oauth_bindings"},
+		"apikey":  {"api_keys"},
+		"queue":   {"jobs", "job_history", "dead_letters", "scheduled_jobs"},
+		"outbox":  {"outbox_events"},
+		"dataops": {"import_jobs"},
+		"search":  {"search_documents"},
+		"audit":   {"audit_logs", "audit_chain_head"},
+	}
+	got := map[string][]string{}
+	for _, d := range All() {
+		if len(d.Owns) > 0 {
+			got[d.Name] = d.Owns
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("catalog Owns drifted:\n got %v\nwant %v", got, want)
+	}
+}
+
+// TestCatalogSoftRequiresShape 钉住可选依赖（只登记代码里真实可降级的耦合）。
+func TestCatalogSoftRequiresShape(t *testing.T) {
+	want := map[string][]string{
+		"user":   {"access", "tenant"},
+		"mfa":    {"auth"},
+		"auth":   {"captcha", "breach"},
+		"apikey": {"tenant"},
+		"outbox": {"queue"},
+	}
+	got := map[string][]string{}
+	for _, d := range All() {
+		if len(d.SoftRequires) > 0 {
+			got[d.Name] = d.SoftRequires
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("catalog SoftRequires drifted:\n got %v\nwant %v", got, want)
 	}
 }
 

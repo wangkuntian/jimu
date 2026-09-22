@@ -43,6 +43,7 @@ var migrationsFS embed.FS
 var Descriptor = contract.Descriptor{
 	Name:       "audit",
 	Migrations: migrationsFS,
+	Owns:       []string{"audit_logs", "audit_chain_head"},
 	Mount:      contract.MountProtected,
 	Permissions: []contract.Permission{
 		{Name: "审计列表", Resource: "/api/v1/audits", Action: "GET"},

@@ -67,10 +67,12 @@ var migrationsFS embed.FS
 
 // Descriptor 声明认证能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:       "auth",
-	Migrations: migrationsFS,
-	Requires:   []string{"user", "access", "tenant", "mfa"},
-	Mount:      contract.MountSelfManaged,
+	Name:         "auth",
+	Migrations:   migrationsFS,
+	Requires:     []string{"user", "access", "tenant", "mfa"},
+	SoftRequires: []string{"captcha", "breach"},
+	Owns:         []string{"login_histories", "password_histories"},
+	Mount:        contract.MountSelfManaged,
 	// auth 拥有整个 auth 段（含嵌套 webauthn/provisioning），不拆段（设计 §8 ¶2）
 	Configs: []contract.ConfigSpec{
 		{Section: ConfigKey, New: func() any { return &Config{} }},

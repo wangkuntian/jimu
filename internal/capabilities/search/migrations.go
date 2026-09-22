@@ -17,4 +17,5 @@ var Descriptor = contract.Descriptor{
 	Name:       "search",
 	Mount:      contract.MountProtected,
 	Migrations: migrationsFS,
+	Owns:       []string{"search_documents"},
 }

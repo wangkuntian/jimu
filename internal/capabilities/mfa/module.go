@@ -41,10 +41,12 @@ var migrationsFS embed.FS
 
 // Descriptor 声明 mfa 能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:       "mfa",
-	Requires:   []string{"user"},
-	Migrations: migrationsFS,
-	Mount:      contract.MountSelfManaged,
+	Name:         "mfa",
+	Requires:     []string{"user"},
+	SoftRequires: []string{"auth"},
+	Migrations:   migrationsFS,
+	Owns:         []string{"user_mfa", "trusted_devices"},
+	Mount:        contract.MountSelfManaged,
 	Permissions: []contract.Permission{
 		{Name: "MFA 绑定密钥", Resource: "/api/v1/auth/mfa/setup", Action: "POST"},
 		{Name: "MFA 启用", Resource: "/api/v1/auth/mfa/enable", Action: "POST"},

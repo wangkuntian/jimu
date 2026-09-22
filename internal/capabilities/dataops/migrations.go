@@ -17,4 +17,5 @@ var Descriptor = contract.Descriptor{
 	Name:       "dataops",
 	Mount:      contract.MountProtected,
 	Migrations: migrationsFS,
+	Owns:       []string{"import_jobs"},
 }
