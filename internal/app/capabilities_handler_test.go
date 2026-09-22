@@ -33,4 +33,11 @@ func TestCapabilitiesHandlerReportsEnabledAndDegraded(t *testing.T) {
 	require.Len(t, body.Degraded, 2)
 	assert.Equal(t, "auth", body.Degraded[1].Capability)
 	assert.Equal(t, []string{"captcha"}, body.Degraded[1].Missing)
+
+	// 逐字节钉住契约：键必须小写且顺序为 enabled 在前、degraded 在后。
+	// 上面的结构体反序列化对键大小写不敏感（encoding/json 会匹配 Enabled/Degraded），
+	// 因此无法发现 tag 被移除或键序翻转，只有原始响应体断言能拦住这类回归。
+	assert.Equal(t,
+		"{\"enabled\":[\"user\",\"auth\"],\"degraded\":[{\"capability\":\"user\",\"missing\":[\"access\"]},{\"capability\":\"auth\",\"missing\":[\"captcha\"]}]}\n",
+		rec.Body.String())
 }
