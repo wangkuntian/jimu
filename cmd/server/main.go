@@ -87,7 +87,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: captcha.Descriptor, Wire: captcha.Wire}, // 已搬迁的试点能力
 			{Descriptor: mfamodule.Descriptor, Wire: mfamodule.Wire},
 			{Descriptor: authmodule.Descriptor, Wire: authmodule.Wire},
-			{Descriptor: passkeymodule.Descriptor, Wire: wirePasskey},
+			{Descriptor: passkeymodule.Descriptor, Wire: passkeymodule.Wire},
 			{Descriptor: auditmodule.Descriptor, Wire: wireAudit},
 			{Descriptor: consolemodule.Descriptor, Wire: wireConsole},
 			{Descriptor: oauthmodule.Descriptor, Wire: wireOAuth},
@@ -102,19 +102,6 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: ws.Descriptor, Wire: ws.Wire},
 		},
 	}
-}
-
-func wirePasskey(ctx *assembly.Context) (contract.Module, error) {
-	finalizer, _ := ctx.Port(authmodule.PortName).(contract.LoginFinalizer)
-	users, _ := ctx.Port(user.UserinfoPortName).(contract.UserinfoSource)
-	return passkeymodule.New(passkeymodule.Deps{
-		DB:         ctx.DB(),
-		Redis:      ctx.Redis(),
-		AuthCfg:    *authConfig(ctx),
-		Users:      users,
-		Finalizer:  finalizer,
-		FailClosed: ctx.Config().HTTP.Mode == config.HTTPModeRelease,
-	}), nil
 }
 
 func wireAudit(ctx *assembly.Context) (contract.Module, error) {
