@@ -106,14 +106,6 @@ func TestFullAssemblyHasNoDuplicates(t *testing.T) {
 	}
 }
 
-// TestNoModuleWireReturnsNoInstance 空 Wire 表示「无 Module 实例」而不是错误
-// （outbox/search/breach 只携带声明、参与迁移）。
-func TestNoModuleWireReturnsNoInstance(t *testing.T) {
-	mod, err := noModule(nil)
-	require.NoError(t, err)
-	assert.Nil(t, mod)
-}
-
 // TestValidateAuthConfigProvisioningRequiresPublicRegistration 组合根承担 auth 段的
 // 跨字段校验：开通式注册必须同时开启公开注册（原 config.validateCommon 语义）。
 func TestValidateAuthConfigProvisioningRequiresPublicRegistration(t *testing.T) {

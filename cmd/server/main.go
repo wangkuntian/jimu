@@ -112,7 +112,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: retention.Descriptor, Wire: wireRetention},
 			{Descriptor: apidocs.Descriptor, Wire: wireAPIDocs},
 			{Descriptor: grpcpkg.Descriptor, Wire: wireGRPC},
-			{Descriptor: ws.Descriptor, Wire: noModule},
+			{Descriptor: ws.Descriptor, Wire: ws.Wire},
 		},
 	}
 }
@@ -463,9 +463,6 @@ func wireGRPC(ctx *assembly.Context) (contract.Module, error) {
 	}
 	return nil, nil
 }
-
-// noModule 是「无 Module 实例」能力的 Wire：只携带声明（ws 等参与装配但不注册模块）。
-func noModule(*assembly.Context) (contract.Module, error) { return nil, nil }
 
 // configSection 取能力配置段并解引用为值；段不存在（能力未启用）时用 zero 构造零值，
 // 与旧装配惯例一致（未启用能力的配置段取零值即"不接线/默认行为"）。
