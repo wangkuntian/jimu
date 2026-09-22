@@ -88,7 +88,7 @@ func fullAssembly() assembly.Assembly {
 		Name:    "full",
 		Version: version,
 		Capabilities: []assembly.Capability{
-			{Descriptor: encryption.Descriptor, Wire: wireEncryption},
+			{Descriptor: encryption.Descriptor, Wire: encryption.Wire},
 			{Descriptor: storage.Descriptor, Wire: wireStorage},
 			{Descriptor: notification.Descriptor, Wire: wireNotification},
 			{Descriptor: queue.Descriptor, Wire: wireQueue},
@@ -115,16 +115,6 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: ws.Descriptor, Wire: noModule},
 		},
 	}
-}
-
-func wireEncryption(ctx *assembly.Context) (contract.Module, error) {
-	cipher := encryption.New(ctx.Config().Security.EncryptionKey)
-	// 字段级加密：注册全局 gorm hook（加密 email/phone 写入 + 盲索引 + 读取解密）
-	encryption.RegisterHooks(ctx.DB(), cipher)
-	if err := ctx.Provide(encryption.PortName, cipher); err != nil {
-		return nil, fmt.Errorf("provide encryption port: %w", err)
-	}
-	return nil, nil
 }
 
 func wireStorage(ctx *assembly.Context) (contract.Module, error) {
