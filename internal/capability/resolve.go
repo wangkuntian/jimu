@@ -20,8 +20,8 @@ type Degradation struct {
 }
 
 // validateStructure 只做与集合无关的结构校验：SoftRequires 必须自洽 ——
-// 不得自引用、不得与 Requires 重叠、不得重复。名字是否命中某份清单不在此处判断，
-// 因此 profile 子集（部分能力缺席）也能通过结构校验。
+// 不得自引用、不得与 Requires 重叠、不得重复；Drivers 名不得为空、不得重复。
+// 名字是否命中某份清单不在此处判断，因此 profile 子集（部分能力缺席）也能通过结构校验。
 // Owns/Mount 与迁移的一致性不在此处，由门禁 `make check-capabilities`
 // （tools/checkcapabilities）负责。
 func validateStructure(caps []contract.Descriptor) error {
@@ -42,6 +42,16 @@ func validateStructure(caps []contract.Descriptor) error {
 				return fmt.Errorf("capability %q duplicates soft requirement %q", d.Name, dep)
 			}
 			seen[dep] = true
+		}
+		seenDriver := make(map[string]bool, len(d.Drivers))
+		for _, drv := range d.Drivers {
+			if drv == "" {
+				return fmt.Errorf("capability %q declares an empty driver name", d.Name)
+			}
+			if seenDriver[drv] {
+				return fmt.Errorf("capability %q duplicates driver %q", d.Name, drv)
+			}
+			seenDriver[drv] = true
 		}
 	}
 	return nil
@@ -156,7 +166,7 @@ func names(caps []contract.Descriptor) []string {
 	return out
 }
 
-// deepCopy 返回清单的深拷贝（含 Requires/SoftRequires/Owns/Permissions/Configs），
+// deepCopy 返回清单的深拷贝（含 Requires/SoftRequires/Drivers/Owns/Permissions/Configs），
 // 调用方修改不影响原清单。
 func deepCopy(caps []contract.Descriptor) []contract.Descriptor {
 	out := make([]contract.Descriptor, len(caps))
@@ -169,6 +179,7 @@ func deepCopy(caps []contract.Descriptor) []contract.Descriptor {
 func deepCopyDescriptor(d contract.Descriptor) contract.Descriptor {
 	d.Requires = append([]string(nil), d.Requires...)
 	d.SoftRequires = append([]string(nil), d.SoftRequires...)
+	d.Drivers = append([]string(nil), d.Drivers...)
 	d.Owns = append([]string(nil), d.Owns...)
 	d.Permissions = append([]contract.Permission(nil), d.Permissions...)
 	d.Configs = append([]contract.ConfigSpec(nil), d.Configs...)

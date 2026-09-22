@@ -45,6 +45,11 @@ type Descriptor struct {
 	// 取值必须是 catalog 能力名，且不得与 Requires 重叠或自引用。
 	SoftRequires []string
 
+	// Drivers 本能力支持的驱动包名（= internal/capabilities/<cap>/<driver> 的目录名）；
+	// 空表示本能力没有驱动概念。形态清单用 assembly.Capability.Drivers 选中子集，
+	// 驱动包在 init() 中向能力核心注册（设计 §3.7）。
+	Drivers []string
+
 	// Permissions 能力拥有的权限点；种子时由启用集聚合写入，未启用的能力不种。
 	Permissions []Permission
 

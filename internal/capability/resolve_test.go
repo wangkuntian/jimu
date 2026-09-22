@@ -13,7 +13,7 @@ import (
 
 // fixture 复刻真实清单（8 业务能力 + 5 基础设施能力）的依赖形态，与
 // catalog_test.go 的同名夹具逐值一致；解析算法只读 Name/Requires/SoftRequires，
-// Owns 与 Mount 随之保留以保持形态可比。
+// Drivers、Owns 与 Mount 随之保留以保持形态可比。
 // Migrations 为 fs.FS 接口值（embed.FS 无法逐值复刻），漂移检测由 catalog 的
 // TestCatalogMigrationsShape 单独按"有无迁移"钉住。
 func fixture() []contract.Descriptor {
@@ -39,11 +39,13 @@ func fixture() []contract.Descriptor {
 			Owns: []string{"user_oauth_bindings"}, Mount: contract.MountPublic},
 		{Name: "apikey", SoftRequires: []string{"tenant"},
 			Owns: []string{"api_keys"}, Mount: contract.MountProtected},
-		{Name: "queue", Owns: []string{"jobs", "job_history", "dead_letters", "scheduled_jobs"},
+		{Name: "queue", Drivers: []string{"redis", "kafka", "rabbitmq"},
+			Owns:  []string{"jobs", "job_history", "dead_letters", "scheduled_jobs"},
 			Mount: contract.MountProtected},
 		{Name: "outbox", SoftRequires: []string{"queue"},
 			Owns: []string{"outbox_events"}, Mount: contract.MountProtected},
-		{Name: "dataops", Owns: []string{"import_jobs"}, Mount: contract.MountProtected},
+		{Name: "dataops", Drivers: []string{"csv", "excel"},
+			Owns: []string{"import_jobs"}, Mount: contract.MountProtected},
 		{Name: "search", Owns: []string{"search_documents"}, Mount: contract.MountProtected},
 		{Name: "captcha", Mount: contract.MountPublic},
 		{Name: "feature", Mount: contract.MountProtected},
@@ -171,6 +173,21 @@ func TestResolveReturnsDeepCopyOfPermissions(t *testing.T) {
 	}
 }
 
+// TestResolveReturnsDeepCopyOfDrivers 驱动声明同样不得暴露清单底层数组：
+// Resolve 的返回值经 deepCopyDescriptor 产出，调用方修改不得影响原清单。
+func TestResolveReturnsDeepCopyOfDrivers(t *testing.T) {
+	caps := fixture()
+	got, err := Resolve(caps, []string{"queue", "dataops"})
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	got[0].Drivers[0] = "mutated"
+	got[1].Drivers[0] = "mutated"
+	again, err := Resolve(caps, []string{"queue", "dataops"})
+	require.NoError(t, err)
+	assert.Equal(t, "redis", again[0].Drivers[0], "Resolve() must not expose the registry's Drivers backing array")
+	assert.Equal(t, "csv", again[1].Drivers[0], "Resolve() must not expose the registry's Drivers backing array")
+}
+
 func TestResolveReportsFirstDanglingDependencyInListOrder(t *testing.T) {
 	// 两个坏依赖：错误必须稳定指向清单顺序里的第一个，而不是 map 遍历的随机一个
 	caps := []contract.Descriptor{
@@ -249,6 +266,20 @@ func TestValidateDeclarationsRejectsStructureDefects(t *testing.T) {
 		{Name: "b"},
 		{Name: "a", Requires: []string{"b"}, SoftRequires: []string{"b"}},
 	}, []string{"a", "b"}))
+}
+
+// TestValidateDeclarationsRejectsBadDriverNames 驱动名必须非空且不重复：
+// 空名与重名都是声明笔误，必须在声明层拦下（驱动目录是否存在由门禁另行校验）。
+func TestValidateDeclarationsRejectsBadDriverNames(t *testing.T) {
+	if err := ValidateDeclarations([]contract.Descriptor{{Name: "a", Drivers: []string{""}}}, []string{"a"}); err == nil {
+		t.Fatal("empty driver name must be rejected")
+	}
+	if err := ValidateDeclarations([]contract.Descriptor{{Name: "a", Drivers: []string{"x", "x"}}}, []string{"a"}); err == nil {
+		t.Fatal("duplicate driver name must be rejected")
+	}
+	if err := ValidateDeclarations([]contract.Descriptor{{Name: "a", Drivers: []string{"x", "y"}}}, []string{"a"}); err != nil {
+		t.Fatalf("valid drivers rejected: %v", err)
+	}
 }
 
 // TestDegradedListsMissingSoftDeps 只报告缺失的软依赖，硬依赖缺失由 Resolve 报错。

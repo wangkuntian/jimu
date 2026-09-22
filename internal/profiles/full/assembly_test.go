@@ -8,6 +8,7 @@ import (
 	"jimu/internal/capability"
 	"jimu/internal/contract"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,6 +50,27 @@ func TestFullAssemblyModulesAreWired(t *testing.T) {
 	for _, c := range Assembly().Capabilities {
 		require.NotNil(t, c.Wire, "capability %q has no Wire", c.Descriptor.Name)
 	}
+}
+
+// TestFullDriverSelection 钉住 full 形态的驱动选中集（T1 按现状声明：三种驱动能力
+// 均为全量选中；后续收敛选中集（Task 2–5）时本用例必须同步修改）。
+func TestFullDriverSelection(t *testing.T) {
+	assert.Equal(t, map[string][]string{
+		"storage": {"local", "s3"},
+		"queue":   {"redis", "kafka", "rabbitmq"},
+		"dataops": {"csv", "excel"},
+	}, driverSelection(Assembly()))
+}
+
+// driverSelection 汇总清单里各能力的驱动选中集（测试辅助）。
+func driverSelection(a assembly.Assembly) map[string][]string {
+	out := map[string][]string{}
+	for _, c := range a.Capabilities {
+		if len(c.Drivers) > 0 {
+			out[c.Descriptor.Name] = c.Drivers
+		}
+	}
+	return out
 }
 
 // TestFullAssemblyHasNoDuplicates 清单内不得重名。

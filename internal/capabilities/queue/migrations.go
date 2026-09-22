@@ -18,6 +18,7 @@ var Descriptor = contract.Descriptor{
 	Mount:      contract.MountProtected,
 	Migrations: migrationsFS,
 	Owns:       []string{"jobs", "job_history", "dead_letters", "scheduled_jobs"},
+	Drivers:    []string{"redis", "kafka", "rabbitmq"},
 	// 调度器实例由本能力用于作业调度（/admin/tasks*、job_history），其配置段随之归本能力
 	Configs: []contract.ConfigSpec{
 		{Section: ConfigKey, New: func() any { return &Config{} }},

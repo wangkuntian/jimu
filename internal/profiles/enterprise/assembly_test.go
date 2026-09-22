@@ -36,6 +36,26 @@ func TestEnterpriseAssemblyModulesAreWired(t *testing.T) {
 	}
 }
 
+// TestEnterpriseDriverSelection 钉住 enterprise 形态的驱动选中集（T1 按现状声明：
+// 仍是全量驱动，收敛到 local + csv 是 Task 5 的行为变更）。
+func TestEnterpriseDriverSelection(t *testing.T) {
+	assert.Equal(t, map[string][]string{
+		"storage": {"local", "s3"},
+		"dataops": {"csv", "excel"},
+	}, driverSelection(Assembly()))
+}
+
+// driverSelection 汇总清单里各能力的驱动选中集（测试辅助）。
+func driverSelection(a assembly.Assembly) map[string][]string {
+	out := map[string][]string{}
+	for _, c := range a.Capabilities {
+		if len(c.Drivers) > 0 {
+			out[c.Descriptor.Name] = c.Drivers
+		}
+	}
+	return out
+}
+
 func capabilityNames(a assembly.Assembly) []string {
 	out := make([]string, 0, len(a.Capabilities))
 	for _, c := range a.Capabilities {
