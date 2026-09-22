@@ -1,10 +1,8 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"jimu/internal/assembly"
 	accessmodule "jimu/internal/capabilities/access"
@@ -33,7 +31,6 @@ import (
 	"jimu/internal/capabilities/user"
 	"jimu/internal/capabilities/ws"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/scheduler"
 )
 
 // @title           Jimu API
@@ -93,7 +90,7 @@ func fullAssembly() assembly.Assembly {
 			{Descriptor: feature.Descriptor, Wire: feature.Wire},
 			{Descriptor: uploadsec.Descriptor, Wire: uploadsec.Wire},
 			{Descriptor: search.Descriptor, Wire: search.Wire},
-			{Descriptor: retention.Descriptor, Wire: wireRetention},
+			{Descriptor: retention.Descriptor, Wire: retention.Wire},
 			{Descriptor: apidocs.Descriptor, Wire: apidocs.Wire},
 			{Descriptor: grpcpkg.Descriptor, Wire: wireGRPC},
 			{Descriptor: ws.Descriptor, Wire: ws.Wire},
@@ -103,55 +100,6 @@ func fullAssembly() assembly.Assembly {
 
 func wireAPIKey(ctx *assembly.Context) (contract.Module, error) {
 	return apikey.New(ctx.DB(), ctx.Port(tenantmodule.PortName)), nil
-}
-
-func wireRetention(ctx *assembly.Context) (contract.Module, error) {
-	cfg, err := retention.Load(ctx.Sections())
-	if err != nil {
-		return nil, fmt.Errorf("init retention config: %w", err)
-	}
-	db := ctx.DB()
-	if db != nil {
-		cleanupSvc := retention.NewCleanupService(db, retention.DefaultCleanupConfig())
-		if err := ctx.RegisterJob(scheduler.Job{ID: "cleanup", Name: "Data Cleanup", Spec: "0 3 * * *", Run: func() {
-			results, err := cleanupSvc.Run(context.Background())
-			if err != nil {
-				ctx.Logger().Errorw("cleanup job failed", "error", err.Error())
-				return
-			}
-			for _, r := range results {
-				if r.Deleted > 0 {
-					ctx.Logger().Infow("cleanup completed", "table", r.Table, "deleted", r.Deleted)
-				}
-			}
-		}}); err != nil {
-			return nil, err
-		}
-	}
-	if db != nil && cfg.Enabled {
-		retentionSvc := retention.NewRetentionService(db, *cfg)
-		spec := cfg.Cron
-		if spec == "" {
-			spec = "30 3 * * *"
-		}
-		if err := ctx.RegisterJob(scheduler.Job{ID: "retention", Name: "History Retention", Spec: spec, Run: func() {
-			runCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-			defer cancel()
-			results, err := retentionSvc.Run(runCtx)
-			if err != nil {
-				ctx.Logger().Errorw("retention job failed", "error", err.Error())
-				return
-			}
-			for _, r := range results {
-				if r.Deleted > 0 {
-					ctx.Logger().Infow("retention completed", "table", r.Table, "deleted", r.Deleted)
-				}
-			}
-		}}); err != nil {
-			return nil, err
-		}
-	}
-	return nil, nil
 }
 
 func wireGRPC(ctx *assembly.Context) (contract.Module, error) {
