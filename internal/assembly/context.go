@@ -25,6 +25,9 @@ type Context struct {
 	ports       map[string]any
 	modules     []contract.Module
 	moduleNames map[string]bool
+	// onPort 在每次 Port 读取时回调（ValidatePortFlow 用它观察读取结果；生产路径为 nil）。
+	// provided 表示该端口在读取发生时已注册。
+	onPort func(name string, provided bool)
 }
 
 // newContext 由内核容器与已解码的配置段构造装配上下文。
@@ -79,7 +82,13 @@ func (c *Context) Provide(name string, port any) error {
 }
 
 // Port 取回端口实现；未提供时返回 nil（消费方按软依赖降级，例如跳过验证码校验）。
-func (c *Context) Port(name string) any { return c.ports[name] }
+func (c *Context) Port(name string) any {
+	v, ok := c.ports[name]
+	if c.onPort != nil {
+		c.onPort(name, ok)
+	}
+	return v
+}
 
 // Register 登记能力的 Module 实例（按调用顺序），重名报错。
 // Wire 返回 nil 的能力（无 Module 实例、只提供端口或仅参与迁移）不需要注册。

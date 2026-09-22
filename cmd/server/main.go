@@ -106,7 +106,13 @@ func wireTenant(ctx *assembly.Context) (contract.Module, error) {
 }
 
 func wireAccess(ctx *assembly.Context) (contract.Module, error) {
-	return accessmodule.New(ctx.DB(), ctx.Port("tenant")), nil
+	mod := accessmodule.New(ctx.DB(), ctx.Port("tenant"))
+	// access 是 user_roles 表所有者：把角色分配端口交给排在其后的 user（缺此 Provide 时
+	// user 的 AssignRoles 会退化为 "role assignment is not configured"）。
+	if err := ctx.Provide("access", mod.UserRoleAssigner()); err != nil {
+		return nil, err
+	}
+	return mod, nil
 }
 
 func wireUser(ctx *assembly.Context) (contract.Module, error) {

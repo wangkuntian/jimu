@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"jimu/internal/assembly"
 	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/catalog"
 	tenantmodule "jimu/internal/capabilities/tenant"
@@ -75,6 +76,14 @@ func TestFullAssemblyOrder(t *testing.T) {
 		got = append(got, c.Descriptor.Name)
 	}
 	require.Equal(t, want, got)
+}
+
+// TestFullAssemblyPortFlow 装配顺序护栏：full 清单里每个被 Wire 读取的端口都必须由内核
+// 桥接端口或排在其前的能力提供。过渡期的内联闭包无法静态内省，故该用例真实试运行各
+// Wire 并观察 Provide/Port 调用（零值内核件、只读配置段，不连库）。删掉 wireAccess 的
+// Provide("access", …) 或把 access 排到 user 之后都会让本用例失败。
+func TestFullAssemblyPortFlow(t *testing.T) {
+	require.NoError(t, assembly.ValidatePortFlow(fullAssembly()))
 }
 
 // TestFullAssemblyHasNoDuplicates 清单内不得重名。

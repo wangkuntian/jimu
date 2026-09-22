@@ -136,22 +136,27 @@ func Run(a Assembly) error {
 // （端口缺失即软依赖降级）。
 func wireCapabilities(ctx *Context, caps []contract.Descriptor, byName map[string]Capability) error {
 	for _, d := range caps {
-		c, ok := byName[d.Name]
-		if !ok {
-			return fmt.Errorf("capability %q resolved but not declared in the assembly", d.Name)
-		}
-		module, err := c.Wire(ctx)
-		if err != nil {
-			return fmt.Errorf("wire capability %q: %w", d.Name, err)
-		}
-		if module == nil {
-			continue // 无 Module 实例：只提供端口 / 仅参与迁移
-		}
-		if err := ctx.Register(module); err != nil {
+		if err := wireOne(ctx, d, byName); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// wireOne 装配单个能力：Wire 构造实例并注册端口，非空 Module 交给 Bootstrap。
+func wireOne(ctx *Context, d contract.Descriptor, byName map[string]Capability) error {
+	c, ok := byName[d.Name]
+	if !ok {
+		return fmt.Errorf("capability %q resolved but not declared in the assembly", d.Name)
+	}
+	module, err := c.Wire(ctx)
+	if err != nil {
+		return fmt.Errorf("wire capability %q: %w", d.Name, err)
+	}
+	if module == nil {
+		return nil // 无 Module 实例：只提供端口 / 仅参与迁移
+	}
+	return ctx.Register(module)
 }
 
 // provideContainerPorts 是过渡期桥接：内核容器仍持有尚未自装配的能力件，先按能力名
