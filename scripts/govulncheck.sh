@@ -46,13 +46,22 @@ for id in $ids; do
   fi
 done
 
-cat "$out"
-
 # 有命中且全部在豁免清单内 → 通过；否则（含 govulncheck 自身出错、无可解析 ID）失败
 if [ -n "$ids" ] && [ -z "$unexpected" ]; then
+  # 默认不打印原始输出：其中的 "Your code is affected by …" 代码帧会被 CI 渲染成
+  # 失败级注解（Annotations 面板），而本分支实际是通过的。需要排查时用
+  # GOVULNCHECK_VERBOSE=1 make govulncheck 查看完整输出。
+  if [ "${GOVULNCHECK_VERBOSE:-0}" = "1" ]; then
+    cat "$out"
+  else
+    echo "ℹ️  已豁免的命中：$(echo "$ids" | tr '\n' ' ')"
+    echo "   完整输出：GOVULNCHECK_VERBOSE=1 make govulncheck"
+  fi
   echo "⚠️  govulncheck: 仅命中临时豁免清单（${ALLOWLIST[*]}），已在导入器侧 recover 兜底，视为通过"
   exit 0
 fi
 
+# 未豁免：保留完整输出，注解即证据
+cat "$out"
 echo "❌ govulncheck: 发现未豁免的可达漏洞（${unexpected:-扫描未成功，见上方输出}）"
 exit 1

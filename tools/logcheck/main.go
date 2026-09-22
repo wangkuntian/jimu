@@ -36,6 +36,8 @@ var vocabulary = map[string]string{
 	"name":               "任务/模块/事件名称",
 	"names":              "名称清单（聚合名，如当前启用的能力清单）",
 	"missing":            "缺失项清单（如缺失的可选依赖名）",
+	"method":             "RPC 方法名（如 grpc 的 info.FullMethod）",
+	"breaker":            "熔断器启用状态（布尔）",
 	"mount":              "HTTP 挂载点（能力 Descriptor 的 Mount）",
 	"type":               "类型/事件类型",
 	"event_type":         "业务事件类型",
