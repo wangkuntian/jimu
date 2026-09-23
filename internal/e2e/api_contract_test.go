@@ -13,32 +13,24 @@ import (
 	"time"
 
 	"jimu/internal/app"
-	accessmodule "jimu/internal/capabilities/access"
+	"jimu/internal/assembly"
 	roledomain "jimu/internal/capabilities/access/domain"
-	"jimu/internal/capabilities/apikey"
-	auditmodule "jimu/internal/capabilities/audit"
 	auditdomain "jimu/internal/capabilities/audit/domain"
 	authmodule "jimu/internal/capabilities/auth"
 	authdomain "jimu/internal/capabilities/auth/domain"
-	captchamodule "jimu/internal/capabilities/captcha"
 	"jimu/internal/capabilities/catalog"
-	consolemodule "jimu/internal/capabilities/console"
-	"jimu/internal/capabilities/dataops"
-	"jimu/internal/capabilities/feature"
-	mfamodule "jimu/internal/capabilities/mfa"
 	mfadomain "jimu/internal/capabilities/mfa/domain"
-	passkeymodule "jimu/internal/capabilities/passkey"
 	passkeydomain "jimu/internal/capabilities/passkey/domain"
-	"jimu/internal/capabilities/queue"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
-	usermodule "jimu/internal/capabilities/user"
 	userdomain "jimu/internal/capabilities/user/domain"
-	userinfrastructure "jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/access"
 	"jimu/internal/kernel/db"
+	"jimu/internal/kernel/event"
+	"jimu/internal/kernel/httpclient"
 	"jimu/internal/kernel/logger"
+	"jimu/internal/profiles/active"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
@@ -102,50 +94,33 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cfg := config.Config{}
-	authCfg := authmodule.Config{
-		JWTSecret:          "0123456789abcdef0123456789abcdef",
-		Issuer:             "jimu-e2e",
-		AccessExpireMin:    30,
-		RefreshExpireDay:   7,
-		PublicRegistration: true,
-		// 0 = 关闭限流，避免测试依赖 Redis Lua 脚本
-		LoginRateLimit:    0,
-		RegisterRateLimit: 0,
-	}
-
+	// 按当前形态装配模块（P2.6 T5）：提交态默认 full；用 -overlay 切到其它形态时，
+	// 本套契约测试即针对该形态（缺能力的用例由 requireCapabilities 跳过）。
+	// 装配走 assembly.WireFor —— 与生产 Run 同一份 wiring，不再手写模块清单。
 	log := logger.New(config.LogConfig{Level: "error", Format: "console", Output: "stdout"})
-
-	userinfoSource := usermodule.NewUserinfoSource(userinfrastructure.NewMysqlRepository(gdb))
-	captchaMod := captchamodule.New(rdb, time.Minute, false)
-	mfaMod := mfamodule.New(gdb, mfamodule.Config{
-		JWTSecret:        authCfg.JWTSecret,
-		Issuer:           authCfg.Issuer,
-		AccessExpireMin:  authCfg.AccessExpireMin,
-		RefreshExpireDay: authCfg.RefreshExpireDay,
-	}, userinfoSource)
-	authMod := authmodule.New(gdb, rdb, authCfg, false, captchaMod.Service(),
-		contract.MFAVerifier(mfaMod.Service()))
-	passkeyMod := passkeymodule.New(passkeymodule.Deps{
-		DB:        gdb,
-		Redis:     rdb,
-		AuthCfg:   authCfg,
-		Users:     userinfoSource,
-		Finalizer: authMod.Finalizer(),
-	})
-	userMod := usermodule.New(gdb, cfg) // 不传 rdb：跳过用户维度限流（依赖 Lua），聚焦契约链路
-	accessMod := accessmodule.New(gdb)
-
-	auditMod := auditmodule.New(gdb, auditmodule.Config{QueueSize: 1024, BatchSize: 1, FlushIntervalMS: 10}, log)
-	consoleMod := consolemodule.New("test", "test", rdb, gdb, nil, nil)
-	featureMod := feature.New(gdb)
-	queueMod := queue.NewModule(gdb, nil)
-	apikeyMod := apikey.New(gdb)
-	dataopsMod := dataops.New(gdb)
+	cfg, _, err := config.LoadWithSections()
+	require.NoError(t, err)
+	sections := testSections(t)
+	asm := active.Assembly()
+	caps, err := assembly.Resolve(asm, nil)
+	require.NoError(t, err)
+	capCfgs, err := app.LoadCapabilityConfigs(sections, caps, cfg.Environment)
+	require.NoError(t, err)
+	container := &app.Container{
+		Config:            cfg,
+		Sections:          sections,
+		CapabilityConfigs: capCfgs,
+		DB:                gdb,
+		Redis:             rdb,
+		Logger:            log,
+		EventBus:          event.New(),
+		HTTPClient:        httpclient.New(httpclient.Config{}),
+	}
+	ctx, modules, err := assembly.WireFor(container, sections, capCfgs, asm, caps)
+	require.NoError(t, err)
 
 	router := gin.New()
 
-	modules := []contract.Module{authMod, mfaMod, passkeyMod, captchaMod, userMod, accessMod, auditMod, consoleMod, featureMod, queueMod, apikeyMod, dataopsMod}
 	// 1) 模块级 HTTP 中间件（审计记录）
 	for _, m := range modules {
 		if p, ok := m.(contract.HTTPMiddlewareProvider); ok {
@@ -172,8 +147,8 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 		m.RegisterHTTP(router.Group("", protected...))
 	}
 
-	// 启动审计 worker，测试结束 flush 剩余日志
-	for _, comp := range auditMod.Components() {
+	// 启动装配期组件（如审计 worker），测试结束回收
+	for _, comp := range ctx.Components() {
 		require.NoError(t, comp.Start(context.Background()))
 		t.Cleanup(func() { _ = comp.Stop(context.Background()) })
 	}
