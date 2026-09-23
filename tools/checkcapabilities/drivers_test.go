@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"jimu/internal/profiles/registry"
+	"jimu/tools/internal/profileoverlay"
 
 	"github.com/stretchr/testify/require"
 )
@@ -76,6 +77,9 @@ func TestActiveSelectionMustImportExactlyOneProfile(t *testing.T) {
 	require.ErrorContains(t, checkActiveImports([]string{"jimu/internal/assembly"}), "exactly one")
 	require.ErrorContains(t, checkActiveImports([]string{"jimu/internal/profiles/ghost"}), "unknown profile")
 	require.ErrorContains(t, checkActiveImports([]string{"jimu/internal/profiles/registry"}), "registry")
+	// 聚合包 jimu/internal/profiles 没有尾斜杠，不命中形态包的前缀判定：必须显式拦下。
+	require.ErrorContains(t, checkActiveImports([]string{"jimu/internal/profiles"}), "aggregate package")
+	require.ErrorContains(t, checkActiveImports([]string{"jimu/internal/profiles", "jimu/internal/profiles/full"}), "aggregate package")
 }
 
 // TestEntryPackageMustNotImportRegistryOrOtherProfiles 唯一入口只 import assembly 与选点包
@@ -84,6 +88,24 @@ func TestEntryPackageMustNotImportRegistryOrOtherProfiles(t *testing.T) {
 	require.NoError(t, checkEntryImports([]string{"fmt", "os", "jimu/internal/assembly", "jimu/internal/profiles/active"}))
 	require.ErrorContains(t, checkEntryImports([]string{"jimu/internal/profiles/minimal"}), "must not import")
 	require.ErrorContains(t, checkEntryImports([]string{"jimu/internal/profiles/registry"}), "registry")
+	// 空 import 列表是载入失败的特征（唯一入口不可能什么都不 import），必须报错而非恒真通过。
+	require.ErrorContains(t, checkEntryImports(nil), "no imports")
+	require.ErrorContains(t, checkEntryImports([]string{}), "no imports")
+}
+
+// TestOverlayForProfileMatchesTheSharedPackage 门禁驱动闭包用的 overlay 必须与共享包
+// tools/internal/profileoverlay 的输出逐字节相同：门禁若再长出模板副本，它度量的就不再是
+// 出货二进制（而门禁仍会全绿）。
+func TestOverlayForProfileMatchesTheSharedPackage(t *testing.T) {
+	root := repoRoot(t)
+	shared, err := profileoverlay.ReplaceMap(root, "minimal")
+	require.NoError(t, err)
+	got, err := overlayForProfile(root, "minimal")
+	require.NoError(t, err)
+	require.Equal(t, shared, got)
+
+	_, err = overlayForProfile(root, "ghost")
+	require.ErrorContains(t, err, `unknown profile "ghost"`)
 }
 
 // TestProfileClosureLoadsTheUniqueEntry 形态闭包的根是唯一入口 ./cmd/server（`-overlay` 下），

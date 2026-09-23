@@ -9,7 +9,13 @@
 
 # 变量
 BIN_DIR := bin
-SERVER_BIN := $(BIN_DIR)/jimu-server
+# 形态（profile）：full/minimal/saas/enterprise/machine；full 为默认（与提交态 active 一致）。
+# 切形态不改动任何受版本控制的文件：profileoverlay 生成 .overlay/<profile>/ 并在构建期叠加。
+PROFILE ?= full
+SERVER_PKG := ./cmd/server
+# 用递归展开（= 而非 :=）：下方 include .env 可能在解析期之后才把 PROFILE 改成别的形态，
+# 立即展开会让「.env 设 PROFILE=minimal」变成「用 minimal 构建、产物名却仍是 bin/jimu-server」。
+SERVER_BIN = $(BIN_DIR)/jimu-server$(if $(filter-out full,$(PROFILE)),-$(PROFILE),)
 CLI_BIN := $(BIN_DIR)/jimu-cli
 SERVER_CMD := cmd/server/main.go
 CLI_CMD := cmd/cli/main.go
@@ -50,14 +56,16 @@ help:
 	@echo "本地运行:"
 	@echo "  make run                  编译并运行服务端"
 	@echo "  make build                编译服务端和 CLI"
+	@echo "  make build-server         编译服务端（PROFILE=<name> 可选形态，默认 full，产物 bin/jimu-server[-<name>]）"
 	@echo "  make test                 运行测试"
 	@echo "  make vet                  静态分析"
 	@echo "  make fmt                  格式化代码"
 	@echo "  make lint                 静态检查"
 	@echo "  make check-log-usage      检查日志调用均为 *w 系列（防 k/v 粘连）"
 	@echo "  make check-capabilities   校验能力自描述（Owns）与驱动可用集/选中集一致"
-	@echo "  make profiles-check       构建 5 个形态入口（JIMU_PROFILES_SMOKE=1 时启动并检查 /readyz）"
-	@echo "  make compose-report       生成各形态的编译面报告 docs/profiles/compose-report.md"
+	@echo "  make profiles-check       构建 5 个形态（overlay 叠加 cmd/server）+ golden 依赖闭包门禁"
+	@echo "                            （JIMU_PROFILES_SMOKE=1 时额外启动并检查 /readyz）"
+	@echo "  make compose-report       生成各形态（overlay 叠加 cmd/server）的编译面报告 docs/profiles/compose-report.md"
 	@echo ""
 	@echo "数据库:"
 	@echo "  make migrate              本地执行迁移"
@@ -72,7 +80,7 @@ help:
 	@echo "  make test-backup-restore  备份/恢复往返测试（需运行中 mariadb 容器）"
 	@echo ""
 	@echo "Docker 容器（单容器，需外部 DB + Redis）:"
-	@echo "  make docker-build         构建镜像"
+	@echo "  make docker-build         构建镜像（PROFILE=<name> 可选形态，默认 full）"
 	@echo "  make docker-run           运行容器（前台）"
 	@echo "  make docker-stop          停止并删除容器"
 	@echo "  make docker-logs          查看容器日志"
@@ -105,9 +113,13 @@ run: build-server
 build: build-server build-cli
 
 # 内部目标（不直接调用）
+# 用 $$(...) 而不是 $(shell ...)：形态名非法时 profileoverlay 带清晰错误非零退出，make 随之
+# 失败，而不是留下一个空的 -overlay=。先把路径赋给变量再构建：赋值语句的退出码就是 $$(...)
+# 的退出码，&& 因而能截断构建；若直接写成 `go build -overlay=$$(...)`，失败的命令替换只留下
+# 空的 -overlay=，go build 会**静默按提交态（full）构建**并成功退出。
 build-server:
 	@mkdir -p $(BIN_DIR)
-	go build -ldflags "$(LDFLAGS)" -o $(SERVER_BIN) $(SERVER_CMD)
+	overlay=$$(go run ./tools/profileoverlay $(PROFILE)) && go build -ldflags "$(LDFLAGS)" -overlay=$$overlay -o $(SERVER_BIN) $(SERVER_PKG)
 
 build-cli:
 	@mkdir -p $(BIN_DIR)
@@ -158,9 +170,9 @@ test-backup-restore:
 
 # ========== Docker 单容器 ==========
 
-## docker-build: 构建 Docker 镜像
+## docker-build: 构建 Docker 镜像（PROFILE=<name> 可选形态，默认 full）
 docker-build:
-	docker build -t "$(DOCKER_IMAGE)" .
+	docker build --build-arg PROFILE=$(PROFILE) -t "$(DOCKER_IMAGE)" .
 
 ## docker-run: 运行容器（前台，需外部 DB + Redis）
 docker-run:
@@ -274,22 +286,25 @@ check-log-usage:
 check-capabilities:
 	@go run ./tools/checkcapabilities
 
-## profiles-check: 构建 5 个形态入口（profiles/*）；构建失败即非零退出。
+## profiles-check: 构建 5 个形态（overlay 叠加 cmd/server）+ golden 依赖闭包门禁；
+##                  构建或门禁失败即非零退出。
 ##                  设置 JIMU_PROFILES_SMOKE=1 后额外以 APP_ENV=dev 启动各形态并轮询
 ##                  /readyz（需 DB+Redis）；未设置时逐形态打印 SKIP，不静默跳过。
 profiles-check:
 	@bash scripts/check_profiles.sh
 
-## compose-report: 生成各形态（profile）的编译面报告（docs/profiles/compose-report.md，入库）。
+## compose-report: 生成各形态（profile，overlay 叠加 cmd/server）的编译面报告
+##                 （docs/profiles/compose-report.md，入库）。
 ##                 指标：二进制大小 / 路由数 / 迁移数 / 表数 / 本仓闭包代码量与文件数 /
 ##                 重型依赖（aws-sdk-go-v2 / kafka-go / amqp091-go / excelize）/
 ##                 go.mod 直接依赖数（各形态相同，见报告的「层②边界」）；不连库、不启动监听。
 compose-report:
 	@go run ./tools/composereport
 
-## clean: 清理构建产物
+## clean: 清理构建产物（含按形态隔离的 overlay 产物 .overlay/）
 clean:
 	rm -rf $(BIN_DIR)
+	rm -rf .overlay
 	rm -f coverage.out coverage.html
 
 ## swagger: 生成 API 文档
