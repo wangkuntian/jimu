@@ -251,7 +251,7 @@
 > **C1 修复（整分支审查发现）**：tenant 的迁移 005 给 `user`/`access` 拥有的 `users`/`roles` 加
 > `tenant_id` 列，而这两个能力的 ORM 模型始终写该列 —— 只按形态声明集裁剪会让不含 `tenant` 的形态
 > 建出**自己写不进去**的 schema（`migrate up` 成功、服务能起，但首次写 user/role 500）；故
-> **迁移集 = 形态声明集 ∪ schema 依赖**（`cmd/cli` 的 `migrationSchemaDeps`：`user`/`access` → `tenant`，
+> **迁移集 = 形态声明集 ∪ schema 依赖**（`catalog.MigrationSchemaDeps`：`user`/`access` → `tenant`，
 > 仍按 catalog 拓扑序），各形态 schema 完整、**结构种子在所有形态都照常执行**（不含 `tenant` 的形态
 > 也会建出 `tenants`/`tenant_plans` 表与 `tenant_id` 列），装配集仍不含 tenant（不挂路由、不 seed
 > 额外数据）；

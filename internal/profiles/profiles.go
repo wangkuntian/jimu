@@ -23,7 +23,7 @@ var Version = "dev"
 // 权限点取自 assembly.Context.Capabilities()（Run 解析出的装配集），而非全量清单：
 // import catalog 会把 18 个能力的包全量拉进每个形态的依赖闭包，形态裁剪随之失效。
 //
-// 迁移自 P2.6 起跟随形态裁剪，但**带上 schema 依赖**（见 cmd/cli 的 migrationSchemaDeps）：
+// 迁移自 P2.6 起跟随形态裁剪，但**带上 schema 依赖**（见 catalog.MigrationSchemaDeps）：
 // 含 user/access 的形态会一并迁移 tenant 的建表/加列，因此 tenants/tenant_plans 表与
 // users/roles.tenant_id 列在各形态都存在，种子照常可执行。
 // 种子需要部署期凭据 ADMIN_PASSWORD（RunSeed 的前置条件），未提供时跳过并告警：

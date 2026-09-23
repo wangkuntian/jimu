@@ -27,9 +27,29 @@ func activeDescriptors() ([]contract.Descriptor, error) {
 	for _, c := range a.Capabilities {
 		declared[c.Descriptor.Name] = true
 	}
-	// 迁移集 = 形态声明集 ∪ schema 依赖（见 migrationSchemaDeps）：裁剪形态也要能建出
+	// 迁移集 = 形态声明集 ∪ schema 依赖（见 catalog.MigrationSchemaDeps）：裁剪形态也要能建出
 	// 自己写得进去的表。装配集不受影响。
 	return resolveActive(a.Name, declared)
+}
+
+// declaredDescriptors 只返回形态**声明**的能力（不含迁移 schema 依赖），供 `seed` 聚合权限点：
+// 与启动期种子（profiles.StructuralSeed 传解析集）同口径 —— schema 依赖只用于建表，不该带出权限点。
+func declaredDescriptors() ([]contract.Descriptor, error) {
+	a := active.Assembly()
+	declared := make(map[string]bool, len(a.Capabilities))
+	for _, c := range a.Capabilities {
+		declared[c.Descriptor.Name] = true
+	}
+	out := make([]contract.Descriptor, 0, len(declared))
+	for _, d := range catalog.All() {
+		if declared[d.Name] {
+			out = append(out, d)
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("%w: %q", errNoCatalogCapabilities, a.Name)
+	}
+	return out, nil
 }
 
 // resolveActive 是 activeDescriptors 的纯函数部分（便于单测）：过滤 + 空集 fail-closed。

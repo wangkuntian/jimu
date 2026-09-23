@@ -193,7 +193,8 @@ var seedCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to connect database: %w", err)
 		}
-		caps, err := activeDescriptors()
+		// 种子用**声明集**（不含迁移的 schema 依赖），与启动期种子同口径。
+		caps, err := declaredDescriptors()
 		if err != nil {
 			return err
 		}

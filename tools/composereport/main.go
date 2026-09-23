@@ -151,22 +151,6 @@ func namesSet(names []string) map[string]bool {
 	return out
 }
 
-// resolvedDescriptors 取形态清单中真正进入解析集的 Descriptor，顺序同装配顺序。
-// ProbeResult 只给出能力名，表/迁移口径需要 Descriptor 本身（Owns/Migrations）。
-func resolvedDescriptors(a assembly.Assembly, names []string) []contract.Descriptor {
-	want := make(map[string]bool, len(names))
-	for _, n := range names {
-		want[n] = true
-	}
-	out := make([]contract.Descriptor, 0, len(names))
-	for _, c := range a.Capabilities {
-		if want[c.Descriptor.Name] {
-			out = append(out, c.Descriptor)
-		}
-	}
-	return out
-}
-
 // tableCount 表数＝各 Descriptor.Owns 的并集大小（同一张表重复声明只算一次）。
 func tableCount(descs []contract.Descriptor) int {
 	seen := map[string]bool{}
@@ -347,7 +331,7 @@ func renderReport(ms []Metrics, deps int) string {
 	b.WriteString("| 二进制 | `go build -overlay=<该形态> -o <tmp> ./cmd/server` 的产物大小 |\n")
 	b.WriteString("| 路由数 | 形态解析集在裸 `gin.Engine` 上 `RegisterHTTP` 后的 `r.Routes()` 条数（不启动监听） |\n")
 	b.WriteString("| 迁移数 | **迁移集**（形态声明集 ∪ schema 依赖，与 `PROFILE=<name> jimu migrate` 同一口径）各 `Descriptor.Migrations` 中 `migrations/mysql/*.sql` 的文件数（postgres 同名同数） |\n")
-	b.WriteString("| 表数 | 各 `Descriptor.Owns` 的并集大小 |\n")
+	b.WriteString("| 表数 | **迁移集**各 `Descriptor.Owns` 的并集大小（口径同迁移数） |\n")
 	b.WriteString("| 本仓 Go 文件 / 代码行 | `golang.org/x/tools/go/packages` 载入 `./cmd/server` 在该形态 overlay 下的 import 闭包，只统计本模块（`jimu/...`）的非 `_test.go` 文件 |\n")
 	b.WriteString("| 重型依赖 | 同一闭包（含第三方包）命中 `tools/internal/heavydeps` 前缀表的展示名，`-` 表示零 |\n")
 	b.WriteString("| go.mod 直接依赖 | `go list -m -f '{{if not .Indirect}}{{.Path}}{{end}}' all` 的非空行数（不含主模块 `jimu` 自身） |\n\n")
