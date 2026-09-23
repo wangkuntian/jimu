@@ -1,7 +1,8 @@
 // Command composereport 生成各形态（profile）的「编译面」报告。
 //
-// 报告回答「层②（profile 入口包）究竟改变了什么」：二进制大小、路由数、迁移数与表数逐
-// 形态实测，本仓 import 闭包的代码行数/文件数按模块内包统计；同时写明 go.mod 直接依赖
+// 报告回答「层②（形态选点）究竟改变了什么」：二进制大小、路由数、迁移数与表数逐
+// 形态实测（二进制与闭包口径 = `./cmd/server` + 该形态 overlay，即出货二进制），本仓 import
+// 闭包的代码行数/文件数按模块内包统计；同时写明 go.mod 直接依赖
 // 数在各形态间**完全相同**（Go 的依赖裁剪作用于整个 module，设计 §6.3/§11 的层②边界）。
 // 生成物 docs/profiles/compose-report.md 入库，供 CI 归档对比。
 //
@@ -11,6 +12,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -23,11 +25,7 @@ import (
 
 	"jimu/internal/assembly"
 	"jimu/internal/contract"
-	"jimu/internal/profiles/enterprise"
-	"jimu/internal/profiles/full"
-	"jimu/internal/profiles/machine"
-	"jimu/internal/profiles/minimal"
-	"jimu/internal/profiles/saas"
+	"jimu/internal/profiles/registry"
 	"jimu/tools/internal/heavydeps"
 
 	"github.com/gin-gonic/gin"
@@ -41,8 +39,9 @@ const outputPath = "docs/profiles/compose-report.md"
 // 第三方依赖的代码量会把信号淹没，那部分由二进制大小衡量）。
 const modulePath = "jimu"
 
-// profileNames 形态的固定顺序：报告行序与断言取值都依赖它，避免 map 迭代顺序。
-var profileNames = []string{"full", "minimal", "saas", "enterprise", "machine"}
+// activeFilePath 选点文件（相对仓库根）：构建期 overlay 替换的目标，与
+// tools/profileoverlay 的生成规则一致。
+var activeFilePath = filepath.Join("internal", "profiles", "active", "assembly.go")
 
 // Metrics 是一个形态的编译面实测值。
 type Metrics struct {
@@ -90,17 +89,18 @@ func fail(err error) {
 	os.Exit(1)
 }
 
-// measureAll 按 profileNames 顺序实测全部形态。
+// measureAll 按 registry.Names() 顺序实测全部形态。
 //
 // 五个二进制并行构建（互不共享状态），随后逐形态顺序探测：ProbeAssembly 会临时切换
 // 工作目录以吸收构造期相对路径副作用，因此不能并发。
 func measureAll(root string) ([]Metrics, error) {
-	asms := assemblies()
+	names := registry.Names()
+	asms := registry.All()
 
-	sizes := make([]int64, len(profileNames))
-	errs := make([]error, len(profileNames))
+	sizes := make([]int64, len(names))
+	errs := make([]error, len(names))
 	var wg sync.WaitGroup
-	for i, name := range profileNames {
+	for i, name := range names {
 		wg.Add(1)
 		go func(i int, name string) {
 			defer wg.Done()
@@ -109,8 +109,8 @@ func measureAll(root string) ([]Metrics, error) {
 	}
 	wg.Wait()
 
-	out := make([]Metrics, 0, len(profileNames))
-	for i, name := range profileNames {
+	out := make([]Metrics, 0, len(names))
+	for i, name := range names {
 		if errs[i] != nil {
 			return nil, errs[i]
 		}
@@ -141,17 +141,6 @@ func measureAll(root string) ([]Metrics, error) {
 		})
 	}
 	return out, nil
-}
-
-// assemblies 各形态的能力清单。
-func assemblies() map[string]assembly.Assembly {
-	return map[string]assembly.Assembly{
-		"full":       full.Assembly(),
-		"minimal":    minimal.Assembly(),
-		"saas":       saas.Assembly(),
-		"enterprise": enterprise.Assembly(),
-		"machine":    machine.Assembly(),
-	}
 }
 
 // resolvedDescriptors 取形态清单中真正进入解析集的 Descriptor，顺序同装配顺序。
@@ -217,7 +206,7 @@ func routeCount(modules []contract.Module) int {
 	return len(r.Routes())
 }
 
-// buildSize 构建该形态入口并返回产物字节数。
+// buildSize 构建唯一入口（该形态 overlay 下）并返回产物字节数。
 func buildSize(root, name string) (int64, error) {
 	dir, err := os.MkdirTemp("", "jimu-compose-report-")
 	if err != nil {
@@ -225,13 +214,17 @@ func buildSize(root, name string) (int64, error) {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 
+	overlayPath, err := writeOverlay(root, name, dir)
+	if err != nil {
+		return 0, err
+	}
 	out := filepath.Join(dir, "jimu-"+name)
-	cmd := exec.CommandContext(context.Background(), "go", "build", "-o", out, "./profiles/"+name)
+	cmd := exec.CommandContext(context.Background(), "go", "build", "-overlay", overlayPath, "-o", out, "./cmd/server")
 	cmd.Dir = root
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return 0, fmt.Errorf("go build ./profiles/%s: %w: %s", name, err, strings.TrimSpace(stderr.String()))
+		return 0, fmt.Errorf("go build -overlay < %s > ./cmd/server: %w: %s", name, err, strings.TrimSpace(stderr.String()))
 	}
 	info, err := os.Stat(out)
 	if err != nil {
@@ -240,20 +233,80 @@ func buildSize(root, name string) (int64, error) {
 	return info.Size(), nil
 }
 
-// closureSize 统计该形态 import 闭包中本模块（jimu/...）非 _test.go 的 .go 文件数与行数，
-// 并收集闭包（含第三方包）命中的重型依赖展示名（去重升序）。
+// writeOverlay 把该形态的构建期 overlay 落到 dir（内容全部来自内存，不依赖
+// tools/profileoverlay 的外部命令），返回 overlay JSON 的路径供 `go build -overlay` 使用。
+func writeOverlay(root, name, dir string) (string, error) {
+	src, err := activeSource(name)
+	if err != nil {
+		return "", err
+	}
+	activeFile := filepath.Join(dir, "active.go")
+	if err := os.WriteFile(activeFile, []byte(src), 0o644); err != nil {
+		return "", err
+	}
+	cfg := struct {
+		Replace map[string]string `json:"Replace"`
+	}{Replace: map[string]string{filepath.Join(root, activeFilePath): activeFile}}
+	content, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	jsonPath := filepath.Join(dir, "overlay.json")
+	if err := os.WriteFile(jsonPath, append(content, '\n'), 0o644); err != nil {
+		return "", err
+	}
+	return jsonPath, nil
+}
+
+// overlayForProfile 返回把 active 选点替换为指定形态的内存 overlay（键值均为绝对路径；
+// 内容与 tools/profileoverlay 生成的 JSON 等价）；形态名未知时返回错误。
+func overlayForProfile(root, profile string) (map[string][]byte, error) {
+	src, err := activeSource(profile)
+	if err != nil {
+		return nil, err
+	}
+	return map[string][]byte{filepath.Join(root, activeFilePath): []byte(src)}, nil
+}
+
+// activeSource 返回选点文件的 overlay 替代内容，逐字节与 tools/profileoverlay 的生成物
+// 同构（含「Code generated」头）；形态名经 registry 白名单校验。
+func activeSource(profile string) (string, error) {
+	if _, err := registry.Lookup(profile); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`// Code generated by tools/profileoverlay; DO NOT EDIT.
+// 本文件是 overlay 替换版：把 internal/profiles/active 的选点指向 %s 形态。
+package active
+
+import (
+	"jimu/internal/assembly"
+	"jimu/internal/profiles/%s"
+)
+
+// Assembly 返回本次构建选中的形态。
+func Assembly() assembly.Assembly { return %s.Assembly() }
+`, profile, profile, profile), nil
+}
+
+// closureSize 统计该形态（./cmd/server + overlay）import 闭包中本模块（jimu/...）非
+// _test.go 的 .go 文件数与行数，并收集闭包（含第三方包）命中的重型依赖展示名（去重升序）。
 // go/packages 在只请求名称/文件/import 图时等价于 go list -deps，不做类型检查。
 func closureSize(root, name string) (files, lines int, heavy []string, err error) {
-	cfg := &packages.Config{
-		Mode: packages.NeedName | packages.NeedFiles | packages.NeedImports | packages.NeedDeps,
-		Dir:  root,
+	overlay, err := overlayForProfile(root, name)
+	if err != nil {
+		return 0, 0, nil, err
 	}
-	pkgs, err := packages.Load(cfg, "./profiles/"+name)
+	cfg := &packages.Config{
+		Mode:    packages.NeedName | packages.NeedFiles | packages.NeedImports | packages.NeedDeps,
+		Dir:     root,
+		Overlay: overlay,
+	}
+	pkgs, err := packages.Load(cfg, "./cmd/server")
 	if err != nil {
 		return 0, 0, nil, err
 	}
 	if len(pkgs) == 0 {
-		return 0, 0, nil, fmt.Errorf("no packages matched ./profiles/%s", name)
+		return 0, 0, nil, fmt.Errorf("no packages matched ./cmd/server (%s)", name)
 	}
 
 	var loadErrs []string
@@ -318,13 +371,15 @@ func renderReport(ms []Metrics, deps int) string {
 
 	b.WriteString("## 指标口径\n\n")
 	b.WriteString("| 指标 | 口径 |\n|---|---|\n")
-	b.WriteString("| 二进制 | `go build -o <tmp> ./profiles/<name>` 的产物大小 |\n")
+	b.WriteString("| 二进制 | `go build -overlay=<该形态> -o <tmp> ./cmd/server` 的产物大小 |\n")
 	b.WriteString("| 路由数 | 形态解析集在裸 `gin.Engine` 上 `RegisterHTTP` 后的 `r.Routes()` 条数（不启动监听） |\n")
 	b.WriteString("| 迁移数 | 各 `Descriptor.Migrations` 中 `migrations/mysql/*.sql` 的文件数（postgres 同名同数） |\n")
 	b.WriteString("| 表数 | 各 `Descriptor.Owns` 的并集大小 |\n")
-	b.WriteString("| 本仓 Go 文件 / 代码行 | `golang.org/x/tools/go/packages` 载入 `./profiles/<name>` 的 import 闭包，只统计本模块（`jimu/...`）的非 `_test.go` 文件 |\n")
+	b.WriteString("| 本仓 Go 文件 / 代码行 | `golang.org/x/tools/go/packages` 载入 `./cmd/server` 在该形态 overlay 下的 import 闭包，只统计本模块（`jimu/...`）的非 `_test.go` 文件 |\n")
 	b.WriteString("| 重型依赖 | 同一闭包（含第三方包）命中 `tools/internal/heavydeps` 前缀表的展示名，`-` 表示零 |\n")
 	b.WriteString("| go.mod 直接依赖 | `go list -m -f '{{if not .Indirect}}{{.Path}}{{end}}' all` 的非空行数（不含主模块 `jimu` 自身） |\n\n")
+	b.WriteString("形态由 `internal/profiles/active` 的**构建期 overlay** 决定：`tools/profileoverlay` 把该选点文件\n")
+	b.WriteString("换成「只选一个形态」的版本，`go build ./cmd/server` 因此只编进该形态的能力与驱动。\n\n")
 	b.WriteString("「本仓闭包」严格大于「形态组成」：`user`/`auth` 直接 import 了 `outbox`/`queue`/`notification`/`ws` 的\n")
 	b.WriteString("具体类型（`*outbox.Outbox`、`notification.Message`、`outbox.Event`），编译期会链上这些能力包，\n")
 	b.WriteString("但装配期一个都不构造（详见 README「形态（profile）」的编译期脚注）。\n\n")

@@ -7,13 +7,16 @@
 
 | 指标 | 口径 |
 |---|---|
-| 二进制 | `go build -o <tmp> ./profiles/<name>` 的产物大小 |
+| 二进制 | `go build -overlay=<该形态> -o <tmp> ./cmd/server` 的产物大小 |
 | 路由数 | 形态解析集在裸 `gin.Engine` 上 `RegisterHTTP` 后的 `r.Routes()` 条数（不启动监听） |
 | 迁移数 | 各 `Descriptor.Migrations` 中 `migrations/mysql/*.sql` 的文件数（postgres 同名同数） |
 | 表数 | 各 `Descriptor.Owns` 的并集大小 |
-| 本仓 Go 文件 / 代码行 | `golang.org/x/tools/go/packages` 载入 `./profiles/<name>` 的 import 闭包，只统计本模块（`jimu/...`）的非 `_test.go` 文件 |
+| 本仓 Go 文件 / 代码行 | `golang.org/x/tools/go/packages` 载入 `./cmd/server` 在该形态 overlay 下的 import 闭包，只统计本模块（`jimu/...`）的非 `_test.go` 文件 |
 | 重型依赖 | 同一闭包（含第三方包）命中 `tools/internal/heavydeps` 前缀表的展示名，`-` 表示零 |
 | go.mod 直接依赖 | `go list -m -f '{{if not .Indirect}}{{.Path}}{{end}}' all` 的非空行数（不含主模块 `jimu` 自身） |
+
+形态由 `internal/profiles/active` 的**构建期 overlay** 决定：`tools/profileoverlay` 把该选点文件
+换成「只选一个形态」的版本，`go build ./cmd/server` 因此只编进该形态的能力与驱动。
 
 「本仓闭包」严格大于「形态组成」：`user`/`auth` 直接 import 了 `outbox`/`queue`/`notification`/`ws` 的
 具体类型（`*outbox.Outbox`、`notification.Message`、`outbox.Event`），编译期会链上这些能力包，
@@ -23,11 +26,11 @@
 
 | 形态 | 二进制 (MB) | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 | 重型依赖 |
 |---|---:|---:|---:|---:|---:|---:|---:|---|
-| `full` | 123.1 | 100.0% | 99 | 25 | 23 | 330 | 34477 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
-| `minimal` | 84.7 | 68.8% | 32 | 7 | 7 | 179 | 17464 | - |
-| `saas` | 85.0 | 69.0% | 48 | 13 | 11 | 205 | 20110 | - |
-| `enterprise` | 85.3 | 69.3% | 55 | 13 | 11 | 245 | 22906 | - |
-| `machine` | 83.3 | 67.7% | 28 | 7 | 6 | 181 | 17740 | - |
+| `full` | 123.1 | 100.0% | 99 | 25 | 23 | 331 | 34502 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
+| `minimal` | 84.7 | 68.8% | 32 | 7 | 7 | 180 | 17494 | - |
+| `saas` | 85.0 | 69.0% | 48 | 13 | 11 | 206 | 20140 | - |
+| `enterprise` | 85.3 | 69.3% | 55 | 13 | 11 | 246 | 22936 | - |
+| `machine` | 83.3 | 67.7% | 28 | 7 | 6 | 182 | 17770 | - |
 
 ## 验收断言
 
@@ -37,8 +40,8 @@
 - 二进制：`minimal` 是 `full` 的 68.8%（要求 ≤ 85%）
 - 路由数：`minimal` 32 < `full` 99
 - 表数：`minimal` 7 < `full` 23
-- 本仓 Go 文件：`minimal` 179 < `full` 330
-- 本仓代码行：`minimal` 17464 < `full` 34477
+- 本仓 Go 文件：`minimal` 180 < `full` 331
+- 本仓代码行：`minimal` 17494 < `full` 34502
 
 ## 层②边界：go.mod 直接依赖
 
