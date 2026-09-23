@@ -275,7 +275,7 @@ v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capab
 
 ## 形态（profile）
 
-形态是**编译期**概念，由**构建期参数**选择：唯一入口是 `cmd/server`，它只 import 选点包 `internal/profiles/active`；提交态该选点文件恒为 `full`，所以 `go build ./cmd/server`（以及 `go test ./...`、IDE、`make swagger`）默认就是 full。切换形态靠 Go 工具链的 `-overlay`：`tools/profileoverlay <profile>` 生成「只选该形态」的选点文件替代版本后再构建，磁盘上的仓库文件一个字节都不动。能力清单声明在 `internal/profiles/<name>`（package 非 main），裁剪由 import 图天然决定 —— 不用 build tag，也不需要组合矩阵。`Assembly.Capabilities` 的顺序是**装配顺序**（端口提供者必须排在消费者之前），与 catalog 的迁移/闭包顺序无关。
+形态是**编译期**概念，由**构建期参数**选择：唯一入口是 `cmd/server`，它只 import `internal/assembly` 与选点包 `internal/profiles/active`（+ 标准库）；提交态该选点文件恒为 `full`，所以 `go build ./cmd/server`（以及 `go test ./...`、IDE、`make swagger`）默认就是 full。切换形态靠 Go 工具链的 `-overlay`：`tools/profileoverlay <profile>` 生成「只选该形态」的选点文件替代版本后再构建，磁盘上的仓库文件一个字节都不动。能力清单声明在 `internal/profiles/<name>`（package 非 main），裁剪由 import 图天然决定 —— 不用 build tag，也不需要组合矩阵。`Assembly.Capabilities` 的顺序是**装配顺序**（端口提供者必须排在消费者之前），与 catalog 的迁移/闭包顺序无关。
 
 | 形态（清单） | 组成 | 场景 |
 |---|---|---|
@@ -287,7 +287,7 @@ v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capab
 
 **入口与用法（P2.5b：唯一入口 + 构建期选形态）**：
 
-- 唯一入口 `cmd/server`（`cmd/server/main.go`）只 import `internal/assembly` 与选点包 `internal/profiles/active`；选点文件 `internal/profiles/active/assembly.go` 在提交态恒选 `full` —— 这就是**默认形态**，`go build ./cmd/server` 无需任何参数。
+- 唯一入口 `cmd/server`（`cmd/server/main.go`）只 import `internal/assembly` 与选点包 `internal/profiles/active`（+ 标准库）；选点文件 `internal/profiles/active/assembly.go` 在提交态恒选 `full` —— 这就是**默认形态**，`go build ./cmd/server` 无需任何参数。
 - 切换形态 = 构建期叠加 `tools/profileoverlay` 生成的 overlay：它把选点文件替换为「只选一个形态」的版本，产物写在 gitignored 的 `.overlay/<profile>/`，工作区文件零改动；形态名来自 `internal/profiles/registry`（`go run ./tools/profileoverlay -list` 列出全部形态，非法名非零退出、无产物）。
 - `PROFILE=minimal make build-server` → `bin/jimu-server-minimal`（`full` 仍是 `bin/jimu-server`，兼容旧路径）；`make docker-build PROFILE=minimal DOCKER_IMAGE=jimu:minimal` 等价于 `docker build --build-arg PROFILE=minimal -t jimu:minimal .`。
 - 手工等价写法：`overlay=$(go run ./tools/profileoverlay minimal) && go build -overlay="$overlay" -o bin/jimu-server-minimal ./cmd/server`。**不能**写成 `go build -overlay=$(...)`：命令替换失败会留下空值，Go 把空 overlay 当作「无 overlay」而静默构建 full。
@@ -1202,7 +1202,7 @@ internal/capabilities/{name}/
 | `make fmt` | 格式化代码 |
 | `make fmt-check` | 检查代码格式 |
 | `make lint` | golangci-lint |
-| `make check-capabilities` | 4 条汇总行：① 能力自描述与 `Owns` ↔ mysql 迁移建表一致（单表唯一归属、无未声明的建表、声明的表确有迁移创建；PostgreSQL 表名与 mysql 一致，暂以 mysql 为准）② 驱动可用集 ↔ 驱动目录存在（`Descriptor.Drivers` 非空不重复且目录存在）+ 能力核心生产闭包零驱动包、零重型依赖 + 各形态选中集 == 该形态生产 import 闭包（集合比较）③ 形态生产代码只 import 已声明的驱动（能力根包或已声明的驱动包）④ 唯一入口 `cmd/server` 只 import `assembly` 与选点包、选点包 `internal/profiles/active` 恰好只选一个形态（且不得 import `internal/profiles/registry`） |
+| `make check-capabilities` | 4 条汇总行：① 能力自描述与 `Owns` ↔ mysql 迁移建表一致（单表唯一归属、无未声明的建表、声明的表确有迁移创建；PostgreSQL 表名与 mysql 一致，暂以 mysql 为准）② 驱动可用集 ↔ 驱动目录存在（`Descriptor.Drivers` 非空不重复且目录存在）+ 能力核心生产闭包零驱动包、零重型依赖 + 各形态选中集 == 该形态生产 import 闭包（集合比较）③ 形态生产代码只 import 已声明的驱动（能力根包或已声明的驱动包）④ 唯一入口 `cmd/server` 只 import `assembly` 与选点包（+ 标准库）、选点包 `internal/profiles/active` 恰好只选一个形态（且不得 import `internal/profiles/registry`） |
 | `make profiles-check` | 用 overlay 构建全部 5 个形态（`./cmd/server` + 该形态 overlay）+ 依赖闭包裁剪门禁（golden）；`JIMU_PROFILES_SMOKE=1` 时额外启动各形态并轮询管理端 `/readyz`（需 DB+Redis） |
 | `make compose-report` | 生成形态编译面报告 `docs/profiles/compose-report.md`（二进制/路由/迁移/表/本仓闭包代码量与文件数/重型依赖列；不连库、不启动监听） |
 | `make swagger` | 生成 API 文档 |

@@ -115,7 +115,8 @@ func TestProfileClosureLoadsTheUniqueEntry(t *testing.T) {
 		closure, err := profileClosure(repoRoot(t), name)
 		require.NoError(t, err, "profile %s", name)
 		require.Contains(t, closure, "jimu/cmd/server", "profile %s 的闭包根应是唯一入口", name)
-		require.NotContains(t, closure, "jimu/profiles/"+name, "profile %s 不应再载入 profiles/<name>", name)
+		// 正向断言：该形态包必须被选中（未生效的 overlay 会让闭包里出现 full 或没有该形态）。
+		require.Contains(t, closure, "jimu/internal/profiles/"+name, "profile %s 的闭包必须包含该形态包", name)
 	}
 
 	_, err := profileClosure(repoRoot(t), "ghost")

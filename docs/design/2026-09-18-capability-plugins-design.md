@@ -338,7 +338,7 @@ profiles/
 
 > **P2.5b 进展（单一入口与构建期形态参数化已完成）**：本节原文的「每个形态一个
 > `profiles/<name>/main.go` 独立入口包」已**删除**，层②入口收敛为**唯一入口 `cmd/server`**：
-> `cmd/server/main.go` 只 import `internal/assembly` 与选点包 `internal/profiles/active`，选点文件
+> `cmd/server/main.go` 只 import `internal/assembly` 与选点包 `internal/profiles/active`（+ 标准库），选点文件
 > `assembly.go` 在提交态恒选一个形态（**默认 `full`**，其余四形态一律显式 `PROFILE=<name>`），因此
 > `go build ./cmd/server`、`go test ./...`、IDE、`make swagger` 默认都是 full（一个完整可跑的程序）。
 > 切换形态靠 Go 工具链的 `-overlay`：`tools/profileoverlay <profile>` 经共享实现
@@ -356,7 +356,7 @@ profiles/
 > **+1 文件 / +25 行（`full`）、+30 行（其余四形态）**，二进制差 16 KB 量级。`make check-capabilities`
 > 按 **4 条汇总行**输出：① 能力自描述与 `Owns` ↔ 迁移归属 ② 驱动可用集/选中集/import 闭包一致 ③ 形态
 > 生产代码只 import 已声明驱动 ④ **唯一入口与选点包只 import 一个形态**（④ 是 P2.5b 新增的不变量，含
-> 三条子断言：入口 `cmd/server` 只 import `internal/assembly` 与选点包；选点包
+> 三条子断言：入口 `cmd/server` 只 import `internal/assembly` 与选点包（+ 标准库）；选点包
 > `internal/profiles/active` **恰好** import 一个形态包；两者都不得 import
 > `internal/profiles/registry`——registry 一进图就会把 5 个形态全拉回二进制。③ 由 P2.5 的「形态生产
 > 代码与入口包只 import 已声明驱动」拆出，入口半边归 ④）；`make profiles-check`
@@ -412,6 +412,9 @@ profiles/
 | **P3 门禁与文档** | `check-capabilities` / `check-profiles` / `check-pluggable`；生成器模板同步新形态；README / CONTRIBUTING / AGENTS.md 更新（能力清单、形态、新增能力流程） | 四道门禁在 CI 生效 |
 | **P4 v0.3.0 收尾** | 版本日志补验证结果；`release-check`；`release/v0.3.0` → `master` 合并；打 tag 发布 | GitHub Release 发布成功 |
 
+> ⚠️ **上表 P2 行的 `profiles/{full,minimal,saas,enterprise,machine}` 入口包已被 P2.5b 取代**：
+> 收敛为唯一入口 `cmd/server` + 选点包 `internal/profiles/active`，见下方 P2.5b 进展块。
+
 P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 
 > **P2 进展（P2.1 运行时配置归属已完成）**：§8 的配置归属已落地 —— 能力配置段由能力在
@@ -450,6 +453,8 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > [`docs/plans/2026-09-22-p2-contract-and-runtime.md`](../plans/2026-09-22-p2-contract-and-runtime.md)。
 >
 > **P2 进展（P2.4 层② 构建已完成）**：§6.3 的 profile 入口包与 `compose-report` 落地 ——
+> ⚠️ **本块的「5 个入口 `profiles/{full,minimal,saas,enterprise,machine}`」已被 P2.5b 取代**：
+> 收敛为唯一入口 `cmd/server` + 选点包 `internal/profiles/active`，见下方 P2.5b 块。
 > 装配从单体的 `cmd/server/main.go` 抽成 `internal/assembly`（`Assembly`/`Capability`/`Context`/
 > `Run`/`ValidatePortFlow`）+ 各能力 `wire.go` 自装配 + `internal/profiles/<name>` 形态清单，
 > 5 个入口 `profiles/{full,minimal,saas,enterprise,machine}` **只 import 本形态需要的能力**
@@ -490,7 +495,7 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 >
 > **P2 进展（P2.5b 单一入口与构建期形态参数化已完成）**：层②入口从 5 个
 > `profiles/<name>/main.go` 收敛为**唯一入口 `cmd/server`** —— `cmd/server/main.go` 只 import
-> `internal/assembly` 与选点包 `internal/profiles/active`（提交态默认 `full`），切换形态改由**构建期
+> `internal/assembly` 与选点包 `internal/profiles/active`（+ 标准库；提交态默认 `full`），切换形态改由**构建期
 > overlay** 完成（`tools/profileoverlay` → gitignored 的 `.overlay/<profile>/`，不脏工作区；非法形态名
 > 非零退出且无产物）。形态名与清单的**唯一来源**收口到 `internal/profiles/registry`；
 > `make check-capabilities` 改为 **4 条汇总行**（④ 是新增不变量，含三条子断言：入口 `cmd/server` 只

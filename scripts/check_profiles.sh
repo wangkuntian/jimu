@@ -22,6 +22,13 @@
 #      capabilities/queue —— 这是软依赖在编译期的类型残留，去除需要把共享类型迁到
 #      contract/kernel（另一次改动，见 AGENTS.md「能力边界」），不在本次种子修复范围内。
 #      这些能力仍被 (2) 的 golden 锁定：不会再无声明地增减。
+#   4) 产物必须真的编入该形态包 —— 构建后 `strings` 产物必须出现
+#      `jimu/internal/profiles/<profile>`。若 overlay 未生效（典型是构建入口被改回
+#      `-overlay=$$(…)` 的单步写法，命令替换失败留下空值、Go 按提交态静默构建 full），
+#      产物里只有 `internal/profiles/full`，这条断言即失败 —— 它是所有构建入口
+#      「先取 overlay 再 && 构建」约定唯一的自动回归。
+#   5) 非法形态名必须让 profileoverlay 非零退出（反例断言），否则「非法名非零退出且无产物」
+#      只是纸面约定。
 #
 # JIMU_PROFILES_SMOKE=1：构建后逐个以 APP_ENV=dev 启动，轮询管理端 readiness
 # （GET /readyz 检查 DB+Redis 可达，即内核的 /health 语义）直到就绪，然后关停；
@@ -48,11 +55,28 @@ LOG_DIR="$BIN_DIR/logs"
 mkdir -p "$LOG_DIR"
 trap 'rm -rf "$BIN_DIR"' EXIT
 
+# 反例断言：非法形态名必须被 profileoverlay 拒绝（「静默构建 full」的第一层兜底）。
+if go run ./tools/profileoverlay ghost >/dev/null 2>&1; then
+  echo "❌ 非法形态名 \"ghost\" 未使 tools/profileoverlay 失败（预期非零退出）" >&2
+  exit 1
+fi
+echo "==> 非法形态名拒绝：ok（ghost → 非零退出）"
+
 echo "==> 构建各形态（overlay 构建 ./cmd/server）"
 for p in "${PROFILES[@]}"; do
   ov="$(go run ./tools/profileoverlay "$p")"
   go build -overlay="$ov" -o "$BIN_DIR/jimu-$p" ./cmd/server
-  echo "    ok  形态 ${p}（overlay 构建 cmd/server）"
+  # overlay 必须真的生效：产物里必须出现该形态包的符号。构建入口退化成
+  # `-overlay=$$(…)` 单步写法时，命令替换失败会留下空值、Go 静默按提交态 full 构建，
+  # 产物里只有 internal/profiles/full —— 这条断言即失败。
+  # 不用 `grep -q`：本脚本开了 pipefail，grep 命中即退出会给 strings 发 SIGPIPE，
+  # 管道整体返回 141 而被误判为失败；`grep -c` 读完全部输入。
+  matches="$(strings "$BIN_DIR/jimu-$p" | grep -c "jimu/internal/profiles/$p" || true)"
+  if [ "${matches:-0}" -eq 0 ]; then
+    echo "❌ profiles/$p 产物未编入该形态包（overlay 可能未生效，产物实为提交态 full）" >&2
+    exit 1
+  fi
+  echo "    ok  形态 ${p}（overlay 构建 cmd/server，产物已编入该形态包）"
 done
 
 # ---------------------------------------------------------------------------

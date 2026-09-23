@@ -119,7 +119,7 @@ build: build-server build-cli
 # 空的 -overlay=，go build 会**静默按提交态（full）构建**并成功退出。
 build-server:
 	@mkdir -p $(BIN_DIR)
-	overlay=$$(go run ./tools/profileoverlay $(PROFILE)) && go build -ldflags "$(LDFLAGS)" -overlay=$$overlay -o $(SERVER_BIN) $(SERVER_PKG)
+	overlay="$$(go run ./tools/profileoverlay "$(PROFILE)")" && go build -ldflags "$(LDFLAGS)" -overlay="$$overlay" -o $(SERVER_BIN) $(SERVER_PKG)
 
 build-cli:
 	@mkdir -p $(BIN_DIR)
