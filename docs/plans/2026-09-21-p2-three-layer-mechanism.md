@@ -14,6 +14,7 @@ P2.2 能力自描述契约（§6.1）             ← 已完成（依赖 P2.1 �
 P2.3 层③ 运行时：capabilities.enabled   ← 已完成（依赖 P2.2；软依赖降级报告 + 管理端点 /capabilities）
 P2.4 层② 构建：profiles 入口包          ← 已完成（依赖 P2.2；5 个 profile + compose-report）
 P2.5 层② 驱动级可插拔（§3.7）           ← 已完成（依赖 P2.4；驱动独立成包 + 两层声明 + 门禁）
+P2.5b 单一入口与构建期形态参数化         ← 已完成（依赖 P2.5；唯一入口 cmd/server + 选点包 + overlay）
 P2.6 层② 非代码资产模块化（§3.8）        ← deploy/Helm/CLI/契约测试随 profile 裁剪
 P2.7 层① 脚手架：jimu new / capability add ← 依赖 P2.2 + P2.4（生成专属 catalog 与 app.yaml）
 P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后在 CI 生效
@@ -67,10 +68,21 @@ P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后
 - **已完成（机制）**：`storage/{local,s3}`、`queue/{redis,kafka,rabbitmq}`、`dataops/{csv,excel}` 各为独立驱动包，包内 `init()` 调用能力核心的 `Register`；核心只留接口 + 注册表（`New`/`Get` 查表，未注册即 **fail-closed**、不静默回退；`storage` 空 `type` 仍按 `local`，`queue.Wire` 启动即校验配置类型已编译）。
 - **已完成（两层声明）**：`contract.Descriptor.Drivers` = 能力声明的**可用集**（驱动包名：storage `[local s3]`、queue `[redis kafka rabbitmq]`、dataops `[csv excel]`；`s3` 包覆盖 `s3`/`oss`/`minio` 三个配置取值）+ `assembly.Capability.Drivers` = 形态选中的**子集**（装配期强制 ⊆ 可用集），形态入口在 `internal/profiles/<name>/drivers.go` blank import 落实。
 - **已完成（两道保险）**：`make check-capabilities` 由 1 项扩到 **6 项**（1 项既有：`Owns` ↔ 迁移归属；5 项驱动：可用集 ↔ 目录存在 / 核心包生产闭包零驱动且零重型依赖 / 形态选中 == 形态**生产** import 闭包（集合比较）/ 驱动归属（驱动包只被 `internal/profiles/*` import）/ 形态生产代码与入口包只 import 已声明驱动）；`make compose-report` 新增「重型依赖」列。两者**仍不接入** `make ci`/`release-check`（P2.8 收口）。
-- **实测闭包计数**（`go list -deps ./profiles/<p> | grep -c <prefix>`）：`full` = aws-sdk-go-v2 67 / excelize 1 / kafka-go 49 / amqp091-go 1；`enterprise` = 0 / 0 / 0 / 0（收敛前 67 / 1 / 0 / 0，kafka/amqp 在队列驱动拆包时归零）；`minimal`/`saas`/`machine` = 0 / 0 / 0 / 0。形态→驱动矩阵（终态）：`full` = local+s3 / redis+kafka+rabbitmq / csv+excel；`enterprise` = local /（无 queue 能力）/ csv；`minimal`/`saas`/`machine` = 无。
+- **实测闭包计数**（当时对形态入口包逐个 `go list -deps` 计数）：`full` = aws-sdk-go-v2 67 / excelize 1 / kafka-go 49 / amqp091-go 1；`enterprise` = 0 / 0 / 0 / 0（收敛前 67 / 1 / 0 / 0，kafka/amqp 在队列驱动拆包时归零）；`minimal`/`saas`/`machine` = 0 / 0 / 0 / 0。形态→驱动矩阵（终态）：`full` = local+s3 / redis+kafka+rabbitmq / csv+excel；`enterprise` = local /（无 queue 能力）/ csv；`minimal`/`saas`/`machine` = 无。
 - **行为变更（仅 `enterprise`）**：该形态下 `storage.type: s3|oss|minio` 与 xlsx 导入/导出改为 fail-closed 报错（`storage driver "s3" is not compiled into this build (compiled: local)` / `import format "xlsx" is not compiled into this build (compiled: csv)`）；`full` 行为不变；`configs/app.yaml` 默认 `storage.type: local`、`queue.type: redis`，默认路径不受影响。
 - **豁免复核**：`GO-2026-6452`（excelize）豁免保留 —— 拆包不解除可达性（`govulncheck ./...` 扫整个 module，`full` 仍 import Excel 驱动），复核条件改为「excelize 发布 v2.11.1（或含 `rows.go` 负索引防护的正式版本）后移除」。
 - **已知限制**：`dataops/exporter` 目前无生产消费方（`/api/v1/users/export.csv` 由 `user` 能力自带 handler 实现），`dataops/excel` 仍注册导出方向供将来端点接入；`outbox`/`queue` **核心包**的类型残留仍在轻形态闭包里（驱动已退出），消除需共享类型迁移（独立改动）。
+
+## P2.5b 单一入口与构建期形态参数化（已完成）
+
+执行记录见 `docs/plans/2026-09-23-p2.5b-unified-entry.md`。
+
+- **已完成（唯一入口）**：删除 5 个 `profiles/<name>/main.go`，层②入口收敛为唯一 `cmd/server` —— `cmd/server/main.go` 只 import `internal/assembly` 与选点包 `internal/profiles/active`（提交态默认 `full`，`go build ./cmd/server`、`go test ./...`、IDE、`make swagger` 默认都是 full）。
+- **已完成（构建期切换形态）**：`tools/profileoverlay`（共享实现 `tools/internal/profileoverlay`）把选点文件替换为「只选该形态」的版本，产物落在 gitignored 的 `.overlay/<profile>/`、不改工作区；`PROFILE=minimal make build-server` → `bin/jimu-server-minimal`（`full` 仍是 `bin/jimu-server`）、`docker build --build-arg PROFILE=<name>`；非法形态名非零退出、无产物。
+- **已完成（registry 单点）**：形态名与清单的唯一来源收口到 `internal/profiles/registry`（`Names`/`All`/`Lookup`），只被 `tools/*` 与 `scripts/check_profiles.sh` 引用，不进 `cmd/server` 的 import 图。
+- **已完成（门禁与报告）**：`make check-capabilities` 改为 **4 条汇总行**（① 能力自描述与 `Owns` ↔ 迁移归属 ② 驱动可用集/选中集/import 闭包一致 ③ 形态生产代码只 import 已声明驱动 ④ 唯一入口与选点包只 import 一个形态）；`make profiles-check` 与 `make compose-report` 的闭包口径同步改为「`./cmd/server` + 该形态 overlay」。
+- **实测**：`full` 闭包 **118 个重型依赖包**、四个轻形态 **0**（`go list -deps`，与 P2.5 逐值一致）；`minimal` **84.7 MB** vs `full` **123.1 MB**；路由/迁移/表逐值不变，仅「本仓 Go 文件」+1、「本仓代码行」+25（`full`）/ +30（其余四形态）来自入口文件差异，二进制差 16 KB 量级。
+- **边界与不做**：驱动参数化**仅限形态级**（驱动集合仍由各形态 `internal/profiles/<name>/drivers.go` 的 blank import 决定）；`PROFILE=enterprise DRIVERS=local` 式**形态内再选驱动**需要第二份真源清单 + 生成 `drivers.go` + 门禁改读它，**留后续阶段**。开发者可见的行为变更：`go build ./profiles/<name>` 不再可用。
 
 ## P2.6 层② 非代码资产模块化（§3.8）
 
