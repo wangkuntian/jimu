@@ -20,8 +20,10 @@ import (
 // r.Routes() 的 method+path 排序。运行时组合根对 MountProtected 能力用空 relativePath 的
 // router.Group 挂载，不改变路径，因此本集合与实际启动逐条一致。
 //
-// 这是 full 零退化护栏的最后一环：e2e 路由对齐用例自建模块清单，不经过 full.Assembly()，
+// 这是 full 零退化护栏的最后一环：P2.6 起 e2e 已按形态装配（internal/e2e 经 assembly.WireFor
+// 与 active.Assembly()），本 golden 仍以逐值方式钉住 full 的对外路由面 ——
 // 任何一条路由从 full 形态消失（或 Mount 误分类导致挂载点变化）都必须让本用例失败。
+// 其它形态的路由 golden 见 internal/profiles/registry/routes_golden_test.go。
 var fullRoutesGolden = []string{
 	"DELETE /api/v1/admin/apikeys/:id",
 	"DELETE /api/v1/admin/files",

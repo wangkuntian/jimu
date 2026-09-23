@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"jimu/internal/config"
+	"jimu/internal/profiles/active"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
@@ -32,6 +33,31 @@ func testSections(t *testing.T) config.SectionDecoder {
 	// 限流值 > 0，不能为了测试把它改小/改 0）。
 	v.Set("storage.base_dir", t.TempDir())
 	return viperSectionDecoder{v: v}
+}
+
+// requireCapabilities 在当前形态缺任一所需能力时跳过用例（打印形态名与缺失能力）。
+//
+// 形态来自编译期选点（internal/profiles/active，提交态 full；`-overlay=$(go run
+// ./tools/profileoverlay <name>)` 可切到其它形态）。用途：同一套契约用例在裁剪形态下
+// 只跑该形态覆盖的部分，而不是因为路由/表不存在而失败 —— 同时让「full 10/10 全跑」
+// 成为零退化护栏（full 不跳过任何用例）。
+func requireCapabilities(t *testing.T, names ...string) {
+	t.Helper()
+
+	asm := active.Assembly()
+	have := make(map[string]bool, len(asm.Capabilities))
+	for _, c := range asm.Capabilities {
+		have[c.Descriptor.Name] = true
+	}
+	var missing []string
+	for _, n := range names {
+		if !have[n] {
+			missing = append(missing, n)
+		}
+	}
+	if len(missing) > 0 {
+		t.Skipf("形态 %s 不含能力 %v，本用例跳过", asm.Name, missing)
+	}
 }
 
 // viperSectionDecoder 把 viper 适配为 config.SectionDecoder（与 internal/app/capconfig_test.go 同构）。

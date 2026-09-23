@@ -34,6 +34,8 @@ func startTestGRPCServer(t *testing.T) (*grpcpkg.Server, *grpc.ClientConn) {
 
 // TestGRPCHealthCheck 验证 gRPC 健康检查协议：启动后返回 SERVING。
 func TestGRPCHealthCheck(t *testing.T) {
+	requireCapabilities(t, "grpc")
+
 	_, conn := startTestGRPCServer(t)
 
 	hc := healthpb.NewHealthClient(conn)
@@ -44,6 +46,7 @@ func TestGRPCHealthCheck(t *testing.T) {
 
 // TestGRPCPingEcho 验证 Ping 服务：echo 应答 + 空参数校验。
 func TestGRPCPingEcho(t *testing.T) {
+	requireCapabilities(t, "grpc")
 	_, conn := startTestGRPCServer(t)
 
 	var out wrapperspb.StringValue
@@ -58,6 +61,7 @@ func TestGRPCPingEcho(t *testing.T) {
 
 // TestGRPCReflection 验证 gRPC 反射：grpcurl 可探测服务列表。
 func TestGRPCReflection(t *testing.T) {
+	requireCapabilities(t, "grpc")
 	_, conn := startTestGRPCServer(t)
 
 	ref := reflectionpb.NewServerReflectionClient(conn)

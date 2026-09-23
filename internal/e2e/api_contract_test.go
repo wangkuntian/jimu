@@ -220,6 +220,8 @@ func loginWithRefresh(t *testing.T, r *gin.Engine, username, password string) (s
 
 // TestAuthRefreshLogout 令牌生命周期：登录 → refresh 换新对 → 旧 refresh 失效 → logout 后 access 失效。
 func TestAuthRefreshLogout(t *testing.T) {
+	requireCapabilities(t, "auth", "user", "access")
+
 	r := newTestApp(t)
 
 	_, refresh := loginWithRefresh(t, r, "admin", "admin123")
@@ -264,6 +266,7 @@ func TestAuthRefreshLogout(t *testing.T) {
 
 // TestRoleAssignmentAndRBAC 角色闭环：创建角色 → 分配权限 → 绑定用户 → 权限生效/撤销。
 func TestRoleAssignmentAndRBAC(t *testing.T) {
+	requireCapabilities(t, "auth", "user", "access")
 	// 缩短策略缓存 TTL，验证权限变更在缓存过期后生效
 	oldTTL := access.PolicyCacheTTL
 	access.PolicyCacheTTL = 50 * time.Millisecond
@@ -338,6 +341,7 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 
 // TestExportImportRoundTrip 导出→导入回读闭环（CSV）。
 func TestExportImportRoundTrip(t *testing.T) {
+	requireCapabilities(t, "auth", "user", "access", "dataops", "console")
 	r := newTestApp(t)
 	adminToken := login(t, r, "admin", "admin123")
 
@@ -357,6 +361,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 
 // TestAPIContract 端到端契约：注册 → 登录 → 401 边界 → RBAC 拒绝 → 管理员 CRUD → 审计。
 func TestAPIContract(t *testing.T) {
+	requireCapabilities(t, "auth", "user", "access", "audit")
 	r := newTestApp(t)
 
 	// 1. 注册新用户
@@ -402,6 +407,8 @@ func TestAPIContract(t *testing.T) {
 // TestAuthRateLimit 验证登录限流：LoginRateLimit=3 时，第 4 次请求被拒绝（code=1007）。
 // miniredis 支持 EVALSHA，无需外部 Redis。
 func TestAuthRateLimit(t *testing.T) {
+	// 本用例自己手搭 router（只挂 auth 的登录路由），故只依赖 auth。
+	requireCapabilities(t, "auth")
 	gin.SetMode(gin.TestMode)
 	t.Chdir(repoRoot(t))
 
