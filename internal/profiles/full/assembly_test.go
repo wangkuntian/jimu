@@ -5,9 +5,14 @@ import (
 
 	"jimu/internal/assembly"
 	"jimu/internal/capabilities/catalog"
+	"jimu/internal/capabilities/dataops/exporter"
+	"jimu/internal/capabilities/dataops/importer"
+	"jimu/internal/capabilities/queue"
+	"jimu/internal/capabilities/storage"
 	"jimu/internal/capability"
 	"jimu/internal/contract"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,6 +54,62 @@ func TestFullAssemblyModulesAreWired(t *testing.T) {
 	for _, c := range Assembly().Capabilities {
 		require.NotNil(t, c.Wire, "capability %q has no Wire", c.Descriptor.Name)
 	}
+}
+
+// TestFullDriverSelection 钉住 full 形态的驱动选中集：三种驱动能力均为全量选中。声明
+// （assembly.go 的 Drivers）与 blank import（drivers.go）必须逐值一致，由
+// `make check-capabilities` 的「形态选中 == 形态生产 import 闭包」断言守住单侧漂移。
+func TestFullDriverSelection(t *testing.T) {
+	assert.Equal(t, map[string][]string{
+		"storage": {"local", "s3"},
+		"queue":   {"redis", "kafka", "rabbitmq"},
+		"dataops": {"csv", "excel"},
+	}, driverSelection(Assembly()))
+}
+
+// TestFullCompiledStorageDrivers 钉住进程内注册表（与 enterprise 侧
+// TestEnterpriseDriverSelection 同款）：`drivers.go` 的两个 blank import 一旦被删，
+// `go build ./...` 与 TestFullDriverSelection 仍全绿（后者只钉 Capability.Drivers 声明），
+// 失败只会在运行期的 wire.go fail-closed 文案里暴露 —— 而 full 正是出货形态
+// （cmd/server/main.go），故此处直接断言本构建实际注册的 storage 类型。
+// 注意 RegisteredTypes() 返回的是**配置取值**集合：s3 驱动包一个包承载 s3/minio/oss 三种
+// S3 兼容类型，故为 4 项；驱动**包**集合仍是 assembly 声明的 {local, s3}。
+func TestFullCompiledStorageDrivers(t *testing.T) {
+	assert.Equal(t, []storage.StorageType{
+		storage.StorageTypeLocal,
+		storage.StorageTypeMinIO,
+		storage.StorageTypeOSS,
+		storage.StorageTypeS3,
+	}, storage.RegisteredTypes())
+}
+
+// TestFullCompiledQueueDrivers 钉住进程内注册表（与 storage 侧同款）：`drivers.go` 的三个
+// queue blank import 一旦被删，`go build ./...` 与 TestFullDriverSelection 仍全绿（后者只钉
+// Capability.Drivers 声明），失败只会在运行期 queue.Wire 的 fail-closed 文案里暴露 ——
+// 而 full 正是出货形态（cmd/server/main.go），故此处直接断言本构建实际注册的队列类型。
+// 与 storage 不同，一个驱动包恰好注册一个 queue.Type，故注册表为 3 项（升序）。
+func TestFullCompiledQueueDrivers(t *testing.T) {
+	assert.Equal(t, []queue.Type{queue.TypeKafka, queue.TypeRabbitMQ, queue.TypeRedis}, queue.RegisteredTypes())
+}
+
+// TestFullCompiledDataopsFormats 钉住进程内注册表（与 storage/queue 侧同款）：
+// `drivers.go` 的 dataops blank import 一旦被删，`go build ./...` 与 TestFullDriverSelection
+// 仍全绿（后者只钉 Capability.Drivers 声明），失败只会在请求期 importer.Get/exporter.Get
+// 的 fail-closed 文案里暴露 —— 故此处直接断言本构建实际注册的导入/导出格式。
+func TestFullCompiledDataopsFormats(t *testing.T) {
+	assert.Equal(t, []importer.Format{importer.FormatCSV, importer.FormatExcel}, importer.RegisteredFormats())
+	assert.Equal(t, []exporter.Format{exporter.FormatCSV, exporter.FormatExcel}, exporter.RegisteredFormats())
+}
+
+// driverSelection 汇总清单里各能力的驱动选中集（测试辅助）。
+func driverSelection(a assembly.Assembly) map[string][]string {
+	out := map[string][]string{}
+	for _, c := range a.Capabilities {
+		if len(c.Drivers) > 0 {
+			out[c.Descriptor.Name] = c.Drivers
+		}
+	}
+	return out
 }
 
 // TestFullAssemblyHasNoDuplicates 清单内不得重名。

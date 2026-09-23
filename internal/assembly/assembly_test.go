@@ -223,3 +223,20 @@ func TestWireCapabilitiesRejectsResolvedCapabilityOutsideAssembly(t *testing.T) 
 	err := wireCapabilities(ctx, []contract.Descriptor{{Name: "ghost"}}, nil)
 	require.ErrorContains(t, err, "not declared in the assembly")
 }
+
+// TestValidateAssemblyRejectsUndeclaredDriver 形态选中的驱动必须是能力声明过的子集，
+// 且不得重复；空选中集（不选任何驱动）恒合法。
+func TestValidateAssemblyRejectsUndeclaredDriver(t *testing.T) {
+	wire := func(*Context) (contract.Module, error) { return nil, nil }
+	base := func(drivers []string, selected []string) Assembly {
+		return Assembly{Name: "x", Capabilities: []Capability{{
+			Descriptor: contract.Descriptor{Name: "storage", Drivers: drivers},
+			Wire:       wire,
+			Drivers:    selected,
+		}}}
+	}
+	require.ErrorContains(t, validateAssembly(base([]string{"local"}, []string{"s3"})), "not declared")
+	require.ErrorContains(t, validateAssembly(base([]string{"local"}, []string{"local", "local"})), "twice")
+	require.NoError(t, validateAssembly(base([]string{"local", "s3"}, []string{"local"})))
+	require.NoError(t, validateAssembly(base(nil, nil)))
+}

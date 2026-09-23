@@ -1,4 +1,4 @@
-package storage
+package s3
 
 import (
 	"context"
@@ -8,12 +8,20 @@ import (
 	"strings"
 	"time"
 
+	"jimu/internal/capabilities/storage"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
+
+func init() {
+	storage.Register(storage.StorageTypeS3, newS3Storage)
+	storage.Register(storage.StorageTypeMinIO, newMinioStorage)
+	storage.Register(storage.StorageTypeOSS, newOSSStorage)
+}
 
 // S3Storage S3/MinIO 对象存储实现
 // MinIO 使用 S3 兼容协议，同一套代码覆盖 S3 与 MinIO（通过 PathStyle + Endpoint 区分）
@@ -24,16 +32,22 @@ type S3Storage struct {
 }
 
 // newS3Storage 创建 S3 存储（MinIO 复用，S3 兼容协议）
-func newS3Storage(cfg Config) (Storage, error) {
+func newS3Storage(cfg storage.Config) (storage.Storage, error) {
 	return newS3CompatibleStorage(cfg, true)
 }
 
 // newMinioStorage 创建 MinIO 存储
-func newMinioStorage(cfg Config) (Storage, error) {
+func newMinioStorage(cfg storage.Config) (storage.Storage, error) {
 	return newS3CompatibleStorage(cfg, false)
 }
 
-func newS3CompatibleStorage(cfg Config, isS3 bool) (Storage, error) {
+// newOSSStorage 创建阿里云 OSS 存储。
+// OSS 兼容 S3 协议，复用 S3 SDK（path style + endpoint），无需引入 aliyun-oss-go-sdk。
+func newOSSStorage(cfg storage.Config) (storage.Storage, error) {
+	return newS3CompatibleStorage(cfg, false)
+}
+
+func newS3CompatibleStorage(cfg storage.Config, isS3 bool) (storage.Storage, error) {
 	if cfg.Bucket == "" {
 		return nil, fmt.Errorf("storage bucket is required")
 	}
@@ -161,4 +175,4 @@ func (s *S3Storage) PresignedUploadURL(key string, expiry time.Duration, content
 	return out.URL, nil
 }
 
-var _ Storage = (*S3Storage)(nil)
+var _ storage.Storage = (*S3Storage)(nil)

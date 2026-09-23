@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"jimu/internal/capabilities/dataops/application"
+	// 注册 CSV 驱动：端点测试经应用层 importer.Get 查进程级注册表，测试二进制需显式编入驱动包。
+	_ "jimu/internal/capabilities/dataops/csv"
 	importdomain "jimu/internal/capabilities/dataops/domain"
 
 	"github.com/gin-gonic/gin"

@@ -1,4 +1,4 @@
-package storage
+package s3
 
 import (
 	"bytes"
@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"jimu/internal/capabilities/storage"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -65,8 +67,8 @@ func newMockS3Storage(t *testing.T) *S3Storage {
 	}))
 	t.Cleanup(srv.Close)
 
-	cfg := Config{
-		Type:      StorageTypeMinIO,
+	cfg := storage.Config{
+		Type:      storage.StorageTypeMinIO,
 		Bucket:    "b",
 		AccessKey: "ak",
 		SecretKey: "sk",

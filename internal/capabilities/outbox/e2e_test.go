@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/queue"
+	queueredis "jimu/internal/capabilities/queue/redis"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -40,7 +41,7 @@ func TestOutboxQueueWorkerEndToEnd(t *testing.T) {
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 
-	rq := queue.NewRedisQueue(client)
+	rq := queueredis.NewRedisQueue(client)
 
 	// 记录处理器收到的载荷，验证跨队列序列化完整
 	var handled atomic.Int32

@@ -17,4 +17,5 @@ var Descriptor = contract.Descriptor{
 	Mount:      contract.MountProtected,
 	Migrations: migrationsFS,
 	Owns:       []string{"import_jobs"},
+	Drivers:    []string{"csv", "excel"},
 }

@@ -13,7 +13,7 @@ P2.1 运行时配置归属（§8）              ← 已完成
 P2.2 能力自描述契约（§6.1）             ← 已完成（依赖 P2.1 的 Config 建模；产出 SoftRequires/Owns，Tags 推迟）
 P2.3 层③ 运行时：capabilities.enabled   ← 已完成（依赖 P2.2；软依赖降级报告 + 管理端点 /capabilities）
 P2.4 层② 构建：profiles 入口包          ← 已完成（依赖 P2.2；5 个 profile + compose-report）
-P2.5 层② 驱动级可插拔（§3.7）           ← 依赖 P2.4（profile 决定 import 哪些驱动）
+P2.5 层② 驱动级可插拔（§3.7）           ← 已完成（依赖 P2.4；驱动独立成包 + 两层声明 + 门禁）
 P2.6 层② 非代码资产模块化（§3.8）        ← deploy/Helm/CLI/契约测试随 profile 裁剪
 P2.7 层① 脚手架：jimu new / capability add ← 依赖 P2.2 + P2.4（生成专属 catalog 与 app.yaml）
 P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后在 CI 生效
@@ -60,11 +60,17 @@ P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后
 - **编译期残留（留待共享类型迁移）**：`user`/`auth` 直接 import `outbox`/`queue`/`notification`（`console` import `ws`）的具体类型，因此 `minimal`/`saas` 闭包多出 `outbox`/`queue`、`machine` 多出 `notification`/`outbox`/`queue`、`enterprise` 多出 `outbox`/`queue`/`ws`；装配期一个都不构造，已由 golden 闭包门禁冻结，消除需把 `*outbox.Outbox`/`notification.Message`/`outbox.Event` 迁到 `contract`/内核。
 - **记录偏差（`internal/app` 的能力 domain 叶子包）**：`internal/app` 不 import `catalog`、任何能力根包或 `internal/assembly`，但仍 import `access/domain`、`tenant/domain`、`user/domain` 三个能力 **domain 叶子包**（`internal/app/seed.go` 的结构性种子需要 `Tenant`/`Plan`/`Role`/`Permission`/`User` 等实体类型）；`go list -deps ./internal/app` 实测 jimu 侧能力项仅此三个。这是 P2.4 收尾裁定记录的偏差，本阶段不搬（属独立重构）：把这些类型移到 `contract`/内核后可消除该偏差，并进一步缩小每个形态的二进制。
 
-## P2.5 层② 驱动级可插拔（§3.7）
+## P2.5 层② 驱动级可插拔（§3.7）（已完成）
 
-- `storage/{local,s3}`、`queue/{redis,kafka,rabbitmq}`、`dataops/{csv,excel}` 拆驱动包。
-- 注册机制从同包 `switch` 改为「显式 import + 注册」；漏 import 会在**运行时**报「未知驱动」而非编译失败 → 两道保险：`check-capabilities` 静态校验「能力声明的驱动集合 = profile 实际 import 的驱动包」，启动时校验配置里的驱动已在编译期注册并给出明确错误。
-- **验收**：只用本地存储/Redis 队列/CSV 时，对应重型依赖不出现（`go.mod`/二进制报告可证）。
+执行记录见 `docs/plans/2026-09-22-p2.5-driver-pluggability.md`。
+
+- **已完成（机制）**：`storage/{local,s3}`、`queue/{redis,kafka,rabbitmq}`、`dataops/{csv,excel}` 各为独立驱动包，包内 `init()` 调用能力核心的 `Register`；核心只留接口 + 注册表（`New`/`Get` 查表，未注册即 **fail-closed**、不静默回退；`storage` 空 `type` 仍按 `local`，`queue.Wire` 启动即校验配置类型已编译）。
+- **已完成（两层声明）**：`contract.Descriptor.Drivers` = 能力声明的**可用集**（驱动包名：storage `[local s3]`、queue `[redis kafka rabbitmq]`、dataops `[csv excel]`；`s3` 包覆盖 `s3`/`oss`/`minio` 三个配置取值）+ `assembly.Capability.Drivers` = 形态选中的**子集**（装配期强制 ⊆ 可用集），形态入口在 `internal/profiles/<name>/drivers.go` blank import 落实。
+- **已完成（两道保险）**：`make check-capabilities` 由 1 项扩到 **6 项**（1 项既有：`Owns` ↔ 迁移归属；5 项驱动：可用集 ↔ 目录存在 / 核心包生产闭包零驱动且零重型依赖 / 形态选中 == 形态**生产** import 闭包（集合比较）/ 驱动归属（驱动包只被 `internal/profiles/*` import）/ 形态生产代码与入口包只 import 已声明驱动）；`make compose-report` 新增「重型依赖」列。两者**仍不接入** `make ci`/`release-check`（P2.8 收口）。
+- **实测闭包计数**（`go list -deps ./profiles/<p> | grep -c <prefix>`）：`full` = aws-sdk-go-v2 67 / excelize 1 / kafka-go 49 / amqp091-go 1；`enterprise` = 0 / 0 / 0 / 0（收敛前 67 / 1 / 0 / 0，kafka/amqp 在队列驱动拆包时归零）；`minimal`/`saas`/`machine` = 0 / 0 / 0 / 0。形态→驱动矩阵（终态）：`full` = local+s3 / redis+kafka+rabbitmq / csv+excel；`enterprise` = local /（无 queue 能力）/ csv；`minimal`/`saas`/`machine` = 无。
+- **行为变更（仅 `enterprise`）**：该形态下 `storage.type: s3|oss|minio` 与 xlsx 导入/导出改为 fail-closed 报错（`storage driver "s3" is not compiled into this build (compiled: local)` / `import format "xlsx" is not compiled into this build (compiled: csv)`）；`full` 行为不变；`configs/app.yaml` 默认 `storage.type: local`、`queue.type: redis`，默认路径不受影响。
+- **豁免复核**：`GO-2026-6452`（excelize）豁免保留 —— 拆包不解除可达性（`govulncheck ./...` 扫整个 module，`full` 仍 import Excel 驱动），复核条件改为「excelize 发布 v2.11.1（或含 `rows.go` 负索引防护的正式版本）后移除」。
+- **已知限制**：`dataops/exporter` 目前无生产消费方（`/api/v1/users/export.csv` 由 `user` 能力自带 handler 实现），`dataops/excel` 仍注册导出方向供将来端点接入；`outbox`/`queue` **核心包**的类型残留仍在轻形态闭包里（驱动已退出），消除需共享类型迁移（独立改动）。
 
 ## P2.6 层② 非代码资产模块化（§3.8）
 

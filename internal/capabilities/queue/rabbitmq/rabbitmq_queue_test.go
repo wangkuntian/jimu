@@ -1,5 +1,5 @@
-// internal/capabilities/queue/rabbitmq_queue_test.go
-package queue
+// internal/capabilities/queue/rabbitmq/rabbitmq_queue_test.go
+package rabbitmq
 
 import (
 	"context"
@@ -7,14 +7,16 @@ import (
 	"testing"
 	"time"
 
+	"jimu/internal/capabilities/queue"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRabbitMQQueueImplementsInterfaces(t *testing.T) {
-	var _ Queue = (*RabbitMQQueue)(nil)
-	var _ Consumer = (*RabbitMQQueue)(nil)
+	var _ queue.Queue = (*RabbitMQQueue)(nil)
+	var _ queue.Consumer = (*RabbitMQQueue)(nil)
 }
 
 // fakeRabbitMQChannel 内存假 channel，记录发布的消息并返回预设 delivery
@@ -69,14 +71,14 @@ func newTestRabbitQueue(t *testing.T) (*RabbitMQQueue, *fakeRabbitMQChannel) {
 func TestRabbitMQQueue_SubmitConsumeAck(t *testing.T) {
 	q, ch := newTestRabbitQueue(t)
 
-	job := &JobData{ID: 9, Type: "test", Payload: `{"x":1}`}
+	job := &queue.JobData{ID: 9, Type: "test", Payload: `{"x":1}`}
 	assert.NoError(t, q.Submit(context.Background(), job))
 
 	// Submit 应把任务 JSON 序列化持久化发布到队列
 	require.Len(t, ch.published, 1)
 	assert.Equal(t, "application/json", ch.published[0].ContentType)
 	assert.Equal(t, amqp.Persistent, ch.published[0].DeliveryMode)
-	var got JobData
+	var got queue.JobData
 	assert.NoError(t, json.Unmarshal(ch.published[0].Body, &got))
 	assert.Equal(t, job.ID, got.ID)
 	assert.Equal(t, job.Type, got.Type)
@@ -99,7 +101,7 @@ func TestRabbitMQQueue_SubmitConsumeAck(t *testing.T) {
 func TestRabbitMQQueue_NackRequeues(t *testing.T) {
 	q, ch := newTestRabbitQueue(t)
 
-	job := &JobData{ID: 9, Type: "test", Payload: `{"x":1}`}
+	job := &queue.JobData{ID: 9, Type: "test", Payload: `{"x":1}`}
 	assert.NoError(t, q.Submit(context.Background(), job))
 
 	ack := &fakeAcknowledger{}

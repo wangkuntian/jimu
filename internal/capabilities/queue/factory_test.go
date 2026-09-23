@@ -4,18 +4,29 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestNew_Redis(t *testing.T) {
-	cfg := Config{Type: "redis"}
-	q, err := New(cfg)
-	assert.NoError(t, err)
-	_, ok := q.(*RedisQueue)
-	assert.True(t, ok)
+func TestNewRejectsUnregisteredDriver(t *testing.T) {
+	assert.Empty(t, RegisteredTypes(), "核心包不得自注册任何驱动")
+	_, err := New(Config{Type: TypeKafka})
+	require.ErrorContains(t, err, `queue driver "kafka" is not compiled into this build`)
+	require.ErrorContains(t, err, "compiled: none")
+	assert.ErrorIs(t, EnsureRegistered(TypeRedis), ErrUnregisteredDriver) // 未注册即标记该哨兵错误
 }
 
-func TestNew_InvalidType(t *testing.T) {
-	cfg := Config{Type: "invalid"}
-	_, err := New(cfg)
-	assert.Error(t, err)
+func TestNewUsesRegisteredDriver(t *testing.T) {
+	Register(TypeRedis, func(Config) (Queue, error) { return nil, nil })
+	t.Cleanup(func() { delete(drivers, TypeRedis) })
+	q, err := New(Config{Type: TypeRedis})
+	require.NoError(t, err)
+	assert.Nil(t, q)
+	assert.NoError(t, EnsureRegistered(TypeRedis))
+}
+
+func TestRegisterPanicsOnDuplicate(t *testing.T) {
+	f := func(Config) (Queue, error) { return nil, nil }
+	Register("dup", f)
+	t.Cleanup(func() { delete(drivers, "dup") })
+	assert.Panics(t, func() { Register("dup", f) })
 }

@@ -1,5 +1,6 @@
 // Command checkcapabilities 校验能力自描述与实际迁移一致（P2.8 门禁的第一块）。
-// 当前范围：Owns 的表必须由且仅由该能力的 mysql 迁移 CREATE（表归属唯一）。
+// 当前范围：① Owns 的表必须由且仅由该能力的 mysql 迁移 CREATE（表归属唯一）；
+// ② 驱动可用集/选中集/import 闭包一致、形态只 import 已声明驱动（见 drivers.go）。
 // 完整门禁（跨能力 import 一致性、internal 越界、kernel→capabilities 反向依赖）留待 P2.8。
 package main
 
@@ -75,7 +76,18 @@ func main() {
 		fmt.Fprintln(os.Stderr, "❌ check-capabilities:", err)
 		os.Exit(1)
 	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "❌ check-capabilities:", err)
+		os.Exit(1)
+	}
+	if err := checkDrivers(root, profileAssemblies()); err != nil {
+		fmt.Fprintln(os.Stderr, "❌ check-capabilities:", err)
+		os.Exit(1)
+	}
 	fmt.Println("✅ check-capabilities: 能力自描述与迁移归属一致")
+	fmt.Println("✅ check-capabilities: 驱动可用集/选中集/import 闭包一致")
+	fmt.Println("✅ check-capabilities: 形态生产代码只 import 已声明的驱动")
 }
 
 // createdTables 从能力嵌入的 mysql 迁移里提取 CREATE TABLE 的表名（去重排序）。

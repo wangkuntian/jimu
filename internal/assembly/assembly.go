@@ -23,6 +23,10 @@ import (
 type Capability struct {
 	Descriptor contract.Descriptor
 	Wire       func(*Context) (contract.Module, error)
+	// Drivers 本形态为这个能力选中的驱动包名（子集；空 = 不选任何驱动）。
+	// 选中集必须 ⊆ Descriptor.Drivers，且与 profiles/<name>/drivers.go 的 blank import
+	// 逐值一致（make check-capabilities 静态校验，设计 §3.7 的两道保险之二）。
+	Drivers []string
 	// Ungated 标记非 catalog 条目：由形态清单决定是否装配，不受 capabilities.enabled
 	// 门控（P2.4 裁定 7 / 设计裁定 B：非 catalog 包不由启用集门控）。catalog 条目为
 	// false，随 capabilities.enabled 的解析集裁剪与补齐。
@@ -196,7 +200,8 @@ func wireOne(ctx *Context, d contract.Descriptor, byName map[string]Capability) 
 	return ctx.Register(module)
 }
 
-// validateAssembly 在触碰配置/DB 之前自检清单：名字必填、Wire 必备、不得重名。
+// validateAssembly 在触碰配置/DB 之前自检清单：名字必填、Wire 必备、不得重名，
+// 且每个能力的驱动选中集必须是其 Descriptor.Drivers 的子集（不得选中未声明的驱动）。
 func validateAssembly(a Assembly) error {
 	if a.Name == "" {
 		return fmt.Errorf("assembly: name is required")
@@ -212,6 +217,21 @@ func validateAssembly(a Assembly) error {
 		}
 		if seen[name] {
 			return fmt.Errorf("assembly %q: capability %q declared twice", a.Name, name)
+		}
+		available := make(map[string]bool, len(c.Descriptor.Drivers))
+		for _, d := range c.Descriptor.Drivers {
+			available[d] = true
+		}
+		selected := make(map[string]bool, len(c.Drivers))
+		for _, d := range c.Drivers {
+			if !available[d] {
+				return fmt.Errorf("assembly %q: capability %q selects driver %q which is not declared in its Descriptor.Drivers %v",
+					a.Name, name, d, c.Descriptor.Drivers)
+			}
+			if selected[d] {
+				return fmt.Errorf("assembly %q: capability %q selects driver %q twice", a.Name, name, d)
+			}
+			selected[d] = true
 		}
 		seen[name] = true
 	}

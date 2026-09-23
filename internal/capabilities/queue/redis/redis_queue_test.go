@@ -1,10 +1,12 @@
-// internal/capabilities/queue/queue_contract_test.go
-package queue
+// internal/capabilities/queue/redis/redis_queue_test.go
+package redis
 
 import (
 	"context"
 	"testing"
 	"time"
+
+	"jimu/internal/capabilities/queue"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -28,16 +30,16 @@ func newRedisTestQueue(t *testing.T) (*RedisQueue, *redis.Client) {
 }
 
 func TestRedisQueueImplementsInterfaces(t *testing.T) {
-	var _ Queue = (*RedisQueue)(nil)
-	var _ Consumer = (*RedisQueue)(nil)
+	var _ queue.Queue = (*RedisQueue)(nil)
+	var _ queue.Consumer = (*RedisQueue)(nil)
 }
 
 func TestQueueContract_SubmitConsume(t *testing.T) {
 	rq, _ := newRedisTestQueue(t)
-	var q Queue = rq
-	var c Consumer = rq
+	var q queue.Queue = rq
+	var c queue.Consumer = rq
 
-	job := &JobData{ID: 1, Type: "test", Payload: `{"x":1}`}
+	job := &queue.JobData{ID: 1, Type: "test", Payload: `{"x":1}`}
 	assert.NoError(t, q.Submit(context.Background(), job))
 
 	got, err := c.Consume(context.Background(), 100*time.Millisecond)
@@ -51,25 +53,25 @@ func TestQueueContract_SubmitConsume(t *testing.T) {
 func TestRedisQueueAckRemovesFromProcessing(t *testing.T) {
 	rq, client := newRedisTestQueue(t)
 
-	job := &JobData{ID: 1, Type: "test", Payload: `{"x":1}`}
+	job := &queue.JobData{ID: 1, Type: "test", Payload: `{"x":1}`}
 	assert.NoError(t, rq.Submit(context.Background(), job))
 
 	got, err := rq.Consume(context.Background(), 100*time.Millisecond)
 	assert.NoError(t, err)
 
 	// 处理中：processing 有 1 条，in_flight 有 1 条
-	assert.Equal(t, int64(1), client.LLen(context.Background(), ProcessingKey).Val())
-	assert.Equal(t, int64(1), client.ZCard(context.Background(), InFlightKey).Val())
+	assert.Equal(t, int64(1), client.LLen(context.Background(), queue.ProcessingKey).Val())
+	assert.Equal(t, int64(1), client.ZCard(context.Background(), queue.InFlightKey).Val())
 
 	assert.NoError(t, rq.Ack(context.Background(), got))
-	assert.Equal(t, int64(0), client.LLen(context.Background(), ProcessingKey).Val())
-	assert.Equal(t, int64(0), client.ZCard(context.Background(), InFlightKey).Val())
+	assert.Equal(t, int64(0), client.LLen(context.Background(), queue.ProcessingKey).Val())
+	assert.Equal(t, int64(0), client.ZCard(context.Background(), queue.InFlightKey).Val())
 }
 
 func TestRedisQueueNackRequeues(t *testing.T) {
 	rq, client := newRedisTestQueue(t)
 
-	job := &JobData{ID: 1, Type: "test", Payload: `{"x":1}`}
+	job := &queue.JobData{ID: 1, Type: "test", Payload: `{"x":1}`}
 	assert.NoError(t, rq.Submit(context.Background(), job))
 
 	got, err := rq.Consume(context.Background(), 100*time.Millisecond)
@@ -78,9 +80,9 @@ func TestRedisQueueNackRequeues(t *testing.T) {
 	assert.NoError(t, rq.Nack(context.Background(), got))
 
 	// 重新入队：processing/in_flight 清空，queue 恢复 1 条
-	assert.Equal(t, int64(0), client.LLen(context.Background(), ProcessingKey).Val())
-	assert.Equal(t, int64(0), client.ZCard(context.Background(), InFlightKey).Val())
-	assert.Equal(t, int64(1), client.LLen(context.Background(), QueueKey).Val())
+	assert.Equal(t, int64(0), client.LLen(context.Background(), queue.ProcessingKey).Val())
+	assert.Equal(t, int64(0), client.ZCard(context.Background(), queue.InFlightKey).Val())
+	assert.Equal(t, int64(1), client.LLen(context.Background(), queue.QueueKey).Val())
 
 	// 可再次消费
 	got2, err := rq.Consume(context.Background(), 100*time.Millisecond)
@@ -91,7 +93,7 @@ func TestRedisQueueNackRequeues(t *testing.T) {
 func TestRedisQueueRequeueExpired(t *testing.T) {
 	rq, client := newRedisTestQueue(t)
 
-	job := &JobData{ID: 1, Type: "test", Payload: `{"x":1}`}
+	job := &queue.JobData{ID: 1, Type: "test", Payload: `{"x":1}`}
 	assert.NoError(t, rq.Submit(context.Background(), job))
 
 	_, err := rq.Consume(context.Background(), 100*time.Millisecond)
@@ -103,10 +105,10 @@ func TestRedisQueueRequeueExpired(t *testing.T) {
 	assert.Equal(t, 0, n)
 
 	// 将 in_flight 的 score 改为过去时间戳，模拟 worker 崩溃后可见性超时
-	res, err := client.ZRangeWithScores(context.Background(), InFlightKey, 0, -1).Result()
+	res, err := client.ZRangeWithScores(context.Background(), queue.InFlightKey, 0, -1).Result()
 	assert.NoError(t, err)
 	assert.Len(t, res, 1)
-	client.ZAdd(context.Background(), InFlightKey, redis.Z{
+	client.ZAdd(context.Background(), queue.InFlightKey, redis.Z{
 		Score:  float64(time.Now().Add(-time.Minute).Unix()),
 		Member: res[0].Member,
 	})
@@ -116,7 +118,7 @@ func TestRedisQueueRequeueExpired(t *testing.T) {
 	assert.Equal(t, 1, n)
 
 	// 任务回到实时队列
-	assert.Equal(t, int64(1), client.LLen(context.Background(), QueueKey).Val())
-	assert.Equal(t, int64(0), client.ZCard(context.Background(), InFlightKey).Val())
-	assert.Equal(t, int64(0), client.LLen(context.Background(), ProcessingKey).Val())
+	assert.Equal(t, int64(1), client.LLen(context.Background(), queue.QueueKey).Val())
+	assert.Equal(t, int64(0), client.ZCard(context.Background(), queue.InFlightKey).Val())
+	assert.Equal(t, int64(0), client.LLen(context.Background(), queue.ProcessingKey).Val())
 }

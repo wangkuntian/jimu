@@ -1,5 +1,5 @@
-// internal/capabilities/queue/kafka_queue_test.go
-package queue
+// internal/capabilities/queue/kafka/kafka_queue_test.go
+package kafka
 
 import (
 	"context"
@@ -8,14 +8,16 @@ import (
 	"testing"
 	"time"
 
+	"jimu/internal/capabilities/queue"
+
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestKafkaQueueImplementsInterfaces(t *testing.T) {
-	var _ Queue = (*KafkaQueue)(nil)
-	var _ Consumer = (*KafkaQueue)(nil)
+	var _ queue.Queue = (*KafkaQueue)(nil)
+	var _ queue.Consumer = (*KafkaQueue)(nil)
 }
 
 // fakeKafkaWriter 内存假 writer，记录写入的消息
@@ -62,13 +64,13 @@ func TestKafkaQueue_SubmitConsume(t *testing.T) {
 	r := &fakeKafkaReader{}
 	q := &KafkaQueue{writer: w, reader: r, inFlight: make(map[uint64]kafka.Message)}
 
-	job := &JobData{ID: 7, Type: "test", Payload: `{"x":1}`}
+	job := &queue.JobData{ID: 7, Type: "test", Payload: `{"x":1}`}
 	assert.NoError(t, q.Submit(context.Background(), job))
 
 	// Submit 应把任务 JSON 序列化写入 Kafka，key 为任务 ID
 	require.Len(t, w.msgs, 1)
 	assert.Equal(t, "7", string(w.msgs[0].Key))
-	var got JobData
+	var got queue.JobData
 	assert.NoError(t, json.Unmarshal(w.msgs[0].Value, &got))
 	assert.Equal(t, job.ID, got.ID)
 	assert.Equal(t, job.Type, got.Type)

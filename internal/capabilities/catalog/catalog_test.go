@@ -47,10 +47,11 @@ func fixture() []contract.Descriptor {
 		{Name: "apikey", SoftRequires: []string{"tenant"},
 			Owns: []string{"api_keys"}, Mount: contract.MountProtected},
 		{Name: "queue", Owns: []string{"jobs", "job_history", "dead_letters", "scheduled_jobs"},
-			Mount: contract.MountProtected},
+			Drivers: []string{"redis", "kafka", "rabbitmq"}, Mount: contract.MountProtected},
 		{Name: "outbox", SoftRequires: []string{"queue"},
 			Owns: []string{"outbox_events"}, Mount: contract.MountProtected},
-		{Name: "dataops", Owns: []string{"import_jobs"}, Mount: contract.MountProtected},
+		{Name: "dataops", Owns: []string{"import_jobs"},
+			Drivers: []string{"csv", "excel"}, Mount: contract.MountProtected},
 		{Name: "search", Owns: []string{"search_documents"}, Mount: contract.MountProtected},
 		{Name: "captcha", Mount: contract.MountPublic},
 		{Name: "feature", Mount: contract.MountProtected},
@@ -89,6 +90,21 @@ func TestAllReturnsDeepCopyOfPermissions(t *testing.T) {
 	if All()[0].Permissions[0].Resource != "/r" {
 		t.Fatal("All() must not expose the registry's Permissions backing array")
 	}
+}
+
+// TestAllReturnsDeepCopyOfDrivers 驱动声明同样不得暴露清单底层数组
+// （queue/dataops 是当前仅有的两个声明驱动的能力）。
+func TestAllReturnsDeepCopyOfDrivers(t *testing.T) {
+	withEntries(t,
+		contract.Descriptor{Name: "queue", Drivers: []string{"redis", "kafka", "rabbitmq"}},
+		contract.Descriptor{Name: "dataops", Drivers: []string{"csv", "excel"}},
+	)
+	got := All()
+	got[0].Drivers[0] = "mutated"
+	got[1].Drivers[0] = "mutated"
+	again := All()
+	assert.Equal(t, "redis", again[0].Drivers[0], "All() must not expose the registry's Drivers backing array")
+	assert.Equal(t, "csv", again[1].Drivers[0], "All() must not expose the registry's Drivers backing array")
 }
 
 // TestValidateDeclarationsAcceptsCurrentCatalog 真实清单必须通过声明校验。
@@ -220,6 +236,24 @@ func TestCatalogSoftRequiresShape(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("catalog SoftRequires drifted:\n got %v\nwant %v", got, want)
+	}
+}
+
+// TestCatalogDriversShape 钉住各能力声明的驱动可用集（空 = 无驱动概念）。
+// 驱动目录是否存在、形态选中集是否与 import 闭包一致，由 make check-capabilities 校验。
+func TestCatalogDriversShape(t *testing.T) {
+	want := map[string][]string{
+		"queue":   {"redis", "kafka", "rabbitmq"},
+		"dataops": {"csv", "excel"},
+	}
+	got := map[string][]string{}
+	for _, d := range All() {
+		if len(d.Drivers) > 0 {
+			got[d.Name] = d.Drivers
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("catalog Drivers drifted:\n got %v\nwant %v", got, want)
 	}
 }
 
