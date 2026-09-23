@@ -251,6 +251,10 @@ make cli
 # 数据初始化
 ./bin/jimu seed                     # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例）
 
+# API Key（命令由 apikey 能力自带：internal/capabilities/apikey/cli）
+./bin/jimu apikey issue --name=ci --scopes=api:access   # 签发 API Key（明文只显示一次）
+./bin/jimu apikey list                                  # 列出 API Key（不显示明文）
+
 ```
 
 ## 数据库迁移

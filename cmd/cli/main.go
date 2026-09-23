@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"jimu/internal/app"
+	apikeycli "jimu/internal/capabilities/apikey/cli"
 	"jimu/internal/capabilities/catalog"
 	"jimu/internal/config"
 	"jimu/internal/kernel/db"
@@ -194,6 +195,8 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 	configCmd.AddCommand(configCheckCmd)
 	rootCmd.AddCommand(configCmd)
+	// 能力自带的命令（P2.6 接缝）：能力在自己的包内提供 Commands()，此处显式注册。
+	rootCmd.AddCommand(apikeycli.Commands()...)
 }
 
 func main() {
