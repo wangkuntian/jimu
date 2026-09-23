@@ -1,6 +1,7 @@
 // Command checkcapabilities 校验能力自描述与实际迁移一致（P2.8 门禁的第一块）。
 // 当前范围：① Owns 的表必须由且仅由该能力的 mysql 迁移 CREATE（表归属唯一）；
-// ② 驱动可用集/选中集/import 闭包一致、形态只 import 已声明驱动（见 drivers.go）。
+// ② 驱动可用集/选中集/import 闭包一致（闭包口径 = ./cmd/server + 该形态 overlay）、形态只
+// import 已声明驱动、唯一入口与选点包只 import 一个形态（见 drivers.go）。
 // 完整门禁（跨能力 import 一致性、internal 越界、kernel→capabilities 反向依赖）留待 P2.8。
 package main
 
@@ -15,6 +16,7 @@ import (
 
 	"jimu/internal/capabilities/catalog"
 	"jimu/internal/contract"
+	"jimu/internal/profiles/registry"
 )
 
 // createTableRe 提取 CREATE TABLE 的目标表名；容忍任意空白、可选 TEMPORARY 与
@@ -81,13 +83,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, "❌ check-capabilities:", err)
 		os.Exit(1)
 	}
-	if err := checkDrivers(root, profileAssemblies()); err != nil {
+	if err := checkDrivers(root, registry.All()); err != nil {
 		fmt.Fprintln(os.Stderr, "❌ check-capabilities:", err)
 		os.Exit(1)
 	}
 	fmt.Println("✅ check-capabilities: 能力自描述与迁移归属一致")
 	fmt.Println("✅ check-capabilities: 驱动可用集/选中集/import 闭包一致")
 	fmt.Println("✅ check-capabilities: 形态生产代码只 import 已声明的驱动")
+	fmt.Println("✅ check-capabilities: 唯一入口与选点包只 import 一个形态")
 }
 
 // createdTables 从能力嵌入的 mysql 迁移里提取 CREATE TABLE 的表名（去重排序）。

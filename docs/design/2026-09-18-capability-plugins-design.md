@@ -190,7 +190,7 @@
 > 集合比较不可见，未声明项被 `available` 过滤），`make compose-report` 新增「重型依赖」列；两道门禁
 > 仍是手动目标，**不接入** `make ci`/`release-check`（P2.8 收口）。
 >
-> **实测闭包计数**（`go list -deps ./profiles/<p> | grep -c <prefix>`）：`full` = aws-sdk-go-v2 67 /
+> **实测闭包计数**（当时对形态入口包逐个 `go list -deps` 计数）：`full` = aws-sdk-go-v2 67 /
 > excelize 1 / kafka-go 49 / amqp091-go 1；`enterprise` 与 `minimal`/`saas`/`machine` 四类均为 0
 > （`enterprise` 收敛前为 67 / 1 / 0 / 0，kafka/amqp 在队列驱动拆包时已归零）。**行为变更（仅
 > `enterprise`）**：该形态下 `storage.type: s3|oss|minio` 与 xlsx 导入/导出改为 fail-closed 报错
@@ -320,6 +320,9 @@ var Capability = contract.Capability{
 
 仓库内提供多个 profile 入口包，每个是独立 main 包，只 import 该形态需要的能力：
 
+> ⚠️ **本节原文的每形态入口 `main` 包已被 P2.5b 取代**：唯一入口 `cmd/server` + 选点包
+> `internal/profiles/active`（提交态默认 `full`，构建期由 overlay 叠加），见下方「P2.5b 进展」块。
+
 ```text
 profiles/
 ├── full/       main.go   → go build ./profiles/full
@@ -332,6 +335,40 @@ profiles/
 用 **profile 入口包而不是 build tag**：裁剪由 import 图天然决定，不引入新的 tag 空间（现有 `sqlite`、`integration` 等 tag 已在用），IDE 与 CI 不需要组合矩阵。
 
 层②能减小**二进制、启动路由数、迁移数、表数**，但**不减小仓库代码量与 `go.mod`**（Go 的依赖裁剪作用于整个 module）—— 后两者由层①负责。
+
+> **P2.5b 进展（单一入口与构建期形态参数化已完成）**：本节原文的「每个形态一个
+> `profiles/<name>/main.go` 独立入口包」已**删除**，层②入口收敛为**唯一入口 `cmd/server`**：
+> `cmd/server/main.go` 只 import `internal/assembly` 与选点包 `internal/profiles/active`（+ 标准库），选点文件
+> `assembly.go` 在提交态恒选一个形态（**默认 `full`**，其余四形态一律显式 `PROFILE=<name>`），因此
+> `go build ./cmd/server`、`go test ./...`、IDE、`make swagger` 默认都是 full（一个完整可跑的程序）。
+> 切换形态靠 Go 工具链的 `-overlay`：`tools/profileoverlay <profile>` 经共享实现
+> `tools/internal/profileoverlay` 生成「只选该形态」的选点文件替代版本与 overlay JSON，产物落在
+> gitignored 的 `.overlay/<profile>/`，**磁盘上的仓库文件一个字节都不动**（可并行、不脏树）；构建命令
+> 必须「先取 overlay 再 `&&` 构建」—— 直接写进 `-overlay=$(...)` 时命令替换失败会留下空值，Go 把空
+> overlay 当作「无 overlay」而静默构建 full。形态名与清单的**唯一来源**收口到
+> `internal/profiles/registry`（`Names`/`All`/`Lookup`，`tools/profileoverlay -list`、
+> `checkcapabilities`、`composereport`、`scripts/check_profiles.sh` 都从它派生）；registry 汇总全部形态
+> 包，**绝不进入口图**（否则 5 个形态全被拉回二进制），由门禁断言拦住。
+>
+> **口径不变**：编译面（二进制/路由/迁移/表/重型依赖）逐值不变 —— `full` 闭包 118 个重型依赖包、
+> 四个轻形态 0；`minimal` 84.7 MB vs `full` 123.1 MB。仅「本仓 Go 文件 / 代码行」两列因闭包根从
+> 各形态入口包（1 个入口文件）换成 `./cmd/server`（`main.go` + 选点 `assembly.go` 两个文件）而
+> **+1 文件 / +25 行（`full`）、+30 行（其余四形态）**，二进制差 16 KB 量级。`make check-capabilities`
+> 按 **4 条汇总行**输出：① 能力自描述与 `Owns` ↔ 迁移归属 ② 驱动可用集/选中集/import 闭包一致 ③ 形态
+> 生产代码只 import 已声明驱动 ④ **唯一入口与选点包只 import 一个形态**（④ 是 P2.5b 新增的不变量，含
+> 三条子断言：入口 `cmd/server` 只 import `internal/assembly` 与选点包（+ 标准库）；选点包
+> `internal/profiles/active` **恰好** import 一个形态包；两者都不得 import
+> `internal/profiles/registry`——registry 一进图就会把 5 个形态全拉回二进制。③ 由 P2.5 的「形态生产
+> 代码与入口包只 import 已声明驱动」拆出，入口半边归 ④）；`make profiles-check`
+> 与 `make compose-report` 的闭包口径同步改为「`./cmd/server` + 该形态 overlay」。
+>
+> **明确边界**：驱动参数化**仅限形态级**（驱动集合仍由各形态 `internal/profiles/<name>/drivers.go`
+> 的 blank import 决定，P2.5 的两层声明与门禁断言原样有效）；`PROFILE=enterprise DRIVERS=local` 这类
+> **形态内再选驱动**需要第二份真源清单 + 生成 `drivers.go` + 门禁改读它，**留后续阶段**，本阶段不做。
+> 开发者可见的行为变更：以形态入口 `main` 包（旧 `profiles/<name>/main.go`）为构建目标不再可用，替代是
+> `PROFILE=<name> make build-server`（产物 `bin/jimu-server[-<name>]`，`full` 仍是 `bin/jimu-server`）或
+> `docker build --build-arg PROFILE=<name>`。执行记录见
+> [`docs/plans/2026-09-23-p2.5b-unified-entry.md`](../plans/2026-09-23-p2.5b-unified-entry.md)。
 
 ### 6.4 层③ 运行时
 
@@ -375,6 +412,9 @@ profiles/
 | **P3 门禁与文档** | `check-capabilities` / `check-profiles` / `check-pluggable`；生成器模板同步新形态；README / CONTRIBUTING / AGENTS.md 更新（能力清单、形态、新增能力流程） | 四道门禁在 CI 生效 |
 | **P4 v0.3.0 收尾** | 版本日志补验证结果；`release-check`；`release/v0.3.0` → `master` 合并；打 tag 发布 | GitHub Release 发布成功 |
 
+> ⚠️ **上表 P2 行的 `profiles/{full,minimal,saas,enterprise,machine}` 入口包已被 P2.5b 取代**：
+> 收敛为唯一入口 `cmd/server` + 选点包 `internal/profiles/active`，见下方 P2.5b 进展块。
+
 P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 
 > **P2 进展（P2.1 运行时配置归属已完成）**：§8 的配置归属已落地 —— 能力配置段由能力在
@@ -413,6 +453,8 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > [`docs/plans/2026-09-22-p2-contract-and-runtime.md`](../plans/2026-09-22-p2-contract-and-runtime.md)。
 >
 > **P2 进展（P2.4 层② 构建已完成）**：§6.3 的 profile 入口包与 `compose-report` 落地 ——
+> ⚠️ **本块的「5 个入口 `profiles/{full,minimal,saas,enterprise,machine}`」已被 P2.5b 取代**：
+> 收敛为唯一入口 `cmd/server` + 选点包 `internal/profiles/active`，见下方 P2.5b 块。
 > 装配从单体的 `cmd/server/main.go` 抽成 `internal/assembly`（`Assembly`/`Capability`/`Context`/
 > `Run`/`ValidatePortFlow`）+ 各能力 `wire.go` 自装配 + `internal/profiles/<name>` 形态清单，
 > 5 个入口 `profiles/{full,minimal,saas,enterprise,machine}` **只 import 本形态需要的能力**
@@ -426,7 +468,7 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > `make profiles-check`（构建 + **golden 依赖闭包裁剪门禁**：逐形态能力根包集合逐值锁定，
 > 可选 `JIMU_PROFILES_SMOKE=1` 启动冒烟）与 `make compose-report`（`tools/composereport` 逐形态
 > 实测二进制大小 / 路由数 / 迁移数 / 表数 / 本仓 import 闭包代码量与文件数，生成
-> [`docs/profiles/compose-report.md`](../profiles/compose-report.md) 入库）。实测：`minimal`
+> [`docs/profiles/compose-report.md`](../../docs/profiles/compose-report.md) 入库）。实测：`minimal`
 > 二进制 85.8 MB vs `full` 122.6 MB（−30.0%），路由 32 vs 99，表 7 vs 23，本仓闭包代码行
 > 17804 vs 33995；五个形态的 `go.mod` 直接依赖数**完全相同**（各 64 个）—— §11「层②不减小
 > `go.mod`」由此变成可回归验证的事实，而不是文字约定。**已知限制与推迟**：`machine` 可启动但
@@ -450,6 +492,20 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > 与 `excelize`。`GO-2026-6452` 豁免保留（拆包不解除可达性，复核条件 excelize ≥ v2.11.1）。
 > 机制细节与实测数字见 §3.7 的 P2.5 进展块；执行记录见
 > [`docs/plans/2026-09-22-p2.5-driver-pluggability.md`](../plans/2026-09-22-p2.5-driver-pluggability.md)。
+>
+> **P2 进展（P2.5b 单一入口与构建期形态参数化已完成）**：层②入口从 5 个
+> `profiles/<name>/main.go` 收敛为**唯一入口 `cmd/server`** —— `cmd/server/main.go` 只 import
+> `internal/assembly` 与选点包 `internal/profiles/active`（+ 标准库；提交态默认 `full`），切换形态改由**构建期
+> overlay** 完成（`tools/profileoverlay` → gitignored 的 `.overlay/<profile>/`，不脏工作区；非法形态名
+> 非零退出且无产物）。形态名与清单的**唯一来源**收口到 `internal/profiles/registry`；
+> `make check-capabilities` 改为 **4 条汇总行**（④ 是新增不变量，含三条子断言：入口 `cmd/server` 只
+> import `internal/assembly` 与选点包；选点包 `internal/profiles/active` **恰好** import 一个形态包；
+> 两者都不得 import `internal/profiles/registry`），
+> `make profiles-check` 与 `make compose-report` 的闭包口径改为「`./cmd/server` + 该形态 overlay」。
+> 编译面口径不变：`full` 闭包 118 个重型依赖包、四个轻形态 0；`minimal` 84.7 MB vs `full` 123.1 MB
+> （仅本仓文件 +1、代码行 +25/+30 来自入口文件差异）。**驱动参数化仅限形态级**，`DRIVERS=` 式形态内
+> 选择留后续阶段。执行记录见
+> [`docs/plans/2026-09-23-p2.5b-unified-entry.md`](../plans/2026-09-23-p2.5b-unified-entry.md)。
 
 ## 11. 风险与取舍
 

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"jimu/internal/assembly"
-	"jimu/internal/profiles/full"
+	"jimu/internal/profiles/active"
 )
 
 // @title           Jimu API
@@ -20,10 +20,10 @@ import (
 // version 版本号，通过 ldflags 注入：-ldflags "-X main.version=v0.1.0"
 var version = "dev"
 
-// main 是薄包装：能力清单归 internal/profiles/full，装配与生命周期归 internal/assembly。
-// 构建版本仍由本包经 ldflags 注入后覆盖清单默认值（Makefile 的 `-X main.version` 不变）。
+// main 是唯一入口：当前形态由 internal/profiles/active 决定（提交态默认 full），
+// 构建期用 `PROFILE=<name> make build-server` 切形态；装配与生命周期归 internal/assembly。
 func main() {
-	a := full.Assembly()
+	a := active.Assembly()
 	a.Version = version
 	if err := assembly.Run(a); err != nil {
 		fmt.Fprintln(os.Stderr, err)

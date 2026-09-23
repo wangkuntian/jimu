@@ -24,7 +24,7 @@ type Capability struct {
 	Descriptor contract.Descriptor
 	Wire       func(*Context) (contract.Module, error)
 	// Drivers 本形态为这个能力选中的驱动包名（子集；空 = 不选任何驱动）。
-	// 选中集必须 ⊆ Descriptor.Drivers，且与 profiles/<name>/drivers.go 的 blank import
+	// 选中集必须 ⊆ Descriptor.Drivers，且与 internal/profiles/<name>/drivers.go 的 blank import
 	// 逐值一致（make check-capabilities 静态校验，设计 §3.7 的两道保险之二）。
 	Drivers []string
 	// Ungated 标记非 catalog 条目：由形态清单决定是否装配，不受 capabilities.enabled

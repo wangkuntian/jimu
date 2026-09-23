@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -8,7 +9,9 @@ import (
 	"testing/fstest"
 
 	"jimu/internal/contract"
+	"jimu/internal/profiles/registry"
 	"jimu/tools/internal/heavydeps"
+	"jimu/tools/internal/profileoverlay"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -85,6 +88,9 @@ func TestRenderReportPinsTheCommittedShape(t *testing.T) {
 	assert.Contains(t, out, "| `full` | 200.0 | 100.0% | 100 | 20 | 20 | 300 | 30000 | aws-sdk-go-v2, excelize |")
 	assert.Contains(t, out, "| `minimal` | 100.0 | 50.0% | 30 | 5 | 5 | 150 | 10000 | - |")
 	assert.Contains(t, out, "| 重型依赖 | 同一闭包（含第三方包）命中 `tools/internal/heavydeps` 前缀表的展示名，`-` 表示零 |")
+	assert.Contains(t, out, "| 二进制 | `go build -overlay=<该形态> -o <tmp> ./cmd/server` 的产物大小 |")
+	assert.Contains(t, out, "| 本仓 Go 文件 / 代码行 | `golang.org/x/tools/go/packages` 载入 `./cmd/server` 在该形态 overlay 下的 import 闭包，只统计本模块（`jimu/...`）的非 `_test.go` 文件 |")
+	assert.Contains(t, out, "形态由 `internal/profiles/active` 的**构建期 overlay** 决定")
 	assert.Contains(t, out, "- 二进制：`minimal` 是 `full` 的 50.0%（要求 ≤ 85%）")
 	assert.Contains(t, out, "- 路由数：`minimal` 30 < `full` 100")
 	assert.Contains(t, out, "五个形态的 go.mod 直接依赖数**逐形态完全相同**（各 64 个）")
@@ -138,6 +144,47 @@ func TestCountLines(t *testing.T) {
 	}
 }
 
+// TestOverlayForProfileMatchesTheSharedPackage 报告统计闭包用的内存 overlay 必须与共享包
+// tools/internal/profileoverlay 的输出逐字节相同：报告若再长出模板副本，度量的就不再是
+// 出货二进制。
+func TestOverlayForProfileMatchesTheSharedPackage(t *testing.T) {
+	root := t.TempDir()
+	shared, err := profileoverlay.ReplaceMap(root, "minimal")
+	require.NoError(t, err)
+	got, err := overlayForProfile(root, "minimal")
+	require.NoError(t, err)
+	assert.Equal(t, shared, got)
+
+	_, err = overlayForProfile(root, "ghost")
+	require.ErrorContains(t, err, `unknown profile "ghost"`)
+}
+
+// TestWriteOverlayMatchesTheSharedPackage 报告构建二进制用的 overlay JSON 也由共享包按形态
+// 隔离写出（`.overlay/<profile>/`）：路径、active.go 内容与 Replace 映射逐字节一致。
+func TestWriteOverlayMatchesTheSharedPackage(t *testing.T) {
+	root := t.TempDir()
+	path, err := writeOverlay(root, "enterprise")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(profileoverlay.Dir(root, "enterprise"), "overlay.json"), path)
+
+	src, err := profileoverlay.Source("enterprise")
+	require.NoError(t, err)
+	active, err := os.ReadFile(filepath.Join(profileoverlay.Dir(root, "enterprise"), "active.go"))
+	require.NoError(t, err)
+	assert.Equal(t, src, string(active))
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var cfg struct{ Replace map[string]string }
+	require.NoError(t, json.Unmarshal(content, &cfg))
+	assert.Equal(t,
+		filepath.Join(profileoverlay.Dir(root, "enterprise"), "active.go"),
+		cfg.Replace[filepath.Join(root, "internal", "profiles", "active", "assembly.go")])
+
+	_, err = writeOverlay(root, "ghost")
+	require.ErrorContains(t, err, `unknown profile "ghost"`)
+}
+
 // TestMinimalCompiledSurfaceIsMateriallySmaller 是 Task 7 的验收断言：minimal 的二进制、
 // 路由、表与本仓代码量必须显著低于 full。断言的是实测关系（相对比例），不写死任何数字，
 // 因此内核膨胀或能力增减都不会让用例误报 —— 只会让真正的裁剪失效暴露出来。
@@ -147,7 +194,7 @@ func TestMinimalCompiledSurfaceIsMateriallySmaller(t *testing.T) {
 	}
 	ms, err := measureAll(repoRoot(t))
 	require.NoError(t, err)
-	require.Len(t, ms, len(profileNames))
+	require.Len(t, ms, len(registry.Names()))
 
 	byName := make(map[string]Metrics, len(ms))
 	for _, m := range ms {

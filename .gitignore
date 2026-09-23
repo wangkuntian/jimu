@@ -37,6 +37,7 @@ secrets/
 
 # Build artifacts
 bin/
+.overlay/
 logs/
 .VSCodeCounter/
 
