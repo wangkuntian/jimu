@@ -245,9 +245,16 @@
 > `internal/capabilities/<name>/cli` 子包并导出 `Commands() []*cobra.Command`，`cmd/cli` 显式
 > import 注册（`internal/contract` 不引入 cobra），实例是 `apikey` 的 `jimu apikey issue|list`
 > （明文只显示一次），补上 `machine` 形态（刻意无 auth/JWT 链）首把 API Key 的**带外签发**路径；
-> ③ 迁移与种子 —— `cmd/cli` 的能力清单改为当前形态声明集（从 `catalog.All()` 过滤、
-> **保持 catalog 拓扑序**，不能用装配顺序），`capabilities.enabled` 不参与，默认 `full` 行为逐值
-> 不变（单测钉住 `activeDescriptors() == catalog.All()`），非 full 形态只迁移/播种该形态的能力；
+> ③ 迁移与种子 —— `cmd/cli` 的能力清单改为当前形态声明集 **∪ schema 依赖**（从 `catalog.All()`
+> 过滤、**保持 catalog 拓扑序**，不能用装配顺序），`capabilities.enabled` 不参与，默认 `full` 行为逐值
+> 不变（单测钉住 `activeDescriptors() == catalog.All()`），非 full 形态只迁移/播种该形态的能力。
+> **C1 修复（整分支审查发现）**：tenant 的迁移 005 给 `user`/`access` 拥有的 `users`/`roles` 加
+> `tenant_id` 列，而这两个能力的 ORM 模型始终写该列 —— 只按形态声明集裁剪会让不含 `tenant` 的形态
+> 建出**自己写不进去**的 schema（`migrate up` 成功、服务能起，但首次写 user/role 500）；故
+> **迁移集 = 形态声明集 ∪ schema 依赖**（`cmd/cli` 的 `migrationSchemaDeps`：`user`/`access` → `tenant`，
+> 仍按 catalog 拓扑序），各形态 schema 完整、**结构种子在所有形态都照常执行**（不含 `tenant` 的形态
+> 也会建出 `tenants`/`tenant_plans` 表与 `tenant_id` 列），装配集仍不含 tenant（不挂路由、不 seed
+> 额外数据）；
 > ④ e2e 契约测试 —— `internal/assembly` 抽出并导出 `Resolve`/`WireFor`（`Run` 复用，单一 wiring），
 > `internal/e2e` 按当前形态装配、配置基线是真实 `configs/app.yaml`，用例用 `requireCapabilities`
 > 声明依赖能力、缺失即 `t.Skipf`（打印形态名与缺失能力）；⑤ 形态路由面 ——
@@ -256,13 +263,10 @@
 > 跨形态挂载点一致性断言 `TestShapeMountsMatchFull`，`full` 仍由自己包内的 golden（99 条 + 挂载点表）
 > 钉住。
 >
-> **行为变更**：① 非 full 形态的 `jimu` CLI 只迁移/播种该形态的能力（`migrate status` 表数下降）；
-> ② 结构种子需要 `tenant` 能力（`tenants`/`tenant_plans` 表与 `users`/`roles.tenant_id` 列都由它的
-> 迁移产生，ORM 模型始终写 `tenant_id` 列）→ 不含 `tenant` 的形态（minimal/machine/enterprise）
-> **不提供结构种子**：`jimu seed` 明确报错并给出替代路径，启动期 `StructuralSeed` 告警跳过、
-> **绝不因此让服务启动失败**；替代路径必须**先用具备 tenant 的形态（full/saas）把迁移也跑一遍**，
-> 否则 `seed` 会再失败一次（表不存在）；`full`/`saas` 但用 `capabilities.enabled` 禁用 `tenant` 时，
-> 启动期种子跳过（解析集不含 tenant）而 CLI `seed` 仍可用（按编译形态判断）；③ 形态不含 `apidocs`
+> **行为变更**：① 非 full 形态的 `jimu` CLI 只迁移/播种该形态的能力（`migrate status` 表数下降），
+> 且迁移集带上 schema 依赖（`user`/`access` → `tenant`，见上方 ③ 的 C1 修复）—— 各形态 schema
+> 完整、**结构种子照常执行**，不含 `tenant` 的形态也会建出 `tenants`/`tenant_plans` 与 `tenant_id`
+> 列（装配集仍不含 tenant）；② 形态不含 `apidocs`
 > 时 `make swagger`/`swagger-check` 打印 `SKIP` 并成功退出。**实测 e2e 形态跳过矩阵**
 > （`go test -overlay=$(go run ./tools/profileoverlay <name>) ./internal/e2e/ -count=1 -v`）：
 > `full` 10 PASS / 0 SKIP，`minimal` 3/7，`saas` 4/6，`enterprise` 5/5，`machine` 3/7，
@@ -573,12 +577,13 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > `internal/e2e` 按形态装配（`assembly.Resolve`/`WireFor`）+ `requireCapabilities` 声明依赖
 > （跳过矩阵 full 10/0、minimal 3/7、saas 4/6、enterprise 5/5、machine 3/7，**0 FAIL**）；
 > 4 个非 full 形态的路由面 golden 落在 `internal/profiles/registry`（32/48/55/28）。
-> **行为变更**：非 full CLI 只迁移/播种该形态能力；结构种子需要 `tenant`，不含 `tenant` 的形态
-> 不提供（CLI `seed` 明确报错、启动期告警跳过；替代路径须先用 full/saas 把迁移也跑一遍）；
-> `apidocs` 缺失时 swagger 目标 SKIP。`configs/*.yaml` 逐字节不变、catalog 仍 18 项；渲染归
+> **行为变更**：非 full CLI 只迁移/播种该形态能力，且迁移集**带上 schema 依赖**（`user`/`access` →
+> `tenant`；C1 修复：tenant 的迁移给这两张表加 `tenant_id` 列，不带就会建出写不进去的 schema），
+> 因此**结构种子在所有形态都照常执行**，不含 `tenant` 的形态也会建出 `tenants`/`tenant_plans` 与
+> `tenant_id` 列（装配集仍不含 tenant，不挂路由、不 seed 额外数据）；`apidocs` 缺失时 swagger 目标 SKIP。`configs/*.yaml` 逐字节不变、catalog 仍 18 项；渲染归
 > P2.7、门禁接入 CI 归 P2.8。机制细节与实测数字见 §3.8 的 P2.6 进展块；执行记录见
 > [`docs/plans/2026-09-23-p2.6-assets-and-conditionals.md`](../plans/2026-09-23-p2.6-assets-and-conditionals.md)。
-> ⚠️ **P2.6 已落地**：上方 P2.4 段落里的「迁移与结构种子仍按 catalog 全量清单执行」是**当时的**限制说明（保留原文）—— 迁移自 P2.6 起跟随编译期形态、结构种子受 `tenant` 能力约束，见 §3.8 的 P2.6 进展块。
+> ⚠️ **P2.6 已落地**：上方 P2.4 段落里的「迁移与结构种子仍按 catalog 全量清单执行」是**当时的**限制说明（保留原文）—— 迁移自 P2.6 起跟随编译期形态并**带上 schema 依赖**（`user`/`access` → `tenant`，整分支审查 C1），结构种子在各形态都照常执行，见 §3.8 的 P2.6 进展块。
 
 ## 11. 风险与取舍
 

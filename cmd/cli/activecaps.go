@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"jimu/internal/app"
-
 	"jimu/internal/capabilities/catalog"
 	"jimu/internal/contract"
 	"jimu/internal/profiles/active"
@@ -14,9 +12,6 @@ import (
 // errNoCatalogCapabilities 形态声明的能力里没有任何 catalog 条目：fail-closed。
 // 静默「迁移零个能力」比报错危险（err113 要求错误静态，故用哨兵 + 包装）。
 var errNoCatalogCapabilities = errors.New("profile declares no catalog capabilities")
-
-// errSeedNeedsTenant 结构种子需要 tenant 能力（见 checkSeedCapabilities）。
-var errSeedNeedsTenant = errors.New("structural seed needs the tenant capability")
 
 // activeDescriptors 返回当前形态（编译期选点，默认 full）声明的能力描述符。
 //
@@ -32,12 +27,16 @@ func activeDescriptors() ([]contract.Descriptor, error) {
 	for _, c := range a.Capabilities {
 		declared[c.Descriptor.Name] = true
 	}
+	// 迁移集 = 形态声明集 ∪ schema 依赖（见 migrationSchemaDeps）：裁剪形态也要能建出
+	// 自己写得进去的表。装配集不受影响。
 	return resolveActive(a.Name, declared)
 }
 
 // resolveActive 是 activeDescriptors 的纯函数部分（便于单测）：过滤 + 空集 fail-closed。
 func resolveActive(profile string, declared map[string]bool) ([]contract.Descriptor, error) {
-	caps := filterCatalog(catalog.All(), declared)
+	// 迁移集 = 声明集 ∪ schema 依赖（catalog.MigrationSet，与 compose-report 同一口径）：
+	// 裁剪形态也要能建出自己写得进去的表。装配集不受影响。
+	caps := catalog.MigrationSet(declared)
 	if len(caps) == 0 {
 		return nil, fmt.Errorf("%w: %q", errNoCatalogCapabilities, profile)
 	}
@@ -53,26 +52,4 @@ func resolveActive(profile string, declared map[string]bool) ([]contract.Descrip
 		return nil, fmt.Errorf("%w: %q has no capability with migrations", errNoCatalogCapabilities, profile)
 	}
 	return caps, nil
-}
-
-// checkSeedCapabilities 结构种子需要 tenant 能力：tenants/tenant_plans 表与 users/roles 的
-// tenant_id 列都由 tenant 能力的迁移产生，而 ORM 模型始终写 tenant_id 列 —— 不含该能力的
-// 形态无法播种（P2.6 迁移裁剪后尤其如此）。这里显式拒绝并给出替代路径，
-// 而不是让种子在事务中途抛 "no such table: tenants"。
-func checkSeedCapabilities(profile string, caps []contract.Descriptor) error {
-	if app.HasCapability(caps, "tenant") {
-		return nil
-	}
-	return fmt.Errorf("%w: profile %q has no tenant capability; migrate and seed with a tenant-capable shape (full/saas) — the database must be migrated by that shape first", errSeedNeedsTenant, profile)
-}
-
-// filterCatalog 保留 catalog 顺序，只留下 declared 里的能力。
-func filterCatalog(all []contract.Descriptor, declared map[string]bool) []contract.Descriptor {
-	out := make([]contract.Descriptor, 0, len(all))
-	for _, d := range all {
-		if declared[d.Name] {
-			out = append(out, d)
-		}
-	}
-	return out
 }

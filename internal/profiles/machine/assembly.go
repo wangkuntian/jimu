@@ -20,7 +20,8 @@ import (
 //
 // 已知限制：`/api/v1/admin/apikeys` 位于 `middleware.AdminAuth()` 之后，需要 machine
 // 刻意排除的 JWT 链，因此该形态可启动但无法自助签发第一把 API Key —— 需要带外签发路径
-// （P2.6/P2.7 §3.8 的 CLI 工作，本阶段不实现）。
+// （P2.6 已提供：`PROFILE=machine make build-cli && ./bin/jimu-cli-machine apikey issue --name=first`，
+// 见 README「形态（profile）」/ release note）。
 func Assembly() assembly.Assembly {
 	return assembly.Assembly{
 		Name:    "machine",

@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"jimu/internal/assembly"
+	"jimu/internal/capabilities/catalog"
 	"jimu/internal/contract"
 	"jimu/internal/profiles/registry"
 	"jimu/tools/internal/heavydeps"
@@ -115,8 +116,10 @@ func measureAll(root string) ([]Metrics, error) {
 		if err != nil {
 			return nil, fmt.Errorf("probe %s: %w", name, err)
 		}
-		descs := resolvedDescriptors(a, res.Capabilities)
-		migrations, err := migrationCount(descs)
+		// 迁移/表口径 = 迁移集（形态声明集 ∪ schema 依赖，与 cmd/cli 的 migrate/seed 同一来源）：
+		// 只按解析集算会与 CLI 实际执行的迁移不一致（如 minimal 会一并迁移 tenant 的建表/加列）。
+		migDescs := catalog.MigrationSet(namesSet(res.Capabilities))
+		migrations, err := migrationCount(migDescs)
 		if err != nil {
 			return nil, fmt.Errorf("count migrations of %s: %w", name, err)
 		}
@@ -129,7 +132,7 @@ func measureAll(root string) ([]Metrics, error) {
 			BinaryBytes:  sizes[i],
 			Routes:       routeCount(res.Modules),
 			Migrations:   migrations,
-			Tables:       tableCount(descs),
+			Tables:       tableCount(migDescs),
 			Files:        files,
 			Lines:        lines,
 			HeavyDeps:    heavy,
@@ -137,6 +140,15 @@ func measureAll(root string) ([]Metrics, error) {
 		})
 	}
 	return out, nil
+}
+
+// namesSet 把能力名切片转成集合（供 catalog.MigrationSet 使用）。
+func namesSet(names []string) map[string]bool {
+	out := make(map[string]bool, len(names))
+	for _, n := range names {
+		out[n] = true
+	}
+	return out
 }
 
 // resolvedDescriptors 取形态清单中真正进入解析集的 Descriptor，顺序同装配顺序。
@@ -334,7 +346,7 @@ func renderReport(ms []Metrics, deps int) string {
 	b.WriteString("| 指标 | 口径 |\n|---|---|\n")
 	b.WriteString("| 二进制 | `go build -overlay=<该形态> -o <tmp> ./cmd/server` 的产物大小 |\n")
 	b.WriteString("| 路由数 | 形态解析集在裸 `gin.Engine` 上 `RegisterHTTP` 后的 `r.Routes()` 条数（不启动监听） |\n")
-	b.WriteString("| 迁移数 | 各 `Descriptor.Migrations` 中 `migrations/mysql/*.sql` 的文件数（postgres 同名同数） |\n")
+	b.WriteString("| 迁移数 | **迁移集**（形态声明集 ∪ schema 依赖，与 `PROFILE=<name> jimu migrate` 同一口径）各 `Descriptor.Migrations` 中 `migrations/mysql/*.sql` 的文件数（postgres 同名同数） |\n")
 	b.WriteString("| 表数 | 各 `Descriptor.Owns` 的并集大小 |\n")
 	b.WriteString("| 本仓 Go 文件 / 代码行 | `golang.org/x/tools/go/packages` 载入 `./cmd/server` 在该形态 overlay 下的 import 闭包，只统计本模块（`jimu/...`）的非 `_test.go` 文件 |\n")
 	b.WriteString("| 重型依赖 | 同一闭包（含第三方包）命中 `tools/internal/heavydeps` 前缀表的展示名，`-` 表示零 |\n")

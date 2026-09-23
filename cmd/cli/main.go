@@ -9,7 +9,6 @@ import (
 	"jimu/internal/config"
 	"jimu/internal/kernel/db"
 	"jimu/internal/kernel/logger"
-	"jimu/internal/profiles/active"
 	"jimu/tools/generator"
 
 	"github.com/spf13/cobra"
@@ -196,11 +195,6 @@ var seedCmd = &cobra.Command{
 		}
 		caps, err := activeDescriptors()
 		if err != nil {
-			return err
-		}
-		// 结构种子需要 tenant 能力（P2.6 起迁移跟随形态裁剪：不含 tenant 的形态没有
-		// tenants/tenant_plans 表与 users/roles.tenant_id 列）→ 显式拒绝并给出替代路径。
-		if err := checkSeedCapabilities(active.Assembly().Name, caps); err != nil {
 			return err
 		}
 		if err := app.RunSeedWithCasbin(dbConn, caps); err != nil {

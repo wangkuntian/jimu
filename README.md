@@ -249,7 +249,7 @@ make cli
 ./bin/jimu migrate adopt-capabilities  # 存量库登记各能力版本表基线（升级到 v0.3.0 后执行一次）
 
 # 数据初始化
-./bin/jimu seed                     # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例；需当前形态含 tenant）
+./bin/jimu seed                     # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例；各形态均可执行）
 
 # API Key（命令由 apikey 能力自带：internal/capabilities/apikey/cli）
 ./bin/jimu apikey issue --name=ci --scopes=api:access   # 签发 API Key（明文只显示一次；另有 --expires-days/--created-by）
@@ -272,16 +272,14 @@ v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capab
   3. 执行 `jimu migrate adopt-capabilities`：读取全局版本表最大已应用版本，为各能力版本表登记"已应用到对应版本"的基线（不执行任何迁移 SQL）；
   4. 之后正常 `jimu migrate up` 只跑各能力新增的迁移。
   全新数据库无需 adopt，直接 `migrate up`。
-- **迁移集跟随编译期形态（P2.6）** — `jimu migrate up|down|status|redo`、`adopt-capabilities` 与 `seed` 只处理**当前形态**声明的能力：`cmd/cli` 从 `catalog.All()` 过滤出形态声明集，因此天然保持 catalog 的拓扑序（迁移有真实依赖，如 `tenant` 的迁移 ALTER `users`/`roles`），装配顺序不参与。`capabilities.enabled`（层③）**不参与** —— 关闭能力不删表，迁移跟随的是编译期形态。默认 `full` 行为逐值不变（单测钉住 `activeDescriptors() == catalog.All()`），而 `PROFILE=minimal make migrate-status` 只看得到该形态的表（表数下降）；`make migrate*`/`make seed` 目标同样叠加形态 overlay（`PROFILE=ghost` fail-fast）。需要全部表时用 `full`/`saas` 形态。
+- **迁移集跟随编译期形态，并带上 schema 依赖（P2.6）** — `jimu migrate up|down|status|redo`、`adopt-capabilities` 与 `seed` 只处理**当前形态**声明的能力：`cmd/cli` 从 `catalog.All()` 过滤出形态声明集，因此天然保持 catalog 的拓扑序（迁移有真实依赖，如 `tenant` 的迁移 ALTER `users`/`roles`），装配顺序不参与。**迁移集 = 形态声明集 ∪ schema 依赖**（`cmd/cli/activecaps.go` 的 `migrationSchemaDeps`：`user`/`access` → `tenant`）—— tenant 的迁移 005 给 `user`/`access` 拥有的 `users`/`roles` 加 `tenant_id` 列，而这两个能力的 ORM 模型始终写该列，只按形态声明集裁剪会让不含 `tenant` 的形态建出**自己写不进去**的 schema（整分支审查 C1），故含 `user`/`access` 的形态也一并迁移 tenant 的建表/加列。这只影响**迁移**：装配集（`Assembly`）仍不含 tenant，不挂 tenant 路由、不 seed 额外数据。`capabilities.enabled`（层③）**不参与** —— 关闭能力不删表，迁移跟随的是编译期形态。默认 `full` 行为逐值不变（单测钉住 `activeDescriptors() == catalog.All()`），而 `PROFILE=minimal make migrate-status` 只看得到该形态的表（表数下降）；`make migrate*`/`make seed` 目标同样叠加形态 overlay（`PROFILE=ghost` fail-fast）。
+- **⚠️ 运维注意事项：同一数据库不要混用形态做迁移** — 各能力的版本表（`goose_db_version_<capability>`）按**当前形态的迁移集**记录，混用不同形态的 `migrate`/`migrate down`/`migrate redo`/`adopt-capabilities` 会让版本表与实际 schema 错配：例如一个库先用 `PROFILE=full` 迁移过，再用 `PROFILE=minimal` 执行 `migrate down`，只会回滚 minimal 迁移集里的能力，其余能力的版本记录与表被留在库中且无人再动；反过来，轻形态迁移过的库切到 full 跑 `down`/`redo` 也可能引用到该形态未处理的对象。**建议同一数据库始终统一用一个形态**（推荐 `full`，schema 最全）。
 
 ## 数据种子
 
 - **权限点来自能力 Descriptor** — 各能力在 `Descriptor.Permissions` 声明自己的权限点，种子时聚合启用集写入 `permissions` 表并授予超管角色；未启用的能力不种其权限点。
-- **`jimu seed` 跟随编译期形态（P2.6）** — CLI 的 `migrate`/`adopt-capabilities`/`seed` 使用同一份「当前形态声明的能力集」并保持 catalog 拓扑序，`capabilities.enabled`（层③）不参与；权限点仍按**该形态解析集**聚合，与迁移到的表结构同步。默认 `full` 行为逐值不变。
-- **结构种子需要 `tenant` 能力** — 默认租户、free 套餐、超管角色与 admin 用户涉及的 `tenants`/`tenant_plans` 表、`users`/`roles.tenant_id` 列都由 `tenant` 的迁移产生（ORM 模型始终写 `tenant_id` 列），因此：
-  1. 不含 `tenant` 的形态（`minimal`/`machine`/`enterprise`）**不提供结构种子**：`jimu seed` 明确报错并给出替代路径，启动期 `StructuralSeed` 打印 `structural seed skipped` 告警跳过（不会让服务启动失败）。
-  2. 替代路径必须**先用具备 `tenant` 的形态（`full`/`saas`）把迁移也跑一遍**，再在该形态执行 `seed`；只换 CLI 二进制而不重跑迁移会因表不存在再次失败。
-  3. `full`/`saas` 形态但用 `capabilities.enabled` **禁用** `tenant` 时：启动期种子跳过（解析集不含 `tenant`），而 CLI `jimu seed` 仍可用（它按**编译形态**判断，表/列仍在）。
+- **`jimu seed` 跟随编译期形态（P2.6）** — CLI 的 `migrate`/`adopt-capabilities`/`seed` 使用同一份「当前形态声明的能力集 ∪ schema 依赖」并保持 catalog 拓扑序，`capabilities.enabled`（层③）不参与；权限点仍按**该形态解析集**聚合，与迁移到的表结构同步。默认 `full` 行为逐值不变。
+- **结构种子在所有形态都照常执行（P2.6）** — 默认租户、free 套餐、超管角色与 admin 用户涉及的 `tenants`/`tenant_plans` 表、`users`/`roles.tenant_id` 列虽由 `tenant` 的迁移产生（ORM 模型始终写 `tenant_id` 列），但迁移集会因 schema 依赖（`user`/`access` → `tenant`）一并带上它们（见「数据库迁移」），因此**不含 `tenant` 能力的形态（`minimal`/`machine`/`enterprise`）schema 同样完整**：`jimu seed` 照常建出 `tenants`/`tenant_plans` 与 `tenant_id` 列并写入默认租户/free 套餐/超管角色/admin 用户，启动期 `StructuralSeed` 也照常执行。形态只改变**装配与数据面**（不挂 tenant 路由、不 seed 额外租户数据），不制造 schema 缺口。`ADMIN_PASSWORD` 未设置时照旧不播种并打 `structural seed skipped` 告警，服务不会因缺少该变量而启动失败（容器启动早于 CLI 迁移、compose 不向 server 注入该变量）。
 
 ## 形态（profile）
 
@@ -304,20 +302,20 @@ v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capab
 
 **编译期脚注（`go list -deps` 实测，闭包 ⊋ 装配集）**：上表是**装配集**，但闭包里还会多出几个能力**核心包** —— `minimal`/`saas` 额外链上 `outbox`/`queue`，`machine` 额外链上 `notification`/`outbox`/`queue`，`enterprise` 额外链上 `outbox`/`queue`/`ws`。这**纯粹**因为 `user`/`auth` 直接 import 了这些能力的具体 Go 类型（`*outbox.Outbox`、`notification.Message`、`outbox.Event`；`outbox` 又 import `queue`，`enterprise` 经 `console` 链上 `ws`），编译期必然带进来；**上列多出来的这些能力一个都不装配**（不在对应形态的 `Assembly` 里，没有路由/任务/组件、不建表、不 seed）。P2.5 驱动拆包后，`queue` 核心包只留接口 + 注册表，`kafka-go`/`amqp091-go` 随之退出所有非 `full` 形态的闭包（见下表「重型依赖」列），但 `queue`/`outbox` **核心包本身**仍在闭包里（类型残留）。`make profiles-check` 的 golden 闭包门禁把每个形态的这份集合钉死，因此它不会无声明地增减；要消除这些核心包残留，需要把上述共享类型移到 `contract`/内核（另一次改动）。
 
-**编译面实测（`make compose-report` 生成 [docs/profiles/compose-report.md](docs/profiles/compose-report.md)，口径见该报告）** —— 形态闭包 = `./cmd/server` 在该形态 overlay 下的生产 import 闭包：
+**编译面实测（`make compose-report` 生成 [docs/profiles/compose-report.md](docs/profiles/compose-report.md)，口径见该报告）** —— 形态闭包 = `./cmd/server` 在该形态 overlay 下的生产 import 闭包。表里的**迁移数/表数**是**该形态解析集（装配集）**的口径（各 `Descriptor.Migrations`/`Owns`）；CLI 的**迁移集**在此基础上还会带上 schema 依赖（`user`/`access` → `tenant`，见「数据库迁移」），因此 `minimal`/`machine`/`enterprise` 的 `jimu migrate` 实际会多跑 tenant 的建表/加列 —— 本表数值不因此变化：
 
 | 形态 | 二进制 | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 | 重型依赖 |
 |---|---:|---:|---:|---:|---:|---:|---:|---|
-| `full` | 123.1 MB | 100.0% | 99 | 25 | 23 | 331 | 34553 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
-| `minimal` | 84.7 MB | 68.8% | 32 | 7 | 7 | 180 | 17542 | — |
-| `saas` | 85.0 MB | 69.0% | 48 | 13 | 11 | 206 | 20188 | — |
-| `enterprise` | 85.3 MB | 69.3% | 55 | 13 | 11 | 246 | 22984 | — |
-| `machine` | 83.3 MB | 67.7% | 28 | 7 | 6 | 182 | 17818 | — |
+| `full` | 123.1 | 100.0% | 99 | 25 | 23 | 331 | 34533 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
+| `minimal` | 84.7 | 68.8% | 32 | 10 | 9 | 180 | 17522 | - |
+| `saas` | 85.0 | 69.0% | 48 | 13 | 11 | 206 | 20168 | - |
+| `enterprise` | 85.3 | 69.3% | 55 | 16 | 13 | 246 | 22964 | - |
+| `machine` | 83.3 | 67.7% | 28 | 10 | 8 | 182 | 17799 | - |
 
 - **层②边界：profile 改变的是编译面，不是 `go.mod`** — `go.mod`/`go.sum` 描述 module 而非包，Go 的依赖裁剪作用于**整个 module**，所以五个形态的 `go.mod` 直接依赖数**完全相同**（各 64 个）。profile 只决定哪些包与符号**编进二进制**（上表的二进制/路由/迁移/表/闭包代码量）；真正让 `go.mod` 变小的是层①（`jimu new` 生成专属 module 后 `go mod tidy`），不是换个 profile。
 - **构建、门禁与报告** — 选形态构建是 `PROFILE=<name> make build-server`（默认 full，手工等价写法见上文「入口与用法」）；`make profiles-check` 用 overlay 构建全部 5 个形态（`./cmd/server` + 该形态 overlay，构建失败即非零退出）并校验依赖闭包裁剪门禁（每个形态的能力根包集合逐值锁定），设置 `JIMU_PROFILES_SMOKE=1` 后额外以 `APP_ENV=dev` 逐个启动并轮询管理端 `/readyz`（需 DB+Redis，端口可用 `JIMU_PROFILES_HTTP_PORT`/`JIMU_PROFILES_MGMT_PORT` 覆盖），未设置时逐形态打印 `SKIP`、不静默跳过；`make compose-report` 重算并覆盖 `docs/profiles/compose-report.md`（不连库、不启动监听，口径见报告开头）。
 - **`machine` 的带外签发路径（P2.6）** — `/api/v1/admin/apikeys` 位于 `middleware.AdminAuth()` 之后，需要该形态刻意排除的 JWT 链，因此 `machine` 无法**自助**签发第一把 API Key；改用能力自带的 CLI 命令带外签发：`PROFILE=machine make build-cli && ./bin/jimu-cli-machine apikey issue --name=first`，再用返回的明文 Key 走 `X-API-Key` 受保护路由。
-- **迁移与种子跟随编译期形态（P2.6）** — `jimu` CLI 的 `migrate up|down|status|redo`、`adopt-capabilities` 与 `seed` 只处理**当前形态声明的能力集**（从 `catalog.All()` 过滤、保持拓扑序；`capabilities.enabled` 不参与，关闭能力不删表）。因此**行为变更**：非 full 形态的 CLI 只迁移/播种该形态的能力（`migrate status` 表数下降），默认 `full` 行为逐值不变（单测钉住）。结构种子需要 `tenant` 能力，不含该能力的形态不提供（`jimu seed` 明确报错、启动期 `structural seed skipped` 告警跳过）—— 三条边界见「数据种子」。`ADMIN_PASSWORD` 未设置时同样跳过并告警，服务不会因缺少该变量而启动失败（容器启动早于 CLI 迁移、compose 不向 server 注入该变量）。
+- **迁移与种子跟随编译期形态（P2.6）** — `jimu` CLI 的 `migrate up|down|status|redo`、`adopt-capabilities` 与 `seed` 只处理**当前形态声明的能力集 ∪ schema 依赖**（从 `catalog.All()` 过滤、保持拓扑序；`capabilities.enabled` 不参与，关闭能力不删表）。**schema 依赖**（`cmd/cli` 的 `migrationSchemaDeps`：`user`/`access` → `tenant`）保证裁剪形态也建出自己写得进去的 schema —— tenant 的迁移 005 给 `users`/`roles` 加 `tenant_id` 列，而对应 ORM 模型始终写该列（整分支审查 C1）。因此**行为变更**：非 full 形态的 CLI 只迁移/播种该形态的能力（`migrate status` 表数下降），默认 `full` 行为逐值不变（单测钉住）。**不含 `tenant` 的形态同样正常播种**（结构种子在所有形态都执行；装配集仍不含 tenant，不挂路由、不 seed 额外数据）—— 机制与运维边界见「数据库迁移」与「数据种子」。`ADMIN_PASSWORD` 未设置时不播种并告警，服务不会因缺少该变量而启动失败（容器启动早于 CLI 迁移、compose 不向 server 注入该变量）。
 
 ### 驱动级可插拔（P2.5）
 

@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"jimu/internal/capabilities/catalog"
-	"jimu/internal/contract"
 	"jimu/internal/profiles/registry"
 
 	"github.com/stretchr/testify/assert"
@@ -44,20 +43,65 @@ func TestResolveActiveKeepsCatalogOrderForSubset(t *testing.T) {
 	require.NoError(t, err)
 
 	// 期望**人工写死**（不用与实现相同的循环，否则断言自指）：
-	// minimal 声明 user/access/auth（另两个 encryption/notification 非 catalog，不参与）。
-	// catalog 序 = user, access, auth；而 minimal 的**装配序**是 encryption, notification,
-	// access, user, auth → 过滤成 access, user, auth —— 两者不同，正可判别是否走错顺序。
-	want := []string{"user", "access", "auth"}
+	// minimal 声明 user/access/auth（另两个 encryption/notification 非 catalog，不参与）；
+	// 迁移集再补 schema 依赖 tenant（users/roles.tenant_id 由它的迁移添加，见 catalog.MigrationSchemaDeps）。
+	// catalog 序 = user, access, tenant, auth；而 minimal 的**装配序**是 encryption,
+	// notification, access, user, auth —— 两者不同，正可判别是否走错顺序。
+	want := []string{"user", "access", "tenant", "auth"}
 	gotNames := make([]string, 0, len(got))
 	for _, d := range got {
 		gotNames = append(gotNames, d.Name)
 	}
 	assert.Equal(t, want, gotNames)
-	assert.NotContains(t, gotNames, "tenant", "minimal 不含 tenant")
+	assert.Contains(t, gotNames, "tenant", "含 user/access 的迁移集必须带 schema 依赖 tenant")
 	assert.Contains(t, gotNames, "auth")
 
 	// 真子集：确实比 catalog 少（否则这条用例是恒真的）。
 	assert.Less(t, len(gotNames), len(catalog.Names()))
+}
+
+// 迁移集必须带上 schema 依赖：minimal 声明 user/access/auth（不含 tenant），
+// 但 tenant 的迁移给 users/roles 加了 tenant_id 列（user/access 的 ORM 模型始终写它），
+// 所以迁移集必须把 tenant 补进来 —— 否则裁剪形态会建出自己写不进去的 schema。
+func TestMigrationSetCarriesSchemaDependencies(t *testing.T) {
+	minimal, err := registry.Lookup("minimal")
+	require.NoError(t, err)
+	declared := map[string]bool{}
+	for _, c := range minimal.Capabilities {
+		declared[c.Descriptor.Name] = true
+	}
+	require.False(t, declared["tenant"], "minimal 本身不含 tenant")
+
+	names := make([]string, 0, len(declared))
+	for _, d := range catalog.MigrationSet(declared) {
+		names = append(names, d.Name)
+	}
+	assert.Contains(t, names, "tenant", "含 user/access 的形态必须带上 tenant 的迁移")
+	// 顺序仍是 catalog 序（tenant 在 user/access 之后）。
+	assert.Less(t, indexOf(names, "user"), indexOf(names, "tenant"))
+	assert.Less(t, indexOf(names, "access"), indexOf(names, "tenant"))
+
+	// machine 只有 user/access/apikey/grpc/encryption：同样补 tenant。
+	machine, err := registry.Lookup("machine")
+	require.NoError(t, err)
+	mDeclared := map[string]bool{}
+	for _, c := range machine.Capabilities {
+		mDeclared[c.Descriptor.Name] = true
+	}
+	mNames := make([]string, 0, len(mDeclared))
+	for _, d := range catalog.MigrationSet(mDeclared) {
+		mNames = append(mNames, d.Name)
+	}
+	assert.Contains(t, mNames, "tenant")
+}
+
+func indexOf(xs []string, want string) int {
+	for i, x := range xs {
+		if x == want {
+			return i
+		}
+	}
+	return -1
 }
 
 // 有 catalog 能力但一个迁移都没有 → 同样是「迁移零个能力」，必须 fail-closed
@@ -73,17 +117,4 @@ func TestResolveActiveRejectsEmptyDeclared(t *testing.T) {
 	_, err := resolveActive("ghost", map[string]bool{})
 	require.ErrorContains(t, err, "declares no catalog capabilities")
 	require.ErrorContains(t, err, `"ghost"`)
-}
-
-// 结构种子需要 tenant 能力：不含它的形态必须被显式拒绝（附替代路径），
-// 而不是让种子在事务中途抛 "no such table: tenants"（P2.6 迁移裁剪后 minimal/machine/enterprise 就是这种形态）。
-func TestCheckSeedCapabilitiesRequiresTenant(t *testing.T) {
-	full := []contract.Descriptor{{Name: "user"}, {Name: "access"}, {Name: "tenant"}}
-	require.NoError(t, checkSeedCapabilities("full", full))
-
-	enterprise := []contract.Descriptor{{Name: "user"}, {Name: "access"}, {Name: "console"}}
-	err := checkSeedCapabilities("enterprise", enterprise)
-	require.ErrorIs(t, err, errSeedNeedsTenant)
-	require.ErrorContains(t, err, `profile "enterprise"`)
-	require.ErrorContains(t, err, "full/saas")
 }
