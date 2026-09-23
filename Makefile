@@ -96,7 +96,7 @@ help:
 	@echo ""
 	@echo "工具:"
 	@echo "  make clean                清理构建产物"
-	@echo "  make swagger              生成 API 文档"
+	@echo "  make swagger              生成 API 文档（形态未编入 apidocs 时跳过）"
 	@echo "  make proto                重新生成 gRPC 代码"
 	@echo "  make bench                运行性能基准测试"
 	@echo "  make loadtest             本地 HTTP 压测（需 hey）"
@@ -307,8 +307,11 @@ clean:
 	rm -rf .overlay
 	rm -f coverage.out coverage.html
 
-## swagger: 生成 API 文档
+## swagger: 生成 API 文档（当前形态未编入 apidocs 时跳过；PROFILE 非法则失败）
 swagger:
+	@assets=$$(go run ./tools/profileassets "$(PROFILE)") || exit 1; \
+	printf '%s\n' "$$assets" | grep -qx 'docs/openapi' || { echo "SKIP swagger：形态 $(PROFILE) 未编入 apidocs"; exit 0; }; \
+	echo "$(SWAG) init -g $(SERVER_CMD) -o docs/openapi"; \
 	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi
 
 ## proto: 从 proto/ 重新生成 gRPC 代码（需 protoc + protoc-gen-go + protoc-gen-go-grpc）
@@ -362,13 +365,14 @@ test-coverage-check:
 test-race:
 	go test -race ./...
 
-## swagger-check: 校验 OpenAPI 文档为最新（与 CI Test job 一致）
+## swagger-check: 校验 OpenAPI 文档为最新（与 CI Test job 一致；当前形态未编入 apidocs 时跳过）
 swagger-check:
-	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi >/dev/null
-	@git diff --exit-code docs/openapi || { \
-		echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; \
-	}
-	@echo "✅ OpenAPI 文档为最新"
+	@assets=$$(go run ./tools/profileassets "$(PROFILE)") || exit 1; \
+	printf '%s\n' "$$assets" | grep -qx 'docs/openapi' || { echo "SKIP swagger-check：形态 $(PROFILE) 未编入 apidocs"; exit 0; }; \
+	echo "$(SWAG) init -g $(SERVER_CMD) -o docs/openapi"; \
+	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi >/dev/null || exit 1; \
+	git diff --exit-code docs/openapi || { echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; }; \
+	echo "✅ OpenAPI 文档为最新"
 
 ## smoke-check: 校验 smoke 脚本语法（与 CI Test job 一致）
 smoke-check:

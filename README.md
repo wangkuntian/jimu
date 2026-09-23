@@ -1205,7 +1205,8 @@ internal/capabilities/{name}/
 | `make check-capabilities` | 4 条汇总行：① 能力自描述与 `Owns` ↔ mysql 迁移建表一致（单表唯一归属、无未声明的建表、声明的表确有迁移创建；PostgreSQL 表名与 mysql 一致，暂以 mysql 为准）② 驱动可用集 ↔ 驱动目录存在（`Descriptor.Drivers` 非空不重复且目录存在）+ 能力核心生产闭包零驱动包、零重型依赖 + 各形态选中集 == 该形态生产 import 闭包（集合比较）③ 形态生产代码只 import 已声明的驱动（能力根包或已声明的驱动包）④ 唯一入口 `cmd/server` 只 import `assembly` 与选点包（+ 标准库）、选点包 `internal/profiles/active` 恰好只选一个形态（且不得 import `internal/profiles/registry`） |
 | `make profiles-check` | 用 overlay 构建全部 5 个形态（`./cmd/server` + 该形态 overlay）+ 依赖闭包裁剪门禁（golden）；`JIMU_PROFILES_SMOKE=1` 时额外启动各形态并轮询管理端 `/readyz`（需 DB+Redis） |
 | `make compose-report` | 生成形态编译面报告 `docs/profiles/compose-report.md`（二进制/路由/迁移/表/本仓闭包代码量与文件数/重型依赖列；不连库、不启动监听） |
-| `make swagger` | 生成 API 文档 |
+| `make swagger` | 生成 API 文档（`docs/openapi` 归 `apidocs` 能力：当前形态未编入 apidocs 时打印 `SKIP` 并成功退出；`PROFILE` 非法则失败） |
+| `make swagger-check` | 校验 OpenAPI 文档为最新（与 CI Test job 一致；同样按形态跳过，`release.yml` 使用它） |
 | `make cli` | 编译 CLI |
 | `make docker-build` | 构建 Docker 镜像（`PROFILE=<name>` 选形态，经 `--build-arg PROFILE=<name>`，默认 full） |
 | `make docker-run` | 直接运行 Docker 容器 |
