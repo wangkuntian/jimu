@@ -23,13 +23,23 @@ var Version = "dev"
 // 权限点取自 assembly.Context.Capabilities()（Run 解析出的装配集），而非全量清单：
 // import catalog 会把 18 个能力的包全量拉进每个形态的依赖闭包，形态裁剪随之失效。
 //
-// 形态裁剪不门控种子：CLI 的 migrate 按完整清单建表，被形态排除的能力表同样存在
-// （profile 驱动的迁移裁剪是 P2.6/P2.8 工作，本阶段不实现）。种子需要部署期凭据
-// ADMIN_PASSWORD（RunSeed 的前置条件），未提供时跳过并告警：容器启动早于 CLI 迁移、
-// compose 也不向 server 注入该变量，服务启动不应因缺少该变量而失败。
+// 迁移自 P2.6 起跟随形态裁剪：结构种子需要 tenant 能力（tenants/tenant_plans 表与
+// users/roles.tenant_id 列都由它的迁移产生），不含该能力的形态无法播种（ORM 模型始终写
+// tenant_id 列）。此时告警跳过而不是让服务启动失败 —— 与缺少 ADMIN_PASSWORD 同一处置；
+// 管理数据改用具备 tenant 的形态（full/saas）执行 `jimu seed`。
+// 种子需要部署期凭据 ADMIN_PASSWORD（RunSeed 的前置条件），未提供时同样跳过并告警：
+// 容器启动早于 CLI 迁移、compose 也不向 server 注入该变量，服务启动不应因缺少该变量而失败。
 func StructuralSeed(ctx *assembly.Context) error {
 	if os.Getenv("ADMIN_PASSWORD") == "" {
 		ctx.Logger().Warnw("structural seed skipped", "missing", "ADMIN_PASSWORD")
+		return nil
+	}
+	if !app.HasCapability(ctx.Capabilities(), "tenant") {
+		// 解析集不含 tenant 有两种成因：该形态本就不含它，或被 capabilities.enabled 关闭
+		// （后者表/列仍在，CLI seed 按编译形态判断仍可用）—— 日志不要把两种混为一谈。
+		ctx.Logger().Warnw("structural seed skipped",
+			"reason", "tenant capability not active",
+			"hint", "shape does not include tenant, or it is disabled via capabilities.enabled")
 		return nil
 	}
 	return app.RunSeedWithCasbin(ctx.DB(), ctx.Capabilities())

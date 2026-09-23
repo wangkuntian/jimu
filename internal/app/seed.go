@@ -16,6 +16,17 @@ import (
 	"gorm.io/gorm"
 )
 
+// HasCapability 判断清单里是否包含指定能力（按 Descriptor.Name）。
+// 供调用方判断「本形态/本清单是否具备结构种子所需的表」（见 seed.go 的 RunSeed 依赖）。
+func HasCapability(caps []contract.Descriptor, name string) bool {
+	for _, d := range caps {
+		if d.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // RunSeed 插入初始数据
 // 管理员密码从 ADMIN_PASSWORD 环境变量获取
 // 权限点来自启用集各能力的 Descriptor.Permissions（能力自声明，未启用不种）

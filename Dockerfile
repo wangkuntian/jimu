@@ -22,7 +22,8 @@ ARG PROFILE=full
 # 镜像会**静默按 full 构建**。产物按形态隔离在 .overlay/<profile>/。
 RUN OVERLAY="$(go run ./tools/profileoverlay "${PROFILE}")" && \
     CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -overlay="$OVERLAY" -o server ./cmd/server
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o jimu cmd/cli/main.go
+RUN OVERLAY="$(go run ./tools/profileoverlay "${PROFILE}")" && \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -overlay="$OVERLAY" -o jimu ./cmd/cli
 
 # Runtime stage
 FROM alpine:3.24.1

@@ -16,9 +16,14 @@ SERVER_PKG := ./cmd/server
 # 用递归展开（= 而非 :=）：下方 include .env 可能在解析期之后才把 PROFILE 改成别的形态，
 # 立即展开会让「.env 设 PROFILE=minimal」变成「用 minimal 构建、产物名却仍是 bin/jimu-server」。
 SERVER_BIN = $(BIN_DIR)/jimu-server$(if $(filter-out full,$(PROFILE)),-$(PROFILE),)
-CLI_BIN := $(BIN_DIR)/jimu-cli
+CLI_BIN = $(BIN_DIR)/jimu-cli$(if $(filter-out full,$(PROFILE)),-$(PROFILE),)
 SERVER_CMD := cmd/server/main.go
-CLI_CMD := cmd/cli/main.go
+# CLI 必须有包形式（cmd/cli 下有多个文件：main.go / activecaps.go）；单文件形式会漏编译。
+CLI_PKG := ./cmd/cli
+
+# CLI 运行同样叠形态 overlay（与 build-cli 同源）。两步写法：先取 overlay 再 &&，非法形态名
+# 会在命令替换处失败 —— 若写进 -overlay=，失败只留空值，go 会当作「无 overlay」静默按 full 跑。
+CLI_RUN = overlay="$$(go run ./tools/profileoverlay "$(PROFILE)")" && APP_ENV=$(ENV) go run -overlay="$$overlay" $(CLI_PKG)
 VERSION ?= dev
 # 注入版本号到两个 main 包
 LDFLAGS := -X main.version=$(VERSION)
@@ -123,25 +128,25 @@ build-server:
 
 build-cli:
 	@mkdir -p $(BIN_DIR)
-	go build -ldflags "$(LDFLAGS)" -o $(CLI_BIN) $(CLI_CMD)
+	overlay="$$(go run ./tools/profileoverlay "$(PROFILE)")" && go build -ldflags "$(LDFLAGS)" -overlay="$$overlay" -o $(CLI_BIN) $(CLI_PKG)
 
 # ========== 数据库 ==========
 
-## migrate: 本地执行迁移
+## migrate: 本地执行迁移（跟随 PROFILE：命令行叠该形态 overlay；非法形态名 fail-fast）
 migrate:
-	APP_ENV=$(ENV) go run $(CLI_CMD) migrate up
+	@$(CLI_RUN) migrate up
 
-## migrate-down: 本地回滚迁移
+## migrate-down: 本地回滚迁移（跟随 PROFILE）
 migrate-down:
-	APP_ENV=$(ENV) go run $(CLI_CMD) migrate down
+	@$(CLI_RUN) migrate down
 
-## migrate-status: 查看迁移状态
+## migrate-status: 查看迁移状态（跟随 PROFILE）
 migrate-status:
-	APP_ENV=$(ENV) go run $(CLI_CMD) migrate status
+	@$(CLI_RUN) migrate status
 
-## seed: 本地插入初始数据
+## seed: 本地插入初始数据（跟随 PROFILE）
 seed:
-	APP_ENV=$(ENV) go run $(CLI_CMD) seed
+	@$(CLI_RUN) seed
 
 ## backup: 备份数据库（需 mysqldump，输出到 ./backups，环境变量见 scripts/backup.sh）
 backup:

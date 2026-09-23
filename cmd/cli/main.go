@@ -6,10 +6,10 @@ import (
 
 	"jimu/internal/app"
 	apikeycli "jimu/internal/capabilities/apikey/cli"
-	"jimu/internal/capabilities/catalog"
 	"jimu/internal/config"
 	"jimu/internal/kernel/db"
 	"jimu/internal/kernel/logger"
+	"jimu/internal/profiles/active"
 	"jimu/tools/generator"
 
 	"github.com/spf13/cobra"
@@ -52,7 +52,11 @@ var migrateUpCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 		log := logger.New(cfg.Log)
-		if err := db.MigrateWithRetry(cfg.DB, catalog.All(), log, "up"); err != nil {
+		caps, err := activeDescriptors()
+		if err != nil {
+			return err
+		}
+		if err := db.MigrateWithRetry(cfg.DB, caps, log, "up"); err != nil {
 			return fmt.Errorf("migration failed: %w", err)
 		}
 		fmt.Println("Migrations applied successfully")
@@ -69,7 +73,11 @@ var migrateDownCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 		log := logger.New(cfg.Log)
-		if err := db.MigrateWithRetry(cfg.DB, catalog.All(), log, "down"); err != nil {
+		caps, err := activeDescriptors()
+		if err != nil {
+			return err
+		}
+		if err := db.MigrateWithRetry(cfg.DB, caps, log, "down"); err != nil {
 			return fmt.Errorf("rollback failed: %w", err)
 		}
 		fmt.Println("Rollback successful")
@@ -86,7 +94,11 @@ var migrateStatusCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 		log := logger.New(cfg.Log)
-		if err := db.MigrateWithRetry(cfg.DB, catalog.All(), log, "status"); err != nil {
+		caps, err := activeDescriptors()
+		if err != nil {
+			return err
+		}
+		if err := db.MigrateWithRetry(cfg.DB, caps, log, "status"); err != nil {
 			return fmt.Errorf("failed to get status: %w", err)
 		}
 		return nil
@@ -102,7 +114,11 @@ var migrateRedoCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 		log := logger.New(cfg.Log)
-		if err := db.MigrateWithRetry(cfg.DB, catalog.All(), log, "redo"); err != nil {
+		caps, err := activeDescriptors()
+		if err != nil {
+			return err
+		}
+		if err := db.MigrateWithRetry(cfg.DB, caps, log, "redo"); err != nil {
 			return fmt.Errorf("redo failed: %w", err)
 		}
 		fmt.Println("Redo successful")
@@ -118,13 +134,17 @@ var migrateAdoptCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
-		baseline, err := db.AdoptCapabilities(cfg.DB, catalog.All())
+		caps, err := activeDescriptors()
+		if err != nil {
+			return err
+		}
+		baseline, err := db.AdoptCapabilities(cfg.DB, caps)
 		if err != nil {
 			return fmt.Errorf("adopt failed: %w", err)
 		}
-		for _, name := range catalog.Names() {
-			if vs, ok := baseline[name]; ok {
-				fmt.Printf("%s: %d migrations adopted\n", name, len(vs))
+		for _, d := range caps {
+			if vs, ok := baseline[d.Name]; ok {
+				fmt.Printf("%s: %d migrations adopted\n", d.Name, len(vs))
 			}
 		}
 		return nil
@@ -174,7 +194,16 @@ var seedCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to connect database: %w", err)
 		}
-		if err := app.RunSeedWithCasbin(dbConn, catalog.All()); err != nil {
+		caps, err := activeDescriptors()
+		if err != nil {
+			return err
+		}
+		// 结构种子需要 tenant 能力（P2.6 起迁移跟随形态裁剪：不含 tenant 的形态没有
+		// tenants/tenant_plans 表与 users/roles.tenant_id 列）→ 显式拒绝并给出替代路径。
+		if err := checkSeedCapabilities(active.Assembly().Name, caps); err != nil {
+			return err
+		}
+		if err := app.RunSeedWithCasbin(dbConn, caps); err != nil {
 			return fmt.Errorf("seed failed: %w", err)
 		}
 		fmt.Println("Seed data inserted successfully (with Casbin policies)")
