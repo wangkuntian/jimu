@@ -64,6 +64,12 @@ type Descriptor struct {
 	// Configs 能力拥有的配置段；nil 表示该能力的配置由内核段承担或无配置。
 	// 一个能力可拥有多段（如 queue 同时拥有 queue 与 scheduler）。
 	Configs []ConfigSpec
+
+	// Assets 本能力拥有的**非代码资产**路径（仓库相对路径：目录前缀或具体文件），
+	// 如 apidocs → ["docs/openapi"]；空表示该能力不拥有资产。内核运维/观测资产不在这里，
+	// 它们在 tools/internal/profileassets 的具名资产组里声明（全形态携带）。
+	// 归属唯一、每个资产文件都必须有所有者，由 make check-capabilities 的资产段校验（P2.6）。
+	Assets []string
 }
 
 // Normalized 返回归一化后的挂载点：空值与任何未识别的取值（如大小写笔误）

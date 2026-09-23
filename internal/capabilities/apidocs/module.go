@@ -4,9 +4,12 @@ import "jimu/internal/contract"
 
 // Descriptor 声明 API 文档能力的静态描述（非 catalog 条目：profile 显式列出）。
 // 公开挂载：在 /swagger 下提供 Swagger UI（release 模式下不注册）。
+// Assets：生成的 OpenAPI 文档（docs/openapi）归本能力所有 —— 形态清单没有本能力时，
+// 生成的文档与校验都不应出现（归属由 make check-capabilities 的资产段校验）。
 var Descriptor = contract.Descriptor{
-	Name:  "apidocs",
-	Mount: contract.MountPublic,
+	Name:   "apidocs",
+	Mount:  contract.MountPublic,
+	Assets: []string{"docs/openapi"},
 }
 
 // Module API 文档能力的模块实例：按 HTTP 模式决定是否注册 Swagger UI 路由。
