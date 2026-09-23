@@ -217,6 +217,60 @@
 | CLI 子命令（`cmd/cli`） | 只有内核命令 + 脚手架 | 能力声明自己的子命令（如 `jobs` → `jimu jobs list`）；生成项目的 CLI 按能力裁剪 |
 | `internal/e2e` 契约测试 | 整体契约测试 | 按能力拆分，与 §9 门禁配套 |
 
+> ⚠️ **上表第一行「随 `obs` 能力携带」的假设未采用**：P2.6 落地时改用**内核资产组
+> `observability`**（不属于任何能力、全形态携带）表达 `deploy/openobserve/` 等观测资产的归属，
+> 因此 catalog 仍 **18 项**、**没有**新增 `obs` 能力（见下方 P2.6 进展块）。
+
+> **P2.6 进展（非代码资产模块化与形态条件化已完成）**：§3.8 落地 —— 能力用
+> `contract.Descriptor.Assets`（仓库相对路径：目录前缀或具体文件）声明自己拥有的非代码资产，
+> 内核运维/观测资产用**具名资产组** `ops`（`deploy/k8s`、`deploy/helm`、`deploy/backup`）与
+> `observability`（`deploy/openobserve`、`deploy/otel-collector.yaml`，以及 `deploy/k8s` 与
+> `deploy/helm/templates` 下的 openobserve/otel 两个文件）表达；**归属判定 = 最长前缀匹配**
+> （具体文件赢过目录），每个文件恰有一个有效所有者，资产根固定为 `deploy/` 与 `docs/openapi/`
+> （`configs/` 不纳入 —— 本仓逐字节不变，按能力渲染归 P2.7）。派生实现是共享包
+> `tools/internal/profileassets`（`Canonical`/`Owner`/`Ownership`/`ForProfile`/`Declared`/
+> `CoreGroups`/`AssetRoots`），查询入口 `go run ./tools/profileassets <profile>`
+> （`-capabilities` 打印该形态的能力名，非法形态名非零退出）。**实测分割**：`git ls-files
+> deploy docs/openapi` 共 **48** 个文件 = `cap:apidocs` **3** / `group:observability` **22** /
+> `group:ops` **23**，零未覆盖零重叠。`make check-capabilities` 新增资产段（由 4 条扩到
+> **5 条汇总行**，新行 `✅ check-capabilities: 资产归属唯一且无未声明资产`），四条断言：声明路径
+> 非空/存在/落在资产根内；同一路径不被两个所有者声明（**归一化比较**，`deploy/k8s/`、
+> `deploy/k8s//`、`deploy/./k8s`、`deploy/k8s/.`、尾随空格、`deploy/../configs` 均被拒）；
+> 资产根下每个文件都有有效所有者；每个形态的资产集覆盖全部内核资产组。
+>
+> **本仓条件化清单**：① APIdocs —— `make swagger`/`make swagger-check` 先取当前形态的资产集，
+> 不含 `docs/openapi`（`minimal`/`saas`/`enterprise`/`machine`：`apidocs` 只在 `full` 的清单里）
+> 时打印 `SKIP …` 并成功退出，含（默认 `full`）则照旧真生成/真校验，`PROFILE` 非法名仍非零失败
+> （`PROFILE=ghost` → make exit 2）；② CLI 命令归属 —— 能力在**自己的包内**提供
+> `internal/capabilities/<name>/cli` 子包并导出 `Commands() []*cobra.Command`，`cmd/cli` 显式
+> import 注册（`internal/contract` 不引入 cobra），实例是 `apikey` 的 `jimu apikey issue|list`
+> （明文只显示一次），补上 `machine` 形态（刻意无 auth/JWT 链）首把 API Key 的**带外签发**路径；
+> ③ 迁移与种子 —— `cmd/cli` 的能力清单改为当前形态声明集（从 `catalog.All()` 过滤、
+> **保持 catalog 拓扑序**，不能用装配顺序），`capabilities.enabled` 不参与，默认 `full` 行为逐值
+> 不变（单测钉住 `activeDescriptors() == catalog.All()`），非 full 形态只迁移/播种该形态的能力；
+> ④ e2e 契约测试 —— `internal/assembly` 抽出并导出 `Resolve`/`WireFor`（`Run` 复用，单一 wiring），
+> `internal/e2e` 按当前形态装配、配置基线是真实 `configs/app.yaml`，用例用 `requireCapabilities`
+> 声明依赖能力、缺失即 `t.Skipf`（打印形态名与缺失能力）；⑤ 形态路由面 ——
+> `internal/profiles/registry/routes_golden_test.go` 钉住 4 个非 full 形态的完整路由集
+> （minimal 32 / saas 48 / enterprise 55 / machine 28，与 `make compose-report` 逐值吻合）+
+> 跨形态挂载点一致性断言 `TestShapeMountsMatchFull`，`full` 仍由自己包内的 golden（99 条 + 挂载点表）
+> 钉住。
+>
+> **行为变更**：① 非 full 形态的 `jimu` CLI 只迁移/播种该形态的能力（`migrate status` 表数下降）；
+> ② 结构种子需要 `tenant` 能力（`tenants`/`tenant_plans` 表与 `users`/`roles.tenant_id` 列都由它的
+> 迁移产生，ORM 模型始终写 `tenant_id` 列）→ 不含 `tenant` 的形态（minimal/machine/enterprise）
+> **不提供结构种子**：`jimu seed` 明确报错并给出替代路径，启动期 `StructuralSeed` 告警跳过、
+> **绝不因此让服务启动失败**；替代路径必须**先用具备 tenant 的形态（full/saas）把迁移也跑一遍**，
+> 否则 `seed` 会再失败一次（表不存在）；`full`/`saas` 但用 `capabilities.enabled` 禁用 `tenant` 时，
+> 启动期种子跳过（解析集不含 tenant）而 CLI `seed` 仍可用（按编译形态判断）；③ 形态不含 `apidocs`
+> 时 `make swagger`/`swagger-check` 打印 `SKIP` 并成功退出。**实测 e2e 形态跳过矩阵**
+> （`go test -overlay=$(go run ./tools/profileoverlay <name>) ./internal/e2e/ -count=1 -v`）：
+> `full` 10 PASS / 0 SKIP，`minimal` 3/7，`saas` 4/6，`enterprise` 5/5，`machine` 3/7，
+> **全部 0 FAIL**。`configs/*.yaml` 逐字节不变、catalog 仍 18 项、`go.mod` 未动；渲染
+> （`values.yaml`/`configs/app.yaml` 按能力裁剪、生成项目里未选中资产不出现、生成项目的 CLI 裁剪）
+> 明确留 **P2.7**；门禁**仍未接入** `make ci`/`release-check`（P2.8 收口）。执行记录见
+> [`docs/plans/2026-09-23-p2.6-assets-and-conditionals.md`](../plans/2026-09-23-p2.6-assets-and-conditionals.md)。
+
 ## 4. 边界规则与现状违反
 
 **规则**：① 一张表只属于一个能力 ② 其他能力不得给别人的表加列，需要附加数据就建自己的从表 ③ 跨能力只经 `contract` 端口读，写只在所有者 ④ 依赖必须单向无环 ⑤ 能力不得 import 其他能力的内部包。
@@ -354,7 +408,7 @@ profiles/
 > 四个轻形态 0；`minimal` 84.7 MB vs `full` 123.1 MB。仅「本仓 Go 文件 / 代码行」两列因闭包根从
 > 各形态入口包（1 个入口文件）换成 `./cmd/server`（`main.go` + 选点 `assembly.go` 两个文件）而
 > **+1 文件 / +25 行（`full`）、+30 行（其余四形态）**，二进制差 16 KB 量级。`make check-capabilities`
-> 按 **4 条汇总行**输出：① 能力自描述与 `Owns` ↔ 迁移归属 ② 驱动可用集/选中集/import 闭包一致 ③ 形态
+> 按 **4 条汇总行**（P2.6 起为 5 条，另含资产段）输出：① 能力自描述与 `Owns` ↔ 迁移归属 ② 驱动可用集/选中集/import 闭包一致 ③ 形态
 > 生产代码只 import 已声明驱动 ④ **唯一入口与选点包只 import 一个形态**（④ 是 P2.5b 新增的不变量，含
 > 三条子断言：入口 `cmd/server` 只 import `internal/assembly` 与选点包（+ 标准库）；选点包
 > `internal/profiles/active` **恰好** import 一个形态包；两者都不得 import
@@ -498,7 +552,7 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > `internal/assembly` 与选点包 `internal/profiles/active`（+ 标准库；提交态默认 `full`），切换形态改由**构建期
 > overlay** 完成（`tools/profileoverlay` → gitignored 的 `.overlay/<profile>/`，不脏工作区；非法形态名
 > 非零退出且无产物）。形态名与清单的**唯一来源**收口到 `internal/profiles/registry`；
-> `make check-capabilities` 改为 **4 条汇总行**（④ 是新增不变量，含三条子断言：入口 `cmd/server` 只
+> `make check-capabilities` 改为 **4 条汇总行**（P2.6 起为 5 条，另含资产段）（④ 是新增不变量，含三条子断言：入口 `cmd/server` 只
 > import `internal/assembly` 与选点包；选点包 `internal/profiles/active` **恰好** import 一个形态包；
 > 两者都不得 import `internal/profiles/registry`），
 > `make profiles-check` 与 `make compose-report` 的闭包口径改为「`./cmd/server` + 该形态 overlay」。
@@ -506,6 +560,25 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > （仅本仓文件 +1、代码行 +25/+30 来自入口文件差异）。**驱动参数化仅限形态级**，`DRIVERS=` 式形态内
 > 选择留后续阶段。执行记录见
 > [`docs/plans/2026-09-23-p2.5b-unified-entry.md`](../plans/2026-09-23-p2.5b-unified-entry.md)。
+>
+> **P2 进展（P2.6 非代码资产模块化与形态条件化已完成）**：§3.8 落地 ——
+> `contract.Descriptor.Assets` + 内核资产组 `ops`/`observability` + **最长前缀**归属（共享派生
+> `tools/internal/profileassets`，查询 `go run ./tools/profileassets <profile>`）；
+> `make check-capabilities` 由 4 条扩到 **5 条汇总行**（新增资产段），实测 **48** 个受跟踪资产文件
+> 分为 `cap:apidocs` 3 / `group:observability` 22 / `group:ops` 23。本仓条件化：`apidocs` 资产让
+> `make swagger`/`swagger-check` 按形态跳过（四个非 full 形态 SKIP + exit 0，非法形态名仍非零）；
+> 能力自带 CLI 命令（`internal/capabilities/<name>/cli.Commands()`，实例 `jimu apikey issue|list`，
+> 补 `machine` 形态首把 Key 的带外签发路径）；`jimu` CLI 的迁移/种子改跟当前形态（从
+> `catalog.All()` 过滤、保持拓扑序、`capabilities.enabled` 不参与、`full` 逐值不变）；
+> `internal/e2e` 按形态装配（`assembly.Resolve`/`WireFor`）+ `requireCapabilities` 声明依赖
+> （跳过矩阵 full 10/0、minimal 3/7、saas 4/6、enterprise 5/5、machine 3/7，**0 FAIL**）；
+> 4 个非 full 形态的路由面 golden 落在 `internal/profiles/registry`（32/48/55/28）。
+> **行为变更**：非 full CLI 只迁移/播种该形态能力；结构种子需要 `tenant`，不含 `tenant` 的形态
+> 不提供（CLI `seed` 明确报错、启动期告警跳过；替代路径须先用 full/saas 把迁移也跑一遍）；
+> `apidocs` 缺失时 swagger 目标 SKIP。`configs/*.yaml` 逐字节不变、catalog 仍 18 项；渲染归
+> P2.7、门禁接入 CI 归 P2.8。机制细节与实测数字见 §3.8 的 P2.6 进展块；执行记录见
+> [`docs/plans/2026-09-23-p2.6-assets-and-conditionals.md`](../plans/2026-09-23-p2.6-assets-and-conditionals.md)。
+> ⚠️ **P2.6 已落地**：上方 P2.4 段落里的「迁移与结构种子仍按 catalog 全量清单执行」是**当时的**限制说明（保留原文）—— 迁移自 P2.6 起跟随编译期形态、结构种子受 `tenant` 能力约束，见 §3.8 的 P2.6 进展块。
 
 ## 11. 风险与取舍
 

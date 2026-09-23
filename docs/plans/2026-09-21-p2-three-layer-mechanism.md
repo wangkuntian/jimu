@@ -15,7 +15,7 @@ P2.3 层③ 运行时：capabilities.enabled   ← 已完成（依赖 P2.2；软
 P2.4 层② 构建：profiles 入口包          ← 已完成（依赖 P2.2；5 个 profile + compose-report）
 P2.5 层② 驱动级可插拔（§3.7）           ← 已完成（依赖 P2.4；驱动独立成包 + 两层声明 + 门禁）
 P2.5b 单一入口与构建期形态参数化         ← 已完成（依赖 P2.5；唯一入口 cmd/server + 选点包 + overlay）
-P2.6 层② 非代码资产模块化（§3.8）        ← deploy/Helm/CLI/契约测试随 profile 裁剪
+P2.6 层② 非代码资产模块化（§3.8）        ← 已完成（依赖 P2.5b；资产归属门禁 + 本仓条件化）
 P2.7 层① 脚手架：jimu new / capability add ← 依赖 P2.2 + P2.4（生成专属 catalog 与 app.yaml）
 P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后在 CI 生效
 ```
@@ -84,9 +84,15 @@ P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后
 - **实测**：`full` 闭包 **118 个重型依赖包**、四个轻形态 **0**（`go list -deps`，与 P2.5 逐值一致）；`minimal` **84.7 MB** vs `full` **123.1 MB**；路由/迁移/表逐值不变，仅「本仓 Go 文件」+1、「本仓代码行」+25（`full`）/ +30（其余四形态）来自入口文件差异，二进制差 16 KB 量级。
 - **边界与不做**：驱动参数化**仅限形态级**（驱动集合仍由各形态 `internal/profiles/<name>/drivers.go` 的 blank import 决定）；`PROFILE=enterprise DRIVERS=local` 式**形态内再选驱动**需要第二份真源清单 + 生成 `drivers.go` + 门禁改读它，**留后续阶段**。开发者可见的行为变更：`go build ./profiles/<name>` 不再可用。
 
-## P2.6 层② 非代码资产模块化（§3.8）
+## P2.6 层② 非代码资产模块化（§3.8）（已完成）
 
-- deploy 资产、Helm values、CLI 子命令、契约测试随 profile 裁剪。
+执行记录见 `docs/plans/2026-09-23-p2.6-assets-and-conditionals.md`。
+
+- **已完成（资产归属与门禁）**：`contract.Descriptor.Assets` 声明能力的非代码资产（当前只有 `apidocs` → `["docs/openapi"]`）；内核运维/观测资产用**具名资产组** `ops`/`observability` 表达（**不新增 `obs` 能力**，catalog 仍 18 项）；归属判定 = **最长前缀匹配**（具体文件赢过目录），资产根 = `deploy/` 与 `docs/openapi/`（不含 `configs/`）。共享派生 `tools/internal/profileassets` + 查询 `go run ./tools/profileassets <profile>`（`-capabilities` 列能力名）。`make check-capabilities` 新增资产段 → **5 条汇总行**（四条断言：路径存在且在根内 / 同一路径不被两个所有者声明（归一化比较）/ 根下每个文件都有有效所有者 / 每个形态覆盖全部内核资产组）。
+- **已完成（本仓条件化）**：① `make swagger`/`swagger-check` 按形态资产集跳过（不含 `apidocs` 的 minimal/saas/enterprise/machine 打印 `SKIP` 并 exit 0，`PROFILE` 非法名仍非零）；② 能力自带 CLI 命令（`internal/capabilities/<name>/cli.Commands()`，实例 `jimu apikey issue|list`，补 `machine` 形态首把 API Key 的带外签发）；③ `jimu` CLI 的 `migrate`/`adopt-capabilities`/`seed` 跟随当前形态（从 `catalog.All()` 过滤、保持拓扑序，`capabilities.enabled` 不参与，`full` 逐值不变）；④ `internal/e2e` 按形态装配（`assembly.Resolve`/`WireFor`，`Run` 复用，单一 wiring）+ `requireCapabilities` 声明依赖；⑤ 4 个非 full 形态的路由面 golden 收在 `internal/profiles/registry/routes_golden_test.go`（32/48/55/28，与 `make compose-report` 逐值吻合）+ 跨形态挂载点一致性断言 `TestShapeMountsMatchFull`，`full` 仍由自己包内的 golden 钉住。
+- **实测**：`git ls-files deploy docs/openapi` 共 **48** 个文件 = `cap:apidocs` 3 / `group:observability` 22 / `group:ops` 23（零未覆盖零重叠）；5 形态路由数 **99 / 32 / 48 / 55 / 28**；e2e 跳过矩阵 **full 10/0、minimal 3/7、saas 4/6、enterprise 5/5、machine 3/7，全部 0 FAIL**。`configs/*.yaml` 逐字节不变、catalog 18 项、`go.mod` 未动。
+- **行为变更（指针，详见 release note 与 README）**：① 非 full 形态的 `jimu` CLI 只迁移/播种该形态的能力（`migrate status` 表数下降；`full` 逐值不变）；② 结构种子需要 `tenant` 能力 → 不含 `tenant` 的形态（minimal/machine/enterprise）**不提供结构种子**（CLI `seed` 明确报错、启动期 `StructuralSeed` 告警跳过、服务不因此启动失败），替代路径必须**先用 full/saas 把迁移也跑一遍**；`full`/`saas` 但 `capabilities.enabled` 禁用 `tenant` 时启动期跳过、CLI `seed` 仍可用；③ 形态不含 `apidocs` 时 `make swagger`/`swagger-check` 打印 `SKIP` 并成功退出。
+- **边界与不做**：**渲染**（`values.yaml`/`configs/app.yaml` 按能力裁剪、生成项目里「未选中资产不出现」、生成项目的 CLI 裁剪）留 **P2.7**；门禁**仍未接入** `make ci`/`release-check`（P2.8 收口）；迁移/种子的**全量清单**语义在 `internal/shared/testutil` 保持（测试要建全部表）。
 
 ## P2.7 层① 脚手架
 

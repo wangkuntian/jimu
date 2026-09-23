@@ -241,7 +241,7 @@ make cli
 # 模块管理
 ./bin/jimu module create product    # 生成完整模块骨架
 
-# 数据库迁移
+# 数据库迁移（均跟随当前形态；默认 full）
 ./bin/jimu migrate up               # 执行所有迁移
 ./bin/jimu migrate down             # 回滚各能力最后一次迁移（按反向能力序）
 ./bin/jimu migrate status           # 查看迁移状态
@@ -249,13 +249,15 @@ make cli
 ./bin/jimu migrate adopt-capabilities  # 存量库登记各能力版本表基线（升级到 v0.3.0 后执行一次）
 
 # 数据初始化
-./bin/jimu seed                     # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例）
+./bin/jimu seed                     # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例；需当前形态含 tenant）
 
 # API Key（命令由 apikey 能力自带：internal/capabilities/apikey/cli）
-./bin/jimu apikey issue --name=ci --scopes=api:access   # 签发 API Key（明文只显示一次）
-./bin/jimu apikey list                                  # 列出 API Key（不显示明文）
+./bin/jimu apikey issue --name=ci --scopes=api:access   # 签发 API Key（明文只显示一次；另有 --expires-days/--created-by）
+./bin/jimu apikey list --limit=20                       # 列出 API Key（表格含 TENANT/CREATED_AT；不显示明文）
 
 ```
+
+> **能力自带命令的约定（P2.6）** — 能力在**自己的包内**提供 `internal/capabilities/<name>/cli` 子包并导出 `Commands() []*cobra.Command`，由 `cmd/cli` 显式 import 与注册（与「驱动显式 import + 注册」同构）；`internal/contract` **不**引入 cobra。当前实例是 `apikey` 的 `issue`/`list`（`--scopes` 默认 `api:access`、`--expires-days` 默认 0 即不过期、`--limit` 必须 ≥ 1）；它同时是 `machine` 形态首把 API Key 的带外签发路径（该形态没有 auth/JWT 链）。CLI 产物名带形态后缀：`bin/jimu-cli`（full）/`bin/jimu-cli-<name>`，与 `bin/jimu-server[-<name>]` 同构。
 
 ## 数据库迁移
 
@@ -270,12 +272,16 @@ v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capab
   3. 执行 `jimu migrate adopt-capabilities`：读取全局版本表最大已应用版本，为各能力版本表登记"已应用到对应版本"的基线（不执行任何迁移 SQL）；
   4. 之后正常 `jimu migrate up` 只跑各能力新增的迁移。
   全新数据库无需 adopt，直接 `migrate up`。
+- **迁移集跟随编译期形态（P2.6）** — `jimu migrate up|down|status|redo`、`adopt-capabilities` 与 `seed` 只处理**当前形态**声明的能力：`cmd/cli` 从 `catalog.All()` 过滤出形态声明集，因此天然保持 catalog 的拓扑序（迁移有真实依赖，如 `tenant` 的迁移 ALTER `users`/`roles`），装配顺序不参与。`capabilities.enabled`（层③）**不参与** —— 关闭能力不删表，迁移跟随的是编译期形态。默认 `full` 行为逐值不变（单测钉住 `activeDescriptors() == catalog.All()`），而 `PROFILE=minimal make migrate-status` 只看得到该形态的表（表数下降）；`make migrate*`/`make seed` 目标同样叠加形态 overlay（`PROFILE=ghost` fail-fast）。需要全部表时用 `full`/`saas` 形态。
 
 ## 数据种子
 
 - **权限点来自能力 Descriptor** — 各能力在 `Descriptor.Permissions` 声明自己的权限点，种子时聚合启用集写入 `permissions` 表并授予超管角色；未启用的能力不种其权限点。
-- **`jimu seed` 语义不变** — CLI seed 使用完整能力清单（`catalog.All()`）：CLI 的 `migrate` 命令同样按完整清单执行迁移，若 seed 只按启用集过滤而迁移不过滤，会造成权限点与表结构不同步。
-- **边界** — 结构性种子（默认租户、free 套餐、超管角色 + admin 用户）目前**不做**能力门控，无论启用集如何都写入；只有权限点按启用集聚合。按 profile 裁剪结构种子的能力门控推迟到 P1 profile 工作落地。
+- **`jimu seed` 跟随编译期形态（P2.6）** — CLI 的 `migrate`/`adopt-capabilities`/`seed` 使用同一份「当前形态声明的能力集」并保持 catalog 拓扑序，`capabilities.enabled`（层③）不参与；权限点仍按**该形态解析集**聚合，与迁移到的表结构同步。默认 `full` 行为逐值不变。
+- **结构种子需要 `tenant` 能力** — 默认租户、free 套餐、超管角色与 admin 用户涉及的 `tenants`/`tenant_plans` 表、`users`/`roles.tenant_id` 列都由 `tenant` 的迁移产生（ORM 模型始终写 `tenant_id` 列），因此：
+  1. 不含 `tenant` 的形态（`minimal`/`machine`/`enterprise`）**不提供结构种子**：`jimu seed` 明确报错并给出替代路径，启动期 `StructuralSeed` 打印 `structural seed skipped` 告警跳过（不会让服务启动失败）。
+  2. 替代路径必须**先用具备 `tenant` 的形态（`full`/`saas`）把迁移也跑一遍**，再在该形态执行 `seed`；只换 CLI 二进制而不重跑迁移会因表不存在再次失败。
+  3. `full`/`saas` 形态但用 `capabilities.enabled` **禁用** `tenant` 时：启动期种子跳过（解析集不含 `tenant`），而 CLI `jimu seed` 仍可用（它按**编译形态**判断，表/列仍在）。
 
 ## 形态（profile）
 
@@ -302,16 +308,16 @@ v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capab
 
 | 形态 | 二进制 | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 | 重型依赖 |
 |---|---:|---:|---:|---:|---:|---:|---:|---|
-| `full` | 123.1 MB | 100.0% | 99 | 25 | 23 | 331 | 34502 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
-| `minimal` | 84.7 MB | 68.8% | 32 | 7 | 7 | 180 | 17494 | — |
-| `saas` | 85.0 MB | 69.0% | 48 | 13 | 11 | 206 | 20140 | — |
-| `enterprise` | 85.3 MB | 69.3% | 55 | 13 | 11 | 246 | 22936 | — |
-| `machine` | 83.3 MB | 67.7% | 28 | 7 | 6 | 182 | 17770 | — |
+| `full` | 123.1 MB | 100.0% | 99 | 25 | 23 | 331 | 34553 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
+| `minimal` | 84.7 MB | 68.8% | 32 | 7 | 7 | 180 | 17542 | — |
+| `saas` | 85.0 MB | 69.0% | 48 | 13 | 11 | 206 | 20188 | — |
+| `enterprise` | 85.3 MB | 69.3% | 55 | 13 | 11 | 246 | 22984 | — |
+| `machine` | 83.3 MB | 67.7% | 28 | 7 | 6 | 182 | 17818 | — |
 
 - **层②边界：profile 改变的是编译面，不是 `go.mod`** — `go.mod`/`go.sum` 描述 module 而非包，Go 的依赖裁剪作用于**整个 module**，所以五个形态的 `go.mod` 直接依赖数**完全相同**（各 64 个）。profile 只决定哪些包与符号**编进二进制**（上表的二进制/路由/迁移/表/闭包代码量）；真正让 `go.mod` 变小的是层①（`jimu new` 生成专属 module 后 `go mod tidy`），不是换个 profile。
 - **构建、门禁与报告** — 选形态构建是 `PROFILE=<name> make build-server`（默认 full，手工等价写法见上文「入口与用法」）；`make profiles-check` 用 overlay 构建全部 5 个形态（`./cmd/server` + 该形态 overlay，构建失败即非零退出）并校验依赖闭包裁剪门禁（每个形态的能力根包集合逐值锁定），设置 `JIMU_PROFILES_SMOKE=1` 后额外以 `APP_ENV=dev` 逐个启动并轮询管理端 `/readyz`（需 DB+Redis，端口可用 `JIMU_PROFILES_HTTP_PORT`/`JIMU_PROFILES_MGMT_PORT` 覆盖），未设置时逐形态打印 `SKIP`、不静默跳过；`make compose-report` 重算并覆盖 `docs/profiles/compose-report.md`（不连库、不启动监听，口径见报告开头）。
-- **`machine` 已知限制** — `/api/v1/admin/apikeys` 位于 `middleware.AdminAuth()` 之后，需要该形态刻意排除的 JWT 链，因此 `machine` 可以启动，但**无法自助签发第一把 API Key**：需要带外签发路径（CLI/种子，P2.6/P2.7 §3.8），本阶段不提供。
-- **种子与迁移不随形态裁剪** — 迁移仍按 catalog 全量清单执行（表先建好），结构种子（默认租户/free 套餐/超管角色/admin 用户 + **按本形态解析集**聚合的权限点 + Casbin 同步）是各形态共享的既有实现，不做形态门控；`ADMIN_PASSWORD` 未设置时跳过并打 `structural seed skipped` 告警，服务不会因缺少该变量而启动失败（容器启动早于 CLI 迁移、compose 不向 server 注入该变量）。profile 驱动的迁移裁剪见 P2.6/P2.8。
+- **`machine` 的带外签发路径（P2.6）** — `/api/v1/admin/apikeys` 位于 `middleware.AdminAuth()` 之后，需要该形态刻意排除的 JWT 链，因此 `machine` 无法**自助**签发第一把 API Key；改用能力自带的 CLI 命令带外签发：`PROFILE=machine make build-cli && ./bin/jimu-cli-machine apikey issue --name=first`，再用返回的明文 Key 走 `X-API-Key` 受保护路由。
+- **迁移与种子跟随编译期形态（P2.6）** — `jimu` CLI 的 `migrate up|down|status|redo`、`adopt-capabilities` 与 `seed` 只处理**当前形态声明的能力集**（从 `catalog.All()` 过滤、保持拓扑序；`capabilities.enabled` 不参与，关闭能力不删表）。因此**行为变更**：非 full 形态的 CLI 只迁移/播种该形态的能力（`migrate status` 表数下降），默认 `full` 行为逐值不变（单测钉住）。结构种子需要 `tenant` 能力，不含该能力的形态不提供（`jimu seed` 明确报错、启动期 `structural seed skipped` 告警跳过）—— 三条边界见「数据种子」。`ADMIN_PASSWORD` 未设置时同样跳过并告警，服务不会因缺少该变量而启动失败（容器启动早于 CLI 迁移、compose 不向 server 注入该变量）。
 
 ### 驱动级可插拔（P2.5）
 
@@ -326,7 +332,23 @@ v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capab
 - **两层声明** — `contract.Descriptor.Drivers` 是能力声明的**可用集**（驱动**包名**：`storage` = `[local s3]`、`queue` = `[redis kafka rabbitmq]`、`dataops` = `[csv excel]`；`s3` 包同时注册 `s3`/`oss`/`minio` 三个配置取值）；`assembly.Capability.Drivers` 是**形态选中的子集**，装配期强制 `⊆` 可用集。`make check-capabilities` 校验「选中集 == 该形态生产 import 闭包的实际驱动包集合」（集合比较，不比顺序）；「新增驱动目录 + 形态 blank import 却忘声明」对集合比较不可见（未声明项被 `available` 过滤），唯一捕获点是**形态直接 import 校验**（驱动包只被 `internal/profiles/*` import，且形态生产代码的 capabilities 子包 import 必为能力根包或已声明驱动包）。
 - **fail-closed，不静默回退** — `storage.New`/`queue.New`/`queue.Wire`/`importer.Get`/`exporter.Get` 一律查注册表：配置的类型未编译进本构建时明确报错，例如 `storage driver "s3" is not compiled into this build (compiled: local)`、`import format "xlsx" is not compiled into this build (compiled: csv)`、`export format "xlsx" is not compiled into this build (compiled: csv)`；`storage` 的空 `type` 仍按 `local` 处理（与拆分前一致），`queue.Wire` 在**启动时**即校验配置的 `queue.type` 已编译，而不是等到第一次入队。
 - **`enterprise` 的行为变更（P2.5 收敛）** — `enterprise` 只编入 `local` + `csv`，所以该形态下 `storage.type: s3|oss|minio` 的存储构造与 xlsx 导入/导出改为**启动/请求期报错**（不再是「配置可写、运行时可用」）；`full` 形态含全部驱动、行为不变。`configs/app.yaml` 默认 `storage.type: local`、`queue.type: redis`，所以默认路径不受影响。
-- **与门禁/报告的关系** — `make check-capabilities` 输出 **4 条汇总行**：① 能力自描述与 `Owns` ↔ 迁移归属 ② 驱动可用集/选中集/import 闭包一致 ③ 形态生产代码只 import 已声明的驱动 ④ 唯一入口与选点包只 import 一个形态（见「Makefile 命令」）；`make compose-report` 的「重型依赖」列直接展示各形态闭包是否命中 `aws-sdk-go-v2`/`kafka-go`/`amqp091-go`/`excelize`（`full` 四类全中，其余形态为零）。两道门禁仍是手动目标，**未接入** `make ci`/`release-check`（P2.8 收口）。
+- **与门禁/报告的关系** — `make check-capabilities` 输出 **5 条汇总行**：① 能力自描述与 `Owns` ↔ 迁移归属 ② 驱动可用集/选中集/import 闭包一致 ③ 形态生产代码只 import 已声明的驱动 ④ 唯一入口与选点包只 import 一个形态 ⑤ 资产归属唯一且无未声明资产（P2.6，见「非代码资产归属」）（见「Makefile 命令」）；`make compose-report` 的「重型依赖」列直接展示各形态闭包是否命中 `aws-sdk-go-v2`/`kafka-go`/`amqp091-go`/`excelize`（`full` 四类全中，其余形态为零）。两道门禁仍是手动目标，**未接入** `make ci`/`release-check`（P2.8 收口）。
+
+### 非代码资产归属（P2.6）
+
+能力除了代码，还可以声明并门禁自己拥有的**非代码资产**（部署清单、生成的文档……）。`contract.Descriptor.Assets` 是**仓库相对路径**的列表（目录前缀或具体文件），当前只有非 catalog 的 `apidocs` 声明 `["docs/openapi"]`（catalog 能力暂不声明，由 `catalog_test.go` 的 `TestCatalogAssetsShape` 钉住）。不属于任何能力的内核运维/观测资产用**具名资产组**表达（catalog 仍 18 项，**没有**新增 `obs` 能力）：
+
+| 所有者 | 声明的前缀 |
+|---|---|
+| `cap:apidocs` | `docs/openapi` |
+| `group:ops` | `deploy/k8s`、`deploy/helm`、`deploy/backup` |
+| `group:observability` | `deploy/openobserve`、`deploy/otel-collector.yaml`、`deploy/k8s/{openobserve,otel-collector}.yaml`、`deploy/helm/templates/{openobserve,otel-collector}.yaml` |
+
+- **归属判定 = 最长前缀匹配**（具体文件赢过目录），因此 `deploy/k8s` 整体归 `ops`，而其中的 `openobserve.yaml`/`otel-collector.yaml` 归 `observability`；每个资产文件恰有一个有效所有者。**资产根**固定为 `deploy/` 与 `docs/openapi/`（`configs/` 不纳入：本仓逐字节不变，按能力渲染只对生成项目成立，归 P2.7）。
+- **实测分割**：`git ls-files deploy docs/openapi` 共 **48** 个文件 = `cap:apidocs` **3** / `group:observability` **22** / `group:ops` **23**，零未覆盖、零重叠（`tools/internal/profileassets` 的 `TestOwnershipPartitionsTheRepo` 钉住）。
+- **共享派生与查询** — `tools/internal/profileassets`（`Canonical`/`Owner`/`Ownership`/`ForProfile`/`Declared`/`CoreGroups`/`AssetRoots`）是归属判定的唯一实现，被门禁与查询工具共用（先例：`tools/internal/{heavydeps,profileoverlay}`）；`go run ./tools/profileassets <profile>` 打印该形态的资产路径，`-capabilities` 打印该形态的能力名（非法形态名非零退出）。
+- **门禁** — `make check-capabilities` 新增资产段，汇总行由 4 条变 **5 条**（新行 `✅ check-capabilities: 资产归属唯一且无未声明资产`）。四条断言：① 每个声明的资产路径非空、存在，且落在资产根内（根外路径永不被扫描，等于把未校验路径交给 P2.7 生成器）；② 同一路径不得被两个所有者声明（比较走**归一化**：`deploy/k8s/`、`deploy/k8s//`、`deploy/./k8s`、`deploy/k8s/.`、尾随空格、`deploy/../configs` 都会被拒）；③ 资产根下每个文件都有有效所有者（无未声明资产）；④ 每个形态的资产集都覆盖全部内核资产组（内核组全形态携带，漏掉即意味着不该裁剪的资产随形态消失）。
+- **条件化的第一个消费方是 apidocs** — `make swagger`/`make swagger-check` 先取当前形态的资产集：不含 `docs/openapi`（该形态清单没有 `apidocs`：`minimal`/`saas`/`enterprise`/`machine`）时打印 `SKIP …` 并成功退出，含（默认 `full`）则照旧真生成/真校验；`PROFILE` 非法名仍非零失败（`PROFILE=ghost make swagger-check` → make exit 2）。CI 不变（默认 full）。
 
 ## 项目结构
 
@@ -381,6 +403,7 @@ jimu/
 │   ├── profiles/               # 形态清单（每个形态一份 Assembly：full/minimal/saas/enterprise/machine）
 │   │   ├── active/             # 选点包：唯一入口只 import 它；提交态默认 full，构建期由 overlay 替换
 │   │   └── registry/           # 形态名与清单的唯一来源（Names/All/Lookup；只被 tools/* 引用）
+│   │       └── routes_golden_test.go  # 4 个非 full 形态的路由面 golden + 跨形态挂载点一致性断言
 │   ├── capabilities/           # 可插拔能力（catalog 是唯一清单；每个能力导出 Descriptor）
 │   │   ├── catalog/            # 能力清单（全量 18 项；启用集解析在 internal/capability）
 │   │   ├── apidocs/            # Swagger 文档注册
@@ -388,6 +411,7 @@ jimu/
 │   │   ├── mfa/                # TOTP 二次验证 + 可信设备（跳过 MFA）+ 自有 totp/ 实现
 │   │   ├── passkey/            # WebAuthn 通行密钥（无密码登录）
 │   │   ├── apikey/             # API Key 签发/校验 + 维度限流（apikey/middleware/）
+│   │   │   └── cli/            # 能力自带 CLI 命令（Commands()；cmd/cli 显式 import 注册）
 │   │   ├── oauth/              # 第三方登录绑定；provider/ 为 OAuth Provider 实现
 │   │   ├── user/               # 用户管理（自助面 + 管理面共用同一仓储与配额）
 │   │   ├── access/             # 访问控制：角色 + 权限 + 用户角色分配（user_roles 所有者）
@@ -444,7 +468,9 @@ jimu/
 │   ├── checkcapabilities/        # 能力自描述（Owns）/迁移归属 + 驱动与选点包静态校验（make check-capabilities）
 │   ├── composereport/            # 形态编译面报告生成（make compose-report）
 │   ├── profileoverlay/           # 构建期形态 overlay 生成（PROFILE=<name> 构建；-list 列形态名）
+│   ├── profileassets/            # 打印某形态的非代码资产清单（go run ./tools/profileassets <profile>；-capabilities 列能力名）
 │   ├── internal/profileoverlay/  # overlay 模板与产物路径的共享实现（工具、门禁与报告同一份）
+│   ├── internal/profileassets/   # 资产归属派生（能力 Assets + 内核资产组 + 最长前缀；门禁与查询工具同一份）
 │   ├── generator/                # 代码生成器
 │   └── logcheck/                 # 日志调用规范静态检查（make check-log-usage）
 ├── .github/                    # GitHub Actions + Dependabot
@@ -1067,7 +1093,7 @@ capabilities:
 - 硬依赖会自动补齐：只写 `["oauth"]` 会连带启用 `auth`/`user`/`access`（`auth` 的 `tenant`/`mfa` 是软依赖，不补齐）
 - 未启用的能力不挂路由、不注册定时任务与事件、不启动其后台组件
 - **软依赖只降级、不自动补齐**：`Descriptor.SoftRequires` 声明可选依赖（当前 `user`→`access`/`tenant`、`access`→`tenant`、`mfa`→`auth`、`auth`→`tenant`/`mfa`/`captcha`/`breach`、`apikey`→`tenant`、`outbox`→`queue`）；目标能力不在启用集时**不会被自动启用**，本能力降级运行，降级项在启动日志（`capability degraded`，字段 `name`/`missing`）与 `GET /capabilities` 的 `degraded` 中列出。该清单是**声明层**的静态比对（只读 `Descriptor`，不观测运行时装配），组合根改为按启用集驱动（P1 显式 `Deps`）之前可能多报
-- **表归属自描述**：`Descriptor.Owns` 声明本能力迁移 `CREATE` 的表（如 `user`→`users`、`access`→`roles`/`permissions`/`role_permissions`/`user_roles`、`mfa`→`user_mfa`/`trusted_devices`），`make check-capabilities` 的①号断言校验「单表唯一归属、无未声明的建表、声明的表确有迁移创建」（只扫描 mysql 迁移，PostgreSQL 迁移表名与 mysql 一致，暂以 mysql 为准）；该命令当前输出 **4 条汇总行**（① 本项：能力自描述与 `Owns` ↔ 迁移归属；② 驱动可用集/选中集/import 闭包一致；③ 形态生产代码只 import 已声明的驱动；④ 唯一入口与选点包只 import 一个形态），见「形态（profile）· 驱动级可插拔」与「Makefile 命令」
+- **表归属自描述**：`Descriptor.Owns` 声明本能力迁移 `CREATE` 的表（如 `user`→`users`、`access`→`roles`/`permissions`/`role_permissions`/`user_roles`、`mfa`→`user_mfa`/`trusted_devices`），`make check-capabilities` 的①号断言校验「单表唯一归属、无未声明的建表、声明的表确有迁移创建」（只扫描 mysql 迁移，PostgreSQL 迁移表名与 mysql 一致，暂以 mysql 为准）；该命令当前输出 **5 条汇总行**（① 本项：能力自描述与 `Owns` ↔ 迁移归属；② 驱动可用集/选中集/import 闭包一致；③ 形态生产代码只 import 已声明的驱动；④ 唯一入口与选点包只 import 一个形态；⑤ 资产归属唯一且无未声明资产 —— P2.6，见「非代码资产归属」），见「形态（profile）· 驱动级可插拔」与「Makefile 命令」
 - `Descriptor`（`Requires`/`SoftRequires`/`Owns`/`Configs`/`Permissions`/`Mount`/`Migrations`）是能力元数据的**唯一来源**：启用闭包、配置段加载、权限点种子、路由挂载与能力门禁都只读它；能力实例化由形态清单驱动（`internal/profiles/<name>/assembly.go`，每个能力经 `wire.go` 自装配），`cmd/server` 是唯一入口、经选点包 `internal/profiles/active` 取当前形态（提交态默认 `full`，构建期由 overlay 切换），新增/删除能力时须同步对应形态清单；清单漂移由 `scripts/check_profiles.sh` 的 golden 依赖闭包门禁（`make profiles-check`）拦截
 - **配置段随能力**：能力配置段由能力在 `Descriptor.Configs` 声明（`ConfigKey` + `Config` 结构体 + `ApplyDefaults`/`Validate`，生产加严可实现可选的 `ValidateProd`），组合根按启用集统一执行「解码 → 默认值 → 校验」；**未启用能力的配置段既不出现也不校验** —— `app.yaml` 中残留的非法段不会导致启动失败。`auth` 段由 `auth` 能力整体拥有（含嵌套 `webauthn`/`provisioning`），不拆分
 - **热更新范围**：配置文件热更新（`config.Watch`）只覆盖内核段（当前仅应用 `log.level`）；能力配置段变更需重启进程
@@ -1119,9 +1145,9 @@ internal/capabilities/{name}/
 
 新增能力时（能力清单只维护在 `internal/capabilities/catalog`）：
 
-1. 在能力包导出静态 `Descriptor`（`Name`/`Requires`/`SoftRequires`/`Owns`/`Configs`/`Permissions`/`Mount`/`Migrations`，有第三方驱动时再加 `Drivers`），实现 `contract.Module` 与 `wire.go` 自装配
+1. 在能力包导出静态 `Descriptor`（`Name`/`Requires`/`SoftRequires`/`Owns`/`Configs`/`Permissions`/`Mount`/`Migrations`，有第三方驱动时再加 `Drivers`，拥有非代码资产时再加 `Assets`），实现 `contract.Module` 与 `wire.go` 自装配
 2. 在 `catalog` 登记该能力，并在需要它的 `internal/profiles/<name>/assembly.go` 形态清单里加入（非 catalog 条目标 `Ungated`）
-3. 跑 `make check-capabilities`（**4 条汇总行**：① 能力声明自洽（`catalog.ValidateDeclarations`）+ `Owns` ↔ 迁移归属；② 驱动可用集/选中集/import 闭包一致；③ 形态生产代码只 import 已声明的驱动；④ 唯一入口与选点包只 import 一个形态）与 `make profiles-check`（golden 依赖闭包）
+3. 跑 `make check-capabilities`（**5 条汇总行**：① 能力声明自洽（`catalog.ValidateDeclarations`）+ `Owns` ↔ 迁移归属；② 驱动可用集/选中集/import 闭包一致；③ 形态生产代码只 import 已声明的驱动；④ 唯一入口与选点包只 import 一个形态；⑤ 资产归属唯一且无未声明资产）与 `make profiles-check`（golden 依赖闭包）
 
 新增**形态**时（形态名与清单的唯一来源是 `internal/profiles/registry`）：
 
@@ -1136,7 +1162,7 @@ internal/capabilities/{name}/
 2. **声明可用集**：在该能力 `Descriptor.Drivers` 加入驱动**包名**（如 `storage` = `[local s3]`、`queue` = `[redis kafka rabbitmq]`、`dataops` = `[csv excel]`；一个驱动包覆盖多个配置取值时仍是同一个包名）
 3. **声明选中子集**：在需要该驱动的形态 `assembly.Capability.Drivers` 里列出选中项（装配期强制 `⊆` 可用集）
 4. **落实 import**：在 `internal/profiles/<name>/drivers.go` 里 blank import 选中的驱动包（`_ "jimu/internal/capabilities/<cap>/<driver>"`），并保证与第 3 步逐值一致
-5. **跑门禁**：`make check-capabilities` 的 4 条汇总行覆盖驱动选择（可用集 ↔ 目录存在 / 核心包生产闭包零驱动、零重型依赖 / 形态选中 == 形态**生产** import 闭包（集合比较）/ 形态生产代码只 import 已声明驱动，即能力根包或已声明的驱动包）；`make compose-report` 复核重型依赖列确实随形态消失
+5. **跑门禁**：`make check-capabilities` 的 5 条汇总行中，驱动段覆盖驱动选择（可用集 ↔ 目录存在 / 核心包生产闭包零驱动、零重型依赖 / 形态选中 == 形态**生产** import 闭包（集合比较）/ 形态生产代码只 import 已声明驱动，即能力根包或已声明的驱动包），资产段覆盖非代码资产归属（见「非代码资产归属」）；`make compose-report` 复核重型依赖列确实随形态消失
 
 ### 错误码
 
@@ -1206,7 +1232,7 @@ internal/capabilities/{name}/
 | `make fmt` | 格式化代码 |
 | `make fmt-check` | 检查代码格式 |
 | `make lint` | golangci-lint |
-| `make check-capabilities` | 4 条汇总行：① 能力自描述与 `Owns` ↔ mysql 迁移建表一致（单表唯一归属、无未声明的建表、声明的表确有迁移创建；PostgreSQL 表名与 mysql 一致，暂以 mysql 为准）② 驱动可用集 ↔ 驱动目录存在（`Descriptor.Drivers` 非空不重复且目录存在）+ 能力核心生产闭包零驱动包、零重型依赖 + 各形态选中集 == 该形态生产 import 闭包（集合比较）③ 形态生产代码只 import 已声明的驱动（能力根包或已声明的驱动包）④ 唯一入口 `cmd/server` 只 import `assembly` 与选点包（+ 标准库）、选点包 `internal/profiles/active` 恰好只选一个形态（且不得 import `internal/profiles/registry`） |
+| `make check-capabilities` | 5 条汇总行：① 能力自描述与 `Owns` ↔ mysql 迁移建表一致（单表唯一归属、无未声明的建表、声明的表确有迁移创建；PostgreSQL 表名与 mysql 一致，暂以 mysql 为准）② 驱动可用集 ↔ 驱动目录存在（`Descriptor.Drivers` 非空不重复且目录存在）+ 能力核心生产闭包零驱动包、零重型依赖 + 各形态选中集 == 该形态生产 import 闭包（集合比较）③ 形态生产代码只 import 已声明的驱动（能力根包或已声明的驱动包）④ 唯一入口 `cmd/server` 只 import `assembly` 与选点包（+ 标准库）、选点包 `internal/profiles/active` 恰好只选一个形态（且不得 import `internal/profiles/registry`）⑤ 资产归属唯一且无未声明资产（P2.6：声明路径非空/存在/在资产根内、同一路径不被两个所有者声明（归一化比较）、资产根下每个文件都有有效所有者、每个形态覆盖全部内核资产组） |
 | `make profiles-check` | 用 overlay 构建全部 5 个形态（`./cmd/server` + 该形态 overlay）+ 依赖闭包裁剪门禁（golden）；`JIMU_PROFILES_SMOKE=1` 时额外启动各形态并轮询管理端 `/readyz`（需 DB+Redis） |
 | `make compose-report` | 生成形态编译面报告 `docs/profiles/compose-report.md`（二进制/路由/迁移/表/本仓闭包代码量与文件数/重型依赖列；不连库、不启动监听） |
 | `make swagger` | 生成 API 文档（`docs/openapi` 归 `apidocs` 能力：当前形态未编入 apidocs 时打印 `SKIP` 并成功退出；`PROFILE` 非法则失败） |
