@@ -1,0 +1,43 @@
+package application
+
+import (
+	"time"
+
+	"jimu/internal/capabilities/{{.Name}}/domain"
+)
+
+type Create{{.NameCamel}}Request struct {
+	Name        string `json:"name" binding:"required,max=128"`
+	Description string `json:"description" binding:"max=255"`
+}
+
+type Update{{.NameCamel}}Request struct {
+	Name        string `json:"name" binding:"required,max=128"`
+	Description string `json:"description" binding:"max=255"`
+}
+
+type {{.NameCamel}}Response struct {
+	ID          uint64    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func To{{.NameCamel}}Response(entity domain.{{.NameCamel}}) {{.NameCamel}}Response {
+	return {{.NameCamel}}Response{
+		ID:          entity.ID,
+		Name:        entity.Name,
+		Description: entity.Description,
+		CreatedAt:   entity.CreatedAt,
+		UpdatedAt:   entity.UpdatedAt,
+	}
+}
+
+func To{{.NameCamel}}Responses(entities []domain.{{.NameCamel}}) []{{.NameCamel}}Response {
+	out := make([]{{.NameCamel}}Response, 0, len(entities))
+	for _, entity := range entities {
+		out = append(out, To{{.NameCamel}}Response(entity))
+	}
+	return out
+}

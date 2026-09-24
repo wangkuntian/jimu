@@ -1,0 +1,21 @@
+package interfaces
+
+import (
+	"jimu/internal/capabilities/{{.Name}}/application"
+	"jimu/internal/kernel/http/middleware"
+	"jimu/internal/shared/pagination"
+
+	"github.com/gin-gonic/gin"
+)
+
+func Register{{.NameCamel}}Routes(r *gin.RouterGroup, service *application.{{.NameCamel}}Service) {
+	handler := New{{.NameCamel}}Handler(service)
+	group := r.Group("/{{.RouteName}}")
+	{
+		group.POST("", middleware.ValidateJSON(&application.Create{{.NameCamel}}Request{}), handler.Create)
+		group.GET("", middleware.ValidateQuery(&pagination.Pagination{}), handler.List)
+		group.GET("/:id", handler.Get)
+		group.PUT("/:id", middleware.ValidateJSON(&application.Update{{.NameCamel}}Request{}), handler.Update)
+		group.DELETE("/:id", handler.Delete)
+	}
+}
