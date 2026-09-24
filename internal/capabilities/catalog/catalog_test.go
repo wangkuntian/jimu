@@ -257,6 +257,18 @@ func TestCatalogDriversShape(t *testing.T) {
 	}
 }
 
+// TestCatalogAssetsShape 钉住各能力声明的非代码资产（P2.6）。
+// 当前只有非 catalog 的 apidocs 声明资产（docs/openapi），因此 catalog 能力必须全为空 ——
+// 若将来给 catalog 能力加资产，这里会红，提醒同步 TestDescriptorsAreWellFormed 的逐值 fixture。
+// 资产归属唯一性与「无未声明资产」由 make check-capabilities 的资产段校验。
+func TestCatalogAssetsShape(t *testing.T) {
+	for _, d := range All() {
+		if len(d.Assets) > 0 {
+			t.Fatalf("catalog capability %q declares assets %v: 请同步 catalog_test.go 的 fixture() 与 TestCatalogAssetsShape", d.Name, d.Assets)
+		}
+	}
+}
+
 // TestTenantRequiresUserAndRole：tenant 的 005_tenants.sql 会 ALTER users/roles，
 // 迁移执行顺序由 Resolve 闭包序保证，故 tenant.Requires 必须含 user 与 access（roles 表所有者）。
 func TestTenantRequiresUserAndRole(t *testing.T) {

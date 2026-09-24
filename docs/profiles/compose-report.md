@@ -9,8 +9,8 @@
 |---|---|
 | 二进制 | `go build -overlay=<该形态> -o <tmp> ./cmd/server` 的产物大小 |
 | 路由数 | 形态解析集在裸 `gin.Engine` 上 `RegisterHTTP` 后的 `r.Routes()` 条数（不启动监听） |
-| 迁移数 | 各 `Descriptor.Migrations` 中 `migrations/mysql/*.sql` 的文件数（postgres 同名同数） |
-| 表数 | 各 `Descriptor.Owns` 的并集大小 |
+| 迁移数 | **迁移集**（形态声明集 ∪ schema 依赖，与 `PROFILE=<name> jimu migrate` 同一口径）各 `Descriptor.Migrations` 中 `migrations/mysql/*.sql` 的文件数（postgres 同名同数） |
+| 表数 | **迁移集**各 `Descriptor.Owns` 的并集大小（口径同迁移数） |
 | 本仓 Go 文件 / 代码行 | `golang.org/x/tools/go/packages` 载入 `./cmd/server` 在该形态 overlay 下的 import 闭包，只统计本模块（`jimu/...`）的非 `_test.go` 文件 |
 | 重型依赖 | 同一闭包（含第三方包）命中 `tools/internal/heavydeps` 前缀表的展示名，`-` 表示零 |
 | go.mod 直接依赖 | `go list -m -f '{{if not .Indirect}}{{.Path}}{{end}}' all` 的非空行数（不含主模块 `jimu` 自身） |
@@ -26,11 +26,11 @@
 
 | 形态 | 二进制 (MB) | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 | 重型依赖 |
 |---|---:|---:|---:|---:|---:|---:|---:|---|
-| `full` | 123.1 | 100.0% | 99 | 25 | 23 | 331 | 34502 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
-| `minimal` | 84.7 | 68.8% | 32 | 7 | 7 | 180 | 17494 | - |
-| `saas` | 85.0 | 69.0% | 48 | 13 | 11 | 206 | 20140 | - |
-| `enterprise` | 85.3 | 69.3% | 55 | 13 | 11 | 246 | 22936 | - |
-| `machine` | 83.3 | 67.7% | 28 | 7 | 6 | 182 | 17770 | - |
+| `full` | 123.1 | 100.0% | 99 | 25 | 23 | 331 | 34533 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
+| `minimal` | 84.7 | 68.8% | 32 | 10 | 9 | 180 | 17522 | - |
+| `saas` | 85.0 | 69.0% | 48 | 13 | 11 | 206 | 20168 | - |
+| `enterprise` | 85.3 | 69.3% | 55 | 16 | 13 | 246 | 22964 | - |
+| `machine` | 83.3 | 67.7% | 28 | 10 | 8 | 182 | 17799 | - |
 
 ## 验收断言
 
@@ -39,9 +39,9 @@
 
 - 二进制：`minimal` 是 `full` 的 68.8%（要求 ≤ 85%）
 - 路由数：`minimal` 32 < `full` 99
-- 表数：`minimal` 7 < `full` 23
+- 表数：`minimal` 9 < `full` 23
 - 本仓 Go 文件：`minimal` 180 < `full` 331
-- 本仓代码行：`minimal` 17494 < `full` 34502
+- 本仓代码行：`minimal` 17522 < `full` 34533
 
 ## 层②边界：go.mod 直接依赖
 

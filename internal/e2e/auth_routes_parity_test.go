@@ -10,6 +10,8 @@ import (
 // TestAuthRoutesParity 钉住 P1.6 拆分后的对外 URL 集合：auth/mfa/passkey/captcha
 // 四个能力拆开后，认证域路由必须与拆分前逐条一致（不缺失、不新增）。
 func TestAuthRoutesParity(t *testing.T) {
+	requireCapabilities(t, "auth", "mfa", "passkey", "captcha")
+
 	app := newTestAppWithDB(t)
 
 	registered := make(map[string]bool)

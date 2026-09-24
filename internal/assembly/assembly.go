@@ -63,10 +63,6 @@ func Run(a Assembly) error {
 	}
 	cfg.Environment = os.Getenv("APP_ENV")
 
-	byName := make(map[string]Capability, len(a.Capabilities))
-	for _, c := range a.Capabilities {
-		byName[c.Descriptor.Name] = c
-	}
 	// 能力开关：capabilities.enabled 为空表示全部启用（向后兼容）；非 catalog（Ungated）
 	// 条目不受门控（P2.4 裁定 7）。在构建容器前解析，因为能力配置段按启用集加载（设计 §8）。
 	caps, err := resolveCapabilities(a, cfg.Capabilities.Enabled)
@@ -105,11 +101,8 @@ func Run(a Assembly) error {
 		container.Logger.Warnw("config file watch disabled", "error", err.Error())
 	}
 
-	ctx := newContext(container, sections, capCfgs)
-	// 解析集写回上下文：Seed 等装配期钩子据本形态的能力（而非全量清单）决策。
-	ctx.caps = caps
-
-	if err := wireCapabilities(ctx, caps, byName); err != nil {
+	ctx, _, err := WireFor(container, sections, capCfgs, a, caps)
+	if err != nil {
 		stop()
 		return fmt.Errorf("assembly %q: %w", a.Name, err)
 	}
@@ -121,6 +114,7 @@ func Run(a Assembly) error {
 		}
 	}
 
+	// 取 ctx.modules（而非 WireFor 的返回值快照）：Seed 若注册了新模块，也要进 Bootstrap。
 	application, err := app.Bootstrap(container, ctx.Components(), ctx.Jobs(), ctx.modules...)
 	if err != nil {
 		stop()
@@ -133,6 +127,33 @@ func Run(a Assembly) error {
 		return fmt.Errorf("run application: %w", err)
 	}
 	return nil
+}
+
+// Resolve 解析一个形态在给定启用集下的实际能力集（Run / WireFor 与 e2e 共用）。
+// enabled 为空表示全部受门控条目启用；Ungated（非 catalog）条目由清单决定、始终并入。
+func Resolve(a Assembly, enabled []string) ([]contract.Descriptor, error) {
+	if err := validateAssembly(a); err != nil {
+		return nil, err
+	}
+	return resolveCapabilities(a, enabled)
+}
+
+// WireFor 在调用方提供的内核件与能力配置上按清单接线，返回装配上下文与已注册的非空模块。
+//
+// 它**不**加载配置文件、**不**创建内核容器、**不**执行 Seed 与生命周期：Run 与契约测试
+// （internal/e2e 按当前形态装配）共用同一份 wiring，避免出现第二套装配逻辑而漂移。
+func WireFor(container *app.Container, sections config.SectionDecoder, capCfgs *app.CapabilityConfigs, a Assembly, caps []contract.Descriptor) (*Context, []contract.Module, error) {
+	byName := make(map[string]Capability, len(a.Capabilities))
+	for _, c := range a.Capabilities {
+		byName[c.Descriptor.Name] = c
+	}
+	ctx := newContext(container, sections, capCfgs)
+	// 解析集写回上下文：Seed 等装配期钩子据本形态的能力（而非全量清单）决策。
+	ctx.caps = caps
+	if err := wireCapabilities(ctx, caps, byName); err != nil {
+		return nil, nil, err
+	}
+	return ctx, ctx.modules, nil
 }
 
 // resolveCapabilities 解析一个形态的实际装配集，是 Run 与端口流向试运行的共用入口。

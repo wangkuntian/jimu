@@ -10,6 +10,8 @@ import (
 // TestAdminRoutesParity 钉住 P1.7 拆分后 /api/v1/admin/* 的对外路由集合：
 // 与拆分前逐条一致，且无重复注册（gin 重复注册会 panic，此处再显式断言计数）。
 func TestAdminRoutesParity(t *testing.T) {
+	requireCapabilities(t, "user", "apikey", "queue", "dataops", "audit", "feature", "console")
+
 	app := newTestAppWithDB(t)
 
 	count := map[string]int{}

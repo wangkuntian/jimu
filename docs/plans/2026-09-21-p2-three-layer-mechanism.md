@@ -15,7 +15,7 @@ P2.3 层③ 运行时：capabilities.enabled   ← 已完成（依赖 P2.2；软
 P2.4 层② 构建：profiles 入口包          ← 已完成（依赖 P2.2；5 个 profile + compose-report）
 P2.5 层② 驱动级可插拔（§3.7）           ← 已完成（依赖 P2.4；驱动独立成包 + 两层声明 + 门禁）
 P2.5b 单一入口与构建期形态参数化         ← 已完成（依赖 P2.5；唯一入口 cmd/server + 选点包 + overlay）
-P2.6 层② 非代码资产模块化（§3.8）        ← deploy/Helm/CLI/契约测试随 profile 裁剪
+P2.6 层② 非代码资产模块化（§3.8）        ← 已完成（依赖 P2.5b；资产归属门禁 + 本仓条件化）
 P2.7 层① 脚手架：jimu new / capability add ← 依赖 P2.2 + P2.4（生成专属 catalog 与 app.yaml）
 P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后在 CI 生效
 ```
@@ -57,7 +57,7 @@ P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后
 - **已完成（装配接缝）**：`internal/capability`（描述符解析叶子包：`Resolve`/`ValidateDeclarations`/`Degraded`，只 import `contract`）与 `internal/assembly`（`Assembly`/`Capability`/`Context`/`Run`/`ValidatePortFlow`/`ProbeAssembly`）+ 24 个能力 `wire.go` 自装配；`internal/app` 收敛为内核容器 + 生命周期：不 import `catalog`、任何能力**根包**或 `internal/assembly`（唯一例外是 `access/domain`、`tenant/domain`、`user/domain` 三个能力 **domain 叶子包**，结构性种子所需，见下方「记录偏差」），`cmd/server` 降为 `full` 的薄包装（保留 swagger 注解，Dockerfile/Makefile/compose/`swag init -g`/CI 不变）。
 - **已完成（5 个形态）**：`internal/profiles/{full,minimal,saas,enterprise,machine}` 声明能力清单与结构性种子，`profiles/<name>/main.go` 只调用 `assembly.Run`；非 catalog 条目在清单里显式标 `Ungated`（不受 `capabilities.enabled` 门控）；能力清单仍是 18 项、`configs/*.yaml` 零改动。`auth.Requires` 放宽 —— `tenant`/`mfa` 降为 `SoftRequires`（行为变更，见 release note），无 `auth` 的 `machine` 由 `apikey.ProtectedHTTPMiddleware` 承担受保护路由。
 - **已完成（门禁与报告）**：`make profiles-check`（构建 + **golden 依赖闭包裁剪门禁**：逐形态能力根包集合逐值锁定，`JIMU_PROFILES_SMOKE=1` 时额外启动并轮询管理端 `/readyz`）与 `make compose-report`（`tools/composereport` → `docs/profiles/compose-report.md`，不连库、不启动监听）。**实测**：二进制 full 122.6 MB / minimal 85.8 MB（−30.0%）/ saas 86.1 MB / enterprise 99.5 MB / machine 84.4 MB；路由 99 / 32 / 48 / 55 / 28；表 23 / 7 / 11 / 11 / 6；迁移 25 / 7 / 13 / 13 / 7；本仓闭包代码行 33995 / 17804 / 20450 / 23241 / 18080。五个形态的 `go.mod` 直接依赖数**完全相同**（各 64 个）—— §11「层②不减小 `go.mod`」被实测钉死。
-- **已知限制（转 P2.6/P2.7）**：`machine` 可启动，但 `/api/v1/admin/apikeys` 需要它刻意排除的 JWT 链，首把 API Key 必须带外签发（CLI 归 §3.8）；迁移与结构种子仍按 catalog 全量执行，profile 驱动的迁移裁剪归 P2.6/P2.8。
+- **已知限制（转 P2.6/P2.7）**：`machine` 可启动，但 `/api/v1/admin/apikeys` 需要它刻意排除的 JWT 链，首把 API Key 必须带外签发（CLI 归 §3.8）；迁移与结构种子仍按 catalog 全量执行，profile 驱动的迁移裁剪归 P2.6/P2.8。**（P2.6 已落地）**：迁移/播种改为跟随编译期形态并**带上 schema 依赖**（`user`/`access` → `tenant`，整分支审查 C1），结构种子在各形态都照常执行 —— 本条为 P2.4 的历史记录。
 - **编译期残留（留待共享类型迁移）**：`user`/`auth` 直接 import `outbox`/`queue`/`notification`（`console` import `ws`）的具体类型，因此 `minimal`/`saas` 闭包多出 `outbox`/`queue`、`machine` 多出 `notification`/`outbox`/`queue`、`enterprise` 多出 `outbox`/`queue`/`ws`；装配期一个都不构造，已由 golden 闭包门禁冻结，消除需把 `*outbox.Outbox`/`notification.Message`/`outbox.Event` 迁到 `contract`/内核。
 - **记录偏差（`internal/app` 的能力 domain 叶子包）**：`internal/app` 不 import `catalog`、任何能力根包或 `internal/assembly`，但仍 import `access/domain`、`tenant/domain`、`user/domain` 三个能力 **domain 叶子包**（`internal/app/seed.go` 的结构性种子需要 `Tenant`/`Plan`/`Role`/`Permission`/`User` 等实体类型）；`go list -deps ./internal/app` 实测 jimu 侧能力项仅此三个。这是 P2.4 收尾裁定记录的偏差，本阶段不搬（属独立重构）：把这些类型移到 `contract`/内核后可消除该偏差，并进一步缩小每个形态的二进制。
 
@@ -80,13 +80,19 @@ P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后
 - **已完成（唯一入口）**：删除 5 个 `profiles/<name>/main.go`，层②入口收敛为唯一 `cmd/server` —— `cmd/server/main.go` 只 import `internal/assembly` 与选点包 `internal/profiles/active`（提交态默认 `full`，`go build ./cmd/server`、`go test ./...`、IDE、`make swagger` 默认都是 full）。
 - **已完成（构建期切换形态）**：`tools/profileoverlay`（共享实现 `tools/internal/profileoverlay`）把选点文件替换为「只选该形态」的版本，产物落在 gitignored 的 `.overlay/<profile>/`、不改工作区；`PROFILE=minimal make build-server` → `bin/jimu-server-minimal`（`full` 仍是 `bin/jimu-server`）、`docker build --build-arg PROFILE=<name>`；非法形态名非零退出、无产物。
 - **已完成（registry 单点）**：形态名与清单的唯一来源收口到 `internal/profiles/registry`（`Names`/`All`/`Lookup`），只被 `tools/*` 与 `scripts/check_profiles.sh` 引用，不进 `cmd/server` 的 import 图。
-- **已完成（门禁与报告）**：`make check-capabilities` 改为 **4 条汇总行**（① 能力自描述与 `Owns` ↔ 迁移归属 ② 驱动可用集/选中集/import 闭包一致 ③ 形态生产代码只 import 已声明驱动 ④ 唯一入口与选点包只 import 一个形态）；`make profiles-check` 与 `make compose-report` 的闭包口径同步改为「`./cmd/server` + 该形态 overlay」。
+- **已完成（门禁与报告）**：`make check-capabilities` 改为 **4 条汇总行**（P2.6 起为 5 条）（① 能力自描述与 `Owns` ↔ 迁移归属 ② 驱动可用集/选中集/import 闭包一致 ③ 形态生产代码只 import 已声明驱动 ④ 唯一入口与选点包只 import 一个形态）；`make profiles-check` 与 `make compose-report` 的闭包口径同步改为「`./cmd/server` + 该形态 overlay」。
 - **实测**：`full` 闭包 **118 个重型依赖包**、四个轻形态 **0**（`go list -deps`，与 P2.5 逐值一致）；`minimal` **84.7 MB** vs `full` **123.1 MB**；路由/迁移/表逐值不变，仅「本仓 Go 文件」+1、「本仓代码行」+25（`full`）/ +30（其余四形态）来自入口文件差异，二进制差 16 KB 量级。
 - **边界与不做**：驱动参数化**仅限形态级**（驱动集合仍由各形态 `internal/profiles/<name>/drivers.go` 的 blank import 决定）；`PROFILE=enterprise DRIVERS=local` 式**形态内再选驱动**需要第二份真源清单 + 生成 `drivers.go` + 门禁改读它，**留后续阶段**。开发者可见的行为变更：`go build ./profiles/<name>` 不再可用。
 
-## P2.6 层② 非代码资产模块化（§3.8）
+## P2.6 层② 非代码资产模块化（§3.8）（已完成）
 
-- deploy 资产、Helm values、CLI 子命令、契约测试随 profile 裁剪。
+执行记录见 `docs/plans/2026-09-23-p2.6-assets-and-conditionals.md`。
+
+- **已完成（资产归属与门禁）**：`contract.Descriptor.Assets` 声明能力的非代码资产（当前只有 `apidocs` → `["docs/openapi"]`）；内核运维/观测资产用**具名资产组** `ops`/`observability` 表达（**不新增 `obs` 能力**，catalog 仍 18 项）；归属判定 = **最长前缀匹配**（具体文件赢过目录），资产根 = `deploy/` 与 `docs/openapi/`（不含 `configs/`）。共享派生 `tools/internal/profileassets` + 查询 `go run ./tools/profileassets <profile>`（`-capabilities` 列能力名）。`make check-capabilities` 新增资产段 → **5 条汇总行**（四条断言：路径存在且在根内 / 同一路径不被两个所有者声明（归一化比较）/ 根下每个文件都有有效所有者 / 每个形态覆盖全部内核资产组）。
+- **已完成（本仓条件化）**：① `make swagger`/`swagger-check` 按形态资产集跳过（不含 `apidocs` 的 minimal/saas/enterprise/machine 打印 `SKIP` 并 exit 0，`PROFILE` 非法名仍非零）；② 能力自带 CLI 命令（`internal/capabilities/<name>/cli.Commands()`，实例 `jimu apikey issue|list`，补 `machine` 形态首把 API Key 的带外签发）；③ `jimu` CLI 的 `migrate`/`adopt-capabilities`/`seed` 跟随当前形态（从 `catalog.All()` 过滤、保持拓扑序，`capabilities.enabled` 不参与，`full` 逐值不变）；④ `internal/e2e` 按形态装配（`assembly.Resolve`/`WireFor`，`Run` 复用，单一 wiring）+ `requireCapabilities` 声明依赖；⑤ 4 个非 full 形态的路由面 golden 收在 `internal/profiles/registry/routes_golden_test.go`（32/48/55/28，与 `make compose-report` 逐值吻合）+ 跨形态挂载点一致性断言 `TestShapeMountsMatchFull`，`full` 仍由自己包内的 golden 钉住。
+- **实测**：`git ls-files deploy docs/openapi` 共 **48** 个文件 = `cap:apidocs` 3 / `group:observability` 22 / `group:ops` 23（零未覆盖零重叠）；5 形态路由数 **99 / 32 / 48 / 55 / 28**；e2e 跳过矩阵 **full 10/0、minimal 3/7、saas 4/6、enterprise 5/5、machine 3/7，全部 0 FAIL**。`configs/*.yaml` 逐字节不变、catalog 18 项、`go.mod` 未动。
+- **行为变更（指针，详见 release note 与 README）**：① 迁移/播种跟随编译期形态，且**迁移集带上 schema 依赖**（含 `user`/`access` 的形态一并迁移 `tenant` 的建表/加列 —— `users`/`roles.tenant_id` 只由 tenant 的迁移创建，整分支审查 C1），故各形态 schema 完整、**结构种子照常执行**（`migrate status` 表数下降；`full` 逐值不变）；② 形态不含 `apidocs` 时 `make swagger`/`swagger-check` 打印 `SKIP` 并成功退出。
+- **边界与不做**：**渲染**（`values.yaml`/`configs/app.yaml` 按能力裁剪、生成项目里「未选中资产不出现」、生成项目的 CLI 裁剪）留 **P2.7**；门禁**仍未接入** `make ci`/`release-check`（P2.8 收口）；迁移/种子的**全量清单**语义在 `internal/shared/testutil` 保持（测试要建全部表）。
 
 ## P2.7 层① 脚手架
 

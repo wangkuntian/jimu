@@ -87,10 +87,15 @@ func main() {
 		fmt.Fprintln(os.Stderr, "❌ check-capabilities:", err)
 		os.Exit(1)
 	}
+	if err := checkAssets(root); err != nil {
+		fmt.Fprintln(os.Stderr, "❌ check-capabilities:", err)
+		os.Exit(1)
+	}
 	fmt.Println("✅ check-capabilities: 能力自描述与迁移归属一致")
 	fmt.Println("✅ check-capabilities: 驱动可用集/选中集/import 闭包一致")
 	fmt.Println("✅ check-capabilities: 形态生产代码只 import 已声明的驱动")
 	fmt.Println("✅ check-capabilities: 唯一入口与选点包只 import 一个形态")
+	fmt.Println("✅ check-capabilities: 资产归属唯一且无未声明资产")
 }
 
 // createdTables 从能力嵌入的 mysql 迁移里提取 CREATE TABLE 的表名（去重排序）。

@@ -16,9 +16,14 @@ SERVER_PKG := ./cmd/server
 # 用递归展开（= 而非 :=）：下方 include .env 可能在解析期之后才把 PROFILE 改成别的形态，
 # 立即展开会让「.env 设 PROFILE=minimal」变成「用 minimal 构建、产物名却仍是 bin/jimu-server」。
 SERVER_BIN = $(BIN_DIR)/jimu-server$(if $(filter-out full,$(PROFILE)),-$(PROFILE),)
-CLI_BIN := $(BIN_DIR)/jimu-cli
+CLI_BIN = $(BIN_DIR)/jimu-cli$(if $(filter-out full,$(PROFILE)),-$(PROFILE),)
 SERVER_CMD := cmd/server/main.go
-CLI_CMD := cmd/cli/main.go
+# CLI 必须有包形式（cmd/cli 下有多个文件：main.go / activecaps.go）；单文件形式会漏编译。
+CLI_PKG := ./cmd/cli
+
+# CLI 运行同样叠形态 overlay（与 build-cli 同源）。两步写法：先取 overlay 再 &&，非法形态名
+# 会在命令替换处失败 —— 若写进 -overlay=，失败只留空值，go 会当作「无 overlay」静默按 full 跑。
+CLI_RUN = overlay="$$(go run ./tools/profileoverlay "$(PROFILE)")" && APP_ENV=$(ENV) go run -overlay="$$overlay" $(CLI_PKG)
 VERSION ?= dev
 # 注入版本号到两个 main 包
 LDFLAGS := -X main.version=$(VERSION)
@@ -96,7 +101,7 @@ help:
 	@echo ""
 	@echo "工具:"
 	@echo "  make clean                清理构建产物"
-	@echo "  make swagger              生成 API 文档"
+	@echo "  make swagger              生成 API 文档（形态未编入 apidocs 时跳过）"
 	@echo "  make proto                重新生成 gRPC 代码"
 	@echo "  make bench                运行性能基准测试"
 	@echo "  make loadtest             本地 HTTP 压测（需 hey）"
@@ -123,25 +128,25 @@ build-server:
 
 build-cli:
 	@mkdir -p $(BIN_DIR)
-	go build -ldflags "$(LDFLAGS)" -o $(CLI_BIN) $(CLI_CMD)
+	overlay="$$(go run ./tools/profileoverlay "$(PROFILE)")" && go build -ldflags "$(LDFLAGS)" -overlay="$$overlay" -o $(CLI_BIN) $(CLI_PKG)
 
 # ========== 数据库 ==========
 
-## migrate: 本地执行迁移
+## migrate: 本地执行迁移（跟随 PROFILE：命令行叠该形态 overlay；非法形态名 fail-fast）
 migrate:
-	APP_ENV=$(ENV) go run $(CLI_CMD) migrate up
+	@$(CLI_RUN) migrate up
 
-## migrate-down: 本地回滚迁移
+## migrate-down: 本地回滚迁移（跟随 PROFILE）
 migrate-down:
-	APP_ENV=$(ENV) go run $(CLI_CMD) migrate down
+	@$(CLI_RUN) migrate down
 
-## migrate-status: 查看迁移状态
+## migrate-status: 查看迁移状态（跟随 PROFILE）
 migrate-status:
-	APP_ENV=$(ENV) go run $(CLI_CMD) migrate status
+	@$(CLI_RUN) migrate status
 
-## seed: 本地插入初始数据
+## seed: 本地插入初始数据（跟随 PROFILE）
 seed:
-	APP_ENV=$(ENV) go run $(CLI_CMD) seed
+	@$(CLI_RUN) seed
 
 ## backup: 备份数据库（需 mysqldump，输出到 ./backups，环境变量见 scripts/backup.sh）
 backup:
@@ -307,8 +312,11 @@ clean:
 	rm -rf .overlay
 	rm -f coverage.out coverage.html
 
-## swagger: 生成 API 文档
+## swagger: 生成 API 文档（当前形态未编入 apidocs 时跳过；PROFILE 非法则失败）
 swagger:
+	@assets=$$(go run ./tools/profileassets "$(PROFILE)") || exit 1; \
+	printf '%s\n' "$$assets" | grep -qx 'docs/openapi' || { echo "SKIP swagger：形态 $(PROFILE) 未编入 apidocs"; exit 0; }; \
+	echo "$(SWAG) init -g $(SERVER_CMD) -o docs/openapi"; \
 	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi
 
 ## proto: 从 proto/ 重新生成 gRPC 代码（需 protoc + protoc-gen-go + protoc-gen-go-grpc）
@@ -362,13 +370,14 @@ test-coverage-check:
 test-race:
 	go test -race ./...
 
-## swagger-check: 校验 OpenAPI 文档为最新（与 CI Test job 一致）
+## swagger-check: 校验 OpenAPI 文档为最新（与 CI Test job 一致；当前形态未编入 apidocs 时跳过）
 swagger-check:
-	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi >/dev/null
-	@git diff --exit-code docs/openapi || { \
-		echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; \
-	}
-	@echo "✅ OpenAPI 文档为最新"
+	@assets=$$(go run ./tools/profileassets "$(PROFILE)") || exit 1; \
+	printf '%s\n' "$$assets" | grep -qx 'docs/openapi' || { echo "SKIP swagger-check：形态 $(PROFILE) 未编入 apidocs"; exit 0; }; \
+	echo "$(SWAG) init -g $(SERVER_CMD) -o docs/openapi"; \
+	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi >/dev/null || exit 1; \
+	git diff --exit-code docs/openapi || { echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; }; \
+	echo "✅ OpenAPI 文档为最新"
 
 ## smoke-check: 校验 smoke 脚本语法（与 CI Test job 一致）
 smoke-check:
