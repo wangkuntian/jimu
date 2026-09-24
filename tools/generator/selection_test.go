@@ -272,7 +272,10 @@ func TestGeneratedCatalogKnownCoversEveryCapability(t *testing.T) {
 	migration, err := os.ReadFile(filepath.Join(dir, "internal/capabilities/catalog/migration.go"))
 	require.NoError(t, err)
 	assert.Contains(t, string(migration), `"user"`)
-	assert.Contains(t, string(migration), `[]string{"tenant"}`)
+	// T3 起渲染与框架蓝本同构：契约字面量写作 {"tenant"}（不再是 T2 占位的 []string{"tenant"}），
+	// 且 migration.go 里**没有**第二条清单（migrationExtras 形态已按裁定修订第 1 条删除）。
+	assert.Contains(t, string(migration), `{"tenant"}`)
+	assert.NotContains(t, string(migration), "migrationExtras")
 }
 
 // TestNewProjectRejectsReportFlag Minor 9：--report 在 T2 阶段明确报错（不是静默 no-op）。

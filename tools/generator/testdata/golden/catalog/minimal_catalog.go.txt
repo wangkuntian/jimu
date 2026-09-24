@@ -6,31 +6,57 @@
 package catalog
 
 import (
-{{- range .Entries}}
-	{{.Alias}} "{{.Path}}"
-{{- end}}
+	accessmodule "jimu/internal/capabilities/access"
+	authmodule "jimu/internal/capabilities/auth"
+	encryptionmodule "jimu/internal/capabilities/encryption"
+	notificationmodule "jimu/internal/capabilities/notification"
+	tenantmodule "jimu/internal/capabilities/tenant"
+	usermodule "jimu/internal/capabilities/user"
 	"jimu/internal/capability"
 	"jimu/internal/contract"
 )
 
 // entries 是本项目装配与启用集解析的唯一清单，顺序即依赖拓扑序。
-{{- if .MigrationOnly}}
-// {{range $i, $e := .MigrationOnly}}{{if $i}}、{{end}}{{$e.Name}}{{end}} 只随迁移复制、不参与装配，但**必须**在 entries 里：
+// tenant 只随迁移复制、不参与装配，但**必须**在 entries 里：
 // filterAll/MigrationSet 只从这里取 descriptor，漏掉它们会让 jimu migrate 少建表/少加列。
-{{- end}}
 var entries = []contract.Descriptor{
-{{- range .Entries}}
-	{{.Alias}}.Descriptor,
-{{- end}}
+	usermodule.Descriptor,
+	accessmodule.Descriptor,
+	tenantmodule.Descriptor,
+	authmodule.Descriptor,
+	encryptionmodule.Descriptor,
+	notificationmodule.Descriptor,
 }
 
 // knownNames 是**框架全量**能力名（catalog 全量 ∪ 非 catalog 条目），生成期固化：
 // ValidateDeclarations 用它做 SoftRequires 错别字检查 —— 子集清单上指向缺席能力的软依赖
 // 是**合法降级**（user→tenant、auth→mfa/captcha/breach），不是笔误。
 var knownNames = []string{
-{{- range .KnownNames}}
-	"{{.}}",
-{{- end}}
+	"user",
+	"access",
+	"tenant",
+	"mfa",
+	"auth",
+	"passkey",
+	"audit",
+	"console",
+	"oauth",
+	"apikey",
+	"queue",
+	"outbox",
+	"dataops",
+	"search",
+	"captcha",
+	"feature",
+	"uploadsec",
+	"breach",
+	"apidocs",
+	"encryption",
+	"grpc",
+	"notification",
+	"retention",
+	"storage",
+	"ws",
 }
 
 // ValidateDeclarations 校验本清单的声明结构 + 软依赖错别字（薄封装，算法见 internal/capability）。

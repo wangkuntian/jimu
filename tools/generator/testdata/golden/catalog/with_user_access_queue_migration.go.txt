@@ -12,9 +12,8 @@ import (
 // 能力拥有的表（如 tenant 的迁移给 user/access 的 users/roles 加 tenant_id 列），只按声明集
 // 过滤会建出**自己写不进去**的 schema —— 生成器只保留「键 ∈ entries」的行（P2.6 的 C1 修复）。
 var MigrationSchemaDeps = map[string][]string{
-{{- range .SchemaDeps}}
-	"{{.From}}": {{.To}},
-{{- end}}
+	"user":   {"tenant"},
+	"access": {"tenant"},
 }
 
 // MigrationSet 返回某形态的**迁移集**（按 catalog 拓扑序）：声明的能力名集合 ∪ schema 依赖。

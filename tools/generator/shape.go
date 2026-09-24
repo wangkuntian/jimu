@@ -5,9 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
-
-	"jimu/internal/capabilities/catalog"
 )
 
 // 单形态渲染（S8 的确定性重渲染）：生成 internal/profiles/registry/registry.go、
@@ -29,14 +26,6 @@ func (c shapeCapability) HasDrivers() bool { return len(c.Drivers) > 0 }
 // configFiles 返回 configs 渲染产物的相对路径。
 func configFiles() []string {
 	return []string{"configs/app.yaml", "configs/app.prod.yaml"}
-}
-
-// catalogFiles 返回 catalog 渲染产物的相对路径。
-func catalogFiles() []string {
-	return []string{
-		"internal/capabilities/catalog/catalog.go",
-		"internal/capabilities/catalog/migration.go",
-	}
 }
 
 // shapeFiles 返回四份单形态产物的相对路径（按渲染顺序）。
@@ -103,79 +92,6 @@ func RenderShape(root, dst string, set CapabilitySet) error {
 // renderShape 是 generateInto 里的落点包装。
 func renderShape(root, dst string, set CapabilitySet) error {
 	return RenderShape(root, dst, set)
-}
-
-// RenderCatalog 渲染生成项目的 internal/capabilities/catalog/{catalog.go,migration.go}：
-// entries = 选定集 ∪ **迁移携带能力**（Minor 7 裁定：S2 原话「迁移携带能力不进 entries」作废
-// —— tenant 的 Descriptor 必须进 entries，否则 filterAll/MigrationSet 取不到，
-// `jimu migrate` 会漏 tenant 的建表/加列，正是 P2.6 C1 的生成项目版。T3 不得按旧口径改回
-// migrationExtras）；known = 框架全量能力名 catalog 18 ∪ Ungated 7（S5）。
-//
-// NOTE: T3 将替换本渲染器 —— entries/MigrationSchemaDeps 的完整口径（Configs/Assets 等）
-// 由 T3 收口；当前版本只是「可编译、可跑 check-capabilities」的骨架，后续任务请**替换**而非叠加。
-func RenderCatalog(dst string, set CapabilitySet) error {
-	type entry struct {
-		Alias string
-		Path  string
-	}
-	type dep struct {
-		From string
-		To   string
-	}
-	data := struct {
-		Capabilities []entry
-		Known        []string
-		Deps         []dep
-	}{}
-	for _, name := range set.Declared {
-		data.Capabilities = append(data.Capabilities, entry{
-			Alias: name + "module",
-			Path:  frameworkModule + "/" + capabilityDirPrefix + "/" + name,
-		})
-	}
-	// 迁移携带能力也要被 catalog import（它只提供 Descriptor/Migrations，不参与装配）。
-	for _, name := range set.MigrationOnly {
-		data.Capabilities = append(data.Capabilities, entry{
-			Alias: name + "module",
-			Path:  frameworkModule + "/" + capabilityDirPrefix + "/" + name,
-		})
-	}
-	// Minor 6/S5：known = 框架全量能力名（catalog 18 ∪ Ungated 7），语义是「软依赖指向缺席能力
-	// = 降级」，不是笔误。
-	data.Known = set.Known
-	for _, name := range set.Declared {
-		deps := catalog.MigrationSchemaDeps[name]
-		if len(deps) == 0 {
-			continue
-		}
-		quoted := make([]string, 0, len(deps))
-		for _, d := range deps {
-			quoted = append(quoted, fmt.Sprintf("%q", d))
-		}
-		data.Deps = append(data.Deps, dep{From: name, To: "[]string{" + strings.Join(quoted, ", ") + "}"})
-	}
-	files := map[string]string{
-		"internal/capabilities/catalog/catalog.go":   "project/catalog.go.tmpl",
-		"internal/capabilities/catalog/migration.go": "project/catalog_migration.go.tmpl",
-	}
-	for rel, tpl := range files {
-		text, err := Template(tpl)
-		if err != nil {
-			return err
-		}
-		out, err := RenderText(rel, text, data)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return fmt.Errorf("create directory for %s: %w", rel, err)
-		}
-		if err := os.WriteFile(target, out, goFileMode); err != nil {
-			return fmt.Errorf("write %s: %w", rel, err)
-		}
-	}
-	return nil
 }
 
 // RenderConfigs 渲染生成项目的 configs/*.yaml。

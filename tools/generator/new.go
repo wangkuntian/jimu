@@ -143,7 +143,7 @@ func generateInto(root, dst string, set CapabilitySet, module string, opts NewOp
 	if err := renderShape(root, dst, set); err != nil {
 		return err
 	}
-	if err := RenderCatalog(dst, set); err != nil {
+	if err := renderCatalog(dst, set); err != nil {
 		return err
 	}
 	if err := RenderConfigs(root, dst); err != nil {
