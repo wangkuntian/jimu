@@ -2,13 +2,17 @@ package generator
 
 import (
 	"fmt"
+	"go/ast"
 	"go/format"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -103,28 +107,19 @@ func RewriteModule(root, from, to string) ([]string, error) {
 		if !utf8.Valid(content) {
 			return nil
 		}
-		rewritten := applyRewriteRules(string(content), to, name, func(scope string) bool {
-			return ruleApplies(scope, base)
-		})
-		if base == "go.mod" {
-			// 规则表之后再用宽容形态兜底（CRLF / 尾空白 / 行尾注释），最后按值校验结果：
-			// 匹配不上就是 fail-open，必须报错而不是静默产出 `module jimu` 的项目。
-			rewritten = rewriteModuleDirective(rewritten, to)
-			if to != from && moduleDirectiveValue(rewritten) == from {
-				return fmt.Errorf("rewrite: go.mod module directive still %q after rewrite (%s)", from, relPath(root, p))
-			}
+		rewritten, modified, err := rewriteFileContent(base, string(content), to, name)
+		if err != nil {
+			return fmt.Errorf("rewrite %s: %w", relPath(root, p), err)
 		}
-		if rewritten == string(content) {
+		if base == "go.mod" && to != from && moduleDirectiveValue(rewritten) == from {
+			// 兜底正则也没命中（如 CR-only 行尾）：fail-open，必须报错而不是静默产出
+			// `module jimu` 的项目。这一步与「是否有改动」无关。
+			return fmt.Errorf("rewrite: go.mod module directive still %q after rewrite (%s)", from, relPath(root, p))
+		}
+		if !modified {
 			return nil
 		}
 		out := []byte(rewritten)
-		if strings.HasSuffix(base, ".go") {
-			formatted, err := format.Source(out)
-			if err != nil {
-				return fmt.Errorf("format %s: %w", relPath(root, p), err)
-			}
-			out = formatted
-		}
 		info, err := d.Info()
 		if err != nil {
 			return fmt.Errorf("stat %s: %w", relPath(root, p), err)
@@ -140,6 +135,105 @@ func RewriteModule(root, from, to string) ([]string, error) {
 	}
 	sort.Strings(changed)
 	return changed, nil
+}
+
+// rewriteFileContent 按文件类型选择重写策略（Fix round 3 / C2）：
+//
+//	go.mod    —— 受控字面量规则 + module 指令的宽容兜底（尾空白/行尾注释/CRLF）；
+//	*.go      —— **import 感知**重写（见 rewriteGoSource）：只动 ImportSpec 路径与
+//	             `const modulePath`，绝不动其它字面量/注释/原始描述符；
+//	其它文本  —— 保留字面量替换（Makefile/Dockerfile/scripts/* 的路径与产物名）。
+func rewriteFileContent(base, content, module, name string) (string, bool, error) {
+	switch {
+	case base == "go.mod":
+		out := applyRewriteRules(content, module, name, func(scope string) bool { return scope != "go" })
+		out = rewriteModuleDirective(out, module)
+		return out, out != content, nil
+	case strings.HasSuffix(base, ".go"):
+		return rewriteGoSource(content, module)
+	default:
+		out := applyRewriteRules(content, module, name, func(scope string) bool { return scope == "all" })
+		return out, out != content, nil
+	}
+}
+
+// rewriteGoSource 对 .go 源码做 import 感知的受控重写，返回（新源码, 是否有改动, 错误）。
+//
+// 为什么不能沿用字面量替换：`.pb.go` 的 protobuf raw descriptor 是**带长度前缀**的字符串
+// 字面量，例如 `"\x1cproto/jimu/v1/userinfo.proto\x12\x07..."`（0x1c = 28 = 该路径长度）。
+// 字面量替换会把 `proto/jimu/v1/...` 改成 `proto/<module>/v1/...` 而长度字节仍是 28，
+// 于是 protobuf 反序列化越界 —— 进程一启动就 panic（filedesc.unmarshalSeed:
+// slice bounds out of range）。只重写 ImportSpec 路径即从根上消除这类误改。
+//
+// 实现用 AST 定位 + **原文字节替换**（不做 printer 往返）：除被改写的字面量外逐字节不变。
+func rewriteGoSource(src, module string) (string, bool, error) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, baseName("rewrite"), strings.NewReader(src), parser.ParseComments)
+	if err != nil {
+		return "", false, fmt.Errorf("parse go source: %w", err)
+	}
+	offsetOf := func(p token.Pos) int { return fset.PositionFor(p, false).Offset }
+	var edits []textEdit
+	for _, spec := range file.Imports {
+		path, err := strconv.Unquote(spec.Path.Value)
+		if err != nil {
+			continue
+		}
+		rest, ok := strings.CutPrefix(path, "jimu/")
+		if !ok {
+			continue
+		}
+		quoted := strconv.Quote(module + "/" + rest)
+		if quoted == spec.Path.Value {
+			continue // to == from：不动点，不能登记为改动（幂等契约）
+		}
+		edits = append(edits, textEdit{
+			start: offsetOf(spec.Path.Pos()), end: offsetOf(spec.Path.End()),
+			text: quoted,
+		})
+	}
+	// tools/{composereport,checkcapabilities} 的 `const modulePath = "jimu"`（无斜杠，import 规则
+	// 抓不到）；按**声明名 + 值**精确定位，不碰其它同值字面量。
+	for _, decl := range file.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.CONST {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for i, id := range vs.Names {
+				if id.Name != "modulePath" || i >= len(vs.Values) {
+					continue
+				}
+				lit, ok := vs.Values[i].(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					continue
+				}
+				if v, err := strconv.Unquote(lit.Value); err != nil || v != "jimu" {
+					continue
+				}
+				quoted := strconv.Quote(module)
+				if quoted == lit.Value {
+					continue
+				}
+				edits = append(edits, textEdit{
+					start: offsetOf(lit.Pos()), end: offsetOf(lit.End()),
+					text: quoted,
+				})
+			}
+		}
+	}
+	if len(edits) == 0 {
+		return src, false, nil
+	}
+	formatted, err := format.Source([]byte(applyTextEdits(src, edits)))
+	if err != nil {
+		return "", false, fmt.Errorf("format rewritten go source: %w", err)
+	}
+	return string(formatted), true, nil
 }
 
 // applyRewriteRules 按 scope 判定应用规则表（前一条的输出是后一条的输入）；scopeApplies 为 nil
