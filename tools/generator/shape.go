@@ -23,11 +23,6 @@ type shapeCapability struct {
 // HasDrivers 是否有选中的驱动（模板里控制 `Drivers: []string{...}` 字段）。
 func (c shapeCapability) HasDrivers() bool { return len(c.Drivers) > 0 }
 
-// configFiles 返回 configs 渲染产物的相对路径。
-func configFiles() []string {
-	return []string{"configs/app.yaml", "configs/app.prod.yaml"}
-}
-
 // shapeFiles 返回四份单形态产物的相对路径（按渲染顺序）。
 func shapeFiles(set CapabilitySet) []string {
 	return []string{
@@ -92,19 +87,6 @@ func RenderShape(root, dst string, set CapabilitySet) error {
 // renderShape 是 generateInto 里的落点包装。
 func renderShape(root, dst string, set CapabilitySet) error {
 	return RenderShape(root, dst, set)
-}
-
-// RenderConfigs 渲染生成项目的 configs/*.yaml。
-//
-// NOTE: T4 将替换本渲染器（当前为原样复制 configs/*.yaml 的占位）—— T4 的段选择器只保留
-// 内核段 + 选中能力的段，且 app.yaml 与 app.prod.yaml 同口径（S6）。请**替换**而非叠加。
-func RenderConfigs(root, dst string) error {
-	for _, rel := range configFiles() {
-		if err := copyOneFile(root, dst, rel); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // docsRelDir 是 apidocs 的编译期依赖目录（apidocs/swagger.go 里 `_ "jimu/docs/openapi"`）。
