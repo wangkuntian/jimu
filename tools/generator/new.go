@@ -155,6 +155,15 @@ func generateInto(root, dst string, set CapabilitySet, module string, opts NewOp
 	if err := RenderCLIMain(root, dst, set); err != nil {
 		return err
 	}
+	// T5：复制并定点改造 tools/**（不含 tools/generator），渲染三份单形态构建文件。
+	// 必须在 RewriteModule 之前：补丁表写的是框架口径（modulePath 常量/文案），module 前缀
+	// 由随后的受控重写统一改写；构建文件模板里的 jimu-* 产物名也依赖同一条重写规则。
+	if err := copyToolsAndScripts(root, dst, module); err != nil {
+		return err
+	}
+	if err := renderBuildFiles(dst, set); err != nil {
+		return err
+	}
 	if _, err := RewriteModule(dst, frameworkModule, module); err != nil {
 		return moduleError(module, err)
 	}
@@ -168,6 +177,54 @@ func generateInto(root, dst string, set CapabilitySet, module string, opts NewOp
 		return err
 	}
 	return writeMarker(root, dst, set, module, discarded)
+}
+
+// copyToolsAndScripts 把生成项目要用的工具树（copyTools）复制进 dst，并应用 patches.go 的
+// 定点补丁（T5）。脚本与构建文件不在这里：它们由 renderBuildFiles 渲染。
+//
+// 过滤两条：skipTransient（临时/编辑器产物）与框架侧 `_test.go`（见 skipToolTestFile）。
+func copyToolsAndScripts(root, dst, module string) error {
+	for _, rel := range copyTools {
+		filter := func(r string, d fs.DirEntry) bool {
+			if !skipTransient(r, d) {
+				return false
+			}
+			return d.IsDir() || !skipToolTestFile(d.Name())
+		}
+		if _, _, err := CopyTree(filepath.Join(root, filepath.FromSlash(rel)), filepath.Join(dst, filepath.FromSlash(rel)), filter); err != nil {
+			return fmt.Errorf("copy tools directory %s: %w", rel, err)
+		}
+	}
+	return applyFilePatches(dst, module)
+}
+
+// renderBuildFiles 渲染生成项目的三份单形态构建文件（Makefile / Dockerfile /
+// scripts/check_profiles.sh）：三者都由「能力集」纯函数决定，因此 `jimu capability add` 的
+// 重渲染（S8）可以整体重建它们。
+func renderBuildFiles(dst string, set CapabilitySet) error {
+	files := []struct {
+		rel    string
+		render func(CapabilitySet) ([]byte, error)
+		mode   fs.FileMode
+	}{
+		{"Makefile", RenderMakefile, 0o644},
+		{"Dockerfile", RenderDockerfile, 0o644},
+		{"scripts/check_profiles.sh", RenderCheckProfiles, 0o755},
+	}
+	for _, f := range files {
+		out, err := f.render(set)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, filepath.FromSlash(f.rel))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return fmt.Errorf("create directory for %s: %w", f.rel, err)
+		}
+		if err := os.WriteFile(target, out, f.mode); err != nil {
+			return fmt.Errorf("write %s: %w", f.rel, err)
+		}
+	}
+	return nil
 }
 
 // pruneUnsatisfiableTests 按「逐文件 import 可满足性」裁剪生成项目的测试树：
@@ -647,7 +704,56 @@ func planResult(root string, set CapabilitySet, module string, opts NewOptions) 
 	}
 	res.FileCount += len(configFiles())
 	res.FileCount++ // cmd/cli/main.go（渲染）
+	// T5：tools 树（与 copyToolsAndScripts 同一过滤口径，见 countTreeFiltered）与三份构建文件。
+	for _, rel := range copyTools {
+		count, err := countTreeFiltered(filepath.Join(root, filepath.FromSlash(rel)), func(_ string, d fs.DirEntry) bool {
+			return d.IsDir() || !skipToolTestFile(d.Name())
+		})
+		if err != nil {
+			return nil, err
+		}
+		res.FileCount += count
+	}
+	res.FileCount += len(buildFiles())
 	return res, nil
+}
+
+// buildFiles 返回 renderBuildFiles 渲染的三份构建文件（dry-run 计数与落地同源）。
+func buildFiles() []string {
+	return []string{"Makefile", "Dockerfile", "scripts/check_profiles.sh"}
+}
+
+// countTreeFiltered 与 countTree 相同，但允许在 skipTransient 之外再加一层过滤（tools 复制集
+// 不复制框架侧 _test.go）。口径必须与 CopyTree 的 filter 逐条一致，否则 dry-run 不再是上界。
+func countTreeFiltered(root string, filter func(rel string, d fs.DirEntry) bool) (int, error) {
+	count := 0
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, rerr := filepath.Rel(root, p)
+		if rerr != nil {
+			return rerr
+		}
+		rel = filepath.ToSlash(rel)
+		if rel != "." && !skipTransient(rel, d) {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if rel != "." && filter != nil && !filter(rel, d) {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !d.IsDir() && d.Type()&fs.ModeSymlink == 0 {
+			count++
+		}
+		return nil
+	})
+	return count, err
 }
 
 // countTree 只统计目录树里的文件数（不落盘，供 --dry-run 使用）。必须与 CopyTree 用同一个

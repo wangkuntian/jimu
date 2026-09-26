@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# 本项目（单形态）的构建门禁 + 依赖闭包裁剪门禁 + 可选启动/健康检查。
+#
+# 本项目只有一个形态（生成期由 `jimu new` 固定）：internal/profiles/active 里就是本形态的
+# 选点，`./cmd/server` 的 import 图即出货二进制的真实 import 图，构建没有任何叠加步骤。
+#
+# 默认（不设 JIMU_PROFILES_SMOKE=1）：构建 + 依赖闭包裁剪门禁 —— 这是硬要求，构建失败、
+# 或闭包里出现被禁止/非预期的能力即非零退出；仍打印一行 SKIP，说明启动与健康检查需要
+# DB+Redis，不静默跳过。
+#
+# 依赖闭包裁剪门禁（「裁剪是真的」这件事在本项目里的可测形式）：
+#   1) no capabilities/catalog —— 用 `go list -f` 取直接 import 清单后 grep
+#      `./cmd/server` 与 `./internal/profiles/...`：出现 capabilities/catalog 即失败，
+#      种子若再退回 catalog.All()，形态裁剪立刻失效。
+#   2) 本项目唯一形态的能力根包闭包必须逐值等于 EXPECTED_<shape>（golden）：任何能力泄漏
+#      （无论是经 catalog 还是新加的 import）都会失败。
+#   3) 产物必须真的编入本形态包 —— 构建后 `strings` 产物必须出现
+#      `<module>/internal/profiles/<shape>`。
+#   4) 非法形态名必须让 profileoverlay 非零退出（反例断言）。
+#
+# JIMU_PROFILES_SMOKE=1：构建后以 APP_ENV=dev 启动，轮询管理端 readiness
+# （GET /readyz 检查 DB+Redis 可达）直到就绪，然后关停；失败或超时即非零退出。
+# 为避开本机已运行的服务，默认用隔离端口 18080/19090（HTTP_PORT/MANAGEMENT_PORT），
+# 可用 JIMU_PROFILES_HTTP_PORT、JIMU_PROFILES_MGMT_PORT、JIMU_PROFILES_READY_TIMEOUT_SEC 覆盖。
+#
+# DB/Redis 连接沿用应用配置与环境变量（DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/REDIS_ADDR…）。
+# 注意：环境里设了 ADMIN_PASSWORD 时，启动会先执行结构性种子（见 internal/profiles
+# 的 StructuralSeed），需要先跑过 `jimu migrate up`；未设置时跳过种子。
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$ROOT"
+
+# 本项目唯一形态（形态名由生成器写入；生成期已固定，不再从 registry 派生）。
+PROFILES=({{.Shape}})
+HTTP_PORT="${JIMU_PROFILES_HTTP_PORT:-18080}"
+MGMT_PORT="${JIMU_PROFILES_MGMT_PORT:-19090}"
+READY_TIMEOUT_SEC="${JIMU_PROFILES_READY_TIMEOUT_SEC:-30}"
+
+BIN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/jimu-profiles-XXXXXX")"
+LOG_DIR="$BIN_DIR/logs"
+mkdir -p "$LOG_DIR"
+trap 'rm -rf "$BIN_DIR"' EXIT
+
+# 反例断言：非法形态名必须被 profileoverlay 拒绝（本项目只有一个合法形态名）。
+if go run ./tools/profileoverlay ghost >/dev/null 2>&1; then
+  echo "❌ 非法形态名 \"ghost\" 未使 tools/profileoverlay 失败（预期非零退出）" >&2
+  exit 1
+fi
+echo "==> 非法形态名拒绝：ok（ghost → 非零退出）"
+
+echo "==> 构建本项目唯一形态（build ./cmd/server）"
+for p in "${PROFILES[@]}"; do
+  bin="$BIN_DIR/shape-$p"
+  go build -o "$bin" ./cmd/server
+  # 产物必须真的编入该形态包：用 `grep -c`（本脚本开了 pipefail，`grep -q` 命中即退出会给
+  # strings 发 SIGPIPE，管道整体返回 141 而被误判为失败；`grep -c` 读完全部输入）。
+  matches="$(strings "$bin" | grep -c "jimu/internal/profiles/$p" || true)"
+  if [ "${matches:-0}" -eq 0 ]; then
+    echo "❌ profiles/$p 产物未编入该形态包" >&2
+    exit 1
+  fi
+  echo "    ok  形态 ${p}（构建 cmd/server，产物已编入该形态包）"
+done
+
+# ---------------------------------------------------------------------------
+# 依赖闭包裁剪门禁
+# ---------------------------------------------------------------------------
+
+# EXPECTED_<shape>：本项目出货二进制依赖闭包里允许出现的**能力根包**，逐值锁定（golden）。
+# 来源＝生成期的编译闭包（迁移携带的能力只进 catalog/CLI，不进 cmd/server 的闭包；只带
+# domain/ 的内核依赖不产生能力根包 import）。逐值相等已经蕴含「不含任何非预期能力」，
+# 无需再维护 FORBIDDEN/ALLOWED 清单（单形态下两者按构造不相交，比对恒为 no-op）。
+EXPECTED_{{.Shape}}="{{.Expected}}"
+
+# cap_roots：本项目闭包里的能力**根包**名（不含 access/domain 之类的子包），排序去重。
+cap_roots() {
+  go list -deps ./cmd/server | sed -n 's#^jimu/internal/capabilities/\([^/]*\)$#\1#p' | sort -u
+}
+
+echo "==> 生产包不得 import catalog"
+# 注意：下面的 `go list -f` 模板字面量里的双花括号是 Go 模板语法，生成器已按字面量转义。
+catalog_importers="$(go list -f '{{"{{"}}join .Imports "\n"{{"}}"}}' ./cmd/server ./internal/profiles/... | grep 'jimu/internal/capabilities/catalog' || true)"
+if [[ -n "$catalog_importers" ]]; then
+  echo "❌ ./cmd/server 或 ./internal/profiles/... 的生产包 import 了 capabilities/catalog：形态裁剪会失效" >&2
+  echo "$catalog_importers" >&2
+  exit 1
+fi
+echo "    ok  ./cmd/server 与 ./internal/profiles/... 无 capabilities/catalog"
+
+echo "==> 依赖闭包裁剪门禁（能力根包）"
+closure_fail=0
+for p in "${PROFILES[@]}"; do
+  roots="$(cap_roots)"
+  expected_var="EXPECTED_$p"
+  expected="${!expected_var}"
+  profile_fail=0
+
+  if [[ "$roots" != "$(printf '%s\n' $expected | sort -u)" ]]; then
+    echo "❌ 形态 $p 闭包与 golden 期望不一致" >&2
+    echo "    实际：$(printf '%s' "$roots" | tr '\n' ' ')" >&2
+    echo "    期望：$expected" >&2
+    closure_fail=1
+    profile_fail=1
+  fi
+  if [[ "$profile_fail" == "0" ]]; then
+    echo "    ok  形态 $p 能力根包：$(printf '%s' "$roots" | tr '\n' ' ')"
+  fi
+done
+if [[ "$closure_fail" != "0" ]]; then
+  exit 1
+fi
+
+if [[ "${JIMU_PROFILES_SMOKE:-}" != "1" ]]; then
+  for p in "${PROFILES[@]}"; do
+    echo "SKIP 形态 $p 启动与健康检查：需要 DB+Redis（设置 JIMU_PROFILES_SMOKE=1 启用；APP_ENV=dev，端口 ${HTTP_PORT}/${MGMT_PORT}）"
+  done
+  echo "✅ 本项目唯一形态（构建 cmd/server）+ 依赖闭包裁剪门禁通过（启动与健康检查已跳过：未设置 JIMU_PROFILES_SMOKE=1）"
+  exit 0
+fi
+
+echo "==> 启动与健康检查（APP_ENV=dev，HTTP ${HTTP_PORT} / management ${MGMT_PORT}）"
+for p in "${PROFILES[@]}"; do
+  log="$LOG_DIR/$p.log"
+  APP_ENV=dev HTTP_PORT="$HTTP_PORT" MANAGEMENT_PORT="$MGMT_PORT" MANAGEMENT_HOST=127.0.0.1 \
+    "$BIN_DIR/shape-$p" >"$log" 2>&1 &
+  pid=$!
+
+  ready=0
+  for _ in $(seq 1 "$READY_TIMEOUT_SEC"); do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      break # 进程已退出：直接看日志
+    fi
+    if curl -fsS "http://127.0.0.1:${MGMT_PORT}/readyz" >/dev/null 2>&1; then
+      ready=1
+      break
+    fi
+    sleep 1
+  done
+
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+
+  if [[ "$ready" != "1" ]]; then
+    echo "❌ 形态 $p 未在 ${READY_TIMEOUT_SEC}s 内就绪，日志：" >&2
+    sed 's/^/    /' "$log" >&2
+    exit 1
+  fi
+  echo "    ok  形态 $p 就绪（GET /readyz）"
+done
+
+echo "✅ 本项目唯一形态（构建 cmd/server）+ 依赖闭包裁剪门禁 + 启动 + 健康检查通过"

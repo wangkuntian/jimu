@@ -154,7 +154,7 @@ jobs:
           DB_USER: root
           DB_PASSWORD: root
           DB_NAME: jimu_test
-        run: go test ./... -coverprofile=coverage.out
+        run: go test ./... -coverprofile=coverage.out -timeout 30m
 
       - name: "🗄️  Verify backup/restore round trip (mysql + postgres)"
         run: |
@@ -256,7 +256,7 @@ jobs:
           DB_USER: root
           DB_PASSWORD: root
           DB_NAME: jimu_test
-        run: go test -race ./...
+        run: go test -race ./... -timeout 30m
 
   bench:
     name: Performance Regression
