@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"go/format"
 	"go/parser"
@@ -49,14 +48,22 @@ type Result struct {
 	Files        []string
 	FileCount    int
 	Lines        int
+
+	// Changed 是 `capability add` 的产物差异（相对调用前的生成项目）：新增/改动/移除的生成产物
+	// 相对路径（排序）。为空即「本次没有改动」（幂等）。`new` 不用该字段（它写的是全新目录）。
+	Changed []string
 }
 
 // markerFile 是生成器产物的标记（dot 文件不参与 `grep -rn '"jimu/'`）：--force 的识别依据，
 // 也是 `jimu capability add` 的输入（S7/S8）。
 const markerFile = ".jimu-generated"
 
-// marker 是 markerFile 的 JSON 结构（S7 规定字段）。
-type marker struct {
+// Marker 是 markerFile 的 JSON 结构（S7 规定字段）：<dir>/.jimu-generated 的内容。
+// `capability add` / `--force` / `--report` 都只读它，不靠猜（读写见 add.go 的 LoadMarker/Save）。
+//
+// 注意 Capabilities 是**声明集**：迁移携带的能力（如 tenant）不在其中，重渲染时必须经
+// CapabilityRoots 重算（T3 裁定 7），不得直接把这份集合喂渲染器。
+type Marker struct {
 	Generator      string              `json:"generator"`
 	Version        string              `json:"version"`
 	SourceRoot     string              `json:"sourceRoot"`
@@ -117,7 +124,7 @@ func NewProject(opts NewOptions) (*Result, error) {
 		return nil, fmt.Errorf("create staging directory: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmp) }() // rename 成功后 tmp 已不存在，幂等
-	if err := generateInto(root, tmp, set, module, opts); err != nil {
+	if err := renderDerivedAll(root, tmp, set, module); err != nil {
 		return nil, err
 	}
 	if err := swapIntoPlace(target, tmp); err != nil {
@@ -126,8 +133,15 @@ func NewProject(opts NewOptions) (*Result, error) {
 	return collectResult(target, set, module, root)
 }
 
-// generateInto 把全部产物写进临时目录 tmp（此时还没有任何 rename，失败由调用方删 tmp）。
-func generateInto(root, dst string, set CapabilitySet, module string, opts NewOptions) error {
+// renderDerivedAll 把「能力集 → 全部产物」的**唯一**一条渲染/复制管线落进 dst（S8 的确定性
+// 重渲染）：内核复制 → 能力复制（含驱动过滤）→ 迁移携带/内核 domain → 形态与 catalog 渲染 →
+// configs 渲染 → CLI 裁剪 → tools 复制与构建文件 → module 受控重写 → 资产复制与 values.yaml
+// 键裁剪 → 测试裁剪 → gofmt → 写 .jimu-generated。
+//
+// `jimu new` 与 `jimu capability add` **共用**本函数（不得出现第二套渲染逻辑）：new 把它写到
+// 空目录再整体换上；add 写到暂存目录后按差异逐文件落盘。产物只由「能力集 + module」决定，
+// 因此 add 天然幂等（同一集合重跑逐字节等价）。
+func renderDerivedAll(root, dst string, set CapabilitySet, module string) error {
 	if err := copyKernel(root, dst); err != nil {
 		return err
 	}
@@ -446,11 +460,15 @@ func swapIntoPlace(target, tmp string) error {
 
 // kernelExcludes 是内核目录里**不原样复制**的文件（相对框架仓根，斜杠路径）：
 //   - cmd/cli/main.go 由 RenderCLIMain 单形态裁剪后渲染（去掉脚手架 import/命令）；
-//   - cmd/cli/new.go|new_test.go 是框架脚手架命令本身，生成项目不含 tools/generator。
+//   - cmd/cli/new.go|new_test.go 是框架脚手架命令本身，生成项目不含 tools/generator；
+//   - cmd/cli/capability.go|capability_test.go 同理（T7 的 `capability add` 依赖 tools/generator，
+//     生成项目既没有该工具树也不该注册这个命令 —— 命令注册由 RenderCLIMain 同步剔除）。
 var kernelExcludes = map[string]bool{
-	"cmd/cli/main.go":     true,
-	"cmd/cli/new.go":      true,
-	"cmd/cli/new_test.go": true,
+	"cmd/cli/main.go":            true,
+	"cmd/cli/new.go":             true,
+	"cmd/cli/new_test.go":        true,
+	"cmd/cli/capability.go":      true,
+	"cmd/cli/capability_test.go": true,
 	// activecaps_test.go 断言的是**框架**的多形态行为（registry.Lookup("minimal")、框架形态的
 	// 声明集与 catalog 拓扑序）。生成项目只有一个形态、声明集也不同，这些断言天然不成立
 	// （它编译得过、vet 也过，只是期望值不匹配）。T2 已按单形态重渲染 cmd/cli，故不再复制该测试，
@@ -868,7 +886,7 @@ func lineCount(text string) int {
 // T8 report 的输入。`files` 是本次落地文件的完整清单（排序），`assets` 是本次复制的资产路径
 // （AssetsFor 的前缀口径：`deploy/helm`、`docs/openapi`…），`discardedTests` 是被裁剪掉的测试文件。
 func writeMarker(root, dst string, set CapabilitySet, module string, assets, discarded []string) error {
-	m := marker{
+	m := Marker{
 		Generator:      "jimu new",
 		Version:        generatorVersion,
 		SourceRoot:     absPath(root),
@@ -905,11 +923,7 @@ func writeMarker(root, dst string, set CapabilitySet, module string, assets, dis
 		return fmt.Errorf("collect generated files: %w", err)
 	}
 	sort.Strings(m.Files)
-	content, err := json.MarshalIndent(m, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode %s: %w", markerFile, err)
-	}
-	return os.WriteFile(filepath.Join(dst, markerFile), append(content, '\n'), 0o644)
+	return m.Save(dst)
 }
 
 // gitCommit 取框架仓当前提交；取不到（无 git / 无提交 / 超时）返回空串，不阻断生成。

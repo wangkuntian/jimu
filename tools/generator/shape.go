@@ -84,7 +84,7 @@ func RenderShape(root, dst string, set CapabilitySet) error {
 	return nil
 }
 
-// renderShape 是 generateInto 里的落点包装。
+// renderShape 是 renderDerivedAll 里的落点包装。
 func renderShape(root, dst string, set CapabilitySet) error {
 	return RenderShape(root, dst, set)
 }

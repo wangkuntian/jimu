@@ -7,11 +7,31 @@ import (
 	"slices"
 	"testing"
 
+	"jimu/internal/profiles/registry"
 	"jimu/tools/internal/profileassets"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestAssetsForProfilesMatchesProfileassetsOracle 是 AssetsFor 的**独立对照**（Fix round 1 / Minor ③）：
+// 对 5 个形态，AssetsFor(set) 必须逐路径等于 profileassets.ForProfile(profile) —— 后者的能力集来自
+// registry 的形态清单（另一条来源），不是从 CapabilitySet.Declared 反推。下面那条
+// TestAssetsForMatchesTheAssetTableTheGeneratedProjectDerives 的 want 与实现同源，单靠它会漏掉
+// 「--profile 分支与声明集派生分叉」这类偏差；本测试补上这层独立网。
+func TestAssetsForProfilesMatchesProfileassetsOracle(t *testing.T) {
+	for _, profile := range registry.Names() {
+		t.Run(profile, func(t *testing.T) {
+			set, err := ParseCapabilitySet(profile, "", "")
+			require.NoError(t, err)
+			got, err := AssetsFor(set)
+			require.NoError(t, err)
+			want, err := profileassets.ForProfile(profile)
+			require.NoError(t, err)
+			assert.Equal(t, want, got, "AssetsFor(%s) 必须与形态清单的独立派生一致", profile)
+		})
+	}
+}
 
 // TestAssetsForMinimalIncludesCoreGroupsButNotOpenapi 钉住 S6②/设计 §3.8：内核资产组
 // （ops/observability）全形态携带，docs/openapi 只在含 apidocs 的选择里出现。

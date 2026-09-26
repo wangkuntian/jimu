@@ -84,7 +84,7 @@ func RenderCatalog(set CapabilitySet) (map[string][]byte, error) {
 	return out, nil
 }
 
-// renderCatalog 是 generateInto 里的落点包装（与 renderShape 同形）：RenderCatalog 的产物写进
+// renderCatalog 是 renderDerivedAll 里的落点包装（与 renderShape 同形）：RenderCatalog 的产物写进
 // 生成目录。接入点收敛在此一处，new.go 不再直接拼装/写盘。
 func renderCatalog(dst string, set CapabilitySet) error {
 	files, err := RenderCatalog(set)

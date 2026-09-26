@@ -243,11 +243,11 @@ func TestParseCapabilitySetClosureDoesNotDragMigrationOnlyIntoCode(t *testing.T)
 }
 
 // readMarkerForTest 读生成项目的 .jimu-generated。
-func readMarkerForTest(t *testing.T, dir string) marker {
+func readMarkerForTest(t *testing.T, dir string) Marker {
 	t.Helper()
 	content, err := os.ReadFile(filepath.Join(dir, markerFile))
 	require.NoError(t, err)
-	var m marker
+	var m Marker
 	require.NoError(t, json.Unmarshal(content, &m))
 	return m
 }

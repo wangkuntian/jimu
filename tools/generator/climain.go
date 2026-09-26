@@ -18,7 +18,7 @@ import (
 //
 //	① 去掉 tools/generator import 与 module create 命令（脚手架是框架仓的职责，
 //	   生成项目不含 tools/generator）；
-//	② 去掉框架脚手架命令 new 的注册；
+//	② 去掉框架脚手架命令（new / capability add）的注册；
 //	③ 按选中能力注入 capabilities/<cap>/cli 的 import 与命令注册（P2.6 接缝）。
 const cliMainRel = "cmd/cli/main.go"
 
@@ -215,10 +215,11 @@ func declaresVar(gen *ast.GenDecl, name string) bool {
 }
 
 // cliInitStmtDropped 判定 init() 里的哪条语句属于「框架脚手架」而必须从生成项目里去掉：
-// 引用 moduleCmd/moduleCreateCmd/newCmd 的注册，以及形如 `<x>cli.Commands()` 的能力命令注册
+// 引用 moduleCmd/moduleCreateCmd/newCmd/capabilityCmd 的注册（capability add 依赖 tools/generator，
+// 生成项目不含该工具树，见 kernelExcludes），以及形如 `<x>cli.Commands()` 的能力命令注册
 // （后者由选中集重新注入）。
 func cliInitStmtDropped(stmt ast.Stmt) bool {
-	if stmtReferencesAny(stmt, "moduleCmd", "moduleCreateCmd", "newCmd") {
+	if stmtReferencesAny(stmt, "moduleCmd", "moduleCreateCmd", "newCmd", "capabilityCmd") {
 		return true
 	}
 	dropped := false

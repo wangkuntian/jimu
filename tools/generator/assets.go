@@ -23,14 +23,15 @@ import (
 // AssetsFor 返回要复制到生成项目的资产路径（目录或单文件，仓库相对路径，升序去重）。
 // 与 P2.6 的归属派生**同一来源**（tools/internal/profileassets）：
 //
-//	--profile：profileassets.ForProfile(name)（= 该形态能力 Assets 并集 ∪ 全部内核资产组）；
-//	--with   ：profileassets.Declared() 里 cap:<选中能力> 的路径并集 ∪ profileassets.CoreGroups()。
+//	声明集里每个能力的 Assets 并集 ∪ 全部内核资产组（P2.6 裁定 3：内核运维/观测资产全形态携带）。
+//
+// **口径是「声明集」，不是「形态」**：`--profile` 的清单在生成时已经展开进 set.Declared，故
+// 形态生成与 `--with` 生成逐路径等价（TestAssetsForMatchesTheAssetTableTheGeneratedProjectDerives
+// 钉住这一点）；而 `jimu capability add` 之后项目不再是任何形态，资产必须随声明集走 ——
+// 否则新增能力（如 apidocs → docs/openapi）的资产不会被复制，生成项目第 5 条门禁会失真。
 //
 // 非 apidocs 形态不含 docs/openapi —— 这一步就是设计 §3.8「未选中资产不出现」的实际落点。
 func AssetsFor(set CapabilitySet) ([]string, error) {
-	if set.Profile != "" {
-		return profileassets.ForProfile(set.Profile)
-	}
 	known := make(map[string]bool, len(set.Known))
 	for _, name := range set.Known {
 		known[name] = true
