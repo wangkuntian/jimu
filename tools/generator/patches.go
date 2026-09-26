@@ -43,10 +43,6 @@ const modulePlaceholder = "{{module}}"
 //	                  profiles-check 的 packages.Load 直接失败（这是审查实测的必改点之一）。
 //	composereport 口径文案 —— 报告表格/说明写死「各形态（profile）」与框架 module path 示例，
 //	                  单形态项目里不成立。
-//	assets.go 资产段 —— 资产的复制（deploy/** 与 docs/openapi）在生成链路的**后续任务**落地：
-//	                  在此之前生成项目没有资产根，「声明的资产路径必须存在」会必然红。补丁只
-//	                  容忍「资产根整棵缺席」（此时无任何资产文件即无未声明资产），根存在而声明
-//	                  路径缺席仍 fail-closed —— 那是复制/声明漂移。资产落地后本补丁自然失效。
 //
 // 命中失败即报错（fail-closed：文案改了却没人同步补丁，好过静默跳过）。
 var filePatches = map[string][][2]string{
@@ -87,25 +83,6 @@ var filePatches = map[string][][2]string{
 		// jimu/... 的选点文件，checkcapabilities / profiles-check 的 packages.Load 直接失败。
 		{`"jimu/internal/assembly"`, `"{{module}}/internal/assembly"`},
 		{`"jimu/internal/profiles/%s"`, `"{{module}}/internal/profiles/%s"`},
-	},
-	"tools/checkcapabilities/assets.go": {
-		{
-			`			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(p))); err != nil {
-				return fmt.Errorf("asset path %q declared by %q is missing: %w", p, owner, err)
-			}`,
-			`			// （单形态生成项目补丁）资产复制在生成链路的后续任务落地：资产**根整棵缺席**时
-			// 其声明路径不可能存在，跳过存在性断言（无资产文件即无未声明资产；归属断言不受
-			// 影响）。资产根存在而声明路径缺席仍 fail-closed —— 那才是复制/声明漂移。
-			if _, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(p))); statErr != nil {
-				rootPath, _, hasRoot := strings.Cut(p, "/")
-				if !hasRoot {
-					return fmt.Errorf("asset path %q declared by %q is missing: %w", p, owner, statErr)
-				}
-				if _, rootErr := os.Stat(filepath.Join(root, filepath.FromSlash(rootPath))); rootErr == nil {
-					return fmt.Errorf("asset path %q declared by %q is missing: %w", p, owner, statErr)
-				}
-			}`,
-		},
 	},
 }
 

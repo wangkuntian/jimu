@@ -13,7 +13,8 @@ import (
 //	check_profiles.sh   只覆盖本项目唯一形态（PROFILES=(<shape>) + 该形态的闭包 golden）。
 //
 // 「无 apidocs 时不要 swagger/swagger-check」与「Dockerfile 不带 docs/openapi」是设计 §3.8
-// 「未选中资产不出现」在构建文件上的落点；判定与 RenderDocs 同一口径（set.Copy 含 apidocs）。
+// 「未选中资产不出现」在构建文件上的落点；判定与 assets.go 的资产派生同一口径（含 apidocs 时
+// docs/openapi 才是本次复制集里的一员）。
 
 // buildData 是三份构建文件模板的数据。
 type buildData struct {

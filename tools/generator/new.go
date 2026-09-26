@@ -149,9 +149,6 @@ func generateInto(root, dst string, set CapabilitySet, module string, opts NewOp
 	if err := RenderConfigs(root, dst, set); err != nil {
 		return err
 	}
-	if err := RenderDocs(root, dst, set); err != nil {
-		return err
-	}
 	if err := RenderCLIMain(root, dst, set); err != nil {
 		return err
 	}
@@ -167,6 +164,28 @@ func generateInto(root, dst string, set CapabilitySet, module string, opts NewOp
 	if _, err := RewriteModule(dst, frameworkModule, module); err != nil {
 		return moduleError(module, err)
 	}
+	// T6：资产复制（deploy/** + docs/openapi 中选中能力与内核资产组实际拥有的部分）+ values.yaml
+	// 顶层键裁剪（S6②，复用 T4 的 ValuesSections/RenderValuesYAML）。
+	//
+	// 位置有两个硬约束：
+	//   - 必须在 RewriteModule **之后**：资产里的 jimu 名字是**框架自己的名字**（第 1 节裁定 3：
+	//     deploy/backup/Dockerfile 的 /opt/jimu/scripts/、k8s 的 jimu-server/namespace jimu、
+	//     镜像名），而字面量重写规则里有 `jimu/` → `<module>/`，先复制会把 /opt/jimu/scripts/
+	//     改成 /opt/<module>/scripts/，产出一个容器内不存在的路径。资产一律逐字节复制
+	//     （唯一例外是 values.yaml 的键裁剪）。
+	//   - 必须在 pruneUnsatisfiableTests **之前**：apidocs/swagger.go 的生产 import
+	//     `<module>/docs/openapi` 必须能在生成树里解析到，否则会被判成「复制集缺口」而报错
+	//     （docs/openapi 是 apidocs 的编译期依赖）。
+	assets, err := AssetsFor(set)
+	if err != nil {
+		return err
+	}
+	if _, err := CopyAssets(root, dst, assets); err != nil {
+		return err
+	}
+	if err := renderValuesYAML(root, dst, set); err != nil {
+		return err
+	}
 	// Important 4：按「逐文件 import 可满足性」裁剪测试树 —— 生产文件不满足 = 复制集缺口（报错），
 	// 测试文件不满足 = 丢弃并记入 marker。internal/e2e/** 走同一条规则（替代 S3 的手写裁剪表）。
 	discarded, err := pruneUnsatisfiableTests(dst, module)
@@ -176,7 +195,7 @@ func generateInto(root, dst string, set CapabilitySet, module string, opts NewOp
 	if err := formatTree(dst); err != nil {
 		return err
 	}
-	return writeMarker(root, dst, set, module, discarded)
+	return writeMarker(root, dst, set, module, assets, discarded)
 }
 
 // copyToolsAndScripts 把生成项目要用的工具树（copyTools）复制进 dst，并应用 patches.go 的
@@ -694,14 +713,18 @@ func planResult(root string, set CapabilitySet, module string, opts NewOptions) 
 	}
 	res.FileCount += len(shapeFiles(set))
 	res.FileCount += len(catalogFiles())
-	if slices.Contains(set.Copy, "apidocs") {
-		// T6 替换点 RenderDocs 的产物（apidocs 的编译期依赖）；漏计会让 dry-run 不再是上界。
-		count, err := countTree(filepath.Join(root, filepath.FromSlash(docsRelDir)))
-		if err != nil {
-			return nil, err
-		}
-		res.FileCount += count
+	// T6：资产（deploy/** + docs/openapi）。用与 CopyAssets 同一个 assetFiles 口径逐文件计数，
+	// 重叠前缀（deploy/k8s 与 deploy/k8s/openobserve.yaml）不会重复计入。
+	assets, err := AssetsFor(set)
+	if err != nil {
+		return nil, err
 	}
+	res.Assets = assets
+	assetList, err := assetFiles(root, assets)
+	if err != nil {
+		return nil, err
+	}
+	res.FileCount += len(assetList)
 	res.FileCount += len(configFiles())
 	res.FileCount++ // cmd/cli/main.go（渲染）
 	// T5：tools 树（与 copyToolsAndScripts 同一过滤口径，见 countTreeFiltered）与三份构建文件。
@@ -791,7 +814,12 @@ func collectResult(target string, set CapabilitySet, module, root string) (*Resu
 		Capabilities: slices.Clone(set.Copy),
 		Drivers:      flattenDrivers(set.Drivers),
 	}
-	err := filepath.WalkDir(target, func(p string, d fs.DirEntry, err error) error {
+	assets, err := AssetsFor(set)
+	if err != nil {
+		return nil, err
+	}
+	res.Assets = assets
+	err = filepath.WalkDir(target, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -837,9 +865,9 @@ func lineCount(text string) int {
 }
 
 // writeMarker 写 .jimu-generated（S7/S8 + Minor 10）：--force 的识别依据、capability add 与
-// T8 report 的输入。`files` 是本次落地文件的完整清单（排序），`assets` 是复制资产路径
-// （T6 前为空数组，但字段必须存在），`discardedTests` 是被裁剪掉的测试文件。
-func writeMarker(root, dst string, set CapabilitySet, module string, discarded []string) error {
+// T8 report 的输入。`files` 是本次落地文件的完整清单（排序），`assets` 是本次复制的资产路径
+// （AssetsFor 的前缀口径：`deploy/helm`、`docs/openapi`…），`discardedTests` 是被裁剪掉的测试文件。
+func writeMarker(root, dst string, set CapabilitySet, module string, assets, discarded []string) error {
 	m := marker{
 		Generator:      "jimu new",
 		Version:        generatorVersion,
@@ -851,9 +879,12 @@ func writeMarker(root, dst string, set CapabilitySet, module string, discarded [
 		Capabilities:   slices.Clone(set.Declared),
 		DomainOnly:     append([]string{}, set.DomainOnly...),
 		Drivers:        set.Drivers,
-		Assets:         []string{},
+		Assets:         assets,
 		Files:          []string{},
 		DiscardedTests: append([]string{}, discarded...),
+	}
+	if m.Assets == nil {
+		m.Assets = []string{}
 	}
 	if m.Drivers == nil {
 		m.Drivers = map[string][]string{}

@@ -224,7 +224,18 @@ func TestMarkerRecordsFilesAndDiscardedTests(t *testing.T) {
 	for _, rel := range m.Files {
 		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)))
 	}
-	assert.Empty(t, m.Assets, "T6 前 assets 为空数组")
+	// T6：assets 是本次复制的资产路径（AssetsFor 的前缀口径）——minimal = 全部内核资产组路径，
+	// 不含 docs/openapi（docs/openapi 只在含 apidocs 的选择里）。
+	set, err := ParseCapabilitySet("minimal", "", "")
+	require.NoError(t, err)
+	wantAssets, err := AssetsFor(set)
+	require.NoError(t, err)
+	assert.Equal(t, wantAssets, m.Assets, "marker.assets 必须与 AssetsFor 同源")
+	for _, rel := range m.Assets {
+		_, serr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
+		assert.NoError(t, serr, "资产路径 %s 必须真的落地", rel)
+	}
+	assert.NotContains(t, m.Assets, "docs/openapi")
 }
 
 // TestParseCapabilitySetAcceptsUngatedCapabilities Important 3：`--with` 用框架全量集合解析，

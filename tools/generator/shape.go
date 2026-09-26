@@ -88,22 +88,3 @@ func RenderShape(root, dst string, set CapabilitySet) error {
 func renderShape(root, dst string, set CapabilitySet) error {
 	return RenderShape(root, dst, set)
 }
-
-// docsRelDir 是 apidocs 的编译期依赖目录（apidocs/swagger.go 里 `_ "jimu/docs/openapi"`）。
-const docsRelDir = "docs/openapi"
-
-// RenderDocs 渲染生成项目的 docs/openapi（apidocs 的**编译期**依赖：apidocs/swagger.go 里
-// `_ "jimu/docs/openapi"` 是硬 import，缺了 apidocs 一选就编译不过）。
-//
-// NOTE: T6 将替换本渲染器 —— 资产（deploy/** 与 docs/openapi）的完整口径归 T6；这里是
-// 「apidocs 选中则携带 docs/openapi」的最小落地，请**替换**而非叠加。
-func RenderDocs(root, dst string, set CapabilitySet) error {
-	if !slices.Contains(set.Copy, "apidocs") {
-		return nil
-	}
-	if _, _, err := CopyTree(filepath.Join(root, filepath.FromSlash(docsRelDir)),
-		filepath.Join(dst, filepath.FromSlash(docsRelDir)), nil); err != nil {
-		return fmt.Errorf("copy docs/openapi: %w", err)
-	}
-	return nil
-}
