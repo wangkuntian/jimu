@@ -44,7 +44,7 @@ func TestRenderCLIMainTrimsScaffoldingAndFollowsSelection(t *testing.T) {
 			tc.opts.Dir = dir
 			tc.opts.Module = "example.com/proj"
 			tc.opts.NoTidy = true
-			_, err := NewProject(tc.opts)
+			_, err := newProjectForTest(t, tc.opts)
 			require.NoError(t, err)
 
 			imports, commands := parseCLIMain(t, filepath.Join(dir, "cmd/cli/main.go"))
@@ -72,7 +72,7 @@ func TestRenderCLIMainTrimsScaffoldingAndFollowsSelection(t *testing.T) {
 // migrate/seed/config/version 的变量声明与 init 注册都还在（否则生成项目只有空壳 CLI）。
 func TestRenderCLIMainKeepsMigrationAndSeedCommands(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := NewProject(NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 	content, err := os.ReadFile(filepath.Join(dir, "cmd/cli/main.go"))
 	require.NoError(t, err)

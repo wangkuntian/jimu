@@ -13,7 +13,7 @@ import (
 
 func TestNewProjectWritesNothingOnDryRun(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := NewProject(NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", DryRun: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", DryRun: true})
 	require.NoError(t, err)
 	_, statErr := os.Stat(dir)
 	assert.True(t, os.IsNotExist(statErr))
@@ -24,7 +24,7 @@ func TestNewProjectLeavesNoPartialTreeOnFailure(t *testing.T) {
 	// 目标目录已存在且非空 → 报错，且不得留下 proj.tmp-* 残留。
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "keep.txt"), []byte("x"), 0o644))
-	_, err := NewProject(NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
 	require.ErrorContains(t, err, "not empty")
 	entries, rerr := os.ReadDir(filepath.Dir(dir))
 	require.NoError(t, rerr)
@@ -36,7 +36,7 @@ func TestNewProjectLeavesNoPartialTreeOnFailure(t *testing.T) {
 func TestNewProjectForceOnlyOverwritesGeneratorProducts(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
-	_, err := NewProject(NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", Force: true, NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", Force: true, NoTidy: true})
 	// 无 .jimu-generated 标记 → 不是生成器产物，--force 不生效。
 	require.ErrorContains(t, err, ".jimu-generated")
 }
@@ -46,7 +46,7 @@ func TestNewProjectForceOnlyOverwritesGeneratorProducts(t *testing.T) {
 // migrations/ + 生成的 module.go、module 前缀已重写。
 func TestNewProjectCopiesKernelAndSelectedCapabilities(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	res, err := NewProject(NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
+	res, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 	require.Equal(t, "example.com/proj", res.Module)
 	assert.Positive(t, res.FileCount)
@@ -110,7 +110,7 @@ func TestNewProjectCopiesKernelAndSelectedCapabilities(t *testing.T) {
 // 否则生成项目的 check-capabilities 断言①（声明的驱动目录必须存在）必红。
 func TestNewProjectWithSelectsFirstDriverAndFiltersDirectories(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := NewProject(NewOptions{Dir: dir, With: "queue", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, With: "queue", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 	assert.FileExists(t, filepath.Join(dir, "internal/capabilities/queue/redis/redis_queue.go"))
 	for _, drv := range []string{"kafka", "rabbitmq"} {
@@ -129,12 +129,12 @@ func TestNewProjectWithSelectsFirstDriverAndFiltersDirectories(t *testing.T) {
 // TestNewProjectForceOverwritesMarkedProduct 覆盖 --force 的正路径：带标记的目录被整体替换。
 func TestNewProjectForceOverwritesMarkedProduct(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := NewProject(NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 	stale := filepath.Join(dir, "stale.txt")
 	require.NoError(t, os.WriteFile(stale, []byte("old"), 0o644))
 
-	_, err = NewProject(NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", Force: true, NoTidy: true})
+	_, err = newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", Force: true, NoTidy: true})
 	require.NoError(t, err)
 	_, statErr := os.Stat(stale)
 	assert.True(t, os.IsNotExist(statErr), "--force 必须整体替换旧产物")
@@ -162,7 +162,7 @@ func TestNewProjectDryRunCountMatchesRealTree(t *testing.T) {
 		{"with queue（只带 domain 的内核依赖）", NewOptions{With: "queue"}},
 		{"with user,access（schema 依赖 tenant）", NewOptions{With: "user,access"}},
 		{"profile minimal", NewOptions{Profile: "minimal"}},
-		// apidocs/full 会额外携带 docs/openapi（RenderDocs）：曾被 dry-run 漏计，使 planned < real。
+		// apidocs/full 会额外携带 docs/openapi（T6 的资产复制）：曾被 dry-run 漏计，使 planned < real。
 		{"with apidocs", NewOptions{With: "apidocs"}},
 		{"profile full", NewOptions{Profile: "full"}},
 	}
@@ -175,14 +175,14 @@ func TestNewProjectDryRunCountMatchesRealTree(t *testing.T) {
 			opts.Module = "example.com/proj"
 			opts.NoTidy = true
 			opts.DryRun = true
-			planned, err := NewProject(opts)
+			planned, err := newProjectForTest(t, opts)
 			require.NoError(t, err)
 			_, statErr := os.Stat(dry)
 			require.True(t, os.IsNotExist(statErr), "--dry-run 不得落盘")
 
 			opts.DryRun = false
 			opts.Dir = filepath.Join(base, "real")
-			real, err := NewProject(opts)
+			real, err := newProjectForTest(t, opts)
 			require.NoError(t, err)
 			marker := readMarkerForTest(t, opts.Dir)
 			assert.Equal(t, real.FileCount+len(marker.DiscardedTests), planned.FileCount,
@@ -223,9 +223,9 @@ func TestSwapIntoPlaceRestoresTargetOnRenameFailure(t *testing.T) {
 // TestNewProjectRejectsCollidingModule 把 RewriteModule 的 fail-closed 转成面向用户的 --module 提示。
 func TestNewProjectRejectsCollidingModule(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := NewProject(NewOptions{Dir: dir, Profile: "minimal", Module: "github.com/foo/jimu", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "github.com/foo/jimu", NoTidy: true})
 	require.ErrorContains(t, err, "--module")
-	_, err = NewProject(NewOptions{Dir: dir, Profile: "minimal", Module: "github.com/foo/jimu/v2", NoTidy: true})
+	_, err = newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "github.com/foo/jimu/v2", NoTidy: true})
 	require.ErrorContains(t, err, "--module")
 	_, statErr := os.Stat(dir)
 	assert.True(t, os.IsNotExist(statErr), "参数校验失败时不得留下产物")

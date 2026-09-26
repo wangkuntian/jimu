@@ -68,6 +68,7 @@ help:
 	@echo "  make lint                 静态检查"
 	@echo "  make check-log-usage      检查日志调用均为 *w 系列（防 k/v 粘连）"
 	@echo "  make check-capabilities   校验能力自描述（Owns）与驱动可用集/选中集一致"
+	@echo "  make check-templates      模板漂移门禁：用生成器生成最小项目并真构建 + 跑生成项目的 check-capabilities"
 	@echo "  make profiles-check       构建 5 个形态（overlay 叠加 cmd/server）+ golden 依赖闭包门禁"
 	@echo "                            （JIMU_PROFILES_SMOKE=1 时额外启动并检查 /readyz）"
 	@echo "  make compose-report       生成各形态（overlay 叠加 cmd/server）的编译面报告 docs/profiles/compose-report.md"
@@ -290,6 +291,13 @@ check-log-usage:
 ##                      当前未接入 make ci/release-check，收口见 P2.8。
 check-capabilities:
 	@go run ./tools/checkcapabilities
+
+## check-templates: 模板漂移门禁 —— 用生成器在临时目录生成最小项目并构建 + 跑生成项目的
+##                   check-capabilities（5 条 ✅）。它把「模板/复制口径 vs 真实框架结构」的漂移
+##                   变成一次可复现的构建；默认 --no-tidy（生成器复制的 go.mod/go.sum 已含全部
+##                   依赖，模块缓存在 CI 上预热）。未接入 make ci/release-check，收口见 P2.8。
+check-templates:
+	go test ./tools/generator/ -run TestTemplatesDrift -count=1 -timeout 30m
 
 ## profiles-check: 构建 5 个形态（overlay 叠加 cmd/server）+ golden 依赖闭包门禁；
 ##                  构建或门禁失败即非零退出。

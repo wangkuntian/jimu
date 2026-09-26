@@ -24,6 +24,7 @@ type CapabilitySet struct {
 	Declared      []string            // 选定集（含 Ungated 非 catalog 条目；catalog 拓扑序 + Ungated 追加）
 	Known         []string            // 软依赖错别字检查的全量能力名（catalog 18 ∪ Ungated 7，Minor 6/S5）
 	Copy          []string            // 实际复制的能力根包目录（S1：声明集 ∪ 编译闭包 ∪ schema 依赖闭包）
+	Roots         []string            // 出货二进制的「能力根包」import 闭包（golden 口径，见 CapabilityRoots）
 	MigrationOnly []string            // 只为 schema 依赖而复制的能力（S2：只带 migrations + domain + 生成的 module.go）
 	DomainOnly    []string            // 只为核心编译期依赖而复制的能力（裁定④：只带 domain/）
 	Drivers       map[string][]string // 能力名 → 选中驱动（S2/S4）
@@ -257,10 +258,11 @@ func CapabilityRoots(root string, set CapabilitySet) (CapabilitySet, error) {
 		known[d.Name] = true
 	}
 	set.Known = knownCapabilityNames(descs)
-	closure, err := capabilityClosure(root, set.Declared, requires, known)
+	closure, roots, err := capabilityClosure(root, set.Declared, requires, known)
 	if err != nil {
 		return CapabilitySet{}, err
 	}
+	set.Roots = roots
 	declared := map[string]bool{}
 	for _, name := range set.Declared {
 		if declared[name] {
@@ -394,9 +396,19 @@ func knownCapabilityNames(descs []contract.Descriptor) []string {
 //
 // 之后再对结果传递地补 `Requires`：完整复制的成员必须带上它的硬依赖（auth → user、access），
 // 否则只剩 root 包而缺子包/依赖，`go build` 失败（--with=breach 就是这样坏的）。
-func capabilityClosure(root string, declared []string, requires map[string][]string, known map[string]bool) ([]string, error) {
+//
+// 返回两个集合（T8 拆分，裁定 17）：
+//
+//	closure：**复制集**口径（属主映射 + Requires 传递补齐）—— 决定哪些能力目录要落盘；
+//	roots：  **出货二进制**口径 —— 只统计 import 路径恰为 `capabilities/<cap>` 的**根包**
+//	         （不含子包，与 scripts/check_profiles.sh 的 cap_roots 逐值同口径），**不做**
+//	         Requires 传递补齐。它才是 check_profiles.sh golden 的真值：硬依赖只保证目录被复制、
+//	         装配可用，**不保证被 import** —— 如 `--with=mfa` 的 `auth → access`，access 在复制集里
+//	         但出货二进制里没有它的根包（T8 的独立 oracle 发现：golden 曾多写一个 access，
+//	         生成项目自己的 `make profiles-check` 会红）。
+func capabilityClosure(root string, declared []string, requires map[string][]string, known map[string]bool) (closure, roots []string, err error) {
 	if len(declared) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	dir := filepath.Join(absPath(root), filepath.FromSlash(capabilityDirPrefix))
 	cfg := &packages.Config{
@@ -414,15 +426,16 @@ func capabilityClosure(root string, declared []string, requires map[string][]str
 	}
 	pkgs, err := packages.Load(cfg, patterns...)
 	if err != nil {
-		return nil, fmt.Errorf("load capability import graph under %s: %w", filepath.ToSlash(dir), err)
+		return nil, nil, fmt.Errorf("load capability import graph under %s: %w", filepath.ToSlash(dir), err)
 	}
 	if len(pkgs) == 0 {
-		return nil, fmt.Errorf("no packages matched any capability root package under %s", filepath.ToSlash(dir))
+		return nil, nil, fmt.Errorf("no packages matched any capability root package under %s", filepath.ToSlash(dir))
 	}
 	// 判据用 **import 路径**前缀（jimu/internal/capabilities/<cap>），不是文件系统路径：
 	// packages.Package.PkgPath 是 import 路径。
 	prefix := frameworkModule + "/" + capabilityDirPrefix + "/"
 	found := map[string]bool{}
+	rootSet := map[string]bool{}
 	var loadErrs []string
 	packages.Visit(pkgs, nil, func(p *packages.Package) {
 		for _, e := range p.Errors {
@@ -437,12 +450,16 @@ func capabilityClosure(root string, declared []string, requires map[string][]str
 			// domain 叶子包不是「该能力参与装配」的证据：它由裁定④/S2 决定只带 domain/。
 			return
 		}
-		if known[name] {
-			found[name] = true
+		if !known[name] {
+			return
+		}
+		found[name] = true
+		if !hasSub {
+			rootSet[name] = true // 根包 = 出货二进制口径（cap_roots）
 		}
 	})
 	if len(loadErrs) > 0 {
-		return nil, fmt.Errorf("load capability import graph: %s", strings.Join(loadErrs, "; "))
+		return nil, nil, fmt.Errorf("load capability import graph: %s", strings.Join(loadErrs, "; "))
 	}
 	// 传递补齐硬依赖：完整复制的成员必须带上它的 Requires（auth → user、access）。C1。
 	for changed := true; changed; {
@@ -461,7 +478,7 @@ func capabilityClosure(root string, declared []string, requires map[string][]str
 		out = append(out, name)
 	}
 	slices.Sort(out)
-	return out, nil
+	return out, slices.Sorted(maps.Keys(rootSet)), nil
 }
 
 // FrameworkRoot 是 frameworkRoot 的导出形式：供测试与后续任务（`jimu capability add`、

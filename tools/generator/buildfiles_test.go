@@ -1,11 +1,15 @@
 package generator
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
+
+	"jimu/internal/profiles/registry"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -130,6 +134,7 @@ func TestCopyToolsCoversEveryBlueprintTree(t *testing.T) {
 		"tools/internal/profileoverlay",
 		"tools/internal/profileassets",
 		"tools/internal/heavydeps",
+		"tools/internal/projectmetrics",
 		"tools/profileoverlay",
 		"tools/profileassets",
 		"tools/checkcapabilities",
@@ -150,7 +155,7 @@ func TestCopyToolsCoversEveryBlueprintTree(t *testing.T) {
 // 都在生成项目里，且 modulePath 定点改写已生效、框架侧 tools 测试未被复制。
 func TestNewProjectCopiesToolsAndRendersBuildFiles(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := NewProject(NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 
 	for _, rel := range []string{
@@ -218,9 +223,12 @@ func TestToolCopyFilterDropsFrameworkTestsOnly(t *testing.T) {
 }
 
 // TestBuildFilesRenderForEveryCapabilitySelection 是「每个选择都能渲染出单形态构建文件」的
-// 廉价系统网（不构建）：golden 必须等于该选择的编译闭包，且不得混入迁移携带 / 只带 domain 的能力
+// 廉价系统网（不构建）：单形态脚本只覆盖一个形态，golden 不得混入迁移携带 / 只带 domain 的能力
 // —— 它们要么只进 catalog/CLI，要么只贡献 domain 子包，都不该出现在出货二进制的根包闭包里。
-// 新增 MigrationSchemaDeps 边或改闭包算法时，这条会先于 25 次真实构建指出问题。
+//
+// 这里**不再**用 expectedRoots 自证 golden —— 期望值与被测值同源时，闭包算法坏了也不会红
+// （裁定 17）。逐 selection「golden == 生成项目 cmd/server 的真实闭包」由
+// TestCheckProfilesGoldenMatchesTheGeneratedClosure 用独立 oracle（go list -deps）钉住。
 func TestBuildFilesRenderForEveryCapabilitySelection(t *testing.T) {
 	for _, name := range allCapabilityNames(t) {
 		t.Run(name, func(t *testing.T) {
@@ -230,9 +238,10 @@ func TestBuildFilesRenderForEveryCapabilitySelection(t *testing.T) {
 			require.NoError(t, err)
 			src := string(scripts)
 			assert.Contains(t, src, "PROFILES=(app)")
-			assert.Contains(t, src, `EXPECTED_app="`+strings.Join(expectedRoots(set), " ")+`"`)
+			golden := goldenExpected(t, src, "app")
+			assert.NotEmpty(t, golden)
 			for _, only := range append(append([]string{}, set.MigrationOnly...), set.DomainOnly...) {
-				assert.NotContains(t, expectedRoots(set), only,
+				assert.NotContains(t, golden, only,
 					"%s 只随迁移/domain 携带，不得进出货二进制的根包闭包", only)
 			}
 			// apidocs 是唯一带 swagger 的选择（未经 profile 也可选，Important 3）。
@@ -248,4 +257,92 @@ func TestBuildFilesRenderForEveryCapabilitySelection(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCheckProfilesGoldenMatchesTheGeneratedClosure 是裁定 17 的**独立 oracle**：单形态脚本的
+// golden（`EXPECTED_<shape>`）必须等于生成项目出货二进制（./cmd/server）**真实** import 闭包里的
+// 能力**根包**集合 —— 用 `go list -deps` 按 check_profiles.sh 的 cap_roots 同口径独立求出，
+// 不再从被测函数里取期望值。
+//
+// 覆盖 25 个 `--with=<cap>` 选择 + 5 个 `--profile=<name>` 形态（生成项目的形态名即 profile 名）。
+// 成本 = 每个选择一次项目复制 + 一次 go list（不链接、不产二进制），因此不必 25 次真实构建。
+//
+// 这条网在 T8 抓到了真实缺陷：`--with=mfa`/`--with=breach` 的 golden 曾多写 `access`（复制集里
+// 有它，出货二进制里没有），生成项目自己的 `make profiles-check` 会红。
+func TestCheckProfilesGoldenMatchesTheGeneratedClosure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("30 次 go list 需要完整工具链；-short 下跳过")
+	}
+	cache := newTestGoCache(t)
+	type tc struct {
+		name  string
+		shape string
+		opts  NewOptions
+	}
+	var cases []tc
+	for _, name := range allCapabilityNames(t) {
+		cases = append(cases, tc{name: "with " + name, shape: "app", opts: NewOptions{With: name}})
+	}
+	for _, name := range registry.Names() {
+		cases = append(cases, tc{name: "profile " + name, shape: name, opts: NewOptions{Profile: name}})
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "proj")
+			opts := c.opts
+			opts.Dir = dir
+			opts.Module = "example.com/proj"
+			opts.NoTidy = true
+			_, err := newProjectForTest(t, opts)
+			require.NoError(t, err)
+			scripts, err := os.ReadFile(filepath.Join(dir, "scripts", "check_profiles.sh"))
+			require.NoError(t, err)
+			want := goldenExpected(t, string(scripts), c.shape)
+			require.NotEmpty(t, want, "golden 不得为空")
+			got := capabilityRootsOfGeneratedServer(t, dir, cache)
+			assert.Equal(t, want, got, "golden 必须等于生成项目 cmd/server 的真实闭包")
+		})
+	}
+}
+
+// TestProfileGoldensMatchTheRepoCheckProfilesScript 交叉网：生成器为 5 个形态算出的 golden 必须与
+// 本仓 scripts/check_profiles.sh 的手写 EXPECTED_<profile> 逐值一致 —— 两处漂移会让「本仓门禁」
+// 与「生成项目的门禁」对同一形态给出不同结论。
+func TestProfileGoldensMatchTheRepoCheckProfilesScript(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join(FrameworkRoot(), "scripts", "check_profiles.sh"))
+	require.NoError(t, err)
+	for _, name := range registry.Names() {
+		set, err := ParseCapabilitySet(name, "", "")
+		require.NoError(t, err)
+		assert.Equal(t, goldenExpected(t, string(src), name), expectedRoots(set),
+			"形态 %s 的 golden 与本仓 EXPECTED_%s 漂移", name, name)
+	}
+}
+
+// goldenExpected 从 check_profiles.sh 里读出 `EXPECTED_<shape>="a b c"` 的值（空格分隔）。
+func goldenExpected(t *testing.T, src, shape string) []string {
+	t.Helper()
+	re := regexp.MustCompile(`(?m)^EXPECTED_` + regexp.QuoteMeta(shape) + `="([^"]*)"$`)
+	m := re.FindStringSubmatch(src)
+	require.NotNil(t, m, "check_profiles.sh 里必须有 EXPECTED_%s", shape)
+	return strings.Fields(m[1])
+}
+
+// capabilityRootsOfGeneratedServer 在生成项目里跑 `go list -deps ./cmd/server`，把 import 路径
+// 映射回能力**根包**（`<module>/internal/capabilities/<cap>`，与脚本的 cap_roots 同口径：
+// 子包不计），返回排序去重的能力名。
+func capabilityRootsOfGeneratedServer(t *testing.T, dir, cache string) []string {
+	t.Helper()
+	out, err := runGoInProjectOutput(t, dir, cache, "list", "-deps", "./cmd/server")
+	require.NoError(t, err, "go list -deps ./cmd/server 失败:\n%s", out)
+	prefix := "example.com/proj/internal/capabilities/"
+	found := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		name, ok := strings.CutPrefix(strings.TrimSpace(line), prefix)
+		if !ok || strings.Contains(name, "/") {
+			continue // 只认根包（cap_roots 的 sed 口径）
+		}
+		found[name] = true
+	}
+	return slices.Sorted(maps.Keys(found))
 }

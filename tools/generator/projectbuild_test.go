@@ -24,6 +24,18 @@ import (
 //     里的 proto 文件名是**必须保留**的（逐字节/与编译进二进制的描述符一致），见
 //     allowedProtoLiteral。
 
+// newProjectForTest 是本仓测试调用 NewProject 的唯一入口：一律跳过 ⑨ 自检（NoSelfCheck）。
+//
+// 动机与上一条约束同源：NewProject 的自检会走**环境里的** GOCACHE，而本包的构建类测试一律用
+// 专用 GOCACHE 自行 build/vet（否则 25 次链接会把共享缓存写爆）。真实的自检路径（默认跑
+// go build + checkcapabilities）由 `jimu new` 的端到端验收与 `make check-templates` 覆盖，
+// 不在这里重复。
+func newProjectForTest(t *testing.T, opts NewOptions) (*Result, error) {
+	t.Helper()
+	opts.NoSelfCheck = true
+	return NewProject(opts)
+}
+
 // newTestGoCache 为当前测试建一个专用 GOCACHE（落在 t.TempDir() 内 → 测试结束由 testing 删除）。
 func newTestGoCache(t *testing.T) string {
 	t.Helper()

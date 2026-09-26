@@ -69,7 +69,7 @@ func TestGeneratedProjectCarriesKernelRequiredDomainsAndBuilds(t *testing.T) {
 			tc.opts.Dir = dir
 			tc.opts.Module = "example.com/proj"
 			tc.opts.NoTidy = true
-			_, err := NewProject(tc.opts)
+			_, err := newProjectForTest(t, tc.opts)
 			require.NoError(t, err)
 
 			for _, capDomain := range kernelRequiredDomains {

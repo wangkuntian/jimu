@@ -107,7 +107,7 @@ func TestNewProjectRejectsReservedShapeWithoutWriting(t *testing.T) {
 	for _, bad := range []string{"registry", "active"} {
 		t.Run(bad, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "proj")
-			_, err := NewProject(NewOptions{Dir: dir, With: "queue", Shape: bad, Module: "example.com/proj", NoTidy: true})
+			_, err := newProjectForTest(t, NewOptions{Dir: dir, With: "queue", Shape: bad, Module: "example.com/proj", NoTidy: true})
 			require.ErrorContains(t, err, "invalid --shape")
 			_, statErr := os.Stat(dir)
 			assert.True(t, os.IsNotExist(statErr), "--shape 非法时不得落盘")

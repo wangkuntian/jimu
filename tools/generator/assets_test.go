@@ -190,7 +190,7 @@ func TestValuesSectionsPrunesUnselectedCapabilityKeys(t *testing.T) {
 // 改成 /opt/<module>/scripts/（容器内不存在的路径）。资产里的 jimu 是框架自己的名字（裁定 3）。
 func TestCopiedAssetsKeepFrameworkNames(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := NewProject(NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 	content, err := os.ReadFile(filepath.Join(dir, "deploy", "backup", "Dockerfile"))
 	require.NoError(t, err)

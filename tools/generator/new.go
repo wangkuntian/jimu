@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"go/ast"
 	"go/format"
 	"go/parser"
 	"go/token"
@@ -12,14 +13,17 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"jimu/internal/capabilities/catalog"
 	"jimu/internal/contract"
+	"jimu/tools/internal/profileassets"
 )
 
 // NewOptions 是 `jimu new` 的全部输入（CLI 与测试共用同一结构，参数校验只在
@@ -31,10 +35,17 @@ type NewOptions struct {
 	Shape   string // --shape：--with 时的形态名，默认 app
 	Module  string // --module：模块路径，默认由 Dir 推导
 
-	NoTidy bool // 跳过 go mod tidy（T8 接入）
+	NoTidy bool // 跳过 go mod tidy（默认跑；--no-tidy 关闭）
 	DryRun bool // 只打印计划，不落盘
 	Force  bool // 只覆盖带 .jimu-generated 标记的既有产物
-	Report bool // 额外写 docs/profiles/generated-report.md（T8 接入）
+	Report bool // 额外写 docs/profiles/generated-report.md
+
+	// NoSelfCheck 跳过 ⑨ 自检（go build ./... + go run ./tools/checkcapabilities）。
+	//
+	// **只给本仓的构建类测试用**：它们在专用 GOCACHE 下自行 build/vet（见 projectbuild_test.go
+	// 的 Fix round 4 —— 25 次链接写爆过共享缓存），不能让 NewProject 的自检再走默认 GOCACHE。
+	// CLI 不暴露该开关：`jimu new` 恒自检。
+	NoSelfCheck bool
 }
 
 // Result 是一次生成的摘要（--dry-run 与 --report 共用）。
@@ -85,12 +96,12 @@ const generatorVersion = "p2.7"
 // NewProject 生成项目。执行顺序与回滚语义见计划第 2 节裁定 7/8：
 //
 //	① 解析能力集 → ② 复制内核必需目录 → ③ 按能力复制（含驱动过滤）
-//	→ ④ 渲染 registry/profiles/<shape>/active（catalog/app.yaml 由 T3/T4 补齐）
-//	→ ⑦ module 受控重写 + gofmt → ⑧ go mod tidy（--no-tidy 关闭）→ ⑨ 自检（T8）
+//	→ ④⑤⑥ 渲染/复制全部产物 → ⑦ module 受控重写 + gofmt（在 renderDerivedAll 内完成）
+//	→ ⑧ go mod tidy（--no-tidy 关闭）→ ⑨ 自检：go build ./... + go run ./tools/checkcapabilities
 //
-// 产物先写 <dir>.tmp-<rand>，成功后原子 rename；任何一步失败都删除临时目录（defer RemoveAll），
-// 绝不留半成品（验收⑤）。--force 时先把既有产物 rename 成 <dir>.old-<rand>，rename 成功后再删，
-// 避免「先删后建」留下空目录窗口。
+// 产物先写 <dir>.tmp-<rand>，⑦⑧⑨ **全在暂存目录里**跑，全部通过后才原子 rename；任何一步失败
+// 都删除临时目录（defer RemoveAll），绝不留半成品（验收⑤）。--force 时先把既有产物 rename 成
+// <dir>.old-<rand>，rename 成功后再删，避免「先删后建」留下空目录窗口。
 func NewProject(opts NewOptions) (*Result, error) {
 	set, err := ParseCapabilitySet(opts.Profile, opts.With, opts.Shape)
 	if err != nil {
@@ -107,10 +118,6 @@ func NewProject(opts NewOptions) (*Result, error) {
 	if err := validateModule(module); err != nil {
 		return nil, err
 	}
-	if opts.Report {
-		// T2 阶段明确报错而不是静默 no-op（报告落点归 T8）。
-		return nil, fmt.Errorf("--report 将在 T8 实现（not implemented yet）")
-	}
 	target := absPath(opts.Dir)
 	if opts.DryRun {
 		return planResult(root, set, module, opts)
@@ -126,6 +133,29 @@ func NewProject(opts NewOptions) (*Result, error) {
 	defer func() { _ = os.RemoveAll(tmp) }() // rename 成功后 tmp 已不存在，幂等
 	if err := renderDerivedAll(root, tmp, set, module); err != nil {
 		return nil, err
+	}
+	if !opts.NoTidy {
+		if err := Tidy(tmp); err != nil {
+			return nil, fmt.Errorf("go mod tidy: %w（用 --no-tidy 跳过）", err)
+		}
+	}
+	if !opts.NoSelfCheck {
+		if err := SelfCheck(tmp); err != nil {
+			return nil, fmt.Errorf("self check: %w", err)
+		}
+	}
+	// --report 也**在暂存目录里**度量并落盘（tidy 之后，报告里的直接依赖数是 tidy 的产物）：
+	// 报告失败（典型场景：cwd 距框架仓 configs/ 超过 5 层，ProbeAssembly 加载不到能力配置段）
+	// 因此发生在原子换上 target **之前**，不会留下「产物已就位、报告却失败」的半成品；报告文件
+	// 本身也随暂存目录原子就位。暂存树与最终树的产物逐字节相同（只有目录名不同），度量不受影响。
+	if opts.Report {
+		metrics, err := Report(tmp)
+		if err != nil {
+			return nil, err
+		}
+		if err := WriteReport(tmp, *metrics, set); err != nil {
+			return nil, err
+		}
 	}
 	if err := swapIntoPlace(target, tmp); err != nil {
 		return nil, err
@@ -202,7 +232,7 @@ func renderDerivedAll(root, dst string, set CapabilitySet, module string) error 
 	}
 	// Important 4：按「逐文件 import 可满足性」裁剪测试树 —— 生产文件不满足 = 复制集缺口（报错），
 	// 测试文件不满足 = 丢弃并记入 marker。internal/e2e/** 走同一条规则（替代 S3 的手写裁剪表）。
-	discarded, err := pruneUnsatisfiableTests(dst, module)
+	discarded, err := pruneUnsatisfiableTests(dst, module, assets)
 	if err != nil {
 		return err
 	}
@@ -260,20 +290,33 @@ func renderBuildFiles(dst string, set CapabilitySet) error {
 	return nil
 }
 
-// pruneUnsatisfiableTests 按「逐文件 import 可满足性」裁剪生成项目的测试树：
+// pruneUnsatisfiableTests 裁剪生成项目的测试树，三类依赖各算一条：
 //
-//	生产文件不满足 → 报错（这是 C1「复制闭包不完整」的捕获网，宁可失败也不产出编译不过的项目）；
-//	测试文件不满足 → **该目录下的测试文件整组丢弃**，并把清单记入 .jimu-generated 的 discardedTests。
+//	import 依赖：测试文件 import 的能力包不在复制集里（未选中能力）；
+//	资产依赖：测试文件读取的资产路径本次没有复制（如未选 apidocs 时的 docs/openapi）——
+//	          它能编译、vet 也过，只是运行期 os.ReadFile 失败；
+//	组成依赖：测试文件读**生成期派生的组成清单** `internal/capabilities/catalog`（`catalog.All()`
+//	          / `Resolve` / `MigrationSet` …）—— 生成项目的 catalog 是**本项目专属子集**，以它为
+//	          期望值的测试断言的是框架全量组成，在裁剪项目里会运行期失败（实测：`--with=queue`
+//	          时 `internal/app/seed_test.go` 的 4 个 TestRunSeed_* 把全量 permissions 序列当成
+//	          期望，sqlmock 期望落空；`internal/kernel/db/*_migration_integration_test.go` 同理）。
 //
-// 为什么是「整组」而不是「逐文件」：同一 package 的 `_test.go` 之间会互相引用（e2e 的
-// helpers_test.go 提供 newTestAppWithDB，被同目录多个测试用），只删 import 不满足的那个文件会
-// 留下「undefined: xxx」——`go vet`/`go test` 仍编译不过。同目录测试整组保留或整组丢弃，
-// 既满足「所有 jimu/... import 都能被满足」，又不依赖符号级分析。
+// 口径是「**逐文件**丢弃 + 同测试包回退」（计划 Task 2 §2 原文即逐文件过滤）：
 //
-// 只删测试、**不扩复制集**：未选中能力不会因为某个测试 import 了它而被拉进生成项目。
-func pruneUnsatisfiableTests(dst, module string) ([]string, error) {
+//	① 逐文件：每个测试文件独立判定，不可满足的**只丢它自己**（不动同目录其它可满足的文件）；
+//	② 包回退：同一**测试包**（`package foo` 与 `package foo_test` 是两个包）里若有文件被丢、
+//	   而某个**保留**文件引用了被丢文件的顶层符号（func/var/const/type），逐文件保留会留下
+//	   `undefined: xxx` —— 此时该测试包**整组**丢弃（这是 internal/e2e 的形态：
+//	   admin_routes_parity_test.go 引用被丢文件里的 newTestAppWithDB）。
+//
+// 生产文件不满足 → 一律报错（这是 C1「复制闭包不完整」的捕获网，宁可失败也不产出编译不过的项目）。
+// 只删测试、**不扩复制集**：未选中能力/未复制资产不会因为某个测试引用它而被拉进生成项目。
+//
+// 回退判据用 AST 顶层声明名 ∩ 保留文件的标识符集合（保守、确定性、不依赖工具链）：同名局部变量
+// 或别的包的导出同名声字面量会**多丢**（安全方向），不会**少丢**（少丢才会产出编译不过的项目）。
+func pruneUnsatisfiableTests(dst, module string, assets []string) ([]string, error) {
 	pkgs := map[string]bool{}
-	testFiles := map[string][]string{} // 目录 → 该目录下的 _test.go
+	var testRels []string
 	err := filepath.WalkDir(dst, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -288,43 +331,97 @@ func pruneUnsatisfiableTests(dst, module string) ([]string, error) {
 			return nil
 		}
 		rel := relPath(dst, p)
-		dir := filepath.ToSlash(filepath.Dir(rel))
 		if strings.HasSuffix(d.Name(), "_test.go") {
-			testFiles[dir] = append(testFiles[dir], rel)
+			testRels = append(testRels, rel)
 			return nil
 		}
-		pkgs[dir] = true
+		pkgs[filepath.ToSlash(filepath.Dir(rel))] = true
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	slices.Sort(testRels)
+
 	prefix := module + "/"
-	var discarded []string
-	for _, dir := range slices.Sorted(maps.Keys(testFiles)) {
-		dropDir := false
-		for _, rel := range testFiles[dir] {
-			missing, err := missingModuleImports(filepath.Join(dst, filepath.FromSlash(rel)), prefix, pkgs)
-			if err != nil {
-				return nil, err
+	absent := missingAssets(assets)
+	deps := make(map[string]testDeps, len(testRels)) // 相对路径 → 依赖画像
+	type groupKey struct{ dir, pkg string }
+	groups := map[groupKey][]string{}
+	for _, rel := range testRels {
+		d, aerr := analyzeTestFile(filepath.Join(dst, filepath.FromSlash(rel)), prefix, pkgs, absent)
+		if aerr != nil {
+			return nil, aerr
+		}
+		deps[rel] = d
+		key := groupKey{dir: filepath.ToSlash(filepath.Dir(rel)), pkg: d.pkg}
+		groups[key] = append(groups[key], rel)
+	}
+
+	drop := map[string]bool{}
+	for _, key := range slices.SortedFunc(maps.Keys(groups), func(a, b groupKey) int {
+		if a.dir != b.dir {
+			return strings.Compare(a.dir, b.dir)
+		}
+		return strings.Compare(a.pkg, b.pkg)
+	}) {
+		files := groups[key]
+		var unsatisfied []string
+		droppedDecls := map[string]bool{}
+		for _, rel := range files {
+			if deps[rel].satisfied() {
+				continue
 			}
-			if len(missing) > 0 {
-				dropDir = true
+			unsatisfied = append(unsatisfied, rel)
+			for name := range deps[rel].decls {
+				droppedDecls[name] = true
+			}
+		}
+		if len(unsatisfied) == 0 {
+			continue
+		}
+		cascade := false
+		for _, rel := range files {
+			if !deps[rel].satisfied() {
+				continue
+			}
+			for name := range deps[rel].refs {
+				if droppedDecls[name] {
+					cascade = true
+					break
+				}
+			}
+			if cascade {
 				break
 			}
 		}
-		if !dropDir {
+		if cascade {
+			for _, rel := range files {
+				drop[rel] = true
+			}
 			continue
 		}
-		for _, rel := range testFiles[dir] {
-			if rerr := os.Remove(filepath.Join(dst, filepath.FromSlash(rel))); rerr != nil {
-				return nil, fmt.Errorf("remove unsatisfiable test %s: %w", rel, rerr)
-			}
-			discarded = append(discarded, rel)
+		for _, rel := range unsatisfied {
+			drop[rel] = true
 		}
 	}
-	// 生产文件的缺口单独再扫一遍（错误要精确到文件，不能被上面的整组逻辑吞掉）。
-	err = filepath.WalkDir(dst, func(p string, d fs.DirEntry, err error) error {
+
+	discarded := make([]string, 0, len(drop))
+	for _, rel := range slices.Sorted(maps.Keys(drop)) {
+		if rerr := os.Remove(filepath.Join(dst, filepath.FromSlash(rel))); rerr != nil {
+			return nil, fmt.Errorf("remove unsatisfiable test %s: %w", rel, rerr)
+		}
+		discarded = append(discarded, rel)
+	}
+	if err := assertNoProductionGap(dst, prefix, pkgs); err != nil {
+		return nil, err
+	}
+	return discarded, nil
+}
+
+// assertNoProductionGap 扫生产文件的 import 缺口（错误要精确到文件，不能被测试裁剪吞掉）。
+func assertNoProductionGap(dst, prefix string, pkgs map[string]bool) error {
+	return filepath.WalkDir(dst, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -337,21 +434,208 @@ func pruneUnsatisfiableTests(dst, module string) ([]string, error) {
 		if !strings.HasSuffix(d.Name(), ".go") || strings.HasSuffix(d.Name(), "_test.go") {
 			return nil
 		}
-		rel := relPath(dst, p)
 		missing, merr := missingModuleImports(p, prefix, pkgs)
 		if merr != nil {
 			return merr
 		}
 		if len(missing) > 0 {
-			return fmt.Errorf("复制集缺口：生产文件 %s import %s，但生成树里没有该包", rel, strings.Join(missing, ", "))
+			return fmt.Errorf("复制集缺口：生产文件 %s import %s，但生成树里没有该包", relPath(dst, p), strings.Join(missing, ", "))
 		}
 		return nil
 	})
+}
+
+// compositionManifestDir 是生成期**派生**的组成清单目录（相对模块根）：生成项目里的
+// `internal/capabilities/catalog` 只含本项目选中的能力，读它的测试把「框架全量组成」当期望值，
+// 属不可移植（见 pruneUnsatisfiableTests 的「组成依赖」）。
+const compositionManifestDir = "internal/capabilities/catalog"
+
+// testDeps 是一个测试文件的静态依赖画像（一次解析得出）：
+//
+//	missingImports：指向本模块但生成树里没有的 import（未选中能力）；
+//	missingAssets： 引用的、本次未复制的资产前缀（如 docs/openapi）；
+//	decls：         顶层声明名（func/var/const/type；方法不算，其接收者类型名已覆盖）；
+//	refs：          文件里出现的全部标识符（同测试包回退判据用）。
+type testDeps struct {
+	pkg            string
+	missingImports []string
+	missingAssets  []string
+	compositionDep bool // 读生成期派生的组成清单（internal/capabilities/catalog）
+	decls          map[string]bool
+	refs           map[string]bool
+}
+
+// satisfied 逐文件可满足性：不带缺失的 import、不引用未复制的资产、也不依赖组成清单的**值**
+// （生成项目的 catalog 是专属子集，读它的测试断言的是框架全量组成）。
+func (d testDeps) satisfied() bool {
+	return len(d.missingImports) == 0 && len(d.missingAssets) == 0 && !d.compositionDep
+}
+
+// analyzeTestFile 解析一次测试文件得到 testDeps（src 传 nil：让 go/parser 从**文件名**读盘）。
+func analyzeTestFile(file, prefix string, pkgs map[string]bool, absent []string) (testDeps, error) {
+	fset := token.NewFileSet()
+	parsed, err := parser.ParseFile(fset, file, nil, parser.SkipObjectResolution)
 	if err != nil {
-		return nil, err
+		return testDeps{}, fmt.Errorf("parse %s: %w", filepathSlash(file), err)
 	}
-	slices.Sort(discarded)
-	return discarded, nil
+	d := testDeps{pkg: parsed.Name.Name, decls: map[string]bool{}, refs: map[string]bool{}}
+	for _, spec := range parsed.Imports {
+		path := strings.Trim(spec.Path.Value, `"`)
+		if path == prefix+compositionManifestDir {
+			d.compositionDep = true
+			continue
+		}
+		rel, ok := strings.CutPrefix(path, prefix)
+		if ok && !pkgs[rel] {
+			d.missingImports = append(d.missingImports, path)
+		}
+	}
+	d.missingAssets = assetRefsOf(parsed, absent)
+	for _, decl := range parsed.Decls {
+		switch v := decl.(type) {
+		case *ast.FuncDecl:
+			if v.Recv == nil {
+				d.decls[v.Name.Name] = true
+			}
+		case *ast.GenDecl:
+			for _, spec := range v.Specs {
+				switch t := spec.(type) {
+				case *ast.ValueSpec:
+					for _, n := range t.Names {
+						recordDecl(d, n.Name)
+					}
+				case *ast.TypeSpec:
+					recordDecl(d, t.Name.Name)
+				}
+			}
+		}
+	}
+	ast.Inspect(parsed, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && id.Name != "_" {
+			d.refs[id.Name] = true
+		}
+		return true
+	})
+	return d, nil
+}
+
+// recordDecl 记录顶层声明名。空标识符 `_` 除外：`var _ T = ...` 之类的声明名是 `_`，而几乎每个
+// 文件都含 `_`（`import _ "x"`、`_ = y`），把它当符号会让回退判据**处处误触发**（T8 Fix round 1
+// 实测：internal/app 的 seed_test.go 因此被连坐丢弃）。
+func recordDecl(d testDeps, name string) {
+	if name == "_" {
+		return
+	}
+	d.decls[name] = true
+}
+
+// missingAssets 返回「框架声明了、但本次没有复制」的资产路径（如未选 apidocs 时的
+// `docs/openapi`）。摘要口径与 AssetsFor 同源（profileassets.Declared 的前缀集合）。
+func missingAssets(copied []string) []string {
+	have := make(map[string]bool, len(copied))
+	for _, p := range copied {
+		have[profileassets.Canonical(p)] = true
+	}
+	var missing []string
+	for _, paths := range profileassets.Declared() {
+		for _, p := range paths {
+			canonical := profileassets.Canonical(p)
+			if canonical == "" || have[canonical] {
+				continue
+			}
+			missing = append(missing, canonical)
+		}
+	}
+	slices.Sort(missing)
+	return slices.Compact(missing)
+}
+
+// missingAssetRefs 返回 file 引用的缺席资产路径（相对仓库根的资产前缀，去重排序）。与
+// analyzeTestFile 共用 assetRefsOf 一份判定；独立入口供单测直接钉「两种字面量写法都认」。
+func missingAssetRefs(file string, absent []string) ([]string, error) {
+	if len(absent) == 0 {
+		return nil, nil
+	}
+	fset := token.NewFileSet()
+	parsed, err := parser.ParseFile(fset, file, nil, parser.SkipObjectResolution)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", filepathSlash(file), err)
+	}
+	return assetRefsOf(parsed, absent), nil
+}
+
+// assetRefsOf 从已解析的 AST 里收集引用的缺席资产路径。两种写法都认（同一份声明在测试里的两种
+// 常见读法）：
+//
+//	单条字面量：`"docs/openapi/swagger.json"`、`"../../docs/openapi"`；
+//	逐段字面量拼接：`filepath.Join("..", "..", "docs", "openapi", "swagger.json")`
+//	（框架里的 internal/contract/openapi_test.go 正是第二种形态）。
+func assetRefsOf(parsed *ast.File, absent []string) []string {
+	if len(absent) == 0 {
+		return nil
+	}
+	found := map[string]bool{}
+	record := func(literal string) {
+		clean := cleanAssetLiteral(literal)
+		if clean == "" {
+			return
+		}
+		for _, prefix := range absent {
+			if clean == prefix || strings.HasPrefix(clean, prefix+"/") ||
+				strings.HasSuffix(clean, "/"+prefix) || strings.Contains(clean, "/"+prefix+"/") {
+				found[prefix] = true
+				return
+			}
+		}
+	}
+	ast.Inspect(parsed, func(n ast.Node) bool {
+		switch v := n.(type) {
+		case *ast.BasicLit:
+			if v.Kind == token.STRING {
+				if s, uerr := strconv.Unquote(v.Value); uerr == nil {
+					record(s)
+				}
+			}
+		case *ast.CallExpr:
+			// filepath.Join / path.Join 的逐段字面量：全部参数都是字符串字面量时拼成一条路径，
+			// 非字面量参数（变量、常量）让整条判定放弃 —— 宁可不裁，也不误裁。
+			parts := make([]string, 0, len(v.Args))
+			for _, arg := range v.Args {
+				lit, ok := arg.(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					parts = nil
+					break
+				}
+				s, uerr := strconv.Unquote(lit.Value)
+				if uerr != nil {
+					parts = nil
+					break
+				}
+				parts = append(parts, s)
+			}
+			if len(parts) > 0 {
+				record(strings.Join(parts, "/"))
+			}
+		}
+		return true
+	})
+	return slices.Sorted(maps.Keys(found))
+}
+
+// cleanAssetLiteral 把字面量归一化成仓库相对路径：统一斜杠、去掉开头的 `./` 与 `../` 段、
+// path.Clean 折叠重复斜杠与 `.`。
+func cleanAssetLiteral(literal string) string {
+	p := strings.TrimSpace(filepath.ToSlash(literal))
+	for {
+		switch {
+		case strings.HasPrefix(p, "./"):
+			p = p[2:]
+		case strings.HasPrefix(p, "../"):
+			p = p[3:]
+		default:
+			return path.Clean(p)
+		}
+	}
 }
 
 // missingModuleImports 返回 file 里指向本模块（module/ 前缀）但生成树中不存在的 import 路径。
@@ -848,8 +1132,9 @@ func collectResult(target string, set CapabilitySet, module, root string) (*Resu
 			return nil
 		}
 		rel := relPath(target, p)
-		if rel == markerFile {
-			return nil // 标记不是产物文件（marker.files 也不含它）
+		if rel == markerFile || rel == reportRelPath {
+			// 标记与 --report 报告都不是产物行：marker.files 也不含它们（报告只描述产物）。
+			return nil
 		}
 		res.Files = append(res.Files, rel)
 		res.FileCount++

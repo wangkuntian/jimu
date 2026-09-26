@@ -45,7 +45,7 @@ func generateForTest(t *testing.T, opts NewOptions) string {
 		opts.Module = "example.com/proj"
 	}
 	opts.NoTidy = true
-	_, err := NewProject(opts)
+	_, err := newProjectForTest(t, opts)
 	require.NoError(t, err)
 	return dir
 }

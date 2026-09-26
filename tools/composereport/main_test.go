@@ -6,74 +6,17 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-	"testing/fstest"
 
-	"jimu/internal/contract"
 	"jimu/internal/profiles/registry"
 	"jimu/tools/internal/heavydeps"
 	"jimu/tools/internal/profileoverlay"
 
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// fakeModule 是 routeCount 的最小 Module 替身：按 paths 注册 GET 路由。
-type fakeModule struct {
-	name  string
-	paths []string
-}
-
-func (m fakeModule) Name() string { return m.name }
-
-func (m fakeModule) RegisterHTTP(r contract.Router) {
-	for _, p := range m.paths {
-		r.GET(p, func(*gin.Context) {})
-	}
-}
-
-func (m fakeModule) RegisterJobs(contract.JobRegistry) {}
-
-func (m fakeModule) RegisterEvents(contract.EventBus) {}
-
-// TestTableCountUnionsOwnedTables 表数是各 Descriptor.Owns 的并集：重名只算一次。
-func TestTableCountUnionsOwnedTables(t *testing.T) {
-	got := tableCount([]contract.Descriptor{
-		{Name: "a", Owns: []string{"users", "roles"}},
-		{Name: "b", Owns: []string{"roles", "permissions"}},
-		{Name: "c"},
-	})
-	assert.Equal(t, 3, got)
-}
-
-// TestMigrationCountWalksMysqlScripts 迁移数只数 embed FS 里 migrations/mysql 下的 .sql；
-// postgres 与 mysql 同名同数，数一遍不重复计数。
-func TestMigrationCountWalksMysqlScripts(t *testing.T) {
-	fsys := fstest.MapFS{
-		"migrations/mysql/001_a.sql":    &fstest.MapFile{},
-		"migrations/mysql/002_b.sql":    &fstest.MapFile{},
-		"migrations/mysql/README.md":    &fstest.MapFile{},
-		"migrations/postgres/001_a.sql": &fstest.MapFile{},
-		"migrations/postgres/002_b.sql": &fstest.MapFile{},
-	}
-	got, err := migrationCount([]contract.Descriptor{
-		{Name: "a", Migrations: fsys},
-		{Name: "b"},
-	})
-	require.NoError(t, err)
-	assert.Equal(t, 2, got)
-}
-
-// TestRouteCountRegistersIntoBareEngine 路由数是模块在裸 gin.Engine 上注册出的条数之和；
-// 没有路由的模块（纯迁移/端口能力）贡献 0。
-func TestRouteCountRegistersIntoBareEngine(t *testing.T) {
-	got := routeCount([]contract.Module{
-		fakeModule{name: "a", paths: []string{"/api/v1/a", "/api/v1/a/:id"}},
-		fakeModule{name: "b", paths: []string{"/api/v1/b"}},
-		fakeModule{name: "no-routes"},
-	})
-	assert.Equal(t, 3, got)
-}
+// 本文件只覆盖 report 本体的渲染与 overlay 口径；度量原语（路由/迁移/表/闭包/行数/直接依赖）
+// 的单测已随实现搬到 tools/internal/projectmetrics（P2.7 抽取，两处共用一份口径）。
 
 // TestRenderReportPinsTheCommittedShape 报告是入库产物：用手写 Metrics 钉住表头、归一化列、
 // 验收断言与「go.mod 逐形态相同」的结论，渲染逻辑变化会让本用例失败。
@@ -98,11 +41,41 @@ func TestRenderReportPinsTheCommittedShape(t *testing.T) {
 }
 
 // TestRenderReportWithoutMinimal 无 minimal 时不渲染验收段（只按数据渲染，不对形态名做隐藏假设）；
-// 无 full 基准时同样跳过。
+// 无 full 基准时同样跳过。用两个形态走多形态分支（单形态分支由下一条测试钉住）。
 func TestRenderReportWithoutMinimal(t *testing.T) {
-	out := renderReport([]Metrics{{Profile: "full", BinaryBytes: 2}}, 64)
+	out := renderReport([]Metrics{{Profile: "full", BinaryBytes: 200}, {Profile: "saas", BinaryBytes: 2}}, 64)
 	assert.NotContains(t, out, "要求 ≤ 85%")
 	assert.Contains(t, out, "| `full` | 0.0 | 100.0% |")
+}
+
+// TestRenderSingleShapeReportHasNoMultiShapeClaims 是 T8 裁定 15 的收口：`jimu new` 的生成项目
+// 里 `make compose-report` 只度量一个形态，报告必须单形态正确 —— 没有「相对 full」列、没有构建期
+// overlay 叙述、没有「五个形态」的结论，也不引用生成项目里不存在的 README 章节与本仓测试名；
+// 主模块名取 modulePath（生成时被受控重写改成 --module）。
+func TestRenderSingleShapeReportHasNoMultiShapeClaims(t *testing.T) {
+	out := renderReport([]Metrics{{
+		Profile: "app", BinaryBytes: 12_345_678, Routes: 32, Migrations: 10, Tables: 9,
+		Files: 181, Lines: 17_522, Capabilities: []string{"access", "queue", "user"},
+	}}, 64)
+
+	assert.Contains(t, out, "# 项目编译面报告")
+	assert.Contains(t, out, "本项目只有一个形态、在生成期固定")
+	assert.Contains(t, out, "| 形态 | 二进制 (MB) | 路由数 | 迁移数 | 表数 | 本模块 Go 文件 | 本模块代码行 | 重型依赖 |")
+	assert.Contains(t, out, "| `app` | 12.3 | 32 | 10 | 9 | 181 | 17522 | - |")
+	assert.Contains(t, out, "| 装配的能力（按装配顺序） |")
+	assert.Contains(t, out, "| access queue user |")
+	assert.Contains(t, out, "本项目的 go.mod 直接依赖数为 **64** 个")
+	assert.Contains(t, out, "（`"+modulePath+"/...`）")
+	assert.Contains(t, out, "不含主模块 `"+modulePath+"` 自身")
+	assert.Contains(t, out, "形态在**生成期**固定")
+
+	// 多形态口吻与失效引用一律不得出现。
+	for _, gone := range []string{
+		"相对 full", "overlay", "五个形态", "README", "TestMinimalCompiledSurfaceIsMateriallySmaller",
+		"各形态", "full",
+	} {
+		assert.NotContains(t, out, gone, "单形态报告不得出现 %q", gone)
+	}
 }
 
 // TestPercentAndMB 归一化列与 MB 呈现的边界：base 为 0 时不得除零，末位按一位小数四舍五入。
@@ -111,37 +84,6 @@ func TestPercentAndMB(t *testing.T) {
 	assert.Equal(t, "50.0%", percent(1, 2))
 	assert.Equal(t, "0.0", mb(0))
 	assert.Equal(t, "1.5", mb(1_500_000))
-}
-
-// TestDirectDepsMeasuresTheModule 直接依赖是 module 级指标，与形态无关（层②边界）。
-func TestDirectDepsMeasuresTheModule(t *testing.T) {
-	n, err := directDeps(repoRoot(t))
-	require.NoError(t, err)
-	assert.Positive(t, n)
-}
-
-// TestMigrationCountRejectsMissingMysqlDir 缺少 migrations/mysql 时明确报错，不静默算 0。
-func TestMigrationCountRejectsMissingMysqlDir(t *testing.T) {
-	_, err := migrationCount([]contract.Descriptor{{Name: "a", Migrations: fstest.MapFS{}}})
-	require.Error(t, err)
-}
-
-// TestCountLines 行数口径：换行符个数，末行无换行时补 1，空文件 0 行。
-func TestCountLines(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "x.go")
-	for _, tc := range []struct {
-		content string
-		want    int
-	}{
-		{"a\nb\n", 2},
-		{"a\nb", 2},
-		{"", 0},
-	} {
-		require.NoError(t, os.WriteFile(path, []byte(tc.content), 0o600))
-		got, err := countLines(path)
-		require.NoError(t, err)
-		assert.Equal(t, tc.want, got, "content %q", tc.content)
-	}
 }
 
 // TestOverlayForProfileMatchesTheSharedPackage 报告统计闭包用的内存 overlay 必须与共享包
@@ -219,7 +161,7 @@ func TestMinimalCompiledSurfaceIsMateriallySmaller(t *testing.T) {
 	assert.Less(t, minM.Lines, fullM.Lines, "minimal 本仓代码行数应少于 full")
 
 	// 驱动拆包后的重型依赖列：full 编进全部四类驱动，其余形态的编译面为零
-	// （可插拔的实际效果；enterprise 已收敛为 local + csv）。
+	//（可插拔的实际效果；enterprise 已收敛为 local + csv）。
 	assert.ElementsMatch(t, heavydeps.Names(), fullM.HeavyDeps, "full 应含全部四类重型依赖")
 	for _, name := range []string{"minimal", "saas", "enterprise", "machine"} {
 		m, ok := byName[name]

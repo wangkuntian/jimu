@@ -16,7 +16,7 @@ P2.4 层② 构建：profiles 入口包          ← 已完成（依赖 P2.2；5
 P2.5 层② 驱动级可插拔（§3.7）           ← 已完成（依赖 P2.4；驱动独立成包 + 两层声明 + 门禁）
 P2.5b 单一入口与构建期形态参数化         ← 已完成（依赖 P2.5；唯一入口 cmd/server + 选点包 + overlay）
 P2.6 层② 非代码资产模块化（§3.8）        ← 已完成（依赖 P2.5b；资产归属门禁 + 本仓条件化）
-P2.7 层① 脚手架：jimu new / capability add ← 依赖 P2.2 + P2.4（生成专属 catalog 与 app.yaml）
+P2.7 层① 脚手架：jimu new / capability add ← 已完成（依赖 P2.2 + P2.4；生成专属 catalog/app.yaml + --report + check-templates）
 P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后在 CI 生效
 ```
 
@@ -94,10 +94,14 @@ P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后
 - **行为变更（指针，详见 release note 与 README）**：① 迁移/播种跟随编译期形态，且**迁移集带上 schema 依赖**（含 `user`/`access` 的形态一并迁移 `tenant` 的建表/加列 —— `users`/`roles.tenant_id` 只由 tenant 的迁移创建，整分支审查 C1），故各形态 schema 完整、**结构种子照常执行**（`migrate status` 表数下降；`full` 逐值不变）；② 形态不含 `apidocs` 时 `make swagger`/`swagger-check` 打印 `SKIP` 并成功退出。
 - **边界与不做**：**渲染**（`values.yaml`/`configs/app.yaml` 按能力裁剪、生成项目里「未选中资产不出现」、生成项目的 CLI 裁剪）留 **P2.7**；门禁**仍未接入** `make ci`/`release-check`（P2.8 收口）；迁移/种子的**全量清单**语义在 `internal/shared/testutil` 保持（测试要建全部表）。
 
-## P2.7 层① 脚手架
+## P2.7 层① 脚手架（已完成）
 
-- 复用 `tools/generator`：`jimu module create` 升级为 `jimu new <project> --profile=` / `--with=a,b` 与 `jimu capability add <name>`。
-- 解析 `Requires` 闭包 → 只复制选中的能力目录、迁移、配置段、对应文档；生成专属 `catalog.go` 与只含选中能力配置段的 `configs/app.yaml`；生成后 `go mod tidy`；产出 `compose-report.md`。
+执行记录见 [`docs/plans/2026-09-24-p2.7-scaffolding.md`](2026-09-24-p2.7-scaffolding.md)（含 8 个任务的实现、裁定修订与审查收口）。
+
+- **已完成**：`jimu new <dir> --profile=<name>` / `--with=a,b[:drv]` 从当前框架 checkout 生成**只含选中能力**的可构建/可迁移/可门禁单体项目，`jimu capability add <name>` 在已生成项目上增量追加能力（确定性重渲染、幂等）。生成物 = 内核原样复制 + 能力按**复制集**（声明集 ∪ 编译闭包 ∪ schema 依赖的迁移携带目录 ∪ 内核编译期 domain 依赖）+ 四处派生文件（`catalog`、单形态 `registry`/`profiles/<shape>`/`active`、`configs/*.yaml`）+ 单形态构建文件 + `tools/**`（不含生成器）+ 选中资产（`deploy/**`、含 `apidocs` 时的 `docs/openapi/**`）；`--module` 受控重写（不改框架运行期名字）；默认 `go mod tidy` + **自检**（`go build ./...` + `go run ./tools/checkcapabilities`，失败整体回滚）；`--report` 写 `<dir>/docs/profiles/generated-report.md`（口径与 `tools/composereport` 共享 `tools/internal/projectmetrics`，本仓报告逐字节不变）；测试树按 import 可满足性 + **资产依赖**裁剪（未选 `apidocs` 时读 `docs/openapi` 的契约测试整组不进产物）。
+- **实测**（2026-09-26）：`--profile=minimal`（`example.com/proj`）= 生成 437 文件 / 闭包 181 文件 17522 行 / `go.mod` 直接依赖 47（tidy 后；框架仓 64）/ 迁移 10 / 表 9 / 路由 32（与 minimal 形态逐值一致）/ 重型依赖 0 / 资产 45；生成项目 `go build ./...` 绿、`check-capabilities` **5 条 ✅**、`go test ./...` 全绿、`make compose-report` 单形态文本正确且幂等。`--with=user,access,queue`：能力目录只含 `access encryption notification outbox queue tenant user`（+ `catalog`），重型依赖 **0**，413 文件 / 直接依赖 47 / 迁移 10 / 表 11 / 路由 34。
+- **本仓行为零变化**：`configs/*.yaml` 逐字节不变、catalog 18 项、`go.mod` 不减小、5 形态路由数不变、`make compose-report` 输出逐字节不变。新增本仓门禁 `make check-templates`（生成最小项目并真构建 + 跑生成项目的门禁；未接入 `make ci`/`release-check`，P2.8 收口）。
+- **边界与不做**：`--module` 之外的 import 重定向、生成项目的 `git init`/`docker build` 冒烟、`jimu upgrade`（跨版本框架升级）、生成项目的 `README.md`/`.github`/`githooks`/`docker-compose.yml`/`specs`/`proto`；生成项目的 `docs/openapi` 是快照（不跑 swag）。
 
 ## P2.8 门禁（§9）
 
