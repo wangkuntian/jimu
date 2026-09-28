@@ -111,11 +111,12 @@ P2.8 门禁（§9）：四道 check-*            ← 已完成（四道门禁在
 | `check-profiles` | 各 profile 的 catalog 子集与入口包一致、能构建 | 实现为 `scripts/check_profiles.sh`（`make profiles-check`：5 形态 overlay 构建 + golden 依赖闭包裁剪），同样已接入 |
 | `check-pluggable` | 驱动集合与 profile 实际 import 一致（§3.7 的静态保险） | **不单独实现**：该静态保险已由 `check-capabilities` 第 ②③⑥ 条覆盖（驱动可用集 ↔ 目录、形态选中集 == 生产 import 闭包、形态生产代码只 import 已声明驱动）；§9 设想的「删掉能力目录后依赖方必须构建失败」破坏性负例与静态断言等价，无额外信号 |
 | `bench-ci` / 既有门禁 | 保持全绿 | 保持：CI 的 `Performance Regression` job 已在跑 `make bench-ci`；`check-log-usage` 早已在 Lint job 与 `make ci` 内 |
-| `compose-report-check`（§9「报告进 CI 归档对比」的落地形式） | `minimal` 的「省」不能被内核悄悄吃掉 | 新增 `make compose-report-check`：重新生成 `docs/profiles/compose-report.md` 并要求入库产物逐字节不变 —— 报告入库即基线，二进制/路由/表/本仓代码量漂移即红；同时接入两个聚合目标与 `Capability Gates` job |
+| `compose-report-check`（§9「报告进 CI 归档对比」的落地形式） | `minimal` 的「省」不能被内核悄悄吃掉 | 新增 `make compose-report-check`（`go run ./tools/composereport -check`）：重新实测并比对入库报告的**平台无关部分** —— 路由/迁移/表/本仓闭包文件数与代码行/重型依赖/直接依赖数漂移即红；**二进制大小列是平台相关的**（darwin/arm64 与 linux/amd64 实测不同），只作归档打印到日志、不参与逐字节比对。同时接入两个聚合目标与 `Capability Gates` job |
 | `check-templates` | 模板/复制口径 vs 真实框架结构 | 不单独接入聚合目标：`make ci`/`release-check` 的 `test-scaffold-matrix` 会跑到同一条用例（`TestTemplatesDrift`），CI 侧由 `ci-scaffold.yml` 的重型矩阵承担 |
 
 - **已完成（CI）**：`ci.yml` 新增 `Capability Gates` job（PR 路径，**不需要 DB/Redis** —— `profiles-check` 未设 `JIMU_PROFILES_SMOKE` 时逐形态打印 SKIP），依次跑 `make check-capabilities` / `make profiles-check` / `make compose-report-check`，并挂 `gocache-gates` 滚动构建缓存；`ci.yml` 的 `paths` 补上 `deploy/**` 与 `docs/openapi/**`（资产归属断言读这两棵树，只改它们的提交也必须把门禁拉起来）。
-- **已完成（本地聚合）**：`make ci` 与 `make release-check` 都加入 `check-capabilities profiles-check compose-report-check`；新增 `compose-report-check` 目标（生成 + `git diff --exit-code`）。
+- **已完成（本地聚合）**：`make ci` 与 `make release-check` 都加入 `check-capabilities profiles-check compose-report-check`；新增 `compose-report-check` 目标（`go run ./tools/composereport -check`，掩码平台相关列后逐行比对，报出首个差异行）。
+- **落地过程中被 CI 抓到的问题（已修）**：`compose-report-check` 最初写成 `make compose-report && git diff --exit-code`（要求入库产物逐字节不变）。首次 CI run 立刻红了 6 行 —— 入库报告里的**二进制大小来自 macOS/arm64**，而 CI 在 linux/amd64 上重新度量得到不同的 MB 值与比例。这类平台相关列无法逐字节门禁，于是把校验挪进工具（`-check`）：对入库报告与本次渲染**同时**施加掩码（多/单形态表的二进制列、验收段里的比例），再逐行比对并报出首个差异行；实测二进制大小改为打到日志归档。
 - **实测**（本机热缓存）：三道门禁串行约 **53s**（`check-capabilities` 2s / `profiles-check` 39s / `compose-report-check` 12s），`check-templates` 28s；CI 侧只做构建与静态读取、无 DB，预计 1.5–2.5 分钟，低于当时 CI (Go) 的 4.0m 长杆，不会成为新瓶颈。
 - **已完成（同一 PR 的三项收尾，来自 P2.7 工作日志的 P2.8 待办）**：
   - **cwd 深度口径统一**：`internal/config` 新增导出常量 `SearchDepthUp`（含 cwd，向上找项目根的最大层数），`buildViper` 找 `configs/` 与 `tools/generator` 的 `frameworkRoot` 找 `module jimu` 源根**共用同一个常量**。统一前 frameworkRoot 是一路找到文件系统根（无上限），于是从更深的目录跑 `jimu new --report` 会先成功发现源根、复制整棵树，再在 `ProbeAssembly` 加载能力配置段时半路失败；现在超出层数即在源根发现处 fail-closed，错误里带层数与起点。测试 `TestFrameworkRootRespectsTheConfigSearchDepth` 用 `t.Chdir` 钉住边界（限制内成功 / 多一层报错）。

@@ -74,7 +74,7 @@ help:
 	@echo "  make profiles-check       构建 5 个形态（overlay 叠加 cmd/server）+ golden 依赖闭包门禁"
 	@echo "                            （JIMU_PROFILES_SMOKE=1 时额外启动并检查 /readyz）"
 	@echo "  make compose-report       生成各形态（overlay 叠加 cmd/server）的编译面报告 docs/profiles/compose-report.md"
-	@echo "  make compose-report-check 报告漂移门禁：重新生成后要求 docs/profiles/compose-report.md 逐字节不变"
+	@echo "  make compose-report-check 报告漂移门禁：重新实测并比对入库报告的平台无关列（二进制列平台相关，只归档）"
 	@echo ""
 	@echo "数据库:"
 	@echo "  make migrate              本地执行迁移"
@@ -328,19 +328,15 @@ profiles-check:
 compose-report:
 	@go run ./tools/composereport
 
-## compose-report-check: 报告漂移门禁（P2.8 收口）—— 重新生成报告并要求入库产物逐字节不变。
-##                       它是「防止最小形态悄悄变胖」的刹车：报告入库本身就是基线，各形态的
-##                       二进制大小 / 路由 / 表 / 本仓闭包代码量一旦漂移，这里就红（相对关系另有
-##                       tools/composereport 的单测断言，如 minimal ≤ 85% full）。
+## compose-report-check: 报告漂移门禁（P2.8 收口）—— 重新实测并比对入库报告的**平台无关部分**：
+##                       路由 / 迁移 / 表 / 本仓闭包文件数与代码行 / 重型依赖 / 直接依赖数。它是
+##                       「防止最小形态悄悄变胖」的刹车：报告入库即基线，这些列漂移就红。
+##                       **二进制大小列是平台相关的**（同一份代码在 darwin/arm64 与 linux/amd64 上
+##                       不同），因此那一列不参与逐字节门禁、只作为归档数据打印到日志（相对关系另有
+##                       tools/composereport 的单测断言，如 minimal ≤ 85% full，在度量所在机器上比）。
 ##                       已接入 make ci/release-check 与 CI 的 Capability Gates job。
-compose-report-check: compose-report
-	@git diff --exit-code docs/profiles/compose-report.md >/dev/null 2>&1 || { \
-		echo "❌ docs/profiles/compose-report.md 与实测不一致（形态编译面发生漂移）："; \
-		git --no-pager diff --stat docs/profiles/compose-report.md; \
-		echo "👉 若漂移是有意的，提交更新后的报告：git add docs/profiles/compose-report.md"; \
-		exit 1; \
-	}
-	@echo "✅ compose-report 与入库产物一致"
+compose-report-check:
+	@go run ./tools/composereport -check
 
 ## clean: 清理构建产物（含按形态隔离的 overlay 产物 .overlay/）
 clean:
