@@ -8,7 +8,8 @@ name: CI (Scaffold Matrix)
 #   ① 手动 workflow_dispatch：只跑这一个 job（这是它独立成文件的主要理由之一 —— 挂在 ci.yml 上
 #      时手动触发会把 Lint/Test/Race/Bench/Govulncheck 一起拉起来）；
 #   ② push 到 release/**：发布前全量验证；
-#   ③ PR 打上 heavy-ci 标签：需要时手动加标签跑满矩阵；打上之后该 PR 的后续推送（synchronize）也会重跑；
+#   ③ PR 打上 heavy-ci 标签：需要时手动加标签跑满矩阵（只认 `labeled` 事件 —— 已打标签的 PR
+#      再推新提交不会自动重跑，重跑请重新打标签或 workflow_dispatch）；
 #   ④ 每周一次的夜间定时：模板/闭包漂移在两次 release 之间就能抓到，而不是等到发布前。
 # tag 发布的重型矩阵由 release.yml 的 quality job 承担（`make release-check` 内含
 # `make test-scaffold-matrix`，与本文件的 job 共用同一份 actions/cache），所以这里**不监听 tags**，
@@ -46,7 +47,13 @@ on:
       - "docs/openapi/**"
       - ".github/workflows/ci-scaffold.yml"
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    # 只监听「打标签」这一件事：这样 PR 上的每次推送都不会再多出一条 skipped 的 run
+    # （paths 匹配的是整个 PR 的累计 diff，所以只要 PR 里有代码改动，任何 push 都会把本
+    # workflow 拉起来、然后 job 因缺少 heavy-ci 标签而 skip —— 那是纯噪声）。
+    # 代价：**给已打标签的 PR 再推新提交不会自动重跑矩阵**，需要重新打一次标签，
+    # 或直接在 Actions 里 workflow_dispatch。若用 `gh pr create --label heavy-ci` 在建 PR 时
+    # 就带上标签，`labeled` 事件不一定补发 —— 那种情况用 workflow_dispatch 补跑。
+    types: [labeled]
     branches: [master, release/*]
     paths:
       - "cmd/**"
