@@ -37,6 +37,11 @@ func TestGeneratedProjectBuildsAndVetsForEverySelection(t *testing.T) {
 		t.Skip("25 次真实构建在 -short 下跳过")
 	}
 	names := allCapabilityNames(t)
+	if os.Getenv(heavyMatrixEnv) == "" {
+		// 默认只跑代表性选区：满 25 选区在 CI 的冷 GOCACHE 上会把 Test/Race 拖到 30 分钟以上。
+		// 设 JIMU_HEAVY_MATRIX=1 跑满矩阵（P2.8 的专用 job 负责）。
+		names = representativeSelections(names)
+	}
 	// 25 次真实构建会产生大量链接产物：用**随测试自动删除**的专用 GOCACHE（见 newTestGoCache），
 	// 避免往共享缓存里堆 25 份构建结果（实测共享缓存可涨到 25G，曾把磁盘写满）。
 	// 全部子用例共用一个 module 路径，让内核那 ~200 个相同文件在缓存里去重。
@@ -413,4 +418,25 @@ func TestGeneratedCatalogKnownCoversEveryCapability(t *testing.T) {
 	// 且 migration.go 里**没有**第二条清单（migrationExtras 形态已按裁定修订第 1 条删除）。
 	assert.Contains(t, string(migration), `{"tenant"}`)
 	assert.NotContains(t, string(migration), "migrationExtras")
+}
+
+// heavyMatrixEnv 控制是否跑满 25 能力构建网；默认只跑代表性选区以控制 CI 时长。
+const heavyMatrixEnv = "JIMU_HEAVY_MATRIX"
+
+// representativeSelections 挑选覆盖已知缺陷类别的选区：breach（跨能力子包闭包）、
+// queue（驱动级过滤）、storage（Ungated + 默认驱动）、apidocs（携带资产）、
+// grpc（protobuf 重写）、user（内核编译期 domain 依赖）。
+func representativeSelections(all []string) []string {
+	want := []string{"breach", "queue", "storage", "apidocs", "grpc", "user"}
+	have := make(map[string]bool, len(all))
+	for _, n := range all {
+		have[n] = true
+	}
+	out := make([]string, 0, len(want))
+	for _, n := range want {
+		if have[n] {
+			out = append(out, n)
+		}
+	}
+	return out
 }
