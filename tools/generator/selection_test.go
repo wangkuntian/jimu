@@ -31,19 +31,14 @@ func allCapabilityNames(t *testing.T) []string {
 // `--with=breach` 曾被漏掉（breach → auth → user/infrastructure 的子包依赖未被映射回属主能力）；
 // 7 个 Ungated 能力（apidocs/storage/notification/retention/ws/grpc/encryption）也在这条网里。
 //
-// 构建开销用信号量限流（并发 2）+ 随测试删除的专用 GOCACHE 缓解；不跳过。
+// 构建开销用信号量限流（并发 2）+ newTestGoCache 缓解；整条矩阵只在重型门控下跑
+// （requireHeavyMatrix：25 次真实构建在 CI 冷缓存上会把默认 Test/Race 拖到 30 分钟以上）。
 func TestGeneratedProjectBuildsAndVetsForEverySelection(t *testing.T) {
-	if testing.Short() {
-		t.Skip("25 次真实构建在 -short 下跳过")
-	}
+	requireHeavyMatrix(t)
 	names := allCapabilityNames(t)
-	if os.Getenv(heavyMatrixEnv) == "" {
-		// 默认只跑代表性选区：满 25 选区在 CI 的冷 GOCACHE 上会把 Test/Race 拖到 30 分钟以上。
-		// 设 JIMU_HEAVY_MATRIX=1 跑满矩阵（P2.8 的专用 job 负责）。
-		names = representativeSelections(names)
-	}
-	// 25 次真实构建会产生大量链接产物：用**随测试自动删除**的专用 GOCACHE（见 newTestGoCache），
-	// 避免往共享缓存里堆 25 份构建结果（实测共享缓存可涨到 25G，曾把磁盘写满）。
+	// 25 次真实构建会产生大量链接产物：用 newTestGoCache（默认随测试自动删除；CI 的 Scaffold
+	// Matrix job 经 JIMU_TEST_GOCACHE 复用一份跨运行的缓存），避免往共享缓存里堆构建结果
+	// （实测共享缓存可涨到 25G，曾把磁盘写满）。
 	// 全部子用例共用一个 module 路径，让内核那 ~200 个相同文件在缓存里去重。
 	cache := newTestGoCache(t)
 	sem := make(chan struct{}, 2) // 受限并发 2：并发链接对磁盘与 CPU 压力都大
@@ -68,6 +63,7 @@ func TestGeneratedProjectBuildsAndVetsForEverySelection(t *testing.T) {
 // breach import auth（根包），auth import user/infrastructure（**子包**）且 Requires user/access
 // —— 三者都必须整目录复制，且 tenant 仍只作携带。
 func TestSelectedCapabilityIsAssembledWithItsWholeCompileClosure(t *testing.T) {
+	requireHeavyMatrix(t)
 	dir := filepath.Join(t.TempDir(), "proj")
 	res, err := newProjectForTest(t, NewOptions{Dir: dir, With: "breach", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
@@ -98,9 +94,7 @@ func TestSelectedCapabilityIsAssembledWithItsWholeCompileClosure(t *testing.T) {
 // 生成项目里 `go run ./cmd/server` **不得**出现 protobuf 描述符解析 panic。
 // 连库失败是预期（无 MySQL），只要不是 filedesc/slice bounds 崩溃即可。
 func TestGeneratedServerSurvivesProtobufDescriptor(t *testing.T) {
-	if testing.Short() {
-		t.Skip("go run 服务器在 -short 下跳过")
-	}
+	requireHeavyMatrix(t)
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "machine", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
@@ -142,9 +136,7 @@ func failedTestNames(output string) []string {
 // 裁剪掉：引用未复制资产的测试文件（连同其所在目录的整组测试）不进生成树，故这里不再有任何
 // 「已登记的失败」白名单 —— 新出现的任何失败都让本测试红。
 func TestGeneratedProjectTestTreeIsGreen(t *testing.T) {
-	if testing.Short() {
-		t.Skip("生成项目测试在 -short 下跳过")
-	}
+	requireHeavyMatrix(t)
 	// 覆盖 5 个 profile + 单能力/小集合的「裁剪得最狠」选区：保留的测试必须真的能跑（不只是能编译）。
 	// 全部用例共用一个专用 GOCACHE（依赖只编译一次），仍不碰共享缓存（见 projectbuild_test.go）。
 	cache := newTestGoCache(t)
@@ -420,23 +412,5 @@ func TestGeneratedCatalogKnownCoversEveryCapability(t *testing.T) {
 	assert.NotContains(t, string(migration), "migrationExtras")
 }
 
-// heavyMatrixEnv 控制是否跑满 25 能力构建网；默认只跑代表性选区以控制 CI 时长。
-const heavyMatrixEnv = "JIMU_HEAVY_MATRIX"
-
-// representativeSelections 挑选覆盖已知缺陷类别的选区：breach（跨能力子包闭包）、
-// queue（驱动级过滤）、storage（Ungated + 默认驱动）、apidocs（携带资产）、
-// grpc（protobuf 重写）、user（内核编译期 domain 依赖）。
-func representativeSelections(all []string) []string {
-	want := []string{"breach", "queue", "storage", "apidocs", "grpc", "user"}
-	have := make(map[string]bool, len(all))
-	for _, n := range all {
-		have[n] = true
-	}
-	out := make([]string, 0, len(want))
-	for _, n := range want {
-		if have[n] {
-			out = append(out, n)
-		}
-	}
-	return out
-}
+// heavyMatrixEnv / requireHeavyMatrix / newTestGoCache 见 projectbuild_test.go：本文件的重型用例
+// 一律经 requireHeavyMatrix 门控，默认路径只跑生成/裁剪/解析这类便宜断言。

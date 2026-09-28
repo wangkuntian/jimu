@@ -69,13 +69,31 @@ jobs:
           args: --timeout=5m
           install-mode: goinstall
 
-      - name: Run release checks and Compose smoke
+      # 与 ci.yml 的 Scaffold Matrix job **同源**的构建缓存：同 path、同 key 规范（含可递增的
+      # `-v1` 版本后缀）、同 restore-keys 前缀 → 只要 CI 上跑过重型矩阵，tag 发布的 quality job
+      # 就能命中同一份仓库缓存，不再每次冷跑。bump 规则：ci.yml 把 `-v1` 递增时，这里同步递增。
+      # 注意：**首次发布仍是冷跑**（仓库里还没有该 key 的条目 → 无可恢复），2 核 runner 上约 28 分钟；
+      # 故下一步骤显式 timeout-minutes: 120（go test 自身另有 -timeout 60m）。
+      - name: "🗂️ Restore the scaffold GOCACHE (shared with ci.yml)"
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/scaffold-gocache
+          key: scaffold-gocache-v1-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            scaffold-gocache-v1-${{ runner.os }}-
+
+      # make release-check 内含 test-scaffold-matrix（JIMU_HEAVY_MATRIX=1 的重型脚手架矩阵）：
+      # tag 发布路径必须真跑那 8 条「真实生成项目 + build/vet/test/run」用例，不能静默跳过。
+      # JIMU_TEST_GOCACHE 指向上一步恢复的缓存目录，命中时才是热跑。
+      - name: Run release checks (incl. heavy scaffold matrix) and Compose smoke
+        timeout-minutes: 120
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: "3306"
           DB_USER: root
           DB_PASSWORD: root
           DB_NAME: jimu_test
+          JIMU_TEST_GOCACHE: ${{ runner.temp }}/scaffold-gocache
         run: make release-check
 
       - name: Run PostgreSQL migration smoke

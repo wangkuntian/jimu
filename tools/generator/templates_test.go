@@ -21,11 +21,9 @@ import (
 //	             Fix round 4 约束：不得让子进程写默认构建缓存）。NewProject 的默认自检路径由
 //	             `jimu new` 的端到端验收覆盖，这里不重复一遍。
 //
-// 唯一跳过条件是 -short（显式，不静默）。
+// 跳过条件是 requireHeavyMatrix（`-short` 或未设 JIMU_HEAVY_MATRIX）。
 func TestTemplatesDrift(t *testing.T) {
-	if testing.Short() {
-		t.Skip("check-templates 需要完整工具链；-short 下跳过（显式，不静默）")
-	}
+	requireHeavyMatrix(t)
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := newProjectForTest(t, NewOptions{
 		Dir: dir, Profile: "minimal", Module: "example.com/proj-templates", NoTidy: true,

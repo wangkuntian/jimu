@@ -294,6 +294,7 @@ make cli
 - **`--report`**：写 `<dir>/docs/profiles/generated-report.md`（文件数、module 闭包的 Go 文件数与代码行、`go.mod` 直接依赖数、迁移数、表数、路由数、重型依赖、资产文件数、装配集）。数字在 `go mod tidy` **之后**度量，口径与 `docs/profiles/compose-report.md` **同一份实现**（`tools/internal/projectmetrics`），但只有一个形态、不做横向比较；报告可对已生成项目**独立重跑**（`Report`/`WriteReport` 从 `.jimu-generated` 读回声明集并经 `CapabilityRoots` 重建迁移携带/domain 携带集合，输出逐字节幂等）；目前没有独立的 CLI 子命令，`jimu new --force --report` 会整体重生成。`jimu capability add` 成功后，若项目里**已有**该报告则**同批重算刷新**（add 改变了装配集与文件数；刷新在暂存树里完成，与其它变更一起原子落盘、不额外打印）——本来没有报告的项目不会因此多出一份。
 - **生成项目自带门禁**：`make check-capabilities`（5 条 ✅）、`make profiles-check`（单形态）、`make compose-report`（单形态报告）、`make lint` 等目标都在产物里可用，`go test ./...` 应全绿。
 - **模板漂移门禁（本仓）**：`make check-templates` 用生成器在临时目录生成最小项目并真构建 + 跑生成项目的 `check-capabilities` —— 模板/复制口径与真实框架结构之间的漂移会在这里变成一次可复现的构建失败。它与 `make check-capabilities`/`make profiles-check` 一样**未接入** `make ci`/`release-check`（P2.8 收口）。
+- **重型矩阵与默认路径分离**：所有真实生成项目并 `go build/vet/test/run` 的用例（25 选区构建网、5 形态生成项目测试树、`go run ./cmd/server`、模板漂移等）统一由 `JIMU_HEAVY_MATRIX=1` 门控（`tools/generator` 的单一 helper `requireHeavyMatrix`）：默认 `go test ./...` 与 CI 的 `Test`/`Race Detector` 只跑轻量断言（回到分钟级），重型矩阵在 CI 的独立 `Scaffold Matrix` job（本地等价命令 `make test-scaffold-matrix`）里跑。该 job **默认不在 PR 上跑**（2 vCPU runner 冷跑约 28 分钟），只在 `push` 到 `release/**`、push tag、`workflow_dispatch` 或给 PR 打 `heavy-ci` 标签时运行；GOCACHE 经 `JIMU_TEST_GOCACHE` 指向 `actions/cache` 目录跨运行复用（收益有限、非收敛，见「质量门禁」）。
 - **不做（P2.7 边界）**：`--module` 之外的 import 重定向、生成项目的 `git init`/`docker build` 冒烟、`jimu upgrade`（跨版本框架升级）、生成项目的 `README.md`/`.github`/`githooks`/`docker-compose.yml`/`specs`/`proto`；生成项目的 `docs/openapi` 是**快照**（不跑 swag，保留 `swagger`/`swagger-check` 目标供使用者自行重生成）。
 
 ## 数据库迁移
@@ -1229,6 +1230,8 @@ internal/capabilities/{name}/
 
 所有改动必须通过 `make fmt`、`make vet`、`make lint`、`make test`；贡献流程与本地集成测试见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)。
 
+**测试分两层**：默认 `go test ./...` 只跑轻量断言（生成/渲染/文件与裁剪规则）；**真实生成项目并 build/vet/test/run 的重型脚手架矩阵只认 `JIMU_HEAVY_MATRIX=1`**（`0`/未设都跳过，`-short` 同样跳过），本地用 `make test-scaffold-matrix` 跑（`make ci`/`make release-check` 也含它）。CI 里它在独立的 `Scaffold Matrix` job，**默认不在 PR 上跑** —— 2 vCPU runner 冷跑约 28 分钟（CPU 时间 ≈3330s），每个 PR 都等 30–40 分钟不划算，只在四种情形运行：`push` 到 `release/**`、push tag、手动 `workflow_dispatch`、或给 PR 打上 `heavy-ci` 标签（需要时手动加标签跑满矩阵）；轻量 job（Lint/Test/Race/Bench/Govulncheck）不受影响，仍每个 PR 都跑。该 job 用 `JIMU_TEST_GOCACHE` 指向 `actions/cache` 的目录跨运行复用构建缓存（`release.yml` 的 quality job 用同一份 key，tag 发布也能命中）：生成项目的构建一律带 `-trimpath`（`tools/generator` 的 `trimpathGoflags`），构建条目与临时路径无关，每轮约 +13.5 MB / +3290 文件（相比无 `-trimpath` 的每轮 +300 MB 约降 20× 增长），但**并不收敛** —— 体积实际由 Go 自身的「5 天未使用」裁剪兜底，热跑约快 8%；超过 6 GiB 时该 job 失败并提示把 cache key 的 `-v1` 版本后缀递增后重跑（非破坏性守卫，不在 job 内删缓存内容）。
+
 ## Makefile 命令
 
 | 命令 | 说明 |
@@ -1258,7 +1261,8 @@ internal/capabilities/{name}/
 | `make fmt-check` | 检查代码格式 |
 | `make lint` | golangci-lint |
 | `make check-capabilities` | 5 条汇总行：① 能力自描述与 `Owns` ↔ mysql 迁移建表一致（单表唯一归属、无未声明的建表、声明的表确有迁移创建；PostgreSQL 表名与 mysql 一致，暂以 mysql 为准）② 驱动可用集 ↔ 驱动目录存在（`Descriptor.Drivers` 非空不重复且目录存在）+ 能力核心生产闭包零驱动包、零重型依赖 + 各形态选中集 == 该形态生产 import 闭包（集合比较）③ 形态生产代码只 import 已声明的驱动（能力根包或已声明的驱动包）④ 唯一入口 `cmd/server` 只 import `assembly` 与选点包（+ 标准库）、选点包 `internal/profiles/active` 恰好只选一个形态（且不得 import `internal/profiles/registry`）⑤ 资产归属唯一且无未声明资产（P2.6：声明路径非空/存在/在资产根内、同一路径不被两个所有者声明（归一化比较）、资产根下每个文件都有有效所有者、每个形态覆盖全部内核资产组） |
-| `make check-templates` | 模板漂移门禁：用生成器在临时目录生成最小项目（`--profile=minimal`）并真构建 + 跑生成项目自己的 `check-capabilities`（5 条 ✅）；未接入 `make ci`/`release-check`（P2.8 收口） |
+| `make check-templates` | 模板漂移门禁：用生成器在临时目录生成最小项目（`--profile=minimal`）并真构建 + 跑生成项目自己的 `check-capabilities`（5 条 ✅）；用例被 `JIMU_HEAVY_MATRIX` 门控，目标内显式置 1；未接入 `make ci`/`release-check`（P2.8 收口） |
+| `make test-scaffold-matrix` | 重型脚手架矩阵（`JIMU_HEAVY_MATRIX=1`：真实生成项目 + `go build/vet/test/run`，耗时数分钟起）；与 CI 的 `Scaffold Matrix` job 同一条命令，该 job **默认不在 PR 上跑**（仅 `push release/**`、tag、`workflow_dispatch` 或 PR 打 `heavy-ci` 标签）；`JIMU_TEST_GOCACHE=<dir>` 可指定跨运行复用的 GOCACHE |
 | `make profiles-check` | 用 overlay 构建全部 5 个形态（`./cmd/server` + 该形态 overlay）+ 依赖闭包裁剪门禁（golden）；`JIMU_PROFILES_SMOKE=1` 时额外启动各形态并轮询管理端 `/readyz`（需 DB+Redis） |
 | `make compose-report` | 生成形态编译面报告 `docs/profiles/compose-report.md`（二进制/路由/迁移/表/本仓闭包代码量与文件数/重型依赖列；不连库、不启动监听） |
 | `make swagger` | 生成 API 文档（`docs/openapi` 归 `apidocs` 能力：当前形态未编入 apidocs 时打印 `SKIP` 并成功退出；`PROFILE` 非法则失败） |

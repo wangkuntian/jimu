@@ -69,6 +69,7 @@ help:
 	@echo "  make check-log-usage      检查日志调用均为 *w 系列（防 k/v 粘连）"
 	@echo "  make check-capabilities   校验能力自描述（Owns）与驱动可用集/选中集一致"
 	@echo "  make check-templates      模板漂移门禁：用生成器生成最小项目并真构建 + 跑生成项目的 check-capabilities"
+	@echo "  make test-scaffold-matrix 重型脚手架矩阵：真实生成项目 + build/vet/test/run（=CI 的 Scaffold Matrix job）"
 	@echo "  make profiles-check       构建 5 个形态（overlay 叠加 cmd/server）+ golden 依赖闭包门禁"
 	@echo "                            （JIMU_PROFILES_SMOKE=1 时额外启动并检查 /readyz）"
 	@echo "  make compose-report       生成各形态（overlay 叠加 cmd/server）的编译面报告 docs/profiles/compose-report.md"
@@ -106,8 +107,8 @@ help:
 	@echo "  make proto                重新生成 gRPC 代码"
 	@echo "  make bench                运行性能基准测试"
 	@echo "  make loadtest             本地 HTTP 压测（需 hey）"
-	@echo "  make ci                   本地 CI 检查（无外部依赖：fmt/vet/lint/test/coverage/race/swagger/smoke/build/govulncheck）"
-	@echo "  make release-check        发布前检查"
+	@echo "  make ci                   本地 CI 检查（无外部依赖：fmt/vet/lint/test/coverage/race/swagger/smoke/build/govulncheck + 重型脚手架矩阵）"
+	@echo "  make release-check        发布前检查（同上 Go 门禁 + govulncheck + Compose/API smoke + 重型脚手架矩阵）"
 
 # ========== 本地运行 ==========
 
@@ -295,9 +296,17 @@ check-capabilities:
 ## check-templates: 模板漂移门禁 —— 用生成器在临时目录生成最小项目并构建 + 跑生成项目的
 ##                   check-capabilities（5 条 ✅）。它把「模板/复制口径 vs 真实框架结构」的漂移
 ##                   变成一次可复现的构建；默认 --no-tidy（生成器复制的 go.mod/go.sum 已含全部
-##                   依赖，模块缓存在 CI 上预热）。未接入 make ci/release-check，收口见 P2.8。
+##                   依赖，模块缓存在 CI 上预热）。用例本身被 JIMU_HEAVY_MATRIX 门控，故这里
+##                   显式置 1（不置会静默 SKIP）。未接入 make ci/release-check，收口见 P2.8。
 check-templates:
-	go test ./tools/generator/ -run TestTemplatesDrift -count=1 -timeout 30m
+	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -run TestTemplatesDrift -count=1 -timeout 30m
+
+## test-scaffold-matrix: 重型脚手架矩阵（CI 的 Scaffold Matrix job 就是这条）：JIMU_HEAVY_MATRIX=1
+##                       下的真实生成 + go build/vet/test/run；耗时数分钟起（本机冷 ~8 分钟，
+##                       CI 2 核冷跑预计 30+ 分钟，-timeout 60m 覆盖首跑），不进默认 `make test`。
+##                       JIMU_TEST_GOCACHE=<dir> 可指定跨运行复用的 GOCACHE（CI 用 actions/cache）。
+test-scaffold-matrix:
+	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 60m -v
 
 ## profiles-check: 构建 5 个形态（overlay 叠加 cmd/server）+ golden 依赖闭包门禁；
 ##                  构建或门禁失败即非零退出。
@@ -404,12 +413,14 @@ compose-check:
 	@./scripts/test_runtime_security.sh
 	@./scripts/smoke_api_contract.sh
 
-## ci: 本地 CI 检查（无外部依赖部分，完整 CI 见 .github/workflows/ci.yml）
-ci: fmt-check vet lint check-log-usage test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck
+## ci: 本地 CI 检查（无外部依赖部分，完整 CI 见 .github/workflows/ci.yml）；
+##     末尾含重型脚手架矩阵（test-scaffold-matrix，耗时数分钟起），与 CI 的 Scaffold Matrix job 对齐
+ci: fmt-check vet lint check-log-usage test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck test-scaffold-matrix
 	@echo "✅ All local CI checks passed"
 
-## release-check: 发布前检查（Go 门禁 + govulncheck + 隔离 Compose/API smoke）
-release-check: fmt-check vet check-log-usage test govulncheck compose-check
+## release-check: 发布前检查（Go 门禁 + govulncheck + 隔离 Compose/API smoke + 重型脚手架矩阵）；
+##                test-scaffold-matrix 必须在内，否则 tag 发布路径会静默跳过那 8 条真实生成+构建/测试用例
+release-check: fmt-check vet check-log-usage test govulncheck compose-check test-scaffold-matrix
 	@echo "All checks passed"
 
 ## hooks: 启用 git 钩子（core.hooksPath=githooks：commit-msg 全英文检查 + pre-commit 框架包装；框架检查需 pip install pre-commit）

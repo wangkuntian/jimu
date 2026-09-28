@@ -36,10 +36,40 @@ func newProjectForTest(t *testing.T, opts NewOptions) (*Result, error) {
 	return NewProject(opts)
 }
 
-// newTestGoCache 为当前测试建一个专用 GOCACHE（落在 t.TempDir() 内 → 测试结束由 testing 删除）。
+// heavyMatrixEnv 门控「真实生成 + 构建/测试」的重型矩阵：未设置时默认路径只跑轻量的生成/渲染/文件断言，
+// CI 的 `Scaffold Matrix` job 设 JIMU_HEAVY_MATRIX=1 跑满（见 requireHeavyMatrix）。
+const heavyMatrixEnv = "JIMU_HEAVY_MATRIX"
+
+// testGoCacheEnv 把测试用的 GOCACHE 指到一个**可跨运行复用**的目录（见 newTestGoCache）；
+// CI 的 Scaffold Matrix job 靠它让冷缓存只在首次付出代价 —— 前提是生成项目的构建都带 -trimpath
+// （见 trimpathGoflags）：否则路径相关条目会无界增长，缓存既不收敛也换不来时间。
+const testGoCacheEnv = "JIMU_TEST_GOCACHE"
+
+// requireHeavyMatrix 是本包重型用例的**唯一**门控入口：`-short` 或未设 `JIMU_HEAVY_MATRIX=1` 都跳过
+// （只认字面量 `1`；`0`/`false`/空一律算关闭）。判据是「这条用例会把生成项目整棵树真的 shell out
+// 到 go build/vet/test/run」——纯生成/渲染/文件断言等便宜用例不门控。
+func requireHeavyMatrix(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("重型脚手架矩阵在 -short 下跳过")
+	}
+	if os.Getenv(heavyMatrixEnv) != "1" {
+		t.Skip("真实生成 + 构建/测试矩阵需要 JIMU_HEAVY_MATRIX=1（CI 的 Scaffold Matrix job）")
+	}
+}
+
+// newTestGoCache 返回本次构建测试使用的 GOCACHE：
+//
+//	JIMU_TEST_GOCACHE 非空 → 原样用它（**不删除**）：CI 的 Scaffold Matrix job 把它指向 actions/cache
+//	                         的目录，跨运行复用构建产物；
+//	否则                  → <t.TempDir()>/gocache（随测试删除），避免往共享缓存堆链接产物
+//	                         （曾涨到 25G 写满磁盘并写坏默认缓存）。
 func newTestGoCache(t *testing.T) string {
 	t.Helper()
 	cache := filepath.Join(t.TempDir(), "gocache")
+	if dir := os.Getenv(testGoCacheEnv); dir != "" {
+		cache = dir
+	}
 	require.NoError(t, os.MkdirAll(cache, 0o755))
 	return cache
 }
@@ -52,7 +82,24 @@ func assertProjectVets(t *testing.T, dir, cache string) {
 	runGoInProject(t, dir, cache, "vet", "./...")
 }
 
-// runGoInProject 在生成项目里执行一个 go 子命令（GOWORK=off + 指定 GOCACHE），失败即报错。
+// trimpathGoflags 返回带 -trimpath 的 GOFLAGS（在用户既有值之后追加，已有则原样返回）。
+//
+// 生成的临时项目每次落在不同路径；不加 -trimpath 时绝对路径进入 build action，同一份内容在不同
+// 路径下命中不了缓存 —— JIMU_TEST_GOCACHE 复用失效，且缓存体积随每次重跑无界增长（实测：全矩阵
+// 无 -trimpath 冷 452s/5.5G、同缓存重跑仍 +300MB；加 -trimpath 后 400s→335s、2378MB→2391MB 收敛）。
+func trimpathGoflags() string {
+	cur := os.Getenv("GOFLAGS")
+	switch {
+	case cur == "":
+		return "-trimpath"
+	case strings.Contains(cur, "-trimpath"):
+		return cur
+	default:
+		return cur + " -trimpath"
+	}
+}
+
+// runGoInProject 在生成项目里执行一个 go 子命令（GOWORK=off + 指定 GOCACHE + -trimpath），失败即报错。
 func runGoInProject(t *testing.T, dir, cache string, args ...string) {
 	t.Helper()
 	output, err := runGoInProjectOutput(t, dir, cache, args...)
@@ -64,7 +111,7 @@ func runGoInProjectOutput(t *testing.T, dir, cache string, args ...string) (stri
 	t.Helper()
 	cmd := exec.Command("go", args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOWORK=off", "GOCACHE="+cache)
+	cmd.Env = append(os.Environ(), "GOWORK=off", "GOCACHE="+cache, "GOFLAGS="+trimpathGoflags())
 	output, err := cmd.CombinedOutput()
 	return string(output), err
 }
@@ -140,11 +187,15 @@ func allowedProtoLiteral(line string, inRawDesc bool) bool {
 	return strings.Contains(line, "Metadata:")
 }
 
-// TestGoBuildCacheIsTestScoped 收尾自检：构建测试必须用 newTestGoCache（专用、随测试删除），
-// 不得再出现共享的 $TMPDIR/jimu-go-build-cache。
+// TestGoBuildCacheIsTestScoped 收尾自检：构建测试必须用 newTestGoCache（默认专用、随测试删除；
+// 设了 JIMU_TEST_GOCACHE 则原样复用该目录），不得再出现共享的 $TMPDIR/jimu-go-build-cache。
 func TestGoBuildCacheIsTestScoped(t *testing.T) {
 	cache := newTestGoCache(t)
 	require.DirExists(t, cache)
+	if dir := os.Getenv(testGoCacheEnv); dir != "" {
+		assert.Equal(t, dir, cache, "JIMU_TEST_GOCACHE 必须原样生效（CI 靠它复用构建缓存）")
+		return
+	}
 	assert.Equal(t, "gocache", filepath.Base(cache), "专用 GOCACHE 必须是 <t.TempDir()>/gocache")
 	t.Logf("专用 GOCACHE 根目录 %s 将由 testing 在本用例结束时删除", filepath.Dir(cache))
 }

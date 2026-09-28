@@ -54,6 +54,7 @@ func TestKernelRequiredDomainsAreSelfContained(t *testing.T) {
 // 对**不含 user/access/tenant**（或只部分包含）的选择，三个内核 domain 必须存在，
 // 且生成项目 `go build ./...` 绿。
 func TestGeneratedProjectCarriesKernelRequiredDomainsAndBuilds(t *testing.T) {
+	requireHeavyMatrix(t)
 	cases := []struct {
 		name string
 		opts NewOptions

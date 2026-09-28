@@ -603,6 +603,7 @@ func TestDeclaredOrderNeverDuplicates(t *testing.T) {
 // 能力用 --force 重建时声明集必须只出现一次。重复声明在生成期全绿（build/gofmt/5 条门禁都过），
 // 只在进程启动 `assembly.validateAssembly` 时报 `capability "x" declared twice` —— 必须在这里挡住。
 func TestAddCapabilityForceOnUngatedIsIdempotent(t *testing.T) {
+	requireHeavyMatrix(t)
 	root := frameworkRootForTest(t)
 	cases := []struct {
 		name string
@@ -626,12 +627,14 @@ func TestAddCapabilityForceOnUngatedIsIdempotent(t *testing.T) {
 			assert.Equal(t, 1, countIn(catalogEntryNames(t, dir), tc.cap), "catalog entries 重复")
 			assert.Equal(t, 1, assemblyDeclarationCount(t, dir, m.Shape, tc.cap), "assembly 重复声明")
 
-			// 启动期装配校验（assembly.Run 第一步就是 validateAssembly）。APP_ENV=prod 让进程在
-			// 装配校验之后、连库之前因配置校验失败而快速退出：不需要 DB，同时证明真的走过了校验。
+			// 启动期装配校验（assembly.Run 第一步就是 validateAssembly）。env 已最小化（见
+			// serverEnvForTest）→ prod 配置校验必然快速失败，不需要 DB；断言只要求进程走过
+			// 装配校验进入「配置加载 / 连库」阶段，且不得出现装配错误或 panic。
 			assertProjectBuilds(t, dir, cache)
 			out := runServerForTest(t, dir, cache)
 			assert.NotContains(t, out, "declared twice", "生成项目启动期装配校验失败：\n%s", out)
-			assert.Contains(t, out, "load config", "装配校验必须通过并走到配置加载：\n%s", out)
+			assert.NotContains(t, out, "panic:", "启动期不得 panic：\n%s", out)
+			assert.Regexp(t, `load config|database`, out, "装配校验必须通过并走到配置/连库阶段：\n%s", out)
 		})
 	}
 }
@@ -661,7 +664,32 @@ func runServerForTest(t *testing.T, dir, cache string) string {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "go", "run", "./cmd/server")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOWORK=off", "GOCACHE="+cache, "APP_ENV=prod")
+	cmd.Env = serverEnvForTest(cache)
 	out, _ := cmd.CombinedOutput()
 	return string(out)
+}
+
+// serverEnvForTest 返回运行生成项目 cmd/server 的**最小显式 env**，绝不 `append(os.Environ(), …)`：
+// `make` 经 `include .env` + `export` 把标准本地 checkout 的 .env（README 要求 `cp .env.example .env`）
+// 整套注入子进程；APP_ENV/DB_*/JWT_SECRET/REDIS_* 齐备时 prod 配置校验会通过，服务器真的去连
+// 127.0.0.1:3306 并重试（10×5s），断言随之变慢/失败 —— 这是正常本地开发态，必须与测试无关。
+//
+// 只透传 go 工具链自身的变量（自定义 GOPATH/GOMODCACHE/GOROOT/GOPROXY 的机器照样能跑），
+// 应用配置键（APP_ENV 由本函数固定为 prod，其余 DB_*/JWT_SECRET/REDIS_* 一律不传）；
+// GOFLAGS 由本函数固定为带 -trimpath（见 trimpathGoflags），不继承外部的 GOFLAGS。
+func serverEnvForTest(cache string) []string {
+	env := []string{
+		"PATH=" + os.Getenv("PATH"),
+		"HOME=" + os.Getenv("HOME"),
+		"GOWORK=off",
+		"GOCACHE=" + cache,
+		"GOFLAGS=" + trimpathGoflags(),
+		"APP_ENV=prod",
+	}
+	for _, k := range []string{"GOPATH", "GOMODCACHE", "GOROOT", "GOTOOLCHAIN", "GOPROXY", "GOPRIVATE", "GONOSUMDB", "GOSUMDB"} {
+		if v := os.Getenv(k); v != "" {
+			env = append(env, k+"="+v)
+		}
+	}
+	return env
 }
