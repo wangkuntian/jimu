@@ -4,6 +4,16 @@ name: CI (Go)
 # 仅当 Go 相关代码或测试/构建脚本变更时触发。
 # 镜像构建与安全扫描见 ci-docker.yml（Dockerfile/compose/deploy 变更）；
 # 重型脚手架矩阵见 ci-scaffold.yml（默认不在 PR 上跑，有自己的触发口径与并发组）。
+#
+# 构建缓存：setup-go 自带的缓存 key 只含 go.mod 哈希，而 Actions 的缓存条目**按 key 不可变**、
+# 命中即「只恢复不重存」—— 快照在首次保存那一刻就冻结，之后每个 commit 的 first-party 编译产物
+# 全部随 runner 丢弃（每一轮都只有依赖是热的；实测每个 job 在出第一条 `ok` 之前要先付 90–115s）。
+# 因此每个 Go job 额外挂一条**滚动** actions/cache：把 GOCACHE 指到自己的目录
+# （`${{ runner.temp }}/gocache-<风味>`），key 取 `<go.sum 哈希>-<sha>` —— 主 key 只在重跑同一
+# commit 时命中，其余靠 restore-keys 拿最近一份快照、跑完存新条目，收益能跨 commit 累积。
+# 风味分开是为了不让 `-race`、`-cover` 与静态分析的产物互相挤占同一份快照；同一风味的多个 race
+# 分片共享一份（谁先跑完谁存，下一轮大家都用得上）。bench 未挂：它只有 2 分钟、不是长杆。
+# 配额：仓库 actions/cache 上限 10 GB，超限按 LRU 淘汰。
 
 on:
   # 手动触发：重跑整套轻量门禁（重型脚手架矩阵不在这里，见 ci-scaffold.yml 的 workflow_dispatch）
@@ -60,6 +70,20 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: "♻️ Restore the Go build cache"
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/gocache-vet
+          key: gocache-vet-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            gocache-vet-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
+            gocache-vet-${{ runner.os }}-
+
+      - name: "🛠️ Point GOCACHE at the rolling build cache"
+        # job 级 env 里拿不到 runner 上下文（actionlint: context "runner" is not allowed here），
+        # 所以在这一步写进 $GITHUB_ENV —— 它对其后的所有步骤生效
+        run: echo "GOCACHE=${{ runner.temp }}/gocache-vet" >> "$GITHUB_ENV"
 
       - name: "🔍 gofmt check"
         run: |
@@ -146,6 +170,20 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: "♻️ Restore the Go build cache"
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/gocache-cover
+          key: gocache-cover-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            gocache-cover-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
+            gocache-cover-${{ runner.os }}-
+
+      - name: "🛠️ Point GOCACHE at the rolling build cache"
+        # job 级 env 里拿不到 runner 上下文（actionlint: context "runner" is not allowed here），
+        # 所以在这一步写进 $GITHUB_ENV —— 它对其后的所有步骤生效
+        run: echo "GOCACHE=${{ runner.temp }}/gocache-cover" >> "$GITHUB_ENV"
 
       - name: "📦 Install coverage tools"
         run: sudo apt-get update && sudo apt-get install -y bc
@@ -280,6 +318,20 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: "♻️ Restore the Go build cache"
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/gocache-race
+          key: gocache-race-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            gocache-race-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
+            gocache-race-${{ runner.os }}-
+
+      - name: "🛠️ Point GOCACHE at the rolling build cache"
+        # job 级 env 里拿不到 runner 上下文（actionlint: context "runner" is not allowed here），
+        # 所以在这一步写进 $GITHUB_ENV —— 它对其后的所有步骤生效
+        run: echo "GOCACHE=${{ runner.temp }}/gocache-race" >> "$GITHUB_ENV"
 
       - name: "🏎️ Run race tests (${{ matrix.shard }})"
         env:
