@@ -50,10 +50,15 @@ type NewOptions struct {
 
 // Result 是一次生成的摘要（--dry-run 与 --report 共用）。
 type Result struct {
-	Dir          string
-	Module       string
-	Shape        string
+	Dir    string
+	Module string
+	Shape  string
+	// Capabilities 是**装配集**（Declared：--profile 的形态清单，或 --with 的 Requires 闭包 + 拓扑序，
+	// 与写进 marker 的 `capabilities` 同源）；CopySet 是**复制集**（Copy：装配集 ∪ 编译闭包
+	// ∪ 迁移携带目录 ∪ 内核编译期 domain 依赖）。两者不等：`minimal` 装配 5 个能力，复制 8 个目录。
+	// `--dry-run` 两个都打印并显式标注，避免把复制集当成装配集读。
 	Capabilities []string
+	CopySet      []string
 	Drivers      []string
 	Assets       []string
 	Files        []string
@@ -695,17 +700,22 @@ func moduleError(module string, err error) error {
 }
 
 // preflightTarget 落实裁定 8 的幂等/安全语义：
-//   - 目标不存在、或存在但为空目录 → 放行；
-//   - 目标非空且无 --force → 报错 not empty；
-//   - 目标非空且带 .jimu-generated 标记 → 放行（由 swapIntoPlace 整体替换）。
+//   - 目标不存在，或存在但为**空目录** → 放行（`mkdir proj && jimu new proj` 是常见用法；
+//     swapIntoPlace 本就把既有空目录改名让位，不需要也不应该要 --force）；
+//   - 目标非空且无 `--force` → 报错 not empty；
+//   - 目标非空且有 `.jimu-generated` 标记 → 放行（由 swapIntoPlace 整体替换）；
+//   - 目标非空但**没有**标记 → 即使带 `--force` 也拒绝（--force 的语义是「覆盖生成器产物」，
+//     不是「强行写任何目录」）。
 func preflightTarget(target string, force bool) error {
-	if _, err := os.ReadDir(target); os.IsNotExist(err) {
+	entries, err := os.ReadDir(target)
+	if os.IsNotExist(err) {
 		return nil
 	} else if err != nil {
 		return fmt.Errorf("inspect target %s: %w", filepathSlash(target), err)
 	}
-	// 既有目录的判据是「是不是本生成器的产物」：没有标记一律拒绝（即使带了 --force ——
-	// --force 的语义是「覆盖生成器产物」，不是「强行写任何目录」）。
+	if len(entries) == 0 {
+		return nil
+	}
 	if _, err := os.Stat(filepath.Join(target, markerFile)); err != nil {
 		return fmt.Errorf("target directory %s is not empty and has no %s marker; --force only overwrites generator products", filepathSlash(target), markerFile)
 	}
@@ -929,7 +939,8 @@ func planResult(root string, set CapabilitySet, module string, opts NewOptions) 
 		Dir:          absPath(opts.Dir),
 		Module:       module,
 		Shape:        set.Shape,
-		Capabilities: slices.Clone(set.Copy),
+		Capabilities: slices.Clone(set.Declared),
+		CopySet:      slices.Clone(set.Copy),
 		Drivers:      flattenDrivers(set.Drivers),
 	}
 	for _, rel := range kernelDirs {
@@ -1113,7 +1124,8 @@ func collectResult(target string, set CapabilitySet, module, root string) (*Resu
 		Dir:          target,
 		Module:       module,
 		Shape:        set.Shape,
-		Capabilities: slices.Clone(set.Copy),
+		Capabilities: slices.Clone(set.Declared),
+		CopySet:      slices.Clone(set.Copy),
 		Drivers:      flattenDrivers(set.Drivers),
 	}
 	assets, err := AssetsFor(set)

@@ -467,7 +467,7 @@ profiles/
 | **P0 契约与内核归位** | 定义 `contract.Capability` 与端口；建立 `internal/kernel/`；`internal/capabilities/` 下按现有 8 模块原样落位（先不改内部）；`catalog` 显式清单；运行时 `capabilities.enabled` + 依赖闭包校验；去掉 `bootstrap.go` 的 `auth`/`oauth` 字符串特判与"第一个中间件提供者"约定 | `full` 行为与 master 完全一致（测试全绿）；关闭 `oauth` 后其路由/迁移/权限点消失 |
 | **P1 边界重划** | `auth` → 6 个能力（§5.1）；`admin` 拆散到各能力（§5.2）；`user` 双写合并（§5.3）；**平台混装包归位**（§3.6：拆 `platform/auth`、`platform/db`、`platform/http`，`platform/tenant` → `kernel/tenant`（上下文机制；租户实体/套餐/配额/开通式注册归 `tenancy` 能力），`conf/rbac_model.conf` → `access`，示例服务移出平台层）；表所有权与迁移搬迁 + `adopt-capabilities`；`platform → module` 反向依赖消除；中间件归位（§3.5.2）（执行拆分为子阶段：P1.1 命名空间搬迁 → P1.2 平台包归位 → P1.3 内核混装包拆分 → P1.4 auth 拆分与端口（已完成：grpc userinfo 经 `contract.UserinfoSource` 端口消费、apikey 模型迁入 `capabilities/apikey/domain`，`kernel/db/seed.go` 的 kernel→capabilities import 留待 P1.5）→ P1.5 种子/迁移归属（已完成：迁移落位 `capabilities/<name>/migrations/{mysql,postgres}/` 并经 embed 进二进制，运行器按能力走独立版本表 + adopt 基线登记，种子迁至 `internal/app`、权限点由 Descriptor 声明，kernel→capabilities import 归零；迁移沿用原全局编号）→ P1.6 auth 六能力（已完成：auth/mfa/passkey 三能力落位 + breach/captcha catalogize + 开通式注册迁入 tenant；TOTP 由 `users.totp_*` 迁到 mfa 自有 `user_mfa` 表（迁移 016，密文原样搬迁、可回滚）；五条 contract 端口 MFAVerifier/LoginFinalizer/TenantProvisioner/BreachChecker/CaptchaVerifier 消除跨能力 import）→ P1.7 admin 拆散与 user 合并（已完成：`role`+`permission` 合并为 `access`（四表所有者 + `contract.UserRoleAssigner`）；`/api/v1/admin/*` 路由按用例归还 user/queue/apikey/dataops/audit/feature/uploadsec，平台级视图与管理端准入中间件归新能力 `console`（声明 `/api/v1/admin/*` 通配权限点）；`/admin/users` 并入 `user`，管理面与自助面共用同一 repository/配额与租户可见性；`admin` 能力目录删除；对外 URL 不变，e2e 以路由对齐用例钉住）；P1.1–P1.3 已合入 release/v0.3.0；P1.4–P1.7 已完成） | 16 处模块间 import 归零；迁移按能力归属并各有版本表；存量实例可平滑 adopt；`platform/` 下不再有跨能力的混装包 | 16 处模块间 import 归零；迁移按能力归属并各有版本表；存量实例可平滑 adopt；`platform/` 下不再有跨能力的混装包 |
 | **P2 三层机制** | `capabilities.enabled` 配置合并与校验；`profiles/{full,minimal,saas,enterprise,machine}` 入口包；**驱动级可插拔**（§3.7：`storage/{local,s3}`、`queue/{redis,kafka,rabbitmq}`、`dataops/{csv,excel}`）；**非代码资产模块化**（§3.8：deploy 资产、Helm values、CLI 子命令、契约测试）；`jimu new` / `capability add` 脚手架；`compose-report` | 5 个 profile 均能构建并启动；`minimal` 的报告数字显著低于 `full`；只用本地存储/Redis 队列/CSV 时对应重型依赖不出现 |
-| **P2.7 层① 脚手架（§6.2）** | `jimu new <dir> --profile=…` / `--with=…`（能力集 → 专属 module：单形态 registry/assembly/drivers/active、按能力渲染的 `catalog`/`configs`/`values.yaml`、按口径复制的工具与资产、module 受控重写、`go mod tidy` + 自检）、`jimu capability add <name>`（增量重渲染）、`--report` 报告、`make check-templates` | 生成项目 `go build ./...` 绿 + `check-capabilities` **5 条 ✅** + `go test ./...` 全绿；`minimal` 实测 437 文件 / 闭包 181 文件 17522 行 / 直接依赖 47 / 迁移 10 / 表 9 / 路由 32；`--with=user,access,queue` 重型依赖 **0**；本仓 `configs/*.yaml` 逐字节不变、catalog 18 项、`go.mod` 不减小、5 形态路由数不变 |
+| **P2.7 层① 脚手架（§6.2）** | `jimu new <dir> --profile=…` / `--with=…`（能力集 → 专属 module：单形态 registry/assembly/drivers/active、按能力渲染的 `catalog`/`configs`/`values.yaml`、按口径复制的工具与资产、module 受控重写、`go mod tidy` + 自检）、`jimu capability add <name>`（增量重渲染）、`--report` 报告、`make check-templates` | 生成项目 `go build ./...` 绿 + `check-capabilities` **5 条 ✅** + `go test ./...` 全绿；`minimal` 实测 449 文件 / 闭包 181 文件 17522 行 / 直接依赖 47 / 迁移 10 / 表 9 / 路由 32；`--with=user,access,queue` 重型依赖 **0**；本仓 `configs/*.yaml` 逐字节不变、catalog 18 项、`go.mod` 不减小、5 形态路由数不变 |
 | **P3 门禁与文档** | `check-capabilities` / `check-profiles` / `check-pluggable`；生成器模板同步新形态；README / CONTRIBUTING / AGENTS.md 更新（能力清单、形态、新增能力流程） | 四道门禁在 CI 生效 |
 | **P4 v0.3.0 收尾** | 版本日志补验证结果；`release-check`；`release/v0.3.0` → `master` 合并；打 tag 发布 | GitHub Release 发布成功 |
 
@@ -608,14 +608,14 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > 项目内 `go build ./...` 与 `go run ./tools/checkcapabilities` 必须都绿，任一步失败整体回滚），
 > 本仓新增 `make check-templates`（生成最小项目并真构建 + 跑生成项目的门禁）。
 >
-> **实测（2026-09-26，本分支）**：`--profile=minimal`（`--module=example.com/proj`）= 生成 **437** 个
+> **实测（2026-09-26，本分支）**：`--profile=minimal`（`--module=example.com/proj`）= 生成 **449** 个
 > 文件 / 闭包 **181** 个 Go 文件、**17522** 行 / `go.mod` 直接依赖 **47**（框架仓 64，`go mod tidy`
 > 之后）/ 迁移 **10** / 表 **9** / 路由 **32**（与 minimal 形态的 32 逐值一致）/ 重型依赖 **0** /
 > 资产 **45** 个文件；生成项目 `go build ./...` 绿、`check-capabilities` **5 条 ✅**、`go test ./...`
 > 全绿（读 `docs/openapi` 的契约测试按资产依赖裁掉）、`make compose-report` 单形态文本正确且幂等
 > （与 `generated-report.md` 数字逐值一致）。`--with=user,access,queue`：能力目录只含
 > `access encryption notification outbox queue tenant user`（+ `catalog`），重型依赖 **0**，
-> 生成 413 文件 / 直接依赖 47 / 迁移 10 / 表 11 / 路由 34。**本仓行为零变化**：`configs/*.yaml`
+> 生成 419 文件 / 闭包 165 文件 16054 行 / 直接依赖 47 / 迁移 10 / 表 11 / 路由 34。**本仓行为零变化**：`configs/*.yaml`
 > 逐字节不变、catalog 仍 18 项、`go.mod` 不减小、5 形态路由数不变、`make compose-report` 输出逐字节
 > 不变。**行为变更**：新增 `jimu new` / `jimu capability add` 两条命令（生成项目是本仓结构的子集，
 > `configs/app.yaml` 按能力渲染，未选中能力目录/驱动/资产/段零出现）。执行记录见

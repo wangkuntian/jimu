@@ -40,6 +40,14 @@ func Report(root string) (*projectmetrics.Metrics, error) {
 	if err != nil {
 		return nil, err
 	}
+	return reportFor(root, src, m)
+}
+
+// reportFor 用**调用方已解析的框架源根**度量 `root`：`capability add` 的 cwd 就是生成项目
+// （文档里的用法 `cd proj && jimu capability add x`），此时 cwd 里没有 `module jimu`，只能把
+// `--from`/`marker.SourceRoot` 解析出的源根传进来 —— 不能重新按 cwd 发现（Fix round 2 修掉的
+// 真实 bug：刷新报告时静默失败并打告警）。
+func reportFor(root, src string, m *Marker) (*projectmetrics.Metrics, error) {
 	set, err := markerSet(src, m)
 	if err != nil {
 		return nil, err
@@ -120,28 +128,44 @@ func assemblyFor(set CapabilitySet) (assembly.Assembly, error) {
 // `set` 提供报告表头需要的声明集/迁移携带集/驱动集（它们不是 Metrics 的字段）；module 与资产根
 // 从 marker 读回 —— 报告的每个数字都必须来自**这个目录**，不靠调用方转述。
 func WriteReport(dir string, m projectmetrics.Metrics, set CapabilitySet) error {
-	marker, err := LoadMarker(dir)
+	content, err := writeReportFileContent(dir, m, set)
 	if err != nil {
 		return err
+	}
+	_, err = os.Stdout.WriteString(content)
+	return err
+}
+
+// writeReportFile 与 WriteReport 同源但**不打印**：`capability add` 的静默刷新用它（add 的输出
+// 已经有自己的「改了哪些文件」清单，再打一整份报告是噪音）。
+func writeReportFile(dir string, m projectmetrics.Metrics, set CapabilitySet) error {
+	_, err := writeReportFileContent(dir, m, set)
+	return err
+}
+
+// writeReportFileContent 渲染并落盘，返回渲染文本（打印与静默写共用同一份内容）。
+func writeReportFileContent(dir string, m projectmetrics.Metrics, set CapabilitySet) (string, error) {
+	marker, err := LoadMarker(dir)
+	if err != nil {
+		return "", err
 	}
 	deps, err := projectmetrics.DirectDeps(dir, marker.Module)
 	if err != nil {
-		return fmt.Errorf("count direct dependencies: %w", err)
+		return "", fmt.Errorf("count direct dependencies: %w", err)
 	}
 	generated, assetFiles, err := generatedTreeCounts(dir)
 	if err != nil {
-		return err
+		return "", err
 	}
 	content := renderGeneratedReport(m, set, marker, deps, generated, assetFiles)
 	target := filepath.Join(dir, filepath.FromSlash(reportRelPath))
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return fmt.Errorf("create directory for %s: %w", reportRelPath, err)
+		return "", fmt.Errorf("create directory for %s: %w", reportRelPath, err)
 	}
 	if err := writeFile(target, []byte(content), 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", reportRelPath, err)
+		return "", fmt.Errorf("write %s: %w", reportRelPath, err)
 	}
-	_, err = os.Stdout.WriteString(content)
-	return err
+	return content, nil
 }
 
 // generatedTreeCounts 返回（生成文件数，资产文件数）：前者是生成树里的全部文件（不含
@@ -201,7 +225,7 @@ func renderGeneratedReport(m projectmetrics.Metrics, set CapabilitySet, marker *
 	b.WriteString("与 `docs/profiles/compose-report.md` 的「指标口径」段同一份实现（`tools/internal/projectmetrics`）：\n\n")
 	b.WriteString("| 指标 | 口径 |\n|---|---|\n")
 	b.WriteString("| 生成文件数 | 生成树里的全部文件数（不含 `.jimu-generated` 标记与本报告自身） |\n")
-	b.WriteString("| 本仓 Go 文件 / 代码行（闭包） | `golang.org/x/tools/go/packages` 载入 `./cmd/server` 的 import 闭包，只统计本模块的非 `_test.go` 文件（生成项目的形态在生成期固定，直接读提交态选点） |\n")
+	b.WriteString("| 本模块 Go 文件 / 代码行（闭包） | `golang.org/x/tools/go/packages` 载入 `./cmd/server` 的 import 闭包，只统计本模块的非 `_test.go` 文件（生成项目的形态在生成期固定，直接读提交态选点） |\n")
 	b.WriteString("| go.mod 直接依赖 | `go list -m -f '{{if not .Indirect}}{{.Path}}{{end}}' all` 的非空行数（不含主模块自身；`--report` 在 `go mod tidy` **之后**度量） |\n")
 	b.WriteString("| 迁移数 | **迁移集**（声明集 ∪ schema 依赖，与 `jimu migrate` 同一口径）各 `Descriptor.Migrations` 中 `migrations/mysql/*.sql` 的文件数（postgres 同名同数） |\n")
 	b.WriteString("| 表数 | **迁移集**各 `Descriptor.Owns` 的并集大小（口径同迁移数） |\n")
@@ -212,8 +236,8 @@ func renderGeneratedReport(m projectmetrics.Metrics, set CapabilitySet, marker *
 	b.WriteString("## 编译面\n\n")
 	b.WriteString("| 指标 | 值 |\n|---|---:|\n")
 	fmt.Fprintf(&b, "| 生成文件数 | %d |\n", generated)
-	fmt.Fprintf(&b, "| 本仓 Go 文件（闭包） | %d |\n", m.Files)
-	fmt.Fprintf(&b, "| 本仓代码行（闭包） | %d |\n", m.Lines)
+	fmt.Fprintf(&b, "| 本模块 Go 文件（闭包） | %d |\n", m.Files)
+	fmt.Fprintf(&b, "| 本模块代码行（闭包） | %d |\n", m.Lines)
 	fmt.Fprintf(&b, "| go.mod 直接依赖 | %d |\n", deps)
 	fmt.Fprintf(&b, "| 迁移数 | %d |\n", m.Migrations)
 	fmt.Fprintf(&b, "| 表数 | %d |\n", m.Tables)

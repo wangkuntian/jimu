@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -33,6 +34,43 @@ func TestNewCmdWiresEveryFlag(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "--dry-run 绝不落盘")
 	assert.Contains(t, out.String(), "example.com/proj")
 	assert.Contains(t, out.String(), "minimal")
+}
+
+// TestNewCmdDryRunDistinguishesAssemblyFromCopySet ④：`--dry-run` 的两个能力集口径不同且必须各自
+// 标注 —— 装配集（写进 marker/assembly 的声明集）与复制集（额外含编译闭包/迁移携带/内核编译期
+// domain 依赖的目录）。曾经只打一行 `capabilities` 且打的是复制集，读者会把它当装配集。
+// `minimal` 是偏差最小的可见样例：装配 5 个能力，复制 8 个目录（outbox/queue/tenant 未被装配）。
+func TestNewCmdDryRunDistinguishesAssemblyFromCopySet(t *testing.T) {
+	var out bytes.Buffer
+	c := newCommandForTest(&out)
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=minimal", "--module=example.com/proj", "--dry-run"})
+	require.NoError(t, c.Execute())
+
+	plan := out.String()
+	assembly := planLine(t, plan, "capabilities")
+	copySet := planLine(t, plan, "copy set")
+	assert.Contains(t, assembly, "(装配集)")
+	assert.Contains(t, copySet, "(复制集")
+	// 装配集只有 minimal 的 5 个能力；outbox/queue/tenant 只是编译闭包/迁移携带，不进装配。
+	assert.NotContains(t, assembly, "outbox")
+	assert.NotContains(t, assembly, "queue")
+	assert.Contains(t, copySet, "outbox")
+	assert.Contains(t, copySet, "queue")
+	assert.Contains(t, copySet, "tenant")
+	assert.NotEqual(t, assembly, copySet, "两个能力集不相等，必须分两行打")
+}
+
+// planLine 取 `--dry-run` 输出里以 "  <label> " 开头的那一行（label 后必须有空格，避免
+// `capabilities` 误匹配到别的前缀）。
+func planLine(t *testing.T, plan, label string) string {
+	t.Helper()
+	for _, line := range strings.Split(plan, "\n") {
+		if strings.HasPrefix(line, "  "+label+" ") {
+			return line
+		}
+	}
+	t.Fatalf("dry-run 输出里没有 %q 行：\n%s", label, plan)
+	return ""
 }
 
 // TestNewCmdRejectsMissingCapabilitySelection 两个选择都不给 → 报错（要求二选一）。

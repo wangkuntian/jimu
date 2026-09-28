@@ -2,6 +2,7 @@ package generator
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -33,12 +34,40 @@ func TestNewProjectLeavesNoPartialTreeOnFailure(t *testing.T) {
 	}
 }
 
+// TestNewProjectAcceptsExistingEmptyDirectory 裁定 8：只拒绝「存在且**非空**」的目标 ——
+// 已存在的空目录必须放行（`mkdir proj && jimu new proj` 是常见用法，也不需要 --force）。
+// Fix round 2 之前这里会误报 "is not empty"（代码与注释/裁定矛盾）。
+func TestNewProjectAcceptsExistingEmptyDirectory(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		t.Run(fmt.Sprintf("force=%v", force), func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "proj")
+			require.NoError(t, os.MkdirAll(dir, 0o755))
+			res, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", Force: force, NoTidy: true})
+			require.NoError(t, err, "已存在的空目录必须放行")
+			assert.FileExists(t, filepath.Join(dir, "go.mod"))
+			assert.Positive(t, res.FileCount)
+			entries, rerr := os.ReadDir(filepath.Dir(dir))
+			require.NoError(t, rerr)
+			for _, e := range entries {
+				assert.NotContains(t, e.Name(), ".tmp-")
+				assert.NotContains(t, e.Name(), ".old-")
+			}
+		})
+	}
+}
+
+// TestNewProjectForceOnlyOverwritesGeneratorProducts --force 的语义是「覆盖**生成器产物**」：
+// 非空且没有 .jimu-generated 标记的目录即使带 --force 也拒绝（用户数据不被碰）。
 func TestNewProjectForceOnlyOverwritesGeneratorProducts(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "keep.txt"), []byte("user data"), 0o644))
 	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", Force: true, NoTidy: true})
-	// 无 .jimu-generated 标记 → 不是生成器产物，--force 不生效。
+	// 非空 + 无 .jimu-generated 标记 → 不是生成器产物，--force 不生效。
 	require.ErrorContains(t, err, ".jimu-generated")
+	content, rerr := os.ReadFile(filepath.Join(dir, "keep.txt"))
+	require.NoError(t, rerr)
+	assert.Equal(t, "user data", string(content), "拒绝时不得动目标目录")
 }
 
 // TestNewProjectCopiesKernelAndSelectedCapabilities 是「复制与落盘」这一层的落地验收：

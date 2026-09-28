@@ -71,7 +71,10 @@ func TestSelectedCapabilityIsAssembledWithItsWholeCompileClosure(t *testing.T) {
 	// tenant 仍是 schema 依赖的迁移携带。
 	assert.ElementsMatch(t,
 		[]string{"access", "auth", "breach", "encryption", "notification", "outbox", "queue", "tenant", "user"},
-		res.Capabilities)
+		res.CopySet)
+	// breach 的 auth 是**软依赖**（SoftRequires）：装配集只有 breach，auth 只是被它生产 import 到
+	// 编译闭包里；复制集才是那 9 个（`Capabilities` vs `CopySet` 的差别由此可见）。
+	assert.Equal(t, []string{"breach"}, res.Capabilities, "Capabilities 是装配集（Declared）")
 	for _, p := range []string{
 		"internal/capabilities/breach/wire.go",
 		"internal/capabilities/auth/wire.go",

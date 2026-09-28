@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -48,6 +49,56 @@ func generateForTest(t *testing.T, opts NewOptions) string {
 	_, err := newProjectForTest(t, opts)
 	require.NoError(t, err)
 	return dir
+}
+
+// TestAddCapabilityRefreshesGeneratedReport `capability add` 改变了能力集与文件数，项目里**已有**的
+// `--report` 产物必须同批刷新（否则它静默过期：旧装配集、旧文件数）；本来没有报告的项目不得凭空多出一份。
+func TestAddCapabilityRefreshesGeneratedReport(t *testing.T) {
+	// 无报告的对照项目先生成（NewProject 需要 cwd 在框架仓内；下面会 t.Chdir 到生成项目）。
+	plain := generateForTest(t, NewOptions{Profile: "minimal"})
+
+	dir := generateForTest(t, NewOptions{Profile: "minimal", Report: true})
+	path := filepath.Join(dir, filepath.FromSlash(reportRelPath))
+	before, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.NotContains(t, string(before), "dataops")
+
+	// 关键：`capability add` 的 cwd 就是生成项目（文档用法 `cd proj && jimu capability add x`）——
+	// 框架源根只能取自 marker.SourceRoot，不能按 cwd 重新发现（Fix round 2 修掉的 bug）。
+	t.Chdir(dir)
+
+	_, err = AddCapability(AddOptions{Name: "dataops", Dir: dir})
+	require.NoError(t, err)
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(after), "dataops", "add 后报告必须反映新的装配集")
+	assert.NotEqual(t, string(before), string(after), "报告内容必须真的重算")
+	assert.Greater(t, reportGeneratedCount(t, string(after)), reportGeneratedCount(t, string(before)),
+		"add 复制了新能力目录，报告的「生成文件数」必须随之更新")
+
+	// 重跑一次：报告内容稳定（幂等），且数字继续跟随新的复制集。
+	_, err = AddCapability(AddOptions{Name: "storage", Dir: dir})
+	require.NoError(t, err)
+	again, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(again), "storage")
+	assert.Contains(t, string(again), "dataops")
+	assert.Greater(t, reportGeneratedCount(t, string(again)), reportGeneratedCount(t, string(after)))
+
+	// 没有报告的项目：add 不得创建报告（报告只在 --report 时产出）。
+	_, err = AddCapability(AddOptions{Name: "dataops", Dir: plain})
+	require.NoError(t, err)
+	assert.NoFileExists(t, filepath.Join(plain, filepath.FromSlash(reportRelPath)))
+}
+
+// reportGeneratedCount 从报告文本里取出「生成文件数」的实测值（解析失败即 fail）。
+func reportGeneratedCount(t *testing.T, report string) int {
+	t.Helper()
+	m := regexp.MustCompile(`(?m)^\| 生成文件数 \| (\d+) \|$`).FindStringSubmatch(report)
+	require.Len(t, m, 2, "报告里必须有「生成文件数」行")
+	n, err := strconv.Atoi(m[1])
+	require.NoError(t, err)
+	return n
 }
 
 // hashTree 返回整棵树的「相对路径 + 内容 sha256」摘要：用于断言幂等与失败回滚（只比内容，不比 mtime）。

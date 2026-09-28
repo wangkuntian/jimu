@@ -3,6 +3,7 @@ package generator
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -129,6 +130,12 @@ func AddCapability(opts AddOptions) (*Result, error) {
 	if err := mergeGeneratedConfigs(dir, staging); err != nil {
 		return nil, err
 	}
+	// ②：报告刷新（`--report` 产物存在才更新）—— add 改变了能力集与文件数，报告必须同批更新，
+	// 否则它会静默过期（旧装配集 / 旧文件数）。写在暂存树里 → 随 changeSet/installStaged 一起
+	// 原子就位；失败**不阻断 add**（报告是产物之外的附加物），打印告警让使用者自行刷新。
+	if err := refreshReportInStaging(dir, staging, root, set); err != nil {
+		fmt.Fprintf(os.Stderr, "⚠️  报告未刷新：%v（可用 `jimu new --force --report` 重新生成）\n", err)
+	}
 	changed, err := changeSet(dir, staging, m.Files)
 	if err != nil {
 		return nil, err
@@ -154,6 +161,27 @@ func AddCapability(opts AddOptions) (*Result, error) {
 		return nil, err
 	}
 	return res, nil
+}
+
+// refreshReportInStaging 在暂存树里重算并写报告，只在调用方项目里**已有**报告时执行
+// （不存在不创建 —— 没要过报告的项目不该在 add 之后突然多出一份）。写在暂存树里意味着它与其它
+// 变更一起原子落盘；已被使用者手改的报告会被重算覆盖（报告头写着「请勿手工编辑」）。
+func refreshReportInStaging(dir, staging, src string, set CapabilitySet) error {
+	if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(reportRelPath))); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	marker, err := LoadMarker(staging)
+	if err != nil {
+		return err
+	}
+	metrics, err := reportFor(staging, src, marker)
+	if err != nil {
+		return err
+	}
+	return writeReportFile(staging, *metrics, set)
 }
 
 // resolveSourceRoot 定位框架源根：--from 优先，否则取 marker.SourceRoot（S7）。两条路径都必须
