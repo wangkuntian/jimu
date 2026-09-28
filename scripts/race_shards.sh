@@ -13,11 +13,18 @@
 #   各分片重复支付的编译时间。
 #
 # 分片：
-#   core          所有非 internal/capabilities、非 tools 的包（kernel/shared/contract/config/
-#                 assembly/app/profiles/e2e/cmd …）—— 用「排除法」派生，新增顶层包自动归位
-#   caps-a/caps-b internal/capabilities 下按能力名排序对半切 —— 不写死能力名，新增能力自动归位
-#   generator-N   tools/generator 整包，但用 `-run` 把**用例**再切 N 片（见下）
-#   tools         ./tools/... 去掉 tools/generator（composereport/checkcapabilities/internal/…）
+#   core             所有非 internal/capabilities、非 tools 的包（kernel/shared/contract/config/
+#                    assembly/app/profiles/e2e/cmd …）—— 用「排除法」派生，新增顶层包自动归位
+#   caps-a/caps-b    internal/capabilities 下按能力名排序对半切 —— 不写死能力名，新增能力自动归位
+#   composereport-N  tools/composereport 整包，但把它那条重型用例按**形态**再切 N 片（见下）
+#   generator-N      tools/generator 整包，但用 `-run` 把**用例**再切 N 片（见下）
+#   tools            ./tools/... 去掉 tools/{generator,composereport}（checkcapabilities/internal/…）
+#
+# composereport 的形态切分：那条重型用例在 `-race` 下每个形态都要做一次全依赖图 packages.Load +
+# 全闭包行数统计（实测整包 257s，是 tools 分片唯一的压力来源）。按形态对半切后每片只度量自己那部分，
+# **每个形态仍然在某个分片里被 `-race` 跑过**；跨形态关系（minimal ≤ 85% full 之类）由未设
+# JIMU_METRICS_PROFILES 时的完整度量断言（非 race 的 Test job，整包 23s）。形态名单来自
+# `tools/profileoverlay -list`（registry 唯一来源），不写死。
 #
 # generator 的用例切分：两条已知最重的用例定向分到不同分片（隔离实测各占该包 ~24% / ~22%，
 # 纯轮转会把它们并到一片、把最短的一片压到 1/3），其余用例按名字排序取模轮转。
@@ -28,10 +35,10 @@
 #   scripts/race_shards.sh shards          # 分片名逐行列出
 #   scripts/race_shards.sh list <shard>    # 打印该分片覆盖的包
 #   scripts/race_shards.sh run <shard>     # 执行该分片的 go test -race（CI 用）
-#   scripts/race_shards.sh verify          # 守卫：包/用例的并集 == 全集、且互不重叠
+#   scripts/race_shards.sh verify          # 守卫：包/用例/形态的并集 == 全集、且互不重叠
 #
 # `run` 开跑前会自己跑一次守卫（fail-closed）：分片清单落后于代码树（新增包没人覆盖、
-# 用例切分漏了用例）会直接失败，而不是静默少测。
+# 用例切分漏了用例、形态切片漏了形态）会直接失败，而不是静默少测。
 
 set -euo pipefail
 
@@ -60,9 +67,45 @@ GENERATOR_PINS=(
 # 单分片超时：与分片前的 `go test -race ./... -timeout 15m` 一致。
 SHARD_TEST_TIMEOUT=15m
 
+# tools/composereport 的重型用例按**形态**切片：它在 `-race` 下每个形态都要做一次全依赖图
+# packages.Load + 全闭包行数统计，整包实测 257s（隔离后依然如此），是 tools 分片变成长杆的唯一
+# 原因。切成 COMPOSEREPORT_SHARDS 片后每片只度量自己那部分形态；**每个形态仍被 `-race` 跑过**。
+# 片数不取「一形态一片」是为了不顶到并发上限（免费公共仓 20 个并发 job）。
+COMPOSEREPORT_SHARDS=2
+COMPOSEREPORT_PKG="./tools/composereport"
+COMPOSEREPORT_IMPORT="$MODULE/tools/composereport"
+# 与 tools/composereport/main_test.go 的 profileShardEnv 同名，它是这条切片的开关
+COMPOSEREPORT_ENV="JIMU_METRICS_PROFILES"
+
 # 当前模块的包（import path 形式）
 all_packages() {
   go list ./...
+}
+
+profiles_cache=""
+# 形态名从 registry 派生（`tools/profileoverlay -list` 是唯一来源），不写死在这份脚本里
+all_profiles() {
+  if [ -z "$profiles_cache" ]; then
+    profiles_cache=$(go run ./tools/profileoverlay -list)
+  fi
+  printf '%s\n' "$profiles_cache"
+}
+
+# 第 i 片 composereport 负责的形态（把形态列表按片数对半切，保持 registry 顺序）
+composereport_profiles() {
+  local idx="$1" total per start end
+  total=$(all_profiles | wc -l | tr -d ' ')
+  per=$(((total + COMPOSEREPORT_SHARDS - 1) / COMPOSEREPORT_SHARDS))
+  start=$(((idx - 1) * per + 1))
+  end=$((idx * per))
+  all_profiles | sed -n "${start},${end}p"
+}
+
+composereport_shard_names() {
+  local i
+  for ((i = 1; i <= COMPOSEREPORT_SHARDS; i++)); do
+    printf 'composereport-%s\n' "$i"
+  done
 }
 
 # 有能力包的能力目录名（排序去重）。从 go list 派生而不是 ls：目录存在但没 Go 包时
@@ -102,6 +145,7 @@ generator_pattern() {
 
 shard_names() {
   local names=(core caps-a caps-b)
+  names+=($(composereport_shard_names))
   local i
   for ((i = 1; i <= GENERATOR_SHARDS; i++)); do
     names+=("generator-$i")
@@ -110,7 +154,7 @@ shard_names() {
   printf '%s\n' "${names[@]}"
 }
 
-# 只覆盖「包」的分片名（generator 分片按用例切，包集合另外算）。
+# 只覆盖「包」的分片名（generator / composereport 分片各自按用例、形态再切，包集合另外算）。
 package_shard_names() {
   printf '%s\n' core caps-a caps-b tools
 }
@@ -139,11 +183,15 @@ shard_packages() {
       # shellcheck disable=SC2086  # 模式列表按空格拆分传给 go list
       go list $patterns
       ;;
+    composereport-*)
+      printf '%s\n' "$COMPOSEREPORT_IMPORT"
+      ;;
     generator-*)
       printf '%s\n' "$GENERATOR_IMPORT"
       ;;
     tools)
-      all_packages | grep "^$MODULE/tools/" | grep -v -x -e "$GENERATOR_IMPORT" || true
+      all_packages | grep "^$MODULE/tools/" \
+        | grep -v -x -e "$GENERATOR_IMPORT" -e "$COMPOSEREPORT_IMPORT" || true
       ;;
     *)
       echo "❌ 未知分片: $1" >&2
@@ -156,11 +204,11 @@ shard_packages() {
 _verify_packages() {
   local rc=0 dups all union
   all=$(all_packages | sort)
-  # generator 的**包**由 generator-1..N 的用例切分覆盖（每个分片都跑同一个包），包集合里只算一次。
+  # generator 与 composereport 的**包**由各自的切片覆盖（每个分片都跑同一个包），包集合里各算一次。
   union=$(
     {
       for s in $(package_shard_names); do shard_packages "$s"; done
-      printf '%s\n' "$GENERATOR_IMPORT"
+      printf '%s\n' "$GENERATOR_IMPORT" "$COMPOSEREPORT_IMPORT"
     } | sort
   )
   dups=$(printf '%s\n' "$union" | uniq -d)
@@ -200,8 +248,40 @@ _verify_generator_tests() {
   return "$rc"
 }
 
+# 守卫（composereport 形态切片）：各片负责的形态并集 == `profileoverlay -list` 全集（不丢、不重），
+# 且没有空片。切片是算术对半，off-by-one 会静默漏掉一个形态 —— 那正是这条守卫要抓的。
+_verify_composereport_shards() {
+  local rc=0 dups all picked i profiles
+  all=$(all_profiles | sort)
+  picked=$(
+    for ((i = 1; i <= COMPOSEREPORT_SHARDS; i++)); do
+      composereport_profiles "$i"
+    done | sort
+  )
+  dups=$(printf '%s\n' "$picked" | uniq -d)
+  if [ -n "$dups" ]; then
+    echo "❌ 以下形态被多个 composereport 分片重复覆盖："
+    printf '%s\n' "$dups"
+    rc=1
+  fi
+  _check_sets "composereport 分片未覆盖" "composereport 分片多出" \
+    "$all" "$(printf '%s\n' "$picked" | uniq)" || rc=1
+  for ((i = 1; i <= COMPOSEREPORT_SHARDS; i++)); do
+    profiles=$(composereport_profiles "$i")
+    if [ -z "$profiles" ]; then
+      echo "❌ composereport-$i 没有分到任何形态（形态数少于片数？）"
+      rc=1
+    fi
+  done
+  if [ "$rc" -eq 0 ]; then
+    echo "✅ race 分片守卫（composereport 形态）：$(printf '%s\n' "$all" | wc -l | tr -d ' ') 个形态的并集 == profileoverlay -list 且无重复"
+  fi
+  return "$rc"
+}
+
 cmd_verify() {
   _verify_packages
+  _verify_composereport_shards
   _verify_generator_tests
 }
 
@@ -248,11 +328,12 @@ cmd_run() {
     echo "用法: race_shards.sh run <shard>" >&2
     exit 2
   }
-  # fail-closed：先证明分片清单没有落后于代码树。包集每次必查；用例切分只在 generator 分片查，
+  # fail-closed：先证明分片清单没有落后于代码树。包集每次必查；用例/形态切片只在对应分片上查，
   # 且复用下面 go test 的 race 编译产物（不额外付编译费）。
   _verify_packages
   case "$shard" in
     generator-*) export GENERATOR_LIST_FLAGS=-race && _verify_generator_tests ;;
+    composereport-*) _verify_composereport_shards ;;
   esac
 
   case "$shard" in
@@ -265,6 +346,17 @@ cmd_run() {
       }
       echo "▶ race 分片 ${shard}：$GENERATOR_PKG 的 $(printf '%s' "$pattern" | tr '|' '\n' | wc -l | tr -d ' ') 条用例"
       go test -race -run "^(${pattern})$" "$GENERATOR_IMPORT" -timeout "$SHARD_TEST_TIMEOUT"
+      ;;
+    composereport-*)
+      local idx="${shard#composereport-}" profiles
+      profiles=$(composereport_profiles "$idx" | paste -sd, -)
+      [ -n "$profiles" ] || {
+        echo "❌ 分片 $shard 没有分到任何形态" >&2
+        exit 1
+      }
+      echo "▶ race 分片 ${shard}：$COMPOSEREPORT_PKG 的形态 $profiles"
+      env "$COMPOSEREPORT_ENV=$profiles" go test -race -run '^TestProfileCompiledSurface$' \
+        "$COMPOSEREPORT_IMPORT" -timeout "$SHARD_TEST_TIMEOUT"
       ;;
     *)
       local pkgs
