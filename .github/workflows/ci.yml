@@ -1,11 +1,12 @@
 name: CI (Go)
 
-# Go 代码质量门禁：lint / test（含覆盖率）/ race / benchmark / govulncheck。
+# Go 代码质量门禁：lint / test（含覆盖率）/ race（分片并行）/ benchmark / govulncheck。
 # 仅当 Go 相关代码或测试/构建脚本变更时触发。
-# 镜像构建与安全扫描见 ci-docker.yml（Dockerfile/compose/deploy 变更）。
+# 镜像构建与安全扫描见 ci-docker.yml（Dockerfile/compose/deploy 变更）；
+# 重型脚手架矩阵见 ci-scaffold.yml（默认不在 PR 上跑，有自己的触发口径与并发组）。
 
 on:
-  # 手动触发：重型 Scaffold Matrix job 的入口之一（触发口径见该 job 的 if:）
+  # 手动触发：重跑整套轻量门禁（重型脚手架矩阵不在这里，见 ci-scaffold.yml 的 workflow_dispatch）
   workflow_dispatch:
   push:
     branches: [master, release/*]
@@ -157,7 +158,7 @@ jobs:
           DB_PASSWORD: root
           DB_NAME: jimu_test
         # 重型脚手架矩阵（真实生成项目 + build/vet/test/run）已由 JIMU_HEAVY_MATRIX 门控并搬到
-        # 独立的 Scaffold Matrix job，本 job 只跑轻量断言
+        # 独立的 ci-scaffold.yml，本 job 只跑轻量断言
         run: go test ./... -coverprofile=coverage.out -timeout 15m
 
       - name: "🗄️  Verify backup/restore round trip (mysql + postgres)"
@@ -206,10 +207,37 @@ jobs:
           bash -n scripts/test_runtime_security.sh
           bash -n scripts/smoke_api_contract.sh
           bash -n scripts/test_backup_restore.sh
+          bash -n scripts/race_shards.sh
 
-  race:
-    name: Race Detector
+  # race-plan：分片清单的唯一来源是 scripts/race_shards.sh（见该文件头的实测归因），
+  # 这里把它转成矩阵，避免「workflow 里的分片列表」与「脚本里的分片规则」两处漂移。
+  race-plan:
+    name: Race plan
     runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: "🧭 Emit the race shard matrix"
+        id: plan
+        run: echo "shards=$(bash scripts/race_shards.sh shards-json)" >> "$GITHUB_OUTPUT"
+
+  # 分片并行：**每个包仍然全量跑 `-race`**，只是不再让重型包挤在同一个 4 vCPU runner 上互相
+  # 争抢。分片前把 `go test -race ./...` 放在一个 job 里时，端到端被争抢放大得远超各自隔离耗时
+  # （composereport 隔离 14.8s → 378.4s，25.5×；generator 238.8s → 729.8s，3.1×；
+  # internal/** 只放大 0.9–2.6×），Race job 因此从 P2.6 的 11m58s 涨到 18m21s。分片后总
+  # runner 分钟数反而下降 —— 被争抢烧掉的时间多于各分片重复支付的编译时间。
+  # 分片规则、generator 用例切分与「并集 == 全集」守卫都在 scripts/race_shards.sh。
+  race:
+    name: Race Detector (${{ matrix.shard }})
+    needs: race-plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.race-plan.outputs.shards) }}
     services:
       mariadb:
         image: mariadb:12.1.2-noble
@@ -253,86 +281,16 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: "🏎️ Run race tests"
+      - name: "🏎️ Run race tests (${{ matrix.shard }})"
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: "3306"
           DB_USER: root
           DB_PASSWORD: root
           DB_NAME: jimu_test
-        # 同 Test：重型脚手架矩阵已门控出默认路径（见 Scaffold Matrix job）
-        run: go test -race ./... -timeout 15m
-
-  scaffold-matrix:
-    name: Scaffold Matrix
-    # **为何默认不在 PR 上跑**：2 vCPU runner 上冷跑约 28 分钟（CPU 时间 ≈3330s），
-    # 若每个 PR 都跑，作者要等 30–40 分钟（用户裁定 B1 / 计划裁定 19）。
-    # 本 job 只在下列情形运行（任一满足）：
-    #   ① 手动 workflow_dispatch；
-    #   ② push 到 release/**（发布前全量验证）；
-    #   ③ push tag（refs/tags/**；注意 ci.yml 的 push 触发只列了 branches、没有 tags，
-    #      所以这一条目前是防御性的 —— tag 发布的重型矩阵由 release.yml 的 quality job 承担，
-    #      两者共用同一份 actions/cache）；
-    #   ④ PR 打上 heavy-ci 标签（需要时手动加标签跑满矩阵）。
-    # 轻量 job（Lint/Test/Race/Bench/Govulncheck）的触发不受影响，仍每个 PR 都跑。
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      startsWith(github.ref, 'refs/heads/release/') ||
-      startsWith(github.ref, 'refs/tags/') ||
-      contains(github.event.pull_request.labels.*.name, 'heavy-ci')
-    # 与 Test/Race 并行：只跑被 JIMU_HEAVY_MATRIX 门控的重型矩阵（真实生成项目 + build/vet/test/run），
-    # 不产出覆盖率、不参与覆盖率阈值。GOCACHE 经 actions/cache 跨运行复用；生成项目的构建一律带
-    # -trimpath（见 tools/generator 的 trimpathGoflags），构建条目与临时路径无关。
-    # 缓存的收益是**有限且不收敛**的：每轮约 +13.5 MB / +3290 文件（相比无 -trimpath 的每轮
-    # +300 MB 约降 20× 增长），体积实际由 Go 自身的「5 天未使用」裁剪兜底（cmd/go/internal/cache
-    # 的 trimInterval=24h / trimLimit=5d，无大小上限），热跑约快 8%（非收敛）。
-    # 首次冷跑（缓存条目还不存在）在 2 核 runner 上约 28 分钟，故 -timeout 60m 覆盖首跑；
-    # job 超时给 90 分钟上限，避免异常挂起占满默认 360 分钟。
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: "🗂️ Restore the scaffold GOCACHE"
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/scaffold-gocache
-          # key 里的 `-v1` 是**可递增的版本后缀**：体积超阈值（见下方守卫步骤）、或怀疑缓存内容
-          # 损坏/被污染时，把它递增（-v2、-v3…）后重跑即可强制重建 —— 新 key 必然未命中，
-          # 旧条目由仓库 actions/cache 配额（10 GB）LRU 淘汰。release.yml 用同一规范，
-          # 因此两个 workflow 命中同一份缓存；`hashFiles('go.sum')` 后缀区分依赖变化。
-          key: scaffold-gocache-v1-${{ runner.os }}-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            scaffold-gocache-v1-${{ runner.os }}-
-
-      - name: "🏗️ Run the heavy scaffold matrix"
-        env:
-          JIMU_HEAVY_MATRIX: "1"
-          JIMU_TEST_GOCACHE: ${{ runner.temp }}/scaffold-gocache
-        # -v 便于失败时定位是哪个选区/形态
-        run: go test ./tools/generator/ -count=1 -timeout 60m -v
-
-      - name: "📏 Report the scaffold GOCACHE size"
-        if: always()
-        run: |
-          CACHE="${{ runner.temp }}/scaffold-gocache"
-          du -sh "$CACHE" 2>/dev/null || echo "（缓存目录不存在）"
-          SIZE_MB=$(du -sm "$CACHE" 2>/dev/null | cut -f1 || true)
-          # actions/cache 的语义：主 key 命中时**只恢复不重存**（key 不可变），本次运行新增的条目
-          # 随 runner 丢弃；主 key 未命中（go.sum 变了或刚 bump 版本后缀）时靠 restore-keys 拿旧缓存、
-          # 跑完把合并后的目录存成新条目。
-          # 非破坏性守卫：**绝不**在 job 内清空缓存 —— 清空后 actions/cache 的 save 步骤会把**空归档**
-          # 写进同一个（不可变的）key，之后永久命中空缓存、永远冷启动。超阈值只报错退出并给出 bump
-          # 指引；缓存内容的删除交给「bump 版本后缀 + 仓库 10 GB 配额 LRU 淘汰」。
-          if [ -n "${SIZE_MB:-}" ] && [ "$SIZE_MB" -gt 6144 ]; then
-            echo "::error::scaffold GOCACHE ${SIZE_MB} MB 超过 6 GiB（仓库 actions/cache 配额 10 GB）：请把 .github/workflows/ci.yml 里 cache key 的 -v1 后缀递增（-v2、-v3…，release.yml 同步）后重跑；不要在本 job 内删除缓存内容"
-            exit 1
-          fi
+        # 分片规则与「开跑前先证明分片并集 == 全集」的守卫都在脚本里；重型脚手架矩阵由
+        # ci-scaffold.yml 承担，不在本 workflow 的默认路径上
+        run: bash scripts/race_shards.sh run ${{ matrix.shard }}
 
   bench:
     name: Performance Regression

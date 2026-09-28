@@ -41,7 +41,7 @@ func TestGeneratedProjectBuildsAndVetsForEverySelection(t *testing.T) {
 	// （实测共享缓存可涨到 25G，曾把磁盘写满）。
 	// 全部子用例共用一个 module 路径，让内核那 ~200 个相同文件在缓存里去重。
 	cache := newTestGoCache(t)
-	sem := make(chan struct{}, 2) // 受限并发 2：并发链接对磁盘与 CPU 压力都大
+	sem := make(chan struct{}, heavyBuildConcurrency) // 见 heavyBuildConcurrency 的取值理由
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -139,7 +139,10 @@ func TestGeneratedProjectTestTreeIsGreen(t *testing.T) {
 	requireHeavyMatrix(t)
 	// 覆盖 5 个 profile + 单能力/小集合的「裁剪得最狠」选区：保留的测试必须真的能跑（不只是能编译）。
 	// 全部用例共用一个专用 GOCACHE（依赖只编译一次），仍不碰共享缓存（见 projectbuild_test.go）。
+	// 十个选区彼此独立、共用同一个只读的 cache，故子用例并行 + 与构建网同一个并发上限：
+	// 串行时这十条占了整个重型 job 的 ~28%（实测 239s）。
 	cache := newTestGoCache(t)
+	sem := make(chan struct{}, heavyBuildConcurrency)
 	for _, tc := range []struct {
 		name string
 		opts NewOptions
@@ -156,6 +159,10 @@ func TestGeneratedProjectTestTreeIsGreen(t *testing.T) {
 		{"with grpc", NewOptions{With: "grpc"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
 			dir := filepath.Join(t.TempDir(), "proj")
 			tc.opts.Dir = dir
 			tc.opts.Module = "example.com/proj"

@@ -69,17 +69,21 @@ jobs:
           args: --timeout=5m
           install-mode: goinstall
 
-      # 与 ci.yml 的 Scaffold Matrix job **同源**的构建缓存：同 path、同 key 规范（含可递增的
-      # `-v1` 版本后缀）、同 restore-keys 前缀 → 只要 CI 上跑过重型矩阵，tag 发布的 quality job
-      # 就能命中同一份仓库缓存，不再每次冷跑。bump 规则：ci.yml 把 `-v1` 递增时，这里同步递增。
-      # 注意：**首次发布仍是冷跑**（仓库里还没有该 key 的条目 → 无可恢复），2 核 runner 上约 28 分钟；
-      # 故下一步骤显式 timeout-minutes: 120（go test 自身另有 -timeout 60m）。
-      - name: "🗂️ Restore the scaffold GOCACHE (shared with ci.yml)"
+      # 与 ci-scaffold.yml 的 Scaffold Matrix job **同源**的构建缓存：同 path、同滚动 key 规范
+      # （`<go.sum 哈希>-<sha>`，含可递增的 `-v1` 版本后缀）、同 restore-keys 前缀 → tag 发布时
+      # 能命中 CI 存下的最近一份快照，不必每次冷跑。bump 规则：ci-scaffold.yml 把 `-v1` 递增时，
+      # 这里同步递增。
+      # 注意：这里带上 `${{ github.sha }}` 只是为了保证「同一规范」，tag 的 sha 与分支上的不会相同，
+      # 所以 tag 发布走的是 restore-keys 回退（拿最近快照）并在跑完后存一份属于该 tag 的新条目；
+      # 首次发布仍是冷跑（仓库里还没有任何该前缀的条目），故下一步骤显式 timeout-minutes: 120
+      # （go test 自身另有 -timeout 60m）。
+      - name: "🗂️ Restore the scaffold GOCACHE (shared with ci-scaffold.yml)"
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/scaffold-gocache
-          key: scaffold-gocache-v1-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          key: scaffold-gocache-v1-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
           restore-keys: |
+            scaffold-gocache-v1-${{ runner.os }}-${{ hashFiles('go.sum') }}-
             scaffold-gocache-v1-${{ runner.os }}-
 
       # make release-check 内含 test-scaffold-matrix（JIMU_HEAVY_MATRIX=1 的重型脚手架矩阵）：
