@@ -1,11 +1,47 @@
 package generator
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"jimu/internal/config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestFrameworkRootRespectsTheConfigSearchDepth 钉住 P2.8 的口径统一：frameworkRoot 的向上搜索层数
+// 与 internal/config 找 `configs/` 的层数**是同一个常量**（`config.SearchDepthUp`，含 cwd 本身）。
+//
+// 统一前两处不一致：frameworkRoot 一路找到文件系统根（无上限），而配置加载只向上 5 层 —— 于是从
+// 更深的目录跑 `jimu new --report` 会先成功发现源根、复制整棵树，再在 ProbeAssembly 加载能力配置段
+// 时半路失败。现在超出层数即在源根发现处 fail-closed 报错，且错误里带层数与起点。
+func TestFrameworkRootRespectsTheConfigSearchDepth(t *testing.T) {
+	base := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(base, "go.mod"), []byte("module "+frameworkModule+"\n\ngo 1.26\n"), 0o644))
+
+	// 深度 1..SearchDepthUp-1（相对框架根）仍在限制内：最深处应能找到源根
+	deepest := base
+	for i := 1; i < config.SearchDepthUp; i++ {
+		deepest = filepath.Join(deepest, fmt.Sprintf("d%d", i))
+	}
+	require.NoError(t, os.MkdirAll(deepest, 0o755))
+	t.Chdir(deepest)
+	root, err := frameworkRoot()
+	require.NoError(t, err, "限制内的深度（%d 层）应能找到框架根", config.SearchDepthUp-1)
+	assert.Equal(t, base, root)
+
+	// 再多一层即超出限制：fail-closed，而不是一路向上找到文件系统根
+	tooDeep := filepath.Join(deepest, "extra")
+	require.NoError(t, os.MkdirAll(tooDeep, 0o755))
+	t.Chdir(tooDeep)
+	_, err = frameworkRoot()
+	require.Error(t, err, "超出 %d 层应报错", config.SearchDepthUp)
+	assert.Contains(t, err.Error(), "no framework source root within")
+	assert.Contains(t, err.Error(), "extra", "错误里应带上搜索起点便于定位")
+}
 
 func TestParseCapabilitySetRejectsNeitherFlag(t *testing.T) {
 	_, err := ParseCapabilitySet("", "", "app")

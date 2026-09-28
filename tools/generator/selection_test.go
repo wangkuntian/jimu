@@ -214,9 +214,49 @@ func TestGeneratedTestTreePruningKeepsSatisfiableTestFiles(t *testing.T) {
 	}
 }
 
+// TestFullProfileKeepsCompositionDependentTests 是组成依赖裁剪**条件化**（P2.8 精化）的真实生成收口：
+// 判定基于「选择是否覆盖框架全量 catalog」，而不是一律裁掉。
+//
+//   - `--profile=full`：生成项目的 catalog 恰好等于框架全量 → `internal/app/seed_test.go` 与两个
+//     db 集成测试断言的「全量 permissions / 全量迁移」成立，必须保留（此前一律裁掉，白丢 3 个文件）；
+//   - 子集选区（`--with=queue`）：catalog 是专属子集 → 同一批文件仍逐文件裁掉（否则运行期红）。
+func TestFullProfileKeepsCompositionDependentTests(t *testing.T) {
+	compositionDeps := []string{
+		"internal/app/seed_test.go",
+		"internal/kernel/db/p17_access_migration_integration_test.go",
+		"internal/kernel/db/user_mfa_migration_integration_test.go",
+	}
+
+	full := filepath.Join(t.TempDir(), "full")
+	_, err := newProjectForTest(t, NewOptions{Dir: full, Profile: "full", Module: "example.com/proj", NoTidy: true})
+	require.NoError(t, err)
+	fullMarker := readMarkerForTest(t, full)
+	fullDiscarded := map[string]bool{}
+	for _, rel := range fullMarker.DiscardedTests {
+		fullDiscarded[rel] = true
+	}
+	for _, rel := range compositionDeps {
+		assert.FileExists(t, filepath.Join(full, filepath.FromSlash(rel)), "full 形态应保留 %s", rel)
+		assert.False(t, fullDiscarded[rel], "full 形态不该裁掉 %s", rel)
+	}
+
+	subset := filepath.Join(t.TempDir(), "subset")
+	_, err = newProjectForTest(t, NewOptions{Dir: subset, With: "queue", Module: "example.com/proj", NoTidy: true})
+	require.NoError(t, err)
+	subsetMarker := readMarkerForTest(t, subset)
+	subsetDiscarded := map[string]bool{}
+	for _, rel := range subsetMarker.DiscardedTests {
+		subsetDiscarded[rel] = true
+	}
+	for _, rel := range compositionDeps {
+		assert.True(t, subsetDiscarded[rel], "子集选区应裁掉组成依赖文件 %s", rel)
+	}
+}
+
 // TestPruneUnsatisfiableTestsDropsCompositionDependentTests 组成依赖单独一条：import 解析得到
 // （生成树里就有 `internal/capabilities/catalog`），但测试把「框架全量组成」当期望值 —— 生成项目的
-// catalog 只是本项目子集，这类测试必须逐文件丢掉，否则在裁剪项目里运行期红。
+// catalog 只是本项目子集时这类测试必须逐文件丢掉，否则在裁剪项目里运行期红；而当选择覆盖框架全量
+// catalog（catalogComplete=true，如 `--profile=full`）时期望值成立，必须**保留**（P2.8 精化）。
 func TestPruneUnsatisfiableTestsDropsCompositionDependentTests(t *testing.T) {
 	dir := t.TempDir()
 	writeFileForTest(t, dir, "internal/capabilities/catalog/catalog.go", "package catalog\n")
@@ -238,11 +278,28 @@ import "testing"
 func TestPlain(t *testing.T) {}
 `)
 
-	discarded, err := pruneUnsatisfiableTests(dir, "example.com/proj", nil)
+	// catalogComplete=false：生成 catalog 只是框架全量的子集 → 组成依赖不可满足，逐文件丢掉
+	discarded, err := pruneUnsatisfiableTests(dir, "example.com/proj", nil, false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"internal/app/seed_test.go"}, discarded)
 	assert.NoFileExists(t, filepath.Join(dir, "internal/app/seed_test.go"))
 	assert.FileExists(t, filepath.Join(dir, "internal/app/plain_test.go"))
+
+	// catalogComplete=true（选择覆盖全量，如 --profile=full）：同一份文件的期望值成立 → 保留
+	writeFileForTest(t, dir, "internal/app/seed_test.go", `package app
+
+import (
+	"testing"
+
+	"example.com/proj/internal/capabilities/catalog"
+)
+
+func TestSeed(t *testing.T) { _ = catalog.All() }
+`)
+	discarded, err = pruneUnsatisfiableTests(dir, "example.com/proj", nil, true)
+	require.NoError(t, err)
+	assert.Empty(t, discarded, "catalog 覆盖全量时组成依赖可满足，不该被裁")
+	assert.FileExists(t, filepath.Join(dir, "internal/app/seed_test.go"))
 }
 
 // TestGeneratedTestTreePruningFallsBackToWholeTestPackage 钉住裁剪口径的**包回退**一半：
@@ -321,7 +378,7 @@ import "testing"
 func TestKeep(t *testing.T) { helperZ() }
 `)
 
-	discarded, err := pruneUnsatisfiableTests(dir, "example.com/proj", nil)
+	discarded, err := pruneUnsatisfiableTests(dir, "example.com/proj", nil, false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"a/keep_test.go", // 包回退：引用了被裁文件里的 helperX

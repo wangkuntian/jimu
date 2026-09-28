@@ -334,6 +334,16 @@ func LoadSection[T SectionConfig](dec SectionDecoder, key string, out T) error {
 	return nil
 }
 
+// SearchDepthUp 是「从工作目录向上找项目根」的最大层数，**含 cwd 本身**（cwd、父、祖父…）。
+//
+// 它有两个消费方，口径必须一致（P2.8 统一）：
+//   - 本包的 buildViper：向上找 `configs/` 目录；
+//   - `tools/generator` 的 frameworkRoot：向上找声明 `module jimu` 的源根。
+//
+// 两处不一致会出现「源根找到了、`jimu new --report` 却在 ProbeAssembly 加载能力配置段时失败」的
+// 半路失败 —— 生成器于是改用同一常量做 fail-closed 的早失败。
+const SearchDepthUp = 5
+
 // buildViper 构造并读取配置的 viper 实例（含环境覆盖文件合并）
 func buildViper() (*viper.Viper, error) {
 	env := os.Getenv("APP_ENV")
@@ -347,9 +357,9 @@ func buildViper() (*viper.Viper, error) {
 	v.SetConfigName("app")
 	v.SetConfigType("yaml")
 
-	// 查找项目根目录下的 configs/
+	// 查找项目根目录下的 configs/（最多向上 SearchDepthUp 层，含 cwd —— 与生成器的源根发现同口径）
 	wd, _ := os.Getwd()
-	for i := 0; i < 5; i++ {
+	for i := 0; i < SearchDepthUp; i++ {
 		cfgDir := filepath.Join(wd, "configs")
 		if _, err := os.Stat(cfgDir); err == nil {
 			v.AddConfigPath(cfgDir)

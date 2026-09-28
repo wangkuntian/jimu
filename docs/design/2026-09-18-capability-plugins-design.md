@@ -188,7 +188,8 @@
 > import 闭包（集合比较）/ 驱动归属（驱动包只被 `internal/profiles/*` import）/ 形态生产代码与入口包
 > 只 import 已声明驱动 —— 末项是「新增驱动目录 + blank import 却忘声明」的唯一捕获点：该场景对
 > 集合比较不可见，未声明项被 `available` 过滤），`make compose-report` 新增「重型依赖」列；两道门禁
-> 仍是手动目标，**不接入** `make ci`/`release-check`（P2.8 收口）。
+> 已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job（**P2.8 已收口**，见
+> [`docs/plans/2026-09-21-p2-three-layer-mechanism.md`](../plans/2026-09-21-p2-three-layer-mechanism.md) 的 P2.8 记录）。
 >
 > **实测闭包计数**（当时对形态入口包逐个 `go list -deps` 计数）：`full` = aws-sdk-go-v2 67 /
 > excelize 1 / kafka-go 49 / amqp091-go 1；`enterprise` 与 `minimal`/`saas`/`machine` 四类均为 0
@@ -272,7 +273,7 @@
 > `full` 10 PASS / 0 SKIP，`minimal` 3/7，`saas` 4/6，`enterprise` 5/5，`machine` 3/7，
 > **全部 0 FAIL**。`configs/*.yaml` 逐字节不变、catalog 仍 18 项、`go.mod` 未动；渲染
 > （`values.yaml`/`configs/app.yaml` 按能力裁剪、生成项目里未选中资产不出现、生成项目的 CLI 裁剪）
-> 明确留 **P2.7**；门禁**仍未接入** `make ci`/`release-check`（P2.8 收口）。执行记录见
+> 明确留 **P2.7**；门禁**已接入** `make ci`/`release-check` 与 CI 的 `Capability Gates` job（P2.8 收口）。执行记录见
 > [`docs/plans/2026-09-23-p2.6-assets-and-conditionals.md`](../plans/2026-09-23-p2.6-assets-and-conditionals.md)。
 
 ## 4. 边界规则与现状违反
@@ -503,7 +504,7 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > 运行时装配）：组合根当前仍无条件注入多数依赖，在其改为按启用集驱动（P1 显式 `Deps`）之前可能
 > 多报。§9 门禁落地第一块 `make check-capabilities`（`tools/checkcapabilities`）：
 > 校验 `Owns` ↔ mysql 迁移「单表唯一归属、无孤儿表、无未声明建表」（PostgreSQL 迁移表名与 mysql
-> 一致，暂以 mysql 为准），其余三道门禁留 P2.8。
+> 一致，暂以 mysql 为准），其余三道门禁已在 P2.8 收口（`make ci`/`release-check` + CI 的 `Capability Gates` job）。
 >
 > **P2.2/P2.3 裁定与推迟**：`Tags` 在出现真实消费方之前**不加**（避免纸面字段）；
 > `storage`/`notification`/`retention`/`ws`/`grpc`/`apidocs`/`encryption` 本轮保持**非 catalog**、
@@ -532,8 +533,7 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > 17804 vs 33995；五个形态的 `go.mod` 直接依赖数**完全相同**（各 64 个）—— §11「层②不减小
 > `go.mod`」由此变成可回归验证的事实，而不是文字约定。**已知限制与推迟**：`machine` 可启动但
 > `/api/v1/admin/apikeys` 需要它刻意排除的 JWT 链，首把 API Key 必须带外签发（CLI 路径归
-> P2.6/P2.7 §3.8）；迁移与结构种子仍按 catalog 全量清单执行，profile 驱动的迁移裁剪归
-> P2.6/P2.8；`user`/`auth` 直接 import `outbox`/`queue`/`notification`/`ws` 的具体类型，导致
+> P2.6/P2.7 §3.8）；迁移与结构种子仍按 catalog 全量清单执行，profile 驱动的迁移裁剪已在 P2.6 完成；`user`/`auth` 直接 import `outbox`/`queue`/`notification`/`ws` 的具体类型，导致
 > `minimal`/`saas`/`machine`/`enterprise` 闭包里留有这些能力的**编译期残留**（装配期一个都不
 > 构造），已由 golden 闭包门禁冻结，消除它们需把这些共享类型迁到 `contract`/内核。执行记录见
 > [`docs/plans/2026-09-21-p2-three-layer-mechanism.md`](../plans/2026-09-21-p2-three-layer-mechanism.md)
@@ -582,7 +582,7 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > `tenant`；C1 修复：tenant 的迁移给这两张表加 `tenant_id` 列，不带就会建出写不进去的 schema），
 > 因此**结构种子在所有形态都照常执行**，不含 `tenant` 的形态也会建出 `tenants`/`tenant_plans` 与
 > `tenant_id` 列（装配集仍不含 tenant，不挂路由、不 seed 额外数据）；`apidocs` 缺失时 swagger 目标 SKIP。`configs/*.yaml` 逐字节不变、catalog 仍 18 项；渲染归
-> P2.7、门禁接入 CI 归 P2.8。机制细节与实测数字见 §3.8 的 P2.6 进展块；执行记录见
+> P2.7、门禁接入 CI 已在 P2.8 收口。机制细节与实测数字见 §3.8 的 P2.6 进展块；执行记录见
 > [`docs/plans/2026-09-23-p2.6-assets-and-conditionals.md`](../plans/2026-09-23-p2.6-assets-and-conditionals.md)。
 > **P2.7 进展（层① 脚手架已完成）**：§6.2 的出货口落地 —— `jimu new <dir> --profile=<name>` /
 > `--with=a,b[:drv]` 在任意目标目录生成**只含选中能力**、可构建可迁移可门禁的单体项目，

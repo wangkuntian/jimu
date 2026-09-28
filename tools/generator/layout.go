@@ -13,6 +13,7 @@ import (
 
 	"jimu/internal/capabilities/catalog"
 	"jimu/internal/capability"
+	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/profiles/registry"
 )
@@ -492,22 +493,29 @@ func FrameworkRoot() string {
 }
 
 // frameworkRoot 从 cwd 向上找第一个 go.mod 且其 module 行为 jimu 的目录（S7）。
-// 找不到即报错并提示「在框架仓内运行」——绝不静默拿空源目录生成空项目。
+//
+// 搜索层数与 `internal/config` 找 `configs/` 的口径**完全一致**（`config.SearchDepthUp`，含 cwd
+// 本身）：两处深度不一致会出现半路失败 —— 源根找到了、`--report` 的 ProbeAssembly 却因为向上
+// 5 层内没有 `configs/` 而加载不到能力配置段。找不到即 fail-closed 报错（绝不静默拿空源目录
+// 生成空项目），错误里带上层数与起点便于定位。
 func frameworkRoot() (string, error) {
-	dir, err := os.Getwd()
+	start, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("resolve working directory: %w", err)
 	}
-	for {
+	dir := start
+	for i := 0; i < config.SearchDepthUp; i++ {
 		if mod, err := moduleOf(filepath.Join(dir, "go.mod")); err == nil && mod == frameworkModule {
 			return dir, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", fmt.Errorf("no framework source root found: run jimu new from inside a directory tree whose go.mod declares module %s", frameworkModule)
+			break
 		}
 		dir = parent
 	}
+	return "", fmt.Errorf("no framework source root within %d levels up from %s: run jimu from the framework checkout (or at most %d levels below its root), whose go.mod declares module %s",
+		config.SearchDepthUp, filepathSlash(start), config.SearchDepthUp-1, frameworkModule)
 }
 
 var goModuleLine = regexp.MustCompile(`(?m)^[ \t]*module[ \t]+([^ \t\r\n]+)`)

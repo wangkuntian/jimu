@@ -17,7 +17,7 @@ P2.5 层② 驱动级可插拔（§3.7）           ← 已完成（依赖 P2.4�
 P2.5b 单一入口与构建期形态参数化         ← 已完成（依赖 P2.5；唯一入口 cmd/server + 选点包 + overlay）
 P2.6 层② 非代码资产模块化（§3.8）        ← 已完成（依赖 P2.5b；资产归属门禁 + 本仓条件化）
 P2.7 层① 脚手架：jimu new / capability add ← 已完成（依赖 P2.2 + P2.4；生成专属 catalog/app.yaml + --report + check-templates）
-P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后在 CI 生效
+P2.8 门禁（§9）：四道 check-*            ← 已完成（四道门禁在 CI 生效 + 本地聚合目标收口）
 ```
 
 每个子阶段独立 PR、保持 `full` 全绿。feature→release 用 squash merge。
@@ -103,14 +103,25 @@ P2.8 门禁（§9）：四道 check-*            ← 贯穿 P2.2–P2.7，最后
 - **本仓行为零变化**：`configs/*.yaml` 逐字节不变、catalog 18 项、`go.mod` 不减小、5 形态路由数不变、`make compose-report` 输出逐字节不变。新增本仓门禁 `make check-templates`（生成最小项目并真构建 + 跑生成项目的门禁；未接入 `make ci`/`release-check`，P2.8 收口）。
 - **边界与不做**：`--module` 之外的 import 重定向、生成项目的 `git init`/`docker build` 冒烟、`jimu upgrade`（跨版本框架升级）、生成项目的 `README.md`/`.github`/`githooks`/`docker-compose.yml`/`specs`/`proto`；生成项目的 `docs/openapi` 是快照（不跑 swag）。
 
-## P2.8 门禁（§9）
+## P2.8 门禁（§9）（已完成）
 
-| 门禁 | 检查内容 |
-|---|---|
-| `check-capabilities` | `capability.go` 声明与实际一致：`Owns` 的表只出现在所有者迁移里、`Requires`/`SoftRequires` 与实际 import 一致、无未声明的跨能力 import、无 `capabilities/A → capabilities/B/internal` 越界、无 `kernel → capabilities` 反向依赖、中间件归属正确 |
-| `check-profiles` | 各 profile 的 catalog 子集与入口包一致、能构建 |
-| `check-pluggable` | 驱动集合与 profile 实际 import 一致（§3.7 的静态保险） |
-| `bench-ci` / 既有门禁 | 保持全绿 |
+| 门禁 | 检查内容 | 现状 |
+|---|---|---|
+| `check-capabilities` | `capability.go` 声明与实际一致：`Owns` 的表只出现在所有者迁移里、`Requires`/`SoftRequires` 与实际 import 一致、无未声明的跨能力 import、无 `capabilities/A → capabilities/B/internal` 越界、无 `kernel → capabilities` 反向依赖、中间件归属正确 | **5 条断言已实现**，接入 `make ci`/`release-check` + CI 的 `Capability Gates` job |
+| `check-profiles` | 各 profile 的 catalog 子集与入口包一致、能构建 | 实现为 `scripts/check_profiles.sh`（`make profiles-check`：5 形态 overlay 构建 + golden 依赖闭包裁剪），同样已接入 |
+| `check-pluggable` | 驱动集合与 profile 实际 import 一致（§3.7 的静态保险） | **不单独实现**：该静态保险已由 `check-capabilities` 第 ②③⑥ 条覆盖（驱动可用集 ↔ 目录、形态选中集 == 生产 import 闭包、形态生产代码只 import 已声明驱动）；§9 设想的「删掉能力目录后依赖方必须构建失败」破坏性负例与静态断言等价，无额外信号 |
+| `bench-ci` / 既有门禁 | 保持全绿 | 保持：CI 的 `Performance Regression` job 已在跑 `make bench-ci`；`check-log-usage` 早已在 Lint job 与 `make ci` 内 |
+| `compose-report-check`（§9「报告进 CI 归档对比」的落地形式） | `minimal` 的「省」不能被内核悄悄吃掉 | 新增 `make compose-report-check`：重新生成 `docs/profiles/compose-report.md` 并要求入库产物逐字节不变 —— 报告入库即基线，二进制/路由/表/本仓代码量漂移即红；同时接入两个聚合目标与 `Capability Gates` job |
+| `check-templates` | 模板/复制口径 vs 真实框架结构 | 不单独接入聚合目标：`make ci`/`release-check` 的 `test-scaffold-matrix` 会跑到同一条用例（`TestTemplatesDrift`），CI 侧由 `ci-scaffold.yml` 的重型矩阵承担 |
+
+- **已完成（CI）**：`ci.yml` 新增 `Capability Gates` job（PR 路径，**不需要 DB/Redis** —— `profiles-check` 未设 `JIMU_PROFILES_SMOKE` 时逐形态打印 SKIP），依次跑 `make check-capabilities` / `make profiles-check` / `make compose-report-check`，并挂 `gocache-gates` 滚动构建缓存；`ci.yml` 的 `paths` 补上 `deploy/**` 与 `docs/openapi/**`（资产归属断言读这两棵树，只改它们的提交也必须把门禁拉起来）。
+- **已完成（本地聚合）**：`make ci` 与 `make release-check` 都加入 `check-capabilities profiles-check compose-report-check`；新增 `compose-report-check` 目标（生成 + `git diff --exit-code`）。
+- **实测**（本机热缓存）：三道门禁串行约 **53s**（`check-capabilities` 2s / `profiles-check` 39s / `compose-report-check` 12s），`check-templates` 28s；CI 侧只做构建与静态读取、无 DB，预计 1.5–2.5 分钟，低于当时 CI (Go) 的 4.0m 长杆，不会成为新瓶颈。
+- **已完成（同一 PR 的三项收尾，来自 P2.7 工作日志的 P2.8 待办）**：
+  - **cwd 深度口径统一**：`internal/config` 新增导出常量 `SearchDepthUp`（含 cwd，向上找项目根的最大层数），`buildViper` 找 `configs/` 与 `tools/generator` 的 `frameworkRoot` 找 `module jimu` 源根**共用同一个常量**。统一前 frameworkRoot 是一路找到文件系统根（无上限），于是从更深的目录跑 `jimu new --report` 会先成功发现源根、复制整棵树，再在 `ProbeAssembly` 加载能力配置段时半路失败；现在超出层数即在源根发现处 fail-closed，错误里带层数与起点。测试 `TestFrameworkRootRespectsTheConfigSearchDepth` 用 `t.Chdir` 钉住边界（限制内成功 / 多一层报错）。
+  - **`internal/shared/totp` 死代码清除**：auth 拆分为六个能力时 TOTP 已迁入 `internal/capabilities/mfa/totp`（自有实现），`internal/shared/totp` 与 `mfa/totp` 逐字节等价（仅包名不同）且**零引用** —— 删除后 `go build ./...` 与广域测试通过；生成项目少复制这 2 个死文件（`internal/shared/**` 是整目录复制的内核目录）。
+  - **组成依赖裁剪条件化**（P2.7 记录的「均匀规则丢弃」精化）：读 `internal/capabilities/catalog` 的测试不再一律裁掉，而是按「本次选择是否覆盖框架全量 catalog」条件化（`catalogCoversAll`）。`--profile=full` 的项目 catalog 恰好完整、那些期望值成立，因此 `internal/app/seed_test.go` 与两个 db 集成测试**保留**；子集选区（如 `--with=queue`）仍逐文件裁掉。实测：full 项目保留这 3 个文件后 `go test ./...` 全绿，其中 `TestRunSeed_*` **12 个用例真的跑了并通过**（此前整文件被裁、白丢覆盖），db 集成测试在无 DB 时按设计 SKIP。
+- **不做**：`check-pluggable` 的破坏性脚本（理由见上表）；报告绝对阈值 golden（二进制大小随工具链浮动，易误报 —— 相对关系已由 `tools/composereport` 的单测断言，如 `minimal ≤ 85% full`）。
 
 ## 风险（§11 摘录）
 
