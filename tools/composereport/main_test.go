@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"jimu/internal/profiles/registry"
@@ -14,6 +15,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// profileShardEnv 让 CI 的 race 分片只度量指定形态（逗号分隔，见 scripts/race_shards.sh）。
+//
+// 动机（实测）：`-race` 下每个形态都要做一次全依赖图 packages.Load + 全闭包行数统计，整包在 4 vCPU
+// runner 上要 257s，而它只是 tools 分片里的一个包 —— 那一片因此成了整个 Race job 的长杆。按形态切开
+// 后每片只度量自己那部分。**这不是减少 race 覆盖**：每个形态仍然在某个分片里被 `-race` 跑过，只是
+// 不再挤在同一个进程/同一台 runner 上；跨形态关系（minimal ≤ 85% full 之类）仍由未设该变量时的
+// 完整度量断言（默认路径的 Test job，非 race，整包 23s）。
+const profileShardEnv = "JIMU_METRICS_PROFILES"
 
 // 本文件只覆盖 report 本体的渲染与 overlay 口径；度量原语（路由/迁移/表/闭包/行数/直接依赖）
 // 的单测已随实现搬到 tools/internal/projectmetrics（P2.7 抽取，两处共用一份口径）。
@@ -134,7 +144,10 @@ func TestMinimalCompiledSurfaceIsMateriallySmaller(t *testing.T) {
 	if testing.Short() {
 		t.Skip("构建 5 个形态二进制，-short 下跳过")
 	}
-	ms, err := measureAll(repoRoot(t))
+	if os.Getenv(profileShardEnv) != "" {
+		t.Skip("按形态切片：" + profileShardEnv + " 已设，本次由 TestProfileCompiledSurface 度量；跨形态关系由未设该变量时的完整度量承担")
+	}
+	ms, err := measureAll(repoRoot(t), nil)
 	require.NoError(t, err)
 	require.Len(t, ms, len(registry.Names()))
 
@@ -167,6 +180,37 @@ func TestMinimalCompiledSurfaceIsMateriallySmaller(t *testing.T) {
 		m, ok := byName[name]
 		require.True(t, ok, "报告缺少形态 %s", name)
 		assert.Empty(t, m.HeavyDeps, "%s 不应把重型依赖编进编译面", name)
+	}
+}
+
+// TestProfileCompiledSurface 是上面那条完整度量的**单形态切片**（见 profileShardEnv）：
+// CI 的 race 分片用 JIMU_METRICS_PROFILES=<p1,p2> 指定它负责的形态，只断言**该形态自身可独立判定**
+// 的性质；跨形态关系留在完整度量里（默认路径的 Test job 跑它）。形态名拼错会让 measureAll 报错，
+// 不会静默少测。
+func TestProfileCompiledSurface(t *testing.T) {
+	if testing.Short() {
+		t.Skip("构建形态二进制，-short 下跳过")
+	}
+	raw := os.Getenv(profileShardEnv)
+	if raw == "" {
+		t.Skip("按形态切片需要 " + profileShardEnv + "=<p1,p2>；完整度量见 TestMinimalCompiledSurfaceIsMateriallySmaller")
+	}
+	profiles := strings.Split(raw, ",")
+	ms, err := measureAll(repoRoot(t), profiles)
+	require.NoError(t, err)
+	require.Len(t, ms, len(profiles))
+
+	for _, m := range ms {
+		require.Positive(t, m.BinaryBytes, "%s 的二进制大小必须实测到", m.Profile)
+		require.Positive(t, m.Routes, "%s 必须注册到路由", m.Profile)
+		require.Positive(t, m.Tables, "%s 必须归属到表", m.Profile)
+		require.Positive(t, m.Files, "%s 的闭包必须含本模块文件", m.Profile)
+		require.Positive(t, m.Lines, "%s 的闭包行数必须为正", m.Profile)
+		if m.Profile == "full" {
+			assert.ElementsMatch(t, heavydeps.Names(), m.HeavyDeps, "full 应含全部四类重型依赖")
+		} else {
+			assert.Empty(t, m.HeavyDeps, "%s 不应把重型依赖编进编译面", m.Profile)
+		}
 	}
 }
 

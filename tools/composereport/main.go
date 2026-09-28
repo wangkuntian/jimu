@@ -16,9 +16,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -42,7 +44,7 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	ms, err := measureAll(root)
+	ms, err := measureAll(root, nil)
 	if err != nil {
 		fail(err)
 	}
@@ -65,13 +67,25 @@ func fail(err error) {
 	os.Exit(1)
 }
 
-// measureAll 按 registry.Names() 顺序实测全部形态。
+// measureAll 按 registry.Names() 顺序实测形态；profiles 非空时只实测这些形态（保持 registry 顺序）。
 //
-// 五个二进制并行构建（互不共享状态），随后逐形态顺序探测：ProbeAssembly 会临时切换
+// 形态子集是给 CI 的 race 分片用的：这条用例在 `-race` 下的进程内度量（每个形态一次
+// `packages.Load` 全依赖图 + 全闭包行数统计）在 4 vCPU runner 上要几分钟，而它只是 tools 分片里的
+// 一个包 —— 按形态切成多片后每片只度量自己那部分（见 scripts/race_shards.sh；跨形态关系仍由
+// 未设子集时的完整度量断言）。
+//
+// 二进制并行构建（互不共享状态），随后逐形态顺序探测：ProbeAssembly 会临时切换
 // 工作目录以吸收构造期相对路径副作用，因此不能并发。
-func measureAll(root string) ([]Metrics, error) {
+func measureAll(root string, profiles []string) ([]Metrics, error) {
 	names := registry.Names()
 	asms := registry.All()
+	if len(profiles) > 0 {
+		picked, err := pickProfiles(names, profiles)
+		if err != nil {
+			return nil, err
+		}
+		names = picked
+	}
 
 	sizes := make([]int64, len(names))
 	errs := make([]error, len(names))
@@ -103,6 +117,26 @@ func measureAll(root string) ([]Metrics, error) {
 		m.Profile = name
 		m.BinaryBytes = sizes[i]
 		out = append(out, m)
+	}
+	return out, nil
+}
+
+// pickProfiles 按 names 的顺序取出 wanted 里的形态。wanted 里出现未知形态即报错（fail-closed：
+// 拼错形态名不该静默少测 —— CI 的分片正是用这个名字选形态）。
+func pickProfiles(names, wanted []string) ([]string, error) {
+	want := make(map[string]bool, len(wanted))
+	for _, n := range wanted {
+		want[n] = true
+	}
+	out := make([]string, 0, len(wanted))
+	for _, n := range names {
+		if want[n] {
+			out = append(out, n)
+			delete(want, n)
+		}
+	}
+	if len(want) > 0 {
+		return nil, fmt.Errorf("unknown profiles: %s", strings.Join(slices.Sorted(maps.Keys(want)), ", "))
 	}
 	return out, nil
 }
