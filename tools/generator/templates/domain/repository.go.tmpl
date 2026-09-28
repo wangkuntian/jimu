@@ -1,0 +1,11 @@
+package domain
+
+import "context"
+
+type {{.NameCamel}}Repository interface {
+	FindByID(ctx context.Context, id uint64) (*{{.NameCamel}}, error)
+	List(ctx context.Context, offset, limit int, sort, order string) ([]{{.NameCamel}}, int64, error)
+	Create(ctx context.Context, entity *{{.NameCamel}}) error
+	Update(ctx context.Context, entity *{{.NameCamel}}) error
+	Delete(ctx context.Context, id uint64) error
+}

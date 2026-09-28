@@ -1,0 +1,88 @@
+package application
+
+import (
+	"context"
+	stderrors "errors"
+	"testing"
+
+	"jimu/internal/capabilities/{{.Name}}/domain"
+	apperrors "jimu/internal/shared/errors"
+	"jimu/internal/shared/pagination"
+
+	"gorm.io/gorm"
+)
+
+func Test{{.NameCamel}}ServiceListPassesPagination(t *testing.T) {
+	seed := []domain.{{.NameCamel}}{
+		{ID: 1, Name: "one"},
+	}
+	repo := &fake{{.NameCamel}}Repository{items: seed, total: 3}
+	service := New{{.NameCamel}}Service(repo)
+
+	items, total, err := service.List(context.Background(), pagination.Pagination{Page: 2, PageSize: 5, Sort: "created_at", Order: "asc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.offset != 5 || repo.limit != 5 || repo.sort != "created_at" || repo.order != "asc" {
+		t.Fatalf("pagination = offset:%d limit:%d sort:%q order:%q", repo.offset, repo.limit, repo.sort, repo.order)
+	}
+	if total != 3 || len(items) != 1 || items[0].Name != "one" {
+		t.Fatalf("items = %#v total = %d", items, total)
+	}
+}
+
+func Test{{.NameCamel}}ServiceGetMapsNotFound(t *testing.T) {
+	service := New{{.NameCamel}}Service(&fake{{.NameCamel}}Repository{findErr: gorm.ErrRecordNotFound})
+
+	_, err := service.Get(context.Background(), 9)
+	if appCode(err) != apperrors.CodeNotFound {
+		t.Fatalf("code = %d, want %d", appCode(err), apperrors.CodeNotFound)
+	}
+}
+
+type fake{{.NameCamel}}Repository struct {
+	item      *domain.{{.NameCamel}}
+	items     []domain.{{.NameCamel}}
+	total     int64
+	findErr   error
+	createErr error
+	updateErr error
+	deleteErr error
+	offset    int
+	limit     int
+	sort      string
+	order     string
+}
+
+func (r *fake{{.NameCamel}}Repository) FindByID(context.Context, uint64) (*domain.{{.NameCamel}}, error) {
+	if r.item != nil {
+		return r.item, r.findErr
+	}
+	return &domain.{{.NameCamel}}{}, r.findErr
+}
+
+func (r *fake{{.NameCamel}}Repository) List(_ context.Context, offset, limit int, sort, order string) ([]domain.{{.NameCamel}}, int64, error) {
+	r.offset = offset
+	r.limit = limit
+	r.sort = sort
+	r.order = order
+	return r.items, r.total, nil
+}
+
+func (r *fake{{.NameCamel}}Repository) Create(context.Context, *domain.{{.NameCamel}}) error {
+	return r.createErr
+}
+func (r *fake{{.NameCamel}}Repository) Update(context.Context, *domain.{{.NameCamel}}) error {
+	return r.updateErr
+}
+func (r *fake{{.NameCamel}}Repository) Delete(context.Context, uint64) error {
+	return r.deleteErr
+}
+
+func appCode(err error) int {
+	var appErr *apperrors.AppError
+	if stderrors.As(err, &appErr) {
+		return appErr.Code
+	}
+	return 0
+}

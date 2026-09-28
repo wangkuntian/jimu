@@ -1,0 +1,78 @@
+package application
+
+import (
+	"context"
+	stderrors "errors"
+
+	"jimu/internal/capabilities/{{.Name}}/domain"
+	"jimu/internal/shared/errors"
+	"jimu/internal/shared/pagination"
+
+	"gorm.io/gorm"
+)
+
+type {{.NameCamel}}Service struct {
+	repo domain.{{.NameCamel}}Repository
+}
+
+func New{{.NameCamel}}Service(repo domain.{{.NameCamel}}Repository) *{{.NameCamel}}Service {
+	return &{{.NameCamel}}Service{repo: repo}
+}
+
+func (s *{{.NameCamel}}Service) Create(ctx context.Context, req Create{{.NameCamel}}Request) (*{{.NameCamel}}Response, error) {
+	entity := &domain.{{.NameCamel}}{Name: req.Name, Description: req.Description}
+	if err := s.repo.Create(ctx, entity); err != nil {
+		if isDuplicateKey(err) {
+			return nil, errors.Wrap(errors.CodeConflict, "{{.Name}} already exists", err)
+		}
+		return nil, errors.Wrap(errors.CodeInternalError, "failed to create {{.Name}}", err)
+	}
+	resp := To{{.NameCamel}}Response(*entity)
+	return &resp, nil
+}
+
+func (s *{{.NameCamel}}Service) Get(ctx context.Context, id uint64) (*{{.NameCamel}}Response, error) {
+	entity, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.Wrap(errors.CodeNotFound, "{{.Name}} not found", err)
+		}
+		return nil, errors.Wrap(errors.CodeInternalError, "failed to get {{.Name}}", err)
+	}
+	resp := To{{.NameCamel}}Response(*entity)
+	return &resp, nil
+}
+
+func (s *{{.NameCamel}}Service) List(ctx context.Context, p pagination.Pagination) ([]{{.NameCamel}}Response, int64, error) {
+	entities, total, err := s.repo.List(ctx, p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
+	if err != nil {
+		return nil, 0, errors.Wrap(errors.CodeInternalError, "failed to list {{.Name}}", err)
+	}
+	return To{{.NameCamel}}Responses(entities), total, nil
+}
+
+func (s *{{.NameCamel}}Service) Update(ctx context.Context, id uint64, req Update{{.NameCamel}}Request) error {
+	entity, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.Wrap(errors.CodeNotFound, "{{.Name}} not found", err)
+		}
+		return errors.Wrap(errors.CodeInternalError, "failed to get {{.Name}}", err)
+	}
+	entity.Name = req.Name
+	entity.Description = req.Description
+	if err := s.repo.Update(ctx, entity); err != nil {
+		if isDuplicateKey(err) {
+			return errors.Wrap(errors.CodeConflict, "{{.Name}} already exists", err)
+		}
+		return errors.Wrap(errors.CodeInternalError, "failed to update {{.Name}}", err)
+	}
+	return nil
+}
+
+func (s *{{.NameCamel}}Service) Delete(ctx context.Context, id uint64) error {
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return errors.Wrap(errors.CodeInternalError, "failed to delete {{.Name}}", err)
+	}
+	return nil
+}

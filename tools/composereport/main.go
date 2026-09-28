@@ -6,6 +6,9 @@
 // 数在各形态间**完全相同**（Go 的依赖裁剪作用于整个 module，设计 §6.3/§11 的层②边界）。
 // 生成物 docs/profiles/compose-report.md 入库，供 CI 归档对比。
 //
+// 度量原语（路由数 / 迁移数 / 表数 / 闭包文件数与代码行 / 行数 / 直接依赖数）由
+// tools/internal/projectmetrics 提供 —— 它与 `jimu new --report` 共用同一份口径，两处不会漂移。
+//
 // 全部指标不连库、不连 Redis、不启动监听：路由数在裸 *gin.Engine 上注册后统计。
 package main
 
@@ -13,24 +16,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/fs"
-	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 
-	"jimu/internal/assembly"
-	"jimu/internal/capabilities/catalog"
-	"jimu/internal/contract"
 	"jimu/internal/profiles/registry"
-	"jimu/tools/internal/heavydeps"
 	"jimu/tools/internal/profileoverlay"
-
-	"github.com/gin-gonic/gin"
-	"golang.org/x/tools/go/packages"
+	"jimu/tools/internal/projectmetrics"
 )
 
 // outputPath 报告生成位置（相对仓库根）。
@@ -40,23 +34,8 @@ const outputPath = "docs/profiles/compose-report.md"
 // 第三方依赖的代码量会把信号淹没，那部分由二进制大小衡量）。
 const modulePath = "jimu"
 
-// Metrics 是一个形态的编译面实测值。
-type Metrics struct {
-	Profile      string
-	BinaryBytes  int64
-	Routes       int
-	Migrations   int
-	Tables       int
-	Files        int
-	Lines        int
-	HeavyDeps    []string
-	Capabilities []string
-}
-
-func init() {
-	// 报告工具只统计路由集合，不需要 gin 的路由注册调试输出（测试同样受益）。
-	gin.SetMode(gin.ReleaseMode)
-}
+// Metrics 是 projectmetrics.Metrics 的别名：库与报告的渲染/测试共用同一类型。
+type Metrics = projectmetrics.Metrics
 
 func main() {
 	root, err := os.Getwd()
@@ -67,7 +46,7 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	deps, err := directDeps(root)
+	deps, err := projectmetrics.DirectDeps(root, modulePath)
 	if err != nil {
 		fail(err)
 	}
@@ -111,91 +90,21 @@ func measureAll(root string) ([]Metrics, error) {
 		if errs[i] != nil {
 			return nil, errs[i]
 		}
-		a := asms[name]
-		res, err := assembly.ProbeAssembly(a, nil)
+		// 闭包口径 = `./cmd/server` + 该形态的**构建期 overlay**（出货二进制），故这里取内存
+		// overlay 交给共享原语；生成项目的报告是单形态提交态，传 nil。
+		overlay, err := overlayForProfile(root, name)
 		if err != nil {
-			return nil, fmt.Errorf("probe %s: %w", name, err)
+			return nil, err
 		}
-		// 迁移/表口径 = 迁移集（形态声明集 ∪ schema 依赖，与 cmd/cli 的 migrate/seed 同一来源）：
-		// 只按解析集算会与 CLI 实际执行的迁移不一致（如 minimal 会一并迁移 tenant 的建表/加列）。
-		migDescs := catalog.MigrationSet(namesSet(res.Capabilities))
-		migrations, err := migrationCount(migDescs)
+		m, err := projectmetrics.Of(root, modulePath, asms[name], overlay)
 		if err != nil {
-			return nil, fmt.Errorf("count migrations of %s: %w", name, err)
+			return nil, err
 		}
-		files, lines, heavy, err := closureSize(root, name)
-		if err != nil {
-			return nil, fmt.Errorf("measure closure of %s: %w", name, err)
-		}
-		out = append(out, Metrics{
-			Profile:      name,
-			BinaryBytes:  sizes[i],
-			Routes:       routeCount(res.Modules),
-			Migrations:   migrations,
-			Tables:       tableCount(migDescs),
-			Files:        files,
-			Lines:        lines,
-			HeavyDeps:    heavy,
-			Capabilities: res.Capabilities,
-		})
+		m.Profile = name
+		m.BinaryBytes = sizes[i]
+		out = append(out, m)
 	}
 	return out, nil
-}
-
-// namesSet 把能力名切片转成集合（供 catalog.MigrationSet 使用）。
-func namesSet(names []string) map[string]bool {
-	out := make(map[string]bool, len(names))
-	for _, n := range names {
-		out[n] = true
-	}
-	return out
-}
-
-// tableCount 表数＝各 Descriptor.Owns 的并集大小（同一张表重复声明只算一次）。
-func tableCount(descs []contract.Descriptor) int {
-	seen := map[string]bool{}
-	for _, d := range descs {
-		for _, t := range d.Owns {
-			seen[t] = true
-		}
-	}
-	return len(seen)
-}
-
-// migrationCount 迁移数＝各 Descriptor.Migrations 里 migrations/mysql 下的 .sql 文件数。
-// postgres 与 mysql 迁移同名同数（`check-capabilities` 同一口径），数一遍不重复计数。
-func migrationCount(descs []contract.Descriptor) (int, error) {
-	n := 0
-	for _, d := range descs {
-		if d.Migrations == nil {
-			continue
-		}
-		err := fs.WalkDir(d.Migrations, "migrations/mysql", func(path string, e fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if !e.IsDir() && strings.HasSuffix(path, ".sql") {
-				n++
-			}
-			return nil
-		})
-		if err != nil {
-			return 0, fmt.Errorf("capability %q: %w", d.Name, err)
-		}
-	}
-	return n, nil
-}
-
-// routeCount 把模块注册到裸 *gin.Engine 后统计 r.Routes()。运行时组合根对声明
-// MountProtected 的能力用 router.Group("", protected...) 挂载，空 relativePath 的 Group
-// 不改变任何路径（只追加 handler），因此裸引擎上的路由集合与实际启动逐条一致 —— 这里量
-// 的是「注册了哪些路由」，不涉及监听、中间件或鉴权语义。
-func routeCount(modules []contract.Module) int {
-	r := gin.New()
-	for _, m := range modules {
-		m.RegisterHTTP(r)
-	}
-	return len(r.Routes())
 }
 
 // buildSize 构建唯一入口（该形态 overlay 下）并返回产物字节数。
@@ -245,80 +154,21 @@ func overlayForProfile(root, profile string) (map[string][]byte, error) {
 	return profileoverlay.ReplaceMap(root, profile)
 }
 
-// closureSize 统计该形态（./cmd/server + overlay）import 闭包中本模块（jimu/...）非
-// _test.go 的 .go 文件数与行数，并收集闭包（含第三方包）命中的重型依赖展示名（去重升序）。
-// go/packages 在只请求名称/文件/import 图时等价于 go list -deps，不做类型检查。
-func closureSize(root, name string) (files, lines int, heavy []string, err error) {
-	overlay, err := overlayForProfile(root, name)
-	if err != nil {
-		return 0, 0, nil, err
-	}
-	cfg := &packages.Config{
-		Mode:    packages.NeedName | packages.NeedFiles | packages.NeedImports | packages.NeedDeps,
-		Dir:     root,
-		Overlay: overlay,
-	}
-	pkgs, err := packages.Load(cfg, "./cmd/server")
-	if err != nil {
-		return 0, 0, nil, err
-	}
-	if len(pkgs) == 0 {
-		return 0, 0, nil, fmt.Errorf("no packages matched ./cmd/server (%s)", name)
-	}
-
-	var loadErrs []string
-	seenFile := map[string]bool{}
-	heavySet := map[string]bool{}
-	packages.Visit(pkgs, func(p *packages.Package) bool {
-		for _, e := range p.Errors {
-			loadErrs = append(loadErrs, e.Error())
-		}
-		if dep := heavydeps.Of(p.PkgPath); dep != "" {
-			heavySet[dep] = true
-		}
-		if !strings.HasPrefix(p.PkgPath, modulePath+"/") {
-			return true
-		}
-		for _, f := range p.GoFiles {
-			if strings.HasSuffix(f, "_test.go") || seenFile[f] {
-				continue
-			}
-			seenFile[f] = true
-			n, err := countLines(f)
-			if err != nil {
-				loadErrs = append(loadErrs, err.Error())
-				continue
-			}
-			files++
-			lines += n
-		}
-		return true
-	}, nil)
-	if len(loadErrs) > 0 {
-		return 0, 0, nil, fmt.Errorf("load package graph: %s", strings.Join(loadErrs, "; "))
-	}
-	return files, lines, slices.Sorted(maps.Keys(heavySet)), nil
-}
-
-// countLines 计文件行数：换行符个数，末行无换行时补 1。
-func countLines(path string) (int, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return 0, err
-	}
-	if len(b) == 0 {
-		return 0, nil
-	}
-	n := bytes.Count(b, []byte("\n"))
-	if b[len(b)-1] != '\n' {
-		n++
-	}
-	return n, nil
-}
-
 // renderReport 输出 markdown 报告。输出必须只由实测值决定（无时间戳、无绝对路径），
 // 这样 make compose-report 每次生成同一份文件，diff 只在形态真的变化时出现。
+//
+// 两个分支的区别是**被度量的对象**，不是风格：
+//
+//	>= 2 个形态（本仓：5 个）→ 横向对比报告（含「相对 full」归一化列、构建期选点叙述）；
+//	恰好 1 个形态（`jimu new` 的生成项目）→ 单形态报告：没有可比对象、没有构建期叠加，
+//	                                          主模块名就是该项目自己（modulePath 已被
+//	                                          `jimu new` 的受控重写改成 --module 的值）。
+//
+// 本仓永远走多形态分支，故入库产物 docs/profiles/compose-report.md 逐字节不变（T8 裁定 15）。
 func renderReport(ms []Metrics, deps int) string {
+	if len(ms) == 1 {
+		return renderSingleShapeReport(ms[0], deps)
+	}
 	base := ms[0] // full 是基准列
 	var b strings.Builder
 
@@ -380,6 +230,50 @@ func renderReport(ms []Metrics, deps int) string {
 	return b.String()
 }
 
+// renderSingleShapeReport 是**单形态**项目（`jimu new` 的产物）的报告：只有一个形态，因此
+// 不写「相对 full」归一化列、不提构建期叠加、不引用本仓 README/测试（生成项目里都不存在），
+// 主模块名用 modulePath（生成时已被改写成 --module 的值）。
+func renderSingleShapeReport(m Metrics, deps int) string {
+	var b strings.Builder
+	b.WriteString("# 项目编译面报告\n\n")
+	b.WriteString("> 由 `make compose-report`（`tools/composereport`）生成，**请勿手工编辑**：改动能力集后\n")
+	b.WriteString("> 重跑该命令并提交本文件。本项目只有一个形态、在生成期固定，因此报告不与任何东西比较。\n\n")
+
+	b.WriteString("## 指标口径\n\n")
+	b.WriteString("| 指标 | 口径 |\n|---|---|\n")
+	b.WriteString("| 二进制 | `go build -o <tmp> ./cmd/server` 的产物大小 |\n")
+	b.WriteString("| 路由数 | 本项目装配集在裸 `gin.Engine` 上 `RegisterHTTP` 后的 `r.Routes()` 条数（不启动监听） |\n")
+	b.WriteString("| 迁移数 | **迁移集**（声明集 ∪ schema 依赖，与 `jimu migrate` 同一口径）各 `Descriptor.Migrations` 中 `migrations/mysql/*.sql` 的文件数（postgres 同名同数） |\n")
+	b.WriteString("| 表数 | **迁移集**各 `Descriptor.Owns` 的并集大小（口径同迁移数） |\n")
+	fmt.Fprintf(&b, "| 本模块 Go 文件 / 代码行 | `golang.org/x/tools/go/packages` 载入 `./cmd/server` 的 import 闭包，只统计本模块（`%s/...`）的非 `_test.go` 文件 |\n", modulePath)
+	b.WriteString("| 重型依赖 | 同一闭包（含第三方包）命中 `tools/internal/heavydeps` 前缀表的展示名，`-` 表示零 |\n")
+	fmt.Fprintf(&b, "| go.mod 直接依赖 | `go list -m -f '{{if not .Indirect}}{{.Path}}{{end}}' all` 的非空行数（不含主模块 `%s` 自身） |\n\n", modulePath)
+	b.WriteString("形态在**生成期**固定：`internal/profiles/active/assembly.go` 直接指向本项目唯一形态，\n")
+	b.WriteString("`go build ./cmd/server` 只编进本项目选定的能力与驱动（生成项目没有构建期叠加）。\n\n")
+	b.WriteString("「本模块闭包」严格大于「装配集」：`user`/`auth` 直接 import 了 `outbox`/`queue`/`notification` 的\n")
+	b.WriteString("具体类型（`*outbox.Outbox`、`notification.Message`、`outbox.Event`），编译期会链上这些能力包，\n")
+	b.WriteString("但装配期一个都不构造。\n\n")
+
+	b.WriteString("## 编译面\n\n")
+	b.WriteString("| 形态 | 二进制 (MB) | 路由数 | 迁移数 | 表数 | 本模块 Go 文件 | 本模块代码行 | 重型依赖 |\n")
+	b.WriteString("|---|---:|---:|---:|---:|---:|---:|---|\n")
+	fmt.Fprintf(&b, "| `%s` | %s | %d | %d | %d | %d | %d | %s |\n",
+		m.Profile, mb(m.BinaryBytes), m.Routes, m.Migrations, m.Tables, m.Files, m.Lines, heavyDepsCell(m.HeavyDeps))
+	b.WriteString("\n")
+
+	b.WriteString("## 装配集（解析集）\n\n")
+	b.WriteString("| 装配的能力（按装配顺序） |\n|---|\n")
+	fmt.Fprintf(&b, "| %s |\n", strings.Join(m.Capabilities, " "))
+	b.WriteString("\n")
+
+	b.WriteString("## 层②边界：go.mod 直接依赖\n\n")
+	fmt.Fprintf(&b, "本项目的 go.mod 直接依赖数为 **%d** 个。这个数字与本项目装配了哪些能力无关：Go 的依赖裁剪\n", deps)
+	b.WriteString("作用于整个 module —— `go.mod`/`go.sum` 描述 module 而非包，形态入口包只改变**编进二进制的\n")
+	b.WriteString("包与符号集合**，不改变 module 依赖图。真正让 `go.mod` 变小的是生成期的能力选择与\n")
+	b.WriteString("`jimu new` 的 `go mod tidy`。\n")
+	return b.String()
+}
+
 func findByProfile(ms []Metrics, name string) (Metrics, bool) {
 	for _, m := range ms {
 		if m.Profile == name {
@@ -408,24 +302,4 @@ func percent(part, base int64) string {
 		return "—"
 	}
 	return fmt.Sprintf("%.1f%%", 100*float64(part)/float64(base))
-}
-
-// directDeps 返回 go.mod 的直接依赖数（`go list -m` 输出里排除主模块自身）。
-func directDeps(root string) (int, error) {
-	cmd := exec.CommandContext(context.Background(), "go", "list", "-m", "-f", "{{if not .Indirect}}{{.Path}}{{end}}", "all")
-	cmd.Dir = root
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return 0, fmt.Errorf("go list -m all: %w: %s", err, strings.TrimSpace(stderr.String()))
-	}
-	n := 0
-	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" && line != modulePath {
-			n++
-		}
-	}
-	return n, nil
 }

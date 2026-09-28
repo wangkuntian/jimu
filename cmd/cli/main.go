@@ -213,6 +213,8 @@ func init() {
 	migrateCmd.AddCommand(migrateStatusCmd)
 	migrateCmd.AddCommand(migrateRedoCmd)
 	migrateCmd.AddCommand(migrateAdoptCmd)
+	rootCmd.AddCommand(newCmd)
+	rootCmd.AddCommand(capabilityCmd)
 	rootCmd.AddCommand(moduleCmd)
 	rootCmd.AddCommand(migrateCmd)
 	rootCmd.AddCommand(seedCmd)
