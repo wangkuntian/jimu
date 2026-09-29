@@ -20,22 +20,29 @@ env:
 # 从「求和」变成「取最大」，且单点失败不再掩盖其余结论。
 #
 # 分工与 ci.yml / ci-scaffold.yml 对齐（tag 与 PR 跑同一批命令，只是编排不同）：
-#   gates           ← ci.yml 的 Lint + Capability Gates，另加 swagger/smoke/build/govulncheck/compose-check
+#   gates           ← ci.yml 的 Lint + Capability Gates，另加 swagger/smoke/build/govulncheck
 #   test-suite      ← ci.yml 的 Test（**以带覆盖率的一次为准**，见下方「不再重复跑套件」）
 #   race            ← ci.yml 的 Race Detector（复用同一份 scripts/race_shards.sh 分片与并集守卫）
 #   postgres-smoke  ← ci.yml 的 postgres 冒烟步骤
 #   scaffold-matrix ← ci-scaffold.yml 的 Scaffold Matrix（tag 上**无条件**跑，不依赖 heavy-ci 标签）
 #   bench           ← ci.yml 的 Performance Regression
+#   container-image ← 镜像构建 + Trivy 扫描 + SBOM
+#   compose-smoke   ← 隔离 Compose 运行时安全冒烟
+#   api-smoke       ← 隔离 API 契约冒烟
+# 后三项**与门禁并行**（原先 container-security 被 `needs: [全部门禁]` 排在最后，实测它是长杆：
+# 干跑 18.9 分钟，把并行省下的门禁时间又吃回去）。它们彼此也独立 —— 两个冒烟脚本各自
+# `compose up -d --build`（随机 project 名、专用端口 18080/18081），不依赖 container-image 的镜像。
 # 构建缓存沿用 ci.yml / ci-scaffold.yml 的**同 key 前缀**（gocache-*、scaffold-gocache-v1），
 # 因此 tag 运行能命中 PR 轮存下的快照，不必冷跑。
 #
-# 不再重复跑套件：原 Quality Gate 在同一 job 里跑了 `test`（来自 `make release-check`）、
-# `test-cover`、`test-race` **三遍全量套件**；现在只跑两遍，且各有不可替代的用途 ——
-# `test-suite` 产出覆盖率并校验阈值，`race` 是带 `-race` 的插桩版本。
+# 不再重复跑套件与冒烟：原 Quality Gate 在同一 job 里跑了 `test`（来自 `make release-check`）、
+# `test-cover`、`test-race` **三遍全量套件**，且 `make compose-check` 与 container-security
+# 把同一对冒烟脚本跑了两遍；现在套件只跑两遍（覆盖率与 `-race` 插桩各有不可替代的用途）、
+# 冒烟只跑一遍。
 jobs:
   # 静态门禁 + 能力/形态门禁 + 报告门禁 + 非 DB 的产物检查：都不需要 DB/Redis
-  # （profiles-check 未设 JIMU_PROFILES_SMOKE 时逐形态 SKIP 并成功退出；compose-check 自带隔离
-  #  Compose，不依赖 job 级 services）。
+  # （profiles-check 未设 JIMU_PROFILES_SMOKE 时逐形态 SKIP 并成功退出，所以这里不挂 services；
+  #  两个隔离冒烟已拆成 compose-smoke / api-smoke 与本 job 并行，不再放在这里）。
   gates:
     name: Gates
     runs-on: ubuntu-latest
@@ -77,8 +84,29 @@ jobs:
           make fmt-check vet check-log-usage check-capabilities profiles-check
           compose-report-check swagger-check smoke-check build govulncheck
 
-      - name: "🐳 Isolated Compose runtime + API contract smoke"
-        run: make compose-check
+  # 两个隔离冒烟各自 `compose up -d --build`（随机 project 名、专用端口 18080/18081），
+  # 既不依赖 container-image 构建的镜像、也互不干扰，因此各自独立成 job 与门禁并行。
+  # 注意：它们**不再**出现在 gates 里 —— 原设计把同一对脚本跑了两遍（`make compose-check`
+  # 一次 + container-security 一次），现在只跑一遍。
+  compose-smoke:
+    name: Isolated Compose smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: "🐳 Isolated Compose runtime security smoke"
+        run: ./scripts/test_runtime_security.sh
+
+  api-smoke:
+    name: Isolated API contract smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: "📜 Isolated API contract smoke"
+        run: ./scripts/smoke_api_contract.sh
 
   test-suite:
     name: Test (+ coverage)
@@ -331,11 +359,13 @@ jobs:
       - name: "⏱️ Run performance gate"
         run: scripts/bench_ci.sh --absolute
 
-  container-security:
-    name: Container Security Gate
+  # 镜像构建 + 漏洞扫描 + SBOM：与门禁**并行**跑（原先被 `needs: [全部门禁]` 排在最后，
+  # 实测它是发布路径的长杆 —— 干跑 18.9 分钟，把并行省下的门禁时间又吃回去）。
+  # 它只被 release job 依赖：安全不过就不发布，但不必等门禁先跑完。
+  container-image:
+    name: Container Image + SBOM
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [gates, test-suite, race, postgres-smoke, scaffold-matrix, bench]
     steps:
       - uses: actions/checkout@v7
 
@@ -364,17 +394,22 @@ jobs:
           name: sbom
           path: jimu-sbom.json
 
-      - name: Run isolated Compose smoke
-        run: ./scripts/test_runtime_security.sh
-
-      - name: Run isolated API contract smoke
-        run: ./scripts/smoke_api_contract.sh
-
   release:
     name: Publish Release
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [container-security]
+    # 发布同时取决于：全部门禁 + 镜像安全扫描/SBOM + 两个隔离冒烟。
+    # 这些之间彼此独立、全部并行跑，所以这里的 needs 只是「全部都得绿」，不构成串行等待。
+    needs:
+      - gates
+      - test-suite
+      - race
+      - postgres-smoke
+      - scaffold-matrix
+      - bench
+      - container-image
+      - compose-smoke
+      - api-smoke
     steps:
       - uses: actions/checkout@v7
 
