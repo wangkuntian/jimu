@@ -15,11 +15,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"flag"
 	"fmt"
 	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -40,6 +42,9 @@ const modulePath = "jimu"
 type Metrics = projectmetrics.Metrics
 
 func main() {
+	check := flag.Bool("check", false, "只校验入库报告与本次实测一致（平台无关部分），不写文件")
+	flag.Parse()
+
 	root, err := os.Getwd()
 	if err != nil {
 		fail(err)
@@ -52,14 +57,86 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
+	rendered := renderReport(ms, deps)
 	out := filepath.Join(root, outputPath)
+
+	// 二进制大小是**平台相关**的（同一份代码在 darwin/arm64 与 linux/amd64 上不同），所以入库报告
+	// 里那一列无法逐字节门禁 —— 这里把它当**归档数据**打到日志，方便发布/排查时对比。
+	printBinarySizes(ms)
+
+	if *check {
+		if err := checkCommitted(out, rendered); err != nil {
+			fail(err)
+		}
+		fmt.Printf("✅ compose-report-check: %s 与实测一致（二进制列为平台相关，已掩码后比对）\n", outputPath)
+		return
+	}
 	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 		fail(err)
 	}
-	if err := os.WriteFile(out, []byte(renderReport(ms, deps)), 0o644); err != nil {
+	if err := os.WriteFile(out, []byte(rendered), 0o644); err != nil {
 		fail(err)
 	}
 	fmt.Printf("✅ compose-report: %s\n", outputPath)
+}
+
+// printBinarySizes 把各形态的二进制大小与相对 full 的比例打到 stdout：入库报告不门禁这一列，
+// 但 CI 日志要留档（§9 的「报告进 CI 归档对比」）。
+func printBinarySizes(ms []Metrics) {
+	var base int64
+	for _, m := range ms {
+		if m.Profile == "full" {
+			base = m.BinaryBytes
+		}
+	}
+	for _, m := range ms {
+		if base > 0 && m.Profile != "full" {
+			fmt.Printf("   binary %-11s %s MB (%s of full)\n", m.Profile, mb(m.BinaryBytes), percent(m.BinaryBytes, base))
+			continue
+		}
+		fmt.Printf("   binary %-11s %s MB\n", m.Profile, mb(m.BinaryBytes))
+	}
+}
+
+// volatileCellsRe / volatileSizeRe / volatileRatioRe 命中报告里**平台相关**的数字：多形态表的
+// 「二进制 (MB) | 相对 full」两列、单形态表的「二进制 (MB)」列，以及验收段里 `minimal` 相对 `full`
+// 的比例。
+var (
+	volatileCellsRe = regexp.MustCompile("(\\| `[^`]+` \\| )[0-9.]+ \\| [0-9.]+% ")
+	volatileSizeRe  = regexp.MustCompile("(\\| `[^`]+` \\| )[0-9.]+ ")
+	volatileRatioRe = regexp.MustCompile("是 `full` 的 [0-9.]+%")
+)
+
+// maskVolatileCells 把两处平台相关的数字换成占位符。**必须对「入库报告」与「本次渲染」同时施加**：
+// 掩码规则本身不精确也只影响两边同等位置，比对仍然成立；而路由/迁移/表/文件数/代码行/重型依赖
+// 这些平台无关的列一个都不会被掩掉。
+func maskVolatileCells(text string) string {
+	text = volatileCellsRe.ReplaceAllString(text, "${1}— | — ")
+	text = volatileSizeRe.ReplaceAllString(text, "${1}— ")
+	return volatileRatioRe.ReplaceAllString(text, "是 `full` 的 —%")
+}
+
+// checkCommitted 比对入库报告与本次渲染的**平台无关部分**；不一致时报出首个差异行。
+func checkCommitted(committedPath, rendered string) error {
+	committed, err := os.ReadFile(committedPath)
+	if err != nil {
+		return fmt.Errorf("读取入库报告 %s: %w", filepath.ToSlash(committedPath), err)
+	}
+	want := strings.Split(maskVolatileCells(rendered), "\n")
+	got := strings.Split(maskVolatileCells(string(committed)), "\n")
+	for i := 0; i < len(want) || i < len(got); i++ {
+		w, g := "", ""
+		if i < len(want) {
+			w = want[i]
+		}
+		if i < len(got) {
+			g = got[i]
+		}
+		if w != g {
+			return fmt.Errorf("%s 与实测不一致（形态编译面发生漂移），第 %d 行：\n  入库: %s\n  实测: %s\n👉 若漂移是有意的，重新生成并提交：make compose-report", outputPath, i+1, g, w)
+		}
+	}
+	return nil
 }
 
 func fail(err error) {

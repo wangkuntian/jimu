@@ -1,5 +1,6 @@
 .PHONY: run build test vet fmt fmt-check lint clean migrate migrate-down migrate-status seed help govulncheck test-backup-restore ci
 .PHONY: test-cover test-coverage-check test-race swagger-check smoke-check compose-check profiles-check compose-report
+.PHONY: check-log-usage check-capabilities check-templates compose-report-check
 .PHONY: docker-build docker-run docker-stop docker-logs
 .PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
 .PHONY: bench loadtest proto secrets
@@ -73,6 +74,7 @@ help:
 	@echo "  make profiles-check       构建 5 个形态（overlay 叠加 cmd/server）+ golden 依赖闭包门禁"
 	@echo "                            （JIMU_PROFILES_SMOKE=1 时额外启动并检查 /readyz）"
 	@echo "  make compose-report       生成各形态（overlay 叠加 cmd/server）的编译面报告 docs/profiles/compose-report.md"
+	@echo "  make compose-report-check 报告漂移门禁：重新实测并比对入库报告的平台无关列（二进制列平台相关，只归档）"
 	@echo ""
 	@echo "数据库:"
 	@echo "  make migrate              本地执行迁移"
@@ -289,7 +291,7 @@ check-log-usage:
 
 ## check-capabilities: 校验能力自描述（Owns）与迁移归属一致，并静态门禁驱动选择
 ##                      （可用集目录存在、核心零驱动、形态选中集==import 闭包、驱动归属）；
-##                      当前未接入 make ci/release-check，收口见 P2.8。
+##                      已接入 make ci/release-check 与 CI 的 Capability Gates job（P2.8 收口）。
 check-capabilities:
 	@go run ./tools/checkcapabilities
 
@@ -297,7 +299,9 @@ check-capabilities:
 ##                   check-capabilities（5 条 ✅）。它把「模板/复制口径 vs 真实框架结构」的漂移
 ##                   变成一次可复现的构建；默认 --no-tidy（生成器复制的 go.mod/go.sum 已含全部
 ##                   依赖，模块缓存在 CI 上预热）。用例本身被 JIMU_HEAVY_MATRIX 门控，故这里
-##                   显式置 1（不置会静默 SKIP）。未接入 make ci/release-check，收口见 P2.8。
+##                   显式置 1（不置会静默 SKIP）。它不必单独接入聚合目标：`make ci`/`release-check`
+##                   里的 test-scaffold-matrix 会跑到同一条用例（TestTemplatesDrift），CI 侧由
+##                   ci-scaffold.yml 的 Scaffold Matrix job 承担。
 check-templates:
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -run TestTemplatesDrift -count=1 -timeout 30m
 
@@ -310,6 +314,7 @@ test-scaffold-matrix:
 
 ## profiles-check: 构建 5 个形态（overlay 叠加 cmd/server）+ golden 依赖闭包门禁；
 ##                  构建或门禁失败即非零退出。
+##                  已接入 make ci/release-check 与 CI 的 Capability Gates job（P2.8 收口）。
 ##                  设置 JIMU_PROFILES_SMOKE=1 后额外以 APP_ENV=dev 启动各形态并轮询
 ##                  /readyz（需 DB+Redis）；未设置时逐形态打印 SKIP，不静默跳过。
 profiles-check:
@@ -322,6 +327,16 @@ profiles-check:
 ##                 go.mod 直接依赖数（各形态相同，见报告的「层②边界」）；不连库、不启动监听。
 compose-report:
 	@go run ./tools/composereport
+
+## compose-report-check: 报告漂移门禁（P2.8 收口）—— 重新实测并比对入库报告的**平台无关部分**：
+##                       路由 / 迁移 / 表 / 本仓闭包文件数与代码行 / 重型依赖 / 直接依赖数。它是
+##                       「防止最小形态悄悄变胖」的刹车：报告入库即基线，这些列漂移就红。
+##                       **二进制大小列是平台相关的**（同一份代码在 darwin/arm64 与 linux/amd64 上
+##                       不同），因此那一列不参与逐字节门禁、只作为归档数据打印到日志（相对关系另有
+##                       tools/composereport 的单测断言，如 minimal ≤ 85% full，在度量所在机器上比）。
+##                       已接入 make ci/release-check 与 CI 的 Capability Gates job。
+compose-report-check:
+	@go run ./tools/composereport -check
 
 ## clean: 清理构建产物（含按形态隔离的 overlay 产物 .overlay/）
 clean:
@@ -415,12 +430,12 @@ compose-check:
 
 ## ci: 本地 CI 检查（无外部依赖部分，完整 CI 见 .github/workflows/ci.yml）；
 ##     末尾含重型脚手架矩阵（test-scaffold-matrix，耗时数分钟起），与 CI 的 Scaffold Matrix job 对齐
-ci: fmt-check vet lint check-log-usage test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck test-scaffold-matrix
+ci: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck test-scaffold-matrix
 	@echo "✅ All local CI checks passed"
 
 ## release-check: 发布前检查（Go 门禁 + govulncheck + 隔离 Compose/API smoke + 重型脚手架矩阵）；
 ##                test-scaffold-matrix 必须在内，否则 tag 发布路径会静默跳过那 8 条真实生成+构建/测试用例
-release-check: fmt-check vet check-log-usage test govulncheck compose-check test-scaffold-matrix
+release-check: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check test govulncheck compose-check test-scaffold-matrix
 	@echo "All checks passed"
 
 ## hooks: 启用 git 钩子（core.hooksPath=githooks：commit-msg 全英文检查 + pre-commit 框架包装；框架检查需 pip install pre-commit）

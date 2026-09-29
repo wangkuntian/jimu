@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"jimu/internal/assembly"
+	"jimu/internal/config"
 	"jimu/internal/profiles/full"
 	"jimu/tools/internal/profileassets"
 	"jimu/tools/internal/projectmetrics"
@@ -60,7 +61,7 @@ func reportFor(root, src string, m *Marker) (*projectmetrics.Metrics, error) {
 	// 没有构建期叠加 —— 这正是生成版 compose-report 与报告口径的差别所在。
 	metrics, err := projectmetrics.Of(root, m.Module, asm, nil)
 	if err != nil {
-		return nil, fmt.Errorf("measure %s: %w（--report 需要框架仓的 configs/：ProbeAssembly 会加载能力配置段，查找口径是 cwd 向上 5 层内的 configs/ 目录 —— 请从框架仓根目录或其 5 层以内运行）", filepathSlash(root), err)
+		return nil, fmt.Errorf("measure %s: %w（--report 需要框架仓的 configs/：ProbeAssembly 会加载能力配置段，查找口径是 cwd 向上 %d 层内（含 cwd）的 configs/，与源根发现同一常量；请从框架仓根目录或其 %d 层以内运行）", filepathSlash(root), err, config.SearchDepthUp, config.SearchDepthUp-1)
 	}
 	return &metrics, nil
 }

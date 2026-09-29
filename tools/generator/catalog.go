@@ -107,6 +107,32 @@ func renderCatalog(dst string, set CapabilitySet) error {
 	return nil
 }
 
+// catalogCoversAll 报告本次选择是否覆盖框架**全量** catalog。
+//
+// entries = 「框架 catalog ∩ (选定集 ∪ 迁移携带)」（见 catalogData），恒为子集，所以「覆盖全量」
+// 等价于「框架每个 catalog 能力都在 selected 里」—— `--profile=full` 这类项目成立，`--with=queue`
+// 这类不成立。
+//
+// 它只服务一件事：测试树裁剪里的「组成依赖」（见 pruneUnsatisfiableTests）。读 `catalog.All()` 的
+// 测试把**框架全量组成**当期望值，项目 catalog 是子集时会运行期失败（`--with=queue` 时
+// `internal/app/seed_test.go` 的 seed 不再查权限，sqlmock 期望落空）；而选择恰好覆盖全量时那些
+// 期望值成立，按同一规则裁掉就是白白丢覆盖（full 类项目会少 3 个测试文件）。于是按此条件化。
+func catalogCoversAll(set CapabilitySet) bool {
+	selected := make(map[string]bool, len(set.Declared)+len(set.MigrationOnly))
+	for _, name := range set.Declared {
+		selected[name] = true
+	}
+	for _, name := range set.MigrationOnly {
+		selected[name] = true
+	}
+	for _, d := range catalog.All() {
+		if !selected[d.Name] {
+			return false
+		}
+	}
+	return true
+}
+
 // catalogData 把能力集折算成模板输入，保证与框架仓 catalog 同构的拓扑序。
 //
 // fail-closed（Fix round 1 / Minor 1）：knownNames 是 ValidateDeclarations 的错别字白名单，空集

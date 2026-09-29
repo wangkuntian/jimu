@@ -214,6 +214,43 @@ func TestProfileCompiledSurface(t *testing.T) {
 	}
 }
 
+// TestMaskVolatileCellsPlatformColumns 钉住门禁的平台中立性：二进制大小与「相对 full」比例是
+// **平台相关**列（同一份代码在 darwin/arm64 与 linux/amd64 上不同），掩码后两份「只差这些列」的
+// 报告必须相等 —— 否则这个门禁只能在作者本机通过（CI 上必红，实测过）；而平台无关列
+// （路由/迁移/表/本仓文件数与代码行/重型依赖）变化必须仍被判为不一致。
+func TestMaskVolatileCellsPlatformColumns(t *testing.T) {
+	a := "" +
+		"| 形态 | 二进制 (MB) | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 | 重型依赖 |\n" +
+		"| `full` | 123.1 | 100.0% | 99 | 25 | 23 | 331 | 34543 | aws-sdk-go-v2 |\n" +
+		"| `minimal` | 84.7 | 68.8% | 32 | 10 | 9 | 180 | 17532 | - |\n" +
+		"- 二进制：`minimal` 是 `full` 的 68.8%（要求 ≤ 85%）\n"
+	b := strings.NewReplacer("123.1", "118.4", "84.7", "79.2", "68.8%", "66.9%").Replace(a)
+	assert.Equal(t, maskVolatileCells(a), maskVolatileCells(b), "只差二进制列的报告掩码后必须相等（跨平台）")
+	assert.NotEqual(t, maskVolatileCells(a), maskVolatileCells(strings.Replace(a, "| 99 |", "| 98 |", 1)),
+		"平台无关列（路由）变化必须仍判为不一致")
+	assert.NotEqual(t, maskVolatileCells(a), maskVolatileCells(strings.Replace(a, "| 34543 |", "| 34544 |", 1)),
+		"平台无关列（本仓代码行）变化必须仍判为不一致")
+}
+
+// TestCheckCommittedReportsTheFirstDriftLine 钉住 -check 的报错形态：指出首个差异行与两侧内容；
+// 只差二进制列时不报错（那条列本来就是平台相关的归档数据）。
+func TestCheckCommittedReportsTheFirstDriftLine(t *testing.T) {
+	dir := t.TempDir()
+	committed := filepath.Join(dir, "compose-report.md")
+	fresh := "| 形态 | 二进制 (MB) | 相对 full | 路由数 |\n| `full` | 1.0 | 100.0% | 99 |\n"
+
+	require.NoError(t, os.WriteFile(committed, []byte(strings.Replace(fresh, "| 99 |", "| 98 |", 1)), 0o644))
+	err := checkCommitted(committed, fresh)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "第 2 行")
+	assert.Contains(t, err.Error(), "入库:")
+	assert.Contains(t, err.Error(), "实测:")
+	assert.Contains(t, err.Error(), "make compose-report", "报错里要给修复入口")
+
+	require.NoError(t, os.WriteFile(committed, []byte(strings.Replace(fresh, "1.0", "0.9", 1)), 0o644))
+	require.NoError(t, checkCommitted(committed, fresh), "只有二进制列不同时不该报错")
+}
+
 // repoRoot 返回仓库根（本文件位于 tools/composereport/）。
 func repoRoot(t *testing.T) string {
 	t.Helper()

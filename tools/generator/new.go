@@ -150,7 +150,8 @@ func NewProject(opts NewOptions) (*Result, error) {
 		}
 	}
 	// --report 也**在暂存目录里**度量并落盘（tidy 之后，报告里的直接依赖数是 tidy 的产物）：
-	// 报告失败（典型场景：cwd 距框架仓 configs/ 超过 5 层，ProbeAssembly 加载不到能力配置段）
+	// 报告失败（典型场景：cwd 距框架仓 configs/ 超过 config.SearchDepthUp 层 —— 与源根发现同一
+	// 常量，故这种 cwd 现在会在 frameworkRoot 阶段就 fail-closed，走不到这里）
 	// 因此发生在原子换上 target **之前**，不会留下「产物已就位、报告却失败」的半成品；报告文件
 	// 本身也随暂存目录原子就位。暂存树与最终树的产物逐字节相同（只有目录名不同），度量不受影响。
 	if opts.Report {
@@ -237,7 +238,9 @@ func renderDerivedAll(root, dst string, set CapabilitySet, module string) error 
 	}
 	// Important 4：按「逐文件 import 可满足性」裁剪测试树 —— 生产文件不满足 = 复制集缺口（报错），
 	// 测试文件不满足 = 丢弃并记入 marker。internal/e2e/** 走同一条规则（替代 S3 的手写裁剪表）。
-	discarded, err := pruneUnsatisfiableTests(dst, module, assets)
+	// 「组成依赖」那一类按 catalogCoversAll 条件化：选择覆盖框架全量 catalog 时（如 --profile=full）
+	// 那些测试的期望值成立，保留而不是白丢（P2.8 精化）。
+	discarded, err := pruneUnsatisfiableTests(dst, module, assets, catalogCoversAll(set))
 	if err != nil {
 		return err
 	}
@@ -305,6 +308,9 @@ func renderBuildFiles(dst string, set CapabilitySet) error {
 //	          期望值的测试断言的是框架全量组成，在裁剪项目里会运行期失败（实测：`--with=queue`
 //	          时 `internal/app/seed_test.go` 的 4 个 TestRunSeed_* 把全量 permissions 序列当成
 //	          期望，sqlmock 期望落空；`internal/kernel/db/*_migration_integration_test.go` 同理）。
+//	          **条件化（P2.8 精化）**：catalogComplete 为真时（选择覆盖框架全量 catalog，如
+//	          `--profile=full`）那些期望值成立，这类文件**保留**而不是白丢 —— 判定见
+//	          catalogCoversAll。
 //
 // 口径是「**逐文件**丢弃 + 同测试包回退」（计划 Task 2 §2 原文即逐文件过滤）：
 //
@@ -319,7 +325,7 @@ func renderBuildFiles(dst string, set CapabilitySet) error {
 //
 // 回退判据用 AST 顶层声明名 ∩ 保留文件的标识符集合（保守、确定性、不依赖工具链）：同名局部变量
 // 或别的包的导出同名声字面量会**多丢**（安全方向），不会**少丢**（少丢才会产出编译不过的项目）。
-func pruneUnsatisfiableTests(dst, module string, assets []string) ([]string, error) {
+func pruneUnsatisfiableTests(dst, module string, assets []string, catalogComplete bool) ([]string, error) {
 	pkgs := map[string]bool{}
 	var testRels []string
 	err := filepath.WalkDir(dst, func(p string, d fs.DirEntry, err error) error {
@@ -374,7 +380,7 @@ func pruneUnsatisfiableTests(dst, module string, assets []string) ([]string, err
 		var unsatisfied []string
 		droppedDecls := map[string]bool{}
 		for _, rel := range files {
-			if deps[rel].satisfied() {
+			if deps[rel].satisfied(catalogComplete) {
 				continue
 			}
 			unsatisfied = append(unsatisfied, rel)
@@ -387,7 +393,7 @@ func pruneUnsatisfiableTests(dst, module string, assets []string) ([]string, err
 		}
 		cascade := false
 		for _, rel := range files {
-			if !deps[rel].satisfied() {
+			if !deps[rel].satisfied(catalogComplete) {
 				continue
 			}
 			for name := range deps[rel].refs {
@@ -470,10 +476,12 @@ type testDeps struct {
 	refs           map[string]bool
 }
 
-// satisfied 逐文件可满足性：不带缺失的 import、不引用未复制的资产、也不依赖组成清单的**值**
-// （生成项目的 catalog 是专属子集，读它的测试断言的是框架全量组成）。
-func (d testDeps) satisfied() bool {
-	return len(d.missingImports) == 0 && len(d.missingAssets) == 0 && !d.compositionDep
+// satisfied 逐文件可满足性：不带缺失的 import、不引用未复制的资产，且（生成 catalog 只是框架全量
+// 的**子集**时）不依赖组成清单的**值** —— catalogComplete 为真时后者不再构成不可满足（见
+// pruneUnsatisfiableTests 的「组成依赖」条件化）。
+func (d testDeps) satisfied(catalogComplete bool) bool {
+	return len(d.missingImports) == 0 && len(d.missingAssets) == 0 &&
+		(catalogComplete || !d.compositionDep)
 }
 
 // analyzeTestFile 解析一次测试文件得到 testDeps（src 传 nil：让 go/parser 从**文件名**读盘）。

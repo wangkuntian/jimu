@@ -11,7 +11,7 @@ name: CI (Go)
 # 因此每个 Go job 额外挂一条**滚动** actions/cache：把 GOCACHE 指到自己的目录
 # （`${{ runner.temp }}/gocache-<风味>`），key 取 `<go.sum 哈希>-<sha>` —— 主 key 只在重跑同一
 # commit 时命中，其余靠 restore-keys 拿最近一份快照、跑完存新条目，收益能跨 commit 累积。
-# 风味分开是为了不让 `-race`、`-cover` 与静态分析的产物互相挤占同一份快照；同一风味的多个 race
+# 风味分开（vet / cover / race / gates）是为了不让 `-race`、`-cover`、静态分析与门禁构建的产物互相挤占同一份快照；同一风味的多个 race
 # 分片共享一份（谁先跑完谁存，下一轮大家都用得上）。bench 未挂：它只有 2 分钟、不是长杆。
 # 配额：仓库 actions/cache 上限 10 GB，超限按 LRU 淘汰。
 
@@ -31,6 +31,10 @@ on:
       - "configs/**"
       - "scripts/**"
       - "Makefile"
+      # Capability Gates 的资产归属断言读 deploy/ 与 docs/openapi/ 两棵树，
+      # 只改这两处的提交也必须把门禁拉起来
+      - "deploy/**"
+      - "docs/openapi/**"
       - ".github/workflows/ci.yml"
   pull_request:
     branches: [master, release/*]
@@ -45,6 +49,10 @@ on:
       - "configs/**"
       - "scripts/**"
       - "Makefile"
+      # Capability Gates 的资产归属断言读 deploy/ 与 docs/openapi/ 两棵树，
+      # 只改这两处的提交也必须把门禁拉起来
+      - "deploy/**"
+      - "docs/openapi/**"
       - ".github/workflows/ci.yml"
 
 # 同分支连续推送取消旧 run（本 workflow 独立取消，不干扰 ci-docker）
@@ -246,6 +254,43 @@ jobs:
           bash -n scripts/smoke_api_contract.sh
           bash -n scripts/test_backup_restore.sh
           bash -n scripts/race_shards.sh
+
+  # 能力/形态门禁（P2.8 收口）：把「声明与实际一致」「每个形态真能构建且闭包被裁剪」
+  # 「编译面报告不漂移」三道门禁放到 PR 路径上。三者都不需要 DB/Redis —— profiles-check 未设
+  # JIMU_PROFILES_SMOKE 时逐形态打印 SKIP 并成功退出，所以这里不挂 services。
+  # check-templates 不列在这里：它的用例 TestTemplatesDrift 由 ci-scaffold.yml 的重型矩阵覆盖。
+  gates:
+    name: Capability Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: "♻️ Restore the Go build cache"
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/gocache-gates
+          key: gocache-gates-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            gocache-gates-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
+            gocache-gates-${{ runner.os }}-
+
+      - name: "🛠️ Point GOCACHE at the rolling build cache"
+        run: echo "GOCACHE=${{ runner.temp }}/gocache-gates" >> "$GITHUB_ENV"
+
+      - name: "🧩 Capability declarations match the code"
+        run: make check-capabilities
+
+      - name: "🏗️ Every profile builds and trims its closure"
+        run: make profiles-check
+
+      - name: "📊 The compose report matches the measurement"
+        run: make compose-report-check
 
   # race-plan：分片清单的唯一来源是 scripts/race_shards.sh（见该文件头的实测归因），
   # 这里把它转成矩阵，避免「workflow 里的分片列表」与「脚本里的分片规则」两处漂移。
