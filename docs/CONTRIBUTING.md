@@ -63,14 +63,16 @@ fix(auth): reject expired refresh token
 ## Pull Request
 
 1. 至少 1 人 review 通过
-2. CI (`make release-check`) 必须通过
-3. 合并策略：feature/fix/hotfix → release 用 squash merge；release → master 用 merge commit
-4. 合并后删除源分支
+2. feature/fix/hotfix → release PR 必须通过常规 CI、Docker 和提交消息检查；这些 workflow 只响应 PR，不在合并后的 branch push 上重复运行
+3. release/* → master 发布候选 PR 还必须通过一次 Scaffold Matrix；向 master 直接提交的其它来源分支会在该 required check 中失败；master 与 release/* 的 GitHub ruleset required checks 负责阻止未验证合并
+4. 合并策略：feature/fix/hotfix → release 用 squash merge；release → master 用 merge commit
+5. 合并后删除源分支
 
 ## Tag 与发布
 
 - 发布当日从 release 分支合并到 master 后，在 master tip 打 `vMAJOR.MINOR.PATCH` tag（SemVer，无预发布标签）
-- Tag 经 `make release-check` 通过后打，tag 与 release notes 同步推送；不发布未经 tag 的 commit
+- 发布候选 PR 合并后，在当前 `master` tip 打 `vMAJOR.MINOR.PATCH` tag；tag workflow 会校验 tag 必须指向当前 `master` tip，然后只构建四平台二进制并创建 GitHub Release，不重复运行完整 CI 或 Scaffold Matrix
+- `make release-check` 仍可在本地发布前人工运行；tag 与 release notes 同步推送；不发布未经 tag 的 commit
 - 回滚：master 不接受 force push，用 revert commit 或新 hotfix PR；release 分支回滚切 hotfix 分支修复后重复合并流程
 
 ## Release Note

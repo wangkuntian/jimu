@@ -449,8 +449,8 @@ compose-check:
 ci: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck test-scaffold-matrix
 	@echo "✅ All local CI checks passed"
 
-## release-check: 发布前检查（Go 门禁 + govulncheck + 隔离 Compose/API smoke + 重型脚手架矩阵）；
-##                test-scaffold-matrix 必须在内，否则 tag 发布路径会静默跳过那 8 条真实生成+构建/测试用例
+## release-check: 本地发布前检查（Go 门禁 + govulncheck + 隔离 Compose/API smoke + 重型脚手架矩阵）；
+##                tag workflow 依赖 release/* → master PR 的 Scaffold Matrix required check，不重复运行该矩阵
 release-check: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check test govulncheck compose-check test-scaffold-matrix
 	@echo "All checks passed"
 

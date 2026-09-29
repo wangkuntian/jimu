@@ -3,7 +3,7 @@ name: CI (Go)
 # Go 代码质量门禁：lint / test（含覆盖率）/ race（分片并行）/ benchmark / govulncheck。
 # 仅当 Go 相关代码或测试/构建脚本变更时触发。
 # 镜像构建与安全扫描见 ci-docker.yml（Dockerfile/compose/deploy 变更）；
-# 重型脚手架矩阵见 ci-scaffold.yml（默认不在 PR 上跑，有自己的触发口径与并发组）。
+# 重型脚手架矩阵见 ci-scaffold.yml（只在发布候选 PR、手动触发与定时任务运行）。
 #
 # 构建缓存：setup-go 自带的缓存 key 只含 go.mod 哈希，而 Actions 的缓存条目**按 key 不可变**、
 # 命中即「只恢复不重存」—— 快照在首次保存那一刻就冻结，之后每个 commit 的 first-party 编译产物
@@ -18,42 +18,8 @@ name: CI (Go)
 on:
   # 手动触发：重跑整套轻量门禁（重型脚手架矩阵不在这里，见 ci-scaffold.yml 的 workflow_dispatch）
   workflow_dispatch:
-  push:
-    branches: [master, release/*]
-    paths:
-      - "cmd/**"
-      - "internal/**"
-      - "tools/**"
-      - "go.mod"
-      - "go.sum"
-      - "internal/capabilities/*/migrations/**"
-      - "proto/**"
-      - "configs/**"
-      - "scripts/**"
-      - "Makefile"
-      # Capability Gates 的资产归属断言读 deploy/ 与 docs/openapi/ 两棵树，
-      # 只改这两处的提交也必须把门禁拉起来
-      - "deploy/**"
-      - "docs/openapi/**"
-      - ".github/workflows/ci.yml"
   pull_request:
     branches: [master, release/*]
-    paths:
-      - "cmd/**"
-      - "internal/**"
-      - "tools/**"
-      - "go.mod"
-      - "go.sum"
-      - "internal/capabilities/*/migrations/**"
-      - "proto/**"
-      - "configs/**"
-      - "scripts/**"
-      - "Makefile"
-      # Capability Gates 的资产归属断言读 deploy/ 与 docs/openapi/ 两棵树，
-      # 只改这两处的提交也必须把门禁拉起来
-      - "deploy/**"
-      - "docs/openapi/**"
-      - ".github/workflows/ci.yml"
 
 # 同分支连续推送取消旧 run（本 workflow 独立取消，不干扰 ci-docker）
 concurrency:
@@ -65,8 +31,35 @@ env:
   GOLANGCI_LINT_VERSION: "v2.7.2"
 
 jobs:
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Detect Go and capability changes
+        id: filter
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$BASE_SHA...$HEAD_SHA" | grep -Eq '^(cmd/|internal/|tools/|go\.mod$|go\.sum$|internal/capabilities/.*/migrations/|proto/|configs/|scripts/|Makefile$|deploy/|docs/openapi/|\.github/workflows/ci\.yml$)'; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+
   lint:
     name: Lint
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -134,6 +127,8 @@ jobs:
 
   test:
     name: Test
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     services:
       mariadb:
@@ -261,6 +256,8 @@ jobs:
   # check-templates 不列在这里：它的用例 TestTemplatesDrift 由 ci-scaffold.yml 的重型矩阵覆盖。
   gates:
     name: Capability Gates
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -296,6 +293,8 @@ jobs:
   # 这里把它转成矩阵，避免「workflow 里的分片列表」与「脚本里的分片规则」两处漂移。
   race-plan:
     name: Race plan
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     outputs:
       shards: ${{ steps.plan.outputs.shards }}
@@ -314,7 +313,8 @@ jobs:
   # 分片规则、generator 用例切分与「并集 == 全集」守卫都在 scripts/race_shards.sh。
   race:
     name: Race Detector (${{ matrix.shard }})
-    needs: race-plan
+    needs: [changes, race-plan]
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -391,6 +391,8 @@ jobs:
 
   bench:
     name: Performance Regression
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -410,6 +412,8 @@ jobs:
 
   govulncheck:
     name: Govulncheck
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

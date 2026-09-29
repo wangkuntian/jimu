@@ -1,19 +1,15 @@
 name: CI (Scaffold Matrix)
 
 # 重型脚手架矩阵：真实生成项目 + `go build/vet/test/run`（由 JIMU_HEAVY_MATRIX=1 门控，
-# 本地等价命令 `make test-scaffold-matrix`）。**默认不在 PR 上跑** —— 冷跑要十几到几十分钟，
-# 每个 PR 都等它不划算（用户裁定 B1 / 计划裁定 19）。
+# 本地等价命令 `make test-scaffold-matrix`）。**普通开发 PR 不跑** —— 冷跑要十几到几十分钟，
+# 只在发布候选 PR 上运行，避免每个开发 PR 都等待重型矩阵。
 #
 # 触发口径（任一满足）：
 #   ① 手动 workflow_dispatch：只跑这一个 job（这是它独立成文件的主要理由之一 —— 挂在 ci.yml 上
 #      时手动触发会把 Lint/Test/Race/Bench/Govulncheck 一起拉起来）；
-#   ② push 到 release/**：发布前全量验证；
-#   ③ PR 打上 heavy-ci 标签：需要时手动加标签跑满矩阵（只认 `labeled` 事件 —— 已打标签的 PR
-#      再推新提交不会自动重跑，重跑请重新打标签或 workflow_dispatch）；
-#   ④ 每周一次的夜间定时：模板/闭包漂移在两次 release 之间就能抓到，而不是等到发布前。
-# tag 发布的重型矩阵由 release.yml 的 quality job 承担（`make release-check` 内含
-# `make test-scaffold-matrix`，与本文件的 job 共用同一份 actions/cache），所以这里**不监听 tags**，
-# 否则同一个 tag 会把 15 分钟起跳的矩阵跑两遍。
+#   ② release/* → master 的 PR：发布候选全量验证；
+#   ③ 每周一次的夜间定时：模板/闭包漂移在两次 release 之间就能抓到。
+# tag 发布不再重复执行矩阵；release→master PR 的必需检查负责验证要发布的 master tip。
 #
 # 为什么独立成 workflow（而不是 ci.yml 里的一个 job）：
 #   1. 手动触发只跑矩阵，不附带整套 PR 门禁；
@@ -29,45 +25,10 @@ name: CI (Scaffold Matrix)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [release/*]
-    paths:
-      - "cmd/**"
-      - "internal/**"
-      - "tools/**"
-      - "go.mod"
-      - "go.sum"
-      - "internal/capabilities/*/migrations/**"
-      - "proto/**"
-      - "configs/**"
-      - "scripts/**"
-      - "Makefile"
-      # 生成器会把 docs/openapi 当资产复制进 apidocs 选区（ci.yml 的轻量 job 不含这条），
-      # 所以这里必须监听它，否则资产漂移不会触发重型矩阵
-      - "docs/openapi/**"
-      - ".github/workflows/ci-scaffold.yml"
   pull_request:
-    # 只监听「打标签」这一件事：这样 PR 上的每次推送都不会再多出一条 skipped 的 run
-    # （paths 匹配的是整个 PR 的累计 diff，所以只要 PR 里有代码改动，任何 push 都会把本
-    # workflow 拉起来、然后 job 因缺少 heavy-ci 标签而 skip —— 那是纯噪声）。
-    # 代价：**给已打标签的 PR 再推新提交不会自动重跑矩阵**，需要重新打一次标签，
-    # 或直接在 Actions 里 workflow_dispatch。若用 `gh pr create --label heavy-ci` 在建 PR 时
-    # 就带上标签，`labeled` 事件不一定补发 —— 那种情况用 workflow_dispatch 补跑。
-    types: [labeled]
-    branches: [master, release/*]
-    paths:
-      - "cmd/**"
-      - "internal/**"
-      - "tools/**"
-      - "go.mod"
-      - "go.sum"
-      - "internal/capabilities/*/migrations/**"
-      - "proto/**"
-      - "configs/**"
-      - "scripts/**"
-      - "Makefile"
-      - "docs/openapi/**"
-      - ".github/workflows/ci-scaffold.yml"
+    # 只监听 release/* → master 的发布候选 PR；普通 feature/fix → release PR 不跑重型矩阵。
+    types: [opened, synchronize, reopened]
+    branches: [master]
   schedule:
     # 每周一 03:00 UTC（北京 11:00）：在默认分支最新提交上跑一次，抓模板/闭包漂移
     - cron: "0 3 * * 1"
@@ -85,31 +46,66 @@ env:
   GO_VERSION: "1.26.6"
 
 jobs:
+  changes:
+    name: Scaffold Changes
+    runs-on: ubuntu-latest
+    outputs:
+      heavy: ${{ steps.filter.outputs.heavy }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Detect scaffold inputs
+        id: filter
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "heavy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$BASE_SHA...$HEAD_SHA" | grep -Eq '^(cmd/|internal/|tools/|go\.mod$|go\.sum$|internal/capabilities/.*/migrations/|proto/|configs/|scripts/|Makefile$|docs/openapi/|\.github/workflows/ci-scaffold\.yml$)'; then
+            echo "heavy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "heavy=false" >> "$GITHUB_OUTPUT"
+          fi
+
   scaffold-matrix:
     name: Scaffold Matrix
-    # push / workflow_dispatch / schedule 一律跑；PR 只在带 heavy-ci 标签时跑
-    # （`types: [labeled]` 对任何标签都会触发，必须自己判）
-    if: >-
-      github.event_name != 'pull_request' ||
-      contains(github.event.pull_request.labels.*.name, 'heavy-ci')
-    # 只跑被 JIMU_HEAVY_MATRIX 门控的重型矩阵，不产出覆盖率、不参与覆盖率阈值。
-    # GOCACHE 经 actions/cache 跨运行复用；生成项目的构建一律带 -trimpath（见 tools/generator 的
-    # trimpathGoflags），构建条目与临时路径无关。
+    needs: changes
+    # workflow_dispatch / schedule 一律跑；PR 必须来自 release/*，且只对相关输入变化执行矩阵。
+    # 其它来源分支显式失败，避免 master 的 required check 因 skipped job 被绕过。
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
 
+      - name: Validate release source branch
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'release/')
+        env:
+          RELEASE_SOURCE: ${{ github.head_ref }}
+        run: |
+          echo "Scaffold Matrix is a release gate and only accepts release/* -> master PRs."
+          echo "This PR comes from: $RELEASE_SOURCE"
+          exit 1
+
+      - name: Skip unchanged scaffold inputs
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/') && needs.changes.outputs.heavy != 'true'
+        run: echo "No scaffold inputs changed; release source branch validation passed."
+
       - name: Set up Go
         uses: actions/setup-go@v7
+        if: github.event_name != 'pull_request' || needs.changes.outputs.heavy == 'true'
         with:
           go-version: ${{ env.GO_VERSION }}
 
       - name: "🗂️ Restore the scaffold GOCACHE"
         uses: actions/cache@v4
+        if: github.event_name != 'pull_request' || needs.changes.outputs.heavy == 'true'
         with:
           path: ${{ runner.temp }}/scaffold-gocache
-          # 滚动 key（与 release.yml 的 quality job 同一规范）：
+          # 滚动 key（发布候选 PR 与手动/定时运行共用同一规范）：
           #   `-v1` 是**可递增的版本后缀** —— 体积超阈值（见下方守卫）或怀疑缓存内容损坏/被污染时，
           #   递增（-v2、-v3…）后重跑即可强制重建；新 key 必然未命中，旧条目由仓库 actions/cache
           #   配额（10 GB）LRU 淘汰。
@@ -124,6 +120,7 @@ jobs:
             scaffold-gocache-v1-${{ runner.os }}-
 
       - name: "🏗️ Run the heavy scaffold matrix"
+        if: github.event_name != 'pull_request' || needs.changes.outputs.heavy == 'true'
         env:
           JIMU_HEAVY_MATRIX: "1"
           JIMU_TEST_GOCACHE: ${{ runner.temp }}/scaffold-gocache
@@ -131,7 +128,7 @@ jobs:
         run: go test ./tools/generator/ -count=1 -timeout 60m -v
 
       - name: "📏 Report the scaffold GOCACHE size"
-        if: always()
+        if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.heavy == 'true')
         run: |
           CACHE="${{ runner.temp }}/scaffold-gocache"
           du -sh "$CACHE" 2>/dev/null || echo "（缓存目录不存在）"

@@ -4,46 +4,52 @@ name: CI (Commits)
 # （AGENTS.md「Commit Message 规范」；本地由 githooks/commit-msg 在 commit 时
 # 强制，本 workflow 为服务端兜底，复用同一检查实现）。
 #
-# 跳过**纯文档**改动（只有全部改动都命中 paths-ignore 时整个 workflow 才不触发）：
-# 「只改 README/docs」的推送不再拉一个 run。这是有意的取舍 —— 纯文档提交的信息规范由本地
-# githooks/commit-msg 继续拦截（`make hooks` 安装），CI 这边只对碰了代码/配置/工作流的提交兜底。
-# 注意：`pull_request` 的 paths 过滤按**整个 PR 的累计 diff** 求值，所以 PR 里只要有代码改动，
-# 后续再推纯文档提交仍会重跑（这是 GitHub 的既定语义，不是本文件的过滤能改变的）。
+# 纯文档 PR 仍触发本 workflow，但只运行轻量 Changes job；提交消息门禁对代码/配置/工作流变更生效。
 
 on:
-  push:
-    branches: [master, release/*]
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-      - "LICENSE"
   pull_request:
     branches: [master, release/*]
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-      - "LICENSE"
 
-# 同分支连续推送取消旧 run（独立于 ci-go / ci-docker）
+# 同一 PR 连续更新时取消旧 run（独立于 ci-go / ci-docker）
 concurrency:
   group: ci-commit-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Commit Changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Detect non-documentation changes
+        id: filter
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$BASE_SHA...$HEAD_SHA" | grep -qvE '(^docs/|\.md$|^LICENSE$)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   commit-messages:
     name: Commit Messages (all-English)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
-      # push：检查本次推送新增的提交区间。
-      # 分支删除（after 为零 SHA）时跳过；force push 的 base 不可解析时脚本自动降级为只查 tip。
-      - name: "📝 Check pushed commits"
-        if: github.event_name == 'push' && github.event.after != '0000000000000000000000000000000000000000'
-        run: |
-          scripts/check_commit_messages.sh "${{ github.event.before }}" "${{ github.event.after }}"
 
       # PR：检查 merge ref 相对 base 分支的全部提交（即 PR 头部的所有提交）。
       # merge ref 不存在（冲突未解决）时降级为只查 PR head 提交。
