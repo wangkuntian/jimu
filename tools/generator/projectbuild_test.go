@@ -116,11 +116,19 @@ func runGoInProject(t *testing.T, dir, cache string, args ...string) {
 }
 
 // runGoInProjectOutput 同上，但把输出与错误一并返回（供「允许登记失败」的测试自行判定）。
+//
+// env 用**最小显式 env**（serverEnvBaseForTest），绝不 `append(os.Environ(), …)`：生成项目里含有本仓
+// 复制过去的集成测试，它们按「库可达就真跑、否则跳过」（testutil.SkipUnlessMysql）决定行为。若继承外界
+// 的 DB_*，这些用例会从「跳过」变成「真跑」，而重型矩阵会**并行**生成十几个项目、各自对同一个
+// jimu_test 库跑 goose 迁移 → 随机撞 `Error 1060 Duplicate column name 'totp_secret'`。
+// CI 的 tag 发布 job（release.yml 的 Quality Gate）正好注入了指向真实 MariaDB 的 DB_*，于是整片
+// TestGeneratedProjectTestTreeIsGreen 全红；ci-scaffold.yml 不注入 DB_*，所以 PR 路径一直绿。
+// 见 TestServerEnvForTestCarriesNoAppConfigKeys。
 func runGoInProjectOutput(t *testing.T, dir, cache string, args ...string) (string, error) {
 	t.Helper()
 	cmd := exec.Command("go", args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOWORK=off", "GOCACHE="+cache, "GOFLAGS="+trimpathGoflags())
+	cmd.Env = serverEnvBaseForTest(cache)
 	output, err := cmd.CombinedOutput()
 	return string(output), err
 }

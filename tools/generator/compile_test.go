@@ -20,7 +20,8 @@ func TestGeneratedModuleCompiles(t *testing.T) {
 
 	cmd := exec.Command("go", "test", "./internal/capabilities/product/...")
 	cmd.Dir = root
-	cmd.Env = append(os.Environ(), "GOWORK=off", "GOCACHE="+newTestGoCache(t), "GOFLAGS="+trimpathGoflags())
+	// 与 runGoInProjectOutput 同一口径：最小显式 env，不继承外界应用配置（DB_*/JWT_SECRET/REDIS_*）。
+	cmd.Env = serverEnvBaseForTest(newTestGoCache(t))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("generated module does not compile: %v\n%s", err, output)
