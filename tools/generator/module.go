@@ -1,15 +1,12 @@
 package generator
 
 import (
-	"bytes"
 	"fmt"
-	"go/format"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-	"text/template"
 )
 
 // GenerateModule 生成完整的模块骨架（Clean Architecture 分层）
@@ -33,7 +30,7 @@ func GenerateModuleAt(root, name string) error {
 	if err := writeAll(root, files); err != nil {
 		return err
 	}
-	fmt.Printf("Module '%s' created at internal/modules/%s/\n", name, name)
+	fmt.Printf("Module '%s' created at internal/capabilities/%s/\n", name, name)
 	return nil
 }
 
@@ -47,7 +44,8 @@ type templateData struct {
 }
 
 type targetFile struct {
-	path     string
+	path string
+	// template 是 templates/ 下的模板文件名（空串表示空文件占位，如 postgres/.gitkeep）。
 	template string
 }
 
@@ -65,12 +63,14 @@ func preflight(root, name string) (templateData, []targetFile, error) {
 	if !validModuleName.MatchString(name) || goKeywords[name] {
 		return templateData{}, nil, fmt.Errorf("invalid module name: %q", name)
 	}
-	for _, rel := range []string{"go.mod", filepath.Join("internal", "modules"), filepath.Join("migrations", "mysql")} {
+	capMigDir := filepath.Join("internal", "capabilities", name, "migrations", "mysql")
+	for _, rel := range []string{"go.mod", filepath.Join("internal", "capabilities")} {
 		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
 			return templateData{}, nil, fmt.Errorf("repository missing %s: %w", rel, err)
 		}
 	}
-	migrationNumber, err := nextMigrationNumber(filepath.Join(root, "migrations", "mysql"))
+	// 能力内自行编号：读该能力迁移目录取最大编号 +1；目录不存在（新能力）从 001 起。
+	migrationNumber, err := nextMigrationNumber(filepath.Join(root, capMigDir))
 	if err != nil {
 		return templateData{}, nil, err
 	}
@@ -83,18 +83,22 @@ func preflight(root, name string) (templateData, []targetFile, error) {
 		MigrationNumber: migrationNumber,
 	}
 	targets := []targetFile{
-		{filepath.Join("internal", "modules", name, "module.go"), moduleTemplate},
-		{filepath.Join("internal", "modules", name, "domain", "entity.go"), entityTemplate},
-		{filepath.Join("internal", "modules", name, "domain", "repository.go"), repositoryTemplate},
-		{filepath.Join("internal", "modules", name, "application", "dto.go"), dtoTemplate},
-		{filepath.Join("internal", "modules", name, "application", "errors.go"), errorsTemplate},
-		{filepath.Join("internal", "modules", name, "application", "service.go"), serviceTemplate},
-		{filepath.Join("internal", "modules", name, "application", "service_test.go"), serviceTestTemplate},
-		{filepath.Join("internal", "modules", name, "infrastructure", "mysql_repository.go"), mysqlRepoTemplate},
-		{filepath.Join("internal", "modules", name, "interfaces", "handler.go"), handlerTemplate},
-		{filepath.Join("internal", "modules", name, "interfaces", "handler_test.go"), handlerTestTemplate},
-		{filepath.Join("internal", "modules", name, "interfaces", "router.go"), routerTemplate},
-		{filepath.Join("migrations", "mysql", migrationNumber+"_create_"+data.TableName+".sql"), migrationTemplate},
+		{filepath.Join("internal", "capabilities", name, "module.go"), "module.go.tmpl"},
+		{filepath.Join("internal", "capabilities", name, "domain", "entity.go"), "domain/entity.go.tmpl"},
+		{filepath.Join("internal", "capabilities", name, "domain", "repository.go"), "domain/repository.go.tmpl"},
+		{filepath.Join("internal", "capabilities", name, "application", "dto.go"), "application/dto.go.tmpl"},
+		{filepath.Join("internal", "capabilities", name, "application", "errors.go"), "application/errors.go.tmpl"},
+		{filepath.Join("internal", "capabilities", name, "application", "service.go"), "application/service.go.tmpl"},
+		{filepath.Join("internal", "capabilities", name, "application", "service_test.go"), "application/service_test.go.tmpl"},
+		{filepath.Join("internal", "capabilities", name, "infrastructure", "mysql_repository.go"), "infrastructure/mysql_repository.go.tmpl"},
+		{filepath.Join("internal", "capabilities", name, "interfaces", "handler.go"), "interfaces/handler.go.tmpl"},
+		{filepath.Join("internal", "capabilities", name, "interfaces", "handler_test.go"), "interfaces/handler_test.go.tmpl"},
+		{filepath.Join("internal", "capabilities", name, "interfaces", "router.go"), "interfaces/router.go.tmpl"},
+		// 迁移写进能力目录：两个方言都生成（postgres 版由生成者手调方言差异），
+		// postgres/.gitkeep 占位避免能力无 postgres 迁移时 embed 缺目录编译失败。
+		{filepath.Join("internal", "capabilities", name, "migrations", "mysql", migrationNumber+"_create_"+data.TableName+".sql"), "migrations/mysql/000_create.sql.tmpl"},
+		{filepath.Join("internal", "capabilities", name, "migrations", "postgres", migrationNumber+"_create_"+data.TableName+".sql"), "migrations/postgres/000_create.sql.tmpl"},
+		{filepath.Join("internal", "capabilities", name, "migrations", "postgres", ".gitkeep"), ""},
 	}
 	for _, target := range targets {
 		if _, err := os.Stat(filepath.Join(root, target.path)); err == nil {
@@ -109,6 +113,9 @@ func preflight(root, name string) (templateData, []targetFile, error) {
 func nextMigrationNumber(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return "001", nil
+		}
 		return "", fmt.Errorf("read migrations: %w", err)
 	}
 	max := 0
@@ -128,21 +135,17 @@ func nextMigrationNumber(dir string) (string, error) {
 func renderAll(data templateData, targets []targetFile) (map[string][]byte, error) {
 	files := make(map[string][]byte, len(targets))
 	for _, target := range targets {
-		t, err := template.New(filepath.Base(target.path)).Parse(target.template)
-		if err != nil {
-			return nil, err
-		}
-		var buf bytes.Buffer
-		if err := t.Execute(&buf, data); err != nil {
-			return nil, err
-		}
-		content := buf.Bytes()
-		if strings.HasSuffix(target.path, ".go") {
-			formatted, err := format.Source(content)
+		text := ""
+		if target.template != "" {
+			var err error
+			text, err = Template(target.template)
 			if err != nil {
-				return nil, fmt.Errorf("format %s: %w", target.path, err)
+				return nil, fmt.Errorf("%s: %w", target.path, err)
 			}
-			content = formatted
+		}
+		content, err := RenderText(target.template, text, data)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", target.path, err)
 		}
 		files[target.path] = content
 	}

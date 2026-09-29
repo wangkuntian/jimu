@@ -9,6 +9,64 @@
     "host": "localhost:8080",
     "basePath": "/api/v1",
     "paths": {
+        "/admin/users/{id}/roles": {
+            "post": {
+                "description": "替换指定用户的全部角色（按角色名）。角色名在用户所属租户内解析，不存在返回 404。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "权限管理"
+                ],
+                "summary": "分配用户角色",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "角色名列表",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "用户或角色不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
         "/api/v1/admin/error-codes": {
             "get": {
                 "description": "获取所有业务错误码及其对应的 HTTP 状态码映射。用于前端和第三方系统集成时参考。包含错误码、错误消息、HTTP 状态码和分类信息。",

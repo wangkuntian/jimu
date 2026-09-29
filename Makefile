@@ -1,5 +1,7 @@
 .PHONY: run build test vet fmt fmt-check lint clean migrate migrate-down migrate-status seed help govulncheck test-backup-restore ci
-.PHONY: test-cover test-coverage-check test-race swagger-check smoke-check compose-check
+.PHONY: test-cover test-coverage-check test-race swagger-check smoke-check compose-check profiles-check compose-report
+.PHONY: check-log-usage check-capabilities check-templates compose-report-check
+.PHONY: check-skills skills-install
 .PHONY: docker-build docker-run docker-stop docker-logs
 .PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
 .PHONY: bench loadtest proto secrets
@@ -9,10 +11,21 @@
 
 # 变量
 BIN_DIR := bin
-SERVER_BIN := $(BIN_DIR)/jimu-server
-CLI_BIN := $(BIN_DIR)/jimu-cli
+# 形态（profile）：full/minimal/saas/enterprise/machine；full 为默认（与提交态 active 一致）。
+# 切形态不改动任何受版本控制的文件：profileoverlay 生成 .overlay/<profile>/ 并在构建期叠加。
+PROFILE ?= full
+SERVER_PKG := ./cmd/server
+# 用递归展开（= 而非 :=）：下方 include .env 可能在解析期之后才把 PROFILE 改成别的形态，
+# 立即展开会让「.env 设 PROFILE=minimal」变成「用 minimal 构建、产物名却仍是 bin/jimu-server」。
+SERVER_BIN = $(BIN_DIR)/jimu-server$(if $(filter-out full,$(PROFILE)),-$(PROFILE),)
+CLI_BIN = $(BIN_DIR)/jimu-cli$(if $(filter-out full,$(PROFILE)),-$(PROFILE),)
 SERVER_CMD := cmd/server/main.go
-CLI_CMD := cmd/cli/main.go
+# CLI 必须有包形式（cmd/cli 下有多个文件：main.go / activecaps.go）；单文件形式会漏编译。
+CLI_PKG := ./cmd/cli
+
+# CLI 运行同样叠形态 overlay（与 build-cli 同源）。两步写法：先取 overlay 再 &&，非法形态名
+# 会在命令替换处失败 —— 若写进 -overlay=，失败只留空值，go 会当作「无 overlay」静默按 full 跑。
+CLI_RUN = overlay="$$(go run ./tools/profileoverlay "$(PROFILE)")" && APP_ENV=$(ENV) go run -overlay="$$overlay" $(CLI_PKG)
 VERSION ?= dev
 # 注入版本号到两个 main 包
 LDFLAGS := -X main.version=$(VERSION)
@@ -21,6 +34,10 @@ DOCKER_IMAGE = jimu:latest
 DOCKER_CONTAINER := jimu-server
 SWAG := go run -mod=mod github.com/swaggo/swag/cmd/swag
 ENV ?= dev
+# golangci-lint 版本：与 .github/workflows/ci.yml 的 GOLANGCI_LINT_VERSION 一致，
+# 使本地 `make lint` 与 CI 的 lint 结论含义相同；本地二进制版本不同时改用 go run 固定版本；
+# 仅在 golangci-lint 完全缺失时才退化为 go vet（不具备版本一致性）
+LINT_VERSION ?= v2.7.2
 
 # 根据 APP_ENV 自动生成 --profile 参数：dev 环境启动 adminer
 COMPOSE_DEV_PROFILE = $(if $(filter dev,$(APP_ENV)),dev)
@@ -46,11 +63,21 @@ help:
 	@echo "本地运行:"
 	@echo "  make run                  编译并运行服务端"
 	@echo "  make build                编译服务端和 CLI"
+	@echo "  make build-server         编译服务端（PROFILE=<name> 可选形态，默认 full，产物 bin/jimu-server[-<name>]）"
 	@echo "  make test                 运行测试"
 	@echo "  make vet                  静态分析"
 	@echo "  make fmt                  格式化代码"
 	@echo "  make lint                 静态检查"
 	@echo "  make check-log-usage      检查日志调用均为 *w 系列（防 k/v 粘连）"
+	@echo "  make check-capabilities   校验能力自描述（Owns）与驱动可用集/选中集一致"
+	@echo "  make check-templates      模板漂移门禁：用生成器生成最小项目并真构建 + 跑生成项目的 check-capabilities"
+	@echo "  make check-skills         校验 skills/** 的 frontmatter 与 reference 引用完整性"
+	@echo "  make skills-install       把 skills/<name>/ 软链到 .claude/skills/ 与 .agents/skills/"
+	@echo "  make test-scaffold-matrix 重型脚手架矩阵：真实生成项目 + build/vet/test/run（=CI 的 Scaffold Matrix job）"
+	@echo "  make profiles-check       构建 5 个形态（overlay 叠加 cmd/server）+ golden 依赖闭包门禁"
+	@echo "                            （JIMU_PROFILES_SMOKE=1 时额外启动并检查 /readyz）"
+	@echo "  make compose-report       生成各形态（overlay 叠加 cmd/server）的编译面报告 docs/profiles/compose-report.md"
+	@echo "  make compose-report-check 报告漂移门禁：重新实测并比对入库报告的平台无关列（二进制列平台相关，只归档）"
 	@echo ""
 	@echo "数据库:"
 	@echo "  make migrate              本地执行迁移"
@@ -65,7 +92,7 @@ help:
 	@echo "  make test-backup-restore  备份/恢复往返测试（需运行中 mariadb 容器）"
 	@echo ""
 	@echo "Docker 容器（单容器，需外部 DB + Redis）:"
-	@echo "  make docker-build         构建镜像"
+	@echo "  make docker-build         构建镜像（PROFILE=<name> 可选形态，默认 full）"
 	@echo "  make docker-run           运行容器（前台）"
 	@echo "  make docker-stop          停止并删除容器"
 	@echo "  make docker-logs          查看容器日志"
@@ -81,12 +108,12 @@ help:
 	@echo ""
 	@echo "工具:"
 	@echo "  make clean                清理构建产物"
-	@echo "  make swagger              生成 API 文档"
+	@echo "  make swagger              生成 API 文档（形态未编入 apidocs 时跳过）"
 	@echo "  make proto                重新生成 gRPC 代码"
 	@echo "  make bench                运行性能基准测试"
 	@echo "  make loadtest             本地 HTTP 压测（需 hey）"
-	@echo "  make ci                   本地 CI 检查（无外部依赖：fmt/vet/lint/test/coverage/race/swagger/smoke/build/govulncheck）"
-	@echo "  make release-check        发布前检查"
+	@echo "  make ci                   本地 CI 检查（无外部依赖：fmt/vet/lint/test/coverage/race/swagger/smoke/build/govulncheck + 重型脚手架矩阵）"
+	@echo "  make release-check        发布前检查（同上 Go 门禁 + govulncheck + Compose/API smoke + 重型脚手架矩阵）"
 
 # ========== 本地运行 ==========
 
@@ -98,31 +125,35 @@ run: build-server
 build: build-server build-cli
 
 # 内部目标（不直接调用）
+# 用 $$(...) 而不是 $(shell ...)：形态名非法时 profileoverlay 带清晰错误非零退出，make 随之
+# 失败，而不是留下一个空的 -overlay=。先把路径赋给变量再构建：赋值语句的退出码就是 $$(...)
+# 的退出码，&& 因而能截断构建；若直接写成 `go build -overlay=$$(...)`，失败的命令替换只留下
+# 空的 -overlay=，go build 会**静默按提交态（full）构建**并成功退出。
 build-server:
 	@mkdir -p $(BIN_DIR)
-	go build -ldflags "$(LDFLAGS)" -o $(SERVER_BIN) $(SERVER_CMD)
+	overlay="$$(go run ./tools/profileoverlay "$(PROFILE)")" && go build -ldflags "$(LDFLAGS)" -overlay="$$overlay" -o $(SERVER_BIN) $(SERVER_PKG)
 
 build-cli:
 	@mkdir -p $(BIN_DIR)
-	go build -ldflags "$(LDFLAGS)" -o $(CLI_BIN) $(CLI_CMD)
+	overlay="$$(go run ./tools/profileoverlay "$(PROFILE)")" && go build -ldflags "$(LDFLAGS)" -overlay="$$overlay" -o $(CLI_BIN) $(CLI_PKG)
 
 # ========== 数据库 ==========
 
-## migrate: 本地执行迁移
+## migrate: 本地执行迁移（跟随 PROFILE：命令行叠该形态 overlay；非法形态名 fail-fast）
 migrate:
-	APP_ENV=$(ENV) go run $(CLI_CMD) migrate up
+	@$(CLI_RUN) migrate up
 
-## migrate-down: 本地回滚迁移
+## migrate-down: 本地回滚迁移（跟随 PROFILE）
 migrate-down:
-	APP_ENV=$(ENV) go run $(CLI_CMD) migrate down
+	@$(CLI_RUN) migrate down
 
-## migrate-status: 查看迁移状态
+## migrate-status: 查看迁移状态（跟随 PROFILE）
 migrate-status:
-	APP_ENV=$(ENV) go run $(CLI_CMD) migrate status
+	@$(CLI_RUN) migrate status
 
-## seed: 本地插入初始数据
+## seed: 本地插入初始数据（跟随 PROFILE）
 seed:
-	APP_ENV=$(ENV) go run $(CLI_CMD) seed
+	@$(CLI_RUN) seed
 
 ## backup: 备份数据库（需 mysqldump，输出到 ./backups，环境变量见 scripts/backup.sh）
 backup:
@@ -151,9 +182,9 @@ test-backup-restore:
 
 # ========== Docker 单容器 ==========
 
-## docker-build: 构建 Docker 镜像
+## docker-build: 构建 Docker 镜像（PROFILE=<name> 可选形态，默认 full）
 docker-build:
-	docker build -t "$(DOCKER_IMAGE)" .
+	docker build --build-arg PROFILE=$(PROFILE) -t "$(DOCKER_IMAGE)" .
 
 ## docker-run: 运行容器（前台，需外部 DB + Redis）
 docker-run:
@@ -244,10 +275,13 @@ fmt-check:
 		echo "所有文件格式正确"; \
 	fi
 
-## lint: 静态检查（需要 golangci-lint）
+## lint: 静态检查（需要 golangci-lint；版本与 CI 一致，见 LINT_VERSION）
 lint:
-	@if command -v golangci-lint >/dev/null 2>&1; then \
+	@if command -v golangci-lint >/dev/null 2>&1 && golangci-lint version 2>/dev/null | grep -qw "$(LINT_VERSION:v%=%)"; then \
 		golangci-lint run ./...; \
+	elif command -v golangci-lint >/dev/null 2>&1; then \
+		echo "本地 golangci-lint 版本与 CI（$(LINT_VERSION)）不一致，改用 go run 固定版本"; \
+		go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(LINT_VERSION) run ./...; \
 	else \
 		echo "golangci-lint 未安装，使用 go vet 替代"; \
 		go vet ./...; \
@@ -258,13 +292,79 @@ lint:
 check-log-usage:
 	@go run ./tools/logcheck "./internal/..." "./cmd/..." "./tools/..."
 
-## clean: 清理构建产物
+## check-capabilities: 校验能力自描述（Owns）与迁移归属一致，并静态门禁驱动选择
+##                      （可用集目录存在、核心零驱动、形态选中集==import 闭包、驱动归属）；
+##                      已接入 make ci/release-check 与 CI 的 Capability Gates job（P2.8 收口）。
+check-capabilities:
+	@go run ./tools/checkcapabilities
+
+## check-templates: 模板漂移门禁 —— 用生成器在临时目录生成最小项目并构建 + 跑生成项目的
+##                   check-capabilities（5 条 ✅）。它把「模板/复制口径 vs 真实框架结构」的漂移
+##                   变成一次可复现的构建；默认 --no-tidy（生成器复制的 go.mod/go.sum 已含全部
+##                   依赖，模块缓存在 CI 上预热）。用例本身被 JIMU_HEAVY_MATRIX 门控，故这里
+##                   显式置 1（不置会静默 SKIP）。它不必单独接入聚合目标：`make ci`/`release-check`
+##                   里的 test-scaffold-matrix 会跑到同一条用例（TestTemplatesDrift），CI 侧由
+##                   ci-scaffold.yml 的 Scaffold Matrix job 承担。
+check-templates:
+	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -run TestTemplatesDrift -count=1 -timeout 30m
+
+## test-scaffold-matrix: 重型脚手架矩阵（CI 的 Scaffold Matrix job 就是这条）：JIMU_HEAVY_MATRIX=1
+##                       下的真实生成 + go build/vet/test/run；耗时数分钟起（本机冷 ~8 分钟，
+##                       CI 2 核冷跑预计 30+ 分钟，-timeout 60m 覆盖首跑），不进默认 `make test`。
+##                       JIMU_TEST_GOCACHE=<dir> 可指定跨运行复用的 GOCACHE（CI 用 actions/cache）。
+test-scaffold-matrix:
+	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 60m -v
+
+## profiles-check: 构建 5 个形态（overlay 叠加 cmd/server）+ golden 依赖闭包门禁；
+##                  构建或门禁失败即非零退出。
+##                  已接入 make ci/release-check 与 CI 的 Capability Gates job（P2.8 收口）。
+##                  设置 JIMU_PROFILES_SMOKE=1 后额外以 APP_ENV=dev 启动各形态并轮询
+##                  /readyz（需 DB+Redis）；未设置时逐形态打印 SKIP，不静默跳过。
+profiles-check:
+	@bash scripts/check_profiles.sh
+
+## compose-report: 生成各形态（profile，overlay 叠加 cmd/server）的编译面报告
+##                 （docs/profiles/compose-report.md，入库）。
+##                 指标：二进制大小 / 路由数 / 迁移数 / 表数 / 本仓闭包代码量与文件数 /
+##                 重型依赖（aws-sdk-go-v2 / kafka-go / amqp091-go / excelize）/
+##                 go.mod 直接依赖数（各形态相同，见报告的「层②边界」）；不连库、不启动监听。
+compose-report:
+	@go run ./tools/composereport
+
+## compose-report-check: 报告漂移门禁（P2.8 收口）—— 重新实测并比对入库报告的**平台无关部分**：
+##                       路由 / 迁移 / 表 / 本仓闭包文件数与代码行 / 重型依赖 / 直接依赖数。它是
+##                       「防止最小形态悄悄变胖」的刹车：报告入库即基线，这些列漂移就红。
+##                       **二进制大小列是平台相关的**（同一份代码在 darwin/arm64 与 linux/amd64 上
+##                       不同），因此那一列不参与逐字节门禁、只作为归档数据打印到日志（相对关系另有
+##                       tools/composereport 的单测断言，如 minimal ≤ 85% full，在度量所在机器上比）。
+##                       已接入 make ci/release-check 与 CI 的 Capability Gates job。
+compose-report-check:
+	@go run ./tools/composereport -check
+
+## check-skills: 校验 skills/** 的 Agent skill 契约 —— frontmatter（name 与目录同名、
+##               description 非空）与 reference 引用完整性（无断链、无孤儿）。
+##               事实源是入库的 skills/，安装（软链到各 Agent 发现路径）见 skills-install。
+##               **不接入** make ci/release-check：聚合目标的发布语义不含它。
+check-skills:
+	@./scripts/check_skills.sh
+
+## skills-install: 把 skills/<name>/ 软链到 .claude/skills/ 与 .agents/skills/（两者都在
+##                 .gitignore 内）。幂等；目标已存在且不是指向本仓事实源的软链时拒绝覆盖，
+##                 以保护 .agents/skills 里的第三方 skill 包。
+skills-install:
+	@./scripts/install_skills.sh
+
+## clean: 清理构建产物（含按形态隔离的 overlay 产物 .overlay/）
 clean:
 	rm -rf $(BIN_DIR)
+	rm -rf .overlay
 	rm -f coverage.out coverage.html
 
-## swagger: 生成 API 文档
+## swagger: 生成 API 文档（当前形态未编入 apidocs 时跳过；PROFILE 非法则失败）
 swagger:
+	@assets=$$(go run ./tools/profileassets "$(PROFILE)") || exit 1; \
+	printf '%s\n' "$$assets" | grep -qx 'docs/openapi' || { echo "SKIP swagger：形态 $(PROFILE) 未编入 apidocs"; exit 0; }; \
+	echo "$(SWAG) init -g $(SERVER_CMD) -o docs/openapi"; \
 	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi
 
 ## proto: 从 proto/ 重新生成 gRPC 代码（需 protoc + protoc-gen-go + protoc-gen-go-grpc）
@@ -285,7 +385,7 @@ all: fmt vet test build
 
 ## bench: 运行性能基准测试
 bench:
-	go test -bench=. -benchmem -run='^$$' ./internal/shared/id/... ./internal/modules/auth/application/... ./internal/platform/notification/... ./internal/platform/http/... ./internal/platform/queue/...
+	go test -bench=. -benchmem -run='^$$' ./internal/shared/id/... ./internal/capabilities/auth/application/... ./internal/capabilities/notification/... ./internal/kernel/http/... ./internal/capabilities/queue/...
 
 ## bench-ci: 性能回归门禁（绝对阈值模式，CI 用）
 bench-ci:
@@ -318,13 +418,14 @@ test-coverage-check:
 test-race:
 	go test -race ./...
 
-## swagger-check: 校验 OpenAPI 文档为最新（与 CI Test job 一致）
+## swagger-check: 校验 OpenAPI 文档为最新（与 CI Test job 一致；当前形态未编入 apidocs 时跳过）
 swagger-check:
-	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi >/dev/null
-	@git diff --exit-code docs/openapi || { \
-		echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; \
-	}
-	@echo "✅ OpenAPI 文档为最新"
+	@assets=$$(go run ./tools/profileassets "$(PROFILE)") || exit 1; \
+	printf '%s\n' "$$assets" | grep -qx 'docs/openapi' || { echo "SKIP swagger-check：形态 $(PROFILE) 未编入 apidocs"; exit 0; }; \
+	echo "$(SWAG) init -g $(SERVER_CMD) -o docs/openapi"; \
+	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi >/dev/null || exit 1; \
+	git diff --exit-code docs/openapi || { echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; }; \
+	echo "✅ OpenAPI 文档为最新"
 
 ## smoke-check: 校验 smoke 脚本语法（与 CI Test job 一致）
 smoke-check:
@@ -343,12 +444,14 @@ compose-check:
 	@./scripts/test_runtime_security.sh
 	@./scripts/smoke_api_contract.sh
 
-## ci: 本地 CI 检查（无外部依赖部分，完整 CI 见 .github/workflows/ci.yml）
-ci: fmt-check vet lint check-log-usage test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck
+## ci: 本地 CI 检查（无外部依赖部分，完整 CI 见 .github/workflows/ci.yml）；
+##     末尾含重型脚手架矩阵（test-scaffold-matrix，耗时数分钟起），与 CI 的 Scaffold Matrix job 对齐
+ci: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck test-scaffold-matrix
 	@echo "✅ All local CI checks passed"
 
-## release-check: 发布前检查（Go 门禁 + govulncheck + 隔离 Compose/API smoke）
-release-check: fmt-check vet check-log-usage test govulncheck compose-check
+## release-check: 发布前检查（Go 门禁 + govulncheck + 隔离 Compose/API smoke + 重型脚手架矩阵）；
+##                test-scaffold-matrix 必须在内，否则 tag 发布路径会静默跳过那 8 条真实生成+构建/测试用例
+release-check: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check test govulncheck compose-check test-scaffold-matrix
 	@echo "All checks passed"
 
 ## hooks: 启用 git 钩子（core.hooksPath=githooks：commit-msg 全英文检查 + pre-commit 框架包装；框架检查需 pip install pre-commit）

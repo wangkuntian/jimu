@@ -24,7 +24,7 @@ type Module interface {
 每个模块 MUST 遵循 4 层：
 
 ```text
-internal/modules/{name}/
+internal/capabilities/{name}/
   domain/           # 实体、值对象、仓储接口
   application/      # 用例服务、DTO
   infrastructure/   # 数据库/缓存实现

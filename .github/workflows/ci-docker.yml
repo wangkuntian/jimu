@@ -21,7 +21,7 @@ on:
       - "tools/**"
       - "go.mod"
       - "go.sum"
-      - "migrations/**"
+      - "internal/capabilities/*/migrations/**"
       - "configs/**"
       - ".github/workflows/ci-docker.yml"
   pull_request:
@@ -38,7 +38,7 @@ on:
       - "tools/**"
       - "go.mod"
       - "go.sum"
-      - "migrations/**"
+      - "internal/capabilities/*/migrations/**"
       - "configs/**"
       - ".github/workflows/ci-docker.yml"
 

@@ -34,6 +34,9 @@ func TestBusinessRoutesRequireProtectedMiddleware(t *testing.T) {
 type fakeAuthzModule struct{}
 
 func (fakeAuthzModule) Name() string { return "auth" }
+func (fakeAuthzModule) Descriptor() contract.Descriptor {
+	return contract.Descriptor{Name: "auth", Mount: contract.MountSelfManaged}
+}
 func (fakeAuthzModule) RegisterHTTP(r contract.Router) {
 	r.Group("/api/v1").POST("/auth/login", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 }
@@ -50,6 +53,9 @@ func (fakeAuthzModule) ProtectedHTTPMiddleware() ([]gin.HandlerFunc, error) {
 type fakeBusinessModule struct{}
 
 func (fakeBusinessModule) Name() string { return "user" }
+func (fakeBusinessModule) Descriptor() contract.Descriptor {
+	return contract.Descriptor{Name: "user", Mount: contract.MountProtected}
+}
 func (fakeBusinessModule) RegisterHTTP(r contract.Router) {
 	r.Group("/api/v1").GET("/users", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 }

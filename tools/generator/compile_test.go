@@ -8,6 +8,7 @@ import (
 )
 
 func TestGeneratedModuleCompiles(t *testing.T) {
+	requireHeavyMatrix(t)
 	root := newTestRepository(t)
 	copyRootFile(t, root, "go.mod")
 	copyGoSum(t, root)
@@ -17,9 +18,10 @@ func TestGeneratedModuleCompiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command("go", "test", "./internal/modules/product/...")
+	cmd := exec.Command("go", "test", "./internal/capabilities/product/...")
 	cmd.Dir = root
-	cmd.Env = append(os.Environ(), "GOWORK=off", "GOCACHE="+filepath.Join(os.TempDir(), "jimu-go-build-cache"))
+	// 与 runGoInProjectOutput 同一口径：最小显式 env，不继承外界应用配置（DB_*/JWT_SECRET/REDIS_*）。
+	cmd.Env = serverEnvBaseForTest(newTestGoCache(t))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("generated module does not compile: %v\n%s", err, output)
@@ -30,7 +32,11 @@ func writeStubPackages(t *testing.T, root string) {
 	t.Helper()
 	writeFileForTest(t, root, "internal/contract/contract.go", `package contract
 
-import "github.com/gin-gonic/gin"
+import (
+	"io/fs"
+
+	"github.com/gin-gonic/gin"
+)
 
 type Router interface {
 	Group(string, ...gin.HandlerFunc) *gin.RouterGroup
@@ -38,6 +44,24 @@ type Router interface {
 
 type JobRegistry interface{}
 type EventBus interface{}
+
+type MountPoint string
+
+const MountProtected MountPoint = "protected"
+
+type Permission struct {
+	Name     string
+	Resource string
+	Action   string
+}
+
+type Descriptor struct {
+	Name        string
+	Requires    []string
+	Mount       MountPoint
+	Permissions []Permission
+	Migrations  fs.FS
+}
 `)
 	writeFileForTest(t, root, "internal/shared/errors/errors.go", `package errors
 
@@ -124,7 +148,7 @@ func Page(c *gin.Context, data interface{}, total int64, page, pageSize int) {
 `)
 	writeFileForTest(t, root, "internal/shared/errors/errors_test.go", `package errors
 `)
-	writeFileForTest(t, root, "internal/platform/http/middleware/middleware.go", `package middleware
+	writeFileForTest(t, root, "internal/kernel/http/middleware/middleware.go", `package middleware
 
 import (
 	stderrors "errors"

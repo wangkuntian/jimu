@@ -1,0 +1,53 @@
+package infrastructure
+
+import (
+	"context"
+
+	"jimu/internal/capabilities/{{.Name}}/domain"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+type mysql{{.NameCamel}}Repository struct {
+	db *gorm.DB
+}
+
+func NewMysql{{.NameCamel}}Repository(db *gorm.DB) domain.{{.NameCamel}}Repository {
+	return &mysql{{.NameCamel}}Repository{db: db}
+}
+
+func (r *mysql{{.NameCamel}}Repository) FindByID(ctx context.Context, id uint64) (*domain.{{.NameCamel}}, error) {
+	var entity domain.{{.NameCamel}}
+	err := r.db.WithContext(ctx).First(&entity, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &entity, nil
+}
+
+func (r *mysql{{.NameCamel}}Repository) List(ctx context.Context, offset, limit int, sort, order string) ([]domain.{{.NameCamel}}, int64, error) {
+	var items []domain.{{.NameCamel}}
+	var total int64
+	db := r.db.WithContext(ctx).Model(&domain.{{.NameCamel}}{})
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := db.Order(clause.OrderByColumn{
+		Column: clause.Column{Name: sort},
+		Desc:   order == "desc",
+	}).Offset(offset).Limit(limit).Find(&items).Error
+	return items, total, err
+}
+
+func (r *mysql{{.NameCamel}}Repository) Create(ctx context.Context, entity *domain.{{.NameCamel}}) error {
+	return r.db.WithContext(ctx).Create(entity).Error
+}
+
+func (r *mysql{{.NameCamel}}Repository) Update(ctx context.Context, entity *domain.{{.NameCamel}}) error {
+	return r.db.WithContext(ctx).Save(entity).Error
+}
+
+func (r *mysql{{.NameCamel}}Repository) Delete(ctx context.Context, id uint64) error {
+	return r.db.WithContext(ctx).Delete(&domain.{{.NameCamel}}{}, id).Error
+}

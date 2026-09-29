@@ -1,0 +1,148 @@
+name: CI (Scaffold Matrix)
+
+# 重型脚手架矩阵：真实生成项目 + `go build/vet/test/run`（由 JIMU_HEAVY_MATRIX=1 门控，
+# 本地等价命令 `make test-scaffold-matrix`）。**默认不在 PR 上跑** —— 冷跑要十几到几十分钟，
+# 每个 PR 都等它不划算（用户裁定 B1 / 计划裁定 19）。
+#
+# 触发口径（任一满足）：
+#   ① 手动 workflow_dispatch：只跑这一个 job（这是它独立成文件的主要理由之一 —— 挂在 ci.yml 上
+#      时手动触发会把 Lint/Test/Race/Bench/Govulncheck 一起拉起来）；
+#   ② push 到 release/**：发布前全量验证；
+#   ③ PR 打上 heavy-ci 标签：需要时手动加标签跑满矩阵（只认 `labeled` 事件 —— 已打标签的 PR
+#      再推新提交不会自动重跑，重跑请重新打标签或 workflow_dispatch）；
+#   ④ 每周一次的夜间定时：模板/闭包漂移在两次 release 之间就能抓到，而不是等到发布前。
+# tag 发布的重型矩阵由 release.yml 的 quality job 承担（`make release-check` 内含
+# `make test-scaffold-matrix`，与本文件的 job 共用同一份 actions/cache），所以这里**不监听 tags**，
+# 否则同一个 tag 会把 15 分钟起跳的矩阵跑两遍。
+#
+# 为什么独立成 workflow（而不是 ci.yml 里的一个 job）：
+#   1. 手动触发只跑矩阵，不附带整套 PR 门禁；
+#   2. 自己的并发组：ci.yml 的 `ci-go-<ref>` 开着 cancel-in-progress，同分支任何一次推送都会取消
+#      正在跑的矩阵 —— 被取消的 run **不会执行缓存 save 步骤**，滚动缓存等于白配；
+#   3. 能加夜间 schedule 而不会连带把轻量 job 也定时跑一遍。
+#
+# 运行时间与优化（实测，run 36383945753 的 Scaffold Matrix job）：job 14m46s，其中 test 步骤 861s，
+# 构成是 25 个选区构建网 ≈560s（占 65%）、5+5 个生成项目测试树 239s、其余门控用例 ~150s、
+# 编译/缓存恢复 ~100s。已做的优化：`heavyBuildConcurrency` 从 2 提到 4（标准 runner 是
+# 4 vCPU，定死在 2 只用一半 CPU；旧注释里的「2 vCPU」是从 `CPU 时间 3330s / 墙钟 28min ≈ 2`
+# 反推出来的，那个 2 其实是当时的并发上限）+ 下面这份滚动缓存。
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [release/*]
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "tools/**"
+      - "go.mod"
+      - "go.sum"
+      - "internal/capabilities/*/migrations/**"
+      - "proto/**"
+      - "configs/**"
+      - "scripts/**"
+      - "Makefile"
+      # 生成器会把 docs/openapi 当资产复制进 apidocs 选区（ci.yml 的轻量 job 不含这条），
+      # 所以这里必须监听它，否则资产漂移不会触发重型矩阵
+      - "docs/openapi/**"
+      - ".github/workflows/ci-scaffold.yml"
+  pull_request:
+    # 只监听「打标签」这一件事：这样 PR 上的每次推送都不会再多出一条 skipped 的 run
+    # （paths 匹配的是整个 PR 的累计 diff，所以只要 PR 里有代码改动，任何 push 都会把本
+    # workflow 拉起来、然后 job 因缺少 heavy-ci 标签而 skip —— 那是纯噪声）。
+    # 代价：**给已打标签的 PR 再推新提交不会自动重跑矩阵**，需要重新打一次标签，
+    # 或直接在 Actions 里 workflow_dispatch。若用 `gh pr create --label heavy-ci` 在建 PR 时
+    # 就带上标签，`labeled` 事件不一定补发 —— 那种情况用 workflow_dispatch 补跑。
+    types: [labeled]
+    branches: [master, release/*]
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "tools/**"
+      - "go.mod"
+      - "go.sum"
+      - "internal/capabilities/*/migrations/**"
+      - "proto/**"
+      - "configs/**"
+      - "scripts/**"
+      - "Makefile"
+      - "docs/openapi/**"
+      - ".github/workflows/ci-scaffold.yml"
+  schedule:
+    # 每周一 03:00 UTC（北京 11:00）：在默认分支最新提交上跑一次，抓模板/闭包漂移
+    - cron: "0 3 * * 1"
+
+# 与 ci.yml 的 `ci-go-<ref>` 分开：本 workflow 的 run 只被同一条重型流水线的新 run 取代，
+# 不会被无关的轻量推送取消（取消会丢掉滚动缓存的 save）
+concurrency:
+  group: ci-scaffold-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.26.6"
+
+jobs:
+  scaffold-matrix:
+    name: Scaffold Matrix
+    # push / workflow_dispatch / schedule 一律跑；PR 只在带 heavy-ci 标签时跑
+    # （`types: [labeled]` 对任何标签都会触发，必须自己判）
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'heavy-ci')
+    # 只跑被 JIMU_HEAVY_MATRIX 门控的重型矩阵，不产出覆盖率、不参与覆盖率阈值。
+    # GOCACHE 经 actions/cache 跨运行复用；生成项目的构建一律带 -trimpath（见 tools/generator 的
+    # trimpathGoflags），构建条目与临时路径无关。
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: "🗂️ Restore the scaffold GOCACHE"
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/scaffold-gocache
+          # 滚动 key（与 release.yml 的 quality job 同一规范）：
+          #   `-v1` 是**可递增的版本后缀** —— 体积超阈值（见下方守卫）或怀疑缓存内容损坏/被污染时，
+          #   递增（-v2、-v3…）后重跑即可强制重建；新 key 必然未命中，旧条目由仓库 actions/cache
+          #   配额（10 GB）LRU 淘汰。
+          #   末尾的 `${{ github.sha }}` 是关键：Actions 的缓存条目按 key **不可变**，命中即
+          #   「只恢复不重存」。旧 key 只含 `hashFiles('go.sum')`，于是快照在首次保存那一刻就冻结，
+          #   之后每个 commit 的 first-party 编译产物全部随 runner 丢弃 —— 每次都只有依赖是热的。
+          #   带上 sha 后主 key 只在重跑同一 commit 时命中；正常路径是未命中 → 靠 restore-keys 拿
+          #   最近一份快照 → 跑完把合并后的目录存成**新**条目，收益才能跨 commit 累积。
+          key: scaffold-gocache-v1-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            scaffold-gocache-v1-${{ runner.os }}-${{ hashFiles('go.sum') }}-
+            scaffold-gocache-v1-${{ runner.os }}-
+
+      - name: "🏗️ Run the heavy scaffold matrix"
+        env:
+          JIMU_HEAVY_MATRIX: "1"
+          JIMU_TEST_GOCACHE: ${{ runner.temp }}/scaffold-gocache
+        # -v 便于失败时定位是哪个选区/形态
+        run: go test ./tools/generator/ -count=1 -timeout 60m -v
+
+      - name: "📏 Report the scaffold GOCACHE size"
+        if: always()
+        run: |
+          CACHE="${{ runner.temp }}/scaffold-gocache"
+          du -sh "$CACHE" 2>/dev/null || echo "（缓存目录不存在）"
+          SIZE_MB=$(du -sm "$CACHE" 2>/dev/null | cut -f1 || true)
+          # 非破坏性守卫：**绝不**在 job 内清空缓存 —— 清空后 actions/cache 的 save 步骤会把**空归档**
+          # 写进同一个 key，之后永久命中空缓存、永远冷启动。超阈值只报错退出并给出 bump 指引；
+          # 缓存内容的删除交给「bump 版本后缀 + 仓库 10 GB 配额 LRU 淘汰」。
+          # 阈值：滚动 key 会真的把每轮的增量存下来，所以这里的体积是**稳态体积**（不再是「只涨在
+          # job 内、跑完全丢」的假象），但仍受 Go 自身的 5 天未使用裁剪兜底（cmd/go/internal/cache
+          # 的 trimInterval=24h / trimLimit=5d，无大小上限）。
+          if [ -n "${SIZE_MB:-}" ] && [ "$SIZE_MB" -gt 6144 ]; then
+            echo "::error::scaffold GOCACHE ${SIZE_MB} MB 超过 6 GiB（仓库 actions/cache 配额 10 GB）：请把 ci-scaffold.yml 里 cache key 的 -v1 后缀递增（-v2、-v3…，release.yml 同步）后重跑；不要在本 job 内删除缓存内容"
+            exit 1
+          fi

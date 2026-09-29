@@ -3,13 +3,26 @@ name: CI (Commits)
 # 提交消息门禁：所有 commit message（summary 与正文）必须为英文
 # （AGENTS.md「Commit Message 规范」；本地由 githooks/commit-msg 在 commit 时
 # 强制，本 workflow 为服务端兜底，复用同一检查实现）。
-# 无 path 过滤：任何 PR/push 都会运行，避免仅改 docs/deploy 的 PR 绕过检查。
+#
+# 跳过**纯文档**改动（只有全部改动都命中 paths-ignore 时整个 workflow 才不触发）：
+# 「只改 README/docs」的推送不再拉一个 run。这是有意的取舍 —— 纯文档提交的信息规范由本地
+# githooks/commit-msg 继续拦截（`make hooks` 安装），CI 这边只对碰了代码/配置/工作流的提交兜底。
+# 注意：`pull_request` 的 paths 过滤按**整个 PR 的累计 diff** 求值，所以 PR 里只要有代码改动，
+# 后续再推纯文档提交仍会重跑（这是 GitHub 的既定语义，不是本文件的过滤能改变的）。
 
 on:
   push:
     branches: [master, release/*]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "LICENSE"
   pull_request:
     branches: [master, release/*]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "LICENSE"
 
 # 同分支连续推送取消旧 run（独立于 ci-go / ci-docker）
 concurrency:

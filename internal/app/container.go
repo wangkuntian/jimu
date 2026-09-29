@@ -3,40 +3,37 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"time"
 
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	admininfra "jimu/internal/modules/admin/infrastructure"
-	"jimu/internal/platform/auth"
-	"jimu/internal/platform/breach"
-	"jimu/internal/platform/captcha"
-	"jimu/internal/platform/db"
-	"jimu/internal/platform/encryption"
-	"jimu/internal/platform/event"
-	"jimu/internal/platform/feature"
-	grpcpkg "jimu/internal/platform/grpc"
-	platformhttp "jimu/internal/platform/http"
-	"jimu/internal/platform/httpclient"
-	"jimu/internal/platform/logger"
-	"jimu/internal/platform/notification"
-	"jimu/internal/platform/observability"
-	"jimu/internal/platform/outbox"
-	"jimu/internal/platform/queue"
-	redistore "jimu/internal/platform/redis"
-	"jimu/internal/platform/reporter"
-	"jimu/internal/platform/scheduler"
-	"jimu/internal/platform/storage"
+	"jimu/internal/kernel/db"
+	"jimu/internal/kernel/event"
+	"jimu/internal/kernel/httpclient"
+	"jimu/internal/kernel/logger"
+	"jimu/internal/kernel/observability"
+	redistore "jimu/internal/kernel/redis"
+	"jimu/internal/kernel/reporter"
+	"jimu/internal/kernel/scheduler"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.uber.org/zap/zapcore"
 	"gorm.io/gorm"
 )
 
+// Container 只持有内核/基础设施件：能力件一律由各能力的 Wire 经装配上下文构造，
+// 并经端口注册表互相消费（设计 §6.3）。此处不得再 import 任何能力包。
 type Container struct {
-	Config         *config.Config
+	Config *config.Config
+	// Sections 按 YAML 点分键解码能力配置段（能力配置由能力自身声明，设计 §8）
+	Sections config.SectionDecoder
+	// CapabilityConfigs 已按启用集解码并校验的能力配置段（P2.1 起，未启用的段不出现）
+	CapabilityConfigs *CapabilityConfigs
+	// Enabled 已启用能力名集合（含依赖闭包）
+	Enabled map[string]bool
+	// Capabilities 已解析启用集的能力描述符（含依赖闭包，按清单顺序）
+	Capabilities   []contract.Descriptor
 	DB             *gorm.DB
 	Redis          redistore.Client
 	Logger         *logger.Logger
@@ -44,23 +41,10 @@ type Container struct {
 	JobRegistry    contract.JobRegistry
 	Scheduler      *scheduler.CronScheduler
 	Lock           *redistore.Lock
-	Storage        storage.Storage
-	UploadScanner  platformhttp.Scanner
-	Notification   notification.Dispatcher
-	FeatureFlag    *feature.Manager
-	WebSocketHub   *notification.Hub
 	EventBus       *event.EventBus
-	Outbox         *outbox.Outbox
 	DBCollector    *observability.DBCollector
 	HTTPClient     *httpclient.Client
-	Captcha        *captcha.Service
-	Cipher         *encryption.Cipher
-	WorkerPool     *queue.WorkerPool
-	APIKeyVerifier *auth.APIKeyVerifier
-	// 泄露口令检查（HIBP）；auth.breach_check_enabled 关闭时为 nil
-	BreachChecker breach.Checker
-	GRPCServer    *grpcpkg.Server
-	Reporter      reporter.Reporter
+	Reporter       reporter.Reporter
 	// 观测出口（OTLP → OpenObserve；未启用时为 nil）
 	MetricsPusher *observability.MetricsPusher
 	LogExporter   *observability.LogExporter
@@ -100,7 +84,7 @@ func (c *Container) Stop(ctx context.Context) error {
 	return result
 }
 
-func NewContainer(cfg *config.Config) (*Container, error) {
+func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *CapabilityConfigs, caps []contract.Descriptor, enabled map[string]bool) (*Container, error) {
 	// OpenObserve 日志通道：otel 启用时附加到 zap（初始化失败仅告警，不阻断启动）
 	var (
 		logExporter *observability.LogExporter
@@ -116,7 +100,6 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		}
 	}
 	log := logger.New(cfg.Log, extraCores...)
-	var pendingWorkerPool *queue.WorkerPool
 
 	// 雪花 ID：初始化全局生成器后再连库（hook 在 open 时注册）
 	if err := db.InitSnowflake(cfg.ID.WorkerID); err != nil {
@@ -126,50 +109,31 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 字段级加密：注册全局 gorm hook（加密 email/phone 写入 + 盲索引 + 读取解密）
-	cipher := encryption.New(cfg.Security.EncryptionKey)
-	db.RegisterEncryptionHooks(dbConn, cipher)
 	rdb, err := redistore.ConnectWithRetry(cfg.Redis, log)
 	if err != nil {
 		return nil, err
 	}
 
+	lock := redistore.NewLock(rdb, "lock")
+
+	// 调度器是内核件：其配置段由 queue 能力声明并已按启用集解码；未启用时取零值
+	// （memory 存储），与下沉前的「不接线/默认行为」一致。
+	var schedulerCfg scheduler.Config
+	if c, ok := SectionOf[*scheduler.Config](capCfgs, scheduler.ConfigKey); ok {
+		schedulerCfg = *c
+	}
 	var schedStore scheduler.Store = scheduler.NewMemoryStore()
-	if cfg.Scheduler.Store == config.SchedulerStoreMySQL {
+	if schedulerCfg.Store == scheduler.StoreMySQL {
 		schedStore = scheduler.NewMySQLStore(dbConn)
 	}
-	lock := redistore.NewLock(rdb, "lock")
 	var sched *scheduler.CronScheduler
-	if cfg.Scheduler.Store == config.SchedulerStoreMySQL {
+	if schedulerCfg.Store == scheduler.StoreMySQL {
 		sched = scheduler.NewWithStore(log, schedStore, lock)
 	} else {
 		sched = scheduler.NewWithStore(log, schedStore, nil)
 	}
-	storageSvc, err := storage.New(storage.Config{
-		Type:      storage.StorageType(cfg.Storage.Type),
-		BaseDir:   cfg.Storage.BaseDir,
-		BaseURL:   cfg.Storage.BaseURL,
-		Endpoint:  cfg.Storage.Endpoint,
-		Region:    cfg.Storage.Region,
-		Bucket:    cfg.Storage.Bucket,
-		AccessKey: cfg.Storage.AccessKey,
-		SecretKey: cfg.Storage.SecretKey,
-		PathStyle: cfg.Storage.PathStyle,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("init storage: %w", err)
-	}
 
-	// 文件上传病毒扫描器：未启用时为 nil（上传不扫描，向后兼容）
-	var uploadScanner platformhttp.Scanner
-	if cfg.Upload.ClamAV.Enabled {
-		uploadScanner = platformhttp.NewClamAVScanner(platformhttp.ClamAVConfig{
-			Address: cfg.Upload.ClamAV.Address,
-			Timeout: time.Duration(cfg.Upload.ClamAV.TimeoutSec) * time.Second,
-		})
-	}
-
-	// 统一出站 HTTP client（oauth/webhook 等外部调用复用）
+	// 统一出站 HTTP client（oauth/webhook/breach 等外部调用复用）
 	httpClient := httpclient.New(httpclient.Config{
 		TimeoutSec:      cfg.HTTPClient.TimeoutSec,
 		MaxRetries:      cfg.HTTPClient.MaxRetries,
@@ -178,103 +142,8 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		RateLimitBurst:  cfg.HTTPClient.RateLimitBurst,
 	})
 
-	// 泄露口令检查（HIBP k-匿名范围查询）：默认关闭，启用时复用统一出站 client（超时/重试/熔断）
-	var breachChecker breach.Checker
-	if cfg.Auth.BreachCheckEnabled {
-		breachChecker = breach.New(httpClient)
-	}
-
-	notifier := notification.NewDispatcher()
-	// WebSocket Hub（通知渠道 + 实时通信共用）
-	wsHub := notification.NewHub()
-
-	// 未配置真实发送渠道时，注册日志型兜底渠道，保证通知链路不报错且可观察
-	var emailChannel notification.Notification = notification.NewLogChannel(notification.ChannelEmail, log)
-	if cfg.Email.Enabled {
-		emailChannel = notification.NewEmail(notification.EmailConfig{
-			Host:     cfg.Email.Host,
-			Port:     cfg.Email.Port,
-			Username: cfg.Email.Username,
-			Password: cfg.Email.Password,
-			From:     cfg.Email.From,
-		})
-	}
-	notifier.Register(notification.ChannelEmail, emailChannel)
-
-	// 短信：未配置真实发送时注册日志型兜底渠道，保证通知链路不报错且可观察
-	var smsChannel notification.Notification = notification.NewLogChannel(notification.ChannelSMS, log)
-	if cfg.SMS.Enabled {
-		smsChannel = notification.NewSMS(notification.SMSConfig{
-			Provider:  cfg.SMS.Provider,
-			APIKey:    cfg.SMS.APIKey,
-			APISecret: cfg.SMS.APISecret,
-			SignName:  cfg.SMS.SignName,
-		})
-	}
-	notifier.Register(notification.ChannelSMS, smsChannel)
-
-	notifier.Register(notification.ChannelWebSocket, notification.NewWebSocket(wsHub))
-	notifier.Register(notification.ChannelWebhook, notification.NewWebhook(notification.WebhookConfig{
-		Headers:    map[string]string{},
-		SignSecret: cfg.Notification.Webhook.SignSecret,
-	}, httpClient))
-
-	// Feature Flag
-	featureMgr := feature.NewManager()
-	// 注册默认特性开关
-	featureMgr.Register(feature.Flag{
-		Name:       "new_dashboard",
-		Enabled:    false,
-		Percentage: 0,
-	})
-	featureMgr.Register(feature.Flag{
-		Name:       "beta_features",
-		Enabled:    true,
-		Percentage: 10, // 10% 灰度
-	})
-
 	// Event Bus
 	eventBus := event.New()
-
-	// Outbox
-	outboxStore := outbox.NewMySQLStore(dbConn)
-	var outboxPublisher outbox.Publisher
-	switch cfg.Outbox.Publisher {
-	case config.OutboxPublisherMQ:
-		q, err := queue.New(queue.Config{
-			Type:  queue.Type(cfg.Queue.Type),
-			Redis: rdb,
-			Kafka: queue.KafkaConfig{
-				Brokers: cfg.Queue.Kafka.Brokers,
-				Topic:   cfg.Queue.Kafka.Topic,
-				GroupID: cfg.Queue.Kafka.GroupID,
-			},
-			RabbitMQ: queue.RabbitMQConfig{
-				URL:       cfg.Queue.RabbitMQ.URL,
-				QueueName: cfg.Queue.RabbitMQ.Queue,
-				Exchange:  cfg.Queue.RabbitMQ.Exchange,
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("init outbox queue: %w", err)
-		}
-		outboxPublisher = outbox.NewMQPublisher(q)
-		consumer, ok := q.(queue.Consumer)
-		if !ok {
-			return nil, fmt.Errorf("queue %s does not implement consumer", cfg.Queue.Type)
-		}
-		store := queue.NewMySQLStore(
-			admininfra.NewMysqlJobRepository(dbConn),
-			admininfra.NewMysqlJobHistoryRepository(dbConn),
-			admininfra.NewMysqlDeadLetterRepository(dbConn),
-		)
-		workerPool := queue.NewWorkerPool(queue.DefaultWorkerConfig, consumer, store)
-		// 延迟到 Container 构造后赋值（见 Step 3）
-		pendingWorkerPool = workerPool
-	default:
-		outboxPublisher = outbox.NewEventBusPublisher(eventBus)
-	}
-	outboxProcessor := outbox.New(outboxStore, outboxPublisher)
 
 	// DB Metrics Collector
 	var dbCollector *observability.DBCollector
@@ -282,55 +151,26 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		dbCollector = observability.NewDBCollector(sqlDB, "primary")
 	}
 
-	// Captcha 验证码服务（平台能力，非业务模块；auth 模块消费）
-	captchaSvc := captcha.NewService(rdb, time.Duration(cfg.Captcha.TTLMin)*time.Minute)
-
-	// API Key 验证器（服务/机器间认证，复用 admin api_keys 表）
-	// 路由组按需挂载 auth.APIKeyAuthMiddleware(c.APIKeyVerifier)
-	apiKeyVerifier := auth.NewAPIKeyVerifier(auth.NewDBAPIKeyStore(dbConn))
-
 	// 错误上报：启用时输出结构化错误日志（日志链路接入 OpenObserve 后自动汇聚）
 	// gRPC 服务端 panic 也经此上报（server recovery 拦截器）
 	errorReporter := reporter.NewReporter(cfg.ErrorReport, log.Errorw)
 
-	// gRPC server（与 HTTP 双栈；bootstrap 在 grpc.enabled 时纳入生命周期）
-	grpcServer, err := grpcpkg.New(grpcpkg.Config{
-		Enabled:    cfg.GRPC.Enabled,
-		Host:       cfg.GRPC.Host,
-		Port:       cfg.GRPC.Port,
-		TimeoutSec: cfg.GRPC.TimeoutSec,
-		TLS:        cfg.GRPC.TLS,
-	}, log, errorReporter)
-	if err != nil {
-		return nil, fmt.Errorf("init grpc server: %w", err)
-	}
-	// 业务示例：注册 UserInfoService（真实业务模块可在此注入自己的 service）
-	grpcServer.RegisterUserInfoService(dbConn)
-
 	return &Container{
-		Config:         cfg,
-		DB:             dbConn,
-		Redis:          rdb,
-		Logger:         log,
-		Reporter:       errorReporter,
-		JobRegistry:    sched,
-		Scheduler:      sched,
-		Lock:           lock,
-		Storage:        storageSvc,
-		UploadScanner:  uploadScanner,
-		Notification:   notifier,
-		FeatureFlag:    featureMgr,
-		WebSocketHub:   wsHub,
-		EventBus:       eventBus,
-		Outbox:         outboxProcessor,
-		DBCollector:    dbCollector,
-		HTTPClient:     httpClient,
-		Captcha:        captchaSvc,
-		Cipher:         cipher,
-		WorkerPool:     pendingWorkerPool,
-		APIKeyVerifier: apiKeyVerifier,
-		BreachChecker:  breachChecker,
-		GRPCServer:     grpcServer,
-		LogExporter:    logExporter,
+		Config:            cfg,
+		Sections:          sections,
+		CapabilityConfigs: capCfgs,
+		Enabled:           enabled,
+		Capabilities:      caps,
+		DB:                dbConn,
+		Redis:             rdb,
+		Logger:            log,
+		Reporter:          errorReporter,
+		JobRegistry:       sched,
+		Scheduler:         sched,
+		Lock:              lock,
+		EventBus:          eventBus,
+		DBCollector:       dbCollector,
+		HTTPClient:        httpClient,
+		LogExporter:       logExporter,
 	}, nil
 }

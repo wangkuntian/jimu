@@ -12,21 +12,25 @@ import (
 	"testing"
 	"time"
 
+	"jimu/internal/app"
+	"jimu/internal/assembly"
+	roledomain "jimu/internal/capabilities/access/domain"
+	auditdomain "jimu/internal/capabilities/audit/domain"
+	authmodule "jimu/internal/capabilities/auth"
+	authdomain "jimu/internal/capabilities/auth/domain"
+	"jimu/internal/capabilities/catalog"
+	mfadomain "jimu/internal/capabilities/mfa/domain"
+	passkeydomain "jimu/internal/capabilities/passkey/domain"
+	tenantdomain "jimu/internal/capabilities/tenant/domain"
+	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	adminmodule "jimu/internal/modules/admin"
-	auditmodule "jimu/internal/modules/audit"
-	auditdomain "jimu/internal/modules/audit/domain"
-	authmodule "jimu/internal/modules/auth"
-	"jimu/internal/modules/permission"
-	"jimu/internal/modules/role"
-	roledomain "jimu/internal/modules/role/domain"
-	tenantdomain "jimu/internal/modules/tenant/domain"
-	usermodule "jimu/internal/modules/user"
-	userdomain "jimu/internal/modules/user/domain"
-	platformauth "jimu/internal/platform/auth"
-	"jimu/internal/platform/db"
-	"jimu/internal/platform/logger"
+	"jimu/internal/kernel/access"
+	"jimu/internal/kernel/db"
+	"jimu/internal/kernel/event"
+	"jimu/internal/kernel/httpclient"
+	"jimu/internal/kernel/logger"
+	"jimu/internal/profiles/active"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
@@ -72,13 +76,17 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 		&tenantdomain.Tenant{},
 		&tenantdomain.Plan{},
 		&auditdomain.AuditLog{},
+		&mfadomain.UserMFA{},
+		&passkeydomain.WebAuthnCredential{},
+		&authdomain.LoginHistory{},
+		&authdomain.PasswordHistory{},
 	))
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS user_roles (user_id INTEGER NOT NULL, role_id INTEGER NOT NULL)`).Error)
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS role_permissions (role_id INTEGER NOT NULL, permission_id INTEGER NOT NULL)`).Error)
 
 	// 种子：admin 用户 + 超级管理员角色 + 权限（含 /users、/audits 策略）
 	t.Setenv("ADMIN_PASSWORD", "admin123")
-	require.NoError(t, db.RunSeed(gdb))
+	require.NoError(t, app.RunSeed(gdb, catalog.All()))
 
 	mr, err := miniredis.Run()
 	require.NoError(t, err)
@@ -86,32 +94,33 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cfg := config.Config{
-		Auth: config.AuthConfig{
-			JWTSecret:          "0123456789abcdef0123456789abcdef",
-			Issuer:             "jimu-e2e",
-			AccessExpireMin:    30,
-			RefreshExpireDay:   7,
-			PublicRegistration: true,
-			// 0 = 关闭限流，避免测试依赖 Redis Lua 脚本
-			LoginRateLimit:    0,
-			RegisterRateLimit: 0,
-		},
-		Audit: config.AuditConfig{QueueSize: 1024, BatchSize: 1, FlushIntervalMS: 10},
-	}
-
+	// 按当前形态装配模块（P2.6 T5）：提交态默认 full；用 -overlay 切到其它形态时，
+	// 本套契约测试即针对该形态（缺能力的用例由 requireCapabilities 跳过）。
+	// 装配走 assembly.WireFor —— 与生产 Run 同一份 wiring，不再手写模块清单。
 	log := logger.New(config.LogConfig{Level: "error", Format: "console", Output: "stdout"})
-
-	authMod := authmodule.New(gdb, rdb, cfg.Auth, false, nil, config.CaptchaConfig{})
-	userMod := usermodule.New(gdb, cfg) // 不传 rdb：跳过用户维度限流（依赖 Lua），聚焦契约链路
-	roleMod := role.New(gdb)
-	permMod := permission.New(gdb)
-	auditMod := auditmodule.New(gdb, cfg.Audit, log)
-	adminMod := adminmodule.New("test", "test", rdb, gdb)
+	cfg, _, err := config.LoadWithSections()
+	require.NoError(t, err)
+	sections := testSections(t)
+	asm := active.Assembly()
+	caps, err := assembly.Resolve(asm, nil)
+	require.NoError(t, err)
+	capCfgs, err := app.LoadCapabilityConfigs(sections, caps, cfg.Environment)
+	require.NoError(t, err)
+	container := &app.Container{
+		Config:            cfg,
+		Sections:          sections,
+		CapabilityConfigs: capCfgs,
+		DB:                gdb,
+		Redis:             rdb,
+		Logger:            log,
+		EventBus:          event.New(),
+		HTTPClient:        httpclient.New(httpclient.Config{}),
+	}
+	ctx, modules, err := assembly.WireFor(container, sections, capCfgs, asm, caps)
+	require.NoError(t, err)
 
 	router := gin.New()
 
-	modules := []contract.Module{authMod, userMod, roleMod, permMod, auditMod, adminMod}
 	// 1) 模块级 HTTP 中间件（审计记录）
 	for _, m := range modules {
 		if p, ok := m.(contract.HTTPMiddlewareProvider); ok {
@@ -127,17 +136,19 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 			break
 		}
 	}
-	// 3) 路由注册（auth/oauth 公开，其余受保护）
+	// 3) 路由注册（按能力声明的挂载点；受保护能力必须存在中间件提供者）
 	for _, m := range modules {
-		if len(protected) > 0 && m.Name() != "auth" && m.Name() != "oauth" {
-			m.RegisterHTTP(router.Group("", protected...))
-		} else {
+		desc := contract.Describe(m)
+		if desc.Normalized() != contract.MountProtected {
 			m.RegisterHTTP(router)
+			continue
 		}
+		require.NotEmpty(t, protected, "capability %q declares MountProtected but no protected middleware provider is present", desc.Name)
+		m.RegisterHTTP(router.Group("", protected...))
 	}
 
-	// 启动审计 worker，测试结束 flush 剩余日志
-	for _, comp := range auditMod.Components() {
+	// 启动装配期组件（如审计 worker），测试结束回收
+	for _, comp := range ctx.Components() {
 		require.NoError(t, comp.Start(context.Background()))
 		t.Cleanup(func() { _ = comp.Stop(context.Background()) })
 	}
@@ -209,6 +220,8 @@ func loginWithRefresh(t *testing.T, r *gin.Engine, username, password string) (s
 
 // TestAuthRefreshLogout 令牌生命周期：登录 → refresh 换新对 → 旧 refresh 失效 → logout 后 access 失效。
 func TestAuthRefreshLogout(t *testing.T) {
+	requireCapabilities(t, "auth", "user", "access")
+
 	r := newTestApp(t)
 
 	_, refresh := loginWithRefresh(t, r, "admin", "admin123")
@@ -253,10 +266,11 @@ func TestAuthRefreshLogout(t *testing.T) {
 
 // TestRoleAssignmentAndRBAC 角色闭环：创建角色 → 分配权限 → 绑定用户 → 权限生效/撤销。
 func TestRoleAssignmentAndRBAC(t *testing.T) {
+	requireCapabilities(t, "auth", "user", "access")
 	// 缩短策略缓存 TTL，验证权限变更在缓存过期后生效
-	oldTTL := platformauth.PolicyCacheTTL
-	platformauth.PolicyCacheTTL = 50 * time.Millisecond
-	t.Cleanup(func() { platformauth.PolicyCacheTTL = oldTTL })
+	oldTTL := access.PolicyCacheTTL
+	access.PolicyCacheTTL = 50 * time.Millisecond
+	t.Cleanup(func() { access.PolicyCacheTTL = oldTTL })
 
 	r := newTestApp(t)
 	adminToken := login(t, r, "admin", "admin123")
@@ -313,10 +327,12 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 	require.Equal(t, 0, parseResp(t, w).Code)
 
 	// 5. 该用户登录后能 GET /users（原 403 → 200）
+	// 策略缓存按 TTL 异步过期，故用有界轮询等待生效，而不是依赖"登录耗时 > TTL"。
 	userToken := login(t, r, "rbacuser", "rbacpass123")
-	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, 0, parseResp(t, w).Code)
+	require.Eventually(t, func() bool {
+		w := doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
+		return w.Code == http.StatusOK
+	}, 3*time.Second, 25*time.Millisecond, "permission should take effect after the policy cache TTL")
 
 	// 6. 但不能 POST /users（未分配该权限）→ 403
 	w = doJSON(t, r, http.MethodPost, "/api/v1/users", userToken, `{"username":"nope","password":"nopepass123"}`)
@@ -325,6 +341,7 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 
 // TestExportImportRoundTrip 导出→导入回读闭环（CSV）。
 func TestExportImportRoundTrip(t *testing.T) {
+	requireCapabilities(t, "auth", "user", "access", "dataops", "console")
 	r := newTestApp(t)
 	adminToken := login(t, r, "admin", "admin123")
 
@@ -344,6 +361,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 
 // TestAPIContract 端到端契约：注册 → 登录 → 401 边界 → RBAC 拒绝 → 管理员 CRUD → 审计。
 func TestAPIContract(t *testing.T) {
+	requireCapabilities(t, "auth", "user", "access", "audit")
 	r := newTestApp(t)
 
 	// 1. 注册新用户
@@ -389,6 +407,8 @@ func TestAPIContract(t *testing.T) {
 // TestAuthRateLimit 验证登录限流：LoginRateLimit=3 时，第 4 次请求被拒绝（code=1007）。
 // miniredis 支持 EVALSHA，无需外部 Redis。
 func TestAuthRateLimit(t *testing.T) {
+	// 本用例自己手搭 router（只挂 auth 的登录路由），故只依赖 auth。
+	requireCapabilities(t, "auth")
 	gin.SetMode(gin.TestMode)
 	t.Chdir(repoRoot(t))
 
@@ -409,7 +429,7 @@ func TestAuthRateLimit(t *testing.T) {
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS user_roles (user_id INTEGER NOT NULL, role_id INTEGER NOT NULL)`).Error)
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS role_permissions (role_id INTEGER NOT NULL, permission_id INTEGER NOT NULL)`).Error)
 	t.Setenv("ADMIN_PASSWORD", "admin123")
-	require.NoError(t, db.RunSeed(gdb))
+	require.NoError(t, app.RunSeed(gdb, catalog.All()))
 
 	mr, err := miniredis.Run()
 	require.NoError(t, err)
@@ -417,18 +437,15 @@ func TestAuthRateLimit(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cfg := config.Config{
-		Auth: config.AuthConfig{
-			JWTSecret:          "0123456789abcdef0123456789abcdef",
-			Issuer:             "jimu-e2e",
-			AccessExpireMin:    30,
-			RefreshExpireDay:   7,
-			PublicRegistration: true,
-			LoginRateLimit:     3,
-			LoginRateWindowSec: 60,
-		},
-	}
-	authMod := authmodule.New(gdb, rdb, cfg.Auth, false, nil, config.CaptchaConfig{})
+	authMod := authmodule.New(gdb, rdb, authmodule.Config{
+		JWTSecret:          "0123456789abcdef0123456789abcdef",
+		Issuer:             "jimu-e2e",
+		AccessExpireMin:    30,
+		RefreshExpireDay:   7,
+		PublicRegistration: true,
+		LoginRateLimit:     3,
+		LoginRateWindowSec: 60,
+	}, false, nil)
 	router := gin.New()
 	authMod.RegisterHTTP(router)
 

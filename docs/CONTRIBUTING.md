@@ -135,6 +135,7 @@ make test-coverage     # 覆盖率报告
 - 改动必须有对应测试覆盖
 - 模块生成器自带 service 和 handler 测试骨架
 - 集成测试使用 `internal/shared/testutil` 中的 testdb 辅助
+- **测试里定位文件路径必须用 `testutil` 的 helper**：模块根用 `testutil.RepoRoot(t)`（`init()` 等拿不到 `*testing.T` 的场合用 `testutil.MustRepoRoot()`），包内 testdata 用 `testutil.TestdataDir(rel)`（cwd 就是包目录，等价于相对路径）。**不要用 `runtime.Caller(0)` 再向上拼层数**：生成项目的重型矩阵构建一律带 `-trimpath`，编译期路径会被重写成模块相对路径，据此推出的「根」是字符串而不是磁盘目录（实测 `chdir example.com/proj: no such file or directory`）
 
 ### 本地数据库集成测试
 
@@ -153,7 +154,7 @@ docker run -d --rm --name jimu-test-mysql \
 
 # 2. 跑集成测试（连接参数与 CI 一致）
 DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root DB_PASSWORD=root DB_NAME=jimu_test \
-  go test ./internal/modules/user/... -run Integration -v
+  go test ./internal/capabilities/user/... -run Integration -v
 
 # 3. 结束删除容器
 docker rm -f jimu-test-mysql
@@ -165,13 +166,17 @@ docker rm -f jimu-test-mysql
 - `MARIADB_DATABASE=jimu_test` 已自动建库，测试直接连接，无需手动建
 - 普通单元测试（sqlite/in-memory）不需要此容器
 
-## 模块开发
+## 模块开发 / 新增能力
 
 ```bash
-./bin/jimu module create product
+./bin/jimu module create product     # 本仓内生成能力骨架：internal/capabilities/product/
 ```
 
-生成完整骨架后在 `cmd/server/main.go` 注册模块。详见 README.md "模块开发" 章节。
+`jimu module create` 只往 `internal/capabilities/<name>/` 落骨架，**不改动任何注册点**。注册分两处：能力清单 `internal/capabilities/catalog`，以及需要该能力的形态清单 `internal/profiles/<name>/assembly.go`（非 catalog 条目按 `Ungated` 声明）。唯一入口 `cmd/server` 只调 `assembly.Run(active.Assembly())`，当前形态由选点包 `internal/profiles/active` 决定，不在这里逐个装配能力。
+
+出货（为使用者生成独立项目）走层①脚手架 `jimu new` / `jimu capability add`，见 README「生成项目」章节。
+
+改完跑 `make check-capabilities`（5 条汇总行）与 `make profiles-check`（golden 依赖闭包）；新增能力、新增形态、新增驱动的完整步骤见 README「[开发规范 › 新增能力 / 驱动](../README.md#新增能力--驱动)」。
 
 ## 报告问题
 

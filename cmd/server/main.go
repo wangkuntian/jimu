@@ -1,24 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
 
-	"jimu/internal/app"
-	"jimu/internal/config"
-	adminmodule "jimu/internal/modules/admin"
-	auditmodule "jimu/internal/modules/audit"
-	authmodule "jimu/internal/modules/auth"
-	oauthmodule "jimu/internal/modules/oauth"
-	"jimu/internal/modules/permission"
-	"jimu/internal/modules/role"
-	tenantmodule "jimu/internal/modules/tenant"
-	"jimu/internal/modules/user"
-	"jimu/internal/platform/auth"
-	"jimu/internal/platform/http/middleware"
+	"jimu/internal/assembly"
+	"jimu/internal/profiles/active"
 )
 
 // @title           Jimu API
@@ -33,66 +20,13 @@ import (
 // version 版本号，通过 ldflags 注入：-ldflags "-X main.version=v0.1.0"
 var version = "dev"
 
+// main 是唯一入口：当前形态由 internal/profiles/active 决定（提交态默认 full），
+// 构建期用 `PROFILE=<name> make build-server` 切形态；装配与生命周期归 internal/assembly。
 func main() {
-	if err := run(); err != nil {
+	a := active.Assembly()
+	a.Version = version
+	if err := assembly.Run(a); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-}
-
-func run() error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-
-	// 注入元数据
-	cfg.Version = version
-	cfg.Environment = os.Getenv("APP_ENV")
-
-	container, err := app.NewContainer(cfg)
-	if err != nil {
-		return fmt.Errorf("create container: %w", err)
-	}
-
-	// 配置文件热更新：仅应用运行时安全项（log.level）。
-	// 结构类配置（DB/Redis 连接池、监听端口等）变更需重启进程生效。
-	if err := config.Watch(func(newCfg *config.Config) error {
-		container.Logger.Infow("config file changed, applying runtime settings", "level", newCfg.Log.Level)
-		if err := container.Logger.SetLevel(newCfg.Log.Level); err != nil {
-			container.Logger.Errorw("apply new log level failed", "error", err.Error())
-			return err
-		}
-		return nil
-	}); err != nil {
-		container.Logger.Warnw("config file watch disabled", "error", err.Error())
-	}
-
-	// 租户套餐/配额：定义在 tenant 模块，注入到创建用户/角色/API Key 的路径
-	tenantMod := tenantmodule.New(container.DB, *cfg)
-
-	application, err := app.Bootstrap(
-		container,
-		user.New(container.DB, *cfg, container.Redis, container.Outbox),
-		authmodule.New(container.DB, container.Redis, cfg.Auth, cfg.HTTP.Mode == config.HTTPModeRelease, container.Captcha, cfg.Captcha, container.Outbox, container.Notification, container.Cipher, container.BreachChecker, tenantMod.Quota()),
-		role.New(container.DB, tenantMod.Quota()),
-		permission.New(container.DB),
-		tenantMod,
-		auditmodule.New(container.DB, cfg.Audit, container.Logger),
-		adminmodule.New(cfg.Version, cfg.Environment, container.Redis, container.DB, middleware.IPAllowlist(cfg.Security.AdminIPAllowlist), container.Scheduler, container.Storage, container.UploadScanner, container.FeatureFlag, container.EventBus,
-			auth.NewWithRotation(cfg.Auth.JWTSecret, cfg.Auth.JWTPreviousSecret, cfg.Auth.Issuer, cfg.Auth.AccessExpireMin, cfg.Auth.RefreshExpireDay),
-			tenantMod.Quota()),
-		oauthmodule.New(container.DB, container.Redis, cfg.OAuth, cfg.Auth, container.HTTPClient),
-	)
-	if err != nil {
-		_ = container.Stop(context.Background())
-		return fmt.Errorf("bootstrap application: %w", err)
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	if err := application.Run(ctx); err != nil {
-		return fmt.Errorf("run application: %w", err)
-	}
-	return nil
 }

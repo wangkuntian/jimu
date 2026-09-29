@@ -37,12 +37,16 @@ secrets/
 
 # Build artifacts
 bin/
+.overlay/
 logs/
 .VSCodeCounter/
 
 # AI
 .claude/
 .agents/
+
+# superpowers SDD 工作区（每份计划的账本/简报/评审包，本地临时）
+.superpowers/
 
 # codebase-memory-mcp（索引存全局缓存；团队共享产物按需手动提交）
 .codebase-memory/

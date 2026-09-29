@@ -49,6 +49,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        PROFILE: ${PROFILE:-full}
     restart: unless-stopped
     environment:
       APP_ENV: ${APP_ENV:-dev}

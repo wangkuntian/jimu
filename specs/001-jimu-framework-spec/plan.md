@@ -10,7 +10,7 @@
 
 从现有代码反推框架能力契约（35 条 FR）。代码审计（research.md）显示 32/35 已真实实现；存在 **2 处规格与实现不一致** 需收敛：
 
-1. **FR-028 通知（SMS 桩）**：`internal/platform/notification/sms.go` 声明 aliyun/tencent/twilio 三家，但 `sendAliyun`/`sendTencent` 直接返回 "not implemented yet"，SMS 渠道一用即失败。违反宪法 VI（能力需可运行示例）。
+1. **FR-028 通知（SMS 桩）**：`internal/capabilities/notification/sms.go` 声明 aliyun/tencent/twilio 三家，但 `sendAliyun`/`sendTencent` 直接返回 "not implemented yet"，SMS 渠道一用即失败。违反宪法 VI（能力需可运行示例）。
 2. **FR-034 发布门禁**：`make release-check` 仅 `fmt-check vet test`（Makefile:227），不含 govulncheck/Trivy；`release.yml` 打 tag 发布只跑 `make release-check`。违反宪法 V（发布 MUST 含 govulncheck 依赖与 Trivy 镜像扫描）。
 
 次要：FR-014 全局限流实为令牌桶（spec 措辞为"固定+滑动窗口"，登录=固定、用户=滑动为真），收敛 spec 措辞即可。
@@ -71,7 +71,7 @@ specs/001-jimu-framework-spec/
 本特性不改代码目录结构（框架结构已定型），改动为外科手术式局部修改：
 
 ```text
-internal/platform/notification/
+internal/capabilities/notification/
 ├── sms.go               # [FR-028] 实现 sendAliyun（dysmsapi-20170525/v5 SDK，见 research.md D2）
 └── sms_test.go          # [FR-028] 契约测试（client Endpoint 指向 mock server）
 

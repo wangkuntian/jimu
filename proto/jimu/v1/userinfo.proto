@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package jimu.v1;
 
-option go_package = "jimu/internal/platform/grpc/userinfopb";
+option go_package = "jimu/internal/capabilities/grpc/userinfopb";
 
 // UserInfoService 业务 gRPC 示例：
 // 演示如何定义业务服务、标准错误码映射、以及服务间调用认证。

@@ -1,10 +1,23 @@
 name: CI (Go)
 
-# Go 代码质量门禁：lint / test（含覆盖率）/ race / benchmark / govulncheck。
+# Go 代码质量门禁：lint / test（含覆盖率）/ race（分片并行）/ benchmark / govulncheck。
 # 仅当 Go 相关代码或测试/构建脚本变更时触发。
-# 镜像构建与安全扫描见 ci-docker.yml（Dockerfile/compose/deploy 变更）。
+# 镜像构建与安全扫描见 ci-docker.yml（Dockerfile/compose/deploy 变更）；
+# 重型脚手架矩阵见 ci-scaffold.yml（默认不在 PR 上跑，有自己的触发口径与并发组）。
+#
+# 构建缓存：setup-go 自带的缓存 key 只含 go.mod 哈希，而 Actions 的缓存条目**按 key 不可变**、
+# 命中即「只恢复不重存」—— 快照在首次保存那一刻就冻结，之后每个 commit 的 first-party 编译产物
+# 全部随 runner 丢弃（每一轮都只有依赖是热的；实测每个 job 在出第一条 `ok` 之前要先付 90–115s）。
+# 因此每个 Go job 额外挂一条**滚动** actions/cache：把 GOCACHE 指到自己的目录
+# （`${{ runner.temp }}/gocache-<风味>`），key 取 `<go.sum 哈希>-<sha>` —— 主 key 只在重跑同一
+# commit 时命中，其余靠 restore-keys 拿最近一份快照、跑完存新条目，收益能跨 commit 累积。
+# 风味分开（vet / cover / race / gates）是为了不让 `-race`、`-cover`、静态分析与门禁构建的产物互相挤占同一份快照；同一风味的多个 race
+# 分片共享一份（谁先跑完谁存，下一轮大家都用得上）。bench 未挂：它只有 2 分钟、不是长杆。
+# 配额：仓库 actions/cache 上限 10 GB，超限按 LRU 淘汰。
 
 on:
+  # 手动触发：重跑整套轻量门禁（重型脚手架矩阵不在这里，见 ci-scaffold.yml 的 workflow_dispatch）
+  workflow_dispatch:
   push:
     branches: [master, release/*]
     paths:
@@ -13,11 +26,15 @@ on:
       - "tools/**"
       - "go.mod"
       - "go.sum"
-      - "migrations/**"
+      - "internal/capabilities/*/migrations/**"
       - "proto/**"
       - "configs/**"
       - "scripts/**"
       - "Makefile"
+      # Capability Gates 的资产归属断言读 deploy/ 与 docs/openapi/ 两棵树，
+      # 只改这两处的提交也必须把门禁拉起来
+      - "deploy/**"
+      - "docs/openapi/**"
       - ".github/workflows/ci.yml"
   pull_request:
     branches: [master, release/*]
@@ -27,11 +44,15 @@ on:
       - "tools/**"
       - "go.mod"
       - "go.sum"
-      - "migrations/**"
+      - "internal/capabilities/*/migrations/**"
       - "proto/**"
       - "configs/**"
       - "scripts/**"
       - "Makefile"
+      # Capability Gates 的资产归属断言读 deploy/ 与 docs/openapi/ 两棵树，
+      # 只改这两处的提交也必须把门禁拉起来
+      - "deploy/**"
+      - "docs/openapi/**"
       - ".github/workflows/ci.yml"
 
 # 同分支连续推送取消旧 run（本 workflow 独立取消，不干扰 ci-docker）
@@ -49,11 +70,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # CHANGELOG 门禁用 git diff origin/<base_ref>...HEAD 判定，需要基线分支历史
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: "♻️ Restore the Go build cache"
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/gocache-vet
+          key: gocache-vet-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            gocache-vet-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
+            gocache-vet-${{ runner.os }}-
+
+      - name: "🛠️ Point GOCACHE at the rolling build cache"
+        # job 级 env 里拿不到 runner 上下文（actionlint: context "runner" is not allowed here），
+        # 所以在这一步写进 $GITHUB_ENV —— 它对其后的所有步骤生效
+        run: echo "GOCACHE=${{ runner.temp }}/gocache-vet" >> "$GITHUB_ENV"
 
       - name: "🔍 gofmt check"
         run: |
@@ -83,7 +121,7 @@ jobs:
         if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
         run: |
           if git diff --name-only origin/${{ github.base_ref }}...HEAD \
-            | grep -E '^(internal/|cmd/|configs/|migrations/)' \
+            | grep -E '^(internal/|cmd/|configs/)' \
             | grep -qv '^$'; then
             if ! git diff --name-only origin/${{ github.base_ref }}...HEAD \
               | grep -Eq '^CHANGELOG\.md$|^docs/releases/'; then
@@ -141,6 +179,20 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: "♻️ Restore the Go build cache"
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/gocache-cover
+          key: gocache-cover-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            gocache-cover-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
+            gocache-cover-${{ runner.os }}-
+
+      - name: "🛠️ Point GOCACHE at the rolling build cache"
+        # job 级 env 里拿不到 runner 上下文（actionlint: context "runner" is not allowed here），
+        # 所以在这一步写进 $GITHUB_ENV —— 它对其后的所有步骤生效
+        run: echo "GOCACHE=${{ runner.temp }}/gocache-cover" >> "$GITHUB_ENV"
+
       - name: "📦 Install coverage tools"
         run: sudo apt-get update && sudo apt-get install -y bc
 
@@ -151,7 +203,9 @@ jobs:
           DB_USER: root
           DB_PASSWORD: root
           DB_NAME: jimu_test
-        run: go test ./... -coverprofile=coverage.out
+        # 重型脚手架矩阵（真实生成项目 + build/vet/test/run）已由 JIMU_HEAVY_MATRIX 门控并搬到
+        # 独立的 ci-scaffold.yml，本 job 只跑轻量断言
+        run: go test ./... -coverprofile=coverage.out -timeout 15m
 
       - name: "🗄️  Verify backup/restore round trip (mysql + postgres)"
         run: |
@@ -175,7 +229,7 @@ jobs:
           DB_USER: postgres
           DB_PASSWORD: postgres
           DB_NAME: jimu_test
-        run: go test ./internal/platform/db/... -run TestPostgresMigrationUpDown -v
+        run: go test ./internal/kernel/db/... -run TestMigrationIntegration -v
 
       - name: "📊 Check coverage threshold"
         run: |
@@ -199,10 +253,74 @@ jobs:
           bash -n scripts/test_runtime_security.sh
           bash -n scripts/smoke_api_contract.sh
           bash -n scripts/test_backup_restore.sh
+          bash -n scripts/race_shards.sh
 
-  race:
-    name: Race Detector
+  # 能力/形态门禁（P2.8 收口）：把「声明与实际一致」「每个形态真能构建且闭包被裁剪」
+  # 「编译面报告不漂移」三道门禁放到 PR 路径上。三者都不需要 DB/Redis —— profiles-check 未设
+  # JIMU_PROFILES_SMOKE 时逐形态打印 SKIP 并成功退出，所以这里不挂 services。
+  # check-templates 不列在这里：它的用例 TestTemplatesDrift 由 ci-scaffold.yml 的重型矩阵覆盖。
+  gates:
+    name: Capability Gates
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: "♻️ Restore the Go build cache"
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/gocache-gates
+          key: gocache-gates-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            gocache-gates-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
+            gocache-gates-${{ runner.os }}-
+
+      - name: "🛠️ Point GOCACHE at the rolling build cache"
+        run: echo "GOCACHE=${{ runner.temp }}/gocache-gates" >> "$GITHUB_ENV"
+
+      - name: "🧩 Capability declarations match the code"
+        run: make check-capabilities
+
+      - name: "🏗️ Every profile builds and trims its closure"
+        run: make profiles-check
+
+      - name: "📊 The compose report matches the measurement"
+        run: make compose-report-check
+
+  # race-plan：分片清单的唯一来源是 scripts/race_shards.sh（见该文件头的实测归因），
+  # 这里把它转成矩阵，避免「workflow 里的分片列表」与「脚本里的分片规则」两处漂移。
+  race-plan:
+    name: Race plan
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: "🧭 Emit the race shard matrix"
+        id: plan
+        run: echo "shards=$(bash scripts/race_shards.sh shards-json)" >> "$GITHUB_OUTPUT"
+
+  # 分片并行：**每个包仍然全量跑 `-race`**，只是不再让重型包挤在同一个 4 vCPU runner 上互相
+  # 争抢。分片前把 `go test -race ./...` 放在一个 job 里时，端到端被争抢放大得远超各自隔离耗时
+  # （composereport 隔离 14.8s → 378.4s，25.5×；generator 238.8s → 729.8s，3.1×；
+  # internal/** 只放大 0.9–2.6×），Race job 因此从 P2.6 的 11m58s 涨到 18m21s。分片后总
+  # runner 分钟数反而下降 —— 被争抢烧掉的时间多于各分片重复支付的编译时间。
+  # 分片规则、generator 用例切分与「并集 == 全集」守卫都在 scripts/race_shards.sh。
+  race:
+    name: Race Detector (${{ matrix.shard }})
+    needs: race-plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.race-plan.outputs.shards) }}
     services:
       mariadb:
         image: mariadb:12.1.2-noble
@@ -246,14 +364,30 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: "🏎️ Run race tests"
+      - name: "♻️ Restore the Go build cache"
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/gocache-race
+          key: gocache-race-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            gocache-race-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
+            gocache-race-${{ runner.os }}-
+
+      - name: "🛠️ Point GOCACHE at the rolling build cache"
+        # job 级 env 里拿不到 runner 上下文（actionlint: context "runner" is not allowed here），
+        # 所以在这一步写进 $GITHUB_ENV —— 它对其后的所有步骤生效
+        run: echo "GOCACHE=${{ runner.temp }}/gocache-race" >> "$GITHUB_ENV"
+
+      - name: "🏎️ Run race tests (${{ matrix.shard }})"
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: "3306"
           DB_USER: root
           DB_PASSWORD: root
           DB_NAME: jimu_test
-        run: go test -race ./...
+        # 分片规则与「开跑前先证明分片并集 == 全集」的守卫都在脚本里；重型脚手架矩阵由
+        # ci-scaffold.yml 承担，不在本 workflow 的默认路径上
+        run: bash scripts/race_shards.sh run ${{ matrix.shard }}
 
   bench:
     name: Performance Regression
