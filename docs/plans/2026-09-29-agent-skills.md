@@ -616,7 +616,7 @@ skills-install:
 ```bash
 make skills-install                      # 期望：installed .claude/skills/jimu -> … 与 installed .agents/skills/jimu -> …
 ls -l .claude/skills/jimu/SKILL.md .agents/skills/jimu/SKILL.md
-readlink -f .claude/skills/jimu/SKILL.md # 期望：<repo>/skills/jimu/SKILL.md
+python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' .claude/skills/jimu/SKILL.md  # 期望：<repo>/skills/jimu/SKILL.md
 make skills-install                      # 期望：两条 unchanged + no changes，exit 0
 git status --short                       # 期望：不出现 .claude/ 与 .agents/
 ```
@@ -740,7 +740,7 @@ make check-capabilities                              # 5 条 ✅
 make profiles-check                                  # 5 形态 overlay 构建 + golden 闭包通过
 make compose-report-check                            # ✅ 与入库报告一致
 ls -l .claude/skills/jimu/SKILL.md .agents/skills/jimu/SKILL.md
-readlink -f .claude/skills/jimu/SKILL.md .agents/skills/jimu/SKILL.md
+python3 -c 'import os,sys;[print(os.path.realpath(p)) for p in sys.argv[1:]]' .claude/skills/jimu/SKILL.md .agents/skills/jimu/SKILL.md
 git status --short                                   # 只出现预期改动；无 .claude/、.agents/
 ```
 
