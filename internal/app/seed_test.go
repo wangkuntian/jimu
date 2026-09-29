@@ -3,8 +3,6 @@ package app_test
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
-	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,6 +13,7 @@ import (
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
+	"jimu/internal/shared/testutil"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
@@ -71,16 +70,6 @@ func seededPermissions() []contract.Permission {
 		out = append(out, d.Permissions...)
 	}
 	return out
-}
-
-// repoRoot 项目根目录：按本文件源码路径向上两级定位，
-// 不依赖工作目录（迁移已迁入能力目录，顶层 migrations/ 不复存在）。
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok, "runtime.Caller failed")
-	// internal/app/seed_test.go → 仓库根（向上两级）
-	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", ".."))
 }
 
 // expectDefaultTenantQuery 编排默认租户 FirstOrCreate 的 SELECT+INSERT 预期
@@ -336,7 +325,7 @@ func TestRunSeedWithCasbin_SeedError(t *testing.T) {
 // TestRunSeedWithCasbin 用 sqlite 内存库端到端跑完整种子（含 casbin 策略）。
 // 需要 cwd 切到项目根以定位 conf/rbac_model.conf。
 func TestRunSeedWithCasbin(t *testing.T) {
-	t.Chdir(repoRoot(t))
+	t.Chdir(testutil.RepoRoot(t))
 	t.Setenv("ADMIN_PASSWORD", "secret123")
 
 	db := newSeedSqliteDB(t)
