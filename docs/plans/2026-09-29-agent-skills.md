@@ -791,3 +791,13 @@ git commit -m "docs(release): record the agent skill verification"
 **2. Placeholder scan**：无 TBD/TODO；五份非旗舰 reference 用「必须覆盖的事实清单 + 权威链接」表达，事实全部是本仓已存在的路径/命令/常量（`hollow` 的步骤不存在）；脚本与 Makefile 片段均为可直接粘贴的完整文本。
 
 **3. Type consistency**：`make check-skills`、`make skills-install`、`scripts/check_skills.sh`、`scripts/install_skills.sh`、`skills/jimu/SKILL.md`、`references/*.md` 在 T1–T9 中命名一致；`✅ check-skills: N 个 skill 契约完整` 的输出文案在 T1 定义、T4/T6/T7/T8/T9 引用一致。
+
+## 执行记录与偏差（2026-09-29 执行完毕）
+
+| 项 | 偏差 |
+|---|---|
+| T1 Step 1 的脚本 | **多了一条断言 ⑦**：`SKILL.md` 与 `references/*.md` 的相对链接可解析（`http(s)`/`mailto`/纯锚点跳过，不校验锚点片段）。原因是实现中真踩到：`SKILL.md` 上溯仓库根应为 `../../`，初稿写成 `../../../` 会跳出仓库，而 ①–⑥ 全绿看不见。设计 §6 已同步增补该条 |
+| T1 Step 1 / T9 Step 1 的 `readlink -f` | 换成 `python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))'` —— 纯 macOS 无 `readlink -f`（本机因装了 coreutils 才能跑，属侥幸） |
+| T8 Step 3 的插入位置 | 版本日志**没有**「新增」段（分类为 亮点/变更/修复/验证/说明），条目落到 `## 变更` 末尾（遵循 CONTRIBUTING 模板「没有内容的分类可以省略」） |
+| T1–T6 的分任务提交 | 未按计划逐任务提交，改为交付后按主题合三条：`feat(skills)`（skill + 两脚本 + Makefile）/ `docs`（README + AGENTS）/ `docs(release)`（版本日志 + 本计划）。逐任务提交需重放中间态，属人为历史 |
+| 全部 9 个任务 | 其余步骤按计划原样执行；验收命令、期望输出与反向验证（含 T1 Step 6 三种破坏、T7 Step 4 两种冲突、T9 复跑 `make release-check`）全部实跑通过 |

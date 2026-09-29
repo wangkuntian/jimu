@@ -124,6 +124,9 @@ dst = .claude/skills/<name>          （Claude Code 项目级发现路径）
 4. `SKILL.md` 中每个 `references/<file>` 引用都指向存在的文件
 5. `references/` 下每个 `.md` 都被 `SKILL.md` 引用（无孤儿）
 6. `skills/` 下不存在没有 `SKILL.md` 的目录（半成品）
+7. **相对链接可解析**（实现期增补）：`SKILL.md` 与每份 `references/*.md` 里的 markdown 相对链接（`](path)`，剥掉锚点后）必须指向磁盘上存在的文件；`http(s)`/`mailto`/纯锚点跳过。**不校验锚点片段**（需复算 GitHub slug，超出本门禁范围）
+
+> **⑦ 的来源（实现期裁定，2026-09-29）**：设计通过后实现时真踩到一次 —— `SKILL.md` 位于 `skills/<name>/`，上溯仓库根应为 `../../`，初稿写成 `../../../` 会静默跳出仓库，而 ①–⑥ 断言全绿、看不见。因此把「相对链接可解析」补成第 7 条，用一次性脚本兜住的做法改为常驻断言。
 
 任一失败打印「哪个 skill / 哪条断言 / 怎么修」并非零退出；全绿打印一行 `✅ check-skills: N 个 skill 契约完整`。
 
