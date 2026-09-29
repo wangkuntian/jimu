@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"jimu/internal/capabilities/tenant/domain"
@@ -22,9 +21,8 @@ func init() {
 	// `Table 'jimu_test.users' doesn't exist`。三个能力的迁移必须一起注入，
 	// 顺序与 catalog 拓扑序一致（user, role 在前）。
 	// 迁移 embed 在能力根包，infrastructure 子包测试引用根包会构成 import cycle，
-	// 故这里按源码路径直接定位各能力根目录（本文件向上 4 级 = 仓库根）。
-	_, thisFile, _, _ := runtime.Caller(0)
-	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..")
+	// 故这里经 testutil.RepoRoot 定位模块根（不用 runtime.Caller：生成项目的重型矩阵构建带 -trimpath，编译期路径会被写成模块相对路径 —— 见 testutil.RepoRoot 的注释）。
+	repoRoot := testutil.MustRepoRoot()
 	testutil.SetMigrateCaps([]contract.Descriptor{
 		{Name: "user", Migrations: os.DirFS(filepath.Join(repoRoot, "internal", "capabilities", "user"))},
 		{Name: "access", Migrations: os.DirFS(filepath.Join(repoRoot, "internal", "capabilities", "access"))},

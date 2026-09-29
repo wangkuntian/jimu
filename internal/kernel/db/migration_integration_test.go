@@ -3,7 +3,6 @@ package db_test
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"jimu/internal/contract"
@@ -136,9 +135,7 @@ func TestMigrationIntegration_UnequalDepths(t *testing.T) {
 // advc(1 条，ALTER capmig_zshared) 为不等深+跨能力依赖夹具（见 README）。
 func testCaps(t *testing.T) []contract.Descriptor {
 	t.Helper()
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok, "runtime.Caller failed")
-	root := filepath.Join(filepath.Dir(thisFile), "testdata", "capmigs")
+	root := testutil.TestdataDir("capmigs")
 
 	userFS := os.DirFS(filepath.Join(root, "user"))
 	auditFS := os.DirFS(filepath.Join(root, "auditsvc"))

@@ -3,8 +3,6 @@ package db_test
 import (
 	"io/fs"
 	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	"jimu/internal/contract"
@@ -162,8 +160,5 @@ func TestAdoptCapabilities_PartialAdopt(t *testing.T) {
 // soloCaps 构造 solo 夹具能力（001/002 互相独立的迁移，供部分基线场景使用）
 func soloCaps(t *testing.T) (fsys fs.FS) {
 	t.Helper()
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok, "runtime.Caller failed")
-	root := filepath.Join(filepath.Dir(thisFile), "testdata", "capmigs")
-	return os.DirFS(filepath.Join(root, "solo"))
+	return os.DirFS(testutil.TestdataDir("capmigs/solo"))
 }

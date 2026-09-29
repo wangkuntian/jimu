@@ -135,6 +135,7 @@ make test-coverage     # 覆盖率报告
 - 改动必须有对应测试覆盖
 - 模块生成器自带 service 和 handler 测试骨架
 - 集成测试使用 `internal/shared/testutil` 中的 testdb 辅助
+- **测试里定位文件路径必须用 `testutil` 的 helper**：模块根用 `testutil.RepoRoot(t)`（`init()` 等拿不到 `*testing.T` 的场合用 `testutil.MustRepoRoot()`），包内 testdata 用 `testutil.TestdataDir(rel)`（cwd 就是包目录，等价于相对路径）。**不要用 `runtime.Caller(0)` 再向上拼层数**：生成项目的重型矩阵构建一律带 `-trimpath`，编译期路径会被重写成模块相对路径，据此推出的「根」是字符串而不是磁盘目录（实测 `chdir example.com/proj: no such file or directory`）
 
 ### 本地数据库集成测试
 
