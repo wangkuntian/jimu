@@ -108,7 +108,10 @@ jobs:
           DB_USER: postgres
           DB_PASSWORD: postgres
           DB_NAME: jimu_test
-        run: go test ./internal/kernel/db/... -run TestPostgresMigrationUpDown -v
+        # 与 ci.yml 的「Run postgres migration smoke」同一条命令：`-run TestPostgresMigrationUpDown`
+        # 曾是一个**不存在的测试名** —— go test 匹配不到用例会打印 `ok … [no tests to run]` 并 exit 0，
+        # 于是这一步「绿」了很久却从未真正跑过 PostgreSQL 迁移。名字与 ci.yml 对齐（真存在、真跑）。
+        run: go test ./internal/kernel/db/... -run TestMigrationIntegration -v
 
       - name: Check coverage, race safety, OpenAPI, scripts, and binaries
         env:
