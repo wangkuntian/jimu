@@ -1,6 +1,7 @@
 .PHONY: run build test vet fmt fmt-check lint clean migrate migrate-down migrate-status seed help govulncheck test-backup-restore ci
 .PHONY: test-cover test-coverage-check test-race swagger-check smoke-check compose-check profiles-check compose-report
 .PHONY: check-log-usage check-capabilities check-templates compose-report-check
+.PHONY: check-skills skills-install
 .PHONY: docker-build docker-run docker-stop docker-logs
 .PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
 .PHONY: bench loadtest proto secrets
@@ -70,6 +71,8 @@ help:
 	@echo "  make check-log-usage      检查日志调用均为 *w 系列（防 k/v 粘连）"
 	@echo "  make check-capabilities   校验能力自描述（Owns）与驱动可用集/选中集一致"
 	@echo "  make check-templates      模板漂移门禁：用生成器生成最小项目并真构建 + 跑生成项目的 check-capabilities"
+	@echo "  make check-skills         校验 skills/** 的 frontmatter 与 reference 引用完整性"
+	@echo "  make skills-install       把 skills/<name>/ 软链到 .claude/skills/ 与 .agents/skills/"
 	@echo "  make test-scaffold-matrix 重型脚手架矩阵：真实生成项目 + build/vet/test/run（=CI 的 Scaffold Matrix job）"
 	@echo "  make profiles-check       构建 5 个形态（overlay 叠加 cmd/server）+ golden 依赖闭包门禁"
 	@echo "                            （JIMU_PROFILES_SMOKE=1 时额外启动并检查 /readyz）"
@@ -337,6 +340,19 @@ compose-report:
 ##                       已接入 make ci/release-check 与 CI 的 Capability Gates job。
 compose-report-check:
 	@go run ./tools/composereport -check
+
+## check-skills: 校验 skills/** 的 Agent skill 契约 —— frontmatter（name 与目录同名、
+##               description 非空）与 reference 引用完整性（无断链、无孤儿）。
+##               事实源是入库的 skills/，安装（软链到各 Agent 发现路径）见 skills-install。
+##               **不接入** make ci/release-check：聚合目标的发布语义不含它。
+check-skills:
+	@./scripts/check_skills.sh
+
+## skills-install: 把 skills/<name>/ 软链到 .claude/skills/ 与 .agents/skills/（两者都在
+##                 .gitignore 内）。幂等；目标已存在且不是指向本仓事实源的软链时拒绝覆盖，
+##                 以保护 .agents/skills 里的第三方 skill 包。
+skills-install:
+	@./scripts/install_skills.sh
 
 ## clean: 清理构建产物（含按形态隔离的 overlay 产物 .overlay/）
 clean:
