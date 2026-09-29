@@ -376,6 +376,21 @@ v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capab
 - **门禁** — `make check-capabilities` 新增资产段，汇总行由 4 条变 **5 条**（新行 `✅ check-capabilities: 资产归属唯一且无未声明资产`）。四条断言：① 每个声明的资产路径非空、存在，且落在资产根内（根外路径永不被扫描，等于把未校验路径交给 P2.7 生成器）；② 同一路径不得被两个所有者声明（比较走**归一化**：`deploy/k8s/`、`deploy/k8s//`、`deploy/./k8s`、`deploy/k8s/.`、尾随空格、`deploy/../configs` 都会被拒）；③ 资产根下每个文件都有有效所有者（无未声明资产）；④ 每个形态的资产集都覆盖全部内核资产组（内核组全形态携带，漏掉即意味着不该裁剪的资产随形态消失）。
 - **条件化的第一个消费方是 apidocs** — `make swagger`/`make swagger-check` 先取当前形态的资产集：不含 `docs/openapi`（该形态清单没有 `apidocs`：`minimal`/`saas`/`enterprise`/`machine`）时打印 `SKIP …` 并成功退出，含（默认 `full`）则照旧真生成/真校验；`PROFILE` 非法名仍非零失败（`PROFILE=ghost make swagger-check` → make exit 2）。CI 不变（默认 full）。
 
+## AI Agent skills（v0.3.0）
+
+本仓把「怎么改这个代码库」的操作知识做成可安装的 Agent skill：事实源是**受版本控制的** `skills/jimu/`（入口 `SKILL.md` + `references/*.md`），安装即把它软链到各 Agent 的项目级发现路径。
+
+```bash
+make skills-install     # 软链到 .claude/skills/ 与 .agents/skills/（幂等；已存在且不是本仓软链时拒绝覆盖）
+make check-skills       # 校验 frontmatter（name 与目录同名、description 非空）与 reference 引用完整性
+```
+
+覆盖的工作流：新增/删除能力、新增形态（profile）与驱动、迁移编写与存量库 adopt、门禁与报告排障、运行时降级排障、`jimu new` 脚手架用法。
+
+- **`.claude/` 与 `.agents/` 不入库**（`.gitignore` 的「AI」段）：Agent 的发现路径随工具而变，因此事实源独立放 `skills/`，安装只是软链；换工具时在 `scripts/install_skills.sh` 的目标列表里加一行即可
+- `make check-skills` **不在** `make ci` / `make release-check` 的成员里（刻意如此，聚合目标的发布语义不变）
+- 生成项目（`jimu new` 的产物）**不带** skill；脚手架相关用法见上面的「生成项目」章节
+
 ## 项目结构
 
 ```text

@@ -17,6 +17,7 @@
 - 项目结构、技术栈、API 等见 [README.md](README.md)
 - 修改代码后，必须同步更新 README.md 相关章节
 - 创建分支、开 PR、发版遵循 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) 的命名与流程约定（分支名 `feature/<issue>-<slug>` 等小写短横线格式）
+- 本仓有可安装的 Agent skill：事实源 `skills/jimu/`，`make skills-install` 装到 `.claude/skills/` 与 `.agents/skills/`；改动前先读入口 `skills/jimu/SKILL.md`（铁律 + 六条工作流索引）
 
 ## 架构约束
 
