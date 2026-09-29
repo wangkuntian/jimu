@@ -166,13 +166,17 @@ docker rm -f jimu-test-mysql
 - `MARIADB_DATABASE=jimu_test` 已自动建库，测试直接连接，无需手动建
 - 普通单元测试（sqlite/in-memory）不需要此容器
 
-## 模块开发
+## 模块开发 / 新增能力
 
 ```bash
-./bin/jimu module create product
+./bin/jimu module create product     # 本仓内生成能力骨架：internal/capabilities/product/
 ```
 
-生成完整骨架后在 `cmd/server/main.go` 注册模块。详见 README.md "模块开发" 章节。
+`jimu module create` 只往 `internal/capabilities/<name>/` 落骨架，**不改动任何注册点**。注册分两处：能力清单 `internal/capabilities/catalog`，以及需要该能力的形态清单 `internal/profiles/<name>/assembly.go`（非 catalog 条目按 `Ungated` 声明）。唯一入口 `cmd/server` 只调 `assembly.Run(active.Assembly())`，当前形态由选点包 `internal/profiles/active` 决定，不在这里逐个装配能力。
+
+出货（为使用者生成独立项目）走层①脚手架 `jimu new` / `jimu capability add`，见 README「生成项目」章节。
+
+改完跑 `make check-capabilities`（5 条汇总行）与 `make profiles-check`（golden 依赖闭包）；新增能力、新增形态、新增驱动的完整步骤见 README「[开发规范 › 新增能力 / 驱动](../README.md#新增能力--驱动)」。
 
 ## 报告问题
 
