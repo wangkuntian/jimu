@@ -669,22 +669,61 @@ func runServerForTest(t *testing.T, dir, cache string) string {
 	return string(out)
 }
 
-// serverEnvForTest 返回运行生成项目 cmd/server 的**最小显式 env**，绝不 `append(os.Environ(), …)`：
-// `make` 经 `include .env` + `export` 把标准本地 checkout 的 .env（README 要求 `cp .env.example .env`）
-// 整套注入子进程；APP_ENV/DB_*/JWT_SECRET/REDIS_* 齐备时 prod 配置校验会通过，服务器真的去连
-// 127.0.0.1:3306 并重试（10×5s），断言随之变慢/失败 —— 这是正常本地开发态，必须与测试无关。
+// runGeneratedServerWithClosedDBForTest 在生成项目里跑一次 cmd/server，供「启动初始化不崩、会走到连库
+// 阶段」这类断言使用：显式把数据库指向一个必然拒绝连接的端口，**绝不继承外界的 DB_***，因此服务器在连库
+// 失败后自行退出，CombinedOutput 才等得到结果。
 //
-// 只透传 go 工具链自身的变量（自定义 GOPATH/GOMODCACHE/GOROOT/GOPROXY 的机器照样能跑），
-// 应用配置键（APP_ENV 由本函数固定为 prod，其余 DB_*/JWT_SECRET/REDIS_* 一律不传）；
-// GOFLAGS 由本函数固定为带 -trimpath（见 trimpathGoflags），不继承外部的 GOFLAGS。
+// 为什么必须显式指定：CI 的 tag 发布 job（release.yml 的 Quality Gate）在 localhost 起了 MariaDB 与
+// Redis，并把 DB_HOST/DB_PORT/... 注入整步环境；继承这些键时生成的服务器会**成功启动并常驻**，而
+// CombinedOutput 要等进程退出 —— v0.3.0 的 release run 就是这样把整个 tools/generator 包拖到包级
+// `-timeout 60m` 才失败（该用例实测卡住 51 分钟，整步 69 分钟）。ci-scaffold.yml 没有 DB env，所以
+// 同一条用例在 PR 路径上一直是绿的：这是**只在发布路径上暴露**的环境泄漏。
+// APP_ENV=dev：不做 prod 的 JWT_SECRET 加严，保证能走到连库阶段（断言要求输出里出现 database）。
+// 另加 5 分钟上限兜底：将来任何「跑起来不退出」的回归只会让本用例失败，不会吃掉整个包的时间预算。
+func runGeneratedServerWithClosedDBForTest(t *testing.T, dir, cache string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "go", "run", "./cmd/server")
+	cmd.Dir = dir
+	cmd.Env = closedDBEnvForTest(cache)
+	out, _ := cmd.CombinedOutput()
+	return string(out)
+}
+
+// closedDBEnvForTest 是该 runner 的 env：工具链最小 env + 显式把库指到必然拒绝连接的端口。
+// 单独抽成函数是为了让「不得继承外界应用配置键」这条不变量可被单测钉住（见
+// TestServerEnvForTestCarriesNoAppConfigKeys）—— 它是 v0.3.0 发布 job 卡死 51 分钟的根因。
+func closedDBEnvForTest(cache string) []string {
+	return append(serverEnvBaseForTest(cache),
+		"APP_ENV=dev",
+		"DB_HOST=127.0.0.1",
+		"DB_PORT=1",
+	)
+}
+
+// serverEnvForTest = 工具链最小 env + APP_ENV=prod（见 serverEnvBaseForTest）。
 func serverEnvForTest(cache string) []string {
+	return append(serverEnvBaseForTest(cache), "APP_ENV=prod")
+}
+
+// serverEnvBaseForTest 返回运行生成项目二进制的最小显式 env：只含 go 工具链自身变量与 PATH/HOME，
+// **不含任何应用配置键**（APP_ENV/DB_*/JWT_SECRET/REDIS_* 由调用方决定）。
+//
+// 绝不 `append(os.Environ(), …)`：`make` 经 `include .env` + `export` 把标准本地 checkout 的 .env
+// （README 要求 `cp .env.example .env`）整套注入子进程；APP_ENV/DB_*/JWT_SECRET/REDIS_* 齐备时 prod
+// 配置校验会通过，服务器真的去连 127.0.0.1:3306 并重试（10×5s），断言随之变慢/失败 —— 这是正常本地
+// 开发态，必须与测试无关。CI 的 tag 发布 job 同理（它注入了指向真实 MariaDB 的 DB_*）。
+//
+// 只透传 go 工具链自身的变量（自定义 GOPATH/GOMODCACHE/GOROOT/GOPROXY 的机器照样能跑）；
+// GOFLAGS 由本函数固定为带 -trimpath（见 trimpathGoflags），不继承外部的 GOFLAGS。
+func serverEnvBaseForTest(cache string) []string {
 	env := []string{
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + os.Getenv("HOME"),
 		"GOWORK=off",
 		"GOCACHE=" + cache,
 		"GOFLAGS=" + trimpathGoflags(),
-		"APP_ENV=prod",
 	}
 	for _, k := range []string{"GOPATH", "GOMODCACHE", "GOROOT", "GOTOOLCHAIN", "GOPROXY", "GOPRIVATE", "GONOSUMDB", "GOSUMDB"} {
 		if v := os.Getenv(k); v != "" {
@@ -692,4 +731,34 @@ func serverEnvForTest(cache string) []string {
 		}
 	}
 	return env
+}
+
+// TestServerEnvForTestCarriesNoAppConfigKeys 钉住「跑生成项目二进制的最小 env 不得含任何应用配置键」。
+//
+// 根因回归：CI 的 tag 发布 job（release.yml 的 Quality Gate）在 localhost 起了 MariaDB + Redis 并把
+// DB_* 注入整步环境。若这里用 `append(os.Environ(), …)` 继承，生成的服务器会连上库、成功启动并常驻，
+// CombinedOutput 永远等不到退出 —— v0.3.0 的 release run 因此把整个 tools/generator 拖到包级
+// `-timeout 60m`（该用例实测卡住 51 分钟，整步 69 分钟）。ci-scaffold.yml 没有 DB env，所以同一条
+// 用例在 PR 路径上一直绿：这是只在发布路径暴露的环境泄漏。
+//
+// 断言只看 helper 的**构造**，与跑测试的机器环境无关（本机恰好有没有库都不影响）。
+func TestServerEnvForTestCarriesNoAppConfigKeys(t *testing.T) {
+	// 工具链最小 env 里出现任何应用配置键都是泄漏
+	for _, kv := range serverEnvBaseForTest("test-cache") {
+		for _, k := range []string{"APP_ENV=", "DB_", "JWT_SECRET=", "REDIS_"} {
+			assert.NotContains(t, kv, k, "最小 env 不得含应用配置键：%s", kv)
+		}
+	}
+	// runServerForTest 依赖 APP_ENV=prod 走快速失败的配置校验
+	assert.Contains(t, serverEnvForTest("test-cache"), "APP_ENV=prod")
+	// 生成服务的 runner 必须把库钉在连不上的端口，而不是继承外界 DB_*
+	env := closedDBEnvForTest("test-cache")
+	assert.Contains(t, env, "APP_ENV=dev")
+	assert.Contains(t, env, "DB_HOST=127.0.0.1")
+	assert.Contains(t, env, "DB_PORT=1")
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "DB_") {
+			assert.Contains(t, []string{"DB_HOST=127.0.0.1", "DB_PORT=1"}, kv, "DB 相关键只允许这两条显式值：%s", kv)
+		}
+	}
 }

@@ -107,7 +107,9 @@ func TestGeneratedServerSurvivesProtobufDescriptor(t *testing.T) {
 	assert.NotContains(t, string(content), "proto/example.com")
 
 	cache := newTestGoCache(t)
-	got, _ := runGoInProjectOutput(t, dir, cache, "run", "./cmd/server") // 连库失败会让退出码非 0，属预期
+	// 走「显式指向连不上的库」的 runner：CI 的 tag 发布 job 注入了指向真实 MariaDB 的 DB_*，
+	// 继承时服务器会成功启动并常驻，CombinedOutput 永远等不到退出（见该 helper 的注释）。
+	got := runGeneratedServerWithClosedDBForTest(t, dir, cache)
 	assert.NotContains(t, got, "filedesc")
 	assert.NotContains(t, got, "slice bounds out of range")
 	assert.NotContains(t, got, "panic:")
