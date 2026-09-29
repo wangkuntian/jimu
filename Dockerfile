@@ -26,7 +26,7 @@ RUN OVERLAY="$(go run ./tools/profileoverlay "${PROFILE}")" && \
     CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -overlay="$OVERLAY" -o jimu ./cmd/cli
 
 # Runtime stage
-FROM alpine:3.24.1
+FROM alpine:3.24.2
 
 # 升级基础镜像包到最新（修复基线 CVE，如 OpenSSL），再安装所需包
 RUN apk --no-cache upgrade && \
