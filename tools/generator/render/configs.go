@@ -54,6 +54,12 @@ func mergeTopLevelSections(existing, source []byte) []byte {
 	return []byte(out.String())
 }
 
+// MergeSections preserves existing top-level YAML sections and appends sections
+// that are present in the newly rendered configuration.
+func MergeSections(existing, source []byte) []byte {
+	return mergeTopLevelSections(existing, source)
+}
+
 func topLevelKeys(content []byte) map[string]bool {
 	keys := map[string]bool{}
 	for key := range topLevelBlocks(content) {
