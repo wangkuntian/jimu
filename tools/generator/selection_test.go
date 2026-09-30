@@ -36,13 +36,16 @@ func allCapabilityNames(t *testing.T) []string {
 func TestGeneratedProjectBuildsAndVetsForEverySelection(t *testing.T) {
 	requireHeavyMatrix(t)
 	names := allCapabilityNames(t)
+	indices, err := scaffoldShardIndices(os.Getenv(scaffoldShardEnv), len(names))
+	require.NoError(t, err)
 	// 25 次真实构建会产生大量链接产物：用 newTestGoCache（默认随测试自动删除；CI 的 Scaffold
 	// Matrix job 经 JIMU_TEST_GOCACHE 复用一份跨运行的缓存），避免往共享缓存里堆构建结果
 	// （实测共享缓存可涨到 25G，曾把磁盘写满）。
 	// 全部子用例共用一个 module 路径，让内核那 ~200 个相同文件在缓存里去重。
 	cache := newTestGoCache(t)
 	sem := make(chan struct{}, heavyBuildConcurrency) // 见 heavyBuildConcurrency 的取值理由
-	for _, name := range names {
+	for _, index := range indices {
+		name := names[index]
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			sem <- struct{}{}
@@ -139,7 +142,7 @@ func TestGeneratedProjectTestTreeIsGreen(t *testing.T) {
 	// 串行时这十条占了整个重型 job 的 ~28%（实测 239s）。
 	cache := newTestGoCache(t)
 	sem := make(chan struct{}, heavyBuildConcurrency)
-	for _, tc := range []struct {
+	cases := []struct {
 		name string
 		opts NewOptions
 	}{
@@ -153,7 +156,11 @@ func TestGeneratedProjectTestTreeIsGreen(t *testing.T) {
 		{"with apidocs", NewOptions{With: "apidocs"}},
 		{"with retention", NewOptions{With: "retention"}},
 		{"with grpc", NewOptions{With: "grpc"}},
-	} {
+	}
+	indices, err := scaffoldShardIndices(os.Getenv(scaffoldShardEnv), len(cases))
+	require.NoError(t, err)
+	for _, index := range indices {
+		tc := cases[index]
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			sem <- struct{}{}

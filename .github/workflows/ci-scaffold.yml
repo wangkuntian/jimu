@@ -5,7 +5,7 @@ name: CI (Scaffold Matrix)
 # 只在发布候选 PR 上运行，避免每个开发 PR 都等待重型矩阵。
 #
 # 触发口径（任一满足）：
-#   ① 手动 workflow_dispatch：只跑这一个 job（这是它独立成文件的主要理由之一 —— 挂在 ci.yml 上
+#   ① 手动 workflow_dispatch：只跑这条重型 workflow（这是它独立成文件的主要理由之一 —— 挂在 ci.yml 上
 #      时手动触发会把 Lint/Test/Race/Bench/Govulncheck 一起拉起来）；
 #   ② release/* → master 的 PR：发布候选全量验证；
 #   ③ 每周一次的夜间定时：模板/闭包漂移在两次 release 之间就能抓到。
@@ -17,11 +17,12 @@ name: CI (Scaffold Matrix)
 #      正在跑的矩阵 —— 被取消的 run **不会执行缓存 save 步骤**，滚动缓存等于白配；
 #   3. 能加夜间 schedule 而不会连带把轻量 job 也定时跑一遍。
 #
-# 运行时间与优化（实测，run 36383945753 的 Scaffold Matrix job）：job 14m46s，其中 test 步骤 861s，
+# 拆分前运行时间（实测，run 36383945753 的 Scaffold Matrix job）：job 14m46s，其中 test 步骤 861s，
 # 构成是 25 个选区构建网 ≈560s（占 65%）、5+5 个生成项目测试树 239s、其余门控用例 ~150s、
 # 编译/缓存恢复 ~100s。已做的优化：`heavyBuildConcurrency` 从 2 提到 4（标准 runner 是
 # 4 vCPU，定死在 2 只用一半 CPU；旧注释里的「2 vCPU」是从 `CPU 时间 3330s / 墙钟 28min ≈ 2`
-# 反推出来的，那个 2 其实是当时的并发上限）+ 下面这份滚动缓存。
+# 反推出来的，那个 2 其实是当时的并发上限）+ 下面这份滚动缓存。现在拆成 4 个构建、
+# 2 个生成项目测试、1 个其余用例并行作业；原 Scaffold Matrix 名称由聚合 job 保留。
 
 on:
   workflow_dispatch:
@@ -71,38 +72,34 @@ jobs:
             echo "heavy=false" >> "$GITHUB_OUTPUT"
           fi
 
-  scaffold-matrix:
-    name: Scaffold Matrix
+  scaffold-shards:
+    name: Scaffold (${{ matrix.name }})
     needs: changes
-    # workflow_dispatch / schedule 一律跑；PR 必须来自 release/*，且只对相关输入变化执行矩阵。
-    # 其它来源分支显式失败，避免 master 的 required check 因 skipped job 被绕过。
+    if: needs.changes.outputs.heavy == 'true' && (github.event_name != 'pull_request' || startsWith(github.head_ref, 'release/'))
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: capability-build-1, spec: '1/4', test: TestGeneratedProjectBuildsAndVetsForEverySelection }
+          - { name: capability-build-2, spec: '2/4', test: TestGeneratedProjectBuildsAndVetsForEverySelection }
+          - { name: capability-build-3, spec: '3/4', test: TestGeneratedProjectBuildsAndVetsForEverySelection }
+          - { name: capability-build-4, spec: '4/4', test: TestGeneratedProjectBuildsAndVetsForEverySelection }
+          - { name: generated-tests-1, spec: '1/2', test: TestGeneratedProjectTestTreeIsGreen }
+          - { name: generated-tests-2, spec: '2/2', test: TestGeneratedProjectTestTreeIsGreen }
+          - { name: invariants, spec: '', test: '' }
     steps:
       - uses: actions/checkout@v7
 
-      - name: Validate release source branch
-        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'release/')
-        env:
-          RELEASE_SOURCE: ${{ github.head_ref }}
-        run: |
-          echo "Scaffold Matrix is a release gate and only accepts release/* -> master PRs."
-          echo "This PR comes from: $RELEASE_SOURCE"
-          exit 1
-
-      - name: Skip unchanged scaffold inputs
-        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/') && needs.changes.outputs.heavy != 'true'
-        run: echo "No scaffold inputs changed; release source branch validation passed."
-
       - name: Set up Go
         uses: actions/setup-go@v7
-        if: github.event_name != 'pull_request' || needs.changes.outputs.heavy == 'true'
         with:
           go-version: ${{ env.GO_VERSION }}
 
       - name: "🗂️ Restore the scaffold GOCACHE"
-        uses: actions/cache@v4
-        if: github.event_name != 'pull_request' || needs.changes.outputs.heavy == 'true'
+        id: cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/scaffold-gocache
           # 滚动 key（发布候选 PR 与手动/定时运行共用同一规范）：
@@ -119,16 +116,21 @@ jobs:
             scaffold-gocache-v1-${{ runner.os }}-${{ hashFiles('go.sum') }}-
             scaffold-gocache-v1-${{ runner.os }}-
 
-      - name: "🏗️ Run the heavy scaffold matrix"
-        if: github.event_name != 'pull_request' || needs.changes.outputs.heavy == 'true'
+      - name: "🏗️ Run scaffold shard"
         env:
           JIMU_HEAVY_MATRIX: "1"
           JIMU_TEST_GOCACHE: ${{ runner.temp }}/scaffold-gocache
-        # -v 便于失败时定位是哪个选区/形态
-        run: go test ./tools/generator/ -count=1 -timeout 60m -v
+          JIMU_SCAFFOLD_SHARD: ${{ matrix.spec }}
+          MATRIX_TEST: ${{ matrix.test }}
+        run: |
+          if [ -n "$MATRIX_TEST" ]; then
+            go test ./tools/generator/ -count=1 -timeout 60m -v -run "^$MATRIX_TEST$"
+          else
+            go test ./tools/generator/ -count=1 -timeout 60m -v -skip '^(TestGeneratedProjectBuildsAndVetsForEverySelection|TestGeneratedProjectTestTreeIsGreen)$'
+          fi
 
       - name: "📏 Report the scaffold GOCACHE size"
-        if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.heavy == 'true')
+        if: always()
         run: |
           CACHE="${{ runner.temp }}/scaffold-gocache"
           du -sh "$CACHE" 2>/dev/null || echo "（缓存目录不存在）"
@@ -141,5 +143,43 @@ jobs:
           # 的 trimInterval=24h / trimLimit=5d，无大小上限）。
           if [ -n "${SIZE_MB:-}" ] && [ "$SIZE_MB" -gt 6144 ]; then
             echo "::error::scaffold GOCACHE ${SIZE_MB} MB 超过 6 GiB（仓库 actions/cache 配额 10 GB）：请把 ci-scaffold.yml 里 cache key 的 -v1 后缀递增（-v2、-v3…，release.yml 同步）后重跑；不要在本 job 内删除缓存内容"
+            exit 1
+          fi
+
+      # 七个作业均从同一滚动快照恢复；只由一个作业保存，避免写入竞态和缓存配额放大。
+      - name: "💾 Save the scaffold GOCACHE"
+        if: matrix.name == 'generated-tests-1' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/scaffold-gocache
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+  scaffold-matrix:
+    name: Scaffold Matrix
+    needs: [changes, scaffold-shards]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate release gate
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          HEAVY: ${{ needs.changes.outputs.heavy }}
+          SHARDS_RESULT: ${{ needs.scaffold-shards.result }}
+          RELEASE_SOURCE: ${{ github.head_ref }}
+        run: |
+          if [ "$CHANGES_RESULT" != success ]; then
+            echo "::error::Scaffold input detection failed: $CHANGES_RESULT"
+            exit 1
+          fi
+          if [ "$GITHUB_EVENT_NAME" = pull_request ] && [[ "$RELEASE_SOURCE" != release/* ]]; then
+            echo "::error::Scaffold Matrix only accepts release/* -> master PRs: $RELEASE_SOURCE"
+            exit 1
+          fi
+          if [ "$HEAVY" = true ] && [ "$SHARDS_RESULT" != success ]; then
+            echo "::error::Scaffold shards failed or were skipped: $SHARDS_RESULT"
+            exit 1
+          fi
+          if [ "$HEAVY" = false ] && [ "$SHARDS_RESULT" != skipped ]; then
+            echo "::error::Scaffold shards unexpectedly ran: $SHARDS_RESULT"
             exit 1
           fi

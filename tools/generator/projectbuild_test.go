@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -40,6 +41,9 @@ func newProjectForTest(t *testing.T, opts NewOptions) (*Result, error) {
 // CI 的 `Scaffold Matrix` job 设 JIMU_HEAVY_MATRIX=1 跑满（见 requireHeavyMatrix）。
 const heavyMatrixEnv = "JIMU_HEAVY_MATRIX"
 
+// scaffoldShardEnv 只对两条选区网生效；本地未设置时仍执行全部选区。
+const scaffoldShardEnv = "JIMU_SCAFFOLD_SHARD"
+
 // testGoCacheEnv 把测试用的 GOCACHE 指到一个**可跨运行复用**的目录（见 newTestGoCache）；
 // CI 的 Scaffold Matrix job 靠它让冷缓存只在首次付出代价 —— 前提是生成项目的构建都带 -trimpath
 // （见 trimpathGoflags）：否则路径相关条目会无界增长，缓存既不收敛也换不来时间。
@@ -53,6 +57,36 @@ const testGoCacheEnv = "JIMU_TEST_GOCACHE"
 // （历史事故：共享构建缓存涨到 25G 把磁盘写满，故构建测试一律用 newTestGoCache 的专用缓存），
 // 所以这个数是**显式的上限**而不是无限并发；如果重型 job 出现内存/磁盘压力，先降它。
 const heavyBuildConcurrency = 4
+
+// scaffoldShardIndices 按选区在原始清单中的位置分片，确保每个选区恰好由一个 shard 执行。
+func scaffoldShardIndices(spec string, count int) ([]int, error) {
+	shard, total := 1, 1
+	if spec != "" {
+		parts := strings.Split(spec, "/")
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid scaffold shard %q: expected N/TOTAL", spec)
+		}
+		var err error
+		shard, err = strconv.Atoi(parts[0])
+		if err != nil {
+			return nil, fmt.Errorf("invalid scaffold shard %q: %w", spec, err)
+		}
+		total, err = strconv.Atoi(parts[1])
+		if err != nil {
+			return nil, fmt.Errorf("invalid scaffold shard %q: %w", spec, err)
+		}
+	}
+	if count < 1 || shard < 1 || total < 1 || shard > total || total > count {
+		return nil, fmt.Errorf("invalid scaffold shard %q for %d cases", spec, count)
+	}
+	indices := make([]int, 0, (count+total-1)/total)
+	for i := 0; i < count; i++ {
+		if i%total == shard-1 {
+			indices = append(indices, i)
+		}
+	}
+	return indices, nil
+}
 
 // requireHeavyMatrix 是本包重型用例的**唯一**门控入口：`-short` 或未设 `JIMU_HEAVY_MATRIX=1` 都跳过
 // （只认字面量 `1`；`0`/`false`/空一律算关闭）。判据是「这条用例会把生成项目整棵树真的 shell out
