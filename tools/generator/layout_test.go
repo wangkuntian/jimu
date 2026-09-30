@@ -60,10 +60,10 @@ func TestParseCapabilitySetProfileAddsCompileAndSchemaDeps(t *testing.T) {
 	assert.Equal(t, "minimal", set.Shape)
 	// 声明集 = catalog 条目（拓扑序）+ 非 catalog（Ungated）条目（P2.4 裁定：Ungated 不受门控）。
 	assert.Equal(t, []string{"user", "access", "auth", "encryption", "notification"}, set.Declared)
-	// S1：user/auth 的类型级残留（outbox/queue/notification/encryption）必须复制，否则 go build 失败；
+	// user/auth 通过端口依赖其他能力，不再携带 outbox/queue；
 	// tenant 是 schema 依赖的「迁移携带」目录（只带 migrations/ + 生成的 module.go，故不展开其编译闭包
 	// —— 否则 auth 链会被一起拖进来）。
-	assert.ElementsMatch(t, []string{"access", "auth", "encryption", "notification", "outbox", "queue", "tenant", "user"}, set.Copy)
+	assert.ElementsMatch(t, []string{"access", "auth", "encryption", "notification", "tenant", "user"}, set.Copy)
 	// S1/S2：user/access 的 schema 依赖 tenant 只作「迁移携带」。
 	assert.Equal(t, []string{"tenant"}, set.MigrationOnly)
 	assert.ElementsMatch(t, []string{"encryption", "notification"}, set.Ungated)
@@ -75,7 +75,7 @@ func TestParseCapabilitySetWithUsesResolveAndDefaultDrivers(t *testing.T) {
 	assert.Equal(t, "app", set.Shape)
 	// S4：--with 的驱动默认取 Descriptor.Drivers 首项（queue→redis），故 kafka-go 不进依赖图。
 	assert.Equal(t, []string{"redis"}, set.Drivers["queue"])
-	assert.Contains(t, set.Copy, "outbox")
+	assert.NotContains(t, set.Copy, "outbox")
 	assert.NotContains(t, set.Copy, "auth")
 	// S1/S2：user/access 的 schema 依赖 tenant 只作迁移携带，不展开其编译闭包（否则拖进 auth）。
 	assert.Equal(t, []string{"tenant"}, set.MigrationOnly)

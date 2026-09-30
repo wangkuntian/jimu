@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	authdomain "jimu/internal/capabilities/auth/domain"
 	oauthdomain "jimu/internal/capabilities/oauth/domain"
 	oauthplatform "jimu/internal/capabilities/oauth/provider"
-	userdomain "jimu/internal/capabilities/user/domain"
+	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
+	dbctx "jimu/internal/kernel/db"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/alicebob/miniredis/v2"
@@ -26,6 +26,49 @@ import (
 )
 
 const testJWTSecret = "01234567890123456789012345678901"
+
+type testAccount struct {
+	ID       uint64
+	Username string
+	Password string
+	Status   int8
+	TenantID uint64
+}
+
+func (testAccount) TableName() string { return "users" }
+
+type testAccounts struct{ db *gorm.DB }
+
+func (r testAccounts) FindByID(ctx context.Context, id uint64) (*contract.Account, error) {
+	var u testAccount
+	if err := r.db.WithContext(ctx).First(&u, id).Error; err != nil {
+		return nil, err
+	}
+	return &contract.Account{ID: u.ID, Username: u.Username, Password: u.Password, Status: u.Status, TenantID: u.TenantID}, nil
+}
+func (r testAccounts) FindByUsername(ctx context.Context, name string) (*contract.Account, error) {
+	var u testAccount
+	if err := r.db.WithContext(ctx).Where("username = ?", name).First(&u).Error; err != nil {
+		return nil, err
+	}
+	return &contract.Account{ID: u.ID, Username: u.Username, Password: u.Password, Status: u.Status, TenantID: u.TenantID}, nil
+}
+func (r testAccounts) FindByEmailHash(context.Context, string) (*contract.Account, error) {
+	return nil, contract.ErrNotFound
+}
+func (r testAccounts) Create(ctx context.Context, user *contract.Account) error {
+	db := r.db.WithContext(ctx)
+	if tx, ok := dbctx.TransactionFromContext(ctx); ok {
+		db = tx.WithContext(ctx)
+	}
+	u := &testAccount{Username: user.Username, Password: user.Password, Status: user.Status, TenantID: user.TenantID}
+	if err := db.Create(u).Error; err != nil {
+		return err
+	}
+	user.ID = u.ID
+	return nil
+}
+func (r testAccounts) UpdatePassword(context.Context, uint64, string) error { return nil }
 
 // fakeProvider 实现 oauthplatform.Provider
 type fakeProvider struct {
@@ -113,13 +156,18 @@ func newTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&userdomain.User{}, &oauthdomain.OAuthBinding{}))
+	require.NoError(t, db.AutoMigrate(&testAccount{}, &oauthdomain.OAuthBinding{}))
+	require.NoError(t, db.Exec("CREATE UNIQUE INDEX idx_users_username ON users (username)").Error)
 	return db
 }
 
 func newService(t *testing.T, repo oauthdomain.BindingRepository, providers map[string]oauthplatform.Provider, rdb *redis.Client, db *gorm.DB, sessions auth.SessionStore) *OAuthService {
 	t.Helper()
-	return NewOAuthService(repo, auth.New(testJWTSecret, "jimu", 30, 7), sessions, providers, rdb, db, 30)
+	var users contract.AccountRepository
+	if db != nil {
+		users = testAccounts{db: db}
+	}
+	return NewOAuthService(repo, auth.New(testJWTSecret, "jimu", 30, 7), sessions, providers, rdb, db, 30, users)
 }
 
 func githubProviders() map[string]oauthplatform.Provider {
@@ -307,7 +355,7 @@ func TestLoginCreatesUserAndBinding(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, pair.AccessToken)
 
-	var user userdomain.User
+	var user testAccount
 	require.NoError(t, db.Where("username = ?", "github_sub123").First(&user).Error)
 	assert.Equal(t, int8(1), user.Status)
 	assert.True(t, user.Password != "" && user.Password != user.Username)
@@ -322,7 +370,7 @@ func TestLoginCreateConflictFallsBackToExistingBinding(t *testing.T) {
 	require.NoError(t, mrs.Set(oauthStateKey("state-1"), "github"))
 	db := newTestDB(t)
 	// 预置同名用户，使 createUserWithBinding 的 INSERT 触发唯一约束失败
-	require.NoError(t, db.Create(&userdomain.User{Username: "github_dup", Password: "x", Status: 1}).Error)
+	require.NoError(t, db.Create(&testAccount{Username: "github_dup", Password: "x", Status: 1}).Error)
 
 	repo := &fakeBindingRepo{results: []struct {
 		binding *oauthdomain.OAuthBinding
@@ -346,7 +394,7 @@ func TestLoginCreateConflictFallbackFails(t *testing.T) {
 	mrs, client := newRedisClient(t)
 	require.NoError(t, mrs.Set(oauthStateKey("state-1"), "github"))
 	db := newTestDB(t)
-	require.NoError(t, db.Create(&userdomain.User{Username: "github_dup", Password: "x", Status: 1}).Error)
+	require.NoError(t, db.Create(&testAccount{Username: "github_dup", Password: "x", Status: 1}).Error)
 
 	repo := &fakeBindingRepo{results: []struct {
 		binding *oauthdomain.OAuthBinding
@@ -401,7 +449,7 @@ func TestCreateUserWithBindingTruncatesLongUsername(t *testing.T) {
 	require.NoError(t, err)
 	require.NotZero(t, userID)
 
-	var user userdomain.User
+	var user testAccount
 	require.NoError(t, db.First(&user, userID).Error)
 	assert.Len(t, user.Username, 64)
 	assert.Equal(t, "github_"+strings.Repeat("s", 57), user.Username)
@@ -412,11 +460,23 @@ func TestCreateUserWithBindingTruncatesLongUsername(t *testing.T) {
 
 func TestCreateUserWithBindingTransactionFailure(t *testing.T) {
 	db := newTestDB(t)
-	require.NoError(t, db.Create(&userdomain.User{Username: "github_dup", Password: "x", Status: 1}).Error)
+	require.NoError(t, db.Create(&testAccount{Username: "github_dup", Password: "x", Status: 1}).Error)
 	svc := newService(t, &fakeBindingRepo{}, nil, nil, db, &fakeSessionStore{})
 
 	_, err := svc.createUserWithBinding(context.Background(), "github", &oauthplatform.UserInfo{Subject: "dup"})
 	require.Error(t, err)
+}
+
+func TestCreateUserWithBindingRollsBackUserWhenBindingFails(t *testing.T) {
+	db := newTestDB(t)
+	require.NoError(t, db.Migrator().DropTable(&oauthdomain.OAuthBinding{}))
+	svc := newService(t, &fakeBindingRepo{}, nil, nil, db, &fakeSessionStore{})
+
+	_, err := svc.createUserWithBinding(context.Background(), "github", &oauthplatform.UserInfo{Subject: "new"})
+	require.Error(t, err)
+	var count int64
+	require.NoError(t, db.Model(&testAccount{}).Count(&count).Error)
+	assert.Zero(t, count)
 }
 
 func TestRefreshTTLNilExpiry(t *testing.T) {
@@ -443,7 +503,7 @@ func TestLoginReturnsCompleteTokenPair(t *testing.T) {
 
 	pair, err := svc.Login(context.Background(), "github", "code", "state-1")
 	require.NoError(t, err)
-	assert.Equal(t, &authdomain.TokenPair{
+	assert.Equal(t, &contract.TokenPair{
 		AccessToken:  pair.AccessToken,
 		RefreshToken: pair.RefreshToken,
 		ExpiresIn:    30 * 60,

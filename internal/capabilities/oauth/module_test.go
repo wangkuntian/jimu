@@ -4,7 +4,6 @@ package oauth
 import (
 	"testing"
 
-	authmodule "jimu/internal/capabilities/auth"
 	oauthplatform "jimu/internal/capabilities/oauth/provider"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/httpclient"
@@ -26,8 +25,9 @@ func newTestModule() *Module {
 				"github": {ClientID: "h-id", Enabled: true},
 			},
 		},
-		authmodule.Config{JWTSecret: "01234567890123456789012345678901", Issuer: "jimu", AccessExpireMin: 30, RefreshExpireDay: 7},
+		contract.AuthConfig{JWTSecret: "01234567890123456789012345678901", Issuer: "jimu", AccessExpireMin: 30, RefreshExpireDay: 7},
 		httpClient,
+		nil,
 	)
 }
 

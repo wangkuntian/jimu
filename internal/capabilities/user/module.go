@@ -4,9 +4,6 @@ import (
 	"embed"
 	"fmt"
 
-	"jimu/internal/capabilities/encryption"
-	"jimu/internal/capabilities/notification"
-	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/user/application"
 	"jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/capabilities/user/interfaces"
@@ -24,21 +21,21 @@ type Module struct {
 	service *application.UserService
 	admin   *application.AdminUserService
 	rdb     redistore.Client
-	outbox  *outbox.Outbox
+	outbox  contract.EventWriter
 }
 
 func New(db *gorm.DB, cfg config.Config, deps ...interface{}) *Module {
 	repo := infrastructure.NewMysqlRepository(db)
 	var c cache.Cache
-	var ob *outbox.Outbox
-	var cipher *encryption.Cipher
+	var ob contract.EventWriter
+	var cipher contract.BlindIndexer
 	for _, dep := range deps {
 		switch d := dep.(type) {
 		case redistore.Client:
 			c = cache.NewRedisCache(d, cfg.Cache.Prefix)
-		case *outbox.Outbox:
+		case contract.EventWriter:
 			ob = d
-		case *encryption.Cipher:
+		case contract.BlindIndexer:
 			cipher = d
 		}
 	}
@@ -112,8 +109,8 @@ func (m *Module) RegisterEvents(e contract.EventBus) {
 	// 订阅全局总线的用户创建事件，桥接到通知系统
 	e.Subscribe(contract.EventUserCreated, func(payload interface{}) {
 		if evt, ok := payload.(contract.UserCreatedEvent); ok {
-			e.Publish(contract.UserCreatedEmailNotification, notification.Message{
-				Channel: notification.ChannelEmail,
+			e.Publish(contract.UserCreatedEmailNotification, contract.NotificationMessage{
+				Channel: "email",
 				To:      evt.Email,
 				Subject: "Welcome to Jimu",
 				Body:    fmt.Sprintf("Hi %s, your account has been created successfully.", evt.Username),

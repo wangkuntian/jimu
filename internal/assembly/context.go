@@ -16,6 +16,15 @@ import (
 	"gorm.io/gorm"
 )
 
+// AuthConfig returns the validated auth section through its contract projection.
+func (c *Context) AuthConfig() contract.AuthConfig {
+	v, ok := c.CapabilityConfigs().Section("auth").(interface{ PortView() contract.AuthConfig })
+	if !ok {
+		return contract.AuthConfig{}
+	}
+	return v.PortView()
+}
+
 // Context 是能力 Wire 的装配上下文：暴露内核件访问器，并持有模块/端口注册表。
 // 由 Run 构造后传给每个能力的 Wire；能力只经它取得依赖 —— 不 import 其它能力包，
 // 也不 import internal/app。

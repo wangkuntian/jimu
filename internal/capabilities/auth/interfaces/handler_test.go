@@ -10,9 +10,7 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/auth/application"
-	"jimu/internal/capabilities/encryption"
-	"jimu/internal/capabilities/notification"
-	userdomain "jimu/internal/capabilities/user/domain"
+	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
 	apperrors "jimu/internal/shared/errors"
 
@@ -20,10 +18,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 const handlerTestKey = "01234567890123456789012345678901"
+
+type handlerIndexer struct{}
+
+func (handlerIndexer) BlindIndex(value string) string { return "test-index:" + value }
 
 func TestForgotPasswordHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -80,7 +81,7 @@ func newHandlerService(t *testing.T) *application.AuthService {
 		auth.New(handlerTestKey, "jimu", 30, 7),
 		&handlerSessionStore{},
 		nil, 30,
-		encryption.New(handlerTestKey),
+		handlerIndexer{},
 		&handlerNotifier{},
 		application.NewResetStore(rc, 15*time.Minute),
 	)
@@ -88,26 +89,17 @@ func newHandlerService(t *testing.T) *application.AuthService {
 
 type handlerUserRepo struct{}
 
-func (r *handlerUserRepo) FindByID(context.Context, uint64) (*userdomain.User, error) {
-	return nil, gorm.ErrRecordNotFound
+func (r *handlerUserRepo) FindByID(context.Context, uint64) (*contract.Account, error) {
+	return nil, contract.ErrNotFound
 }
-func (r *handlerUserRepo) FindByUsername(context.Context, string) (*userdomain.User, error) {
-	return nil, gorm.ErrRecordNotFound
+func (r *handlerUserRepo) FindByUsername(context.Context, string) (*contract.Account, error) {
+	return nil, contract.ErrNotFound
 }
-func (r *handlerUserRepo) List(context.Context, uint64, int, int, string, string) ([]userdomain.User, int64, error) {
-	return nil, 0, nil
+func (r *handlerUserRepo) Create(context.Context, *contract.Account) error { return nil }
+func (r *handlerUserRepo) FindByEmailHash(context.Context, string) (*contract.Account, error) {
+	return nil, contract.ErrNotFound
 }
-func (r *handlerUserRepo) Create(context.Context, *userdomain.User) error { return nil }
-func (r *handlerUserRepo) Update(context.Context, *userdomain.User) error { return nil }
-func (r *handlerUserRepo) Delete(context.Context, uint64) error           { return nil }
-func (r *handlerUserRepo) FindByEmailHash(context.Context, string) (*userdomain.User, error) {
-	return nil, gorm.ErrRecordNotFound
-}
-func (r *handlerUserRepo) FindByPhoneHash(context.Context, string) (*userdomain.User, error) {
-	return nil, gorm.ErrRecordNotFound
-}
-func (r *handlerUserRepo) UpdatePassword(context.Context, uint64, string) error   { return nil }
-func (r *handlerUserRepo) UpdateTOTP(context.Context, uint64, string, bool) error { return nil }
+func (r *handlerUserRepo) UpdatePassword(context.Context, uint64, string) error { return nil }
 
 type handlerSessionStore struct{}
 
@@ -122,8 +114,4 @@ func (s *handlerSessionStore) RevokeAll(context.Context, uint64) error      { re
 
 type handlerNotifier struct{}
 
-func (n *handlerNotifier) Register(notification.Channel, notification.Notification) {}
-func (n *handlerNotifier) Dispatch(context.Context, notification.Message) error     { return nil }
-func (n *handlerNotifier) DispatchBatch(context.Context, []notification.Message) error {
-	return nil
-}
+func (n *handlerNotifier) Dispatch(context.Context, contract.NotificationMessage) error { return nil }

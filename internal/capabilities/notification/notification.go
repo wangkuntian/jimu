@@ -2,6 +2,7 @@ package notification
 
 import (
 	"context"
+	"jimu/internal/contract"
 )
 
 // Channel 通知渠道
@@ -25,6 +26,17 @@ type Message struct {
 	Data       map[string]string // 模板变量
 	Metadata   map[string]string // 自定义元数据
 }
+
+type contractDispatcher struct{ dispatcher Dispatcher }
+
+func (p contractDispatcher) Dispatch(ctx context.Context, msg contract.NotificationMessage) error {
+	return p.dispatcher.Dispatch(ctx, Message{
+		Channel: Channel(msg.Channel), To: msg.To, Subject: msg.Subject, Body: msg.Body,
+		TemplateID: msg.TemplateID, Data: msg.Data, Metadata: msg.Metadata,
+	})
+}
+
+var _ contract.Notifier = contractDispatcher{}
 
 // Notification 通知接口
 type Notification interface {

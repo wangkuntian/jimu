@@ -1,13 +1,17 @@
-package application
+package e2e
 
 import (
 	"context"
 	stderrors "errors"
 	"testing"
 
+	accesscap "jimu/internal/capabilities/access"
 	roledomain "jimu/internal/capabilities/access/domain"
+	tenantapp "jimu/internal/capabilities/tenant/application"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
+	usercap "jimu/internal/capabilities/user"
 	userdomain "jimu/internal/capabilities/user/domain"
+	userinfra "jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/db"
 	apperrors "jimu/internal/shared/errors"
@@ -38,15 +42,15 @@ func newProvisionTestDB(t *testing.T) *gorm.DB {
 	return gdb
 }
 
-func provisionTestConfig() ProvisioningConfig {
-	return ProvisioningConfig{
+func provisionTestConfig() tenantapp.ProvisioningConfig {
+	return tenantapp.ProvisioningConfig{
 		Enabled:   true,
 		OwnerRole: "管理员",
-		Roles: []ProvisionRoleTemplate{
+		Roles: []tenantapp.ProvisionRoleTemplate{
 			{
 				Name:        "管理员",
 				Description: "租户管理员",
-				Permissions: []ProvisionPermission{
+				Permissions: []tenantapp.ProvisionPermission{
 					{Resource: "/api/v1/users", Action: "GET"},
 					{Resource: "/api/v1/users", Action: "POST"},
 					{Resource: "/api/v1/roles", Action: "GET"},
@@ -56,12 +60,17 @@ func provisionTestConfig() ProvisioningConfig {
 			{
 				Name:        "成员",
 				Description: "普通成员",
-				Permissions: []ProvisionPermission{
+				Permissions: []tenantapp.ProvisionPermission{
 					{Resource: "/api/v1/audits", Action: "GET"},
 				},
 			},
 		},
 	}
+}
+
+func newProvisioner(gdb *gorm.DB, cfg tenantapp.ProvisioningConfig) *tenantapp.GormTenantProvisioner {
+	users := usercap.NewAccountRepository(userinfra.NewMysqlRepository(gdb))
+	return tenantapp.NewGormTenantProvisioner(gdb, cfg, users, accesscap.NewProvisioningRoleStore(gdb))
 }
 
 func seedProvisionPermissions(t *testing.T, gdb *gorm.DB) {
@@ -80,7 +89,7 @@ func seedProvisionPermissions(t *testing.T, gdb *gorm.DB) {
 func TestGormTenantProvisionerProvision(t *testing.T) {
 	gdb := newProvisionTestDB(t)
 	seedProvisionPermissions(t, gdb)
-	provisioner := NewGormTenantProvisioner(gdb, provisionTestConfig())
+	provisioner := newProvisioner(gdb, provisionTestConfig())
 
 	res, err := provisioner.Provision(context.Background(), contract.ProvisionRequest{
 		Username:     "alice",
@@ -125,7 +134,7 @@ func TestGormTenantProvisionerOwnerRoleDefaultsToFirst(t *testing.T) {
 	seedProvisionPermissions(t, gdb)
 	cfg := provisionTestConfig()
 	cfg.OwnerRole = "" // 缺省 = 第一个模板角色
-	provisioner := NewGormTenantProvisioner(gdb, cfg)
+	provisioner := newProvisioner(gdb, cfg)
 
 	res, err := provisioner.Provision(context.Background(), contract.ProvisionRequest{
 		Username:     "bob",
@@ -145,10 +154,27 @@ func TestGormTenantProvisionerOwnerRoleDefaultsToFirst(t *testing.T) {
 	assert.Regexp(t, `^t[0-9a-f]{12}$`, res.Tenant.Code)
 }
 
+func TestGormTenantProvisionerRollsBackWhenRoleCreationFails(t *testing.T) {
+	gdb := newProvisionTestDB(t)
+	seedProvisionPermissions(t, gdb)
+	require.NoError(t, gdb.Migrator().DropTable(&roledomain.Role{}))
+	provisioner := newProvisioner(gdb, provisionTestConfig())
+
+	_, err := provisioner.Provision(context.Background(), contract.ProvisionRequest{
+		Username: "alice", PasswordHash: "hashed", TenantName: "Acme", TenantCode: "acme",
+	})
+	require.Error(t, err)
+	var tenants, users int64
+	require.NoError(t, gdb.Model(&tenantdomain.Tenant{}).Count(&tenants).Error)
+	require.NoError(t, gdb.Model(&userdomain.User{}).Count(&users).Error)
+	assert.Zero(t, tenants)
+	assert.Zero(t, users)
+}
+
 func TestGormTenantProvisionerErrors(t *testing.T) {
 	gdb := newProvisionTestDB(t)
 	seedProvisionPermissions(t, gdb)
-	provisioner := NewGormTenantProvisioner(gdb, provisionTestConfig())
+	provisioner := newProvisioner(gdb, provisionTestConfig())
 	ctx := context.Background()
 
 	t.Run("租户名缺失", func(t *testing.T) {

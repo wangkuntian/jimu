@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/passkey/application"
 	passkeydomain "jimu/internal/capabilities/passkey/domain"
 	"jimu/internal/contract"
@@ -168,7 +167,7 @@ func newWebAuthnHandler(t *testing.T) (*PasskeyHandler, *handlerUserRepo, *webau
 		SessionTTL:  time.Minute,
 		Finalizer:   handlerFinalizer{},
 	})
-	return NewPasskeyHandler(svc, authmodule.Config{}, nil), repo, creds
+	return NewPasskeyHandler(svc, contract.AuthConfig{}, nil), repo, creds
 }
 
 // invokeHandler 以直接调用处理器的方式发请求
@@ -265,7 +264,7 @@ func TestWebAuthnLoginBeginWithoutCredential(t *testing.T) {
 func TestWebAuthnLoginBeginRateLimited(t *testing.T) {
 	handler, _, _ := newWebAuthnHandler(t)
 	handler.limiter = auth.NewLimiter(&routerLimiterRedis{counts: map[string]int{}}, true)
-	handler.cfg = authmodule.Config{LoginRateLimit: 1, LoginRateWindowSec: 60}
+	handler.cfg = contract.AuthConfig{LoginRateLimit: 1, LoginRateWindowSec: 60}
 	gin.SetMode(gin.TestMode)
 
 	call := func() *httptest.ResponseRecorder {
@@ -342,7 +341,7 @@ func TestWebAuthnCredentialManagementHandlers(t *testing.T) {
 
 func TestWebAuthnHandlersWithoutConfiguration(t *testing.T) {
 	svc := application.NewPasskeyService(application.Deps{Users: &handlerUserRepo{}})
-	handler := NewPasskeyHandler(svc, authmodule.Config{}, nil)
+	handler := NewPasskeyHandler(svc, contract.AuthConfig{}, nil)
 
 	cases := []struct {
 		name string

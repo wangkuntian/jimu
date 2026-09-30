@@ -7,8 +7,6 @@ import (
 	"jimu/internal/capabilities/auth/application"
 	authinfra "jimu/internal/capabilities/auth/infrastructure"
 	"jimu/internal/capabilities/auth/interfaces"
-	"jimu/internal/capabilities/outbox"
-	"jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/access"
 	"jimu/internal/kernel/auth"
@@ -29,7 +27,7 @@ type Module struct {
 	limiter *auth.Limiter
 	db      *gorm.DB
 	captcha contract.CaptchaVerifier
-	outbox  *outbox.Outbox
+	outbox  contract.EventWriter
 }
 
 // New 创建 auth 模块。
@@ -37,7 +35,13 @@ type Module struct {
 // application.TenantQuota、contract.MFAVerifier、contract.TenantProvisioner、
 // contract.BreachChecker、*application.ResetStore。
 func New(db *gorm.DB, rdb redistore.Client, cfg Config, failClosed bool, captchaVerifier contract.CaptchaVerifier, deps ...interface{}) *Module {
-	userRepo := infrastructure.NewMysqlRepository(db)
+	var userRepo contract.AccountRepository
+	for _, dep := range deps {
+		if repo, ok := dep.(contract.AccountRepository); ok {
+			userRepo = repo
+			break
+		}
+	}
 	jwtUtil := auth.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
 	sessionStore := auth.NewRedisSessionStore(rdb)
 	limiter := auth.NewLimiter(rdb, failClosed)
@@ -52,7 +56,7 @@ func New(db *gorm.DB, rdb redistore.Client, cfg Config, failClosed bool, captcha
 	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin, allDeps...)
 	m := &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaVerifier}
 	for _, dep := range deps {
-		if ob, ok := dep.(*outbox.Outbox); ok {
+		if ob, ok := dep.(contract.EventWriter); ok {
 			m.outbox = ob
 		}
 	}

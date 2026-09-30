@@ -89,10 +89,10 @@ ALL_CAPS="access apidocs apikey audit auth breach captcha console dataops encryp
 # EXPECTED_<profile>：该形态二进制依赖闭包里允许出现的**能力根包**，逐值锁定（golden）。
 # 来源＝ internal/profiles/<profile>/assembly.go 的清单 + 传递必需的编译期依赖。
 EXPECTED_full="access apidocs apikey audit auth breach captcha console dataops encryption feature grpc mfa notification oauth outbox passkey queue retention search storage tenant uploadsec user ws"
-EXPECTED_minimal="access auth encryption notification outbox queue user"
-EXPECTED_saas="access audit auth encryption notification outbox queue tenant user"
-EXPECTED_enterprise="access audit auth console dataops encryption notification oauth outbox queue storage user ws"
-EXPECTED_machine="access apikey encryption grpc notification outbox queue user"
+EXPECTED_minimal="access auth encryption notification user"
+EXPECTED_saas="access audit auth encryption notification tenant user"
+EXPECTED_enterprise="access audit auth console dataops encryption notification oauth storage user ws"
+EXPECTED_machine="access apikey encryption grpc user"
 
 # FORBIDDEN_<profile>：该形态闭包里明确禁止出现的能力（本次修复的逐形态「不得包含」清单）。
 # 未列出的形态按「ALL_CAPS − EXPECTED」即全部非预期能力处理（见下方 FORBIDDEN_* 逐条列明）。

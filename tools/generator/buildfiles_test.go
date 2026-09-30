@@ -82,7 +82,7 @@ func TestGeneratedCheckProfilesCoversExactlyOneShape(t *testing.T) {
 	// 单形态的 golden = 生成项目出货二进制的真实闭包（编译闭包），与本仓
 	// scripts/check_profiles.sh 的 EXPECTED_minimal 逐值一致：迁移携带的 tenant 只进
 	// catalog（CLI），不进 cmd/server 的闭包。
-	assert.Contains(t, src, `EXPECTED_minimal="access auth encryption notification outbox queue user"`)
+	assert.Contains(t, src, `EXPECTED_minimal="access auth encryption notification user"`)
 	// 逐值相等已蕴含「不含非预期能力」：单形态脚本不再持有 FORBIDDEN/ALLOWED 清单
 	// （两者按构造不相交，比对恒为 no-op）。
 	assert.NotContains(t, src, "FORBIDDEN_")

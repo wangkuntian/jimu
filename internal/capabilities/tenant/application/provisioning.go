@@ -8,10 +8,9 @@ import (
 	"fmt"
 	"strings"
 
-	roledomain "jimu/internal/capabilities/access/domain"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
-	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
+	dbctx "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 
@@ -44,12 +43,14 @@ type ProvisionPermission struct {
 
 // GormTenantProvisioner 基于单事务的租户开通实现（实现 contract.TenantProvisioner）。
 type GormTenantProvisioner struct {
-	db  *gorm.DB
-	cfg ProvisioningConfig
+	db    *gorm.DB
+	cfg   ProvisioningConfig
+	users contract.AccountRepository
+	roles contract.ProvisioningRoleStore
 }
 
-func NewGormTenantProvisioner(db *gorm.DB, cfg ProvisioningConfig) *GormTenantProvisioner {
-	return &GormTenantProvisioner{db: db, cfg: cfg}
+func NewGormTenantProvisioner(db *gorm.DB, cfg ProvisioningConfig, users contract.AccountRepository, roles contract.ProvisioningRoleStore) *GormTenantProvisioner {
+	return &GormTenantProvisioner{db: db, cfg: cfg, users: users, roles: roles}
 }
 
 // Provision 创建租户 + owner 用户 + 模板角色（单事务，任一步失败整体回滚）。
@@ -65,6 +66,7 @@ func (p *GormTenantProvisioner) Provision(ctx context.Context, params contract.P
 
 	var result *contract.ProvisionResult
 	err := p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txCtx := dbctx.WithTransaction(ctx, tx)
 		// 1. 创建租户（编码唯一；自动生成时在事务内重试冲突）
 		tenant := &tenantdomain.Tenant{Name: params.TenantName, Status: 1}
 		if tenantCode != "" {
@@ -87,7 +89,7 @@ func (p *GormTenantProvisioner) Provision(ctx context.Context, params contract.P
 		}
 
 		// 2. 创建 owner 用户（归属新租户）
-		user := &userdomain.User{
+		user := &contract.Account{
 			Username: params.Username,
 			Password: params.PasswordHash,
 			Email:    params.Email,
@@ -95,7 +97,7 @@ func (p *GormTenantProvisioner) Provision(ctx context.Context, params contract.P
 			Status:   1,
 			TenantID: tenant.ID,
 		}
-		if err := tx.Create(user).Error; err != nil {
+		if err := p.users.Create(txCtx, user); err != nil {
 			if isDuplicateKeyErr(err) {
 				return errors.Wrap(errors.CodeUserExists, "username already exists", err)
 			}
@@ -103,12 +105,20 @@ func (p *GormTenantProvisioner) Provision(ctx context.Context, params contract.P
 		}
 
 		// 3. 按模板初始化角色 + 权限绑定；owner 绑定 owner_role（缺省第一个角色）
-		ownerRoleID, err := provisionTemplateRoles(tx, p.cfg, tenant.ID)
+		rolesCfg := contract.AuthProvisioningConfig{Enabled: p.cfg.Enabled, OwnerRole: p.cfg.OwnerRole}
+		for _, role := range p.cfg.Roles {
+			r := contract.AuthProvisionRole{Name: role.Name, Description: role.Description}
+			for _, perm := range role.Permissions {
+				r.Permissions = append(r.Permissions, contract.AuthProvisionPermission{Resource: perm.Resource, Action: perm.Action})
+			}
+			rolesCfg.Roles = append(rolesCfg.Roles, r)
+		}
+		ownerRoleID, err := p.roles.ProvisionRoles(txCtx, tenant.ID, rolesCfg)
 		if err != nil {
 			return err
 		}
 		if ownerRoleID != 0 {
-			if err := tx.Exec("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", user.ID, ownerRoleID).Error; err != nil {
+			if err := p.roles.AssignRole(txCtx, user.ID, ownerRoleID); err != nil {
 				return err
 			}
 		}
@@ -140,41 +150,6 @@ func (p *GormTenantProvisioner) Provision(ctx context.Context, params contract.P
 		return nil, err
 	}
 	return result, nil
-}
-
-// provisionTemplateRoles 按模板创建角色并绑定全局权限，返回 owner 角色ID（0 = 无可绑定角色）。
-// owner_role 匹配模板角色名；未配置或缺省时绑定第一个角色。
-func provisionTemplateRoles(tx *gorm.DB, cfg ProvisioningConfig, tenantID uint64) (uint64, error) {
-	var ownerRoleID uint64
-	for _, template := range cfg.Roles {
-		role := roledomain.Role{
-			Name:        template.Name,
-			Description: template.Description,
-			Status:      1,
-			TenantID:    tenantID,
-		}
-		if err := tx.Create(&role).Error; err != nil {
-			return 0, err
-		}
-		for _, perm := range template.Permissions {
-			var gp roledomain.Permission
-			if err := tx.Where("resource = ? AND action = ?", perm.Resource, perm.Action).First(&gp).Error; err != nil {
-				if isRecordNotFound(err) {
-					continue // 模板权限未 seed，跳过不阻塞开通
-				}
-				return 0, err
-			}
-			if err := tx.Exec("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)", role.ID, gp.ID).Error; err != nil {
-				return 0, err
-			}
-		}
-		if template.Name == cfg.OwnerRole {
-			ownerRoleID = role.ID
-		} else if ownerRoleID == 0 {
-			ownerRoleID = role.ID
-		}
-	}
-	return ownerRoleID, nil
 }
 
 // generateTenantCode 自动生成租户编码（t + 12 位随机 hex），冲突重试最多 5 次

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"jimu/internal/capabilities/queue"
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/event"
@@ -37,7 +36,7 @@ func TestBridgeWorkerPublishesStrongTypeToBareTopic(t *testing.T) {
 		Payload:     payload,
 	})
 
-	err := BridgeWorker(bus)(context.Background(), string(evtPayload))
+	err := BridgeWorker(bus)(context.Background(), contract.OutboxMQMessage{Payload: string(evtPayload)})
 	assert.NoError(t, err)
 }
 
@@ -48,7 +47,7 @@ func TestBridgeWorkerUnknownTypeErrors(t *testing.T) {
 		EventType: "order.created",
 		Payload:   json.RawMessage(`{}`),
 	})
-	err := BridgeWorker(bus)(context.Background(), string(evtPayload))
+	err := BridgeWorker(bus)(context.Background(), contract.OutboxMQMessage{Payload: string(evtPayload)})
 	assert.Error(t, err)
 }
 
@@ -60,7 +59,7 @@ func TestBridgeWorkerConversionFailureErrors(t *testing.T) {
 		EventType: contract.EventUserCreated,
 		Payload:   json.RawMessage(`[1,2,3]`),
 	})
-	err := BridgeWorker(bus)(context.Background(), string(evtPayload))
+	err := BridgeWorker(bus)(context.Background(), contract.OutboxMQMessage{Payload: string(evtPayload)})
 	assert.Error(t, err)
 }
 
@@ -81,14 +80,4 @@ func TestEventBusBridgePublishesToBareTopic(t *testing.T) {
 		EventType: contract.EventUserCreated,
 		Payload:   payload,
 	})
-}
-
-func TestRegisterMQWorkersRegistersAll(t *testing.T) {
-	// queue 包全局 worker map 无导出清理；本测试只断言三个事件类型可注册后 GetWorker 命中，重复运行幂等
-	RegisterMQWorkers(event.New())
-	for _, et := range []string{"outbox:user.created", "outbox:user.updated", "outbox:user.deleted"} {
-		fn, ok := queue.GetWorker(et)
-		assert.True(t, ok, "worker %s not registered", et)
-		assert.NotNil(t, fn)
-	}
 }

@@ -8,8 +8,6 @@ import (
 	"log"
 	"time"
 
-	"jimu/internal/capabilities/encryption"
-	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/cache"
@@ -24,17 +22,17 @@ import (
 type UserService struct {
 	repo   domain.UserRepository
 	cache  cache.Cache
-	outbox *outbox.Outbox
-	cipher *encryption.Cipher
+	outbox contract.EventWriter
+	cipher contract.BlindIndexer
 }
 
 func NewUserService(repo domain.UserRepository, cache cache.Cache, deps ...interface{}) *UserService {
 	s := &UserService{repo: repo, cache: cache}
 	for _, dep := range deps {
 		switch d := dep.(type) {
-		case *outbox.Outbox:
+		case contract.EventWriter:
 			s.outbox = d
-		case *encryption.Cipher:
+		case contract.BlindIndexer:
 			s.cipher = d
 		}
 	}
@@ -109,7 +107,7 @@ func (s *UserService) publishUserCreated(ctx context.Context, user *domain.User)
 		log.Printf("user: marshal created event: %v", err)
 		return
 	}
-	if err := s.outbox.Add(ctx, nil, outbox.Event{
+	if err := s.outbox.WriteEvent(ctx, nil, contract.OutboxEvent{
 		AggregateID: fmt.Sprintf("user:%d", user.ID),
 		EventType:   contract.EventUserCreated,
 		Payload:     payload,
@@ -131,7 +129,7 @@ func (s *UserService) publishUserUpdated(ctx context.Context, id uint64) {
 		log.Printf("user: marshal updated event: %v", err)
 		return
 	}
-	if err := s.outbox.Add(ctx, nil, outbox.Event{
+	if err := s.outbox.WriteEvent(ctx, nil, contract.OutboxEvent{
 		AggregateID: fmt.Sprintf("user:%d", id),
 		EventType:   contract.EventUserUpdated,
 		Payload:     payload,
@@ -236,7 +234,7 @@ func (s *UserService) publishUserDeleted(ctx context.Context, id uint64) {
 		log.Printf("user: marshal deleted event: %v", err)
 		return
 	}
-	if err := s.outbox.Add(ctx, nil, outbox.Event{
+	if err := s.outbox.WriteEvent(ctx, nil, contract.OutboxEvent{
 		AggregateID: fmt.Sprintf("user:%d", id),
 		EventType:   contract.EventUserDeleted,
 		Payload:     payload,

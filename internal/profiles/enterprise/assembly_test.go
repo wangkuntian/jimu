@@ -25,12 +25,27 @@ func TestEnterpriseAssemblyIsSingleTenantWithoutMFA(t *testing.T) {
 }
 
 // TestEnterpriseAssemblyShape 名字集合 = 设计 §2 ③ 到仓库能力名的映射：minimal 的
-// user/access/auth + console/audit/oauth/dataops，非 catalog 取 minimal + storage。
+// user/access/auth + console/audit/oauth/dataops，非 catalog 取 minimal + storage/ws。
 func TestEnterpriseAssemblyShape(t *testing.T) {
 	require.ElementsMatch(t,
-		[]string{"user", "access", "auth", "console", "audit", "oauth", "dataops", "notification", "encryption", "storage"},
+		[]string{"user", "access", "auth", "console", "audit", "oauth", "dataops", "notification", "encryption", "storage", "ws"},
 		capabilityNames(Assembly()),
 	)
+}
+
+func TestEnterpriseWSBeforeConsole(t *testing.T) {
+	names := capabilityNames(Assembly())
+	wsIndex, consoleIndex := -1, -1
+	for i, name := range names {
+		if name == "ws" {
+			wsIndex = i
+		}
+		if name == "console" {
+			consoleIndex = i
+		}
+	}
+	require.GreaterOrEqual(t, wsIndex, 0)
+	require.Greater(t, consoleIndex, wsIndex)
 }
 
 // TestEnterpriseAssemblyModulesAreWired 每个条目都必须给出 Wire。

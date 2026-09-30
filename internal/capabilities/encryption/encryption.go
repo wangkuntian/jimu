@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"jimu/internal/contract"
 	"strings"
 )
 
@@ -25,6 +26,8 @@ const prefix = "enc:v1:"
 type Cipher struct {
 	key []byte
 }
+
+var _ contract.BlindIndexer = (*Cipher)(nil)
 
 // New 创建加密器。key 为空时返回明文模式的 Cipher（Encrypt 透传）。
 // 生产环境校验见 config.validate（encryption_key 非空需 ≥32 字节）。

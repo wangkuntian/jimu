@@ -1,8 +1,12 @@
 package db
 
 import (
+	"context"
+
 	"gorm.io/gorm"
 )
+
+type transactionKey struct{}
 
 // Transaction 执行事务
 func Transaction(db *gorm.DB, fn func(tx *gorm.DB) error) error {
@@ -29,4 +33,13 @@ func WithTx(db *gorm.DB, fn func(tx *gorm.DB) error) error {
 	}
 
 	return tx.Commit().Error
+}
+
+func WithTransaction(ctx context.Context, tx *gorm.DB) context.Context {
+	return context.WithValue(ctx, transactionKey{}, tx)
+}
+
+func TransactionFromContext(ctx context.Context) (*gorm.DB, bool) {
+	tx, ok := ctx.Value(transactionKey{}).(*gorm.DB)
+	return tx, ok && tx != nil
 }

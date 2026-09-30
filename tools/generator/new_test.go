@@ -92,8 +92,8 @@ func TestNewProjectCopiesKernelAndSelectedCapabilities(t *testing.T) {
 		assert.FileExists(t, filepath.Join(dir, p), "缺少必需产物 %s", p)
 	}
 
-	// S1 复制集：user/auth 的类型级残留也必须落地，否则生成项目编译不过。
-	for _, capName := range []string{"user", "access", "auth", "encryption", "notification", "outbox", "queue"} {
+	// S1 复制集：只包含已声明的能力和必要的 schema 依赖。
+	for _, capName := range []string{"user", "access", "auth", "encryption", "notification"} {
 		assert.FileExists(t, filepath.Join(dir, "internal/capabilities", capName, "wire.go"), "能力 %s 未复制", capName)
 	}
 	// 未选中能力零出现。
@@ -265,7 +265,7 @@ func TestNewProjectRejectsCollidingModule(t *testing.T) {
 func TestParseCapabilitySetClosureDoesNotDragMigrationOnlyIntoCode(t *testing.T) {
 	set, err := ParseCapabilitySet("", "user,access", "app")
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"user", "access", "outbox", "queue", "notification", "encryption", "tenant"}, set.Copy)
+	assert.ElementsMatch(t, []string{"user", "access", "tenant"}, set.Copy)
 	assert.Equal(t, []string{"tenant"}, set.MigrationOnly)
 	assert.Equal(t, set.Copy, slices.Sorted(slices.Values(set.Copy)), "Copy 必须排序且无重复")
 	assert.NotContains(t, set.Copy, "auth")

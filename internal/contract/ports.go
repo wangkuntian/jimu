@@ -4,8 +4,98 @@ package contract
 import (
 	"context"
 	"errors"
+	"io"
 	"time"
 )
+
+type BlindIndexer interface{ BlindIndex(string) string }
+
+type NotificationMessage struct {
+	Channel           string
+	To, Subject, Body string
+	TemplateID        string
+	Data, Metadata    map[string]string
+}
+type Notifier interface {
+	Dispatch(context.Context, NotificationMessage) error
+}
+
+type OutboxEvent struct {
+	AggregateID, EventType string
+	Payload                []byte
+}
+type EventWriter interface {
+	WriteEvent(context.Context, any, OutboxEvent) error
+}
+
+type Account struct {
+	ID        uint64    `json:"id"`
+	Username  string    `json:"username"`
+	Password  string    `json:"-"`
+	Email     string    `json:"email"`
+	Phone     string    `json:"phone"`
+	Status    int8      `json:"status"`
+	TenantID  uint64    `json:"tenant_id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type AccountRepository interface {
+	FindByID(context.Context, uint64) (*Account, error)
+	FindByUsername(context.Context, string) (*Account, error)
+	FindByEmailHash(context.Context, string) (*Account, error)
+	Create(context.Context, *Account) error
+	UpdatePassword(context.Context, uint64, string) error
+}
+
+type ProvisioningRoleStore interface {
+	ProvisionRoles(ctx context.Context, tenantID uint64, cfg AuthProvisioningConfig) (uint64, error)
+	AssignRole(ctx context.Context, userID, roleID uint64) error
+}
+
+type TenantProvisionerFactory interface {
+	Build(users AccountRepository, roles ProvisioningRoleStore) TenantProvisioner
+}
+
+const (
+	StoragePortName  = "storage"
+	UserinfoPortName = "user.info"
+)
+
+type AuthConfig struct {
+	JWTSecret, JWTPreviousSecret, Issuer     string
+	AccessExpireMin, RefreshExpireDay        int
+	PublicRegistration                       bool
+	LoginRateLimit, LoginRateWindowSec       int
+	RegisterRateLimit, RegisterRateWindowSec int
+	BreachCheckEnabled                       bool
+	TrustedDeviceDays                        int
+	Provisioning                             AuthProvisioningConfig
+	WebAuthn                                 AuthWebAuthnConfig
+}
+type AuthWebAuthnConfig struct {
+	Enabled             bool
+	RPDisplayName, RPID string
+	RPOrigins           []string
+	SessionTTLMin       int
+}
+type AuthProvisioningConfig struct {
+	Enabled   bool
+	OwnerRole string
+	Roles     []AuthProvisionRole
+}
+type AuthProvisionRole struct {
+	Name, Description string
+	Permissions       []AuthProvisionPermission
+}
+type AuthProvisionPermission struct{ Resource, Action string }
+
+// Storage is the subset of file storage used by uploadsec.
+type Storage interface {
+	Upload(ctx context.Context, key string, reader io.Reader, size int64, contentType string) error
+	Delete(ctx context.Context, key string) error
+	URL(key string) string
+}
 
 // ErrNotFound 端口查询目标不存在（由端口实现返回，消费方据此映射语义）。
 var ErrNotFound = errors.New("record not found")

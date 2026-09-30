@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"jimu/internal/capabilities/storage"
+	"jimu/internal/contract"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
@@ -21,7 +21,7 @@ import (
 
 // UploadHandler 通用文件上传处理器
 type UploadHandler struct {
-	storage    storage.Storage
+	storage    contract.Storage
 	maxSize    int64   // 最大文件大小（字节）
 	allowTypes string  // 允许的 MIME 前缀，逗号分隔，空表示允许所有
 	basePrefix string  // 存储路径前缀，如 "uploads"
@@ -30,7 +30,7 @@ type UploadHandler struct {
 
 // UploadConfig 上传处理器配置
 type UploadConfig struct {
-	Storage    storage.Storage
+	Storage    contract.Storage
 	MaxSize    int64   // 默认 10MB
 	AllowTypes string  // 如 "image/,application/pdf"
 	BasePrefix string  // 默认 "uploads"

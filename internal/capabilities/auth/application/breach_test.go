@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"jimu/internal/capabilities/encryption"
-	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/tenant"
@@ -55,7 +53,7 @@ func (f *fakeProvisioner) called() []contract.ProvisionRequest {
 
 func newBreachService(t *testing.T, checker *fakeBreachChecker) (*AuthService, *fakeUserRepo) {
 	t.Helper()
-	repo := &fakeUserRepo{users: map[string]*userdomain.User{}}
+	repo := &fakeUserRepo{users: map[string]*contract.Account{}}
 	svc := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, checker)
 	return svc, repo
 }
@@ -81,7 +79,7 @@ func TestRegisterProvisionedRejectsBreachedPassword(t *testing.T) {
 	ctx := context.Background()
 	checker := &fakeBreachChecker{breached: map[string]bool{"password123": true}}
 	provisioner := &fakeProvisioner{}
-	repo := &fakeUserRepo{users: map[string]*userdomain.User{}}
+	repo := &fakeUserRepo{users: map[string]*contract.Account{}}
 	svc := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7),
 		newFakeSessionStore(), nil, 30, checker, provisioner)
 
@@ -122,12 +120,12 @@ func TestResetPasswordRejectsBreachedPassword(t *testing.T) {
 	ctx := context.Background()
 	_, rclient := newResetRedis(t)
 	resetStore := NewResetStore(rclient, 15*time.Minute)
-	cipher := encryption.New(resetTestKey)
+	cipher := testIndexer{}
 
-	repo := &fakeUserRepo{users: map[string]*userdomain.User{}}
+	repo := &fakeUserRepo{users: map[string]*contract.Account{}}
 	alice := userWithPassword(t, 42, "alice", "correct", 1)
 	repo.users["alice"] = alice
-	repo.findByEmailHash = func(_ context.Context, hash string) (*userdomain.User, error) {
+	repo.findByEmailHash = func(_ context.Context, hash string) (*contract.Account, error) {
 		if hash != cipher.BlindIndex("alice@example.com") {
 			return nil, gorm.ErrRecordNotFound
 		}

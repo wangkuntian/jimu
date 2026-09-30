@@ -7,7 +7,26 @@ import (
 	"strings"
 
 	"jimu/internal/config"
+	"jimu/internal/contract"
 )
+
+func (c Config) PortView() contract.AuthConfig {
+	v := contract.AuthConfig{JWTSecret: c.JWTSecret, JWTPreviousSecret: c.JWTPreviousSecret, Issuer: c.Issuer,
+		AccessExpireMin: c.AccessExpireMin, RefreshExpireDay: c.RefreshExpireDay, PublicRegistration: c.PublicRegistration,
+		LoginRateLimit: c.LoginRateLimit, LoginRateWindowSec: c.LoginRateWindowSec,
+		RegisterRateLimit: c.RegisterRateLimit, RegisterRateWindowSec: c.RegisterRateWindowSec,
+		BreachCheckEnabled: c.BreachCheckEnabled, TrustedDeviceDays: c.TrustedDeviceDays,
+		WebAuthn:     contract.AuthWebAuthnConfig{Enabled: c.WebAuthn.Enabled, RPDisplayName: c.WebAuthn.RPDisplayName, RPID: c.WebAuthn.RPID, RPOrigins: append([]string(nil), c.WebAuthn.RPOrigins...), SessionTTLMin: c.WebAuthn.SessionTTLMin},
+		Provisioning: contract.AuthProvisioningConfig{Enabled: c.Provisioning.Enabled, OwnerRole: c.Provisioning.OwnerRole}}
+	for _, r := range c.Provisioning.Roles {
+		pr := contract.AuthProvisionRole{Name: r.Name, Description: r.Description}
+		for _, p := range r.Permissions {
+			pr.Permissions = append(pr.Permissions, contract.AuthProvisionPermission{Resource: p.Resource, Action: p.Action})
+		}
+		v.Provisioning.Roles = append(v.Provisioning.Roles, pr)
+	}
+	return v
+}
 
 // ConfigKey 本能力在 app.yaml 中的配置段键（原 config.AuthConfig，P2.1 下沉）。
 //

@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"time"
 
-	"jimu/internal/capabilities/auth/domain"
 	oauthdomain "jimu/internal/capabilities/oauth/domain"
 	oauthplatform "jimu/internal/capabilities/oauth/provider"
-	userdomain "jimu/internal/capabilities/user/domain"
+	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
+	dbctx "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 
@@ -37,11 +37,12 @@ type OAuthService struct {
 	providers   map[string]oauthplatform.Provider
 	rdb         redistore.Client
 	db          *gorm.DB
+	users       contract.AccountRepository
 	accessMin   int
 }
 
 // NewOAuthService 创建 OAuth 服务
-func NewOAuthService(bindingRepo oauthdomain.BindingRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, providers map[string]oauthplatform.Provider, rdb redistore.Client, db *gorm.DB, accessMin int) *OAuthService {
+func NewOAuthService(bindingRepo oauthdomain.BindingRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, providers map[string]oauthplatform.Provider, rdb redistore.Client, db *gorm.DB, accessMin int, users contract.AccountRepository) *OAuthService {
 	return &OAuthService{
 		bindingRepo: bindingRepo,
 		jwtUtil:     jwtUtil,
@@ -49,6 +50,7 @@ func NewOAuthService(bindingRepo oauthdomain.BindingRepository, jwtUtil *auth.JW
 		providers:   providers,
 		rdb:         rdb,
 		db:          db,
+		users:       users,
 		accessMin:   accessMin,
 	}
 }
@@ -95,7 +97,7 @@ func (s *OAuthService) consumeState(ctx context.Context, state, providerName str
 }
 
 // Login 处理 OAuth 回调，匹配/创建用户并签发 token
-func (s *OAuthService) Login(ctx context.Context, providerName, code, state string) (*domain.TokenPair, error) {
+func (s *OAuthService) Login(ctx context.Context, providerName, code, state string) (*contract.TokenPair, error) {
 	if err := s.consumeState(ctx, state, providerName); err != nil {
 		return nil, err
 	}
@@ -143,7 +145,7 @@ func (s *OAuthService) Login(ctx context.Context, providerName, code, state stri
 		return nil, errors.Wrap(errors.CodeInternalError, "create session", err)
 	}
 
-	return &domain.TokenPair{
+	return &contract.TokenPair{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		ExpiresIn:    s.accessMin * 60,
@@ -161,19 +163,19 @@ func (s *OAuthService) createUserWithBinding(ctx context.Context, providerName s
 	if err != nil {
 		return 0, err
 	}
-	user := &userdomain.User{
+	user := &contract.Account{
 		Username: username,
 		Password: string(hashed),
 		Status:   1,
 		TenantID: tenant.DefaultTenantID,
 	}
 	var userID uint64
-	if err := s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(user).Error; err != nil {
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.users.Create(dbctx.WithTransaction(ctx, tx), user); err != nil {
 			return err
 		}
 		userID = user.ID
-		return tx.Create(&oauthdomain.OAuthBinding{
+		return tx.WithContext(ctx).Create(&oauthdomain.OAuthBinding{
 			UserID:   userID,
 			Provider: providerName,
 			Subject:  info.Subject,
@@ -194,11 +196,11 @@ func refreshTTL(claims auth.Claims) time.Duration {
 
 // resolveTenantID 查询用户归属租户；未归属（0）、db 不可用或查询失败时归默认租户
 func (s *OAuthService) resolveTenantID(ctx context.Context, userID uint64) uint64 {
-	if s.db == nil {
+	if s.users == nil {
 		return tenant.DefaultTenantID
 	}
-	var u userdomain.User
-	if err := s.db.WithContext(ctx).Select("id", "tenant_id").First(&u, userID).Error; err != nil {
+	u, err := s.users.FindByID(ctx, userID)
+	if err != nil || u == nil {
 		return tenant.DefaultTenantID
 	}
 	if u.TenantID == 0 {

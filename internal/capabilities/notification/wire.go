@@ -52,15 +52,15 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 		SignSecret: notifCfg.Notification.Webhook.SignSecret,
 	}, ctx.HTTPClient()))
 
-	if err := ctx.Provide(PortName, notifier); err != nil {
+	if err := ctx.Provide(PortName, contractDispatcher{dispatcher: notifier}); err != nil {
 		return nil, fmt.Errorf("provide notification port: %w", err)
 	}
 	ctx.RegisterComponent(NewHubComponent(wsHub))
 
 	// 注册全局事件处理器：将领域事件桥接到通知系统
 	ctx.EventBus().Subscribe(contract.UserCreatedEmailNotification, func(payload interface{}) {
-		if msg, ok := payload.(Message); ok {
-			if err := notifier.Dispatch(context.Background(), msg); err != nil {
+		if msg, ok := payload.(contract.NotificationMessage); ok {
+			if err := (contractDispatcher{dispatcher: notifier}).Dispatch(context.Background(), msg); err != nil {
 				log.Errorw("notification dispatch failed", "error", err.Error())
 			}
 		}

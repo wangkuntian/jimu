@@ -1,9 +1,10 @@
 package interfaces
 
 import (
+	"encoding/json"
 	"strconv"
 
-	"jimu/internal/capabilities/ws"
+	"jimu/internal/contract"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
@@ -12,42 +13,45 @@ import (
 
 // AdminWSHandler WebSocket 管理端点
 type AdminWSHandler struct {
-	hub *ws.ClientHub
-	pm  *ws.PresenceManager
+	ws contract.AdminWebSocket
 }
 
 // NewAdminWSHandler 创建 WebSocket 管理 handler
-func NewAdminWSHandler(hub *ws.ClientHub, pm *ws.PresenceManager) *AdminWSHandler {
-	return &AdminWSHandler{hub: hub, pm: pm}
+func NewAdminWSHandler(port contract.AdminWebSocket) *AdminWSHandler {
+	return &AdminWSHandler{ws: port}
 }
 
 // Push 通过 HTTP 推送 WebSocket 消息（fallback）
 func (h *AdminWSHandler) Push(c *gin.Context) {
 	var req struct {
-		UserID  uint64      `json:"user_id"`
-		Type    string      `json:"type" binding:"required"`
-		Channel string      `json:"channel"`
-		Payload interface{} `json:"payload"`
+		UserID  uint64          `json:"user_id"`
+		Type    string          `json:"type" binding:"required"`
+		Channel string          `json:"channel"`
+		Payload json.RawMessage `json:"payload"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	if h.hub == nil {
+	if h.ws == nil {
 		response.Fail(c, errors.New(errors.CodeInternalError, "websocket hub not initialized"))
 		return
 	}
-	msg, err := ws.NewMessage(req.Type, req.Channel, req.Payload)
-	if err != nil {
-		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
-		return
+	if req.Payload == nil {
+		req.Payload = json.RawMessage("null")
 	}
+	msg := contract.AdminWebSocketMessage{Type: req.Type, Channel: req.Channel, Payload: req.Payload}
+	var sendErr error
 	if req.UserID > 0 {
-		h.hub.SendToUser(req.UserID, msg)
+		sendErr = h.ws.SendToUser(req.UserID, msg)
 	} else if req.Channel != "" {
-		h.hub.BroadcastToChannel(req.Channel, msg)
+		sendErr = h.ws.BroadcastToChannel(req.Channel, msg)
 	} else {
-		h.hub.Broadcast(msg)
+		sendErr = h.ws.Broadcast(msg)
+	}
+	if sendErr != nil {
+		response.Fail(c, errors.New(errors.CodeInvalidParam, sendErr.Error()))
+		return
 	}
 	response.OK(c, gin.H{"sent": true})
 }
@@ -59,29 +63,26 @@ func (h *AdminWSHandler) Presence(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid user id"))
 		return
 	}
-	if h.pm == nil {
+	if h.ws == nil {
 		response.Fail(c, errors.New(errors.CodeInternalError, "presence manager not initialized"))
 		return
 	}
-	status := ws.StatusOffline
-	conns := 0
-	if p, ok := h.pm.GetPresence(userID); ok {
+	status := "offline"
+	if p, ok := h.ws.Presence(userID); ok {
 		status = p.Status
 	}
-	if h.hub != nil {
-		conns = h.hub.GetUserConnections(userID)
-	}
+	conns := h.ws.Connections(userID)
 	response.OK(c, gin.H{"user_id": userID, "status": status, "connections": conns})
 }
 
 // OnlineUsers 在线用户列表
 func (h *AdminWSHandler) OnlineUsers(c *gin.Context) {
-	if h.pm == nil {
+	if h.ws == nil {
 		response.Fail(c, errors.New(errors.CodeInternalError, "presence manager not initialized"))
 		return
 	}
 	response.OK(c, gin.H{
-		"online_count": h.pm.OnlineCount(),
-		"users":        h.pm.OnlineUsers(),
+		"online_count": h.ws.OnlineCount(),
+		"users":        h.ws.OnlineUsers(),
 	})
 }

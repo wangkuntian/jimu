@@ -22,7 +22,9 @@ import (
 	mfadomain "jimu/internal/capabilities/mfa/domain"
 	passkeydomain "jimu/internal/capabilities/passkey/domain"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
+	usercap "jimu/internal/capabilities/user"
 	userdomain "jimu/internal/capabilities/user/domain"
+	userinfra "jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/access"
@@ -445,7 +447,7 @@ func TestAuthRateLimit(t *testing.T) {
 		PublicRegistration: true,
 		LoginRateLimit:     3,
 		LoginRateWindowSec: 60,
-	}, false, nil)
+	}, false, nil, usercap.NewAccountRepository(userinfra.NewMysqlRepository(gdb)))
 	router := gin.New()
 	authMod.RegisterHTTP(router)
 
