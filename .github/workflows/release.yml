@@ -10,47 +10,18 @@ permissions:
 
 env:
   GO_VERSION: "1.26.6"
-  GOLANGCI_LINT_VERSION: "v2.7.2"
 
-# tag 发布门禁：与 PR 路径跑**同一批检查**，但按 job 并行（`needs` 把发布卡在全部通过之后）。
-#
-# 为什么不再把 `make release-check` 塞进单个 job 串行跑：任何**单点 hang 都会吃掉整段墙钟**。
-# 实测（v0.3.0 首发，run 36519069487）：一个用例卡住 51 分 7 秒 → 包级 `-timeout 60m` → 整步
-# 69m17s 后失败，后续 postgres 冒烟/覆盖率/race/性能门禁**全部 skipped**。拆成并行 job 后墙钟
-# 从「求和」变成「取最大」，且单点失败不再掩盖其余结论。
-#
-# 分工与 ci.yml / ci-scaffold.yml 对齐（tag 与 PR 跑同一批命令，只是编排不同）：
-#   gates           ← ci.yml 的 Lint + Capability Gates，另加 swagger/smoke/build/govulncheck
-#   test-suite      ← ci.yml 的 Test（**以带覆盖率的一次为准**，见下方「不再重复跑套件」）
-#   race            ← ci.yml 的 Race Detector（复用同一份 scripts/race_shards.sh 分片与并集守卫）
-#   postgres-smoke  ← ci.yml 的 postgres 冒烟步骤
-#   scaffold-matrix ← ci-scaffold.yml 的 Scaffold Matrix（tag 上**无条件**跑，不依赖 heavy-ci 标签）
-#   bench           ← ci.yml 的 Performance Regression
-#   container-image ← 镜像构建 + Trivy 扫描 + SBOM
-#   compose-smoke   ← 隔离 Compose 运行时安全冒烟
-#   api-smoke       ← 隔离 API 契约冒烟
-# 后三项**与门禁并行**（原先 container-security 被 `needs: [全部门禁]` 排在最后，实测它是长杆：
-# 干跑 18.9 分钟，把并行省下的门禁时间又吃回去）。它们彼此也独立 —— 两个冒烟脚本各自
-# `compose up -d --build`（随机 project 名、专用端口 18080/18081），不依赖 container-image 的镜像。
-# 构建缓存沿用 ci.yml / ci-scaffold.yml 的**同 key 前缀**（gocache-*、scaffold-gocache-v1），
-# 因此 tag 运行能命中 PR 轮存下的快照，不必冷跑。
-#
-# 不再重复跑套件与冒烟：原 Quality Gate 在同一 job 里跑了 `test`（来自 `make release-check`）、
-# `test-cover`、`test-race` **三遍全量套件**，且 `make compose-check` 与 container-security
-# 把同一对冒烟脚本跑了两遍；现在套件只跑两遍（覆盖率与 `-race` 插桩各有不可替代的用途）、
-# 冒烟只跑一遍。
+# tag 只负责发布已经验证过的 master tip。
+# 发布候选的常规门禁与重型 Scaffold Matrix 由 release/* → master PR 的 required checks 承担；
+# 这里拒绝不是当前 master tip 的 tag，避免绕过候选 PR 直接发布旧提交或分支提交。
 jobs:
-  # 静态门禁 + 能力/形态门禁 + 报告门禁 + 非 DB 的产物检查：都不需要 DB/Redis
-  # （profiles-check 未设 JIMU_PROFILES_SMOKE 时逐形态 SKIP 并成功退出，所以这里不挂 services；
-  #  两个隔离冒烟已拆成 compose-smoke / api-smoke 与本 job 并行，不再放在这里）。
-  gates:
-    name: Gates
+  release:
+    name: Publish Release
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
-          # swagger-check 用 git diff 判定 docs/openapi 是否最新
           fetch-depth: 0
 
       - name: Set up Go
@@ -58,388 +29,45 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: "♻️ Restore the Go build cache"
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/gocache-gates
-          key: gocache-gates-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
-          restore-keys: |
-            gocache-gates-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
-            gocache-gates-${{ runner.os }}-
-
-      - name: "🛠️ Point GOCACHE at the rolling build cache"
-        # job 级 env 里拿不到 runner 上下文（actionlint: context "runner" is not allowed here），
-        # 所以在这一步写进 $GITHUB_ENV —— 它对其后的所有步骤生效
-        run: echo "GOCACHE=${{ runner.temp }}/gocache-gates" >> "$GITHUB_ENV"
-
-      - name: "🧹 golangci-lint"
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: ${{ env.GOLANGCI_LINT_VERSION }}
-          args: --timeout=5m
-          install-mode: goinstall
-
-      - name: "🔍 fmt / vet / log / capabilities / report / swagger / smoke scripts"
-        run: >-
-          make fmt-check vet check-log-usage check-capabilities profiles-check
-          compose-report-check swagger-check smoke-check build govulncheck
-
-  # 两个隔离冒烟各自 `compose up -d --build`（随机 project 名、专用端口 18080/18081），
-  # 既不依赖 container-image 构建的镜像、也互不干扰，因此各自独立成 job 与门禁并行。
-  # 注意：它们**不再**出现在 gates 里 —— 原设计把同一对脚本跑了两遍（`make compose-check`
-  # 一次 + container-security 一次），现在只跑一遍。
-  compose-smoke:
-    name: Isolated Compose smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: "🐳 Isolated Compose runtime security smoke"
-        run: ./scripts/test_runtime_security.sh
-
-  api-smoke:
-    name: Isolated API contract smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: "📜 Isolated API contract smoke"
-        run: ./scripts/smoke_api_contract.sh
-
-  test-suite:
-    name: Test (+ coverage)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      mariadb:
-        image: mariadb:12.1.2-noble
-        env:
-          MARIADB_ROOT_PASSWORD: root
-          MARIADB_DATABASE: jimu_test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mariadb-admin ping --silent"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: jimu_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres -d jimu_test"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-      redis:
-        image: redis:8.4.0-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd="redis-cli ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: "♻️ Restore the Go build cache"
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/gocache-cover
-          key: gocache-cover-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
-          restore-keys: |
-            gocache-cover-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
-            gocache-cover-${{ runner.os }}-
-
-      - name: "🛠️ Point GOCACHE at the rolling build cache"
-        run: echo "GOCACHE=${{ runner.temp }}/gocache-cover" >> "$GITHUB_ENV"
-
-      - name: "📦 Install coverage tools"
-        run: sudo apt-get update && sudo apt-get install -y bc
-
-      - name: "🧪 Test with coverage"
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: "3306"
-          DB_USER: root
-          DB_PASSWORD: root
-          DB_NAME: jimu_test
-        run: make test-cover
-
-      - name: "📊 Check coverage threshold"
-        run: make test-coverage-check
-
-  # race 的分片清单唯一来源是 scripts/race_shards.sh（含「并集 == 全集」守卫），
-  # 这里把它转成矩阵，避免 workflow 与脚本两处漂移 —— 与 ci.yml 同一做法。
-  race-plan:
-    name: Race plan
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      shards: ${{ steps.plan.outputs.shards }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: "🧭 Emit the race shard matrix"
-        id: plan
-        run: echo "shards=$(bash scripts/race_shards.sh shards-json)" >> "$GITHUB_OUTPUT"
-
-  race:
-    name: Race Detector (${{ matrix.shard }})
-    needs: race-plan
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: ${{ fromJSON(needs.race-plan.outputs.shards) }}
-    services:
-      mariadb:
-        image: mariadb:12.1.2-noble
-        env:
-          MARIADB_ROOT_PASSWORD: root
-          MARIADB_DATABASE: jimu_test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mariadb-admin ping --silent"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: jimu_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres -d jimu_test"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-      redis:
-        image: redis:8.4.0-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd="redis-cli ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: "♻️ Restore the Go build cache"
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/gocache-race
-          key: gocache-race-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
-          restore-keys: |
-            gocache-race-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
-            gocache-race-${{ runner.os }}-
-
-      - name: "🛠️ Point GOCACHE at the rolling build cache"
-        run: echo "GOCACHE=${{ runner.temp }}/gocache-race" >> "$GITHUB_ENV"
-
-      - name: "🏎️ Race tests (${{ matrix.shard }})"
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: "3306"
-          DB_USER: root
-          DB_PASSWORD: root
-          DB_NAME: jimu_test
-        run: bash scripts/race_shards.sh run ${{ matrix.shard }}
-
-  postgres-smoke:
-    name: PostgreSQL migration smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: jimu_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres -d jimu_test"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: "🐘 Run postgres migration smoke"
-        env:
-          DB_DRIVER: postgres
-          DB_HOST: 127.0.0.1
-          DB_PORT: "5432"
-          DB_USER: postgres
-          DB_PASSWORD: postgres
-          DB_NAME: jimu_test
-        # 与 ci.yml 的「Run postgres migration smoke」同一条命令。`-run TestPostgresMigrationUpDown`
-        # 曾是一个**不存在的测试名**：go test 匹配不到用例会打印 `ok … [no tests to run]` 并 exit 0，
-        # 于是这一步「绿」了很久却从未真正跑过 PostgreSQL 迁移。名字必须与真实用例一致。
-        run: go test ./internal/kernel/db/... -run TestMigrationIntegration -v
-
-  # 重型脚手架矩阵：tag 上无条件跑（发布不能依赖「有没有人打标签」）。
-  # **不注入 DB_*/Redis 环境**：生成项目里的集成测试按「库可达就真跑、否则跳过」决定行为，
-  # 而矩阵会并行生成十几个项目 —— 继承外界 DB_* 会让它们各自对同一个库跑 goose 迁移并互相撞车
-  # （实测 `Error 1060 Duplicate column name 'totp_secret'`，10 个选区全红）。测试侧已改为最小显式
-  # env 收口（tools/generator 的两道守卫钉住），这里也不再注入，两侧都不给泄漏留口子。
-  scaffold-matrix:
-    name: Scaffold Matrix
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      # 与 ci-scaffold.yml 的 Scaffold Matrix job 同源（同 path、同滚动 key 规范、同 restore-keys），
-      # tag 发布能命中 PR/分支轮存下的快照。bump 规则：ci-scaffold.yml 递增 `-v1` 时这里同步递增。
-      - name: "🗂️ Restore the scaffold GOCACHE (shared with ci-scaffold.yml)"
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/scaffold-gocache
-          key: scaffold-gocache-v1-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
-          restore-keys: |
-            scaffold-gocache-v1-${{ runner.os }}-${{ hashFiles('go.sum') }}-
-            scaffold-gocache-v1-${{ runner.os }}-
-
-      - name: "🏗️ Heavy scaffold matrix"
-        # JIMU_TEST_GOCACHE 指向恢复出来的缓存目录，命中时才是热跑；
-        # 首次发布是冷跑，故这里显式给足 timeout（go test 自身另有 -timeout 60m）。
-        env:
-          JIMU_TEST_GOCACHE: ${{ runner.temp }}/scaffold-gocache
-        run: make test-scaffold-matrix
-
-  bench:
-    name: Performance Regression
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: "⏱️ Run performance gate"
-        run: scripts/bench_ci.sh --absolute
-
-  # 镜像构建 + 漏洞扫描 + SBOM：与门禁**并行**跑（原先被 `needs: [全部门禁]` 排在最后，
-  # 实测它是发布路径的长杆 —— 干跑 18.9 分钟，把并行省下的门禁时间又吃回去）。
-  # 它只被 release job 依赖：安全不过就不发布，但不必等门禁先跑完。
-  container-image:
-    name: Container Image + SBOM
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Build release image
-        run: docker build -t jimu:${{ github.sha }} .
-
-      - name: Scan release image
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: jimu:${{ github.sha }}
-          format: table
-          exit-code: '1'
-          ignore-unfixed: true
-          severity: CRITICAL,HIGH
-
-      - name: Generate SBOM
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: jimu:${{ github.sha }}
-          format: cyclonedx
-          output: jimu-sbom.json
-
-      - name: Upload SBOM
-        uses: actions/upload-artifact@v7
-        with:
-          name: sbom
-          path: jimu-sbom.json
-
-  release:
-    name: Publish Release
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    # 发布同时取决于：全部门禁 + 镜像安全扫描/SBOM + 两个隔离冒烟。
-    # 这些之间彼此独立、全部并行跑，所以这里的 needs 只是「全部都得绿」，不构成串行等待。
-    needs:
-      - gates
-      - test-suite
-      - race
-      - postgres-smoke
-      - scaffold-matrix
-      - bench
-      - container-image
-      - compose-smoke
-      - api-smoke
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
+      - name: Verify tag points to current master tip
+        run: |
+          git fetch --no-tags origin master
+          tag_sha=$(git rev-parse "refs/tags/${GITHUB_REF_NAME}^{commit}")
+          master_sha=$(git rev-parse "origin/master^{commit}")
+          if [ "$tag_sha" != "$master_sha" ]; then
+            echo "Tag ${GITHUB_REF_NAME} points to ${tag_sha}, but origin/master is ${master_sha}."
+            echo "Create the release tag only after the release candidate PR has merged."
+            exit 1
+          fi
+          echo "${GITHUB_REF_NAME} matches origin/master at ${master_sha}."
 
       - name: Build release binaries
         run: |
-          GOOS=linux GOARCH=amd64 go build -o bin/jimu-linux-amd64 cmd/server/main.go
-          GOOS=linux GOARCH=arm64 go build -o bin/jimu-linux-arm64 cmd/server/main.go
-          GOOS=darwin GOARCH=amd64 go build -o bin/jimu-darwin-amd64 cmd/server/main.go
-          GOOS=darwin GOARCH=arm64 go build -o bin/jimu-darwin-arm64 cmd/server/main.go
+          mkdir -p bin
+          GOOS=linux GOARCH=amd64 go build -o bin/jimu-linux-amd64 ./cmd/server
+          GOOS=linux GOARCH=arm64 go build -o bin/jimu-linux-arm64 ./cmd/server
+          GOOS=darwin GOARCH=amd64 go build -o bin/jimu-darwin-amd64 ./cmd/server
+          GOOS=darwin GOARCH=arm64 go build -o bin/jimu-darwin-arm64 ./cmd/server
 
       - name: Read release notes
         id: notes
         run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          VERSION=${GITHUB_REF_NAME}
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           NOTES_FILE="docs/releases/${VERSION}.md"
           if [ -f "$NOTES_FILE" ]; then
-            echo "body<<EOF" >> $GITHUB_OUTPUT
-            cat "$NOTES_FILE" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            {
+              echo "body<<EOF"
+              cat "$NOTES_FILE"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "::warning::Release notes file not found: $NOTES_FILE, falling back to auto-generated changelog"
-            echo "body<<EOF" >> $GITHUB_OUTPUT
-            echo "See CHANGELOG.md for details." >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            {
+              echo "body<<EOF"
+              echo "See CHANGELOG.md for details."
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create Release
