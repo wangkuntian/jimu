@@ -12,7 +12,7 @@ func validDocument() Document {
 		SchemaVersion: 1,
 		Framework:     Framework{Module: "jimu", Version: "v0.3.3", Commit: "744c7a3"},
 		Selection:     Selection{Shape: "app", Profile: "minimal", Capabilities: []string{"tenant", "user"}},
-		Copy:          []CopyAction{{Source: "internal/kernel", Destination: "internal/kernel"}},
+		Copy:          []CopyAction{{Source: "internal/kernel", Destination: "internal/kernel", Include: []string{}, Exclude: []string{}}},
 		Report:        ReportSpec{Name: "minimal", Capabilities: []string{"tenant", "user"}},
 	}
 }

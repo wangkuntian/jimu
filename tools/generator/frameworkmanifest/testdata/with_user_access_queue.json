@@ -1,0 +1,1137 @@
+{
+  "schema_version": 1,
+  "framework": {
+    "module": "jimu",
+    "version": "dev",
+    "commit": "\u003ccommit\u003e"
+  },
+  "selection": {
+    "shape": "app",
+    "profile": "",
+    "capabilities": [
+      "user",
+      "access",
+      "queue"
+    ],
+    "drivers": {
+      "queue": [
+        "redis"
+      ]
+    }
+  },
+  "capabilities": [
+    {
+      "name": "user",
+      "requires": null,
+      "soft_requires": [
+        "access",
+        "tenant"
+      ],
+      "migration_only": false,
+      "domain_only": false,
+      "owns": [
+        "users"
+      ],
+      "configs": null,
+      "permissions": [
+        {
+          "name": "用户列表",
+          "resource": "/api/v1/users",
+          "action": "GET"
+        },
+        {
+          "name": "用户创建",
+          "resource": "/api/v1/users",
+          "action": "POST"
+        },
+        {
+          "name": "用户详情",
+          "resource": "/api/v1/users/*",
+          "action": "GET"
+        },
+        {
+          "name": "用户修改",
+          "resource": "/api/v1/users/*",
+          "action": "PUT"
+        },
+        {
+          "name": "用户删除",
+          "resource": "/api/v1/users/*",
+          "action": "DELETE"
+        }
+      ],
+      "mount": "protected",
+      "migrations": [
+        "internal/capabilities/user/migrations/mysql/001_users.sql",
+        "internal/capabilities/user/migrations/mysql/004_user_totp.sql",
+        "internal/capabilities/user/migrations/mysql/008_user_version.sql"
+      ],
+      "drivers": null,
+      "assets": null
+    },
+    {
+      "name": "access",
+      "requires": [
+        "user"
+      ],
+      "soft_requires": [
+        "tenant"
+      ],
+      "migration_only": false,
+      "domain_only": false,
+      "owns": [
+        "roles",
+        "permissions",
+        "role_permissions",
+        "user_roles"
+      ],
+      "configs": null,
+      "permissions": [
+        {
+          "name": "角色列表",
+          "resource": "/api/v1/roles",
+          "action": "GET"
+        },
+        {
+          "name": "角色创建",
+          "resource": "/api/v1/roles",
+          "action": "POST"
+        },
+        {
+          "name": "角色详情",
+          "resource": "/api/v1/roles/*",
+          "action": "GET"
+        },
+        {
+          "name": "角色修改",
+          "resource": "/api/v1/roles/*",
+          "action": "PUT"
+        },
+        {
+          "name": "角色删除",
+          "resource": "/api/v1/roles/*",
+          "action": "DELETE"
+        },
+        {
+          "name": "角色分配权限",
+          "resource": "/api/v1/roles/*/permissions",
+          "action": "POST"
+        },
+        {
+          "name": "权限列表",
+          "resource": "/api/v1/permissions",
+          "action": "GET"
+        },
+        {
+          "name": "权限创建",
+          "resource": "/api/v1/permissions",
+          "action": "POST"
+        },
+        {
+          "name": "权限详情",
+          "resource": "/api/v1/permissions/*",
+          "action": "GET"
+        },
+        {
+          "name": "权限修改",
+          "resource": "/api/v1/permissions/*",
+          "action": "PUT"
+        },
+        {
+          "name": "权限删除",
+          "resource": "/api/v1/permissions/*",
+          "action": "DELETE"
+        }
+      ],
+      "mount": "protected",
+      "migrations": [
+        "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
+        "internal/capabilities/access/migrations/mysql/008_role_version.sql"
+      ],
+      "drivers": null,
+      "assets": null
+    },
+    {
+      "name": "tenant",
+      "requires": [
+        "user",
+        "access"
+      ],
+      "soft_requires": null,
+      "migration_only": true,
+      "domain_only": false,
+      "owns": [
+        "tenants",
+        "tenant_plans"
+      ],
+      "configs": null,
+      "permissions": [
+        {
+          "name": "租户列表",
+          "resource": "/api/v1/tenants",
+          "action": "GET"
+        },
+        {
+          "name": "租户创建",
+          "resource": "/api/v1/tenants",
+          "action": "POST"
+        },
+        {
+          "name": "租户详情",
+          "resource": "/api/v1/tenants/*",
+          "action": "GET"
+        },
+        {
+          "name": "租户修改",
+          "resource": "/api/v1/tenants/*",
+          "action": "PUT"
+        },
+        {
+          "name": "租户删除",
+          "resource": "/api/v1/tenants/*",
+          "action": "DELETE"
+        },
+        {
+          "name": "套餐列表",
+          "resource": "/api/v1/tenant-plans",
+          "action": "GET"
+        },
+        {
+          "name": "套餐创建",
+          "resource": "/api/v1/tenant-plans",
+          "action": "POST"
+        },
+        {
+          "name": "套餐修改",
+          "resource": "/api/v1/tenant-plans/*",
+          "action": "PUT"
+        },
+        {
+          "name": "套餐删除",
+          "resource": "/api/v1/tenant-plans/*",
+          "action": "DELETE"
+        }
+      ],
+      "mount": "protected",
+      "migrations": [
+        "internal/capabilities/tenant/migrations/mysql/005_tenants.sql",
+        "internal/capabilities/tenant/migrations/mysql/008_tenant_version.sql",
+        "internal/capabilities/tenant/migrations/mysql/014_tenant_plans.sql"
+      ],
+      "drivers": null,
+      "assets": null
+    },
+    {
+      "name": "queue",
+      "requires": null,
+      "soft_requires": null,
+      "migration_only": false,
+      "domain_only": false,
+      "owns": [
+        "jobs",
+        "job_history",
+        "dead_letters",
+        "scheduled_jobs"
+      ],
+      "configs": [
+        "queue",
+        "scheduler"
+      ],
+      "permissions": null,
+      "mount": "protected",
+      "migrations": [
+        "internal/capabilities/queue/migrations/mysql/001_jobs.sql",
+        "internal/capabilities/queue/migrations/mysql/007_jobs_tenant.sql"
+      ],
+      "drivers": [
+        "redis",
+        "kafka",
+        "rabbitmq"
+      ],
+      "assets": null
+    }
+  ],
+  "copy": [
+    {
+      "source": "internal/kernel",
+      "destination": "internal/kernel",
+      "optional": false,
+      "include": [],
+      "exclude": null
+    },
+    {
+      "source": "internal/app",
+      "destination": "internal/app",
+      "optional": false,
+      "include": [],
+      "exclude": null
+    },
+    {
+      "source": "internal/assembly",
+      "destination": "internal/assembly",
+      "optional": false,
+      "include": [],
+      "exclude": null
+    },
+    {
+      "source": "internal/capability",
+      "destination": "internal/capability",
+      "optional": false,
+      "include": [],
+      "exclude": null
+    },
+    {
+      "source": "internal/contract",
+      "destination": "internal/contract",
+      "optional": false,
+      "include": [],
+      "exclude": null
+    },
+    {
+      "source": "internal/config",
+      "destination": "internal/config",
+      "optional": false,
+      "include": [],
+      "exclude": null
+    },
+    {
+      "source": "internal/shared",
+      "destination": "internal/shared",
+      "optional": false,
+      "include": [],
+      "exclude": null
+    },
+    {
+      "source": "internal/e2e",
+      "destination": "internal/e2e",
+      "optional": false,
+      "include": [],
+      "exclude": null
+    },
+    {
+      "source": "conf",
+      "destination": "conf",
+      "optional": false,
+      "include": [],
+      "exclude": null
+    },
+    {
+      "source": "cmd/server",
+      "destination": "cmd/server",
+      "optional": false,
+      "include": [],
+      "exclude": null
+    },
+    {
+      "source": "cmd/cli",
+      "destination": "cmd/cli",
+      "optional": false,
+      "include": [],
+      "exclude": [
+        "activecaps_test.go",
+        "capability.go",
+        "capability_test.go",
+        "main.go",
+        "new.go",
+        "new_test.go"
+      ]
+    },
+    {
+      "source": "internal/profiles/profiles.go",
+      "destination": "internal/profiles/profiles.go",
+      "optional": false,
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "go.mod",
+      "destination": "go.mod",
+      "optional": false,
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "go.sum",
+      "destination": "go.sum",
+      "optional": false,
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": ".golangci.yml",
+      "destination": ".golangci.yml",
+      "optional": false,
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": ".gitignore",
+      "destination": ".gitignore",
+      "optional": false,
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "internal/capabilities/access",
+      "destination": "internal/capabilities/access",
+      "optional": false,
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "internal/capabilities/queue",
+      "destination": "internal/capabilities/queue",
+      "optional": false,
+      "include": [],
+      "exclude": [
+        "kafka",
+        "rabbitmq"
+      ]
+    },
+    {
+      "source": "internal/capabilities/user",
+      "destination": "internal/capabilities/user",
+      "optional": false,
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "internal/capabilities/tenant/migrations",
+      "destination": "internal/capabilities/tenant/migrations",
+      "optional": false,
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "internal/capabilities/tenant/domain",
+      "destination": "internal/capabilities/tenant/domain",
+      "optional": false,
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "tools/internal/profileoverlay",
+      "destination": "tools/internal/profileoverlay",
+      "optional": false,
+      "include": [],
+      "exclude": [
+        "*_test.go"
+      ]
+    },
+    {
+      "source": "tools/internal/profileassets",
+      "destination": "tools/internal/profileassets",
+      "optional": false,
+      "include": [],
+      "exclude": [
+        "*_test.go"
+      ]
+    },
+    {
+      "source": "tools/internal/heavydeps",
+      "destination": "tools/internal/heavydeps",
+      "optional": false,
+      "include": [],
+      "exclude": [
+        "*_test.go"
+      ]
+    },
+    {
+      "source": "tools/internal/projectmetrics",
+      "destination": "tools/internal/projectmetrics",
+      "optional": false,
+      "include": [],
+      "exclude": [
+        "*_test.go"
+      ]
+    },
+    {
+      "source": "tools/profileoverlay",
+      "destination": "tools/profileoverlay",
+      "optional": false,
+      "include": [],
+      "exclude": [
+        "*_test.go"
+      ]
+    },
+    {
+      "source": "tools/profileassets",
+      "destination": "tools/profileassets",
+      "optional": false,
+      "include": [],
+      "exclude": [
+        "*_test.go"
+      ]
+    },
+    {
+      "source": "tools/checkcapabilities",
+      "destination": "tools/checkcapabilities",
+      "optional": false,
+      "include": [],
+      "exclude": [
+        "*_test.go"
+      ]
+    },
+    {
+      "source": "tools/composereport",
+      "destination": "tools/composereport",
+      "optional": false,
+      "include": [],
+      "exclude": [
+        "*_test.go"
+      ]
+    },
+    {
+      "source": "tools/logcheck",
+      "destination": "tools/logcheck",
+      "optional": false,
+      "include": [],
+      "exclude": [
+        "*_test.go"
+      ]
+    }
+  ],
+  "templates": [
+    {
+      "source": "tools/generator/templates/project/Makefile.tmpl",
+      "destination": "Makefile",
+      "kind": "build",
+      "data": {
+        "capabilities": "user,access,queue",
+        "drivers": "queue:redis",
+        "roots": "access queue user",
+        "shape": "app"
+      }
+    },
+    {
+      "source": "tools/generator/templates/project/Dockerfile.tmpl",
+      "destination": "Dockerfile",
+      "kind": "build",
+      "data": {
+        "capabilities": "user,access,queue",
+        "drivers": "queue:redis",
+        "roots": "access queue user",
+        "shape": "app"
+      }
+    },
+    {
+      "source": "tools/generator/templates/project/check_profiles.sh.tmpl",
+      "destination": "scripts/check_profiles.sh",
+      "kind": "build",
+      "data": {
+        "capabilities": "user,access,queue",
+        "drivers": "queue:redis",
+        "roots": "access queue user",
+        "shape": "app"
+      }
+    },
+    {
+      "source": "tools/generator/templates/project/registry.go.tmpl",
+      "destination": "internal/profiles/registry/registry.go",
+      "kind": "shape",
+      "data": {
+        "capabilities": "user,access,queue",
+        "drivers": "queue:redis",
+        "roots": "access queue user",
+        "shape": "app"
+      }
+    },
+    {
+      "source": "tools/generator/templates/project/assembly.go.tmpl",
+      "destination": "internal/profiles/app/assembly.go",
+      "kind": "shape",
+      "data": {
+        "capabilities": "user,access,queue",
+        "drivers": "queue:redis",
+        "roots": "access queue user",
+        "shape": "app"
+      }
+    },
+    {
+      "source": "tools/generator/templates/project/drivers.go.tmpl",
+      "destination": "internal/profiles/app/drivers.go",
+      "kind": "shape",
+      "data": {
+        "capabilities": "user,access,queue",
+        "drivers": "queue:redis",
+        "roots": "access queue user",
+        "shape": "app"
+      }
+    },
+    {
+      "source": "tools/generator/templates/project/active.go.tmpl",
+      "destination": "internal/profiles/active/assembly.go",
+      "kind": "shape",
+      "data": {
+        "capabilities": "user,access,queue",
+        "drivers": "queue:redis",
+        "roots": "access queue user",
+        "shape": "app"
+      }
+    },
+    {
+      "source": "tools/generator/templates/project/catalog.go.tmpl",
+      "destination": "internal/capabilities/catalog/catalog.go",
+      "kind": "catalog",
+      "data": {
+        "capabilities": "user,access,queue",
+        "drivers": "queue:redis",
+        "roots": "access queue user",
+        "shape": "app"
+      }
+    },
+    {
+      "source": "tools/generator/templates/project/catalog_migration.go.tmpl",
+      "destination": "internal/capabilities/catalog/migration.go",
+      "kind": "catalog",
+      "data": {
+        "capabilities": "user,access,queue",
+        "drivers": "queue:redis",
+        "roots": "access queue user",
+        "shape": "app"
+      }
+    },
+    {
+      "source": "cmd/cli/main.go",
+      "destination": "cmd/cli/main.go",
+      "kind": "cli",
+      "data": {
+        "capabilities": "user,access,queue",
+        "drivers": "queue:redis",
+        "roots": "access queue user",
+        "shape": "app"
+      }
+    }
+  ],
+  "merges": [
+    {
+      "source": "configs/app.yaml",
+      "destination": "configs/app.yaml",
+      "strategy": "sections",
+      "sections": []
+    },
+    {
+      "source": "configs/app.prod.yaml",
+      "destination": "configs/app.prod.yaml",
+      "strategy": "sections",
+      "sections": []
+    }
+  ],
+  "rewrites": [
+    {
+      "kind": "module",
+      "from": "jimu",
+      "to": "example.com/with",
+      "files": []
+    },
+    {
+      "kind": "file-patches",
+      "from": "{{module}}",
+      "to": "example.com/with",
+      "files": [
+        "tools/checkcapabilities/drivers.go",
+        "tools/composereport/main.go",
+        "tools/logcheck/main.go",
+        "tools/internal/profileoverlay/profileoverlay.go"
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "source": "deploy/backup",
+      "destination": "deploy/backup",
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "deploy/helm",
+      "destination": "deploy/helm",
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "deploy/helm/templates/openobserve.yaml",
+      "destination": "deploy/helm/templates/openobserve.yaml",
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "deploy/helm/templates/otel-collector.yaml",
+      "destination": "deploy/helm/templates/otel-collector.yaml",
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "deploy/k8s",
+      "destination": "deploy/k8s",
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "deploy/k8s/openobserve.yaml",
+      "destination": "deploy/k8s/openobserve.yaml",
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "deploy/k8s/otel-collector.yaml",
+      "destination": "deploy/k8s/otel-collector.yaml",
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "deploy/openobserve",
+      "destination": "deploy/openobserve",
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "deploy/otel-collector.yaml",
+      "destination": "deploy/otel-collector.yaml",
+      "include": [],
+      "exclude": []
+    }
+  ],
+  "prune": [
+    {
+      "kind": "test-import",
+      "path": "**/*_test.go",
+      "reason": "remove files whose imports are not satisfied"
+    }
+  ],
+  "report": {
+    "name": "app",
+    "capabilities": [
+      "user",
+      "access",
+      "queue"
+    ],
+    "routes": 34,
+    "migrations": [
+      "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
+      "internal/capabilities/access/migrations/mysql/008_role_version.sql",
+      "internal/capabilities/queue/migrations/mysql/001_jobs.sql",
+      "internal/capabilities/queue/migrations/mysql/007_jobs_tenant.sql",
+      "internal/capabilities/tenant/migrations/mysql/005_tenants.sql",
+      "internal/capabilities/tenant/migrations/mysql/008_tenant_version.sql",
+      "internal/capabilities/tenant/migrations/mysql/014_tenant_plans.sql",
+      "internal/capabilities/user/migrations/mysql/001_users.sql",
+      "internal/capabilities/user/migrations/mysql/004_user_totp.sql",
+      "internal/capabilities/user/migrations/mysql/008_user_version.sql"
+    ],
+    "tables": [
+      "dead_letters",
+      "job_history",
+      "jobs",
+      "permissions",
+      "role_permissions",
+      "roles",
+      "scheduled_jobs",
+      "tenant_plans",
+      "tenants",
+      "user_roles",
+      "users"
+    ],
+    "heavy_deps": null
+  },
+  "generated_files": [
+    ".gitignore",
+    ".golangci.yml",
+    "Dockerfile",
+    "Makefile",
+    "cmd/cli/activecaps.go",
+    "cmd/cli/main.go",
+    "cmd/server/main.go",
+    "conf/rbac_model.conf",
+    "configs/app.prod.yaml",
+    "configs/app.yaml",
+    "deploy/backup/Dockerfile",
+    "deploy/helm/Chart.yaml",
+    "deploy/helm/templates/_helpers.tpl",
+    "deploy/helm/templates/backup-cronjob.yaml",
+    "deploy/helm/templates/configmap.yaml",
+    "deploy/helm/templates/deployment.yaml",
+    "deploy/helm/templates/hpa.yaml",
+    "deploy/helm/templates/ingress.yaml",
+    "deploy/helm/templates/networkpolicy.yaml",
+    "deploy/helm/templates/openobserve.yaml",
+    "deploy/helm/templates/otel-collector.yaml",
+    "deploy/helm/templates/pdb.yaml",
+    "deploy/helm/templates/secret.yaml",
+    "deploy/helm/templates/service.yaml",
+    "deploy/helm/values.yaml",
+    "deploy/k8s/backup-cronjob.yaml",
+    "deploy/k8s/config-files.yaml",
+    "deploy/k8s/configmap.yaml",
+    "deploy/k8s/deployment.yaml",
+    "deploy/k8s/hpa.yaml",
+    "deploy/k8s/ingress.yaml",
+    "deploy/k8s/networkpolicy.yaml",
+    "deploy/k8s/openobserve.yaml",
+    "deploy/k8s/otel-collector.yaml",
+    "deploy/k8s/pdb.yaml",
+    "deploy/k8s/secret.yaml",
+    "deploy/k8s/service.yaml",
+    "deploy/openobserve/alerts/destination-webhook.json",
+    "deploy/openobserve/alerts/jimu_circuit_breaker_open.json",
+    "deploy/openobserve/alerts/jimu_db_pool_saturation.json",
+    "deploy/openobserve/alerts/jimu_error_logs_spike.json",
+    "deploy/openobserve/alerts/jimu_http_5xx_rate.json",
+    "deploy/openobserve/alerts/jimu_mysql_threads_high.json",
+    "deploy/openobserve/alerts/jimu_outbox_publish_failures.json",
+    "deploy/openobserve/alerts/jimu_queue_deadletters.json",
+    "deploy/openobserve/alerts/jimu_redis_keys_evicted.json",
+    "deploy/openobserve/alerts/template-http.json",
+    "deploy/openobserve/dashboards-optional/postgresql-metrics.json",
+    "deploy/openobserve/dashboards/jimu-overview.json",
+    "deploy/openobserve/dashboards/mysql-metrics.json",
+    "deploy/openobserve/dashboards/redis-metrics.json",
+    "deploy/openobserve/init-dashboard.sh",
+    "deploy/openobserve/sync-alerts.sh",
+    "deploy/openobserve/sync-dashboard.sh",
+    "deploy/otel-collector.yaml",
+    "go.mod",
+    "go.sum",
+    "internal/app/application.go",
+    "internal/app/application_test.go",
+    "internal/app/authz_bootstrap_test.go",
+    "internal/app/bootstrap.go",
+    "internal/app/bootstrap_http_test.go",
+    "internal/app/capabilities_handler_test.go",
+    "internal/app/capconfig.go",
+    "internal/app/capconfig_test.go",
+    "internal/app/container.go",
+    "internal/app/seed.go",
+    "internal/app/seed_test.go",
+    "internal/assembly/assembly.go",
+    "internal/assembly/assembly_test.go",
+    "internal/assembly/context.go",
+    "internal/assembly/context_test.go",
+    "internal/assembly/portflow.go",
+    "internal/assembly/wirefor_test.go",
+    "internal/capabilities/access/application/crud_test.go",
+    "internal/capabilities/access/application/dto.go",
+    "internal/capabilities/access/application/dto_test.go",
+    "internal/capabilities/access/application/errors.go",
+    "internal/capabilities/access/application/permission_dto.go",
+    "internal/capabilities/access/application/permission_service.go",
+    "internal/capabilities/access/application/permission_service_test.go",
+    "internal/capabilities/access/application/quota.go",
+    "internal/capabilities/access/application/service.go",
+    "internal/capabilities/access/application/service_test.go",
+    "internal/capabilities/access/application/user_roles.go",
+    "internal/capabilities/access/application/user_roles_test.go",
+    "internal/capabilities/access/domain/domain_test.go",
+    "internal/capabilities/access/domain/permission.go",
+    "internal/capabilities/access/domain/role.go",
+    "internal/capabilities/access/infrastructure/mysql_permission_repository.go",
+    "internal/capabilities/access/infrastructure/mysql_permission_repository_test.go",
+    "internal/capabilities/access/infrastructure/mysql_repository.go",
+    "internal/capabilities/access/infrastructure/mysql_repository_test.go",
+    "internal/capabilities/access/interfaces/handler.go",
+    "internal/capabilities/access/interfaces/handler_test.go",
+    "internal/capabilities/access/interfaces/permission_handler.go",
+    "internal/capabilities/access/interfaces/permission_handler_test.go",
+    "internal/capabilities/access/interfaces/permission_router.go",
+    "internal/capabilities/access/interfaces/router.go",
+    "internal/capabilities/access/interfaces/user_roles.go",
+    "internal/capabilities/access/interfaces/user_roles_test.go",
+    "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
+    "internal/capabilities/access/migrations/mysql/008_role_version.sql",
+    "internal/capabilities/access/migrations/postgres/001_roles_permissions.sql",
+    "internal/capabilities/access/migrations/postgres/008_role_version.sql",
+    "internal/capabilities/access/module.go",
+    "internal/capabilities/access/module_test.go",
+    "internal/capabilities/access/provisioning_port.go",
+    "internal/capabilities/access/wire.go",
+    "internal/capabilities/catalog/catalog.go",
+    "internal/capabilities/catalog/migration.go",
+    "internal/capabilities/queue/admin_module.go",
+    "internal/capabilities/queue/admin_module_test.go",
+    "internal/capabilities/queue/application/tasks_service.go",
+    "internal/capabilities/queue/application/tasks_service_test.go",
+    "internal/capabilities/queue/assembly.go",
+    "internal/capabilities/queue/config.go",
+    "internal/capabilities/queue/config_test.go",
+    "internal/capabilities/queue/domain/dead_letter.go",
+    "internal/capabilities/queue/domain/domain_test.go",
+    "internal/capabilities/queue/domain/history.go",
+    "internal/capabilities/queue/domain/job.go",
+    "internal/capabilities/queue/factory.go",
+    "internal/capabilities/queue/factory_test.go",
+    "internal/capabilities/queue/infrastructure/dead_letter_repository.go",
+    "internal/capabilities/queue/infrastructure/dead_letter_repository_test.go",
+    "internal/capabilities/queue/infrastructure/job_history_repository.go",
+    "internal/capabilities/queue/infrastructure/job_history_repository_test.go",
+    "internal/capabilities/queue/infrastructure/job_repository.go",
+    "internal/capabilities/queue/infrastructure/job_repository_test.go",
+    "internal/capabilities/queue/interfaces/fakes_test.go",
+    "internal/capabilities/queue/interfaces/jobs.go",
+    "internal/capabilities/queue/interfaces/jobs_test.go",
+    "internal/capabilities/queue/interfaces/tasks.go",
+    "internal/capabilities/queue/interfaces/tasks_test.go",
+    "internal/capabilities/queue/kafka_config.go",
+    "internal/capabilities/queue/migrations.go",
+    "internal/capabilities/queue/migrations/mysql/001_jobs.sql",
+    "internal/capabilities/queue/migrations/mysql/007_jobs_tenant.sql",
+    "internal/capabilities/queue/migrations/postgres/001_jobs.sql",
+    "internal/capabilities/queue/migrations/postgres/007_jobs_tenant.sql",
+    "internal/capabilities/queue/mysql_store.go",
+    "internal/capabilities/queue/outbox_mq.go",
+    "internal/capabilities/queue/outbox_mq_test.go",
+    "internal/capabilities/queue/queue.go",
+    "internal/capabilities/queue/rabbitmq_config.go",
+    "internal/capabilities/queue/redis/redis_queue.go",
+    "internal/capabilities/queue/redis/redis_queue_test.go",
+    "internal/capabilities/queue/retry.go",
+    "internal/capabilities/queue/wire.go",
+    "internal/capabilities/queue/worker.go",
+    "internal/capabilities/queue/worker_bench_test.go",
+    "internal/capabilities/queue/worker_test.go",
+    "internal/capabilities/tenant/domain/plan.go",
+    "internal/capabilities/tenant/domain/tenant.go",
+    "internal/capabilities/tenant/migrations/mysql/005_tenants.sql",
+    "internal/capabilities/tenant/migrations/mysql/008_tenant_version.sql",
+    "internal/capabilities/tenant/migrations/mysql/014_tenant_plans.sql",
+    "internal/capabilities/tenant/migrations/postgres/005_tenants.sql",
+    "internal/capabilities/tenant/migrations/postgres/008_tenant_version.sql",
+    "internal/capabilities/tenant/migrations/postgres/014_tenant_plans.sql",
+    "internal/capabilities/user/account_port.go",
+    "internal/capabilities/user/application/admin_service.go",
+    "internal/capabilities/user/application/admin_service_test.go",
+    "internal/capabilities/user/application/dto.go",
+    "internal/capabilities/user/application/service.go",
+    "internal/capabilities/user/application/service_test.go",
+    "internal/capabilities/user/domain/repository.go",
+    "internal/capabilities/user/domain/user.go",
+    "internal/capabilities/user/domain/user_test.go",
+    "internal/capabilities/user/infrastructure/mysql_repository.go",
+    "internal/capabilities/user/infrastructure/mysql_repository_integration_test.go",
+    "internal/capabilities/user/infrastructure/mysql_repository_test.go",
+    "internal/capabilities/user/interfaces/admin_users.go",
+    "internal/capabilities/user/interfaces/admin_users_test.go",
+    "internal/capabilities/user/interfaces/handler.go",
+    "internal/capabilities/user/interfaces/handler_test.go",
+    "internal/capabilities/user/interfaces/router.go",
+    "internal/capabilities/user/interfaces/router_test.go",
+    "internal/capabilities/user/migrations/mysql/001_users.sql",
+    "internal/capabilities/user/migrations/mysql/004_user_totp.sql",
+    "internal/capabilities/user/migrations/mysql/008_user_version.sql",
+    "internal/capabilities/user/migrations/postgres/001_users.sql",
+    "internal/capabilities/user/migrations/postgres/004_user_totp.sql",
+    "internal/capabilities/user/migrations/postgres/008_user_version.sql",
+    "internal/capabilities/user/module.go",
+    "internal/capabilities/user/module_test.go",
+    "internal/capabilities/user/userinfo_port.go",
+    "internal/capabilities/user/wire.go",
+    "internal/capability/resolve.go",
+    "internal/capability/resolve_test.go",
+    "internal/config/capsection_test.go",
+    "internal/config/config.go",
+    "internal/config/config_test.go",
+    "internal/config/validate.go",
+    "internal/contract/admin_websocket_port.go",
+    "internal/contract/capability.go",
+    "internal/contract/capability_test.go",
+    "internal/contract/client.go",
+    "internal/contract/client_test.go",
+    "internal/contract/events.go",
+    "internal/contract/module.go",
+    "internal/contract/openapi.go",
+    "internal/contract/openapi_test.go",
+    "internal/contract/outbox_mq_port.go",
+    "internal/contract/ports.go",
+    "internal/e2e/.DS_Store",
+    "internal/e2e/admin_routes_parity_test.go",
+    "internal/e2e/api_contract_test.go",
+    "internal/e2e/auth_routes_parity_test.go",
+    "internal/e2e/grpc_contract_test.go",
+    "internal/e2e/helpers_test.go",
+    "internal/e2e/tenant_provisioning_test.go",
+    "internal/kernel/access/casbin.go",
+    "internal/kernel/access/permission_middleware.go",
+    "internal/kernel/access/roles.go",
+    "internal/kernel/access/roles_test.go",
+    "internal/kernel/auth/apikey_context.go",
+    "internal/kernel/auth/fuzz_test.go",
+    "internal/kernel/auth/jwt.go",
+    "internal/kernel/auth/jwt_test.go",
+    "internal/kernel/auth/limiter.go",
+    "internal/kernel/auth/limiter_test.go",
+    "internal/kernel/auth/lockout.go",
+    "internal/kernel/auth/middleware.go",
+    "internal/kernel/auth/redis_fake_test.go",
+    "internal/kernel/auth/session.go",
+    "internal/kernel/auth/session_test.go",
+    "internal/kernel/breaker/breaker.go",
+    "internal/kernel/breaker/breaker_test.go",
+    "internal/kernel/breaker/db_plugin.go",
+    "internal/kernel/breaker/db_plugin_test.go",
+    "internal/kernel/cache/cache.go",
+    "internal/kernel/cache/cache_test.go",
+    "internal/kernel/db/adopt_test.go",
+    "internal/kernel/db/concurrency.go",
+    "internal/kernel/db/concurrency_test.go",
+    "internal/kernel/db/dsn_test.go",
+    "internal/kernel/db/export_test.go",
+    "internal/kernel/db/gorm_logger.go",
+    "internal/kernel/db/gorm_logger_test.go",
+    "internal/kernel/db/migrate.go",
+    "internal/kernel/db/migrate_order_test.go",
+    "internal/kernel/db/migrate_test.go",
+    "internal/kernel/db/migration_integration_test.go",
+    "internal/kernel/db/mysql.go",
+    "internal/kernel/db/mysql_test.go",
+    "internal/kernel/db/p17_access_migration_integration_test.go",
+    "internal/kernel/db/postgres.go",
+    "internal/kernel/db/snowflake.go",
+    "internal/kernel/db/snowflake_ext_test.go",
+    "internal/kernel/db/snowflake_test.go",
+    "internal/kernel/db/testdata/capmigs/README.md",
+    "internal/kernel/db/testdata/capmigs/advc/migrations/mysql/001_advc_tag.sql",
+    "internal/kernel/db/testdata/capmigs/advc/migrations/postgres/001_advc_tag.sql",
+    "internal/kernel/db/testdata/capmigs/auditsvc/migrations/mysql/001_audit_events.sql",
+    "internal/kernel/db/testdata/capmigs/auditsvc/migrations/postgres/001_audit_events.sql",
+    "internal/kernel/db/testdata/capmigs/solo/migrations/mysql/001_solo_items.sql",
+    "internal/kernel/db/testdata/capmigs/solo/migrations/mysql/002_solo_tags.sql",
+    "internal/kernel/db/testdata/capmigs/solo/migrations/postgres/001_solo_items.sql",
+    "internal/kernel/db/testdata/capmigs/solo/migrations/postgres/002_solo_tags.sql",
+    "internal/kernel/db/testdata/capmigs/user/migrations/mysql/001_users.sql",
+    "internal/kernel/db/testdata/capmigs/user/migrations/mysql/002_users_note.sql",
+    "internal/kernel/db/testdata/capmigs/user/migrations/postgres/001_users.sql",
+    "internal/kernel/db/testdata/capmigs/user/migrations/postgres/002_users_note.sql",
+    "internal/kernel/db/testdata/capmigs/zsvc/migrations/mysql/001_zsvc_items.sql",
+    "internal/kernel/db/testdata/capmigs/zsvc/migrations/mysql/002_zsvc_shared.sql",
+    "internal/kernel/db/testdata/capmigs/zsvc/migrations/postgres/001_zsvc_items.sql",
+    "internal/kernel/db/testdata/capmigs/zsvc/migrations/postgres/002_zsvc_shared.sql",
+    "internal/kernel/db/transaction.go",
+    "internal/kernel/db/transaction_test.go",
+    "internal/kernel/db/user_mfa_migration_integration_test.go",
+    "internal/kernel/event/bus.go",
+    "internal/kernel/event/bus_test.go",
+    "internal/kernel/http/management.go",
+    "internal/kernel/http/management_test.go",
+    "internal/kernel/http/middleware/admin_auth.go",
+    "internal/kernel/http/middleware/admin_auth_test.go",
+    "internal/kernel/http/middleware/body_recorder.go",
+    "internal/kernel/http/middleware/body_recorder_test.go",
+    "internal/kernel/http/middleware/concurrency.go",
+    "internal/kernel/http/middleware/concurrency_test.go",
+    "internal/kernel/http/middleware/csrf.go",
+    "internal/kernel/http/middleware/csrf_test.go",
+    "internal/kernel/http/middleware/gzip.go",
+    "internal/kernel/http/middleware/gzip_test.go",
+    "internal/kernel/http/middleware/idempotency.go",
+    "internal/kernel/http/middleware/idempotency_test.go",
+    "internal/kernel/http/middleware/ip_allowlist.go",
+    "internal/kernel/http/middleware/ip_allowlist_test.go",
+    "internal/kernel/http/middleware/locale.go",
+    "internal/kernel/http/middleware/locale_test.go",
+    "internal/kernel/http/middleware/metrics.go",
+    "internal/kernel/http/middleware/metrics_test.go",
+    "internal/kernel/http/middleware/middleware.go",
+    "internal/kernel/http/middleware/middleware_test.go",
+    "internal/kernel/http/middleware/ratelimit.go",
+    "internal/kernel/http/middleware/ratelimit_tenant.go",
+    "internal/kernel/http/middleware/ratelimit_tenant_test.go",
+    "internal/kernel/http/middleware/ratelimit_test.go",
+    "internal/kernel/http/middleware/ratelimit_user.go",
+    "internal/kernel/http/middleware/ratelimit_user_test.go",
+    "internal/kernel/http/middleware/security.go",
+    "internal/kernel/http/middleware/security_headers.go",
+    "internal/kernel/http/middleware/security_test.go",
+    "internal/kernel/http/middleware/signature.go",
+    "internal/kernel/http/middleware/signature_test.go",
+    "internal/kernel/http/middleware/timeout.go",
+    "internal/kernel/http/middleware/timeout_test.go",
+    "internal/kernel/http/middleware/validate.go",
+    "internal/kernel/http/middleware/validate_test.go",
+    "internal/kernel/http/server.go",
+    "internal/kernel/http/server_test.go",
+    "internal/kernel/httpclient/client.go",
+    "internal/kernel/httpclient/client_test.go",
+    "internal/kernel/logger/mask_core.go",
+    "internal/kernel/logger/mask_core_test.go",
+    "internal/kernel/logger/zap.go",
+    "internal/kernel/logger/zap_test.go",
+    "internal/kernel/mask/keymask.go",
+    "internal/kernel/mask/mask.go",
+    "internal/kernel/mask/mask_test.go",
+    "internal/kernel/observability/health.go",
+    "internal/kernel/observability/health_test.go",
+    "internal/kernel/observability/logs.go",
+    "internal/kernel/observability/logs_test.go",
+    "internal/kernel/observability/metrics.go",
+    "internal/kernel/observability/metrics_push.go",
+    "internal/kernel/observability/metrics_push_test.go",
+    "internal/kernel/observability/metrics_test.go",
+    "internal/kernel/observability/tracing.go",
+    "internal/kernel/observability/tracing_headers_test.go",
+    "internal/kernel/observability/tracing_test.go",
+    "internal/kernel/redis/breaker.go",
+    "internal/kernel/redis/breaker_test.go",
+    "internal/kernel/redis/lock.go",
+    "internal/kernel/redis/lock_test.go",
+    "internal/kernel/redis/redis.go",
+    "internal/kernel/redis/redis_test.go",
+    "internal/kernel/reporter/reporter.go",
+    "internal/kernel/reporter/reporter_test.go",
+    "internal/kernel/scheduler/job.go",
+    "internal/kernel/scheduler/memory_store.go",
+    "internal/kernel/scheduler/mysql_store.go",
+    "internal/kernel/scheduler/mysql_store_test.go",
+    "internal/kernel/scheduler/observability_test.go",
+    "internal/kernel/scheduler/scheduler.go",
+    "internal/kernel/scheduler/scheduler_manage_test.go",
+    "internal/kernel/scheduler/scheduler_store_test.go",
+    "internal/kernel/scheduler/store.go",
+    "internal/kernel/scheduler/store_test.go",
+    "internal/kernel/tenant/tenant.go",
+    "internal/kernel/tenant/tenant_test.go",
+    "internal/kernel/tlsconf/tlsconf.go",
+    "internal/kernel/tlsconf/tlsconf_test.go",
+    "internal/profiles/active/assembly.go",
+    "internal/profiles/app/assembly.go",
+    "internal/profiles/app/drivers.go",
+    "internal/profiles/profiles.go",
+    "internal/profiles/registry/registry.go",
+    "internal/shared/errors/errors.go",
+    "internal/shared/errors/errors_test.go",
+    "internal/shared/i18n/i18n.go",
+    "internal/shared/i18n/i18n_test.go",
+    "internal/shared/id/benchmark_test.go",
+    "internal/shared/id/fuzz_test.go",
+    "internal/shared/id/id.go",
+    "internal/shared/id/id_test.go",
+    "internal/shared/pagination/pagination.go",
+    "internal/shared/pagination/pagination_test.go",
+    "internal/shared/response/response.go",
+    "internal/shared/response/response_contract_test.go",
+    "internal/shared/response/response_test.go",
+    "internal/shared/testutil/assert.go",
+    "internal/shared/testutil/reporoot.go",
+    "internal/shared/testutil/reporoot_test.go",
+    "internal/shared/testutil/testdb.go",
+    "internal/shared/testutil/testdb_integration_test.go",
+    "internal/shared/testutil/testutil.go",
+    "internal/shared/testutil/tlscerts.go",
+    "internal/shared/validator/fuzz_test.go",
+    "internal/shared/validator/validator.go",
+    "internal/shared/validator/validator_test.go",
+    "scripts/check_profiles.sh",
+    "tools/checkcapabilities/assets.go",
+    "tools/checkcapabilities/drivers.go",
+    "tools/checkcapabilities/imports.go",
+    "tools/checkcapabilities/main.go",
+    "tools/checkcapabilities/structure.go",
+    "tools/composereport/main.go",
+    "tools/internal/heavydeps/heavydeps.go",
+    "tools/internal/profileassets/profileassets.go",
+    "tools/internal/profileoverlay/profileoverlay.go",
+    "tools/internal/projectmetrics/projectmetrics.go",
+    "tools/logcheck/main.go",
+    "tools/profileassets/main.go",
+    "tools/profileoverlay/main.go"
+  ],
+  "digest": "sha256:3e53c6b4c8bd8378445919e0e2ddaffc7e9258f0267fc749b992fdf5e8b3f48f"
+}

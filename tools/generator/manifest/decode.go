@@ -112,12 +112,17 @@ func normalize(doc Document) Document {
 		doc.Capabilities[i].SoftRequires = sortedClone(doc.Capabilities[i].SoftRequires)
 		doc.Capabilities[i].Owns = sortedClone(doc.Capabilities[i].Owns)
 		doc.Capabilities[i].Configs = sortedClone(doc.Capabilities[i].Configs)
-		doc.Capabilities[i].Permissions = sortedClone(doc.Capabilities[i].Permissions)
+		doc.Capabilities[i].Permissions = nonNilClone(doc.Capabilities[i].Permissions)
 		doc.Capabilities[i].Migrations = sortedClone(doc.Capabilities[i].Migrations)
 		doc.Capabilities[i].Drivers = sortedClone(doc.Capabilities[i].Drivers)
 		doc.Capabilities[i].Assets = sortedClone(doc.Capabilities[i].Assets)
+		doc.Capabilities[i].Permissions = nonNilClone(doc.Capabilities[i].Permissions)
 	}
 	doc.Copy = nonNilClone(doc.Copy)
+	for i := range doc.Copy {
+		doc.Copy[i].Include = sortedClone(doc.Copy[i].Include)
+		doc.Copy[i].Exclude = sortedClone(doc.Copy[i].Exclude)
+	}
 	doc.Templates = nonNilClone(doc.Templates)
 	for i := range doc.Templates {
 		if doc.Templates[i].Data == nil {

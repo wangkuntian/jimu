@@ -22,9 +22,6 @@ func Validate(doc Document) error {
 	if strings.TrimSpace(doc.Selection.Shape) == "" {
 		return fmt.Errorf("selection.shape is required")
 	}
-	if strings.TrimSpace(doc.Selection.Profile) == "" {
-		return fmt.Errorf("selection.profile is required")
-	}
 	if err := validateNames("selection.capabilities", doc.Selection.Capabilities); err != nil {
 		return err
 	}
@@ -39,6 +36,19 @@ func Validate(doc Document) error {
 		}
 		if err := validateActionPath(fmt.Sprintf("copy[%d].destination", i), action.Destination); err != nil {
 			return err
+		}
+		for j, include := range action.Include {
+			if err := validateActionPath(fmt.Sprintf("copy[%d].include[%d]", i, j), include); err != nil {
+				return err
+			}
+		}
+		for j, exclude := range action.Exclude {
+			if exclude == "*_test.go" {
+				continue
+			}
+			if err := validateActionPath(fmt.Sprintf("copy[%d].exclude[%d]", i, j), exclude); err != nil {
+				return err
+			}
 		}
 		if err := reserveDestination(usedDestinations, action.Destination, "copy"); err != nil {
 			return err
@@ -150,6 +160,11 @@ func validateCapabilities(capabilities []Capability) error {
 				if err := validateActionPath(fmt.Sprintf("capabilities[%d].%s[%d]", i, field, j), value); err != nil {
 					return err
 				}
+			}
+		}
+		for j, permission := range capability.Permissions {
+			if strings.TrimSpace(permission.Name) == "" && strings.TrimSpace(permission.Resource) == "" {
+				return fmt.Errorf("capabilities[%d].permissions[%d] must have name or resource", i, j)
 			}
 		}
 	}

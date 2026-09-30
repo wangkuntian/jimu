@@ -34,29 +34,38 @@ type Selection struct {
 }
 
 type Capability struct {
-	Name          string   `json:"name"`
-	Requires      []string `json:"requires"`
-	SoftRequires  []string `json:"soft_requires"`
-	MigrationOnly bool     `json:"migration_only"`
-	DomainOnly    bool     `json:"domain_only"`
-	Owns          []string `json:"owns"`
-	Configs       []string `json:"configs"`
-	Permissions   []string `json:"permissions"`
-	Mount         string   `json:"mount"`
-	Migrations    []string `json:"migrations"`
-	Drivers       []string `json:"drivers"`
-	Assets        []string `json:"assets"`
+	Name          string       `json:"name"`
+	Requires      []string     `json:"requires"`
+	SoftRequires  []string     `json:"soft_requires"`
+	MigrationOnly bool         `json:"migration_only"`
+	DomainOnly    bool         `json:"domain_only"`
+	Owns          []string     `json:"owns"`
+	Configs       []string     `json:"configs"`
+	Permissions   []Permission `json:"permissions"`
+	Mount         string       `json:"mount"`
+	Migrations    []string     `json:"migrations"`
+	Drivers       []string     `json:"drivers"`
+	Assets        []string     `json:"assets"`
 }
 
 type CopyAction struct {
-	Source      string `json:"source"`
-	Destination string `json:"destination"`
-	Optional    bool   `json:"optional"`
+	Source      string   `json:"source"`
+	Destination string   `json:"destination"`
+	Optional    bool     `json:"optional"`
+	Include     []string `json:"include"`
+	Exclude     []string `json:"exclude"`
+}
+
+type Permission struct {
+	Name     string `json:"name"`
+	Resource string `json:"resource"`
+	Action   string `json:"action"`
 }
 
 type TemplateAction struct {
 	Source      string            `json:"source"`
 	Destination string            `json:"destination"`
+	Kind        string            `json:"kind"`
 	Data        map[string]string `json:"data"`
 }
 

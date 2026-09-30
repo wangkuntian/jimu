@@ -34,7 +34,7 @@
     "selection": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["shape", "profile", "capabilities", "drivers"],
+      "required": ["shape", "capabilities", "drivers"],
       "properties": {
         "shape": {"type": "string", "minLength": 1},
         "profile": {"type": "string", "minLength": 1},
@@ -54,7 +54,7 @@
         "domain_only": {"type": "boolean"},
         "owns": {"type": "array", "items": {"type": "string"}},
         "configs": {"type": "array", "items": {"type": "string"}},
-        "permissions": {"type": "array", "items": {"type": "string"}},
+        "permissions": {"type": "array", "items": {"$ref": "#/$defs/permission"}},
         "mount": {"type": "string"},
         "migrations": {"type": "array", "items": {"type": "string"}},
         "drivers": {"type": "array", "items": {"type": "string"}},
@@ -62,12 +62,16 @@
       }
     },
     "copy": {
-      "type": "object", "additionalProperties": false, "required": ["source", "destination", "optional"],
-      "properties": {"source": {"type": "string"}, "destination": {"type": "string"}, "optional": {"type": "boolean"}}
+      "type": "object", "additionalProperties": false, "required": ["source", "destination", "optional", "include", "exclude"],
+      "properties": {"source": {"type": "string"}, "destination": {"type": "string"}, "optional": {"type": "boolean"}, "include": {"type": "array", "items": {"type": "string"}}, "exclude": {"type": "array", "items": {"type": "string"}}}
+    },
+    "permission": {
+      "type": "object", "additionalProperties": false, "required": ["name", "resource", "action"],
+      "properties": {"name": {"type": "string"}, "resource": {"type": "string"}, "action": {"type": "string"}}
     },
     "template": {
-      "type": "object", "additionalProperties": false, "required": ["source", "destination", "data"],
-      "properties": {"source": {"type": "string"}, "destination": {"type": "string"}, "data": {"type": "object", "additionalProperties": {"type": "string"}}}
+      "type": "object", "additionalProperties": false, "required": ["source", "destination", "kind", "data"],
+      "properties": {"source": {"type": "string"}, "destination": {"type": "string"}, "kind": {"type": "string"}, "data": {"type": "object", "additionalProperties": {"type": "string"}}}
     },
     "merge": {
       "type": "object", "additionalProperties": false, "required": ["source", "destination", "strategy", "sections"],
