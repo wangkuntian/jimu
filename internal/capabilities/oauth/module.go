@@ -3,7 +3,6 @@ package oauth
 
 import (
 	"embed"
-	authmodule "jimu/internal/capabilities/auth"
 	oauthapp "jimu/internal/capabilities/oauth/application"
 	oauthinfra "jimu/internal/capabilities/oauth/infrastructure"
 	"jimu/internal/capabilities/oauth/interfaces"
@@ -22,12 +21,12 @@ type Module struct {
 	service *oauthapp.OAuthService
 }
 
-// New 创建 OAuth 模块（自包含装配依赖）。authCfg 为 auth 能力配置（oauth.Requires 含 auth，方向合法）。
-func New(db *gorm.DB, rdb redistore.Client, oauthCfg Config, authCfg authmodule.Config, httpClient *httpclient.Client) *Module {
+// New 创建 OAuth 模块。签发配置与用户账户仓库由装配层提供。
+func New(db *gorm.DB, rdb redistore.Client, oauthCfg Config, authCfg contract.AuthConfig, httpClient *httpclient.Client, users contract.AccountRepository) *Module {
 	bindingRepo := oauthinfra.NewMySQLBindingRepository(db)
 	jwtUtil := auth.NewWithRotation(authCfg.JWTSecret, authCfg.JWTPreviousSecret, authCfg.Issuer, authCfg.AccessExpireMin, authCfg.RefreshExpireDay)
 	sessionStore := auth.NewRedisSessionStore(rdb)
-	service := oauthapp.NewOAuthService(bindingRepo, jwtUtil, sessionStore, buildProviders(oauthCfg, httpClient), rdb, db, authCfg.AccessExpireMin)
+	service := oauthapp.NewOAuthService(bindingRepo, jwtUtil, sessionStore, buildProviders(oauthCfg, httpClient), rdb, db, authCfg.AccessExpireMin, users)
 	return &Module{service: service}
 }
 

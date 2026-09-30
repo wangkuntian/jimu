@@ -1,19 +1,18 @@
 package uploadsec
 
 import (
-	"jimu/internal/capabilities/storage"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/http/middleware"
 )
 
 // Module 上传安全能力的模块实例：注册 /api/v1/admin/files 上传与删除端点。
 type Module struct {
-	storage storage.Storage
+	storage contract.Storage
 	scanner Scanner
 }
 
 // New 创建上传安全模块。storage 为空时不注册端点（与拆分前 admin 行为一致）。
-func New(st storage.Storage, scanner Scanner) *Module {
+func New(st contract.Storage, scanner Scanner) *Module {
 	return &Module{storage: st, scanner: scanner}
 }
 

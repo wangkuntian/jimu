@@ -5,16 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"jimu/internal/capabilities/queue"
+	"jimu/internal/contract"
 )
 
 // MQPublisher 发布 Outbox 事件到消息队列，支持跨服务分发
 type MQPublisher struct {
-	queue queue.Queue
+	queue contract.OutboxMQPublisher
 }
 
 // NewMQPublisher 创建 MQ 发布器
-func NewMQPublisher(q queue.Queue) *MQPublisher {
+func NewMQPublisher(q contract.OutboxMQPublisher) *MQPublisher {
 	return &MQPublisher{queue: q}
 }
 
@@ -35,14 +35,14 @@ func (p *MQPublisher) Publish(ctx context.Context, events ...Event) error {
 			return fmt.Errorf("marshal outbox event %d: %w", e.ID, err)
 		}
 		traceparent, tracestate := traceFromMetadata(e.Metadata)
-		job := &queue.JobData{
+		message := contract.OutboxMQMessage{
 			ID:          e.ID,
-			Type:        "outbox:" + e.EventType,
+			EventType:   e.EventType,
 			Payload:     string(data),
 			Traceparent: traceparent,
 			Tracestate:  tracestate,
 		}
-		if err := p.queue.Submit(ctx, job); err != nil {
+		if err := p.queue.Publish(ctx, message); err != nil {
 			return fmt.Errorf("submit outbox event %d: %w", e.ID, err)
 		}
 	}

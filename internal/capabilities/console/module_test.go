@@ -61,7 +61,6 @@ func TestModuleRegisterHTTP(t *testing.T) {
 	}
 
 	// 未配置 JWT 时 ws handler 返回 500 而非 panic
-	m.initWS()
 	assert.NotNil(t, m.wsHandler())
 }
 

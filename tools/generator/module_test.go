@@ -41,6 +41,24 @@ func TestGenerateModuleDoesNotOverwriteExistingTarget(t *testing.T) {
 	}
 }
 
+func TestGenerateModuleDoesNotOverwriteExistingWire(t *testing.T) {
+	root := newTestRepository(t)
+	target := filepath.Join(root, "internal/capabilities/product/wire.go")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := GenerateModuleAt(root, "product"); err == nil {
+		t.Fatal("expected wire target conflict")
+	}
+	got, err := os.ReadFile(target)
+	if err != nil || string(got) != "keep" {
+		t.Fatalf("existing wire changed: %q, %v", got, err)
+	}
+}
+
 func TestGenerateModuleCreatesCompleteCRUD(t *testing.T) {
 	root := newTestRepository(t)
 	writeMigration(t, root, "001_create_users.sql")
@@ -54,6 +72,20 @@ func TestGenerateModuleCreatesCompleteCRUD(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
 			t.Errorf("missing %s: %v", rel, err)
 		}
+	}
+	module, err := os.ReadFile(filepath.Join(root, "internal/capabilities/order_item/module.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(module, []byte("Owns:")) || !bytes.Contains(module, []byte(`[]string{"order_items"}`)) {
+		t.Fatal("generated descriptor does not own migrated table")
+	}
+	wire, err := os.ReadFile(filepath.Join(root, "internal/capabilities/order_item/wire.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(wire, []byte("func Wire(ctx *assembly.Context) (contract.Module, error)")) {
+		t.Fatal("generated wire has no assembly entrypoint")
 	}
 	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -106,6 +138,9 @@ func TestGenerateModuleRollsBackWriteFailure(t *testing.T) {
 	// 生成器自建的目录必须回滚；预置的 mysql/ 基线目录允许保留
 	if _, err := os.Stat(filepath.Join(root, "internal", "capabilities", "product", "module.go")); !os.IsNotExist(err) {
 		t.Fatalf("module file still exists: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "internal", "capabilities", "product", "wire.go")); !os.IsNotExist(err) {
+		t.Fatalf("wire file still exists: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "internal", "capabilities", "product", "migrations", "postgres")); !os.IsNotExist(err) {
 		t.Fatalf("postgres migration dir still exists: %v", err)
@@ -171,6 +206,7 @@ func requiredFiles(name, version string) []string {
 	capRoot := filepath.Join("internal", "capabilities", name)
 	return []string{
 		filepath.Join(capRoot, "module.go"),
+		filepath.Join(capRoot, "wire.go"),
 		filepath.Join(capRoot, "domain", "entity.go"),
 		filepath.Join(capRoot, "domain", "repository.go"),
 		filepath.Join(capRoot, "application", "dto.go"),

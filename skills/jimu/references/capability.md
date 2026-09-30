@@ -6,7 +6,7 @@
 
 ## 步骤
 
-1. **建能力目录**：`internal/capabilities/<name>/`，按需分层（`domain/` / `application/` / `infrastructure/` / `interfaces/`）。用脚手架打底：`./bin/jimu module create <name>`（只落骨架，**不改任何注册点**）
+1. **建能力目录**：`internal/capabilities/<name>/`，按需分层（`domain/` / `application/` / `infrastructure/` / `interfaces/`）。用脚手架打底：`./bin/jimu capability create <name>`（只落典型 CRUD 骨架，**不改任何注册点**）
 2. **导出静态 `Descriptor`**（`contract.Descriptor`，字段定义见 `internal/contract/capability.go`）：
    - `Name`：能力名，全仓唯一，必须与 `catalog` 清单里的名字一致
    - `Requires`：**硬依赖** —— 启用本能力必须同时启用这些能力，参与闭包补齐与拓扑序
@@ -18,7 +18,7 @@
    - `Mount`：路由挂载方式（零值等价 `MountProtected`，特权路由不会被裸挂到根路由）
    - `Drivers`：能力支持的**驱动包名**（有第三方驱动时才写，见 [profile-driver.md](profile-driver.md)）
    - `Assets`：能力拥有的非代码资产（仓库相对路径；有资产时才写）
-3. **实现 `contract.Module`** 并写 `wire.go` 自装配。能力内部只依赖 `contract` 端口；**禁止** import 其他能力的内部包
+3. **导出 `Wire` 自装配**，有 HTTP、任务、事件或生命周期职责时实现 `contract.Module`；仅提供端口或迁移的能力可返回 nil。能力内部只依赖 `contract` 端口；**禁止**跨能力 import（包括测试和驱动子包）
 4. **在 `internal/capabilities/catalog` 登记**该能力
 5. **在需要它的形态清单 `internal/profiles/<name>/assembly.go` 里加入**；非 catalog 条目按 `Ungated` 声明。唯一入口 `cmd/server` 只调 `assembly.Run(active.Assembly())`，**不要**去 `cmd/server` 里逐个装配能力
 6. **迁移**：写进 `internal/capabilities/<name>/migrations/{mysql,postgres}/`，能力内编号取该目录当前最大 +1；细节见 [migration.md](migration.md)
@@ -29,7 +29,7 @@
 ## 验收命令与期望输出
 
 ```bash
-make check-capabilities           # 必须 5 条 ✅（① 自描述与 Owns ↔ 迁移归属 ② 驱动 ③ 形态只 import 已声明驱动 ④ 唯一入口与选点包 ⑤ 资产归属）
+make check-capabilities           # 必须 6 条 ✅（① 自描述与 Owns ↔ 迁移归属 ② 驱动 ③ 形态只 import 已声明驱动 ④ 唯一入口与选点包 ⑤ 资产归属 ⑥ 跨能力 import）
 make profiles-check               # 5 形态 overlay 构建 + golden 依赖闭包通过
 go test ./internal/... -count=1   # 能力自带单测全绿
 ```

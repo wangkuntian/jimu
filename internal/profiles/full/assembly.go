@@ -37,7 +37,7 @@ import (
 //
 // 顺序即装配顺序：提供端口的能力必须排在消费它的能力之前（encryption/storage/
 // notification/queue/outbox/breach 先于 tenant/user/auth/uploadsec/grpc；
-// tenant/access 先于 user；captcha/mfa 先于 auth）。
+// tenant/access 先于 user；captcha/mfa 先于 auth；ws 先于 console）。
 //
 // 非 catalog 条目（encryption/storage/notification/retention/apidocs/grpc/ws）标记
 // Ungated：由本清单决定是否装配，不受 capabilities.enabled 门控（P2.4 裁定 7）。
@@ -62,6 +62,7 @@ func Assembly() assembly.Assembly {
 			{Descriptor: authmodule.Descriptor, Wire: authmodule.Wire},
 			{Descriptor: passkeymodule.Descriptor, Wire: passkeymodule.Wire},
 			{Descriptor: auditmodule.Descriptor, Wire: auditmodule.Wire},
+			{Descriptor: ws.Descriptor, Wire: ws.Wire, Ungated: true},
 			{Descriptor: consolemodule.Descriptor, Wire: consolemodule.Wire},
 			{Descriptor: oauthmodule.Descriptor, Wire: oauthmodule.Wire},
 			{Descriptor: apikey.Descriptor, Wire: apikey.Wire},
@@ -73,7 +74,6 @@ func Assembly() assembly.Assembly {
 			{Descriptor: retention.Descriptor, Wire: retention.Wire, Ungated: true},
 			{Descriptor: apidocs.Descriptor, Wire: apidocs.Wire, Ungated: true},
 			{Descriptor: grpcpkg.Descriptor, Wire: grpcpkg.Wire, Ungated: true},
-			{Descriptor: ws.Descriptor, Wire: ws.Wire, Ungated: true},
 		},
 		Seed: profiles.StructuralSeed,
 	}

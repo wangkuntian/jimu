@@ -5,8 +5,9 @@ import (
 	"fmt"
 
 	"jimu/internal/assembly"
-	"jimu/internal/capabilities/queue"
 	"jimu/internal/contract"
+	"jimu/internal/kernel/event"
+	"jimu/internal/kernel/logger"
 	"jimu/internal/kernel/scheduler"
 )
 
@@ -14,41 +15,21 @@ import (
 // 事件，并注册 outbox_process 定时任务。
 //
 // publisher=event_bus（默认）：订阅事件总线 outbox:* 主题桥接到裸业务主题，不构造队列；
-// publisher=mq：按 queue.type 构造队列客户端（base 行为：仅在此时构造，kafka/rabbitmq
-// 会连 broker、缺 broker/topic 即启动失败），消费它注册 MQ 桥接 worker 并把 WorkerPool
-// 纳入生命周期。
+// publisher=mq：通过 queue 提供的惰性工厂构造客户端与 worker，配置或 broker 错误
+// 在装配期失败。
 func Wire(ctx *assembly.Context) (contract.Module, error) {
 	cfg := assembly.MustSection[*Config](ctx, ConfigKey)
 	if cfg == nil {
 		cfg = &Config{}
 	}
-	// 跨能力校验（原 config.validateCommon 的 outbox.publisher=mq 依赖 queue.type）
-	queueCfg := assembly.MustSection[*queue.Config](ctx, queue.ConfigKey)
-	if cfg.UsesMQ() && (queueCfg == nil || !queue.SupportsOutboxMQ(queueCfg.Type)) {
-		return nil, fmt.Errorf("invalid queue.type %q for outbox.publisher %q", queueTypeOf(queueCfg), cfg.Publisher)
-	}
-
 	outboxStore := NewMySQLStore(ctx.DB())
-	var publisher Publisher
-	switch cfg.Publisher {
-	case PublisherMQ:
-		qc := *queueCfg
-		qc.Redis = ctx.Redis()
-		q, err := queue.New(qc)
-		if err != nil {
-			return nil, fmt.Errorf("init outbox queue: %w", err)
-		}
-		consumer, ok := q.(queue.Consumer)
-		if !ok {
-			return nil, fmt.Errorf("queue %s does not implement consumer", queueTypeOf(queueCfg))
-		}
-		publisher = NewMQPublisher(q)
-		pool := queue.NewWorkerPool(queue.DefaultWorkerConfig, consumer, queue.NewMySQLStoreForDB(ctx.DB()))
-		RegisterMQWorkers(ctx.EventBus())
-		ctx.RegisterComponent(queue.NewWorkerPoolComponent(pool))
-	default:
-		publisher = NewEventBusPublisher(ctx.EventBus())
-		RegisterEventBusBridge(ctx.EventBus(), ctx.Logger())
+	var factory contract.OutboxMQFactory
+	if cfg.UsesMQ() {
+		factory, _ = ctx.Port(contract.OutboxMQPortName).(contract.OutboxMQFactory)
+	}
+	publisher, err := selectPublisher(context.Background(), *cfg, factory, ctx.EventBus(), ctx.Logger())
+	if err != nil {
+		return nil, err
 	}
 	processor := New(outboxStore, publisher)
 	if err := ctx.Provide(PortName, processor); err != nil {
@@ -67,10 +48,22 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	return nil, nil
 }
 
-// queueTypeOf 读取 queue 配置的类型（queue 未启用时为零值）。
-func queueTypeOf(cfg *queue.Config) queue.Type {
-	if cfg == nil {
-		return ""
+func selectPublisher(ctx context.Context, cfg Config, factory contract.OutboxMQFactory, bus *event.EventBus, log *logger.Logger) (Publisher, error) {
+	if !cfg.UsesMQ() {
+		RegisterEventBusBridge(bus, log)
+		return NewEventBusPublisher(bus), nil
 	}
-	return cfg.Type
+	if factory == nil {
+		return nil, fmt.Errorf("outbox MQ port %q unavailable", contract.OutboxMQPortName)
+	}
+	types := make([]string, 0, len(eventTypeConverters))
+	for eventType := range eventTypeConverters {
+		types = append(types, eventType)
+	}
+	bridge := BridgeWorker(bus)
+	publisher, err := factory.StartOutbox(ctx, types, bridge)
+	if err != nil {
+		return nil, fmt.Errorf("init outbox queue: %w", err)
+	}
+	return NewMQPublisher(publisher), nil
 }

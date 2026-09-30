@@ -1,10 +1,20 @@
 package ws
 
 import (
+	"fmt"
+
 	"jimu/internal/assembly"
 	"jimu/internal/contract"
 )
 
-// Wire 装配 WebSocket 能力：ws 是供 console 等能力复用的客户端 Hub 库，装配期无自建
-// 实例、无端口、无 Module；仅作为形态条目参与启用集与能力报告。
-func Wire(*assembly.Context) (contract.Module, error) { return nil, nil }
+const PortName = "ws"
+
+// Wire 装配 WebSocket 能力，提供管理端口并把 hub 纳入应用生命周期。
+func Wire(ctx *assembly.Context) (contract.Module, error) {
+	port := newAdminWebSocket()
+	if err := ctx.Provide(PortName, port); err != nil {
+		return nil, fmt.Errorf("provide ws port: %w", err)
+	}
+	ctx.RegisterComponent(port)
+	return nil, nil
+}

@@ -16,5 +16,8 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	if err := ctx.Provide(PortName, mod.UserRoleAssigner()); err != nil {
 		return nil, fmt.Errorf("provide access port: %w", err)
 	}
+	if err := ctx.Provide(ProvisioningRolePortName, NewProvisioningRoleStore(ctx.DB())); err != nil {
+		return nil, fmt.Errorf("provide provisioning roles: %w", err)
+	}
 	return mod, nil
 }

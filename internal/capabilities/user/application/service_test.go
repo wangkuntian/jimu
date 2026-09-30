@@ -7,7 +7,6 @@ import (
 	stderrors "errors"
 	"testing"
 
-	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/tenant"
@@ -187,26 +186,17 @@ func appCode(err error) int {
 	return 0
 }
 
-// recordingOutboxStore 记录 Add 的事件，其余方法无操作
-type recordingOutboxStore struct {
-	events []outbox.Event
-}
+type recordingEventWriter struct{ events []contract.OutboxEvent }
 
-func (o *recordingOutboxStore) Add(_ context.Context, _ interface{}, events ...outbox.Event) error {
-	o.events = append(o.events, events...)
+func (o *recordingEventWriter) WriteEvent(_ context.Context, _ any, event contract.OutboxEvent) error {
+	o.events = append(o.events, event)
 	return nil
 }
-func (o *recordingOutboxStore) FetchUnpublish(context.Context, int) ([]outbox.Event, error) {
-	return nil, nil
-}
-func (o *recordingOutboxStore) MarkPublished(context.Context, []uint64) error   { return nil }
-func (o *recordingOutboxStore) MarkFailed(context.Context, uint64, error) error { return nil }
 
 // createOutboxUserService 构造带 recording outbox 的 UserService
-func createOutboxUserService() (*UserService, *recordingOutboxStore) {
-	store := &recordingOutboxStore{}
-	ob := outbox.New(store, nil)
-	svc := NewUserService(&fakeOutboxUserRepo{}, nil, ob)
+func createOutboxUserService() (*UserService, *recordingEventWriter) {
+	store := &recordingEventWriter{}
+	svc := NewUserService(&fakeOutboxUserRepo{}, nil, store)
 	return svc, store
 }
 

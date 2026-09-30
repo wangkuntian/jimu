@@ -16,9 +16,9 @@ import (
 // 内核 CLI 的 migrate/seed/config/version 命令树很长且会持续演进，逐行复刻必然漂移；
 // 这里以框架仓的 cmd/cli/main.go 为唯一来源，只做三处**受控**裁剪/注入：
 //
-//	① 去掉 tools/generator import 与 module create 命令（脚手架是框架仓的职责，
+//	① 去掉 tools/generator import（脚手架是框架仓的职责，
 //	   生成项目不含 tools/generator）；
-//	② 去掉框架脚手架命令（new / capability add）的注册；
+//	② 去掉框架脚手架命令（new / capability create / capability add）的注册；
 //	③ 按选中能力注入 capabilities/<cap>/cli 的 import 与命令注册（P2.6 接缝）。
 const cliMainRel = "cmd/cli/main.go"
 
@@ -96,18 +96,7 @@ func RenderCLIMain(root, dst string, set CapabilitySet) error {
 		}
 	}
 
-	// ① decl：去掉 module 命令树。
-	for _, decl := range file.Decls {
-		gen, ok := decl.(*ast.GenDecl)
-		if !ok || gen.Tok != token.VAR {
-			continue
-		}
-		if declaresVar(gen, "moduleCmd") || declaresVar(gen, "moduleCreateCmd") {
-			edits = append(edits, dropLines(lineOf(gen.Pos()), lineOf(gen.End())))
-		}
-	}
-
-	// ② init：去掉 module/new 的注册与写死的能力命令注册，并记住注入点。
+	// ① init：去掉 new/capability 的注册与写死的能力命令注册，并记住注入点。
 	insertAt := -1
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
@@ -166,7 +155,7 @@ func RenderCLIMain(root, dst string, set CapabilitySet) error {
 }
 
 // cliMainHeader 说明本文件的裁剪口径（放在 package 之前，即包文档）。
-const cliMainHeader = `// 本文件由生成器按选中能力裁剪：脚手架命令（jimu new / jimu module create）是**框架仓**的职责，
+const cliMainHeader = `// 本文件由生成器按选中能力裁剪：框架脚手架命令（jimu new / jimu capability create / jimu capability add）是**框架仓**的职责，
 // 生成项目不含 tools/generator，也不注册这些命令；能力自带命令只注册已选中的能力。
 `
 
@@ -198,28 +187,12 @@ func lineOffsets(src string) []int {
 	return off
 }
 
-// declaresVar 判定一个 var 声明是否声明了指定名字。
-func declaresVar(gen *ast.GenDecl, name string) bool {
-	for _, spec := range gen.Specs {
-		vs, ok := spec.(*ast.ValueSpec)
-		if !ok {
-			continue
-		}
-		for _, id := range vs.Names {
-			if id.Name == name {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // cliInitStmtDropped 判定 init() 里的哪条语句属于「框架脚手架」而必须从生成项目里去掉：
-// 引用 moduleCmd/moduleCreateCmd/newCmd/capabilityCmd 的注册（capability add 依赖 tools/generator，
+// 引用 newCmd/capabilityCmd 的注册（capability add 依赖 tools/generator，
 // 生成项目不含该工具树，见 kernelExcludes），以及形如 `<x>cli.Commands()` 的能力命令注册
 // （后者由选中集重新注入）。
 func cliInitStmtDropped(stmt ast.Stmt) bool {
-	if stmtReferencesAny(stmt, "moduleCmd", "moduleCreateCmd", "newCmd", "capabilityCmd") {
+	if stmtReferencesAny(stmt, "newCmd", "capabilityCmd") {
 		return true
 	}
 	dropped := false

@@ -16,7 +16,7 @@ var errProvisioningRequiresPublicRegistration = errors.New("auth.provisioning.en
 // （captcha/mfa/tenant/outbox/notification/encryption/breach，缺失即降级），
 // 把 LoginFinalizer 暴露为端口供 passkey 复用登录收尾。
 //
-// 端口名用字面量：tenant/mfa/breach 能力 import 本包（配置视图/校验），反向 import 会成环。
+// 端口名按能力声明读取；可选能力缺席时保留既有降级行为。
 func Wire(ctx *assembly.Context) (contract.Module, error) {
 	cfg := assembly.MustSection[*Config](ctx, ConfigKey)
 	if cfg == nil {
@@ -25,14 +25,26 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
 	}
+	users, ok := ctx.Port("user.account").(contract.AccountRepository)
+	if !ok {
+		return nil, fmt.Errorf("auth requires user.account port")
+	}
 	// captcha 是 auth 的可选依赖（不在 Requires 内）：能力未启用/未装配时端口取回
 	// nil，登录/注册跳过验证码校验。
 	captchaVerifier, _ := ctx.Port("captcha").(contract.CaptchaVerifier)
+	var provisioner contract.TenantProvisioner
+	if factory, ok := ctx.Port("tenant.provisioner").(contract.TenantProvisionerFactory); ok && cfg.Provisioning.Enabled {
+		roles, ok := ctx.Port("access.provisioning").(contract.ProvisioningRoleStore)
+		if !ok {
+			return nil, fmt.Errorf("auth provisioning requires access.provisioning port")
+		}
+		provisioner = factory.Build(users, roles)
+	}
 	mod := New(ctx.DB(), ctx.Redis(), *cfg,
 		ctx.Config().HTTP.Mode == config.HTTPModeRelease,
 		captchaVerifier,
 		ctx.Port("outbox"), ctx.Port("notification"), ctx.Port("encryption"),
-		ctx.Port("tenant"), ctx.Port("mfa"), ctx.Port("tenant.provisioner"), ctx.Port("breach"))
+		ctx.Port("tenant"), ctx.Port("mfa"), provisioner, ctx.Port("breach"), users)
 	if err := ctx.Provide(PortName, mod.Finalizer()); err != nil {
 		return nil, fmt.Errorf("provide auth port: %w", err)
 	}

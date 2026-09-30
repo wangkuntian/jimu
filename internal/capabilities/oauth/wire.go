@@ -1,8 +1,9 @@
 package oauth
 
 import (
+	"fmt"
+
 	"jimu/internal/assembly"
-	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/contract"
 )
 
@@ -13,13 +14,9 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	if cfg == nil {
 		cfg = &Config{}
 	}
-	return New(ctx.DB(), ctx.Redis(), *cfg, *authConfig(ctx), ctx.HTTPClient()), nil
-}
-
-// authConfig 取 auth 段；auth 未启用时该段不加载，回退为零值（旧装配惯例）。
-func authConfig(ctx *assembly.Context) *authmodule.Config {
-	if cfg := assembly.MustSection[*authmodule.Config](ctx, authmodule.ConfigKey); cfg != nil {
-		return cfg
+	users, ok := ctx.Port("user.account").(contract.AccountRepository)
+	if !ok {
+		return nil, fmt.Errorf("oauth requires user.account port")
 	}
-	return &authmodule.Config{}
+	return New(ctx.DB(), ctx.Redis(), *cfg, ctx.AuthConfig(), ctx.HTTPClient(), users), nil
 }

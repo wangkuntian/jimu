@@ -6,12 +6,10 @@
 package console
 
 import (
-	"context"
 	"net/http"
 
 	"jimu/internal/capabilities/console/application"
 	"jimu/internal/capabilities/console/interfaces"
-	"jimu/internal/capabilities/ws"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/http/middleware"
@@ -31,9 +29,7 @@ type Module struct {
 	ipAllowlist gin.HandlerFunc
 	db          *gorm.DB
 
-	wsHub      *ws.ClientHub
-	wsPres     *ws.PresenceManager
-	wsChannels *ws.ChannelManager
+	ws contract.AdminWebSocket
 }
 
 // New 创建 console 模块。jwt 用于 WebSocket 认证；ipAllowlist 为空时不挂载白名单。
@@ -48,6 +44,9 @@ func New(version, env string, rdb redistore.Client, db *gorm.DB, jwt *auth.JWT, 
 	for _, dep := range deps {
 		if fn, ok := dep.(gin.HandlerFunc); ok {
 			m.ipAllowlist = fn
+		}
+		if port, ok := dep.(contract.AdminWebSocket); ok {
+			m.ws = port
 		}
 	}
 	return m
@@ -73,17 +72,6 @@ var Descriptor = contract.Descriptor{
 
 // Descriptor 实现 contract.Describable。
 func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
-
-// initWS 初始化 WebSocket hub 与 presence（幂等）。
-func (m *Module) initWS() {
-	if m.wsHub != nil {
-		return
-	}
-	m.wsPres = ws.NewPresenceManager()
-	m.wsChannels = ws.NewChannelManager()
-	m.wsHub = ws.NewClientHub(m.wsPres, m.wsChannels)
-	go m.wsHub.Run(context.Background())
-}
 
 // RegisterHTTP 注册平台控制台端点（/api/v1/admin 前缀 + 管理端准入）。
 func (m *Module) RegisterHTTP(r contract.Router) {
@@ -116,23 +104,21 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 	admin.POST("/config/reload", configHandler.Reload)
 
 	// WebSocket 实时通信端点
-	m.initWS()
 	admin.GET("/ws", gin.WrapF(m.wsHandler()))
-	wsAdmin := interfaces.NewAdminWSHandler(m.wsHub, m.wsPres)
+	wsAdmin := interfaces.NewAdminWSHandler(m.ws)
 	admin.POST("/ws/push", wsAdmin.Push)
 	admin.GET("/ws/presence/:userId", wsAdmin.Presence)
 	admin.GET("/ws/online", wsAdmin.OnlineUsers)
 }
 
-// wsHandler 创建 WebSocket 处理器；JWT 未注入时返回 nil（路由仍注册，调用会 500）。
+// wsHandler 创建 WebSocket 处理器；JWT 或 ws 端口未注入时返回 500 处理器。
 func (m *Module) wsHandler() http.HandlerFunc {
-	m.initWS()
-	if m.jwt == nil {
+	if m.jwt == nil || m.ws == nil {
 		return func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "websocket not configured", http.StatusInternalServerError)
 		}
 	}
-	return ws.WSHandler(m.wsHub, m.jwt, m.wsPres, m.wsChannels)
+	return m.ws.Handler(m.jwt)
 }
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}

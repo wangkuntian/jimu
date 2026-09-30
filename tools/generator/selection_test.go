@@ -36,13 +36,16 @@ func allCapabilityNames(t *testing.T) []string {
 func TestGeneratedProjectBuildsAndVetsForEverySelection(t *testing.T) {
 	requireHeavyMatrix(t)
 	names := allCapabilityNames(t)
+	indices, err := scaffoldShardIndices(os.Getenv(scaffoldShardEnv), len(names))
+	require.NoError(t, err)
 	// 25 次真实构建会产生大量链接产物：用 newTestGoCache（默认随测试自动删除；CI 的 Scaffold
 	// Matrix job 经 JIMU_TEST_GOCACHE 复用一份跨运行的缓存），避免往共享缓存里堆构建结果
 	// （实测共享缓存可涨到 25G，曾把磁盘写满）。
 	// 全部子用例共用一个 module 路径，让内核那 ~200 个相同文件在缓存里去重。
 	cache := newTestGoCache(t)
 	sem := make(chan struct{}, heavyBuildConcurrency) // 见 heavyBuildConcurrency 的取值理由
-	for _, name := range names {
+	for _, index := range indices {
+		name := names[index]
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			sem <- struct{}{}
@@ -59,30 +62,24 @@ func TestGeneratedProjectBuildsAndVetsForEverySelection(t *testing.T) {
 	}
 }
 
-// TestSelectedCapabilityIsAssembledWithItsWholeCompileClosure 用 breach 钉住 C1 的具体形态：
-// breach import auth（根包），auth import user/infrastructure（**子包**）且 Requires user/access
-// —— 三者都必须整目录复制，且 tenant 仍只作携带。
+// TestSelectedCapabilityIsAssembledWithItsWholeCompileClosure 钉住端口化后的裁剪：
+// breach 仅复制自身完整代码；内核编译期仍需携带 access/tenant/user 的 domain。
 func TestSelectedCapabilityIsAssembledWithItsWholeCompileClosure(t *testing.T) {
 	requireHeavyMatrix(t)
 	dir := filepath.Join(t.TempDir(), "proj")
 	res, err := newProjectForTest(t, NewOptions{Dir: dir, With: "breach", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
-	// breach → auth（根包）→ user/infrastructure（子包）+ Requires user/access；
-	// auth 还 import encryption/notification/outbox/queue 的根包 → 一并整目录复制；
-	// tenant 仍是 schema 依赖的迁移携带。
+	// auth 是 breach 的可选运行时配置来源，不属于此生成项目的编译闭包。
 	assert.ElementsMatch(t,
-		[]string{"access", "auth", "breach", "encryption", "notification", "outbox", "queue", "tenant", "user"},
+		[]string{"access", "breach", "tenant", "user"},
 		res.CopySet)
-	// breach 的 auth 是**软依赖**（SoftRequires）：装配集只有 breach，auth 只是被它生产 import 到
-	// 编译闭包里；复制集才是那 9 个（`Capabilities` vs `CopySet` 的差别由此可见）。
+	// 装配集只有 breach；其余三个能力仅携带 domain。
 	assert.Equal(t, []string{"breach"}, res.Capabilities, "Capabilities 是装配集（Declared）")
 	for _, p := range []string{
 		"internal/capabilities/breach/wire.go",
-		"internal/capabilities/auth/wire.go",
-		"internal/capabilities/auth/application",    // auth 自己的子包
-		"internal/capabilities/user/infrastructure", // auth import 的 user 子包（C1 的关键）
-		"internal/capabilities/user/wire.go",
-		"internal/capabilities/access/wire.go",
+		"internal/capabilities/access/domain",
+		"internal/capabilities/tenant/domain",
+		"internal/capabilities/user/domain",
 	} {
 		_, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(p)))
 		assert.NoError(t, statErr, "缺少编译闭包成员 %s", p)
@@ -145,7 +142,7 @@ func TestGeneratedProjectTestTreeIsGreen(t *testing.T) {
 	// 串行时这十条占了整个重型 job 的 ~28%（实测 239s）。
 	cache := newTestGoCache(t)
 	sem := make(chan struct{}, heavyBuildConcurrency)
-	for _, tc := range []struct {
+	cases := []struct {
 		name string
 		opts NewOptions
 	}{
@@ -159,7 +156,11 @@ func TestGeneratedProjectTestTreeIsGreen(t *testing.T) {
 		{"with apidocs", NewOptions{With: "apidocs"}},
 		{"with retention", NewOptions{With: "retention"}},
 		{"with grpc", NewOptions{With: "grpc"}},
-	} {
+	}
+	indices, err := scaffoldShardIndices(os.Getenv(scaffoldShardEnv), len(cases))
+	require.NoError(t, err)
+	for _, index := range indices {
+		tc := cases[index]
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			sem <- struct{}{}
@@ -180,8 +181,8 @@ func TestGeneratedProjectTestTreeIsGreen(t *testing.T) {
 
 // TestGeneratedTestTreePruningKeepsSatisfiableTestFiles 钉住裁剪口径的**逐文件**一半：
 // 目录里有文件被裁，不代表整个目录都要裁 —— 逐文件 import/资产可满足性下合法的测试必须保留
-// （内部/审查者重放：minimal 的 internal/app、internal/assembly、outbox、internal/contract 都有
-// 可保留文件；此前按目录整组丢弃会多删 15 个文件/65 个 Test*）。
+// （内部/审查者重放：minimal 的 internal/app、internal/assembly、auth、internal/contract 都有
+// 可保留文件；此前按目录整组丢弃会多删合法测试）。
 func TestGeneratedTestTreePruningKeepsSatisfiableTestFiles(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
@@ -192,11 +193,11 @@ func TestGeneratedTestTreePruningKeepsSatisfiableTestFiles(t *testing.T) {
 		discarded[rel] = true
 	}
 	for _, rel := range []string{
-		"internal/app/application_test.go",            // 逐文件可满足
-		"internal/app/bootstrap_http_test.go",         //
-		"internal/assembly/assembly_test.go",          //
-		"internal/capabilities/outbox/outbox_test.go", //
-		"internal/contract/capability_test.go",        // 资产依赖只裁同目录的 openapi_test.go
+		"internal/app/application_test.go",                     // 逐文件可满足
+		"internal/app/bootstrap_http_test.go",                  //
+		"internal/assembly/assembly_test.go",                   //
+		"internal/capabilities/auth/application/reset_test.go", //
+		"internal/contract/capability_test.go",                 // 资产依赖只裁同目录的 openapi_test.go
 	} {
 		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "%s 应当保留", rel)
 		assert.False(t, discarded[rel], "%s 不应被裁", rel)

@@ -26,11 +26,11 @@
 
 | 形态 | 二进制 (MB) | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 | 重型依赖 |
 |---|---:|---:|---:|---:|---:|---:|---:|---|
-| `full` | 123.1 | 100.0% | 99 | 25 | 23 | 331 | 34543 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
-| `minimal` | 84.7 | 68.8% | 32 | 10 | 9 | 180 | 17532 | - |
-| `saas` | 85.0 | 69.0% | 48 | 13 | 11 | 206 | 20178 | - |
-| `enterprise` | 85.3 | 69.3% | 55 | 16 | 13 | 246 | 22974 | - |
-| `machine` | 83.3 | 67.7% | 28 | 10 | 8 | 182 | 17809 | - |
+| `full` | 123.2 | 100.0% | 99 | 25 | 23 | 337 | 35007 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
+| `minimal` | 84.7 | 68.8% | 32 | 10 | 9 | 155 | 15894 | - |
+| `saas` | 84.9 | 69.0% | 48 | 13 | 11 | 181 | 18506 | - |
+| `enterprise` | 85.3 | 69.3% | 55 | 16 | 13 | 222 | 21431 | - |
+| `machine` | 81.9 | 66.5% | 28 | 10 | 8 | 146 | 15249 | - |
 
 ## 验收断言
 
@@ -40,8 +40,8 @@
 - 二进制：`minimal` 是 `full` 的 68.8%（要求 ≤ 85%）
 - 路由数：`minimal` 32 < `full` 99
 - 表数：`minimal` 9 < `full` 23
-- 本仓 Go 文件：`minimal` 180 < `full` 331
-- 本仓代码行：`minimal` 17532 < `full` 34543
+- 本仓 Go 文件：`minimal` 155 < `full` 337
+- 本仓代码行：`minimal` 15894 < `full` 35007
 
 ## 层②边界：go.mod 直接依赖
 
@@ -54,8 +54,8 @@
 
 | 形态 | 装配的能力（按装配顺序） |
 |---|---|
-| `full` | encryption storage notification queue outbox breach tenant access user captcha mfa auth passkey audit console oauth apikey dataops feature uploadsec search retention apidocs grpc ws |
+| `full` | encryption storage notification queue outbox breach tenant access user captcha mfa auth passkey audit ws console oauth apikey dataops feature uploadsec search retention apidocs grpc |
 | `minimal` | encryption notification access user auth |
 | `saas` | encryption notification tenant access user auth audit |
-| `enterprise` | encryption storage notification access user auth audit console oauth dataops |
+| `enterprise` | encryption storage notification access user auth audit ws console oauth dataops |
 | `machine` | encryption access user apikey grpc |

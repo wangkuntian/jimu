@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"jimu/internal/assembly"
-	authmodule "jimu/internal/capabilities/auth"
-	"jimu/internal/capabilities/user"
 	"jimu/internal/contract"
 )
 
@@ -13,8 +11,8 @@ import (
 // user.info 端口读取（软依赖，缺失时仅影响 otpauth account 兜底），把 MFAVerifier
 // 暴露为端口供 auth 消费。
 func Wire(ctx *assembly.Context) (contract.Module, error) {
-	cfg := authConfig(ctx)
-	users, _ := ctx.Port(user.UserinfoPortName).(contract.UserinfoSource)
+	cfg := ctx.AuthConfig()
+	users, _ := ctx.Port(contract.UserinfoPortName).(contract.UserinfoSource)
 	mod := New(ctx.DB(), Config{
 		JWTSecret:         cfg.JWTSecret,
 		JWTPreviousSecret: cfg.JWTPreviousSecret,
@@ -30,9 +28,3 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 }
 
 // authConfig 取 auth 段；auth 未启用时该段不加载，回退为零值（旧装配惯例）。
-func authConfig(ctx *assembly.Context) *authmodule.Config {
-	if cfg := assembly.MustSection[*authmodule.Config](ctx, authmodule.ConfigKey); cfg != nil {
-		return cfg
-	}
-	return &authmodule.Config{}
-}

@@ -49,6 +49,21 @@ func TestFullAssemblyShape(t *testing.T) {
 	}
 }
 
+func TestFullWSBeforeConsole(t *testing.T) {
+	names := capabilityNames(Assembly())
+	wsIndex, consoleIndex := -1, -1
+	for i, name := range names {
+		if name == "ws" {
+			wsIndex = i
+		}
+		if name == "console" {
+			consoleIndex = i
+		}
+	}
+	require.GreaterOrEqual(t, wsIndex, 0)
+	require.Greater(t, consoleIndex, wsIndex)
+}
+
 // TestFullAssemblyModulesAreWired 每个条目都必须给出 Wire。
 func TestFullAssemblyModulesAreWired(t *testing.T) {
 	for _, c := range Assembly().Capabilities {
@@ -204,14 +219,13 @@ func TestFullAssemblyUngatedUnderEnabledSubset(t *testing.T) {
 // TestFullAssemblyEventBusDoesNotConstructQueue 回归（Task 3 评审 Finding 2）：
 // shipped 配置 outbox.publisher=event_bus 下不得在启动期构造队列客户端。base 只在 outbox
 // 的 MQ 分支 queue.New（kafka/rabbitmq 构造会连 broker、缺 broker/topic 即启动失败）。
-// 因此 queue 能力（Module/作业端点）仍照常装配，但 queue.Wire 不提供任何端口 ——
-// 没有队列客户端可被构造或泄漏。
+// queue.Wire 只提供惰性工厂；event_bus 下 outbox 不会调用 StartOutbox。
 func TestFullAssemblyEventBusDoesNotConstructQueue(t *testing.T) {
 	res, err := assembly.ProbeAssembly(Assembly(), nil)
 	require.NoError(t, err)
 
 	require.Contains(t, res.Capabilities, "queue", "queue 能力必须照常装配")
-	require.NotContains(t, res.Provided, "queue", "event_bus 下不得构造队列客户端")
+	require.Equal(t, []string{contract.OutboxMQPortName}, res.Provided["queue"])
 	// 对照：outbox 仍装配并提供端口（事件总线发布器路径）。
 	require.Contains(t, res.Provided["outbox"], "outbox")
 }

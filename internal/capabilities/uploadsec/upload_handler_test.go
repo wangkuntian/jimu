@@ -16,14 +16,14 @@ import (
 	"testing"
 	"time"
 
-	"jimu/internal/capabilities/storage"
+	"jimu/internal/contract"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// fakeStorage 内存实现，覆盖 storage.Storage 全接口
+// fakeStorage 内存实现，覆盖上传能力使用的存储端口。
 type fakeStorage struct {
 	uploaded map[string]string // key → contentType
 	deleted  []string
@@ -57,7 +57,7 @@ func (f *fakeStorage) PresignedUploadURL(string, time.Duration, string) (string,
 	return "", nil
 }
 
-var _ storage.Storage = (*fakeStorage)(nil)
+var _ contract.Storage = (*fakeStorage)(nil)
 
 func uploadEngine(h *UploadHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)

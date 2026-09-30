@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"jimu/internal/assembly"
-	"jimu/internal/capabilities/outbox"
 	"jimu/internal/capabilities/user/application"
 	"jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/contract"
@@ -17,10 +16,14 @@ import (
 func Wire(ctx *assembly.Context) (contract.Module, error) {
 	roles, _ := ctx.Port("access").(application.UserRoleAssigner)
 	quota, _ := ctx.Port("tenant").(application.TenantQuota)
-	ob, _ := ctx.Port(outbox.PortName).(*outbox.Outbox)
+	ob, _ := ctx.Port("outbox").(contract.EventWriter)
 	mod := New(ctx.DB(), *ctx.Config(), ctx.Redis(), ob).WithRoles(roles).WithQuota(quota)
-	if err := ctx.Provide(UserinfoPortName, NewUserinfoSource(infrastructure.NewMysqlRepository(ctx.DB()))); err != nil {
+	repo := infrastructure.NewMysqlRepository(ctx.DB())
+	if err := ctx.Provide(UserinfoPortName, NewUserinfoSource(repo)); err != nil {
 		return nil, fmt.Errorf("provide user info port: %w", err)
+	}
+	if err := ctx.Provide(AccountPortName, NewAccountRepository(repo)); err != nil {
+		return nil, fmt.Errorf("provide account port: %w", err)
 	}
 	return mod, nil
 }

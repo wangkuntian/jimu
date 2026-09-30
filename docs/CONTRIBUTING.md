@@ -171,14 +171,14 @@ docker rm -f jimu-test-mysql
 ## 模块开发 / 新增能力
 
 ```bash
-./bin/jimu module create product     # 本仓内生成能力骨架：internal/capabilities/product/
+./bin/jimu capability create product # 本仓内生成能力骨架：internal/capabilities/product/
 ```
 
-`jimu module create` 只往 `internal/capabilities/<name>/` 落骨架，**不改动任何注册点**。注册分两处：能力清单 `internal/capabilities/catalog`，以及需要该能力的形态清单 `internal/profiles/<name>/assembly.go`（非 catalog 条目按 `Ungated` 声明）。唯一入口 `cmd/server` 只调 `assembly.Run(active.Assembly())`，当前形态由选点包 `internal/profiles/active` 决定，不在这里逐个装配能力。
+`jimu capability create` 只往 `internal/capabilities/<name>/` 落典型 CRUD 骨架（含 `Descriptor` 和 `Wire`），**不改动任何注册点**；旧 `module create` 不再可用。注册分两处：能力清单 `internal/capabilities/catalog`，以及需要该能力的形态清单 `internal/profiles/<name>/assembly.go`（非 catalog 条目按 `Ungated` 声明）。唯一入口 `cmd/server` 只调 `assembly.Run(active.Assembly())`，当前形态由选点包 `internal/profiles/active` 决定，不在这里逐个装配能力。
 
-出货（为使用者生成独立项目）走层①脚手架 `jimu new` / `jimu capability add`，见 README「生成项目」章节。
+出货（为使用者生成独立项目）走层①脚手架 `jimu new` / `jimu capability add`；其中 `add` 向已生成项目追加已有能力，不创建框架能力，见 README「生成项目」章节。
 
-改完跑 `make check-capabilities`（5 条汇总行）与 `make profiles-check`（golden 依赖闭包）；新增能力、新增形态、新增驱动的完整步骤见 README「[开发规范 › 新增能力 / 驱动](../README.md#新增能力--驱动)」。
+改完跑 `make check-capabilities`（6 条汇总行）与 `make profiles-check`（golden 依赖闭包）；新增能力、新增形态、新增驱动的完整步骤见 README「[开发规范 › 新增能力 / 驱动](../README.md#新增能力--驱动)」。
 
 ## 报告问题
 

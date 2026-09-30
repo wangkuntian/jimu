@@ -6,34 +6,27 @@ import (
 	"testing"
 
 	"jimu/internal/capabilities/grpc/userinfopb"
-	userpkg "jimu/internal/capabilities/user"
-	userdomain "jimu/internal/capabilities/user/domain"
-	userinfrastructure "jimu/internal/capabilities/user/infrastructure"
+	"jimu/internal/contract"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 func newTestGRPCService(t *testing.T) userinfopb.UserInfoServiceClient {
 	t.Helper()
-	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, gdb.AutoMigrate(&userdomain.User{}))
-
-	// 种子数据
-	require.NoError(t, gdb.Create(&userdomain.User{ID: 1, Username: "alice", Status: 1}).Error)
-	require.NoError(t, gdb.Create(&userdomain.User{ID: 2, Username: "bob", Status: 1}).Error)
+	source := testUserinfoSource{users: []contract.Userinfo{
+		{ID: 1, Username: "alice", Status: 1},
+		{ID: 2, Username: "bob", Status: 1},
+	}}
 
 	// 用随机端口模拟 gRPC 连接，避免真实端口冲突
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	srv := grpc.NewServer()
-	userinfopb.RegisterUserInfoServiceServer(srv, NewUserInfoGRPCService(userpkg.NewUserinfoSource(userinfrastructure.NewMysqlRepository(gdb))))
+	userinfopb.RegisterUserInfoServiceServer(srv, NewUserInfoGRPCService(source))
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 

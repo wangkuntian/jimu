@@ -26,6 +26,21 @@ func validConfig() Config {
 	}
 }
 
+func TestPortViewDoesNotShareNestedSlices(t *testing.T) {
+	cfg := validConfig()
+	cfg.WebAuthn.RPOrigins = []string{"https://example.com"}
+	cfg.Provisioning.Roles = []ProvisionRoleTemplate{{
+		Name: "owner", Permissions: []ProvisionPermission{{Resource: "users", Action: "read"}},
+	}}
+	view := cfg.PortView()
+	view.WebAuthn.RPOrigins[0] = "https://changed.example.com"
+	view.Provisioning.Roles[0].Permissions[0].Resource = "other"
+	view.Provisioning.Roles[0].Name = "other"
+	assert.Equal(t, "https://example.com", cfg.WebAuthn.RPOrigins[0])
+	assert.Equal(t, "owner", cfg.Provisioning.Roles[0].Name)
+	assert.Equal(t, "users", cfg.Provisioning.Roles[0].Permissions[0].Resource)
+}
+
 func TestValidateCommonAuthChecks(t *testing.T) {
 	tests := []struct {
 		name   string

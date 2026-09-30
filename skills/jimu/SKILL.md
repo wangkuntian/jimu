@@ -22,14 +22,14 @@ description: 在 jimu 框架仓内改动时使用：新增/删除能力、新增
 | 路径 | 是什么 |
 |---|---|
 | `internal/kernel/` | 内核（不可勾选）：JWT/Session/限流机制、db、租户上下文、Casbin 强制器、logger 等 |
-| `internal/capabilities/<name>/` | 能力实现：静态 `Descriptor` + `contract.Module` + `wire.go` 自装配 |
+| `internal/capabilities/<name>/` | 能力实现：静态 `Descriptor` + `Wire` 入口，按职责实现 `contract.Module` 与分层目录 |
 | `internal/capabilities/catalog/` | 能力清单（唯一真源；18 项 catalog + 非 catalog 条目标 `Ungated`） |
 | `internal/capability/` | 描述符解析叶子包（`Resolve` / `ValidateDeclarations` / `Degraded`） |
 | `internal/assembly/` | 装配与生命周期（`Assembly` / `Capability` / `Run` / `ProbeAssembly`） |
 | `internal/profiles/<name>/` | 形态清单（`full`/`minimal`/`saas`/`enterprise`/`machine`）+ `registry`（形态总表）+ `active`（选点包） |
 | `internal/contract/` | 能力间端口与 `Descriptor` 定义 |
 | `cmd/server/` | 唯一入口：只 import `internal/assembly` 与选点包 `internal/profiles/active` |
-| `cmd/cli/` | `jimu` CLI（`migrate` / `seed` / `new` / `capability` / `module` / `apikey`） |
+| `cmd/cli/` | `jimu` CLI（`migrate` / `seed` / `new` / `capability create/add` / `apikey`） |
 | `tools/*` | 门禁与报告工具（`checkcapabilities` / `composereport` / `profileoverlay` / `profileassets` / `generator`） |
 | `configs/*.yaml` | 内核段之外的能力配置段由各能力 `Descriptor.Configs` 声明并按启用集加载 |
 
@@ -47,7 +47,7 @@ description: 在 jimu 框架仓内改动时使用：新增/删除能力、新增
 ## 最常用的验收命令
 
 ```bash
-make check-capabilities     # 5 条汇总行：自描述 ↔ 迁移、驱动、入口/选点包、资产归属
+make check-capabilities     # 6 条汇总行：自描述 ↔ 迁移、驱动、入口/选点包、资产归属、跨能力 import
 make profiles-check         # 5 形态 overlay 构建 + golden 依赖闭包
 make compose-report-check   # 入库报告 == 本次实测（平台相关列掩码后比对）
 make check-skills           # 本 skill 自身的契约校验

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"jimu/internal/contract"
 	"jimu/internal/kernel/observability"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -61,6 +62,12 @@ type Outbox struct {
 	store     Store
 	publisher Publisher
 }
+
+func (o *Outbox) WriteEvent(ctx context.Context, tx any, event contract.OutboxEvent) error {
+	return o.Add(ctx, tx, Event{AggregateID: event.AggregateID, EventType: event.EventType, Payload: event.Payload})
+}
+
+var _ contract.EventWriter = (*Outbox)(nil)
 
 // New 创建 Outbox
 func New(store Store, publisher Publisher) *Outbox {

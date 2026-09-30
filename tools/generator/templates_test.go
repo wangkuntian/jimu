@@ -33,6 +33,6 @@ func TestTemplatesDrift(t *testing.T) {
 	runGoInProject(t, dir, cache, "build", "./...")
 	out, err := runGoInProjectOutput(t, dir, cache, "run", "./tools/checkcapabilities")
 	require.NoError(t, err, "生成项目的 checkcapabilities 必须绿:\n%s", out)
-	// 5 条汇总行（P2.6 起资产段是第 5 条）：少一条就是门禁被削弱的信号。
-	assert.Equal(t, 5, strings.Count(out, "✅ check-capabilities:"), "门禁必须仍是 5 条:\n%s", out)
+	// 第六条覆盖能力内部的跨能力 import，少一条就是门禁被削弱的信号。
+	assert.Equal(t, 6, strings.Count(out, "✅ check-capabilities:"), "门禁必须仍是 6 条:\n%s", out)
 }

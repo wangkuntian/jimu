@@ -11,10 +11,6 @@ import (
 	"time"
 
 	authdomain "jimu/internal/capabilities/auth/domain"
-	"jimu/internal/capabilities/encryption"
-	"jimu/internal/capabilities/notification"
-	"jimu/internal/capabilities/outbox"
-	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/tenant"
@@ -22,18 +18,17 @@ import (
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 )
 
 type AuthService struct {
-	userRepo             userdomain.UserRepository
+	userRepo             contract.AccountRepository
 	jwtUtil              *auth.JWT
 	sessions             auth.SessionStore
 	lockout              *auth.LoginFailureTracker
 	accessMin            int
-	outbox               *outbox.Outbox
-	cipher               *encryption.Cipher
-	notifier             notification.Dispatcher
+	outbox               contract.EventWriter
+	cipher               contract.BlindIndexer
+	notifier             contract.Notifier
 	resetStore           *ResetStore
 	loginHistory         authdomain.LoginHistoryRepository    // 登录历史（nil=不记录）
 	passwordHistory      authdomain.PasswordHistoryRepository // 密码历史（nil=不做防复用检查）
@@ -45,7 +40,7 @@ type AuthService struct {
 	mfa                  contract.MFAVerifier       // 二次验证 + 可信设备（nil = 未启用）
 }
 
-func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int, deps ...interface{}) *AuthService {
+func NewAuthService(userRepo contract.AccountRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int, deps ...interface{}) *AuthService {
 	s := &AuthService{
 		userRepo:  userRepo,
 		jwtUtil:   jwtUtil,
@@ -55,11 +50,11 @@ func NewAuthService(userRepo userdomain.UserRepository, jwtUtil *auth.JWT, sessi
 	}
 	for _, dep := range deps {
 		switch d := dep.(type) {
-		case *outbox.Outbox:
+		case contract.EventWriter:
 			s.outbox = d
-		case *encryption.Cipher:
+		case contract.BlindIndexer:
 			s.cipher = d
-		case notification.Dispatcher:
+		case contract.Notifier:
 			s.notifier = d
 		case *ResetStore:
 			s.resetStore = d
@@ -161,7 +156,7 @@ func (s *AuthService) LoginWithTOTP(ctx context.Context, username, password, tot
 }
 
 // finishLogin 校验通过后的公共登录收尾：签发 token + 建会话 + Outbox 事件。
-func (s *AuthService) finishLogin(ctx context.Context, user *userdomain.User) (*authdomain.TokenPair, error) {
+func (s *AuthService) finishLogin(ctx context.Context, user *contract.Account) (*authdomain.TokenPair, error) {
 	sessionID := uuid.NewString()
 	accessToken, refreshToken, refreshClaims, err := s.issueTokenPair(user.ID, effectiveTenantID(user.TenantID), sessionID)
 	if err != nil {
@@ -180,7 +175,7 @@ func (s *AuthService) finishLogin(ctx context.Context, user *userdomain.User) (*
 		})
 		if err != nil {
 			log.Printf("auth: marshal logged_in event: %v", err)
-		} else if err := s.outbox.Add(ctx, nil, outbox.Event{
+		} else if err := s.outbox.WriteEvent(ctx, nil, contract.OutboxEvent{
 			AggregateID: fmt.Sprintf("user:%d", user.ID),
 			EventType:   contract.EventUserLoggedIn,
 			Payload:     payload,
@@ -204,7 +199,7 @@ func (s *AuthService) recordFailure(ctx context.Context, username string) {
 	_, _ = s.lockout.RecordFailure(ctx, username)
 }
 
-func (s *AuthService) Register(ctx context.Context, username, password, email, phone string) (*userdomain.User, error) {
+func (s *AuthService) Register(ctx context.Context, username, password, email, phone string) (*contract.Account, error) {
 	username = normalizeUsername(username)
 	if err := s.checkRegistrationAvailable(ctx, username, email); err != nil {
 		return nil, err
@@ -225,7 +220,7 @@ func (s *AuthService) Register(ctx context.Context, username, password, email, p
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to hash password", err)
 	}
 
-	user := &userdomain.User{
+	user := &contract.Account{
 		Username: username,
 		Password: string(hashedPassword),
 		Email:    email,
@@ -305,7 +300,7 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email string) error {
 	}
 	hash := s.cipher.BlindIndex(email)
 	user, err := s.userRepo.FindByEmailHash(ctx, hash)
-	if err != nil && !stderrors.Is(err, gorm.ErrRecordNotFound) {
+	if err != nil && !stderrors.Is(err, contract.ErrNotFound) {
 		return errors.Wrap(errors.CodeInternalError, "failed to find user by email", err)
 	}
 	if user == nil {
@@ -316,8 +311,8 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email string) error {
 	if err := s.resetStore.Set(ctx, hash, code); err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to store reset code", err)
 	}
-	if err := s.notifier.Dispatch(ctx, notification.Message{
-		Channel: notification.ChannelEmail,
+	if err := s.notifier.Dispatch(ctx, contract.NotificationMessage{
+		Channel: "email",
 		To:      email,
 		Subject: "密码重置验证码",
 		Body:    fmt.Sprintf("你的验证码：%s，%d 分钟内有效。若非本人操作请忽略。", code, int(s.resetStore.ttl.Minutes())),
@@ -343,7 +338,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, email, code, newPasswor
 
 	user, err := s.userRepo.FindByEmailHash(ctx, hash)
 	if err != nil {
-		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		if stderrors.Is(err, contract.ErrNotFound) {
 			return errors.New(errors.CodeInvalidResetCode, "invalid or expired reset code")
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to find user by email", err)
@@ -399,7 +394,7 @@ func WithPasswordHistory(count int) interface{} { return passwordHistoryCount(co
 
 // checkPasswordReuse 阻止把密码改回当前值或最近使用过的历史密码。
 // 未配置仓储或条数为 0 时跳过检查（视为未启用该策略）。
-func (s *AuthService) checkPasswordReuse(ctx context.Context, user *userdomain.User, newPassword string) error {
+func (s *AuthService) checkPasswordReuse(ctx context.Context, user *contract.Account, newPassword string) error {
 	if s.passwordHistory == nil || s.passwordHistoryCount <= 0 {
 		return nil
 	}
@@ -419,7 +414,7 @@ func (s *AuthService) checkPasswordReuse(ctx context.Context, user *userdomain.U
 }
 
 // recordPasswordHistory 记录旧密码哈希并裁剪到配置条数；失败只记日志，不阻断改密结果。
-func (s *AuthService) recordPasswordHistory(ctx context.Context, user *userdomain.User) {
+func (s *AuthService) recordPasswordHistory(ctx context.Context, user *contract.Account) {
 	if s.passwordHistory == nil || s.passwordHistoryCount <= 0 || user.Password == "" {
 		return
 	}

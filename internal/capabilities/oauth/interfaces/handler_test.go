@@ -77,6 +77,7 @@ func newTestHandler(t *testing.T, providers map[string]oauthplatform.Provider) *
 		client,
 		nil,
 		30,
+		nil,
 	)
 	return NewOAuthHandler(svc)
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"jimu/internal/assembly"
-	"jimu/internal/capabilities/user"
 	"jimu/internal/contract"
 )
 
@@ -24,7 +23,7 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	}
 	// 业务示例：注册 UserInfoService，用户数据经 contract.UserinfoSource 端口读取
 	// （user 能力提供适配实现，grpc 能力不直接依赖 user/domain）
-	if source, ok := ctx.Port(user.UserinfoPortName).(contract.UserinfoSource); ok && source != nil {
+	if source, ok := ctx.Port(contract.UserinfoPortName).(contract.UserinfoSource); ok && source != nil {
 		server.RegisterUserInfoService(source)
 	}
 	if cfg.GRPC.Enabled {

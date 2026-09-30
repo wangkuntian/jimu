@@ -19,6 +19,7 @@ var migrationsFS embed.FS
 // Descriptor 能力静态描述：迁移与权限点由能力自声明，供迁移运行器与种子消费。
 var Descriptor = contract.Descriptor{
 	Name:       "product",
+	Owns:       []string{"products"},
 	Migrations: migrationsFS,
 	Mount:      contract.MountProtected,
 	Permissions: []contract.Permission{

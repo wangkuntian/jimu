@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"jimu/internal/capabilities/queue"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/event"
 	"jimu/internal/kernel/logger"
@@ -48,10 +47,10 @@ var eventTypeConverters = map[string]func(json.RawMessage) (interface{}, error){
 }
 
 // BridgeWorker 返回把 outbox 载荷反序列化并发布强类型事件到裸业务主题的 worker。
-func BridgeWorker(bus *event.EventBus) queue.WorkerFunc {
-	return func(_ context.Context, payload string) error {
+func BridgeWorker(bus *event.EventBus) contract.OutboxMQHandler {
+	return func(_ context.Context, message contract.OutboxMQMessage) error {
 		var evt EventPayload
-		if err := json.Unmarshal([]byte(payload), &evt); err != nil {
+		if err := json.Unmarshal([]byte(message.Payload), &evt); err != nil {
 			return fmt.Errorf("unmarshal outbox event: %w", err)
 		}
 		conv, ok := eventTypeConverters[evt.EventType]
@@ -64,13 +63,6 @@ func BridgeWorker(bus *event.EventBus) queue.WorkerFunc {
 		}
 		bus.Publish(evt.EventType, strong)
 		return nil
-	}
-}
-
-// RegisterMQWorkers 注册 MQ 消费端的 outbox 桥接 worker。
-func RegisterMQWorkers(bus *event.EventBus) {
-	for eventType := range eventTypeConverters {
-		queue.RegisterWorker("outbox:"+eventType, BridgeWorker(bus))
 	}
 }
 

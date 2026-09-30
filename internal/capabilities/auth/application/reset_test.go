@@ -7,9 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"jimu/internal/capabilities/encryption"
-	"jimu/internal/capabilities/notification"
-	userdomain "jimu/internal/capabilities/user/domain"
+	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
 	apperrors "jimu/internal/shared/errors"
 
@@ -19,6 +17,10 @@ import (
 )
 
 const resetTestKey = "0123456789abcdef0123456789abcdef"
+
+type testIndexer struct{}
+
+func (testIndexer) BlindIndex(value string) string { return "test-index:" + value }
 
 // newResetRedis 启动内存 redis（miniredis）供一次性码存储测试
 func newResetRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
@@ -34,27 +36,19 @@ func newResetRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 // fakeDispatcher 记录通知消息的 Dispatcher mock
 type fakeDispatcher struct {
 	mu       sync.Mutex
-	messages []notification.Message
+	messages []contract.NotificationMessage
 }
 
-func (f *fakeDispatcher) Register(notification.Channel, notification.Notification) {}
-func (f *fakeDispatcher) Dispatch(_ context.Context, msg notification.Message) error {
+func (f *fakeDispatcher) Dispatch(_ context.Context, msg contract.NotificationMessage) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.messages = append(f.messages, msg)
 	return nil
 }
-func (f *fakeDispatcher) DispatchBatch(_ context.Context, msgs []notification.Message) error {
+func (f *fakeDispatcher) sent() []contract.NotificationMessage {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.messages = append(f.messages, msgs...)
-	return nil
-}
-
-func (f *fakeDispatcher) sent() []notification.Message {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return append([]notification.Message{}, f.messages...)
+	return append([]contract.NotificationMessage{}, f.messages...)
 }
 
 func newResetService(t *testing.T, repo *fakeUserRepo, notifier *fakeDispatcher) (*AuthService, *ResetStore, *fakeSessionStore) {
@@ -63,17 +57,17 @@ func newResetService(t *testing.T, repo *fakeUserRepo, notifier *fakeDispatcher)
 	resetStore := NewResetStore(rclient, 15*time.Minute)
 	store := newFakeSessionStore()
 	svc := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), store, nil, 30,
-		encryption.New(resetTestKey), notifier, resetStore)
+		testIndexer{}, notifier, resetStore)
 	svc.resetGen = func() string { return "123456" }
 	return svc, resetStore, store
 }
 
 func TestForgotPasswordSendsCode(t *testing.T) {
 	ctx := context.Background()
-	repo := &fakeUserRepo{users: map[string]*userdomain.User{
+	repo := &fakeUserRepo{users: map[string]*contract.Account{
 		"alice": userWithPassword(t, 42, "alice", "correct", 1),
 	}}
-	repo.findByEmailHash = func(_ context.Context, hash string) (*userdomain.User, error) {
+	repo.findByEmailHash = func(_ context.Context, hash string) (*contract.Account, error) {
 		return repo.users["alice"], nil
 	}
 	notifier := &fakeDispatcher{}
@@ -83,13 +77,13 @@ func TestForgotPasswordSendsCode(t *testing.T) {
 		t.Fatal(err)
 	}
 	msgs := notifier.sent()
-	if len(msgs) != 1 || msgs[0].To != "alice@example.com" || msgs[0].Channel != notification.ChannelEmail {
+	if len(msgs) != 1 || msgs[0].To != "alice@example.com" || msgs[0].Channel != "email" {
 		t.Fatalf("messages = %#v", msgs)
 	}
 	if !strings.Contains(msgs[0].Body, "123456") {
 		t.Fatalf("body lacks code: %q", msgs[0].Body)
 	}
-	code, err := resetStore.GetAndDelete(ctx, encryption.New(resetTestKey).BlindIndex("alice@example.com"))
+	code, err := resetStore.GetAndDelete(ctx, testIndexer{}.BlindIndex("alice@example.com"))
 	if err != nil || code != "123456" {
 		t.Fatalf("stored code = %q err = %v", code, err)
 	}
@@ -98,7 +92,7 @@ func TestForgotPasswordSendsCode(t *testing.T) {
 func TestForgotPasswordHidesMissingUser(t *testing.T) {
 	ctx := context.Background()
 	notifier := &fakeDispatcher{}
-	svc, _, _ := newResetService(t, &fakeUserRepo{users: map[string]*userdomain.User{}}, notifier)
+	svc, _, _ := newResetService(t, &fakeUserRepo{users: map[string]*contract.Account{}}, notifier)
 
 	if err := svc.ForgotPassword(ctx, "missing@example.com"); err != nil {
 		t.Fatalf("missing user must not error: %v", err)
@@ -110,12 +104,12 @@ func TestForgotPasswordHidesMissingUser(t *testing.T) {
 
 func TestResetPasswordSuccess(t *testing.T) {
 	ctx := context.Background()
-	repo := &fakeUserRepo{users: map[string]*userdomain.User{
+	repo := &fakeUserRepo{users: map[string]*contract.Account{
 		"alice": userWithPassword(t, 42, "alice", "correct", 1),
 	}}
 	var updatedID uint64
 	var updatedHash string
-	repo.findByEmailHash = func(_ context.Context, hash string) (*userdomain.User, error) {
+	repo.findByEmailHash = func(_ context.Context, hash string) (*contract.Account, error) {
 		return repo.users["alice"], nil
 	}
 	repo.updatePassword = func(_ context.Context, id uint64, hashed string) error {
@@ -124,7 +118,7 @@ func TestResetPasswordSuccess(t *testing.T) {
 	}
 	notifier := &fakeDispatcher{}
 	svc, resetStore, store := newResetService(t, repo, notifier)
-	hash := encryption.New(resetTestKey).BlindIndex("alice@example.com")
+	hash := testIndexer{}.BlindIndex("alice@example.com")
 	require.NoError(t, resetStore.Set(ctx, hash, "123456"))
 
 	if err := svc.ResetPassword(ctx, "alice@example.com", "123456", "newpass123"); err != nil {
@@ -140,12 +134,12 @@ func TestResetPasswordSuccess(t *testing.T) {
 
 func TestResetPasswordWrongCode(t *testing.T) {
 	ctx := context.Background()
-	repo := &fakeUserRepo{users: map[string]*userdomain.User{
+	repo := &fakeUserRepo{users: map[string]*contract.Account{
 		"alice": userWithPassword(t, 42, "alice", "correct", 1),
 	}}
 	notifier := &fakeDispatcher{}
 	svc, resetStore, _ := newResetService(t, repo, notifier)
-	require.NoError(t, resetStore.Set(ctx, encryption.New(resetTestKey).BlindIndex("alice@example.com"), "123456"))
+	require.NoError(t, resetStore.Set(ctx, testIndexer{}.BlindIndex("alice@example.com"), "123456"))
 
 	err := svc.ResetPassword(ctx, "alice@example.com", "000000", "newpass123")
 	if appCode(err) != apperrors.CodeInvalidResetCode {
@@ -155,7 +149,7 @@ func TestResetPasswordWrongCode(t *testing.T) {
 
 func TestForgotPasswordNotConfigured(t *testing.T) {
 	ctx := context.Background()
-	svc := NewAuthService(&fakeUserRepo{users: map[string]*userdomain.User{}}, auth.New(resetTestKey, "jimu", 30, 7), newFakeSessionStore(), nil, 30)
+	svc := NewAuthService(&fakeUserRepo{users: map[string]*contract.Account{}}, auth.New(resetTestKey, "jimu", 30, 7), newFakeSessionStore(), nil, 30)
 	err := svc.ForgotPassword(ctx, "a@example.com")
 	if appCode(err) != apperrors.CodeInternalError {
 		t.Fatalf("code = %d, want %d", appCode(err), apperrors.CodeInternalError)
@@ -163,7 +157,7 @@ func TestForgotPasswordNotConfigured(t *testing.T) {
 }
 
 func TestGenerateResetCodeReal(t *testing.T) {
-	repo := &fakeUserRepo{users: map[string]*userdomain.User{}}
+	repo := &fakeUserRepo{users: map[string]*contract.Account{}}
 	svc, _, _ := newResetService(t, repo, &fakeDispatcher{})
 	svc.resetGen = nil // 走真实 crypto/rand 路径
 	for i := 0; i < 5; i++ {
@@ -181,15 +175,15 @@ func TestGenerateResetCodeReal(t *testing.T) {
 
 func TestResetPasswordCodeReuseFails(t *testing.T) {
 	ctx := context.Background()
-	repo := &fakeUserRepo{users: map[string]*userdomain.User{
+	repo := &fakeUserRepo{users: map[string]*contract.Account{
 		"alice": userWithPassword(t, 42, "alice", "correct", 1),
 	}}
-	repo.findByEmailHash = func(_ context.Context, hash string) (*userdomain.User, error) {
+	repo.findByEmailHash = func(_ context.Context, hash string) (*contract.Account, error) {
 		return repo.users["alice"], nil
 	}
 	notifier := &fakeDispatcher{}
 	svc, resetStore, _ := newResetService(t, repo, notifier)
-	hash := encryption.New(resetTestKey).BlindIndex("alice@example.com")
+	hash := testIndexer{}.BlindIndex("alice@example.com")
 	require.NoError(t, resetStore.Set(ctx, hash, "123456"))
 
 	if err := svc.ResetPassword(ctx, "alice@example.com", "123456", "newpass123"); err != nil {
