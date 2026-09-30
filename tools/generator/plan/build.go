@@ -89,7 +89,7 @@ func normalizeTemplates(values []manifest.TemplateAction) []manifest.TemplateAct
 	values = slices.Clone(values)
 	for i := range values {
 		if values[i].Data == nil {
-			values[i].Data = map[string]string{}
+			values[i].Data = map[string]any{}
 		}
 	}
 	sort.SliceStable(values, func(i, j int) bool { return values[i].Destination < values[j].Destination })

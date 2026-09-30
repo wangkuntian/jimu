@@ -535,10 +535,9 @@
       "destination": "Makefile",
       "kind": "build",
       "data": {
-        "capabilities": "user,access,auth,encryption,notification",
-        "drivers": "",
-        "roots": "access auth encryption notification user",
-        "shape": "minimal"
+        "Expected": "access auth encryption notification user",
+        "HasAPIdocs": false,
+        "Shape": "minimal"
       }
     },
     {
@@ -546,10 +545,9 @@
       "destination": "Dockerfile",
       "kind": "build",
       "data": {
-        "capabilities": "user,access,auth,encryption,notification",
-        "drivers": "",
-        "roots": "access auth encryption notification user",
-        "shape": "minimal"
+        "Expected": "access auth encryption notification user",
+        "HasAPIdocs": false,
+        "Shape": "minimal"
       }
     },
     {
@@ -557,10 +555,9 @@
       "destination": "scripts/check_profiles.sh",
       "kind": "build",
       "data": {
-        "capabilities": "user,access,auth,encryption,notification",
-        "drivers": "",
-        "roots": "access auth encryption notification user",
-        "shape": "minimal"
+        "Expected": "access auth encryption notification user",
+        "HasAPIdocs": false,
+        "Shape": "minimal"
       }
     },
     {
@@ -568,10 +565,49 @@
       "destination": "internal/profiles/registry/registry.go",
       "kind": "shape",
       "data": {
-        "capabilities": "user,access,auth,encryption,notification",
-        "drivers": "",
-        "roots": "access auth encryption notification user",
-        "shape": "minimal"
+        "Capabilities": [
+          {
+            "Alias": "usermodule",
+            "Capability": "user",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/user",
+            "Ungated": false
+          },
+          {
+            "Alias": "accessmodule",
+            "Capability": "access",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/access",
+            "Ungated": false
+          },
+          {
+            "Alias": "authmodule",
+            "Capability": "auth",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/auth",
+            "Ungated": false
+          },
+          {
+            "Alias": "encryptionmodule",
+            "Capability": "encryption",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/encryption",
+            "Ungated": true
+          },
+          {
+            "Alias": "notificationmodule",
+            "Capability": "notification",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/notification",
+            "Ungated": true
+          }
+        ],
+        "Shape": "minimal"
       }
     },
     {
@@ -579,10 +615,49 @@
       "destination": "internal/profiles/minimal/assembly.go",
       "kind": "shape",
       "data": {
-        "capabilities": "user,access,auth,encryption,notification",
-        "drivers": "",
-        "roots": "access auth encryption notification user",
-        "shape": "minimal"
+        "Capabilities": [
+          {
+            "Alias": "usermodule",
+            "Capability": "user",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/user",
+            "Ungated": false
+          },
+          {
+            "Alias": "accessmodule",
+            "Capability": "access",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/access",
+            "Ungated": false
+          },
+          {
+            "Alias": "authmodule",
+            "Capability": "auth",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/auth",
+            "Ungated": false
+          },
+          {
+            "Alias": "encryptionmodule",
+            "Capability": "encryption",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/encryption",
+            "Ungated": true
+          },
+          {
+            "Alias": "notificationmodule",
+            "Capability": "notification",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/notification",
+            "Ungated": true
+          }
+        ],
+        "Shape": "minimal"
       }
     },
     {
@@ -590,10 +665,49 @@
       "destination": "internal/profiles/minimal/drivers.go",
       "kind": "shape",
       "data": {
-        "capabilities": "user,access,auth,encryption,notification",
-        "drivers": "",
-        "roots": "access auth encryption notification user",
-        "shape": "minimal"
+        "Capabilities": [
+          {
+            "Alias": "usermodule",
+            "Capability": "user",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/user",
+            "Ungated": false
+          },
+          {
+            "Alias": "accessmodule",
+            "Capability": "access",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/access",
+            "Ungated": false
+          },
+          {
+            "Alias": "authmodule",
+            "Capability": "auth",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/auth",
+            "Ungated": false
+          },
+          {
+            "Alias": "encryptionmodule",
+            "Capability": "encryption",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/encryption",
+            "Ungated": true
+          },
+          {
+            "Alias": "notificationmodule",
+            "Capability": "notification",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/notification",
+            "Ungated": true
+          }
+        ],
+        "Shape": "minimal"
       }
     },
     {
@@ -601,10 +715,7 @@
       "destination": "internal/profiles/active/assembly.go",
       "kind": "shape",
       "data": {
-        "capabilities": "user,access,auth,encryption,notification",
-        "drivers": "",
-        "roots": "access auth encryption notification user",
-        "shape": "minimal"
+        "Shape": "minimal"
       }
     },
     {
@@ -612,10 +723,82 @@
       "destination": "internal/capabilities/catalog/catalog.go",
       "kind": "catalog",
       "data": {
-        "capabilities": "user,access,auth,encryption,notification",
-        "drivers": "",
-        "roots": "access auth encryption notification user",
-        "shape": "minimal"
+        "Entries": [
+          {
+            "Alias": "usermodule",
+            "Name": "user",
+            "Path": "jimu/internal/capabilities/user"
+          },
+          {
+            "Alias": "accessmodule",
+            "Name": "access",
+            "Path": "jimu/internal/capabilities/access"
+          },
+          {
+            "Alias": "tenantmodule",
+            "Name": "tenant",
+            "Path": "jimu/internal/capabilities/tenant"
+          },
+          {
+            "Alias": "authmodule",
+            "Name": "auth",
+            "Path": "jimu/internal/capabilities/auth"
+          },
+          {
+            "Alias": "encryptionmodule",
+            "Name": "encryption",
+            "Path": "jimu/internal/capabilities/encryption"
+          },
+          {
+            "Alias": "notificationmodule",
+            "Name": "notification",
+            "Path": "jimu/internal/capabilities/notification"
+          }
+        ],
+        "KnownNames": [
+          "user",
+          "access",
+          "tenant",
+          "mfa",
+          "auth",
+          "passkey",
+          "audit",
+          "console",
+          "oauth",
+          "apikey",
+          "queue",
+          "outbox",
+          "dataops",
+          "search",
+          "captcha",
+          "feature",
+          "uploadsec",
+          "breach",
+          "encryption",
+          "storage",
+          "notification",
+          "ws",
+          "retention",
+          "apidocs",
+          "grpc"
+        ],
+        "MigrationOnly": [
+          {
+            "Alias": "tenantmodule",
+            "Name": "tenant",
+            "Path": "jimu/internal/capabilities/tenant"
+          }
+        ],
+        "SchemaDeps": [
+          {
+            "From": "user",
+            "To": "{\"tenant\"}"
+          },
+          {
+            "From": "access",
+            "To": "{\"tenant\"}"
+          }
+        ]
       }
     },
     {
@@ -623,10 +806,82 @@
       "destination": "internal/capabilities/catalog/migration.go",
       "kind": "catalog",
       "data": {
-        "capabilities": "user,access,auth,encryption,notification",
-        "drivers": "",
-        "roots": "access auth encryption notification user",
-        "shape": "minimal"
+        "Entries": [
+          {
+            "Alias": "usermodule",
+            "Name": "user",
+            "Path": "jimu/internal/capabilities/user"
+          },
+          {
+            "Alias": "accessmodule",
+            "Name": "access",
+            "Path": "jimu/internal/capabilities/access"
+          },
+          {
+            "Alias": "tenantmodule",
+            "Name": "tenant",
+            "Path": "jimu/internal/capabilities/tenant"
+          },
+          {
+            "Alias": "authmodule",
+            "Name": "auth",
+            "Path": "jimu/internal/capabilities/auth"
+          },
+          {
+            "Alias": "encryptionmodule",
+            "Name": "encryption",
+            "Path": "jimu/internal/capabilities/encryption"
+          },
+          {
+            "Alias": "notificationmodule",
+            "Name": "notification",
+            "Path": "jimu/internal/capabilities/notification"
+          }
+        ],
+        "KnownNames": [
+          "user",
+          "access",
+          "tenant",
+          "mfa",
+          "auth",
+          "passkey",
+          "audit",
+          "console",
+          "oauth",
+          "apikey",
+          "queue",
+          "outbox",
+          "dataops",
+          "search",
+          "captcha",
+          "feature",
+          "uploadsec",
+          "breach",
+          "encryption",
+          "storage",
+          "notification",
+          "ws",
+          "retention",
+          "apidocs",
+          "grpc"
+        ],
+        "MigrationOnly": [
+          {
+            "Alias": "tenantmodule",
+            "Name": "tenant",
+            "Path": "jimu/internal/capabilities/tenant"
+          }
+        ],
+        "SchemaDeps": [
+          {
+            "From": "user",
+            "To": "{\"tenant\"}"
+          },
+          {
+            "From": "access",
+            "To": "{\"tenant\"}"
+          }
+        ]
       }
     },
     {
@@ -634,10 +889,7 @@
       "destination": "cmd/cli/main.go",
       "kind": "cli",
       "data": {
-        "capabilities": "user,access,auth,encryption,notification",
-        "drivers": "",
-        "roots": "access auth encryption notification user",
-        "shape": "minimal"
+        "CLIImports": []
       }
     }
   ],
@@ -1187,5 +1439,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:534c8ad969edebb56585b83b2dd6f4b1d58f63197700d2832d803e6e439131a7"
+  "digest": "sha256:d296edadfbb0677c83135bdeacc72613c8b9ac642cfffe2c27441bbfb559bdab"
 }

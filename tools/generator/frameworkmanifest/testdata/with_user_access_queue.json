@@ -497,10 +497,9 @@
       "destination": "Makefile",
       "kind": "build",
       "data": {
-        "capabilities": "user,access,queue",
-        "drivers": "queue:redis",
-        "roots": "access queue user",
-        "shape": "app"
+        "Expected": "access queue user",
+        "HasAPIdocs": false,
+        "Shape": "app"
       }
     },
     {
@@ -508,10 +507,9 @@
       "destination": "Dockerfile",
       "kind": "build",
       "data": {
-        "capabilities": "user,access,queue",
-        "drivers": "queue:redis",
-        "roots": "access queue user",
-        "shape": "app"
+        "Expected": "access queue user",
+        "HasAPIdocs": false,
+        "Shape": "app"
       }
     },
     {
@@ -519,10 +517,9 @@
       "destination": "scripts/check_profiles.sh",
       "kind": "build",
       "data": {
-        "capabilities": "user,access,queue",
-        "drivers": "queue:redis",
-        "roots": "access queue user",
-        "shape": "app"
+        "Expected": "access queue user",
+        "HasAPIdocs": false,
+        "Shape": "app"
       }
     },
     {
@@ -530,10 +527,35 @@
       "destination": "internal/profiles/registry/registry.go",
       "kind": "shape",
       "data": {
-        "capabilities": "user,access,queue",
-        "drivers": "queue:redis",
-        "roots": "access queue user",
-        "shape": "app"
+        "Capabilities": [
+          {
+            "Alias": "usermodule",
+            "Capability": "user",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/user",
+            "Ungated": false
+          },
+          {
+            "Alias": "accessmodule",
+            "Capability": "access",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/access",
+            "Ungated": false
+          },
+          {
+            "Alias": "queuemodule",
+            "Capability": "queue",
+            "Drivers": [
+              "redis"
+            ],
+            "HasDrivers": true,
+            "Path": "jimu/internal/capabilities/queue",
+            "Ungated": false
+          }
+        ],
+        "Shape": "app"
       }
     },
     {
@@ -541,10 +563,35 @@
       "destination": "internal/profiles/app/assembly.go",
       "kind": "shape",
       "data": {
-        "capabilities": "user,access,queue",
-        "drivers": "queue:redis",
-        "roots": "access queue user",
-        "shape": "app"
+        "Capabilities": [
+          {
+            "Alias": "usermodule",
+            "Capability": "user",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/user",
+            "Ungated": false
+          },
+          {
+            "Alias": "accessmodule",
+            "Capability": "access",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/access",
+            "Ungated": false
+          },
+          {
+            "Alias": "queuemodule",
+            "Capability": "queue",
+            "Drivers": [
+              "redis"
+            ],
+            "HasDrivers": true,
+            "Path": "jimu/internal/capabilities/queue",
+            "Ungated": false
+          }
+        ],
+        "Shape": "app"
       }
     },
     {
@@ -552,10 +599,35 @@
       "destination": "internal/profiles/app/drivers.go",
       "kind": "shape",
       "data": {
-        "capabilities": "user,access,queue",
-        "drivers": "queue:redis",
-        "roots": "access queue user",
-        "shape": "app"
+        "Capabilities": [
+          {
+            "Alias": "usermodule",
+            "Capability": "user",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/user",
+            "Ungated": false
+          },
+          {
+            "Alias": "accessmodule",
+            "Capability": "access",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/access",
+            "Ungated": false
+          },
+          {
+            "Alias": "queuemodule",
+            "Capability": "queue",
+            "Drivers": [
+              "redis"
+            ],
+            "HasDrivers": true,
+            "Path": "jimu/internal/capabilities/queue",
+            "Ungated": false
+          }
+        ],
+        "Shape": "app"
       }
     },
     {
@@ -563,10 +635,7 @@
       "destination": "internal/profiles/active/assembly.go",
       "kind": "shape",
       "data": {
-        "capabilities": "user,access,queue",
-        "drivers": "queue:redis",
-        "roots": "access queue user",
-        "shape": "app"
+        "Shape": "app"
       }
     },
     {
@@ -574,10 +643,72 @@
       "destination": "internal/capabilities/catalog/catalog.go",
       "kind": "catalog",
       "data": {
-        "capabilities": "user,access,queue",
-        "drivers": "queue:redis",
-        "roots": "access queue user",
-        "shape": "app"
+        "Entries": [
+          {
+            "Alias": "usermodule",
+            "Name": "user",
+            "Path": "jimu/internal/capabilities/user"
+          },
+          {
+            "Alias": "accessmodule",
+            "Name": "access",
+            "Path": "jimu/internal/capabilities/access"
+          },
+          {
+            "Alias": "tenantmodule",
+            "Name": "tenant",
+            "Path": "jimu/internal/capabilities/tenant"
+          },
+          {
+            "Alias": "queuemodule",
+            "Name": "queue",
+            "Path": "jimu/internal/capabilities/queue"
+          }
+        ],
+        "KnownNames": [
+          "user",
+          "access",
+          "tenant",
+          "mfa",
+          "auth",
+          "passkey",
+          "audit",
+          "console",
+          "oauth",
+          "apikey",
+          "queue",
+          "outbox",
+          "dataops",
+          "search",
+          "captcha",
+          "feature",
+          "uploadsec",
+          "breach",
+          "encryption",
+          "storage",
+          "notification",
+          "ws",
+          "retention",
+          "apidocs",
+          "grpc"
+        ],
+        "MigrationOnly": [
+          {
+            "Alias": "tenantmodule",
+            "Name": "tenant",
+            "Path": "jimu/internal/capabilities/tenant"
+          }
+        ],
+        "SchemaDeps": [
+          {
+            "From": "user",
+            "To": "{\"tenant\"}"
+          },
+          {
+            "From": "access",
+            "To": "{\"tenant\"}"
+          }
+        ]
       }
     },
     {
@@ -585,10 +716,72 @@
       "destination": "internal/capabilities/catalog/migration.go",
       "kind": "catalog",
       "data": {
-        "capabilities": "user,access,queue",
-        "drivers": "queue:redis",
-        "roots": "access queue user",
-        "shape": "app"
+        "Entries": [
+          {
+            "Alias": "usermodule",
+            "Name": "user",
+            "Path": "jimu/internal/capabilities/user"
+          },
+          {
+            "Alias": "accessmodule",
+            "Name": "access",
+            "Path": "jimu/internal/capabilities/access"
+          },
+          {
+            "Alias": "tenantmodule",
+            "Name": "tenant",
+            "Path": "jimu/internal/capabilities/tenant"
+          },
+          {
+            "Alias": "queuemodule",
+            "Name": "queue",
+            "Path": "jimu/internal/capabilities/queue"
+          }
+        ],
+        "KnownNames": [
+          "user",
+          "access",
+          "tenant",
+          "mfa",
+          "auth",
+          "passkey",
+          "audit",
+          "console",
+          "oauth",
+          "apikey",
+          "queue",
+          "outbox",
+          "dataops",
+          "search",
+          "captcha",
+          "feature",
+          "uploadsec",
+          "breach",
+          "encryption",
+          "storage",
+          "notification",
+          "ws",
+          "retention",
+          "apidocs",
+          "grpc"
+        ],
+        "MigrationOnly": [
+          {
+            "Alias": "tenantmodule",
+            "Name": "tenant",
+            "Path": "jimu/internal/capabilities/tenant"
+          }
+        ],
+        "SchemaDeps": [
+          {
+            "From": "user",
+            "To": "{\"tenant\"}"
+          },
+          {
+            "From": "access",
+            "To": "{\"tenant\"}"
+          }
+        ]
       }
     },
     {
@@ -596,10 +789,7 @@
       "destination": "cmd/cli/main.go",
       "kind": "cli",
       "data": {
-        "capabilities": "user,access,queue",
-        "drivers": "queue:redis",
-        "roots": "access queue user",
-        "shape": "app"
+        "CLIImports": []
       }
     }
   ],
@@ -1133,5 +1323,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:3e53c6b4c8bd8378445919e0e2ddaffc7e9258f0267fc749b992fdf5e8b3f48f"
+  "digest": "sha256:919c500be7c31608536765d7e72e4b2eef0ff48f05cd748c76c366f89e3a8ac3"
 }

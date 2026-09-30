@@ -63,10 +63,13 @@ type Permission struct {
 }
 
 type TemplateAction struct {
-	Source      string            `json:"source"`
-	Destination string            `json:"destination"`
-	Kind        string            `json:"kind"`
-	Data        map[string]string `json:"data"`
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
+	Kind        string `json:"kind"`
+	// Data is a JSON object passed to the template. Templates use both scalar
+	// values and structured collections, so the manifest keeps the payload
+	// deliberately template-oriented instead of restricting it to strings.
+	Data any `json:"data"`
 }
 
 type MergeAction struct {

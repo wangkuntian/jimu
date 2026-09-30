@@ -71,7 +71,7 @@
     },
     "template": {
       "type": "object", "additionalProperties": false, "required": ["source", "destination", "kind", "data"],
-      "properties": {"source": {"type": "string"}, "destination": {"type": "string"}, "kind": {"type": "string"}, "data": {"type": "object", "additionalProperties": {"type": "string"}}}
+      "properties": {"source": {"type": "string"}, "destination": {"type": "string"}, "kind": {"type": "string"}, "data": {"type": "object"}}
     },
     "merge": {
       "type": "object", "additionalProperties": false, "required": ["source", "destination", "strategy", "sections"],

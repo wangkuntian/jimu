@@ -126,7 +126,7 @@ func normalize(doc Document) Document {
 	doc.Templates = nonNilClone(doc.Templates)
 	for i := range doc.Templates {
 		if doc.Templates[i].Data == nil {
-			doc.Templates[i].Data = map[string]string{}
+			doc.Templates[i].Data = map[string]any{}
 		}
 	}
 	doc.Merges = nonNilClone(doc.Merges)
