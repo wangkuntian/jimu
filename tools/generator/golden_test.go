@@ -9,8 +9,8 @@ import (
 )
 
 // TestGenerateModuleProducesSameTree 是模板外置（templates/** + go:embed）的逐字节回归网：
-// testdata/golden/module/** 由**迁移前**（HEAD 98186be 的 CLI）对同一 fixture 生成并入库，
-// 当前实现对同一输入生成的能力目录必须与黄金树逐文件相同（既不多也不少）。
+// testdata/golden/module/** 是当前 capability create 对同一 fixture 的预期输出，
+// 生成的能力目录必须与黄金树逐文件相同（既不多也不少）。
 func TestGenerateModuleProducesSameTree(t *testing.T) {
 	root := newTestRepository(t)
 	if err := GenerateModuleAt(root, "product"); err != nil {

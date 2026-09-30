@@ -30,7 +30,7 @@ func GenerateModuleAt(root, name string) error {
 	if err := writeAll(root, files); err != nil {
 		return err
 	}
-	fmt.Printf("Module '%s' created at internal/capabilities/%s/\n", name, name)
+	fmt.Printf("Capability '%s' created at internal/capabilities/%s/\n", name, name)
 	return nil
 }
 
@@ -84,6 +84,7 @@ func preflight(root, name string) (templateData, []targetFile, error) {
 	}
 	targets := []targetFile{
 		{filepath.Join("internal", "capabilities", name, "module.go"), "module.go.tmpl"},
+		{filepath.Join("internal", "capabilities", name, "wire.go"), "wire.go.tmpl"},
 		{filepath.Join("internal", "capabilities", name, "domain", "entity.go"), "domain/entity.go.tmpl"},
 		{filepath.Join("internal", "capabilities", name, "domain", "repository.go"), "domain/repository.go.tmpl"},
 		{filepath.Join("internal", "capabilities", name, "application", "dto.go"), "application/dto.go.tmpl"},

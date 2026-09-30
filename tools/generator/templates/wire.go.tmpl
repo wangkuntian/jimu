@@ -1,0 +1,11 @@
+package {{.Name}}
+
+import (
+	"jimu/internal/assembly"
+	"jimu/internal/contract"
+)
+
+// Wire 使用装配上下文中的数据库构造本能力。
+func Wire(ctx *assembly.Context) (contract.Module, error) {
+	return New(ctx.DB()), nil
+}

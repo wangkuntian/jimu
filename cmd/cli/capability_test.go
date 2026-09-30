@@ -51,6 +51,30 @@ func capabilityCommandForTest(out *bytes.Buffer) *cobra.Command {
 	return root
 }
 
+func TestCapabilityCreateCmdCreatesSkeleton(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module jimu\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "capabilities"), 0o755))
+	t.Chdir(root)
+
+	cmd := capabilityCommandForTest(&bytes.Buffer{})
+	cmd.SetArgs([]string{"capability", "create", "product"})
+	require.NoError(t, cmd.Execute())
+	assert.FileExists(t, filepath.Join(root, "internal", "capabilities", "product", "module.go"))
+}
+
+func TestModuleCreateCmdIsRemoved(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module jimu\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "capabilities"), 0o755))
+	t.Chdir(root)
+
+	rootCmd.SetArgs([]string{"module", "create", "product"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	require.ErrorContains(t, rootCmd.Execute(), "unknown command")
+	assert.NoDirExists(t, filepath.Join(root, "internal", "capabilities", "product"))
+}
+
 // TestCapabilityAddCmdDryRunWiresFlags 钉住 CLI → generator.AddOptions 的 flag 映射与
 // 「--dry-run 绝不落盘」：输出必须列出将改动的文件，且目录里除了 marker 什么都不多。
 func TestCapabilityAddCmdDryRunWiresFlags(t *testing.T) {

@@ -16,7 +16,7 @@ import (
 )
 
 // TestRenderCLIMainTrimsScaffoldingAndFollowsSelection 钉住生成项目 cmd/cli/main.go 的裁剪口径：
-//   - 不 import 框架脚手架（tools/generator），也不注册 module create（脚手架是框架的职责）；
+//   - 不 import 框架脚手架（tools/generator），也不注册 capability create（脚手架是框架的职责）；
 //   - 能力自带命令只 import/注册**已选中**能力（minimal 无 apikey → 不 import apikey/cli）。
 func TestRenderCLIMainTrimsScaffoldingAndFollowsSelection(t *testing.T) {
 	cases := []struct {
@@ -50,7 +50,7 @@ func TestRenderCLIMainTrimsScaffoldingAndFollowsSelection(t *testing.T) {
 			imports, commands := parseCLIMain(t, filepath.Join(dir, "cmd/cli/main.go"))
 			assert.NotContains(t, imports, "example.com/proj/tools/generator", "生成项目不 import 脚手架")
 			assert.NotContains(t, imports, "jimu/tools/generator")
-			assert.NotContains(t, commands, "module", "生成项目不注册 module create")
+			assert.NotContains(t, commands, "module", "生成项目不注册旧 module 命令")
 			assert.NotContains(t, commands, "newCmd", "生成项目不注册脚手架命令")
 			assert.ElementsMatch(t, tc.wantCommands, commands)
 			for _, want := range tc.wantImports {

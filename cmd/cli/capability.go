@@ -17,10 +17,22 @@ var capabilityCmd = newCapabilityCmd()
 func newCapabilityCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "capability",
-		Short: "Manage the capabilities of a generated project",
+		Short: "Create framework capabilities and manage generated projects",
 	}
+	cmd.AddCommand(newCapabilityCreateCmd())
 	cmd.AddCommand(newCapabilityAddCmd())
 	return cmd
+}
+
+func newCapabilityCreateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "create <name>",
+		Short: "Create a new capability skeleton in the framework repository",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return generator.GenerateModule(args[0])
+		},
+	}
 }
 
 // printAddPlan 打印 add 的计划/结果：--dry-run 逐行列出将新增/改动的文件（唯一不落盘的计划输出），

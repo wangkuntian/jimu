@@ -44,6 +44,12 @@ type Router interface {
 
 type JobRegistry interface{}
 type EventBus interface{}
+type Module interface {
+	Name() string
+	RegisterHTTP(Router)
+	RegisterJobs(JobRegistry)
+	RegisterEvents(EventBus)
+}
 
 type MountPoint string
 
@@ -58,10 +64,19 @@ type Permission struct {
 type Descriptor struct {
 	Name        string
 	Requires    []string
+	Owns        []string
 	Mount       MountPoint
 	Permissions []Permission
 	Migrations  fs.FS
 }
+`)
+	writeFileForTest(t, root, "internal/assembly/context.go", `package assembly
+
+import "gorm.io/gorm"
+
+type Context struct{}
+
+func (*Context) DB() *gorm.DB { return nil }
 `)
 	writeFileForTest(t, root, "internal/shared/errors/errors.go", `package errors
 
