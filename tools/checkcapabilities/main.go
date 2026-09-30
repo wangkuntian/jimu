@@ -1,8 +1,6 @@
-// Command checkcapabilities 校验能力自描述与实际迁移一致（P2.8 门禁的第一块）。
-// 当前范围：① Owns 的表必须由且仅由该能力的 mysql 迁移 CREATE（表归属唯一）；
-// ② 驱动可用集/选中集/import 闭包一致（闭包口径 = ./cmd/server + 该形态 overlay）、形态只
-// import 已声明驱动、唯一入口与选点包只 import 一个形态（见 drivers.go）。
-// 完整门禁（跨能力 import 一致性、internal 越界、kernel→capabilities 反向依赖）留待 P2.8。
+// Command checkcapabilities 校验能力声明、驱动与形态闭包、资产归属、
+// Descriptor/Wire 入口，以及能力树内的跨能力 import。
+// 其余门禁（internal 越界、kernel→capabilities 反向依赖）留待后续。
 package main
 
 import (
@@ -91,11 +89,31 @@ func main() {
 		fmt.Fprintln(os.Stderr, "❌ check-capabilities:", err)
 		os.Exit(1)
 	}
+	seen := map[string]bool{}
+	var names []string
+	for _, profile := range registry.All() {
+		for _, capability := range profile.Capabilities {
+			name := capability.Descriptor.Name
+			if !seen[name] {
+				seen[name] = true
+				names = append(names, name)
+			}
+		}
+	}
+	if err := checkCapabilityStructure(root, names); err != nil {
+		fmt.Fprintln(os.Stderr, "❌ check-capabilities:", err)
+		os.Exit(1)
+	}
+	if err := checkCapabilityImports(root); err != nil {
+		fmt.Fprintln(os.Stderr, "❌ check-capabilities:", err)
+		os.Exit(1)
+	}
 	fmt.Println("✅ check-capabilities: 能力自描述与迁移归属一致")
 	fmt.Println("✅ check-capabilities: 驱动可用集/选中集/import 闭包一致")
 	fmt.Println("✅ check-capabilities: 形态生产代码只 import 已声明的驱动")
 	fmt.Println("✅ check-capabilities: 唯一入口与选点包只 import 一个形态")
 	fmt.Println("✅ check-capabilities: 资产归属唯一且无未声明资产")
+	fmt.Println("✅ check-capabilities: 能力树仅 catalog 允许跨能力 import")
 }
 
 // createdTables 从能力嵌入的 mysql 迁移里提取 CREATE TABLE 的表名（去重排序）。
