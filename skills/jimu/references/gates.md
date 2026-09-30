@@ -4,9 +4,9 @@
 
 **权威口径**：README「[质量门禁](../../../README.md#质量门禁)」、「[Makefile 命令](../../../README.md#makefile-命令)」、[docs/profiles/compose-report.md](../../../docs/profiles/compose-report.md)。
 
-## `make check-capabilities`：5 条汇总行逐条
+## `make check-capabilities`：6 条汇总行逐条
 
-输出是 5 行 `✅ check-capabilities: …`（每行对应一条断言；实现在 `tools/checkcapabilities`）：
+输出是 6 行 `✅ check-capabilities: …`（每行对应一条断言；实现在 `tools/checkcapabilities`）：
 
 | # | 断言 | 管什么 | 红了看 |
 |---|---|---|---|
@@ -15,6 +15,7 @@
 | ③ | 形态生产代码只 import 已声明的驱动 | 形态代码的 capabilities 子包 import 只能是能力根包或已声明的驱动包 | [profile-driver.md](profile-driver.md) |
 | ④ | 唯一入口与选点包只 import 一个形态 | `cmd/server` 只 import `internal/assembly` + 选点包；`internal/profiles/active` **恰好**选一个形态；两者都不得 import `internal/profiles/registry` | [capability.md](capability.md) / [profile-driver.md](profile-driver.md) |
 | ⑤ | 资产归属唯一且无未声明资产 | 声明路径非空/存在/在资产根内（`deploy/`、`docs/openapi/`）；同一路径不被两个所有者声明（归一化比较）；资产根下每个文件都有所有者；每个形态覆盖全部内核资产组 | README「[非代码资产归属（P2.6）](../../../README.md#非代码资产归属p26)」 |
+| ⑥ | 能力树仅 catalog 允许跨能力 import | 能力生产、测试和驱动子包只依赖本能力或 `internal/contract`；`catalog` 是唯一组合根 | README「[开发规范](../../../README.md#开发规范)」 |
 
 ## `make profiles-check`：形态构建 + golden 依赖闭包
 
@@ -49,7 +50,7 @@ make release-check     # fmt-check vet check-log-usage + 上述三道 + test + g
 
 | 症状 | 定位 |
 |---|---|
-| 闭包出现没声明的能力 | 形态清单、`scripts/check_profiles.sh` golden、或某能力的 import 变了（共享类型残留见 README 的「编译期脚注」） |
+| 闭包出现没声明的能力 | 形态清单、`scripts/check_profiles.sh` golden、或某能力的 import 变了（检查能力树是否残留跨能力 import，再核对声明依赖） |
 | `compose-report-check` 报本仓代码行变化 | 你改了本仓 Go 代码 → 跑 `make compose-report` 重新入库（确认差异只来自本次改动） |
 | `profiles-check` 全部形态构建失败 | 先用 `go build ./...` 排除基础编译问题，再看 overlay 是否生成成功 |
 | `check-templates` 红 | 模板/复制口径与真实结构漂移：看 `tools/generator` 的复制集与 `templates/**` |

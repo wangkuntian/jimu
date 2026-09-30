@@ -37,9 +37,9 @@
 
 在**已生成项目**上增量追加能力：确定性重渲染、幂等（同一集合重跑逐字节等价）；`configs/*.yaml` 与 `deploy/helm/values.yaml` 以项目现有文件为底补齐新增段，**不覆盖**用户手改的值。若项目里已有 `--report` 产物，成功后同批重算刷新（本来没有则不创建）。
 
-## `jimu module create <name>`
+## `jimu capability create <name>`
 
-**只**在本仓 `internal/capabilities/<name>/` 落骨架（`module.go` + `domain/` + `application/` + `infrastructure/` + `interfaces/` + 迁移占位），**不改任何注册点** —— 注册见 [capability.md](capability.md)。
+**只**在本仓 `internal/capabilities/<name>/` 落典型 CRUD 骨架（`Descriptor` + `Wire` + 按职责分层代码 + 迁移），**不改任何注册点** —— 注册见 [capability.md](capability.md)。旧 `module create` 已移除；`capability add` 是向已生成项目追加已有能力，职责不同。
 
 ## 生成项目与本仓的门禁关系
 

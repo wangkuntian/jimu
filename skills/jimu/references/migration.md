@@ -7,7 +7,7 @@
 ## 步骤
 
 1. **写进所属能力的目录**：`internal/capabilities/<name>/migrations/mysql/` 与 `.../postgres/`（两个方言都要写；门禁的归属判定只扫 mysql，但 PostgreSQL 迁移必须同步、表名与 mysql 一致）
-2. **能力内编号**：取该目录当前最大编号 +1（脚手架 `jimu module create` 自动完成；也可手工 `ls` 后递增）。**不要**用全局编号 —— 各能力各自独立编号，已迁移的能力沿用历史编号
+2. **能力内编号**：取该目录当前最大编号 +1（脚手架 `jimu capability create` 自动完成；也可手工 `ls` 后递增）。**不要**用全局编号 —— 各能力各自独立编号，已迁移的能力沿用历史编号
 3. **一条 ALTER 只属于一个能力**：它改变的表归谁，迁移就写谁的能力目录 —— 即使这条 ALTER 是别的能力需要的
 4. **注释写清 up/down 与在 MySQL / PostgreSQL 下的差异**（SQL 片段最好在注释里给出）
 5. **迁移集带上 schema 依赖**：迁移集 = 形态声明集 ∪ schema 依赖（`user`/`access` → `tenant`，实现见 `cmd/cli/activecaps.go` 的 `catalog.MigrationSchemaDeps`）。`users` / `roles.tenant_id` 只由 tenant 的迁移创建，因此含 `user`/`access` 的形态也会一并迁移 tenant 的建表/加列 —— 否则会建出**写不进去**的 schema（只影响迁移，装配集仍不含 tenant）

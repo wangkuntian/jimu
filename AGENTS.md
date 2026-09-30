@@ -23,7 +23,7 @@
 
 ### 模块结构
 
-每个业务模块必须遵循 Clean Architecture 分层与 `contract.Module` 注册规范，详见 README「开发规范 · 模块结构」；HTTP 路由统一注册在 `/api/v1` 前缀下。
+每个能力根包必须导出静态 `Descriptor` 与 `Wire(*assembly.Context) (contract.Module, error)`；按职责设置 Clean Architecture 分层目录，不强制四层或 `module.go`。仅提供端口或迁移时 `Wire` 可返回 nil；HTTP 路由统一注册在 `/api/v1` 前缀下。详见 README「开发规范 · 模块结构」。
 
 ### 能力边界（v0.3.0 起）
 
@@ -31,7 +31,7 @@
 
 - 能力清单只维护在 `internal/capabilities/catalog`；新增/删除能力需同步 `catalog` 与需要它的形态清单 `internal/profiles/<name>/assembly.go`（非 catalog 条目标 `Ungated`）。唯一入口 `cmd/server` 只调 `assembly.Run(active.Assembly())`，当前形态由选点包 `internal/profiles/active` 决定，**不在这里逐个装配能力**
 - 每个能力导出静态 `Descriptor`（名称 / 硬依赖 `Requires` / 软依赖 `SoftRequires` / 自有表 `Owns` / 配置段 `Configs` / 权限点 `Permissions` / 挂载点 `Mount` / 迁移 `Migrations` / 驱动 `Drivers` / 资产 `Assets`），依赖必须单向
-- 能力之间只经 `contract` 端口调用，禁止 import 其他能力的内部包
+- 能力之间只经 `contract` 端口调用；能力内部代码（含测试与驱动）禁止跨能力 import，只有 `catalog` 作为能力树内的组合根例外
 - 挂载点由 `Descriptor.Mount` 声明，禁止按能力名做特判
 - Casbin RBAC 机制位于内核 `internal/kernel/access`（强制器/策略/权限中间件），API Key 签发/校验位于 `internal/capabilities/apikey`；`kernel/auth` 只保留 JWT/Session/限流/登录失败锁定机制与 API Key 上下文助手（`apikey_context.go`）
 - 原 `auth` 已拆为 `auth`（会话/凭证/登录历史/密码历史）、`mfa`（TOTP + 可信设备，含自有 `totp/` 实现与 `user_mfa` 表）、`passkey`（WebAuthn）；`breach`/`captcha` 为独立能力；开通式注册（provisioned registration）属 `tenant` 能力。auth 经 `contract.MFAVerifier`/`TenantProvisioner`/`BreachChecker`/`CaptchaVerifier` 消费它们，passkey 经 `contract.LoginFinalizer` 复用 auth 的登录收尾；TOTP 状态存 `user_mfa`（迁移 016），`users` 表不再有 `totp_*` 列
@@ -39,7 +39,7 @@
 - **形态（profile）** — `full`/`minimal`/`saas`/`enterprise`/`machine` 五个；形态名与清单的唯一来源是 `internal/profiles/registry`（它 import 全部形态包，**不得**被 `cmd/server` 或选点包 import）。形态只裁剪编进二进制的包与符号（`go.mod` 不变），真正减小依赖的是层① `jimu new` 生成的独立项目
 - **驱动级可插拔** — 第三方驱动独立成包，能力在 `Descriptor.Drivers` 声明**可用集**、形态在 `assembly.Capability.Drivers` 声明**选中集**并在 `internal/profiles/<name>/drivers.go` blank import；核心包只留接口 + 注册表，未注册即 fail-closed
 - **非代码资产** — `Descriptor.Assets` 声明能力拥有的资产（仓库相对路径），内核运维/观测资产用具名资产组 `ops`/`observability`；归属按最长前缀匹配
-- **门禁** — 改能力/形态/驱动/资产后跑 `make check-capabilities`（5 条汇总行）与 `make profiles-check`（golden 依赖闭包），报告漂移用 `make compose-report-check`；三者已进 `make ci`/`release-check` 与 CI 的 `Capability Gates` job。新增能力/形态/驱动的完整步骤见 README「[开发规范 › 新增能力 / 驱动](README.md#新增能力--驱动)」，生成独立项目的流程见 README「[生成项目](README.md#生成项目jimu-new--jimu-capability-add)」
+- **门禁** — 改能力/形态/驱动/资产后跑 `make check-capabilities`（6 条汇总行）与 `make profiles-check`（golden 依赖闭包），报告漂移用 `make compose-report-check`；三者已进 `make ci`/`release-check` 与 CI 的 `Capability Gates` job。新增能力/形态/驱动的完整步骤见 README「[开发规范 › 新增能力 / 驱动](README.md#新增能力--驱动)」，生成独立项目的流程见 README「[生成项目](README.md#生成项目jimu-new--jimu-capability-add)」
 
 ### 租户体系
 
