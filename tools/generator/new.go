@@ -1,7 +1,6 @@
 package generator
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 	"io/fs"
 	"maps"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
@@ -23,6 +21,10 @@ import (
 
 	"jimu/internal/capabilities/catalog"
 	"jimu/internal/contract"
+	"jimu/tools/generator/frameworkmanifest"
+	"jimu/tools/generator/manifest"
+	"jimu/tools/generator/plan"
+	"jimu/tools/generator/workspace"
 	"jimu/tools/internal/profileassets"
 )
 
@@ -37,7 +39,7 @@ type NewOptions struct {
 
 	NoTidy bool // 跳过 go mod tidy（默认跑；--no-tidy 关闭）
 	DryRun bool // 只打印计划，不落盘
-	Force  bool // 只覆盖带 .jimu-generated 标记的既有产物
+	Force  bool // 只覆盖带 .jimu/manifest.json 的既有生成项目
 	Report bool // 额外写 docs/profiles/generated-report.md
 
 	// NoSelfCheck 跳过 ⑨ 自检（go build ./... + go run ./tools/checkcapabilities）。
@@ -70,34 +72,6 @@ type Result struct {
 	Changed []string
 }
 
-// markerFile 是生成器产物的标记（dot 文件不参与 `grep -rn '"jimu/'`）：--force 的识别依据，
-// 也是 `jimu capability add` 的输入（S7/S8）。
-const markerFile = ".jimu-generated"
-
-// Marker 是 markerFile 的 JSON 结构（S7 规定字段）：<dir>/.jimu-generated 的内容。
-// `capability add` / `--force` / `--report` 都只读它，不靠猜（读写见 add.go 的 LoadMarker/Save）。
-//
-// 注意 Capabilities 是**声明集**：迁移携带的能力（如 tenant）不在其中，重渲染时必须经
-// CapabilityRoots 重算（T3 裁定 7），不得直接把这份集合喂渲染器。
-type Marker struct {
-	Generator      string              `json:"generator"`
-	Version        string              `json:"version"`
-	SourceRoot     string              `json:"sourceRoot"`
-	SourceCommit   string              `json:"sourceCommit"`
-	Module         string              `json:"module"`
-	Shape          string              `json:"shape"`
-	Profile        string              `json:"profile"`
-	Capabilities   []string            `json:"capabilities"`
-	DomainOnly     []string            `json:"domainOnly"`
-	Drivers        map[string][]string `json:"drivers"`
-	Assets         []string            `json:"assets"`
-	Files          []string            `json:"files"`
-	DiscardedTests []string            `json:"discardedTests"`
-}
-
-// generatorVersion 是写入标记的生成器版本（与本仓版本解耦，仅供 add/upgrade 判断口径）。
-const generatorVersion = "p2.7"
-
 // NewProject 生成项目。执行顺序与回滚语义见计划第 2 节裁定 7/8：
 //
 //	① 解析能力集 → ② 复制内核必需目录 → ③ 按能力复制（含驱动过滤）
@@ -108,10 +82,6 @@ const generatorVersion = "p2.7"
 // 都删除临时目录（defer RemoveAll），绝不留半成品（验收⑤）。--force 时先把既有产物 rename 成
 // <dir>.old-<rand>，rename 成功后再删，避免「先删后建」留下空目录窗口。
 func NewProject(opts NewOptions) (*Result, error) {
-	set, err := ParseCapabilitySet(opts.Profile, opts.With, opts.Shape)
-	if err != nil {
-		return nil, err
-	}
 	root, err := frameworkRoot()
 	if err != nil {
 		return nil, err
@@ -123,50 +93,64 @@ func NewProject(opts NewOptions) (*Result, error) {
 	if err := validateModule(module); err != nil {
 		return nil, err
 	}
-	target := absPath(opts.Dir)
-	if opts.DryRun {
-		return planResult(root, set, module, opts)
-	}
-	if err := preflightTarget(target, opts.Force); err != nil {
-		return nil, err
-	}
-	parent := filepath.Dir(target)
-	tmp, err := os.MkdirTemp(parent, filepath.Base(target)+".tmp-")
+	doc, err := frameworkmanifest.Export(frameworkmanifest.Request{
+		Root:    root,
+		Profile: opts.Profile,
+		With:    opts.With,
+		Shape:   opts.Shape,
+		Module:  module,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("create staging directory: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tmp) }() // rename 成功后 tmp 已不存在，幂等
-	if err := renderDerivedAll(root, tmp, set, module); err != nil {
 		return nil, err
 	}
-	if !opts.NoTidy {
-		if err := Tidy(tmp); err != nil {
-			return nil, fmt.Errorf("go mod tidy: %w（用 --no-tidy 跳过）", err)
-		}
-	}
-	if !opts.NoSelfCheck {
-		if err := SelfCheck(tmp); err != nil {
-			return nil, fmt.Errorf("self check: %w", err)
-		}
-	}
-	// --report 也**在暂存目录里**度量并落盘（tidy 之后，报告里的直接依赖数是 tidy 的产物）：
-	// 报告失败（典型场景：cwd 距框架仓 configs/ 超过 config.SearchDepthUp 层 —— 与源根发现同一
-	// 常量，故这种 cwd 现在会在 frameworkRoot 阶段就 fail-closed，走不到这里）
-	// 因此发生在原子换上 target **之前**，不会留下「产物已就位、报告却失败」的半成品；报告文件
-	// 本身也随暂存目录原子就位。暂存树与最终树的产物逐字节相同（只有目录名不同），度量不受影响。
-	if opts.Report {
-		metrics, err := Report(tmp)
-		if err != nil {
-			return nil, err
-		}
-		if err := WriteReport(tmp, *metrics, set); err != nil {
-			return nil, err
-		}
-	}
-	if err := swapIntoPlace(target, tmp); err != nil {
+	if err := manifest.Validate(doc); err != nil {
 		return nil, err
 	}
-	return collectResult(target, set, module, root)
+	if _, err := plan.Build(doc); err != nil {
+		return nil, err
+	}
+	created, err := workspace.Create(doc, workspace.CreateOptions{
+		Target:      opts.Dir,
+		SourceRoot:  root,
+		Module:      module,
+		Force:       opts.Force,
+		NoTidy:      opts.NoTidy,
+		DryRun:      opts.DryRun,
+		Report:      opts.Report,
+		NoSelfCheck: opts.NoSelfCheck,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &Result{
+		Dir:          created.Target,
+		Module:       created.Module,
+		Shape:        doc.Selection.Shape,
+		Capabilities: slices.Clone(doc.Selection.Capabilities),
+		CopySet:      manifestCapabilityNames(doc),
+		Drivers:      flattenDrivers(doc.Selection.Drivers),
+		Assets:       manifestAssetNames(doc),
+		Files:        slices.Clone(created.Files),
+		FileCount:    created.FileCount,
+	}, nil
+}
+
+func manifestCapabilityNames(doc manifest.Document) []string {
+	values := make([]string, 0, len(doc.Capabilities))
+	for _, capability := range doc.Capabilities {
+		values = append(values, capability.Name)
+	}
+	slices.Sort(values)
+	return slices.Compact(values)
+}
+
+func manifestAssetNames(doc manifest.Document) []string {
+	values := make([]string, 0, len(doc.Assets))
+	for _, asset := range doc.Assets {
+		values = append(values, asset.Destination)
+	}
+	slices.Sort(values)
+	return slices.Compact(values)
 }
 
 // renderDerivedAll 把「能力集 → 全部产物」的**唯一**一条渲染/复制管线落进 dst（S8 的确定性
@@ -247,7 +231,8 @@ func renderDerivedAll(root, dst string, set CapabilitySet, module string) error 
 	if err := formatTree(dst); err != nil {
 		return err
 	}
-	return writeMarker(root, dst, set, module, assets, discarded)
+	_ = discarded
+	return nil
 }
 
 // copyToolsAndScripts 把生成项目要用的工具树（copyTools）复制进 dst，并应用 patches.go 的
@@ -711,8 +696,8 @@ func moduleError(module string, err error) error {
 //   - 目标不存在，或存在但为**空目录** → 放行（`mkdir proj && jimu new proj` 是常见用法；
 //     swapIntoPlace 本就把既有空目录改名让位，不需要也不应该要 --force）；
 //   - 目标非空且无 `--force` → 报错 not empty；
-//   - 目标非空且有 `.jimu-generated` 标记 → 放行（由 swapIntoPlace 整体替换）；
-//   - 目标非空但**没有**标记 → 即使带 `--force` 也拒绝（--force 的语义是「覆盖生成器产物」，
+//   - 目标非空且有 `.jimu/manifest.json` → 放行（由 swapIntoPlace 整体替换）；
+//   - 目标非空但**没有** manifest → 即使带 `--force` 也拒绝（--force 的语义是「覆盖生成器产物」，
 //     不是「强行写任何目录」）。
 func preflightTarget(target string, force bool) error {
 	entries, err := os.ReadDir(target)
@@ -724,8 +709,8 @@ func preflightTarget(target string, force bool) error {
 	if len(entries) == 0 {
 		return nil
 	}
-	if _, err := os.Stat(filepath.Join(target, markerFile)); err != nil {
-		return fmt.Errorf("target directory %s is not empty and has no %s marker; --force only overwrites generator products", filepathSlash(target), markerFile)
+	if _, err := os.Stat(filepath.Join(target, ".jimu", "manifest.json")); err != nil {
+		return fmt.Errorf("target directory %s is not empty and has no .jimu/manifest.json; --force only overwrites generated projects", filepathSlash(target))
 	}
 	if !force {
 		return fmt.Errorf("target directory %s is not empty; pass --force to overwrite a generator product", filepathSlash(target))
@@ -1124,122 +1109,6 @@ func countTree(root string) (int, error) {
 		return nil
 	})
 	return count, err
-}
-
-// collectResult 在产物就位后统计文件数/行数与文件清单（--report 的输入）。
-func collectResult(target string, set CapabilitySet, module, root string) (*Result, error) {
-	res := &Result{
-		Dir:          target,
-		Module:       module,
-		Shape:        set.Shape,
-		Capabilities: slices.Clone(set.Declared),
-		CopySet:      slices.Clone(set.Copy),
-		Drivers:      flattenDrivers(set.Drivers),
-	}
-	assets, err := AssetsFor(set)
-	if err != nil {
-		return nil, err
-	}
-	res.Assets = assets
-	err = filepath.WalkDir(target, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if d.Name() == ".git" {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		rel := relPath(target, p)
-		if rel == markerFile || rel == reportRelPath {
-			// 标记与 --report 报告都不是产物行：marker.files 也不含它们（报告只描述产物）。
-			return nil
-		}
-		res.Files = append(res.Files, rel)
-		res.FileCount++
-		if strings.HasSuffix(rel, ".go") || strings.HasSuffix(rel, ".yaml") || strings.HasSuffix(rel, ".yml") ||
-			strings.HasSuffix(rel, ".sh") || strings.HasSuffix(rel, ".mod") {
-			content, rerr := os.ReadFile(p)
-			if rerr != nil {
-				return rerr
-			}
-			res.Lines += lineCount(string(content))
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(res.Files)
-	return res, nil
-}
-
-// lineCount 统计文本行数（无尾换行的最后一行也算一行）。
-func lineCount(text string) int {
-	if text == "" {
-		return 0
-	}
-	n := strings.Count(text, "\n")
-	if !strings.HasSuffix(text, "\n") {
-		n++
-	}
-	return n
-}
-
-// writeMarker 写 .jimu-generated（S7/S8 + Minor 10）：--force 的识别依据、capability add 与
-// T8 report 的输入。`files` 是本次落地文件的完整清单（排序），`assets` 是本次复制的资产路径
-// （AssetsFor 的前缀口径：`deploy/helm`、`docs/openapi`…），`discardedTests` 是被裁剪掉的测试文件。
-func writeMarker(root, dst string, set CapabilitySet, module string, assets, discarded []string) error {
-	m := Marker{
-		Generator:      "jimu new",
-		Version:        generatorVersion,
-		SourceRoot:     absPath(root),
-		SourceCommit:   gitCommit(root),
-		Module:         module,
-		Shape:          set.Shape,
-		Profile:        set.Profile,
-		Capabilities:   slices.Clone(set.Declared),
-		DomainOnly:     append([]string{}, set.DomainOnly...),
-		Drivers:        set.Drivers,
-		Assets:         assets,
-		Files:          []string{},
-		DiscardedTests: append([]string{}, discarded...),
-	}
-	if m.Assets == nil {
-		m.Assets = []string{}
-	}
-	if m.Drivers == nil {
-		m.Drivers = map[string][]string{}
-	}
-	if err := filepath.WalkDir(dst, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		rel := relPath(dst, p)
-		if rel != markerFile {
-			m.Files = append(m.Files, rel)
-		}
-		return nil
-	}); err != nil {
-		return fmt.Errorf("collect generated files: %w", err)
-	}
-	sort.Strings(m.Files)
-	return m.Save(dst)
-}
-
-// gitCommit 取框架仓当前提交；取不到（无 git / 无提交 / 超时）返回空串，不阻断生成。
-func gitCommit(root string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, "git", "-C", root, "rev-parse", "HEAD").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }
 
 // formatTree 对生成树里的 .go 文件跑 gofmt（RewriteModule 已格式化被改写的文件，但

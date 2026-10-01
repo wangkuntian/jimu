@@ -1,0 +1,48 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"jimu/tools/internal/projectmetrics"
+)
+
+// projectManifestReport is the generated project's small view of the persisted
+// manifest. Keeping this type local avoids copying the generator implementation
+// package into the generated project.
+type projectManifestReport struct {
+	Name         string   `json:"name"`
+	Capabilities []string `json:"capabilities"`
+	Routes       int      `json:"routes"`
+	Migrations   []string `json:"migrations"`
+	Tables       []string `json:"tables"`
+}
+
+type projectManifest struct {
+	Report projectManifestReport `json:"report"`
+}
+
+func projectReportSpec(root, name string) (projectmetrics.ReportSpec, error) {
+	path := filepath.Join(root, ".jimu", "manifest.json")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return projectmetrics.ReportSpec{}, fmt.Errorf("read %s: %w", filepath.ToSlash(path), err)
+	}
+	var doc projectManifest
+	if err := json.Unmarshal(content, &doc); err != nil {
+		return projectmetrics.ReportSpec{}, fmt.Errorf("parse %s: %w", filepath.ToSlash(path), err)
+	}
+	profile := doc.Report.Name
+	if profile == "" {
+		profile = name
+	}
+	return projectmetrics.ReportSpec{
+		Name:         profile,
+		Capabilities: append([]string(nil), doc.Report.Capabilities...),
+		Routes:       doc.Report.Routes,
+		Migrations:   len(doc.Report.Migrations),
+		Tables:       len(doc.Report.Tables),
+	}, nil
+}

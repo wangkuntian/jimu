@@ -1,12 +1,14 @@
 package generator
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
+
+	"jimu/tools/generator/manifest"
+	"jimu/tools/generator/workspace"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,14 +59,14 @@ func TestNewProjectAcceptsExistingEmptyDirectory(t *testing.T) {
 }
 
 // TestNewProjectForceOnlyOverwritesGeneratorProducts --force 的语义是「覆盖**生成器产物**」：
-// 非空且没有 .jimu-generated 标记的目录即使带 --force 也拒绝（用户数据不被碰）。
+// 非空且没有 manifest 的目录即使带 --force 也拒绝（用户数据不被碰）。
 func TestNewProjectForceOnlyOverwritesGeneratorProducts(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "keep.txt"), []byte("user data"), 0o644))
 	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", Force: true, NoTidy: true})
-	// 非空 + 无 .jimu-generated 标记 → 不是生成器产物，--force 不生效。
-	require.ErrorContains(t, err, ".jimu-generated")
+	// 非空 + 无 manifest → 不是生成器产物，--force 不生效。
+	require.ErrorContains(t, err, ".jimu/manifest.json")
 	content, rerr := os.ReadFile(filepath.Join(dir, "keep.txt"))
 	require.NoError(t, rerr)
 	assert.Equal(t, "user data", string(content), "拒绝时不得动目标目录")
@@ -130,7 +132,7 @@ func TestNewProjectCopiesKernelAndSelectedCapabilities(t *testing.T) {
 	// 全树不得残留框架 module path（精确判据：protobuf rawDesc/Metadata 里的 proto 文件名显式放行）。
 	assertNoStaleModulePath(t, dir)
 
-	// .jimu-generated 标记（--force 的识别依据）。
+	// v0.3.3 manifest（--force 的识别依据）。
 	assert.FileExists(t, filepath.Join(dir, markerFile))
 }
 
@@ -213,12 +215,13 @@ func TestNewProjectDryRunCountMatchesRealTree(t *testing.T) {
 			opts.Dir = filepath.Join(base, "real")
 			real, err := newProjectForTest(t, opts)
 			require.NoError(t, err)
-			marker := readMarkerForTest(t, opts.Dir)
-			assert.Equal(t, real.FileCount+len(marker.DiscardedTests), planned.FileCount,
-				"planned = real + 被裁剪的测试文件数（dry-run 是裁剪前的上界）")
+			assert.GreaterOrEqual(t, planned.FileCount, real.FileCount,
+				"dry-run 计划是渲染裁剪前的文件上界")
 			assert.Len(t, real.Files, real.FileCount)
-			assert.NotContains(t, real.Files, markerFile)
-			assert.Equal(t, real.Files, marker.Files, "marker.files 必须是本次落盘的完整清单")
+			assert.Contains(t, real.Files, markerFile)
+			manifest := readManifestForTest(t, opts.Dir)
+			generated := slices.DeleteFunc(slices.Clone(real.Files), func(rel string) bool { return rel == markerFile })
+			assert.Equal(t, generated, manifest.GeneratedFiles, "manifest.generated_files 必须是本次落盘的完整清单（不含 manifest 自身）")
 		})
 	}
 }
@@ -271,12 +274,17 @@ func TestParseCapabilitySetClosureDoesNotDragMigrationOnlyIntoCode(t *testing.T)
 	assert.NotContains(t, set.Copy, "auth")
 }
 
-// readMarkerForTest 读生成项目的 .jimu-generated。
+// readMarkerForTest 读取 manifest 的测试视图。
 func readMarkerForTest(t *testing.T, dir string) Marker {
 	t.Helper()
-	content, err := os.ReadFile(filepath.Join(dir, markerFile))
+	m, err := LoadMarker(dir)
 	require.NoError(t, err)
-	var m Marker
-	require.NoError(t, json.Unmarshal(content, &m))
-	return m
+	return *m
+}
+
+func readManifestForTest(t *testing.T, dir string) manifest.Document {
+	t.Helper()
+	doc, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	return doc
 }

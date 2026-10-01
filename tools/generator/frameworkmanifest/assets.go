@@ -34,7 +34,11 @@ func assetActions(_ string, selected selection) []manifest.AssetAction {
 	paths := selectedAssets(selected)
 	actions := make([]manifest.AssetAction, 0, len(paths))
 	for _, value := range paths {
-		actions = append(actions, manifest.AssetAction{Source: value, Destination: value, Include: []string{}, Exclude: []string{}})
+		exclude := []string{}
+		if value == "deploy/helm" {
+			exclude = []string{"values.yaml"}
+		}
+		actions = append(actions, manifest.AssetAction{Source: value, Destination: value, Include: []string{}, Exclude: exclude})
 	}
 	return actions
 }

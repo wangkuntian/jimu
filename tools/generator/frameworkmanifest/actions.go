@@ -4,12 +4,14 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 
 	"jimu/internal/capabilities/catalog"
+	"jimu/internal/config"
 	"jimu/tools/generator/manifest"
 )
 
@@ -98,7 +100,13 @@ func copyActions(root string, selected selection) []manifest.CopyAction {
 		actions = append(actions, manifest.CopyAction{Source: base, Destination: base, Include: []string{}, Exclude: []string{}})
 	}
 	for _, source := range copiedTools {
-		actions = append(actions, manifest.CopyAction{Source: source, Destination: source, Include: []string{}, Exclude: []string{"*_test.go"}})
+		exclude := []string{"*_test.go"}
+		if source == "tools/composereport" {
+			// The framework-only adapter imports frameworkmanifest. Generated projects
+			// read their persisted manifest through the generated spec instead.
+			exclude = append(exclude, "framework_spec.go")
+		}
+		actions = append(actions, manifest.CopyAction{Source: source, Destination: source, Include: []string{}, Exclude: exclude})
 	}
 	return actions
 }
@@ -135,9 +143,92 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 		{Source: "tools/generator/templates/project/active.go.tmpl", Destination: "internal/profiles/active/assembly.go", Kind: "shape", Data: map[string]any{"Shape": selected.shape}},
 		{Source: "tools/generator/templates/project/catalog.go.tmpl", Destination: "internal/capabilities/catalog/catalog.go", Kind: "catalog", Data: catalogData},
 		{Source: "tools/generator/templates/project/catalog_migration.go.tmpl", Destination: "internal/capabilities/catalog/migration.go", Kind: "catalog", Data: catalogData},
+		{Source: "tools/generator/templates/project/compose_spec.go.tmpl", Destination: "tools/composereport/manifest_spec.go", Kind: "report"},
 		{Source: "cmd/cli/main.go", Destination: "cmd/cli/main.go", Kind: "cli", Data: cliData},
 	}
+	all, _ := allDescriptors()
+	byName := descriptorByName(all)
+	for _, name := range selected.migration {
+		descriptor, ok := byName[name]
+		if !ok {
+			continue
+		}
+		actions = append(actions, manifest.TemplateAction{
+			Source:      "tools/generator/templates/project/migration_module.go.tmpl",
+			Destination: filepath.ToSlash(filepath.Join("internal/capabilities", name, "module.go")),
+			Kind:        "migration-module",
+			Data: map[string]any{
+				"Name": descriptor.Name,
+				"Owns": slices.Clone(descriptor.Owns),
+			},
+		})
+	}
 	return actions
+}
+
+func configSections(selected selection) []string {
+	keep := map[string]bool{}
+	typ := reflect.TypeOf(config.Config{})
+	for i := 0; i < typ.NumField(); i++ {
+		name, _, _ := strings.Cut(typ.Field(i).Tag.Get("mapstructure"), ",")
+		if name != "" && name != "-" {
+			keep[name] = true
+		}
+	}
+	all, _ := allDescriptors()
+	selectedNames := make(map[string]bool, len(selected.declared))
+	for _, name := range selected.declared {
+		selectedNames[name] = true
+	}
+	for _, descriptor := range all {
+		if !selectedNames[descriptor.Name] {
+			continue
+		}
+		for _, spec := range descriptor.Configs {
+			keep[spec.Section] = true
+		}
+	}
+	for name, sections := range map[string][]string{
+		"storage":      {"storage"},
+		"retention":    {"retention"},
+		"notification": {"email", "sms", "notification"},
+	} {
+		if !selectedNames[name] {
+			continue
+		}
+		for _, section := range sections {
+			keep[section] = true
+		}
+	}
+	return sortedStrings(mapsKeys(keep))
+}
+
+func valuesSections(root string, selected selection) []string {
+	path := filepath.Join(root, filepath.FromSlash("deploy/helm/values.yaml"))
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	selectedNames := make(map[string]bool, len(selected.declared))
+	for _, name := range selected.declared {
+		selectedNames[name] = true
+	}
+	capabilityKeys := map[string]string{"audit": "audit", "storage": "storage", "auth": "auth"}
+	var sections []string
+	for _, line := range strings.Split(string(content), "\n") {
+		if line == "" || strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, _, ok := strings.Cut(line, ":")
+		if !ok || key == "" {
+			continue
+		}
+		if capability, ok := capabilityKeys[strings.TrimSpace(key)]; ok && !selectedNames[capability] {
+			continue
+		}
+		sections = append(sections, strings.TrimSpace(key))
+	}
+	return sections
 }
 
 func shapeCapabilities(selected selection) []map[string]any {
@@ -235,17 +326,26 @@ func cliImports(root string, selected selection) []map[string]any {
 	return imports
 }
 
-func mergeActions() []manifest.MergeAction {
+func mergeActions(root string, selected selection) []manifest.MergeAction {
+	sections := configSections(selected)
 	return []manifest.MergeAction{
-		{Source: "configs/app.yaml", Destination: "configs/app.yaml", Strategy: "sections", Sections: []string{}},
-		{Source: "configs/app.prod.yaml", Destination: "configs/app.prod.yaml", Strategy: "sections", Sections: []string{}},
+		{Source: "configs/app.yaml", Destination: "configs/app.yaml", Strategy: "sections", Sections: slices.Clone(sections)},
+		{Source: "configs/app.prod.yaml", Destination: "configs/app.prod.yaml", Strategy: "sections", Sections: slices.Clone(sections)},
+		{Source: "deploy/helm/values.yaml", Destination: "deploy/helm/values.yaml", Strategy: "sections", Sections: valuesSections(root, selected)},
 	}
 }
 
 func rewriteActions(module string) []manifest.RewriteAction {
 	return []manifest.RewriteAction{
 		{Kind: "module", From: "jimu", To: module, Files: []string{}},
-		{Kind: "file-patches", From: "{{module}}", To: module, Files: []string{"tools/checkcapabilities/drivers.go", "tools/composereport/main.go", "tools/logcheck/main.go", "tools/internal/profileoverlay/profileoverlay.go"}},
+		{Kind: "file-patch", From: `const modulePath = "jimu"`, To: `const modulePath = "` + module + `"`, Files: []string{"tools/checkcapabilities/drivers.go", "tools/composereport/main.go"}},
+		{Kind: "file-patch", From: `"jimu/tools/logcheck"`, To: `"` + module + `/tools/logcheck"`, Files: []string{"tools/logcheck/main.go"}},
+		{Kind: "file-patch", From: `"jimu/internal/assembly"`, To: `"` + module + `/internal/assembly"`, Files: []string{"tools/internal/profileoverlay/profileoverlay.go"}},
+		{Kind: "file-patch", From: `"jimu/internal/profiles/%s"`, To: `"` + module + `/internal/profiles/%s"`, Files: []string{"tools/internal/profileoverlay/profileoverlay.go"}},
+		{Kind: "file-patch", From: "// Command composereport 生成各形态（profile）的「编译面」报告。", To: "// Command composereport 生成本项目唯一形态的「编译面」报告。", Files: []string{"tools/composereport/main.go"}},
+		{Kind: "file-patch", From: "报告回答「层②（形态选点）究竟改变了什么」", To: "报告回答「本项目编进了什么」", Files: []string{"tools/composereport/main.go"}},
+		{Kind: "file-patch", From: "数在各形态间**完全相同**", To: "数不再随形态变化", Files: []string{"tools/composereport/main.go"}},
+		{Kind: "file-patch", From: "（`jimu/...`）", To: "（`" + module + "/...`）", Files: []string{"tools/composereport/main.go"}},
 	}
 }
 
@@ -257,11 +357,11 @@ func generatedFiles(root string, selected selection) []string {
 	for _, action := range templateActions(root, selected) {
 		seen[action.Destination] = true
 	}
-	for _, action := range mergeActions() {
+	for _, action := range mergeActions(root, selected) {
 		seen[action.Destination] = true
 	}
 	for _, action := range assetActions(root, selected) {
-		collectFiles(root, action.Source, nil, seen)
+		collectFiles(root, action.Source, action.Exclude, seen)
 	}
 	return sortedStrings(mapsKeys(seen))
 }

@@ -187,11 +187,6 @@ func TestGeneratedTestTreePruningKeepsSatisfiableTestFiles(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
-	m := readMarkerForTest(t, dir)
-	discarded := map[string]bool{}
-	for _, rel := range m.DiscardedTests {
-		discarded[rel] = true
-	}
 	for _, rel := range []string{
 		"internal/app/application_test.go",                     // 逐文件可满足
 		"internal/app/bootstrap_http_test.go",                  //
@@ -200,9 +195,8 @@ func TestGeneratedTestTreePruningKeepsSatisfiableTestFiles(t *testing.T) {
 		"internal/contract/capability_test.go",                 // 资产依赖只裁同目录的 openapi_test.go
 	} {
 		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "%s 应当保留", rel)
-		assert.False(t, discarded[rel], "%s 不应被裁", rel)
 	}
-	assert.True(t, discarded["internal/contract/openapi_test.go"], "读 docs/openapi 的测试必须裁掉")
+	assert.NoFileExists(t, filepath.Join(dir, "internal/contract/openapi_test.go"), "读 docs/openapi 的测试必须裁掉")
 	// 组成依赖：读生成期派生的组成清单（catalog 是专属子集）的测试不可移植 —— 实测 `--with=queue`
 	// 时 seed_test.go 的 TestRunSeed_* 会因全量 permissions 期望落空而红，故按逐文件裁掉。
 	for _, rel := range []string{
@@ -210,10 +204,7 @@ func TestGeneratedTestTreePruningKeepsSatisfiableTestFiles(t *testing.T) {
 		"internal/kernel/db/p17_access_migration_integration_test.go",
 		"internal/kernel/db/user_mfa_migration_integration_test.go",
 	} {
-		assert.True(t, discarded[rel], "组成依赖的测试应被裁掉：%s", rel)
-	}
-	for _, rel := range m.DiscardedTests {
-		assert.True(t, strings.HasSuffix(rel, "_test.go"), "只丢弃测试文件：%s", rel)
+		assert.NoFileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "组成依赖的测试应被裁掉：%s", rel)
 	}
 }
 
@@ -233,26 +224,15 @@ func TestFullProfileKeepsCompositionDependentTests(t *testing.T) {
 	full := filepath.Join(t.TempDir(), "full")
 	_, err := newProjectForTest(t, NewOptions{Dir: full, Profile: "full", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
-	fullMarker := readMarkerForTest(t, full)
-	fullDiscarded := map[string]bool{}
-	for _, rel := range fullMarker.DiscardedTests {
-		fullDiscarded[rel] = true
-	}
 	for _, rel := range compositionDeps {
 		assert.FileExists(t, filepath.Join(full, filepath.FromSlash(rel)), "full 形态应保留 %s", rel)
-		assert.False(t, fullDiscarded[rel], "full 形态不该裁掉 %s", rel)
 	}
 
 	subset := filepath.Join(t.TempDir(), "subset")
 	_, err = newProjectForTest(t, NewOptions{Dir: subset, With: "queue", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
-	subsetMarker := readMarkerForTest(t, subset)
-	subsetDiscarded := map[string]bool{}
-	for _, rel := range subsetMarker.DiscardedTests {
-		subsetDiscarded[rel] = true
-	}
 	for _, rel := range compositionDeps {
-		assert.True(t, subsetDiscarded[rel], "子集选区应裁掉组成依赖文件 %s", rel)
+		assert.NoFileExists(t, filepath.Join(subset, filepath.FromSlash(rel)), "子集选区应裁掉组成依赖文件 %s", rel)
 	}
 }
 
@@ -313,11 +293,6 @@ func TestGeneratedTestTreePruningFallsBackToWholeTestPackage(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
-	m := readMarkerForTest(t, dir)
-	discarded := map[string]bool{}
-	for _, rel := range m.DiscardedTests {
-		discarded[rel] = true
-	}
 	// e2e 的测试包被整组丢弃：目录里不得残留任何 _test.go，且每个原文件都在丢弃清单里。
 	entries, rerr := os.ReadDir(filepath.Join(dir, "internal", "e2e"))
 	require.NoError(t, rerr)
@@ -329,7 +304,7 @@ func TestGeneratedTestTreePruningFallsBackToWholeTestPackage(t *testing.T) {
 		"internal/e2e/api_contract_test.go",
 		"internal/e2e/admin_routes_parity_test.go",
 	} {
-		assert.True(t, discarded[rel], "%s 应随测试包整组丢弃", rel)
+		assert.NoFileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "%s 应随测试包整组丢弃", rel)
 	}
 }
 

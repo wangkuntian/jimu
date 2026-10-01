@@ -34,6 +34,10 @@ func replaceDirectory(target, staging string) error {
 	return nil
 }
 
+// InstallFile is the per-file installation hook used by workspace updates.
+// Package-level callers may replace it briefly to verify rollback behavior.
+var InstallFile = copyStagedFile
+
 func installStaged(root, staging string, changed, removed []string) error {
 	touched := append(append([]string{}, changed...), removed...)
 	sort.Strings(touched)
@@ -75,9 +79,7 @@ func installStaged(root, staging string, changed, removed []string) error {
 		backed = append(backed, rel)
 	}
 	for _, rel := range changed {
-		source := filepath.Join(staging, filepath.FromSlash(rel))
-		target := filepath.Join(root, filepath.FromSlash(rel))
-		if err := copyStagedFile(source, target); err != nil {
+		if err := InstallFile(staging, root, rel); err != nil {
 			restore()
 			return fmt.Errorf("install update target %s: %w", rel, err)
 		}
@@ -91,7 +93,9 @@ func installStaged(root, staging string, changed, removed []string) error {
 	return nil
 }
 
-func copyStagedFile(source, target string) error {
+func copyStagedFile(sourceRoot, targetRoot, rel string) error {
+	source := filepath.Join(sourceRoot, filepath.FromSlash(rel))
+	target := filepath.Join(targetRoot, filepath.FromSlash(rel))
 	info, err := os.Stat(source)
 	if err != nil {
 		return err

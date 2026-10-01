@@ -37,7 +37,7 @@ func TestCreateForceReplacesExistingProject(t *testing.T) {
 	writeFile(t, source, "config.yaml", "base:\n  enabled: true\nnew:\n  value: source\n")
 	doc := fixtureDocument("generated.txt", "config.yaml")
 	target := filepath.Join(t.TempDir(), "project")
-	if err := os.MkdirAll(target, 0o755); err != nil {
+	if _, err := Create(doc, CreateOptions{Target: target, SourceRoot: source, Module: "example.com/app", NoTidy: true, NoSelfCheck: true}); err != nil {
 		t.Fatal(err)
 	}
 	writeFile(t, target, "old.txt", "old\n")

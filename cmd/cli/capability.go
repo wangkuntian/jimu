@@ -60,7 +60,7 @@ func newCapabilityAddCmd() *cobra.Command {
 		Short: "Add a capability to an existing generated project",
 		Long: `Add a capability to an existing generated project.
 
-读 <dir>/.jimu-generated（模块路径、声明集、驱动集、框架源根），按同一套渲染管线在暂存目录
+读取 <dir>/.jimu/manifest.json（模块路径、声明集、驱动集），按同一套渲染管线在暂存目录
 重渲染后逐文件落盘：生成文件（DO NOT EDIT）被覆盖，configs/*.yaml 与 deploy/helm/values.yaml
 以现有文件为底合并（保住手改的段值），用户自有文件原样保留。任一失败即回滚，不留半成品。
 
@@ -83,9 +83,9 @@ func newCapabilityAddCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().String("dir", ".", "generated project root (must contain .jimu-generated)")
-	cmd.Flags().String("from", "", "framework source root (default: .jimu-generated sourceRoot)")
-	cmd.Flags().String("module", "", "override the module path recorded in .jimu-generated")
+	cmd.Flags().String("dir", ".", "generated project root (must contain .jimu/manifest.json)")
+	cmd.Flags().String("from", "", "framework source root (default: current jimu checkout)")
+	cmd.Flags().String("module", "", "override the module path recorded in .jimu/manifest.json")
 	cmd.Flags().Bool("force", false, "rebuild the capability even if it is already present")
 	cmd.Flags().Bool("dry-run", false, "print the files that would change without writing anything")
 	return cmd

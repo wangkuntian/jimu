@@ -516,7 +516,8 @@
       "optional": false,
       "include": [],
       "exclude": [
-        "*_test.go"
+        "*_test.go",
+        "framework_spec.go"
       ]
     },
     {
@@ -885,11 +886,29 @@
       }
     },
     {
+      "source": "tools/generator/templates/project/compose_spec.go.tmpl",
+      "destination": "tools/composereport/manifest_spec.go",
+      "kind": "report",
+      "data": null
+    },
+    {
       "source": "cmd/cli/main.go",
       "destination": "cmd/cli/main.go",
       "kind": "cli",
       "data": {
         "CLIImports": []
+      }
+    },
+    {
+      "source": "tools/generator/templates/project/migration_module.go.tmpl",
+      "destination": "internal/capabilities/tenant/module.go",
+      "kind": "migration-module",
+      "data": {
+        "Name": "tenant",
+        "Owns": [
+          "tenants",
+          "tenant_plans"
+        ]
       }
     }
   ],
@@ -898,13 +917,82 @@
       "source": "configs/app.yaml",
       "destination": "configs/app.yaml",
       "strategy": "sections",
-      "sections": []
+      "sections": [
+        "auth",
+        "cache",
+        "capabilities",
+        "db",
+        "email",
+        "error_reporting",
+        "grpc",
+        "http",
+        "http_client",
+        "id",
+        "log",
+        "management",
+        "notification",
+        "otel",
+        "ratelimit",
+        "redis",
+        "security",
+        "server",
+        "sms"
+      ]
     },
     {
       "source": "configs/app.prod.yaml",
       "destination": "configs/app.prod.yaml",
       "strategy": "sections",
-      "sections": []
+      "sections": [
+        "auth",
+        "cache",
+        "capabilities",
+        "db",
+        "email",
+        "error_reporting",
+        "grpc",
+        "http",
+        "http_client",
+        "id",
+        "log",
+        "management",
+        "notification",
+        "otel",
+        "ratelimit",
+        "redis",
+        "security",
+        "server",
+        "sms"
+      ]
+    },
+    {
+      "source": "deploy/helm/values.yaml",
+      "destination": "deploy/helm/values.yaml",
+      "strategy": "sections",
+      "sections": [
+        "image",
+        "replicaCount",
+        "environment",
+        "resources",
+        "autoscaling",
+        "pdb",
+        "networkPolicy",
+        "service",
+        "ingress",
+        "http",
+        "management",
+        "security",
+        "server",
+        "cache",
+        "log",
+        "auth",
+        "otel",
+        "backup",
+        "db",
+        "redis",
+        "openobserve",
+        "otelCollector"
+      ]
     }
   ],
   "rewrites": [
@@ -915,14 +1003,68 @@
       "files": []
     },
     {
-      "kind": "file-patches",
-      "from": "{{module}}",
-      "to": "example.com/minimal",
+      "kind": "file-patch",
+      "from": "const modulePath = \"jimu\"",
+      "to": "const modulePath = \"example.com/minimal\"",
       "files": [
         "tools/checkcapabilities/drivers.go",
-        "tools/composereport/main.go",
-        "tools/logcheck/main.go",
+        "tools/composereport/main.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "\"jimu/tools/logcheck\"",
+      "to": "\"example.com/minimal/tools/logcheck\"",
+      "files": [
+        "tools/logcheck/main.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "\"jimu/internal/assembly\"",
+      "to": "\"example.com/minimal/internal/assembly\"",
+      "files": [
         "tools/internal/profileoverlay/profileoverlay.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "\"jimu/internal/profiles/%s\"",
+      "to": "\"example.com/minimal/internal/profiles/%s\"",
+      "files": [
+        "tools/internal/profileoverlay/profileoverlay.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "// Command composereport 生成各形态（profile）的「编译面」报告。",
+      "to": "// Command composereport 生成本项目唯一形态的「编译面」报告。",
+      "files": [
+        "tools/composereport/main.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "报告回答「层②（形态选点）究竟改变了什么」",
+      "to": "报告回答「本项目编进了什么」",
+      "files": [
+        "tools/composereport/main.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "数在各形态间**完全相同**",
+      "to": "数不再随形态变化",
+      "files": [
+        "tools/composereport/main.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "（`jimu/...`）",
+      "to": "（`example.com/minimal/...`）",
+      "files": [
+        "tools/composereport/main.go"
       ]
     }
   ],
@@ -937,7 +1079,9 @@
       "source": "deploy/helm",
       "destination": "deploy/helm",
       "include": [],
-      "exclude": []
+      "exclude": [
+        "values.yaml"
+      ]
     },
     {
       "source": "deploy/helm/templates/openobserve.yaml",
@@ -986,7 +1130,7 @@
     {
       "kind": "test-import",
       "path": "**/*_test.go",
-      "reason": "remove files whose imports are not satisfied"
+      "reason": "test-import"
     }
   ],
   "report": {
@@ -1202,6 +1346,7 @@
     "internal/capabilities/tenant/migrations/postgres/005_tenants.sql",
     "internal/capabilities/tenant/migrations/postgres/008_tenant_version.sql",
     "internal/capabilities/tenant/migrations/postgres/014_tenant_plans.sql",
+    "internal/capabilities/tenant/module.go",
     "internal/capabilities/user/account_port.go",
     "internal/capabilities/user/application/admin_service.go",
     "internal/capabilities/user/application/admin_service_test.go",
@@ -1431,13 +1576,15 @@
     "tools/checkcapabilities/main.go",
     "tools/checkcapabilities/structure.go",
     "tools/composereport/main.go",
+    "tools/composereport/manifest_spec.go",
     "tools/internal/heavydeps/heavydeps.go",
     "tools/internal/profileassets/profileassets.go",
     "tools/internal/profileoverlay/profileoverlay.go",
     "tools/internal/projectmetrics/projectmetrics.go",
+    "tools/internal/projectmetrics/spec.go",
     "tools/logcheck/main.go",
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:d296edadfbb0677c83135bdeacc72613c8b9ac642cfffe2c27441bbfb559bdab"
+  "digest": "sha256:ad8400a643ef86a08094c079e340f42a39d6810cf3af0405dfc6530e40282e4d"
 }

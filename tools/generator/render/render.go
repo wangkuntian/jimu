@@ -49,13 +49,18 @@ func Execute(ctx Context) ([]string, error) {
 			return nil, err
 		}
 	}
-	for _, action := range ctx.Plan.Assets {
-		if err := copyTree(ctx.SourceRoot, ctx.Destination, action.Source, action.Destination, action.Include, action.Exclude); err != nil {
-			return nil, err
-		}
+	if err := narrowDrivers(ctx.Destination, ctx.Plan.Selection.Drivers); err != nil {
+		return nil, err
 	}
 	for _, action := range ctx.Plan.Rewrites {
 		if err := applyRewrite(ctx.Destination, ctx.Module, action); err != nil {
+			return nil, err
+		}
+	}
+	// Deployment assets contain framework-owned names such as /opt/jimu. Copy them
+	// after module rewriting so those names remain literal asset content.
+	for _, action := range ctx.Plan.Assets {
+		if err := copyTree(ctx.SourceRoot, ctx.Destination, action.Source, action.Destination, action.Include, action.Exclude); err != nil {
 			return nil, err
 		}
 	}

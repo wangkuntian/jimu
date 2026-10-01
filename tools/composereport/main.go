@@ -27,7 +27,6 @@ import (
 	"sync"
 
 	"jimu/internal/profiles/registry"
-	"jimu/tools/generator/frameworkmanifest"
 	"jimu/tools/internal/profileoverlay"
 	"jimu/tools/internal/projectmetrics"
 )
@@ -187,16 +186,9 @@ func measureAll(root string, profiles []string) ([]Metrics, error) {
 		if err != nil {
 			return nil, err
 		}
-		doc, err := frameworkmanifest.Export(frameworkmanifest.Request{Root: root, Profile: name, Module: modulePath})
+		spec, err := projectReportSpec(root, name)
 		if err != nil {
 			return nil, err
-		}
-		spec := projectmetrics.ReportSpec{
-			Name:         name,
-			Capabilities: doc.Report.Capabilities,
-			Routes:       doc.Report.Routes,
-			Migrations:   len(doc.Report.Migrations),
-			Tables:       len(doc.Report.Tables),
 		}
 		m, err := projectmetrics.Measure(root, modulePath, spec, overlay)
 		if err != nil {

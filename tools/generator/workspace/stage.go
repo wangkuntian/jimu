@@ -7,10 +7,13 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 
 	"jimu/tools/generator/manifest"
 	"jimu/tools/generator/plan"
 	"jimu/tools/generator/render"
+	"jimu/tools/generator/report"
+	"jimu/tools/internal/projectmetrics"
 )
 
 const manifestRel = ".jimu/manifest.json"
@@ -37,6 +40,7 @@ type UpdateOptions struct {
 	DryRun      bool
 	NoTidy      bool
 	NoSelfCheck bool
+	Report      bool
 }
 
 type Result struct {
@@ -67,7 +71,7 @@ func Create(doc manifest.Document, opts CreateOptions) (Result, error) {
 	}
 	files := append(slices.Clone(executionPlan.GeneratedFiles), manifestRel)
 	sort.Strings(files)
-	result := Result{Target: target, Module: module, Shape: doc.Selection.Shape, Files: files}
+	result := Result{Target: target, Module: module, Shape: doc.Selection.Shape, Files: files, FileCount: len(files)}
 	if opts.DryRun {
 		return result, nil
 	}
@@ -91,6 +95,12 @@ func Create(doc manifest.Document, opts CreateOptions) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	doc.GeneratedFiles = slices.Clone(rendered)
+	doc.Digest = ""
+	doc.Digest, err = manifest.Digest(doc)
+	if err != nil {
+		return Result{}, err
+	}
 	if !opts.NoTidy {
 		if err := Tidy(staging); err != nil {
 			return Result{}, fmt.Errorf("go mod tidy: %w", err)
@@ -103,6 +113,11 @@ func Create(doc manifest.Document, opts CreateOptions) (Result, error) {
 	}
 	if err := manifest.Write(filepath.Join(staging, manifestRel), doc); err != nil {
 		return Result{}, err
+	}
+	if opts.Report {
+		if err := writeReport(staging, module, doc); err != nil {
+			return Result{}, err
+		}
 	}
 	if err := replaceDirectory(target, staging); err != nil {
 		return Result{}, err
@@ -153,13 +168,30 @@ func Update(previous manifest.Document, next manifest.Document, opts UpdateOptio
 	}); err != nil {
 		return Result{}, err
 	}
+	rendered := listFiles(staging)
+	next.GeneratedFiles = slices.Clone(rendered)
+	next.Digest = ""
+	next.Digest, err = manifest.Digest(next)
+	if err != nil {
+		return Result{}, err
+	}
 	if err := mergeConfigs(projectRoot, staging, next.Merges); err != nil {
 		return Result{}, err
 	}
 	if err := manifest.Write(filepath.Join(staging, manifestRel), next); err != nil {
 		return Result{}, err
 	}
-	changed, removed, err := diffGenerated(projectRoot, staging, previous.GeneratedFiles, next.GeneratedFiles)
+	if opts.Report {
+		if err := writeReport(staging, module, next); err != nil {
+			return Result{}, err
+		}
+	}
+	managedFiles := slices.Clone(next.GeneratedFiles)
+	managedFiles = append(managedFiles, manifestRel)
+	if opts.Report {
+		managedFiles = append(managedFiles, report.ReportPath)
+	}
+	changed, removed, err := diffGenerated(projectRoot, staging, previous.GeneratedFiles, managedFiles)
 	if err != nil {
 		return Result{}, err
 	}
@@ -180,6 +212,25 @@ func Update(previous manifest.Document, next manifest.Document, opts UpdateOptio
 		return Result{}, err
 	}
 	return result, nil
+}
+
+func listFiles(root string) []string {
+	var files []string
+	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err == nil {
+			files = append(files, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	sort.Strings(files)
+	return files
 }
 
 func moduleFromDocument(doc manifest.Document, override string) string {
@@ -212,6 +263,11 @@ func validateCreateTarget(target string, force bool) error {
 	if len(entries) > 0 && !force {
 		return fmt.Errorf("target directory %s is not empty; pass --force to replace it", target)
 	}
+	if len(entries) > 0 && force {
+		if _, err := LoadProjectManifest(target); err != nil {
+			return fmt.Errorf("target directory %s is not a generated project: --force requires %s: %w", target, manifestRel, err)
+		}
+	}
 	return nil
 }
 
@@ -221,4 +277,77 @@ func createStage(target string) (string, error) {
 		return "", fmt.Errorf("create staging directory: %w", err)
 	}
 	return stage, nil
+}
+
+func writeReport(root, module string, doc manifest.Document) error {
+	spec := projectmetrics.ReportSpec{
+		Name:         doc.Selection.Shape,
+		Capabilities: doc.Report.Capabilities,
+		Routes:       doc.Report.Routes,
+		Migrations:   len(doc.Report.Migrations),
+		Tables:       len(doc.Report.Tables),
+	}
+	metrics, err := report.Measure(root, module, spec, nil)
+	if err != nil {
+		return fmt.Errorf("measure generated report: %w", err)
+	}
+	metadata := report.Metadata{
+		Module:        module,
+		Shape:         doc.Selection.Shape,
+		Capabilities:  slices.Clone(doc.Selection.Capabilities),
+		MigrationOnly: capabilityNames(doc, true, false),
+		DomainOnly:    capabilityNames(doc, false, true),
+		Drivers:       driverNames(doc.Selection.Drivers),
+		Assets:        assetNames(doc),
+	}
+	_, err = report.Write(root, metrics, metadata, assetRoots(doc))
+	return err
+}
+
+func capabilityNames(doc manifest.Document, migrationOnly, domainOnly bool) []string {
+	values := make([]string, 0)
+	for _, capability := range doc.Capabilities {
+		if capability.MigrationOnly == migrationOnly && capability.DomainOnly == domainOnly {
+			if migrationOnly || domainOnly {
+				values = append(values, capability.Name)
+			}
+		}
+	}
+	sort.Strings(values)
+	return values
+}
+
+func driverNames(drivers map[string][]string) []string {
+	names := make([]string, 0, len(drivers))
+	for name, values := range drivers {
+		if len(values) == 0 {
+			continue
+		}
+		names = append(names, name+"="+strings.Join(values, ","))
+	}
+	sort.Strings(names)
+	return names
+}
+
+func assetNames(doc manifest.Document) []string {
+	names := make([]string, 0, len(doc.Assets))
+	for _, asset := range doc.Assets {
+		names = append(names, asset.Destination)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func assetRoots(doc manifest.Document) []string {
+	seen := map[string]bool{}
+	var roots []string
+	for _, asset := range doc.Assets {
+		root := strings.SplitN(asset.Destination, "/", 2)[0]
+		if !seen[root] {
+			seen[root] = true
+			roots = append(roots, root)
+		}
+	}
+	sort.Strings(roots)
+	return roots
 }

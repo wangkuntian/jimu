@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/catalog"
+	"jimu/tools/generator/manifest"
+	"jimu/tools/generator/workspace"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -63,9 +65,8 @@ func TestAddCapabilityRefreshesGeneratedReport(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(before), "dataops")
 
-	// 关键：`capability add` 的 cwd 就是生成项目（文档用法 `cd proj && jimu capability add x`）——
-	// 框架源根只能取自 marker.SourceRoot，不能按 cwd 重新发现（Fix round 2 修掉的 bug）。
-	t.Chdir(dir)
+	// 缺省 --from 从当前 Jimu checkout 解析；生成项目 manifest 不保存本机绝对路径。
+	t.Chdir(FrameworkRoot())
 
 	_, err = AddCapability(AddOptions{Name: "dataops", Dir: dir})
 	require.NoError(t, err)
@@ -473,25 +474,28 @@ func TestAddCapabilityRejectsUnknownCapability(t *testing.T) {
 	require.ErrorContains(t, err, `unknown capability "ghost"`)
 }
 
-// TestMarkerSaveLoadRoundTrip 钉住 marker 的读写接口（S7）：Save 后 Load 逐字段相等。
-func TestMarkerSaveLoadRoundTrip(t *testing.T) {
+// TestManifestSaveLoadRoundTrip 钉住生成项目 manifest 的读写接口。
+func TestManifestSaveLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	want := &Marker{
-		Generator:    "jimu new",
-		Version:      generatorVersion,
-		SourceRoot:   frameworkRootForTest(t),
-		SourceCommit: "deadbeef",
-		Module:       "example.com/proj",
-		Shape:        "minimal",
-		Profile:      "minimal",
-		Capabilities: []string{"user", "access"},
-		DomainOnly:   []string{"tenant"},
-		Drivers:      map[string][]string{"queue": {"redis"}},
-		Assets:       []string{"deploy/k8s"},
-		Files:        []string{"go.mod"},
+	want := manifest.Document{
+		SchemaVersion:  manifest.CurrentSchemaVersion,
+		Framework:      manifest.Framework{Module: "jimu", Version: "v0.3.3", Commit: "deadbeef"},
+		Selection:      manifest.Selection{Shape: "minimal", Profile: "minimal", Capabilities: []string{"user", "access"}, Drivers: map[string][]string{"queue": {"redis"}}},
+		Capabilities:   []manifest.Capability{},
+		Copy:           []manifest.CopyAction{},
+		Templates:      []manifest.TemplateAction{},
+		Merges:         []manifest.MergeAction{},
+		Assets:         []manifest.AssetAction{},
+		Prune:          []manifest.PruneRule{},
+		Report:         manifest.ReportSpec{Capabilities: []string{}, Migrations: []string{}, Tables: []string{}, HeavyDeps: []string{}},
+		GeneratedFiles: []string{"go.mod"},
+		Rewrites:       []manifest.RewriteAction{{Kind: "module", From: "jimu", To: "example.com/proj", Files: []string{}}},
 	}
-	require.NoError(t, want.Save(dir))
-	got, err := LoadMarker(dir)
+	digest, err := manifest.Digest(want)
+	require.NoError(t, err)
+	want.Digest = digest
+	require.NoError(t, manifest.Write(filepath.Join(dir, markerFile), want))
+	got, err := workspace.LoadProjectManifest(dir)
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
 }

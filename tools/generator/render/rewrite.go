@@ -35,6 +35,20 @@ func applyRewrite(root, module string, action manifest.RewriteAction) error {
 			continue
 		}
 		from, to := action.From, action.To
+		if action.Kind == "file-patch" {
+			updated := strings.ReplaceAll(string(content), from, to)
+			if updated == string(content) {
+				return fmt.Errorf("rewrite target %s: patch source %q was not found", rel, from)
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(path, []byte(updated), info.Mode().Perm()); err != nil {
+				return err
+			}
+			continue
+		}
 		if action.Kind == "module" {
 			if module != "" {
 				to = module

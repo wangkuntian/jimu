@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"jimu/internal/assembly"
+	"jimu/internal/capabilities/catalog"
 	"jimu/internal/contract"
 	"jimu/internal/profiles"
 	"jimu/internal/profiles/full"
@@ -73,8 +74,14 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 	if err := manifest.Validate(previous); err != nil {
 		return manifest.Document{}, fmt.Errorf("validate previous manifest: %w", err)
 	}
+	for _, capability := range previous.Capabilities {
+		if capability.Name != name || !capability.MigrationOnly || force {
+			continue
+		}
+		return manifest.Document{}, fmt.Errorf("capability %q is already present only as a migration carry; pass --force to promote it to a full declared capability", name)
+	}
 	if contains(previous.Selection.Capabilities, name) && !force {
-		return manifest.Document{}, fmt.Errorf("capability %q is already selected", name)
+		return manifest.Document{}, fmt.Errorf("capability %q is already present as a declared capability (already selected)", name)
 	}
 	selected := slices.Clone(previous.Selection.Capabilities)
 	if !contains(selected, name) {
@@ -86,7 +93,7 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 		}
 		for _, required := range descriptor.Descriptor.Requires {
 			if !contains(selected, required) {
-				return manifest.Document{}, fmt.Errorf("capability %q requires %q; add the dependency first", name, required)
+				return manifest.Document{}, fmt.Errorf("capability %q requires %q; add it first (add the dependency first)", name, required)
 			}
 		}
 		break
@@ -99,10 +106,23 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 			break
 		}
 	}
-	return Export(Request{Root: root, With: with, Shape: previous.Selection.Shape, Module: module})
+	profile := ""
+	if force && contains(previous.Selection.Capabilities, name) {
+		// Rebuilding an existing profile selection must preserve its profile identity;
+		// otherwise an idempotent --force run would rewrite only metadata.
+		profile = previous.Selection.Profile
+	}
+	if profile != "" {
+		return Export(Request{Root: root, Profile: profile, Module: module})
+	}
+	return Export(Request{Root: root, Profile: profile, With: with, Shape: previous.Selection.Shape, Module: module})
 }
 
 func buildDocument(root, module string, selected selection) (manifest.Document, error) {
+	pruneReason := "test-import"
+	if catalogCoversAll(selected) {
+		pruneReason = "catalog-complete"
+	}
 	doc := manifest.Document{
 		SchemaVersion:  manifest.CurrentSchemaVersion,
 		Framework:      manifest.Framework{Module: "jimu", Version: profiles.Version, Commit: frameworkCommit(root)},
@@ -110,10 +130,10 @@ func buildDocument(root, module string, selected selection) (manifest.Document, 
 		Capabilities:   capabilityFacts(root, selected),
 		Copy:           copyActions(root, selected),
 		Templates:      templateActions(root, selected),
-		Merges:         mergeActions(),
+		Merges:         mergeActions(root, selected),
 		Rewrites:       rewriteActions(module),
 		Assets:         assetActions(root, selected),
-		Prune:          []manifest.PruneRule{{Kind: "test-import", Path: "**/*_test.go", Reason: "remove files whose imports are not satisfied"}},
+		Prune:          []manifest.PruneRule{{Kind: "test-import", Path: "**/*_test.go", Reason: pruneReason}},
 		GeneratedFiles: generatedFiles(root, selected),
 	}
 	routes, err := routeCount(root, selected.assemblies)
@@ -125,6 +145,22 @@ func buildDocument(root, module string, selected selection) (manifest.Document, 
 		return manifest.Document{}, err
 	}
 	return doc, nil
+}
+
+func catalogCoversAll(selected selection) bool {
+	chosen := make(map[string]bool, len(selected.declared)+len(selected.migration))
+	for _, name := range selected.declared {
+		chosen[name] = true
+	}
+	for _, name := range selected.migration {
+		chosen[name] = true
+	}
+	for _, descriptor := range catalog.All() {
+		if !chosen[descriptor.Name] {
+			return false
+		}
+	}
+	return true
 }
 
 func frameworkCommit(root string) string {
