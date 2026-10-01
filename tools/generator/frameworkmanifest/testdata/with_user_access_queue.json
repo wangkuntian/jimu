@@ -1451,6 +1451,7 @@
     "scripts/check_profiles.sh",
     "tools/checkcapabilities/assets.go",
     "tools/checkcapabilities/drivers.go",
+    "tools/checkcapabilities/generator_boundary.go",
     "tools/checkcapabilities/imports.go",
     "tools/checkcapabilities/main.go",
     "tools/checkcapabilities/structure.go",
@@ -1465,5 +1466,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:0e0fa0a5c21b03b67110e17216e81b42d31f722e0d96dbcb03620da63afab018"
+  "digest": "sha256:ae6a152cddc9e1709c2ebfdcffa311f20ff724f02cffee953e47b0dcbf36b87d"
 }

@@ -1136,11 +1136,11 @@
   "report": {
     "name": "minimal",
     "capabilities": [
-      "user",
-      "access",
-      "auth",
       "encryption",
-      "notification"
+      "notification",
+      "access",
+      "user",
+      "auth"
     ],
     "routes": 32,
     "migrations": [
@@ -1572,6 +1572,7 @@
     "scripts/check_profiles.sh",
     "tools/checkcapabilities/assets.go",
     "tools/checkcapabilities/drivers.go",
+    "tools/checkcapabilities/generator_boundary.go",
     "tools/checkcapabilities/imports.go",
     "tools/checkcapabilities/main.go",
     "tools/checkcapabilities/structure.go",
@@ -1586,5 +1587,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:ad8400a643ef86a08094c079e340f42a39d6810cf3af0405dfc6530e40282e4d"
+  "digest": "sha256:e6b2bcfac00d3eaf585b4da8caad81ac51264969ba0478cf541f7e832a9a0f0c"
 }

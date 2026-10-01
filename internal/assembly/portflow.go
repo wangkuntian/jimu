@@ -34,7 +34,12 @@ type ProbeResult struct {
 // 完整形态（full）里每个被读取的端口都应有人提供，缺失即报错；因此它不适用于
 // 「软依赖确实缺席」的裁剪形态 —— 那类形态用 ProbeAssembly 观察装配产物。
 func ValidatePortFlow(a Assembly) error {
-	_, violations, err := probeWires(a, nil)
+	var violations []string
+	err := config.WithWorkingDirectory("", func() error {
+		var err error
+		_, violations, err = probeWires(a, nil)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -49,7 +54,28 @@ func ValidatePortFlow(a Assembly) error {
 // capabilities.enabled 裁剪并补齐硬依赖闭包，Ungated 条目恒装配。它不做读取顺序校验
 // （那是 ValidatePortFlow 的职责），供启用子集/延迟构造的回归用例观察装配产物。
 func ProbeAssembly(a Assembly, enabled []string) (ProbeResult, error) {
-	result, _, err := probeWires(a, enabled)
+	var result ProbeResult
+	err := config.WithWorkingDirectory("", func() error {
+		var err error
+		result, _, err = probeWires(a, enabled)
+		return err
+	})
+	return result, err
+}
+
+// ProbeAssemblyAt runs the same probe from an explicit framework root. This
+// keeps callers independent from their process cwd, which may be changed by
+// another probe while generation runs in parallel.
+func ProbeAssemblyAt(root string, a Assembly, enabled []string) (ProbeResult, error) {
+	if root == "" {
+		return ProbeResult{}, fmt.Errorf("probe root is required")
+	}
+	var result ProbeResult
+	err := config.WithWorkingDirectory(root, func() error {
+		var err error
+		result, _, err = probeWires(a, enabled)
+		return err
+	})
 	return result, err
 }
 

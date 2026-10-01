@@ -13,6 +13,7 @@ import (
 	"jimu/internal/kernel/httpclient"
 	"jimu/internal/kernel/logger"
 	"jimu/internal/profiles/full"
+	"jimu/internal/shared/testutil"
 
 	"github.com/stretchr/testify/require"
 )
@@ -63,6 +64,15 @@ func TestWireForMatchesProbeAssembly(t *testing.T) {
 	require.Equal(t, names(probe.Modules), names(modules),
 		"WireFor 装配的模块集合必须与 ProbeAssembly 一致")
 	require.NotEmpty(t, modules)
+}
+
+func TestProbeAssemblyAtUsesExplicitRoot(t *testing.T) {
+	root := testutil.RepoRoot(t)
+	t.Chdir(t.TempDir())
+
+	result, err := assembly.ProbeAssemblyAt(root, full.Assembly(), nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, result.Modules)
 }
 
 // 形态名写错时 Resolve 必须报错（fail-closed），不能静默装配出一个空形态。

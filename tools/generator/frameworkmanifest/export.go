@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 
 	"jimu/internal/assembly"
 	"jimu/internal/capabilities/catalog"
@@ -41,8 +40,6 @@ type selection struct {
 	ungated    map[string]bool
 	assemblies []assembly.Capability
 }
-
-var probeMu sync.Mutex
 
 // Export 根据框架当前事实生成一份可校验、可复现的 manifest。
 func Export(req Request) (manifest.Document, error) {
@@ -218,7 +215,7 @@ func capabilityFacts(root string, selected selection) []manifest.Capability {
 }
 
 func reportSpec(root string, selected selection, routes int) manifest.ReportSpec {
-	spec := manifest.ReportSpec{Name: selected.shape, Capabilities: slices.Clone(selected.declared), Routes: routes}
+	spec := manifest.ReportSpec{Name: selected.shape, Capabilities: assemblyNames(selected.assemblies), Routes: routes}
 	all, _ := allDescriptors()
 	byName := make(map[string]contract.Descriptor, len(all))
 	for _, descriptor := range all {
@@ -238,19 +235,17 @@ func reportSpec(root string, selected selection, routes int) manifest.ReportSpec
 	return spec
 }
 
+func assemblyNames(values []assembly.Capability) []string {
+	names := make([]string, 0, len(values))
+	for _, value := range values {
+		names = append(names, value.Descriptor.Name)
+	}
+	return names
+}
+
 func routeCount(root string, caps []assembly.Capability) (int, error) {
-	probeMu.Lock()
-	defer probeMu.Unlock()
-	workingDirectory, err := os.Getwd()
-	if err != nil {
-		return 0, fmt.Errorf("read working directory: %w", err)
-	}
-	if err := os.Chdir(root); err != nil {
-		return 0, fmt.Errorf("enter framework root: %w", err)
-	}
-	defer func() { _ = os.Chdir(workingDirectory) }()
 	gin.SetMode(gin.ReleaseMode)
-	result, err := assembly.ProbeAssembly(assembly.Assembly{Name: "manifest", Capabilities: caps}, nil)
+	result, err := assembly.ProbeAssemblyAt(root, assembly.Assembly{Name: "manifest", Capabilities: caps}, nil)
 	if err != nil {
 		return 0, fmt.Errorf("probe selected assembly: %w", err)
 	}
