@@ -156,7 +156,7 @@ func manifestAssetNames(doc manifest.Document) []string {
 // renderDerivedAll 把「能力集 → 全部产物」的**唯一**一条渲染/复制管线落进 dst（S8 的确定性
 // 重渲染）：内核复制 → 能力复制（含驱动过滤）→ 迁移携带/内核 domain → 形态与 catalog 渲染 →
 // configs 渲染 → CLI 裁剪 → tools 复制与构建文件 → module 受控重写 → 资产复制与 values.yaml
-// 键裁剪 → 测试裁剪 → gofmt → 写 .jimu-generated。
+// 键裁剪 → 测试裁剪 → gofmt → 写 .jimu/manifest.json。
 //
 // `jimu new` 与 `jimu capability add` **共用**本函数（不得出现第二套渲染逻辑）：new 把它写到
 // 空目录再整体换上；add 写到暂存目录后按差异逐文件落盘。产物只由「能力集 + module」决定，

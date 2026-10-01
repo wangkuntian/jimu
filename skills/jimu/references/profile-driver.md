@@ -19,7 +19,7 @@
 **验收**：
 
 ```bash
-make check-capabilities                       # 6 条 ✅（④ 号管入口与选点包）
+make check-capabilities                       # 7 条 ✅（④ 号管入口与选点包，⑦ 号管生成器边界）
 make profiles-check                           # 新形态 overlay 构建 + golden 闭包通过
 PROFILE=<name> make build-server              # 产物 bin/jimu-server-<name>
 JIMU_PROFILES_SMOKE=1 make profiles-check     # 启动并轮询管理端 /readyz（需 DB+Redis）

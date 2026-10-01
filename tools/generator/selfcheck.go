@@ -27,7 +27,7 @@ func SelfCheck(dir string) error {
 
 // runGo 在 dir 里跑一个 go 子命令。env 追加在继承的环境之后（同名变量以后者为准）。
 //
-// 输出被捕获后**成功才透出**（`go run ./tools/checkcapabilities` 的 6 条 ✅ 是给使用者的回执），
+// 输出被捕获后**成功才透出**（`go run ./tools/checkcapabilities` 的 7 条 ✅ 是给使用者的回执），
 // 失败则并进错误信息 —— 构建失败时看不到编译器输出的错误最难排查。
 //
 // 用 CommandContext（`noctx` 门禁要求）：生成器没有可传播的请求上下文 —— Tidy/SelfCheck 的签名是

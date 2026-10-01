@@ -29,7 +29,7 @@
 ## 验收命令与期望输出
 
 ```bash
-make check-capabilities           # 必须 6 条 ✅（① 自描述与 Owns ↔ 迁移归属 ② 驱动 ③ 形态只 import 已声明驱动 ④ 唯一入口与选点包 ⑤ 资产归属 ⑥ 跨能力 import）
+make check-capabilities           # 必须 7 条 ✅（① 自描述与 Owns ↔ 迁移归属 ② 驱动 ③ 形态只 import 已声明驱动 ④ 唯一入口与选点包 ⑤ 资产归属 ⑥ 跨能力 import ⑦ 生成器边界）
 make profiles-check               # 5 形态 overlay 构建 + golden 依赖闭包通过
 go test ./internal/... -count=1   # 能力自带单测全绿
 ```

@@ -69,7 +69,7 @@ help:
 	@echo "  make fmt                  格式化代码"
 	@echo "  make lint                 静态检查"
 	@echo "  make check-log-usage      检查日志调用均为 *w 系列（防 k/v 粘连）"
-	@echo "  make check-capabilities   校验能力自描述（Owns）与驱动可用集/选中集一致"
+	@echo "  make check-capabilities   校验能力自描述、驱动闭包、资产归属与生成器边界"
 	@echo "  make check-templates      模板漂移门禁：用生成器生成最小项目并真构建 + 跑生成项目的 check-capabilities"
 	@echo "  make check-skills         校验 skills/** 的 frontmatter 与 reference 引用完整性"
 	@echo "  make skills-install       把 skills/<name>/ 软链到 .claude/skills/ 与 .agents/skills/"
@@ -292,14 +292,14 @@ lint:
 check-log-usage:
 	@go run ./tools/logcheck "./internal/..." "./cmd/..." "./tools/..."
 
-## check-capabilities: 校验能力自描述（Owns）与迁移归属一致，并静态门禁驱动选择
+## check-capabilities: 校验能力自描述、迁移归属、驱动选择、资产归属与生成器边界
 ##                      （可用集目录存在、核心零驱动、形态选中集==import 闭包、驱动归属）；
 ##                      已接入 make ci/release-check 与 CI 的 Capability Gates job（P2.8 收口）。
 check-capabilities:
 	@go run ./tools/checkcapabilities
 
 ## check-templates: 模板漂移门禁 —— 用生成器在临时目录生成最小项目并构建 + 跑生成项目的
-##                   check-capabilities（5 条 ✅）。它把「模板/复制口径 vs 真实框架结构」的漂移
+##                   check-capabilities（7 条 ✅）。它把「模板/复制口径 vs 真实框架结构」的漂移
 ##                   变成一次可复现的构建；默认 --no-tidy（生成器复制的 go.mod/go.sum 已含全部
 ##                   依赖，模块缓存在 CI 上预热）。用例本身被 JIMU_HEAVY_MATRIX 门控，故这里
 ##                   显式置 1（不置会静默 SKIP）。它不必单独接入聚合目标：`make ci`/`release-check`

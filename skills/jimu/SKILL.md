@@ -47,7 +47,7 @@ description: 在 jimu 框架仓内改动时使用：新增/删除能力、新增
 ## 最常用的验收命令
 
 ```bash
-make check-capabilities     # 6 条汇总行：自描述 ↔ 迁移、驱动、入口/选点包、资产归属、跨能力 import
+make check-capabilities     # 7 条汇总行：自描述 ↔ 迁移、驱动、入口/选点包、资产归属、跨能力 import、生成器边界
 make profiles-check         # 5 形态 overlay 构建 + golden 依赖闭包
 make compose-report-check   # 入库报告 == 本次实测（平台相关列掩码后比对）
 make check-skills           # 本 skill 自身的契约校验
