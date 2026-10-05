@@ -99,7 +99,7 @@ jobs:
 
       - name: "🗂️ Restore the scaffold GOCACHE"
         id: cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/scaffold-gocache
           # 滚动 key（发布候选 PR 与手动/定时运行共用同一规范）：
@@ -149,7 +149,7 @@ jobs:
       # 七个作业均从同一滚动快照恢复；只由一个作业保存，避免写入竞态和缓存配额放大。
       - name: "💾 Save the scaffold GOCACHE"
         if: matrix.name == 'generated-tests-1' && steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/scaffold-gocache
           key: ${{ steps.cache.outputs.cache-primary-key }}
