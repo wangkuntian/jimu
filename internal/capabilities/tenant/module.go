@@ -48,6 +48,8 @@ func (m *Module) Build(users contract.AccountRepository, roles contract.Provisio
 	return application.NewGormTenantProvisioner(m.db, m.provisioning, users, roles)
 }
 
+func (m *Module) Enabled() bool { return m.provisioning.Enabled }
+
 var _ contract.TenantProvisionerFactory = (*Module)(nil)
 
 func (m *Module) Name() string {
@@ -67,6 +69,7 @@ var Descriptor = contract.Descriptor{
 	Migrations: migrationsFS,
 	Owns:       []string{"tenants", "tenant_plans"},
 	Mount:      contract.MountProtected,
+	Configs:    []contract.ConfigSpec{{Section: ConfigKey, New: func() any { return &Config{} }}},
 	Permissions: []contract.Permission{
 		{Name: "租户列表", Resource: "/api/v1/tenants", Action: "GET"},
 		{Name: "租户创建", Resource: "/api/v1/tenants", Action: "POST"},

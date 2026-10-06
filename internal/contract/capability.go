@@ -25,7 +25,7 @@ type Permission struct {
 //
 // 设计 §6.1/§8：能力配置由能力自身声明（默认值与校验），装配时按启用集合并；
 // 未启用的能力其配置段既不出现也不校验。Section 支持点分路径（如
-// "auth.webauthn"），因此能力可拥有嵌套段而对外配置布局保持不变。
+// "tenant.provisioning"），因此能力可拥有嵌套段。
 type ConfigSpec struct {
 	// Section 是 app.yaml 中的配置段键（点分路径）。
 	Section string

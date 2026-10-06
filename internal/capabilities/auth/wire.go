@@ -9,8 +9,8 @@ import (
 	"jimu/internal/contract"
 )
 
-// errProvisioningRequiresPublicRegistration 开通式注册要求公开注册（auth 段跨字段校验）。
-var errProvisioningRequiresPublicRegistration = errors.New("auth.provisioning.enabled requires auth.public_registration")
+// errProvisioningRequiresPublicRegistration tenant 开通式注册要求公开注册。
+var errProvisioningRequiresPublicRegistration = errors.New("tenant.provisioning.enabled requires auth.public_registration")
 
 // Wire 装配 auth 能力：校验 auth 段的跨字段约束，从端口取回可选/必需依赖
 // （captcha/mfa/tenant/outbox/notification/encryption/breach，缺失即降级），
@@ -22,7 +22,9 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	if cfg == nil {
 		cfg = &Config{}
 	}
-	if err := validateConfig(cfg); err != nil {
+	factory, _ := ctx.Port("tenant.provisioner").(contract.TenantProvisionerFactory)
+	provisioningEnabled := factory != nil && factory.Enabled()
+	if err := validateConfig(cfg, provisioningEnabled); err != nil {
 		return nil, err
 	}
 	users, ok := ctx.Port("user.account").(contract.AccountRepository)
@@ -33,7 +35,7 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	// nil，登录/注册跳过验证码校验。
 	captchaVerifier, _ := ctx.Port("captcha").(contract.CaptchaVerifier)
 	var provisioner contract.TenantProvisioner
-	if factory, ok := ctx.Port("tenant.provisioner").(contract.TenantProvisionerFactory); ok && cfg.Provisioning.Enabled {
+	if provisioningEnabled {
 		roles, ok := ctx.Port("access.provisioning").(contract.ProvisioningRoleStore)
 		if !ok {
 			return nil, fmt.Errorf("auth provisioning requires access.provisioning port")
@@ -51,11 +53,9 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	return mod, nil
 }
 
-// validateConfig 承担 auth 段的跨字段校验：provisioning 与 public_registration 同段
-// （设计 §8 ¶2），开通式注册必须同时开启公开注册。provisioning 的语义归 tenant，
-// P2.1 裁定把这条校验留在装配侧（与 outbox.publisher 依赖 queue.type 同理）。
-func validateConfig(cfg *Config) error {
-	if cfg.Provisioning.Enabled && !cfg.PublicRegistration {
+// validateConfig 保留开通式注册必须允许公开注册的组合约束。
+func validateConfig(cfg *Config, provisioningEnabled bool) error {
+	if provisioningEnabled && !cfg.PublicRegistration {
 		return errProvisioningRequiresPublicRegistration
 	}
 	return nil

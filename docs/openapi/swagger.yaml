@@ -891,7 +891,7 @@ paths:
       - application/json
       description: |-
         注册新用户账户。仅当系统配置中 public_registration 为 true 时可用。支持 IP 维度的限流保护。
-        开通式注册（auth.provisioning.enabled=true）时，body 携带 tenant_name 即创建新租户并成为其 owner，按模板初始化角色权限，返回 {user, tenant}；未携带 tenant_name 报参数错误。
+        开通式注册（tenant.provisioning.enabled=true）时，body 携带 tenant_name 即创建新租户并成为其 owner，按模板初始化角色权限，返回 {user, tenant}；未携带 tenant_name 报参数错误。
         普通注册（未启用开通式）时忽略租户字段，用户归默认租户，返回用户信息。
         开通式注册的 tenant_code 统一转小写存储，不传则自动生成；未传 tenant_name 报参数错误。
       parameters:

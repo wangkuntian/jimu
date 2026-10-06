@@ -21,13 +21,14 @@ import (
 const PortName = "auth"
 
 type Module struct {
-	cfg     Config
-	service *application.AuthService
-	jwtUtil *auth.JWT
-	limiter *auth.Limiter
-	db      *gorm.DB
-	captcha contract.CaptchaVerifier
-	outbox  contract.EventWriter
+	cfg                 Config
+	service             *application.AuthService
+	jwtUtil             *auth.JWT
+	limiter             *auth.Limiter
+	db                  *gorm.DB
+	captcha             contract.CaptchaVerifier
+	outbox              contract.EventWriter
+	provisioningEnabled bool
 }
 
 // New 创建 auth 模块。
@@ -36,10 +37,13 @@ type Module struct {
 // contract.BreachChecker、*application.ResetStore。
 func New(db *gorm.DB, rdb redistore.Client, cfg Config, failClosed bool, captchaVerifier contract.CaptchaVerifier, deps ...interface{}) *Module {
 	var userRepo contract.AccountRepository
+	var provisioningEnabled bool
 	for _, dep := range deps {
 		if repo, ok := dep.(contract.AccountRepository); ok {
 			userRepo = repo
-			break
+		}
+		if _, ok := dep.(contract.TenantProvisioner); ok {
+			provisioningEnabled = true
 		}
 	}
 	jwtUtil := auth.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
@@ -54,7 +58,8 @@ func New(db *gorm.DB, rdb redistore.Client, cfg Config, failClosed bool, captcha
 	allDeps = append(allDeps, resetStore, application.WithPasswordHistory(cfg.PasswordHistoryCount),
 		loginHistoryRepo, passwordHistoryRepo)
 	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin, allDeps...)
-	m := &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaVerifier}
+	m := &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaVerifier,
+		provisioningEnabled: provisioningEnabled}
 	for _, dep := range deps {
 		if ob, ok := dep.(contract.EventWriter); ok {
 			m.outbox = ob
@@ -96,7 +101,7 @@ func (m *Module) Finalizer() contract.LoginFinalizer { return m.service }
 func (m *Module) RegisterHTTP(r contract.Router) {
 	interfaces.RegisterAuthRoutes(r.Group("/api/v1"), m.service, m.jwtUtil, interfaces.Config{
 		PublicRegistration:    m.cfg.PublicRegistration,
-		ProvisioningEnabled:   m.cfg.Provisioning.Enabled,
+		ProvisioningEnabled:   m.provisioningEnabled,
 		LoginRateLimit:        m.cfg.LoginRateLimit,
 		LoginRateWindowSec:    m.cfg.LoginRateWindowSec,
 		RegisterRateLimit:     m.cfg.RegisterRateLimit,

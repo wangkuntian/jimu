@@ -49,11 +49,12 @@ type AccountRepository interface {
 }
 
 type ProvisioningRoleStore interface {
-	ProvisionRoles(ctx context.Context, tenantID uint64, cfg AuthProvisioningConfig) (uint64, error)
+	ProvisionRoles(ctx context.Context, tenantID uint64, cfg ProvisioningRoles) (uint64, error)
 	AssignRole(ctx context.Context, userID, roleID uint64) error
 }
 
 type TenantProvisionerFactory interface {
+	Enabled() bool
 	Build(users AccountRepository, roles ProvisioningRoleStore) TenantProvisioner
 }
 
@@ -69,25 +70,19 @@ type AuthConfig struct {
 	LoginRateLimit, LoginRateWindowSec       int
 	RegisterRateLimit, RegisterRateWindowSec int
 	BreachCheckEnabled                       bool
-	Provisioning                             AuthProvisioningConfig
-	WebAuthn                                 AuthWebAuthnConfig
 }
-type AuthWebAuthnConfig struct {
-	Enabled             bool
-	RPDisplayName, RPID string
-	RPOrigins           []string
-	SessionTTLMin       int
-}
-type AuthProvisioningConfig struct {
-	Enabled   bool
+
+type ProvisioningRoles struct {
 	OwnerRole string
-	Roles     []AuthProvisionRole
+	Roles     []ProvisioningRole
 }
-type AuthProvisionRole struct {
+
+type ProvisioningRole struct {
 	Name, Description string
-	Permissions       []AuthProvisionPermission
+	Permissions       []ProvisioningPermission
 }
-type AuthProvisionPermission struct{ Resource, Action string }
+
+type ProvisioningPermission struct{ Resource, Action string }
 
 // Storage is the subset of file storage used by uploadsec.
 type Storage interface {

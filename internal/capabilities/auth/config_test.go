@@ -3,10 +3,12 @@ package authmodule
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"jimu/internal/config"
+	"jimu/internal/contract"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,19 +28,17 @@ func validConfig() Config {
 	}
 }
 
-func TestPortViewDoesNotShareNestedSlices(t *testing.T) {
+func TestPortViewContainsOnlyAuthConfiguration(t *testing.T) {
 	cfg := validConfig()
-	cfg.WebAuthn.RPOrigins = []string{"https://example.com"}
-	cfg.Provisioning.Roles = []ProvisionRoleTemplate{{
-		Name: "owner", Permissions: []ProvisionPermission{{Resource: "users", Action: "read"}},
-	}}
 	view := cfg.PortView()
-	view.WebAuthn.RPOrigins[0] = "https://changed.example.com"
-	view.Provisioning.Roles[0].Permissions[0].Resource = "other"
-	view.Provisioning.Roles[0].Name = "other"
-	assert.Equal(t, "https://example.com", cfg.WebAuthn.RPOrigins[0])
-	assert.Equal(t, "owner", cfg.Provisioning.Roles[0].Name)
-	assert.Equal(t, "users", cfg.Provisioning.Roles[0].Permissions[0].Resource)
+	assert.Equal(t, cfg.JWTSecret, view.JWTSecret)
+	assert.Equal(t, cfg.PublicRegistration, view.PublicRegistration)
+	fields := make([]string, reflect.TypeOf(view).NumField())
+	for i := range fields {
+		fields[i] = reflect.TypeOf(view).Field(i).Name
+	}
+	assert.NotContains(t, fields, "WebAuthn")
+	assert.NotContains(t, fields, "Provisioning")
 }
 
 func TestValidateCommonAuthChecks(t *testing.T) {
@@ -68,111 +68,6 @@ func TestValidateCommonAuthChecks(t *testing.T) {
 	assert.NoError(t, base.Validate())
 }
 
-func validProvisioningConfig() ProvisioningConfig {
-	return ProvisioningConfig{
-		Enabled:   true,
-		OwnerRole: "管理员",
-		Roles: []ProvisionRoleTemplate{
-			{
-				Name:        "管理员",
-				Description: "租户管理员",
-				Permissions: []ProvisionPermission{{Resource: "/api/v1/users", Action: "GET"}},
-			},
-		},
-	}
-}
-
-func TestValidateProvisioning(t *testing.T) {
-	// 关闭时不做任何检查
-	cfg := validConfig()
-	cfg.Provisioning = ProvisioningConfig{Enabled: false}
-	assert.NoError(t, cfg.Validate())
-
-	// 合法模板
-	cfg = validConfig()
-	cfg.Provisioning = validProvisioningConfig()
-	assert.NoError(t, cfg.Validate())
-
-	// enabled 但无角色
-	cfg = validConfig()
-	cfg.Provisioning = ProvisioningConfig{Enabled: true}
-	err := cfg.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "auth.provisioning.roles")
-
-	// 角色重名
-	cfg = validConfig()
-	p := validProvisioningConfig()
-	p.Roles = append(p.Roles, p.Roles[0])
-	cfg.Provisioning = p
-	err = cfg.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "duplicate")
-
-	// owner_role 无法解析
-	cfg = validConfig()
-	p = validProvisioningConfig()
-	p.OwnerRole = "不存在"
-	cfg.Provisioning = p
-	err = cfg.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "owner_role")
-
-	// 权限条目缺 action
-	cfg = validConfig()
-	p = validProvisioningConfig()
-	p.Roles[0].Permissions = []ProvisionPermission{{Resource: "/api/v1/users"}}
-	cfg.Provisioning = p
-	err = cfg.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "resource and action")
-}
-
-func TestValidateWebAuthn(t *testing.T) {
-	// 未启用不校验
-	cfg := validConfig()
-	cfg.WebAuthn = WebAuthnConfig{Enabled: false}
-	assert.NoError(t, cfg.Validate())
-
-	// 合法
-	cfg = validConfig()
-	cfg.WebAuthn = WebAuthnConfig{
-		Enabled:       true,
-		RPDisplayName: "Jimu",
-		RPID:          "example.com",
-		RPOrigins:     []string{"https://example.com"},
-		SessionTTLMin: 5,
-	}
-	assert.NoError(t, cfg.Validate())
-
-	// 缺 rp_id
-	cfg.WebAuthn.RPID = " "
-	err := cfg.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "rp_id")
-
-	// 缺 origins
-	cfg = validConfig()
-	cfg.WebAuthn = WebAuthnConfig{Enabled: true, RPID: "example.com"}
-	err = cfg.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "rp_origins")
-
-	// 相对来源
-	cfg = validConfig()
-	cfg.WebAuthn = WebAuthnConfig{Enabled: true, RPID: "example.com", RPOrigins: []string{"/relative"}}
-	err = cfg.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "absolute http(s) origin")
-
-	// 负数 TTL
-	cfg = validConfig()
-	cfg.WebAuthn = WebAuthnConfig{Enabled: true, RPID: "example.com", RPOrigins: []string{"https://example.com"}, SessionTTLMin: -1}
-	err = cfg.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "session_ttl_min")
-}
-
 // TestValidateProdRejectsWeakJWTSecret 生产加严：弱/占位/未展开的 jwt_secret 一律拒绝。
 func TestValidateProdRejectsWeakJWTSecret(t *testing.T) {
 	for _, secret := range []string{
@@ -185,6 +80,14 @@ func TestValidateProdRejectsWeakJWTSecret(t *testing.T) {
 		cfg := validConfig()
 		cfg.JWTSecret = secret
 		assert.Error(t, cfg.ValidateProd(), "secret %q 在生产环境必须被拒绝", secret)
+	}
+}
+
+func TestAuthConfigPortViewDoesNotExposeOtherCapabilitySettings(t *testing.T) {
+	typ := reflect.TypeOf(contract.AuthConfig{})
+	for _, name := range []string{"WebAuthn", "Provisioning"} {
+		_, ok := typ.FieldByName(name)
+		assert.False(t, ok, "contract.AuthConfig must not expose %s", name)
 	}
 }
 

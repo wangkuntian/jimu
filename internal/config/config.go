@@ -304,7 +304,7 @@ func Load() (*Config, error) {
 	return cfg, err
 }
 
-// SectionDecoder 按 YAML 点分键（如 "auth.webauthn"）解码单个配置段。
+// SectionDecoder 按 YAML 点分键（如 "tenant.provisioning"）解码单个配置段。
 // 组合根用它解码各能力自有的配置段，从而 internal/config 无需知道能力存在。
 type SectionDecoder interface {
 	UnmarshalKey(key string, rawVal any) error
@@ -352,7 +352,7 @@ type SectionConfig interface {
 //
 // 设计 §8：能力配置由能力自身声明默认值与校验。组合根只对**启用**的能力调用
 // 本函数，因此未启用能力的配置段既不出现也不校验。key 为 YAML 点分路径
-// （如 "auth.webauthn"），能力可拥有嵌套段而对外配置布局保持不变。
+// （如 "tenant.provisioning"），能力可拥有嵌套段。
 func LoadSection[T SectionConfig](dec SectionDecoder, key string, out T) error {
 	if err := dec.UnmarshalKey(key, out); err != nil {
 		return fmt.Errorf("decode capability config %q: %w", key, err)
