@@ -72,7 +72,7 @@
 
 **步骤：**
 
-- [ ] 运行 `go test ./... -count=1`、`go vet ./...`。
-- [ ] 运行 `make check-capabilities`、`make profiles-check`、`make compose-report-check`、`make check-skills`、`git diff --check`。
-- [ ] 运行 `make test-scaffold-matrix`；若环境门控跳过，记录明确的跳过条件。
-- [ ] 查看 `git status --short`，确认提交只包含本轮整理相关文件。
+- [x] 运行 `go test ./... -count=1`、`go vet ./...`。
+- [x] 运行 `make check-capabilities`、`make profiles-check`、`make compose-report-check`、`make check-skills`、`git diff --check`。
+- [x] 运行 `make test-scaffold-matrix`；profiles smoke 因未设置 `JIMU_PROFILES_SMOKE=1` 跳过，overlay 构建和依赖闭包检查通过。
+- [x] 查看 `git status --short`，确认提交只包含本轮整理相关文件。
