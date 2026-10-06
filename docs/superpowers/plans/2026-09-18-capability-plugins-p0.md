@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go 1.26 · Gin · GORM · Viper · Zap · testify
 
-**Spec:** `docs/design/2026-09-18-capability-plugins-design.md`（§3.1 内核、§6.1 能力自描述、§6.4 层③运行时、§10 P0）
+**当前设计参考：** [能力架构](../../design/capability-architecture.md)。历史实现方案以本计划当时的记录为准。
 
 ## Global Constraints
 
@@ -1205,7 +1205,7 @@ capabilities:
 - 硬依赖会自动补齐：只写 `["oauth"]` 会连带启用 `auth`/`user`/`role`/`tenant`
 - 未启用的能力不挂路由、不注册定时任务与事件、不启动其后台组件
 - **受保护能力需要认证器**：声明为受保护（`MountProtected`）的能力必须有模块提供受保护中间件（当前为 `auth`）；否则进程**启动即失败**并指出缺失的提供者，而不是把路由裸挂出去。因此 `enabled: ["user"]` 这类"有业务路由、无认证器"的配置会被拒绝
-- 能力清单与依赖关系见 `internal/capabilities/catalog/catalog.go`；设计见 [能力可插拔设计](docs/design/2026-09-18-capability-plugins-design.md)
+- 能力清单与依赖关系见 `internal/capabilities/catalog/catalog.go`；当前设计见[能力架构](../../design/capability-architecture.md)
 ````
 
 - [ ] **Step 2: 更新版本日志**
@@ -1235,7 +1235,7 @@ capabilities:
 ```markdown
 ### 能力边界（v0.3.0 起）
 
-后端按**能力**组织，可插拔为正式能力（设计与清单见 [docs/design/2026-09-18-capability-plugins-design.md](docs/design/2026-09-18-capability-plugins-design.md)）：
+后端按**能力**组织，可插拔为正式能力（当前设计见[能力架构](../../design/capability-architecture.md)）：
 
 - 能力清单只维护在 `internal/capabilities/catalog`，新增/删除能力只改该文件
 - 每个能力导出静态 `Descriptor`（名称 / 硬依赖 `Requires` / 挂载点 `Mount`），依赖必须单向

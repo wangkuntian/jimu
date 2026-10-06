@@ -1,6 +1,6 @@
 ---
 name: jimu
-description: 在 jimu 框架仓内改动时使用：新增/删除能力、新增形态（profile）或驱动、编写能力内迁移与存量库 adopt、运行四道能力门禁与报告、排查运行时降级、使用 jimu new 脚手架生成项目。Use when adding capabilities, profiles, drivers, migrations, or running capability gates in the jimu repo.
+description: 在 jimu 框架仓内改动时使用：新增/删除能力、新增形态（profile）或驱动、编写能力内迁移与存量库 adopt、运行能力与形态门禁、排查运行时降级、使用 jimu new 脚手架生成项目。Use when adding capabilities, profiles, drivers, migrations, or running capability gates in the jimu repo.
 ---
 
 # jimu 框架仓操作指南

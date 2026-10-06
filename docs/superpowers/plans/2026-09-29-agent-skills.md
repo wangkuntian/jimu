@@ -8,7 +8,7 @@
 
 **Tech Stack:** Markdown（Agent Skills 约定：`SKILL.md` + YAML frontmatter）、bash、GNU Make、现有门禁工具（`make check-capabilities` / `profiles-check` / `compose-report-check`）
 
-**Spec:** [docs/design/2026-09-29-agent-skills-design.md](../../design/2026-09-29-agent-skills-design.md)
+**当前 skill 事实源：** [skills/jimu/SKILL.md](../../../skills/jimu/SKILL.md)。本计划保留当时的实现方案。
 
 ## Global Constraints
 
@@ -302,7 +302,7 @@ git commit -m "feat(skills): add the jimu agent skill entry and its checker"
 
 - [ ] **Step 1: 写 `skills/jimu/references/profile-driver.md`**
 
-四段结构（`何时读 / 步骤 / 验收命令与期望输出 / 常见红与定位`），权威口径链接 README「[形态（profile）](../../../README.md#形态profile)」、「[驱动级可插拔（P2.5）](../../../README.md#驱动级可插拔p25)」。内容必须覆盖：
+四段结构（`何时读 / 步骤 / 验收命令与期望输出 / 常见红与定位`），权威口径链接 README「[形态（profile）](../../../README.md#形态profile)」及[形态与项目生成设计](../../design/profiles-and-project-generation.md)。内容必须覆盖：
 
 **新增形态（profile）**
 1. 新建 `internal/profiles/<name>/`（`assembly.go` 能力清单 + 可选 `drivers.go` blank import）
