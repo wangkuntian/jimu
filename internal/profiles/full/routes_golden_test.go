@@ -148,7 +148,6 @@ var fullMountsGolden = map[string]contract.MountPoint{
 	"dataops":      contract.MountProtected,
 	"uploadsec":    contract.MountProtected,
 	"search":       contract.MountProtected,
-	"retention":    contract.MountProtected,
 	"apidocs":      contract.MountPublic,
 	"grpc":         contract.MountProtected,
 	"ws":           contract.MountProtected,

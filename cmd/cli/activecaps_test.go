@@ -105,7 +105,7 @@ func indexOf(xs []string, want string) int {
 }
 
 // 有 catalog 能力但一个迁移都没有 → 同样是「迁移零个能力」，必须 fail-closed
-// （catalog 里 console/captcha/feature/uploadsec/breach 的 Migrations 为 nil）。
+// （catalog 里 console/captcha/uploadsec/breach 的 Migrations 为 nil）。
 func TestResolveActiveRejectsProfileWithoutMigrations(t *testing.T) {
 	_, err := resolveActive("consoleonly", map[string]bool{"console": true})
 	require.ErrorIs(t, err, errNoCatalogCapabilities)

@@ -168,7 +168,6 @@ func TestSelfReadSectionsMatchTheFrameworkSources(t *testing.T) {
 	got := undeclaredSections(scanned, declaredSections())
 	assert.Equal(t, map[string][]string{
 		"storage":      {"storage"},
-		"retention":    {"retention"},
 		"notification": {"email", "sms", "notification"},
 	}, got)
 	assert.Equal(t, got, selfReadSections, "selfReadSections 必须与能力实际 Load 的未声明段逐值一致")
@@ -228,11 +227,10 @@ func undeclaredSections(scanned, declared map[string][]string) map[string][]stri
 // internal/config.Config 的运行时反射）必须等于 config.go 里的 mapstructure tag 集合。
 func TestKernelSectionsMatchConfigStruct(t *testing.T) {
 	assert.ElementsMatch(t, kernelSectionsFromRepo(t), KernelSections())
-	assert.Len(t, KernelSections(), 15)
 }
 
-// TestSectionsSourcesExplainEveryAppYAMLKey 钉住三类段的完整性：full 形态声明了全部 25 个
-// 能力（catalog 18 ∪ Ungated 7），其段集合必须**恰好**等于蓝本 configs/app.yaml 的 28 个
+// TestSectionsSourcesExplainEveryAppYAMLKey 钉住三类段的完整性：full 形态声明的能力配置段集合
+// 必须**恰好**等于蓝本 configs/app.yaml 的顶层段集合
 // 顶层段 —— 任何一类来源漏掉，这里就少段（recon §5 的 5 段缺口）。
 func TestSectionsSourcesExplainEveryAppYAMLKey(t *testing.T) {
 	keys, _, err := SectionBlocks(readRepoFile(t, "configs/app.yaml"))
@@ -241,7 +239,6 @@ func TestSectionsSourcesExplainEveryAppYAMLKey(t *testing.T) {
 	require.NoError(t, err)
 	sections, err := SectionsFor(set)
 	require.NoError(t, err)
-	assert.Len(t, keys, 28)
 	assert.ElementsMatch(t, keys, sections)
 }
 
@@ -257,10 +254,11 @@ func TestSectionsForAddsSelfReadSectionsForUngatedCapabilities(t *testing.T) {
 	assert.Contains(t, got, "sms")
 	assert.Contains(t, got, "notification")
 	assert.NotContains(t, got, "storage")
-	assert.NotContains(t, got, "retention")
+	assert.NotContains(t, got, "mfa")
 	assert.NotContains(t, got, "upload")
 	assert.Contains(t, got, "http")
-	assert.Len(t, got, 19)
+	expected := append(KernelSections(), "auth", "email", "sms", "notification")
+	assert.ElementsMatch(t, expected, got)
 	assert.True(t, slices.IsSorted(got), "段集合升序去重：%v", got)
 }
 
@@ -273,24 +271,22 @@ func TestSectionsForWithQueueIncludesQueueAndScheduler(t *testing.T) {
 	assert.Contains(t, got, "queue")
 	assert.Contains(t, got, "scheduler")
 	assert.NotContains(t, got, "auth")
-	assert.Len(t, got, 17)
+	assert.ElementsMatch(t, append(KernelSections(), "queue", "scheduler"), got)
 }
 
 // TestAppConfigSectionBlocksRoundTripsRepoFiles：块切分必须无损 —— 拼接所有块逐字节等于源文件，
 // 段序等于源文件顺序。这是「绝不静默丢内容」和「保留原文」的直接证据。
 func TestAppConfigSectionBlocksRoundTripsRepoFiles(t *testing.T) {
 	for _, tc := range []struct {
-		rel  string
-		keys int
+		rel string
 	}{
-		{"configs/app.yaml", 28},
-		{"configs/app.prod.yaml", 27},
-		{"deploy/helm/values.yaml", 24},
+		{"configs/app.yaml"},
+		{"configs/app.prod.yaml"},
+		{"deploy/helm/values.yaml"},
 	} {
 		src := readRepoFile(t, tc.rel)
 		keys, blocks, err := SectionBlocks(src)
 		require.NoError(t, err, tc.rel)
-		assert.Len(t, keys, tc.keys, tc.rel)
 		assert.Equal(t, string(src), strings.Join(blocks, ""), tc.rel)
 		sorted := slices.Clone(keys)
 		slices.Sort(sorted)
@@ -368,10 +364,10 @@ func TestRenderAppConfigKeepsOnlySelectedSections(t *testing.T) {
 	assert.Contains(t, string(out), "fixture 头部注释")
 	assert.Contains(t, string(out), "# fixture 尾部注释")
 	assert.Contains(t, string(out), "# 队列段前的独立注释组")
-	assert.NotContains(t, string(out), "\nretention:\n")
+	assert.NotContains(t, string(out), "\nsample:\n")
 	assert.NotContains(t, string(out), "\nstorage:\n")
 	assert.NotContains(t, string(out), "\nnotification:\n")
-	assert.NotContains(t, string(out), "# 保留段注释")
+	assert.NotContains(t, string(out), "# 未选中的自定义段")
 }
 
 // TestAppConfigGoldenMinimal / …WithUserAccessQueue：黄金文件锁住「蓝本 → 段子集」的逐字节产物。
@@ -400,11 +396,10 @@ func assertGoldenAppConfig(t *testing.T, set CapabilitySet, golden string) {
 }
 
 // TestValuesCapabilityKeysMatchRepo：values.yaml 的「能力同名键」映射表漂移护栏 ——
-// 24 个顶层键里凡与某个能力同名者都必须在表里；表里也只能是这些键（S6②）。
+// 顶层键凡与某个能力同名者都必须在表里；表里也只能是这些键（S6②）。
 func TestValuesCapabilityKeysMatchRepo(t *testing.T) {
 	keys, _, err := SectionBlocks(readRepoFile(t, "deploy/helm/values.yaml"))
 	require.NoError(t, err)
-	assert.Len(t, keys, 24)
 	set, err := ParseCapabilitySet("full", "", "")
 	require.NoError(t, err)
 	known := make(map[string]bool, len(set.Known))
@@ -422,7 +417,7 @@ func TestValuesCapabilityKeysMatchRepo(t *testing.T) {
 	assert.ElementsMatch(t, repoCapabilityKeys, slices.Collect(maps.Keys(valuesCapabilityKeys)))
 }
 
-// TestValuesSectionsKeepKernelKeysAndSelectedCapabilityKeys：内核键恒留（21 个）+ 选中能力同名键。
+// TestValuesSectionsKeepKernelKeysAndSelectedCapabilityKeys：内核键恒留，并加入选中能力同名键。
 func TestValuesSectionsKeepKernelKeysAndSelectedCapabilityKeys(t *testing.T) {
 	src := readRepoFile(t, "deploy/helm/values.yaml")
 	keys, _, err := SectionBlocks(src)
@@ -432,7 +427,6 @@ func TestValuesSectionsKeepKernelKeysAndSelectedCapabilityKeys(t *testing.T) {
 	require.NoError(t, err)
 	keep, err := ValuesSections(src, minimal)
 	require.NoError(t, err)
-	assert.Len(t, keep, 22)
 	assert.Contains(t, keep, "auth")
 	assert.NotContains(t, keep, "audit")
 	assert.NotContains(t, keep, "storage")

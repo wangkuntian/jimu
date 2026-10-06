@@ -16,7 +16,7 @@
 
 ## `capabilities.enabled` 语义
 
-- 它是**完整的解析集**：除 catalog 硬依赖闭包外，**恒含七个非 catalog（`Ungated`）条目** —— `encryption` / `storage` / `notification` / `retention` / `apidocs` / `grpc` / `ws`。它们不受门控，只要该形态清单里有就会出现（缺了才是异常）
+- 它是**完整的解析集**：除 catalog 硬依赖闭包外，还包含形态清单声明的非 catalog（`Ungated`）条目。它们不受 `capabilities.enabled` 门控，只要该形态清单里有就会出现（缺了才是异常）
 - `Requires`（硬依赖）：启用本能力会**补齐**依赖并参与拓扑序
 - `SoftRequires`（软依赖）：目标缺失时**只降级**，不补齐、不参与拓扑序
 - 降级判定是**声明层静态比对**（只读 `Descriptor`，不观测运行时装配）：组合根改为按启用集驱动之前可能**多报**

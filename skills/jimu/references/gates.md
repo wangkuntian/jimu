@@ -4,9 +4,9 @@
 
 **权威口径**：README「[质量门禁](../../../README.md#质量门禁)」、「[Makefile 命令](../../../README.md#makefile-命令)」、[docs/profiles/compose-report.md](../../../docs/profiles/compose-report.md)。
 
-## `make check-capabilities`：7 条汇总行逐条
+## `make check-capabilities`
 
-输出是 6 行 `✅ check-capabilities: …`（每行对应一条断言；实现在 `tools/checkcapabilities`）：
+输出中的每行 `✅ check-capabilities: …` 对应一类断言；具体实现位于 `tools/checkcapabilities`：
 
 | # | 断言 | 管什么 | 红了看 |
 |---|---|---|---|

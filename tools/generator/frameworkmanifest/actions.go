@@ -190,7 +190,6 @@ func configSections(selected selection) []string {
 	}
 	for name, sections := range map[string][]string{
 		"storage":      {"storage"},
-		"retention":    {"retention"},
 		"notification": {"email", "sms", "notification"},
 	} {
 		if !selectedNames[name] {

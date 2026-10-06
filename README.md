@@ -8,7 +8,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **统一认证** — typed JWT + Redis refresh session + Casbin RBAC v3 权限模型；API Key 认证（服务/机器间调用，`X-API-Key` 头 + `apikey.APIKeyAuthMiddleware` + `apikey.RequireScope` scope 校验，复用 `api_keys` 表并按 `tenant_id` 归属租户，认证后自动注入租户上下文；能力标签与 Scope 约定见 [API Key 与 Scope](#api-key-与-scope)）
 - **租户体系** — 单归属多租户：`tenants` 表 + 租户 CRUD API（`/api/v1/tenants`），`users`/`roles`/`audit_logs`/`api_keys` 携带 `tenant_id` 做行级隔离，任务队列（`jobs`/`job_history`/`dead_letters`）、导入任务（`import_jobs`）与可信设备（`trusted_devices`）同样归属租户；租户身份写入 JWT claim（`tid`）经中间件注入请求上下文，不接受客户端 header 传入；存量数据迁移时归入默认租户（`code=default`），角色名唯一性为租户内唯一，用户名/邮箱保持全局唯一（登录无需传租户标识）；归属关系为**租户 1:N 用户、用户单归属且不可跨租户**（见 [归属模型](#归属模型)）
 - **租户运营（套餐 / 配额 / 用量）** — `tenant_plans` 定义资源上限（`max_users`/`max_roles`/`max_api_keys`，0=不限），`tenants.plan_id=0` 表示未分配套餐（不受限，保持向后兼容）；创建用户（管理端与公开注册）、角色、API Key 前校验上限，超限返回新增错误码 `5005`/403 且不影响既有数据；`GET /api/v1/tenants/usage` 返回当前租户套餐与各项用量，`/api/v1/tenant-plans` 管理套餐定义、`PUT /api/v1/tenants/{id}/plan` 分配套餐（`jimu seed` 会内置一个未分配的 `free` 示例套餐）
-- **开通式注册** — 可选的 SaaS 语义（`auth.provisioning.enabled`）：注册即单事务开通新租户，注册者成为 owner，按可配置的角色模板自动初始化租户角色与全局权限绑定（模板模式，全部可配置：开关/owner 角色/角色与权限模板）；未启用时注册用户归默认租户
+- **开通式注册** — 可选的 SaaS 语义（`tenant.provisioning.enabled`）：注册即单事务开通新租户，注册者成为 owner，按可配置的角色模板自动初始化租户角色与全局权限绑定（模板模式，全部可配置：开关/owner 角色/角色与权限模板）；未启用时注册用户归默认租户
 - **密码重置** — 邮箱验证码自助重置（`POST /api/v1/auth/forgot-password` + `reset-password`），6 位数字码 Redis 一次性存储，防用户枚举，重置后强制登出全部会话
 - **敏感信息脱敏** — `kernel/mask` 提供手机号/邮箱/身份证/银行卡/姓名/IP 等脱敏函数与按字段名判定（`RedactByKey`/`Map`）；日志链路（文件、stdout、OTLP 导出）统一接入，凭证类字段整体替换为 `***`、PII 部分保留，避免明文落盘
 - **敏感字段加密** — AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引（email/phone，`security.encryption_key` 配置后启用；未配置时明文模式，功能不受影响）
@@ -38,14 +38,13 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **文件存储** — 本地/S3/OSS/MinIO 统一接口
 - **上传安全** — 文件大小限制 + magic-byte 嗅探覆盖可伪造的 Content-Type 头 + MIME 白名单；可选 ClamAV 病毒扫描（`upload.clamav.enabled`，stdlib 实现 INSTREAM 协议，落库前同步扫描，fail-closed：不干净或扫描不可达均拒绝落库）
 - **数据导入/导出** — CSV/Excel 模板解析、校验与导入/导出（`internal/capabilities/dataops/importer` / `internal/capabilities/dataops/exporter`）；通用 importer 保留 `Importer.Import`，通过可选逐行 `RowSink` 注入持久化，未配置时明确报错，业务应用负责事务落库，导出结果可被导入器回读验证；管理端用户导入按操作者所在租户归属（无租户上下文时归默认租户），不产生未归属数据
-- **历史数据保留** — `internal/capabilities/retention` 保留服务按表分批硬删除过期历史数据（`audit_logs`/`jobs`/`job_history`/`dead_letters`/`outbox_events`/`import_jobs`），挂在定时任务上（`retention.enabled`，默认关闭）；只清理终态记录（已发布事件、已处理死信、已结束任务），指标 `jimu_retention_deleted_total`
+- **历史数据清理** — `audit`、`queue`、`outbox`、`dataops` 与 `mfa` 分别清理各自拥有的历史表；各能力独立开关、默认关闭，并通过共享的 `dbpurge` 工具分批硬删除，只清理终态记录
 - **全文检索** — `capabilities/search` 统一接口（`Index`/`Delete`/`Search`）+ 公共索引表 `search_documents`：MySQL 走 FULLTEXT（`MATCH ... AGAINST`），PostgreSQL 走 `tsvector` 表达式 GIN 索引；按 `tenant_id` 隔离，`(tenant_id, doc_type, doc_id)` 唯一保证幂等覆盖。**CJK 查询自动回退**：查询含中文/日文/韩文时改用 LIKE/ILIKE 子串匹配（标题命中优先），默认分词器下也能命中，代价是不走索引（大表建议启用 MySQL ngram 或 PG zhparser）；LIKE 通配符按字面量转义
 - **通知系统** — 邮件/短信(SMS)/WebSocket/Webhook 抽象；短信支持阿里云（dysmsapi SDK，`sms.enabled` 配置开关）；Webhook 回调载荷支持 HMAC-SHA256 签名（`notification.webhook.sign_secret`，附加 `X-Jimu-Timestamp`/`X-Jimu-Signature` 头，防重放）
 - **统一出站 HTTP client** — 封装 timeout + retry/backoff（仅网络错误与 5xx）+ 熔断（复用 `kernel/breaker`，连续失败自动开启、冷却后探测恢复）+ 按目标 host 独立限流（令牌桶）+ OTel `traceparent` 注入（`internal/kernel/httpclient`），OAuth 提供商与 Webhook 共用
 - **依赖熔断** — 统一熔断器 `internal/kernel/breaker`（连续失败阈值 + 冷却后半开探测）接入三类依赖：Redis（命令/连接级 hook）、DB（gorm 语句级回调，**主库与只读副本一体生效**）、HTTP 出站（`httpclient`）；依赖不可用时快速失败而非每请求等超时；只把连接/网络类错误计为失败（Redis 未命中与业务错误、DB 慢查询超时都不触发）；指标 `jimu_breaker_open` / `jimu_breaker_rejected_total` / `jimu_breaker_trip_total`（`component` 标签区分 httpclient/redis/db）
 - **Outbox 模式** — 事件发布与数据库事务一致性保证，支持 MQ 跨服务发布（`outbox.publisher` 切换；`mq` 模式下通过 WorkerPool 消费事件，`event_bus` 模式通过 `outbox:*` 桥接器注入事件总线）
 - **定时任务** — Cron 调度器（robfig/cron），支持 MySQL 持久化（`scheduler.store=mysql`）与多实例分布式锁协调，启动时通过 `RestoreFromStore` 恢复持久化任务（内置任务去重）
-- **Feature Flag** — 运行时特性开关（灰度百分比、白名单）
 - **OpenTelemetry 可观测性（OpenObserve）** — 统一 OTLP gRPC 输出：分布式追踪（HTTP/Gin + Gorm 查询 + Redis 命令全链路 span，队列/Outbox 异步边界透传 `traceparent`/`tracestate`）、Prometheus 指标转 OTLP 推送、结构化日志异步推送（`otel.enabled` 开启）
 - **Prometheus 指标** — DB 连接池 + 运行时 + HTTP 请求指标（`jimu_http_*`）+ 队列执行/死信（`jimu_queue_*`）+ Outbox 发布（`jimu_outbox_*`）+ 依赖熔断（`jimu_breaker_*`）+ 定时任务执行（`jimu_scheduler_*`，成功/失败计数 + 耗时分布）；Management `/metrics` 暴露 Prometheus 格式，`otel.metrics_enabled` 时定期转 OTLP 推送 OpenObserve
 - **gRPC server** — 与 HTTP 双栈并存，内置健康检查（`grpc_health_v1`）与反射（grpcurl 可探），可选启用（`grpc.enabled`，默认端口 9091）；服务端治理拦截器：**panic 恢复**（转 `Internal` 并上报，避免 handler panic 终止进程）+ 请求量/错误量/在途/耗时指标（`jimu_grpc_server_*`）+ 单请求超时（`grpc.timeout_sec`，超时返回 `DeadlineExceeded`）；业务示例 `UserInfoService` 演示 proto 定义 → `make proto` 生成 → 服务实现 → 注册全流程，业务模块经 `RegisterService` 接入
@@ -61,7 +60,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **Redis 高可用** — `redis.mode` 支持 `single` / `sentinel` / `cluster` 三种部署模式（默认 single 行为不变）：哨兵模式通过 `master_name` + `sentinel_addrs` 自动故障转移，集群模式通过 `cluster_addrs` 连接分片；统一 `redis.Client` 接口，框架内 session/缓存/队列/限流/分布式锁全复用
 - **TOTP 二次验证（`mfa` 能力）** — RFC 6238 自研实现（`internal/capabilities/mfa/totp`，无外部依赖），用户可自助绑定/启用/关闭：`POST /auth/mfa/setup` 生成密钥与 otpauth URI（二维码绑定）、`/auth/mfa/enable` 首次验证码确认、`/auth/mfa/disable` 校验后关闭；启用后登录必须携带 `totp_code`（缺失 `2006`，错误 `2007`），密钥 AES-GCM 字段级加密落库到 `user_mfa` 表（迁移 016，独立于 `users`）
 - **统一 gRPC 客户端** — 出站调用封装（`internal/capabilities/grpc` `Client`）：连接管理 + 调用超时 + 指数退避重试（仅 Unavailable/ResourceExhausted 幂等安全码）+ **出站熔断**（复用 `kernel/breaker`，只把 Unavailable/DeadlineExceeded 计为失败）+ panic 恢复拦截器 + Prometheus 指标（`jimu_grpc_client_*`），支持 TLS/insecure，与 HTTP client 对齐的框架风格
-- **WebAuthn / 通行密钥（`passkey` 能力）** — `auth.webauthn.*`（`rp_id`/`rp_origins`/`session_ttl_min`）启用后支持 Passkey：已登录用户经 `POST /auth/webauthn/register/begin|finish` 自助注册（凭证公钥落库 `webauthn_credentials`，passkey 能力迁移 015，沿用原全局编号，私钥永不离开认证器），`POST /auth/webauthn/login/begin|finish` 无密码登录（通行密钥是抗钓鱼强因子，不叠加密码与 TOTP），`GET/PUT/DELETE /auth/webauthn/credentials` 管理与注销；挑战经 Redis 一次性存储（`session_id` 回传，防替换/重放），签名计数器回写用于克隆检测，凭证按租户与用户隔离
+- **WebAuthn / 通行密钥（`passkey` 能力）** — `passkey.*`（`rp_id`/`rp_origins`/`session_ttl_min`）启用后支持 Passkey：已登录用户经 `POST /auth/webauthn/register/begin|finish` 自助注册（凭证公钥落库 `webauthn_credentials`，passkey 能力迁移 015，沿用原全局编号，私钥永不离开认证器），`POST /auth/webauthn/login/begin|finish` 无密码登录（通行密钥是抗钓鱼强因子，不叠加密码与 TOTP），`GET/PUT/DELETE /auth/webauthn/credentials` 管理与注销；挑战经 Redis 一次性存储（`session_id` 回传，防替换/重放），签名计数器回写用于克隆检测，凭证按租户与用户隔离
 - **密码防复用** — 改密时校验新密码不等于当前密码与最近 N 个历史密码（`auth.password_history_count`，默认 5，0=关闭），历史哈希落库 `password_histories` 并按条数自动裁剪；命中返回 `2008`
 - **可信设备（记住此设备，`mfa` 能力）** — 仅对启用 TOTP 的账号生效：登录时传 `remember_device: true`，成功后返回一次性明文 `device_token`（前缀 `jimu_dev_`，库中只存 SHA-256 哈希）；后续登录携带 `X-Device-Token` 头且不带 `totp_code` 即可跳过 TOTP，**密码仍必需**；令牌绑定签发用户（泄露也无法用于他人账号），改密与 `/auth/logout-all` 自动吊销，`GET/DELETE /auth/devices` 自助查看与注销；有效期 `auth.trusted_device_days`（默认 30，0=关闭）
 - **登录历史** — 每次登录尝试落库 `login_histories`（成功/失败/锁定 + 原因 + IP + User-Agent，账号不存在也记录用户名），`GET /api/v1/auth/login-history` 供用户自助排查异常登录；写入失败只记日志，不影响登录主流程
@@ -279,7 +278,7 @@ make cli
 
 | 参数 | 说明 |
 |---|---|
-| `--profile=<name>` / `--with=<cap>[:<drv>][,…]` | 能力集二选一（互斥）。`--with` 的能力名取自 **catalog 18 ∪ Ungated 7**（`apidocs`/`storage`/`notification`/`retention`/`ws`/`grpc`/`encryption`），驱动默认取该能力 `Descriptor.Drivers` 首项（`queue→redis`、`storage→local`、`dataops→csv`），可用 `<cap>:<drv>` 覆盖 |
+| `--profile=<name>` / `--with=<cap>[:<drv>][,…]` | 能力集二选一（互斥）。`--with` 的能力名取自 catalog 与 Ungated 能力，驱动默认取该能力 `Descriptor.Drivers` 首项（`queue→redis`、`storage→local`、`dataops→csv`），可用 `<cap>:<drv>` 覆盖 |
 | `--shape=<name>` | `--with` 时的形态名（默认 `app`）；`--profile` 时形态名恒等于 profile 名 |
 | `--module=<path>` | 生成项目的 module 路径，默认由 `<dir>` 推导 |
 | `--dry-run` | 只打印计划（将要复制/渲染的文件数与资产数），绝不落盘 |
@@ -329,7 +328,7 @@ v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capab
 
 | 形态（清单） | 组成 | 场景 |
 |---|---|---|
-| `internal/profiles/full` | 全部 18 个 catalog 能力 + `storage` `notification` `retention` `ws` `grpc` `apidocs` `encryption` | 全功能基准；`cmd/server` 默认选中的形态（保留 swagger 注解） |
+| `internal/profiles/full` | catalog 中的全部能力及该形态声明的 Ungated 能力 | 全功能基准；`cmd/server` 默认选中的形态（保留 swagger 注解） |
 | `internal/profiles/minimal` | `user` `access` `auth` + `notification` `encryption` | 内部微服务 / 新项目起点（不含租户、审计、控制台、MFA） |
 | `internal/profiles/saas` | `minimal` + `tenant` `audit` | 面向外部客户的多租户产品（真实邮件渠道由 `email.enabled` 打开） |
 | `internal/profiles/enterprise` | `minimal` + `console` `audit` `oauth` `dataops` `storage` | 公司内部系统（单租户，`tid=0` 平台级视角） |
@@ -362,11 +361,11 @@ v0.3.0 起迁移按能力目录组织：每个能力的脚本在 `internal/capab
 - **两层声明** — `contract.Descriptor.Drivers` 是能力声明的**可用集**（驱动**包名**：`storage` = `[local s3]`、`queue` = `[redis kafka rabbitmq]`、`dataops` = `[csv excel]`；`s3` 包同时注册 `s3`/`oss`/`minio` 三个配置取值）；`assembly.Capability.Drivers` 是**形态选中的子集**，装配期强制 `⊆` 可用集。`make check-capabilities` 校验「选中集 == 该形态生产 import 闭包的实际驱动包集合」（集合比较，不比顺序）；「新增驱动目录 + 形态 blank import 却忘声明」对集合比较不可见（未声明项被 `available` 过滤），唯一捕获点是**形态直接 import 校验**（驱动包只被 `internal/profiles/*` import，且形态生产代码的 capabilities 子包 import 必为能力根包或已声明驱动包）。
 - **fail-closed，不静默回退** — `storage.New`/`queue.New`/`queue.Wire`/`importer.Get`/`exporter.Get` 一律查注册表：配置的类型未编译进本构建时明确报错，例如 `storage driver "s3" is not compiled into this build (compiled: local)`、`import format "xlsx" is not compiled into this build (compiled: csv)`、`export format "xlsx" is not compiled into this build (compiled: csv)`；`storage` 的空 `type` 仍按 `local` 处理（与拆分前一致），`queue.Wire` 在**启动时**即校验配置的 `queue.type` 已编译，而不是等到第一次入队。
 - **`enterprise` 的行为变更（P2.5 收敛）** — `enterprise` 只编入 `local` + `csv`，所以该形态下 `storage.type: s3|oss|minio` 的存储构造与 xlsx 导入/导出改为**启动/请求期报错**（不再是「配置可写、运行时可用」）；`full` 形态含全部驱动、行为不变。`configs/app.yaml` 默认 `storage.type: local`、`queue.type: redis`，所以默认路径不受影响。
-- **与门禁/报告的关系** — `make check-capabilities` 输出 **7 条汇总行**：前六条覆盖能力声明、驱动、入口/选点包、资产归属与能力树跨能力 import，第七条检查生成器核心只经 `frameworkmanifest` 读取框架内部包；`make compose-report` 的「重型依赖」列直接展示各形态闭包是否命中重型驱动。三道门禁已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job。
+- **与门禁/报告的关系** — `make check-capabilities` 汇总能力声明、驱动、入口/选点包、资产归属、能力树跨能力 import 与生成器依赖边界的检查结果；`make compose-report` 的「重型依赖」列直接展示各形态闭包是否命中重型驱动。三道门禁已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job。
 
 ### 非代码资产归属（P2.6）
 
-能力除了代码，还可以声明并门禁自己拥有的**非代码资产**（部署清单、生成的文档……）。`contract.Descriptor.Assets` 是**仓库相对路径**的列表（目录前缀或具体文件），当前只有非 catalog 的 `apidocs` 声明 `["docs/openapi"]`（catalog 能力暂不声明，由 `catalog_test.go` 的 `TestCatalogAssetsShape` 钉住）。不属于任何能力的内核运维/观测资产用**具名资产组**表达（catalog 仍 18 项，**没有**新增 `obs` 能力）：
+能力除了代码，还可以声明并门禁自己拥有的**非代码资产**（部署清单、生成的文档……）。`contract.Descriptor.Assets` 是**仓库相对路径**的列表（目录前缀或具体文件），当前只有非 catalog 的 `apidocs` 声明 `["docs/openapi"]`（catalog 能力暂不声明，由 `catalog_test.go` 的 `TestCatalogAssetsShape` 钉住）。不属于任何能力的内核运维/观测资产用**具名资产组**表达（**没有**新增 `obs` 能力）：
 
 | 所有者 | 声明的前缀 |
 |---|---|
@@ -450,7 +449,7 @@ jimu/
 │   │   └── registry/           # 形态名与清单的唯一来源（Names/All/Lookup；只被 tools/* 引用）
 │   │       └── routes_golden_test.go  # 4 个非 full 形态的路由面 golden + 跨形态挂载点一致性断言
 │   ├── capabilities/           # 可插拔能力（catalog 是唯一清单；每个能力导出 Descriptor）
-│   │   ├── catalog/            # 能力清单（全量 18 项；启用集解析在 internal/capability）
+│   │   ├── catalog/            # 能力清单（启用集解析在 internal/capability）
 │   │   ├── apidocs/            # Swagger 文档注册
 │   │   ├── auth/               # 会话与凭证本体（登录/注册/改密/Token/登录历史）
 │   │   ├── mfa/                # TOTP 二次验证 + 可信设备（跳过 MFA）+ 自有 totp/ 实现
@@ -470,12 +469,10 @@ jimu/
 │   │   │   ├── exporter/       # 数据导出（CSV/Excel）
 │   │   │   └── migrations/{mysql,postgres}/   # 迁移脚本（按能力归属，//go:embed 进二进制）
 │   │   ├── encryption/         # AES-GCM 字段级加密 + HMAC 盲索引
-│   │   ├── feature/            # Feature Flag
 │   │   ├── grpc/               # gRPC server + 统一出站 Client（健康/反射/超时/重试/熔断/恢复/指标）
 │   │   ├── notification/       # 通知系统（邮件/短信/WebSocket/Webhook）
 │   │   ├── outbox/             # Outbox 模式
 │   │   ├── queue/              # 多队列抽象（Redis/Kafka/RabbitMQ）+ 死信
-│   │   ├── retention/          # 历史数据保留与清理
 │   │   ├── search/             # 全文检索（MySQL FULLTEXT / PostgreSQL tsvector）
 │   │   ├── storage/            # 文件存储抽象（本地/S3/OSS/MinIO）
 │   │   ├── uploadsec/          # 上传处理 + ClamAV 扫描
@@ -728,7 +725,7 @@ curl -X DELETE http://localhost:8080/api/v1/auth/devices/1 \
 
 ### WebAuthn / 通行密钥（Passkey）
 
-启用 `auth.webauthn.enabled` 后，用户可注册通行密钥并用它**无密码登录**。浏览器侧需 HTTPS（本地 `localhost` 例外），`rp_id` 填站点有效域、`rp_origins` 填前端来源。
+启用 `passkey.enabled` 后，用户可注册通行密钥并用它**无密码登录**。浏览器侧需 HTTPS（本地 `localhost` 例外），`rp_id` 填站点有效域、`rp_origins` 填前端来源。
 
 ```bash
 # 1. 已登录用户开始注册：返回 session_id 与 publicKey 选项
@@ -758,7 +755,7 @@ curl -X DELETE http://localhost:8080/api/v1/auth/webauthn/credentials/1 -H "Auth
 
 ### 开通式注册（可选）
 
-启用 `auth.provisioning.enabled`（要求 `public_registration: true`）后，注册即开通新租户：单事务创建租户 + owner 用户，并按角色模板自动绑定全局权限。请求携带 `tenant_name`（必填，`tenant_code` 可选，不传自动生成）：
+启用 `tenant.provisioning.enabled`（要求 `auth.public_registration: true`）后，注册即开通新租户：单事务创建租户 + owner 用户，并按角色模板自动绑定全局权限。请求携带 `tenant_name`（必填，`tenant_code` 可选，不传自动生成）：
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/register \
@@ -964,11 +961,11 @@ curl http://127.0.0.1:9090/metrics
 curl http://127.0.0.1:9090/capabilities
 ```
 
-`capabilities.enabled: ["auth"]` 时（硬依赖闭包补齐 `user`/`access`；`tenant`/`mfa`/`captcha`/`breach` 是软依赖，不补齐但会在 `degraded` 中列为缺失）。**`enabled` 是完整的解析集**：除 catalog 闭包外，它**恒含七个非 catalog（`Ungated`）条目** —— `encryption`/`storage`/`notification`/`retention`/`apidocs`/`grpc`/`ws`，它们不受 `capabilities.enabled` 门控，只要该形态清单里有就会出现（缺了才是异常，见[形态（profile）](#形态profile)）：
+`capabilities.enabled: ["auth"]` 时（硬依赖闭包补齐 `user`/`access`；`tenant`/`mfa`/`captcha`/`breach` 是软依赖，不补齐但会在 `degraded` 中列为缺失）。**`enabled` 是完整的解析集**：除 catalog 闭包外，还包含该形态声明的 Ungated 能力；它们不受 `capabilities.enabled` 门控，只要形态清单里有就会出现（缺了才是异常，见[形态（profile）](#形态profile)）：
 
 ```json
 {
-  "enabled": ["encryption", "storage", "notification", "access", "user", "auth", "retention", "apidocs", "grpc", "ws"],
+  "enabled": ["encryption", "storage", "notification", "access", "user", "auth", "apidocs", "grpc", "ws"],
   "degraded": [
     {"capability": "access", "missing": ["tenant"]},
     {"capability": "user", "missing": ["tenant"]},
@@ -1011,7 +1008,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 
 ### 配置项
 
-> **配置归属（v0.3.0 / P2.1）**：内核段（`http`/`management`/`db`/`redis`/`ratelimit`/`log`/`server`/`id`/`cache`/`security`/`otel`/`error_reporting`/`http_client`/`grpc`/`capabilities`）留在 `internal/config`；其余段由能力自身声明（`Descriptor.Configs`），装配时**按启用集**解码与校验：`auth`（含嵌套 `auth.webauthn`/`auth.provisioning`）→ `auth`；`oauth`→`oauth`；`queue`+`scheduler`→`queue`；`outbox`→`outbox`；`audit`→`audit`；`captcha`→`captcha`；`upload`→`uploadsec`；`storage`→`storage`；`email`/`sms`/`notification`→`notification`；`retention`→`retention`。其中 `storage`/`notification`/`retention` 不是 catalog 能力（不随 `capabilities.enabled` 开关），其段由组合根显式加载，行为仍由各自 `enabled` 字段驱动。对外 YAML 键名与位置逐一未变。
+> **配置归属（v0.3.0 / P2.1）**：内核段（`http`/`management`/`db`/`redis`/`ratelimit`/`log`/`server`/`id`/`cache`/`security`/`otel`/`error_reporting`/`http_client`/`grpc`/`capabilities`）留在 `internal/config`；其余段由能力自身声明（`Descriptor.Configs`），装配时**按启用集**解码与校验：`auth`→`auth`；`passkey`→`passkey`；`tenant`→`tenant`；`oauth`→`oauth`；`queue`+`scheduler`→`queue`；`outbox`→`outbox`；`audit`→`audit`；`dataops`→`dataops`；`mfa`→`mfa`；`captcha`→`captcha`；`upload`→`uploadsec`；`storage`→`storage`；`email`/`sms`/`notification`→`notification`。其中 `storage`/`notification` 不是 catalog 能力（不随 `capabilities.enabled` 开关），其段由组合根显式加载，行为仍由各自 `enabled` 字段驱动。
 
 | 字段 | 说明 | 默认值 |
 |------|------|--------|
@@ -1050,25 +1047,27 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `auth.access_expire_min` | Access Token 有效期 (分钟) | `60`（开发）/ `15`（生产） |
 | `auth.refresh_expire_day` | Refresh Token 有效期 (天) | `30`（开发）/ `7`（生产） |
 | `auth.reset_code_ttl_min` | 密码重置验证码有效期 (分钟) | `15` |
-| `auth.provisioning.enabled` | 开通式注册：注册即开通新租户（要求 `auth.public_registration: true`） | `false` |
-| `auth.provisioning.owner_role` | owner 绑定的模板角色名；缺省为模板第一个角色 | — |
-| `auth.provisioning.roles[]` | 开通时初始化的角色模板（`name`/`description`/`permissions[]{resource,action}`）；permissions 引用全局权限表（`jimu seed` 写入），缺失条目跳过 | — |
+| `tenant.provisioning.enabled` | 开通式注册：注册即开通新租户（要求 `auth.public_registration: true`） | `false` |
+| `tenant.provisioning.owner_role` | owner 绑定的模板角色名；缺省为模板第一个角色 | — |
+| `tenant.provisioning.roles[]` | 开通时初始化的角色模板（`name`/`description`/`permissions[]{resource,action}`）；permissions 引用全局权限表（`jimu seed` 写入），缺失条目跳过 | — |
 | `auth.public_registration` | 是否开放 `/auth/register` 公开注册端点 | `true`（开发）/ `false`（生产） |
 | `server.timeout_sec` | 请求超时（秒），0 不限；超时且未产出响应时返回 `1008`/504 | `30` |
 | `server.rate_limit_rate` / `server.rate_limit_burst` | 全局限流速率（每秒）/ 桶容量 | `100` / `200` |
 | `server.max_concurrency` / `server.concurrency_wait_ms` | 并发处理上限 / 超限排队等待上限（毫秒，0=立即拒绝）；超限返回 `1010`/503，0 表示不限制 | `512` / `200` |
 | `ratelimit.tenant.enabled` / `ratelimit.tenant.limit` / `ratelimit.tenant.window_sec` | 租户维度限流开关 / 窗口内请求上限 / 窗口秒数（平台级视角 `tid=0` 跳过，Redis 异常 fail-open） | `false` / `6000` / `60` |
-| `retention.enabled` / `retention.cron` / `retention.batch_size` | 历史数据保留任务开关 / 调度表达式 / 每批删除行数（默认关闭） | `false` / `30 3 * * *` / `500` |
-| `retention.audit_log_days` / `retention.job_days` / `retention.job_history_days` | 审计日志 / 已终态任务 / 任务执行历史保留天数（0=不清理） | `180` / `7` / `30` |
-| `retention.dead_letter_days` / `retention.outbox_event_days` / `retention.import_job_days` / `retention.trusted_device_days` | 已处理死信 / 已发布 outbox 事件 / 已结束导入任务 / 已失效可信设备保留天数（0=不清理） | `30` / `7` / `90` / `7` |
+| `audit.retention.enabled` / `cron` / `batch_size` / `audit_log_days` | 审计清理开关 / 调度 / 每批删除行数 / 审计日志保留天数（0=不清理） | `false` / `30 3 * * *` / `500` / `180` |
+| `queue.retention.enabled` / `cron` / `batch_size` / `job_days` / `job_history_days` / `dead_letter_days` | 队列清理开关 / 调度 / 每批删除行数 / 终态任务、任务历史、已处理死信保留天数（0=不清理） | `false` / `30 3 * * *` / `500` / `7` / `30` / `30` |
+| `outbox.retention.enabled` / `cron` / `batch_size` / `outbox_event_days` | Outbox 清理开关 / 调度 / 每批删除行数 / 已发布事件保留天数（0=不清理） | `false` / `30 3 * * *` / `500` / `7` |
+| `dataops.retention.enabled` / `cron` / `batch_size` / `import_job_days` | 导入记录清理开关 / 调度 / 每批删除行数 / 已结束导入任务保留天数（0=不清理） | `false` / `30 3 * * *` / `500` / `90` |
 | `http.tls.enabled` / `http.tls.cert_file` / `http.tls.key_file` / `http.tls.client_ca_file` | HTTP 服务端 TLS；`client_ca_file` 非空时启用 mTLS（要求并校验客户端证书） | `false` / — / — / — |
 | `grpc.tls.*` | gRPC 服务端 TLS/mTLS，字段与 `http.tls` 同构 | `false` |
 | `security.idempotency_enabled` / `security.idempotency_ttl_sec` | 幂等中间件开关 / 幂等记录保留时长（秒） | `true` / `86400` |
 | `security.ip_allowlist` / `security.admin_ip_allowlist` | 全局 / 管理端 IP 白名单（CIDR 或单个 IP，可多项）；为空表示不限制，非法值启动报错 | `[]` |
 | `auth.password_history_count` | 密码防复用：检查最近 N 个历史密码（0=关闭） | `5` |
-| `auth.trusted_device_days` | 可信设备（记住此设备）有效期天数，0=关闭该能力 | `30` |
-| `auth.webauthn.enabled` / `rp_id` / `rp_origins` | 通行密钥开关 / Relying Party 有效域（不带 scheme）/ 允许的浏览器来源（绝对 URL） | `false` / — / — |
-| `auth.webauthn.rp_display_name` / `session_ttl_min` | 展示给用户的站点名 / 挑战有效期（分钟，0 用默认 5） | `Jimu` / `5` |
+| `mfa.trusted_device_days` | 可信设备（记住此设备）有效期天数，0=关闭该能力 | `30` |
+| `mfa.retention.enabled` / `cron` / `batch_size` / `expired_device_days` | 失效可信设备清理开关 / 调度 / 每批删除行数 / 设备失效后额外保留天数（0=不清理） | `false` / `30 3 * * *` / `500` / `7` |
+| `passkey.enabled` / `passkey.rp_id` / `passkey.rp_origins` | 通行密钥开关 / Relying Party 有效域（不带 scheme）/ 允许的浏览器来源（绝对 URL） | `false` / — / — |
+| `passkey.rp_display_name` / `passkey.session_ttl_min` | 展示给用户的站点名 / 挑战有效期（分钟，0 用默认 5） | `Jimu` / `5` |
 | `auth.breach_check_enabled` | 泄露口令检查（HIBP k-匿名范围查询，需可出网）；开启后注册/重置密码命中泄露库返回 `2009` | `false` |
 | `audit.hash_secret` | 审计链 HMAC 密钥（建议经 `AUDIT_HASH_SECRET` 或 Secret 文件注入）；为空时退化为 SHA-256，篡改者可重算整条链 | — |
 | `id.worker_id` | 雪花 ID worker 编号（0-1023）；多实例部署时每个副本需唯一，避免 ID 冲突 | `0` |
@@ -1133,8 +1132,8 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 
 ### 能力开关（v0.3.0）
 
-后端由**能力**组成（v0.3.0 起共 18 项：`user`/`access`/`tenant`/`mfa`/`auth`/`passkey`/`audit`/`console`/`oauth`/`apikey`/`queue`/`outbox`/`dataops`/`search`/`captcha`/`feature`/`uploadsec`/`breach`）。
-管理端 `/api/v1/admin/*` 前缀保留，但路由按用例归属各能力：用户→`user`、任务队列与调度→`queue`、API Key→`apikey`、用户导入→`dataops`、审计列表→`audit`、Feature Flag→`feature`、文件上传→`uploadsec`、其余平台级视图（错误码/监控/限流查看/配置热更新/WS 管理）与**管理端准入中间件**→`console`。能力间只经 `contract` 端口调用（如 `user` 经 `contract.UserRoleAssigner` 委托 `access` 写 `user_roles`）。
+后端由**能力**组成，清单唯一来源是 `internal/capabilities/catalog`；各形态声明编入二进制的能力，`capabilities.enabled` 再控制运行时装配。
+管理端 `/api/v1/admin/*` 前缀保留，但路由按用例归属各能力：用户→`user`、任务队列与调度→`queue`、API Key→`apikey`、用户导入→`dataops`、审计列表→`audit`、文件上传→`uploadsec`、平台级视图（错误码/监控/限流查看/配置热更新/WS 管理）与**管理端准入中间件**→`console`。能力间只经 `contract` 端口调用（如 `user` 经 `contract.UserRoleAssigner` 委托 `access` 写 `user_roles`）。
 
 可用 `capabilities.enabled` 选择启用哪些能力（留空 = 全部启用，行为与旧版本一致）：
 
@@ -1146,9 +1145,9 @@ capabilities:
 - 硬依赖会自动补齐：只写 `["oauth"]` 会连带启用 `auth`/`user`/`access`（`auth` 的 `tenant`/`mfa` 是软依赖，不补齐）
 - 未启用的能力不挂路由、不注册定时任务与事件、不启动其后台组件
 - **软依赖只降级、不自动补齐**：`Descriptor.SoftRequires` 声明可选依赖（当前 `user`→`access`/`tenant`、`access`→`tenant`、`mfa`→`auth`、`auth`→`tenant`/`mfa`/`captcha`/`breach`、`apikey`→`tenant`、`outbox`→`queue`）；目标能力不在启用集时**不会被自动启用**，本能力降级运行，降级项在启动日志（`capability degraded`，字段 `name`/`missing`）与 `GET /capabilities` 的 `degraded` 中列出。该清单是**声明层**的静态比对（只读 `Descriptor`，不观测运行时装配），组合根改为按启用集驱动（P1 显式 `Deps`）之前可能多报
-- **表归属自描述**：`Descriptor.Owns` 声明本能力迁移 `CREATE` 的表（如 `user`→`users`、`access`→`roles`/`permissions`/`role_permissions`/`user_roles`、`mfa`→`user_mfa`/`trusted_devices`），`make check-capabilities` 的①号断言校验「单表唯一归属、无未声明的建表、声明的表确有迁移创建」（只扫描 mysql 迁移，PostgreSQL 迁移表名与 mysql 一致，暂以 mysql 为准）；该命令当前输出 **7 条汇总行**（① 本项：能力自描述与 `Owns` ↔ 迁移归属；② 驱动可用集/选中集/import 闭包一致；③ 形态生产代码只 import 已声明的驱动；④ 唯一入口与选点包只 import 一个形态；⑤ 资产归属唯一且无未声明资产；⑥ 能力根包入口与能力树跨能力 import 约束；⑦ 生成器核心与框架内部包的边界），见「形态（profile）· 驱动级可插拔」与「Makefile 命令」
+- **表归属自描述**：`Descriptor.Owns` 声明本能力迁移 `CREATE` 的表（如 `user`→`users`、`access`→`roles`/`permissions`/`role_permissions`/`user_roles`、`mfa`→`user_mfa`/`trusted_devices`），`make check-capabilities` 校验声明与迁移的表归属、驱动和形态边界、资产所有权及生成器依赖边界（只扫描 mysql 迁移，PostgreSQL 迁移表名与 mysql 一致，暂以 mysql 为准），见「形态（profile）· 驱动级可插拔」与「Makefile 命令」
 - `Descriptor`（`Requires`/`SoftRequires`/`Owns`/`Configs`/`Permissions`/`Mount`/`Migrations`）是能力元数据的**唯一来源**：启用闭包、配置段加载、权限点种子、路由挂载与能力门禁都只读它；能力实例化由形态清单驱动（`internal/profiles/<name>/assembly.go`，每个能力经 `wire.go` 自装配），`cmd/server` 是唯一入口、经选点包 `internal/profiles/active` 取当前形态（提交态默认 `full`，构建期由 overlay 切换），新增/删除能力时须同步对应形态清单；清单漂移由 `scripts/check_profiles.sh` 的 golden 依赖闭包门禁（`make profiles-check`）拦截
-- **配置段随能力**：能力配置段由能力在 `Descriptor.Configs` 声明（`ConfigKey` + `Config` 结构体 + `ApplyDefaults`/`Validate`，生产加严可实现可选的 `ValidateProd`），组合根按启用集统一执行「解码 → 默认值 → 校验」；**未启用能力的配置段既不出现也不校验** —— `app.yaml` 中残留的非法段不会导致启动失败。`auth` 段由 `auth` 能力整体拥有（含嵌套 `webauthn`/`provisioning`），不拆分
+- **配置段随能力**：能力配置段由能力在 `Descriptor.Configs` 声明（`ConfigKey` + `Config` 结构体 + `ApplyDefaults`/`Validate`，生产加严可实现可选的 `ValidateProd`），组合根按启用集统一执行「解码 → 默认值 → 校验」；**未启用能力的配置段既不出现也不校验** —— `app.yaml` 中残留的非法段不会导致启动失败。认证配置由 `auth` 拥有，WebAuthn 配置归 `passkey`，开通式注册配置归 `tenant`，可信设备配置归 `mfa`
 - **热更新范围**：配置文件热更新（`config.Watch`）只覆盖内核段（当前仅应用 `log.level`）；能力配置段变更需重启进程
 - **受保护能力需要认证器**：声明为受保护（`MountProtected`）的能力必须有模块提供受保护中间件 —— 启用集含 `auth` 时由它提供（JWT + RBAC），无 `auth` 时由 `apikey` 提供（`X-API-Key` 认证 + `ScopeProtected`（`api:access`）scope 校验 + Key 归属租户注入）；两者都没有时进程**启动即失败**并指出缺失的提供者，而不是把路由裸挂出去。因此 `enabled: ["user"]` 这类"有业务路由、无认证器"的配置会被拒绝；合法的最小组合之一是 `["auth"]`（闭包自动补齐 `user`/`access`）或无 `auth` 的 `["user", "access", "apikey"]`
 - 能力清单与依赖关系见 `internal/capabilities/catalog/catalog.go`；设计见 [能力可插拔设计](docs/design/2026-09-18-capability-plugins-design.md)
@@ -1202,7 +1201,7 @@ internal/capabilities/{name}/
 
 1. 在能力根包导出静态 `Descriptor`（`Name`/`Requires`/`SoftRequires`/`Owns`/`Configs`/`Permissions`/`Mount`/`Migrations`，有第三方驱动时再加 `Drivers`，拥有非代码资产时再加 `Assets`）与 `Wire`；按职责实现 `contract.Module`，仅提供端口或迁移时可返回 nil
 2. 在 `catalog` 登记该能力，并在需要它的 `internal/profiles/<name>/assembly.go` 形态清单里加入（非 catalog 条目标 `Ungated`）
-3. 跑 `make check-capabilities`（**7 条汇总行**：① 能力声明自洽（`catalog.ValidateDeclarations`）+ `Owns` ↔ 迁移归属；② 驱动可用集/选中集/import 闭包一致；③ 形态生产代码只 import 已声明的驱动；④ 唯一入口与选点包只 import 一个形态；⑤ 资产归属唯一且无未声明资产；⑥ 能力树只允许 `catalog` 跨能力 import；⑦ 生成器核心只经 `frameworkmanifest` 读取框架内部包）与 `make profiles-check`（golden 依赖闭包）
+3. 跑 `make check-capabilities` 与 `make profiles-check`，验证能力声明、迁移、驱动、形态装配、资产归属、生成器依赖边界和 profile golden 闭包
 
 新增**形态**时（形态名与清单的唯一来源是 `internal/profiles/registry`）：
 
@@ -1217,7 +1216,7 @@ internal/capabilities/{name}/
 2. **声明可用集**：在该能力 `Descriptor.Drivers` 加入驱动**包名**（如 `storage` = `[local s3]`、`queue` = `[redis kafka rabbitmq]`、`dataops` = `[csv excel]`；一个驱动包覆盖多个配置取值时仍是同一个包名）
 3. **声明选中子集**：在需要该驱动的形态 `assembly.Capability.Drivers` 里列出选中项（装配期强制 `⊆` 可用集）
 4. **落实 import**：在 `internal/profiles/<name>/drivers.go` 里 blank import 选中的驱动包（`_ "jimu/internal/capabilities/<cap>/<driver>"`），并保证与第 3 步逐值一致
-5. **跑门禁**：`make check-capabilities` 的 7 条汇总行中，驱动段覆盖驱动选择（可用集 ↔ 目录存在 / 核心包生产闭包零驱动、零重型依赖 / 形态选中 == 形态**生产** import 闭包（集合比较）/ 形态生产代码只 import 已声明驱动，即能力根包或已声明的驱动包），资产段覆盖非代码资产归属（见「非代码资产归属」），第七条覆盖生成器核心与框架内部包的边界；`make compose-report` 复核重型依赖列确实随形态消失
+5. **跑门禁**：`make check-capabilities` 校验驱动声明、形态生产 import 闭包与非代码资产归属；`make compose-report` 复核重型依赖列确实随形态消失
 
 ### 错误码
 
@@ -1301,8 +1300,8 @@ internal/capabilities/{name}/
 | `make fmt` | 格式化代码 |
 | `make fmt-check` | 检查代码格式 |
 | `make lint` | golangci-lint |
-| `make check-capabilities` | 7 条汇总行：① 能力自描述与 `Owns` ↔ mysql 迁移建表一致（单表唯一归属、无未声明的建表、声明的表确有迁移创建；PostgreSQL 表名与 mysql 一致，暂以 mysql 为准）② 驱动可用集 ↔ 驱动目录存在（`Descriptor.Drivers` 非空不重复且目录存在）+ 能力核心生产闭包零驱动包、零重型依赖 + 各形态选中集 == 该形态生产 import 闭包（集合比较）③ 形态生产代码只 import 已声明的驱动（能力根包或已声明的驱动包）④ 唯一入口 `cmd/server` 只 import `assembly` 与选点包（+ 标准库）、选点包 `internal/profiles/active` 恰好只选一个形态（且不得 import `internal/profiles/registry`）⑤ 资产归属唯一且无未声明资产（P2.6：声明路径非空/存在/在资产根内、同一路径不被两个所有者声明（归一化比较）、资产根下每个文件都有有效所有者、每个形态覆盖全部内核资产组）⑥ 能力根包必须导出 Descriptor/Wire，能力树仅 catalog 可跨能力 import（含测试与驱动）⑦ 生成器核心只经 `frameworkmanifest` 读取框架内部包；已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job（P2.8 收口） |
-| `make check-templates` | 模板漂移门禁：用生成器在临时目录生成最小项目（`--profile=minimal`）并真构建 + 跑生成项目自己的 `check-capabilities`（7 条 ✅）；用例被 `JIMU_HEAVY_MATRIX` 门控，目标内显式置 1；**不必单独接入** `make ci`/`release-check` —— 两者里的 `test-scaffold-matrix` 已覆盖同一条用例（P2.8 收口） |
+| `make check-capabilities` | 校验能力声明与迁移/驱动关系、形态生产 import 边界、非代码资产归属及生成器依赖边界；已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job |
+| `make check-templates` | 模板漂移门禁：用生成器在临时目录生成最小项目（`--profile=minimal`）并真构建 + 跑生成项目自己的 `check-capabilities`；用例被 `JIMU_HEAVY_MATRIX` 门控，目标内显式置 1；**不必单独接入** `make ci`/`release-check` —— 两者里的 `test-scaffold-matrix` 已覆盖同一条用例（P2.8 收口） |
 | `make test-scaffold-matrix` | 本地完整运行重型脚手架矩阵（`JIMU_HEAVY_MATRIX=1`：真实生成项目 + `go build/vet/test/run`，耗时数分钟起）；CI 在 `release/* → master` 发布候选 PR、手动触发或每周定时将其拆为七个并行分片，由同名 `Scaffold Matrix` 检查聚合结果；`JIMU_TEST_GOCACHE=<dir>` 可指定跨运行复用的 GOCACHE |
 | `make profiles-check` | 用 overlay 构建全部 5 个形态（`./cmd/server` + 该形态 overlay）+ 依赖闭包裁剪门禁（golden）；`JIMU_PROFILES_SMOKE=1` 时额外启动各形态并轮询管理端 `/readyz`（需 DB+Redis）；已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job（P2.8 收口） |
 | `make compose-report` | 生成形态编译面报告 `docs/profiles/compose-report.md`（二进制/路由/迁移/表/本仓闭包代码量与文件数/重型依赖列；不连库、不启动监听） |

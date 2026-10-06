@@ -14,7 +14,7 @@
 4. **守住两条不变式**：
    - 选点包 `internal/profiles/active` **恰好** import 一个形态
    - `internal/profiles/registry` **不得**被 `cmd/server` 或选点包 import（它 import 全部形态包，被引用会把所有形态拉回二进制、层②裁剪失效）。两条都由 `make check-capabilities` ④ 号断言检查
-5. **非 catalog 条目按 `Ungated` 声明**：`storage`/`notification`/`retention`/`ws`/`grpc`/`apidocs`/`encryption` 这七个不受 `capabilities.enabled` 门控，形态清单里必须显式列出
+5. **非 catalog 条目按 `Ungated` 声明**：非 catalog 能力在形态清单中标记 `Ungated`，不受 `capabilities.enabled` 门控
 
 **验收**：
 

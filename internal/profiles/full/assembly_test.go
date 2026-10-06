@@ -19,7 +19,7 @@ import (
 // nonCatalogEntries 是 full 形态里的非 catalog 条目：它们是 assembly.Capability
 // 但不是 catalog 成员，不入迁移/权限聚合。
 var nonCatalogEntries = []string{
-	"storage", "notification", "retention", "ws", "grpc", "apidocs", "encryption",
+	"storage", "notification", "ws", "grpc", "apidocs", "encryption",
 }
 
 // TestFullAssemblyShape full 形态的名字集合 = catalog 全量 ∪ 固定非 catalog 条目。

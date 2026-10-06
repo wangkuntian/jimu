@@ -35,11 +35,11 @@
 - 挂载点由 `Descriptor.Mount` 声明，禁止按能力名做特判
 - Casbin RBAC 机制位于内核 `internal/kernel/access`（强制器/策略/权限中间件），API Key 签发/校验位于 `internal/capabilities/apikey`；`kernel/auth` 只保留 JWT/Session/限流/登录失败锁定机制与 API Key 上下文助手（`apikey_context.go`）
 - 原 `auth` 已拆为 `auth`（会话/凭证/登录历史/密码历史）、`mfa`（TOTP + 可信设备，含自有 `totp/` 实现与 `user_mfa` 表）、`passkey`（WebAuthn）；`breach`/`captcha` 为独立能力；开通式注册（provisioned registration）属 `tenant` 能力。auth 经 `contract.MFAVerifier`/`TenantProvisioner`/`BreachChecker`/`CaptchaVerifier` 消费它们，passkey 经 `contract.LoginFinalizer` 复用 auth 的登录收尾；TOTP 状态存 `user_mfa`（迁移 016），`users` 表不再有 `totp_*` 列
-- 原 `admin` 已拆散（P1.7）：`role` + `permission` 合并为 `access`（roles/permissions/role_permissions/user_roles 四表 + 用户角色分配）；管理端 `/api/v1/admin/*` 路由按用例归还各能力（用户→`user`、任务与调度→`queue`、API Key→`apikey`、用户导入→`dataops`、审计列表→`audit`、Feature Flag→`feature`、文件上传→`uploadsec`），平台级视图与**管理端准入中间件**归新能力 `console`；`/api/v1/admin/*` 通配权限点由 `console` 声明。`user` 管理面与自助面共用同一 repository/配额，角色分配经 `contract.UserRoleAssigner` 委托 `access`
+- 原 `admin` 已拆散（P1.7）：`role` + `permission` 合并为 `access`（roles/permissions/role_permissions/user_roles 四表 + 用户角色分配）；管理端 `/api/v1/admin/*` 路由按用例归还各能力（用户→`user`、任务与调度→`queue`、API Key→`apikey`、用户导入→`dataops`、审计列表→`audit`、文件上传→`uploadsec`），平台级视图与**管理端准入中间件**归新能力 `console`；`/api/v1/admin/*` 通配权限点由 `console` 声明。`user` 管理面与自助面共用同一 repository/配额，角色分配经 `contract.UserRoleAssigner` 委托 `access`
 - **形态（profile）** — `full`/`minimal`/`saas`/`enterprise`/`machine` 五个；形态名与清单的唯一来源是 `internal/profiles/registry`（它 import 全部形态包，**不得**被 `cmd/server` 或选点包 import）。形态只裁剪编进二进制的包与符号（`go.mod` 不变），真正减小依赖的是层① `jimu new` 生成的独立项目
 - **驱动级可插拔** — 第三方驱动独立成包，能力在 `Descriptor.Drivers` 声明**可用集**、形态在 `assembly.Capability.Drivers` 声明**选中集**并在 `internal/profiles/<name>/drivers.go` blank import；核心包只留接口 + 注册表，未注册即 fail-closed
 - **非代码资产** — `Descriptor.Assets` 声明能力拥有的资产（仓库相对路径），内核运维/观测资产用具名资产组 `ops`/`observability`；归属按最长前缀匹配
-- **门禁** — 改能力/形态/驱动/资产后跑 `make check-capabilities`（6 条汇总行）与 `make profiles-check`（golden 依赖闭包），报告漂移用 `make compose-report-check`；三者已进 `make ci`/`release-check` 与 CI 的 `Capability Gates` job。新增能力/形态/驱动的完整步骤见 README「[开发规范 › 新增能力 / 驱动](README.md#新增能力--驱动)」，生成独立项目的流程见 README「[生成项目](README.md#生成项目jimu-new--jimu-capability-add)」
+- **门禁** — 改能力/形态/驱动/资产后跑 `make check-capabilities`（能力声明、驱动、形态装配、资产归属与生成器边界）与 `make profiles-check`（golden 依赖闭包），报告漂移用 `make compose-report-check`；三者已进 `make ci`/`release-check` 与 CI 的 `Capability Gates` job。新增能力/形态/驱动的完整步骤见 README「[开发规范 › 新增能力 / 驱动](README.md#新增能力--驱动)」，生成独立项目的流程见 README「[生成项目](README.md#生成项目jimu-new--jimu-capability-add)」
 
 ### 租户体系
 

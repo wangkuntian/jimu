@@ -1,6 +1,6 @@
 # v0.3.4 Capability Boundaries Implementation Plan
 
-> **执行方式：** 在当前会话 inline 按 task 顺序执行；每项完成后运行该项验证并勾选。未明确要求时不创建 commit。
+> **执行方式：** 在当前会话 inline 按 task 顺序执行；每项完成后运行该项验证、勾选并单独提交。
 
 **目标：** 移除 `feature` 与独立 `retention` capability，把配置和清理行为归还给对应数据所有者，并让能力清单、配置文档与报告一致。
 
@@ -109,12 +109,12 @@
 - 修改：`internal/capabilities/tenant/application/provisioning.go`、`internal/contract/ports.go` 及其调用处
 - 修改：`configs/app.yaml`、`configs/app.prod.yaml`
 
-- [ ] 新增 `passkey` 配置段并由 passkey Descriptor 声明；把 WebAuthn 启用开关、RP 参数和 session TTL 从 auth 段迁入 passkey。
-- [ ] 新增 tenant 自有 provisioning 配置并由 tenant Descriptor 声明；把 provisioning 开关和模板从 auth 段迁入 tenant。
-- [ ] `auth` 保留 `public_registration`，Wire 通过 `tenant.provisioner` 能力端口判断是否启用 provisioning；保留“provisioning 需要公开注册”的组合根校验。
-- [ ] 收窄 `contract.AuthConfig`，移除 WebAuthn 与 provisioning 配置视图；passkey 从自身配置读取 WebAuthn 参数，只从 auth 消费登录收尾端口和 JWT/限流需要的认证信息。
-- [ ] 更新配置默认值与生产校验，覆盖启用配置缺少必填值、未启用配置不触发校验、租户模板校验和公开注册约束。
-- [ ] 运行 `go test ./internal/capabilities/auth ./internal/capabilities/passkey ./internal/capabilities/tenant ./internal/assembly -count=1`。
+- [x] 新增 `passkey` 配置段并由 passkey Descriptor 声明；把 WebAuthn 启用开关、RP 参数和 session TTL 从 auth 段迁入 passkey。
+- [x] 新增 tenant 自有 provisioning 配置并由 tenant Descriptor 声明；把 provisioning 开关和模板从 auth 段迁入 tenant。
+- [x] `auth` 保留 `public_registration`，Wire 通过 `tenant.provisioner` 能力端口判断是否启用 provisioning；保留“provisioning 需要公开注册”的组合根校验。
+- [x] 收窄 `contract.AuthConfig`，移除 WebAuthn 与 provisioning 配置视图；passkey 从自身配置读取 WebAuthn 参数，只从 auth 消费登录收尾端口和 JWT/限流需要的认证信息。
+- [x] 更新配置默认值与生产校验，覆盖启用配置缺少必填值、未启用配置不触发校验、租户模板校验和公开注册约束。
+- [x] 运行 `go test ./internal/capabilities/auth ./internal/capabilities/passkey ./internal/capabilities/tenant ./internal/assembly -count=1`。
 
 ### Task 8：删除 retention capability 并同步清单、报告和文档
 
@@ -125,8 +125,9 @@
 - 删除：`internal/capabilities/retention/`
 - 新建：`docs/releases/v0.3.4.md`
 
-- [ ] 从所有 profile 删除 `retention` Ungated 项，删除 retention 包和配置段，移除 generator 的 retention 特判。
-- [ ] 更新能力总数、profile 依赖闭包、路由 golden、配置段归属、CLI `--with` 能力列表和脚手架 manifest fixture。
-- [ ] 用脚手架导出 manifest/报告的现有测试路径刷新 JSON golden，确认 `storage` 仍保留在六个 Ungated 能力中。
-- [ ] 更新 README 配置表与能力目录树，新增 v0.3.4 release note 的变更与验证章节。
-- [ ] 运行 `go test ./... -count=1`、`make check-capabilities`、`make profiles-check`、`make compose-report-check`、`make release-check COMPOSE_ENV=.env.example`、`git diff --check`。
+- [x] 从所有 profile 删除 `retention` Ungated 项，删除 retention 包和配置段，移除 generator 的 retention 特判。
+- [x] 更新 catalog/profile 清单、路由 golden、配置段归属、CLI `--with` 能力来源说明和脚手架 manifest fixture。
+- [x] 用脚手架导出 manifest/报告的现有测试路径刷新 JSON golden；storage 保留在 profile 声明中。
+- [x] 更新 README 配置表与能力目录树，新增 v0.3.4 release note 的变更与验证章节。
+- [x] 清理当前规范、v0.3.4 设计和代码注释中的 capability 数量及门禁汇总行总数，避免清单变化时产生无关文档改动。
+- [x] 运行 `go test ./... -count=1`、`make check-capabilities`、`make profiles-check`、`make compose-report-check`、`make release-check COMPOSE_ENV=.env.example`、`git diff --check`。

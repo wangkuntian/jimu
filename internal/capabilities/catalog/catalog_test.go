@@ -330,7 +330,7 @@ func TestDescriptorPermissionsCoverBusinessRoutes(t *testing.T) {
 
 // TestCatalogConfigSectionsShape 钉住各能力声明的配置段（ConfigSpec.New 是函数值，
 // 无法参与 TestDescriptorsAreWellFormed 的逐值比较，故单独钉住段键与 SectionConfig 契约）。
-// 非 catalog 包（storage/notification/retention）的段由组合根显式加载，此处不出现（③ 裁定 B）。
+// 非 catalog 包（storage/notification）的段由组合根显式加载，此处不出现（③ 裁定 B）。
 func TestCatalogConfigSectionsShape(t *testing.T) {
 	want := map[string][]string{
 		"auth":      {"auth"},
@@ -339,8 +339,10 @@ func TestCatalogConfigSectionsShape(t *testing.T) {
 		"captcha":   {"captcha"},
 		"audit":     {"audit"},
 		"oauth":     {"oauth"},
+		"passkey":   {"passkey"},
 		"queue":     {"queue", "scheduler"},
 		"outbox":    {"outbox"},
+		"tenant":    {"tenant"},
 		"uploadsec": {"upload"},
 	}
 	got := make(map[string][]string, len(want))

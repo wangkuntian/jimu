@@ -164,7 +164,9 @@
         "tenants",
         "tenant_plans"
       ],
-      "configs": null,
+      "configs": [
+        "tenant"
+      ],
       "permissions": [
         {
           "name": "租户列表",
@@ -682,14 +684,12 @@
           "dataops",
           "search",
           "captcha",
-          "feature",
           "uploadsec",
           "breach",
           "encryption",
           "storage",
           "notification",
           "ws",
-          "retention",
           "apidocs",
           "grpc"
         ],
@@ -755,14 +755,12 @@
           "dataops",
           "search",
           "captcha",
-          "feature",
           "uploadsec",
           "breach",
           "encryption",
           "storage",
           "notification",
           "ws",
-          "retention",
           "apidocs",
           "grpc"
         ],
@@ -1212,6 +1210,8 @@
     "internal/capabilities/queue/rabbitmq_config.go",
     "internal/capabilities/queue/redis/redis_queue.go",
     "internal/capabilities/queue/redis/redis_queue_test.go",
+    "internal/capabilities/queue/retention.go",
+    "internal/capabilities/queue/retention_test.go",
     "internal/capabilities/queue/retry.go",
     "internal/capabilities/queue/wire.go",
     "internal/capabilities/queue/worker.go",
@@ -1424,6 +1424,9 @@
     "internal/profiles/app/drivers.go",
     "internal/profiles/profiles.go",
     "internal/profiles/registry/registry.go",
+    "internal/shared/dbpurge/dbpurge.go",
+    "internal/shared/dbpurge/dbpurge_integration_test.go",
+    "internal/shared/dbpurge/dbpurge_test.go",
     "internal/shared/errors/errors.go",
     "internal/shared/errors/errors_test.go",
     "internal/shared/i18n/i18n.go",
@@ -1465,5 +1468,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:44b571b95cb6fa6d8aabefbfd6739104cb67957aa7f51278ec5303165deb6f0d"
+  "digest": "sha256:5916899d9fd545ab7b5a46f5d2ac67da93e078a932222eb4f5033eeaca3e5d40"
 }

@@ -32,7 +32,7 @@ import (
 // 本文件是 P2.7 Task 7（`jimu capability add <name>`）的落地验收。四条硬输入各由一条测试钉死：
 //
 //	① 重渲染必须重算（裁定 ⑬/T3 裁定 7）：TestAddCapabilityKeepsMigrationCarryAndKnownNames
-//	   —— add 后 tenant 仍在 entries、knownNames 仍 25、catalog 拓扑序正确；
+//	   —— add 后 tenant 仍在 entries、knownNames 覆盖已知能力、catalog 拓扑序正确；
 //	② 配置段合并以生成项目现有 app.yaml 为底（裁定 ⑬）：
 //	   TestAddCapabilityPreservesEditedConfigSections —— 手改值仍在 + 新段出现 + 二次 add 幂等；
 //	③ 资产按前缀口径重派生（T6 审查）：
@@ -226,7 +226,7 @@ func TestAddCapabilityKeepsMigrationCarryAndKnownNames(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, before.Capabilities, "tenant", "marker.capabilities 是声明集，不含迁移携带的 tenant")
 	assert.Contains(t, catalogEntryNames(t, dir), "tenant", "minimal 的 tenant 必须随迁移进 entries")
-	require.Len(t, catalogKnownNames(t, dir), 25)
+	assert.ElementsMatch(t, allCapabilityNames(t), catalogKnownNames(t, dir))
 
 	_, err = AddCapability(AddOptions{Dir: dir, Name: "dataops", From: root})
 	require.NoError(t, err)
@@ -243,7 +243,7 @@ func TestAddCapabilityKeepsMigrationCarryAndKnownNames(t *testing.T) {
 	assert.Equal(t, []string{"user", "access", "tenant", "auth", "dataops", "encryption", "notification"}, entries)
 
 	known := catalogKnownNames(t, dir)
-	assert.Len(t, known, 25, "knownNames 恒为框架全量能力名（catalog 18 ∪ Ungated 7）")
+	assert.ElementsMatch(t, allCapabilityNames(t), known, "knownNames 恒为框架全量能力名")
 	assert.Contains(t, known, "dataops")
 	assert.Contains(t, known, "tenant")
 }
@@ -466,7 +466,7 @@ func TestAddCapabilityRejectsForeignDirectory(t *testing.T) {
 	require.ErrorContains(t, err, markerFile)
 }
 
-// TestAddCapabilityRejectsUnknownCapability 能力名必须在框架全量集合里（catalog 18 ∪ Ungated 7）。
+// TestAddCapabilityRejectsUnknownCapability 能力名必须在框架全量集合里。
 func TestAddCapabilityRejectsUnknownCapability(t *testing.T) {
 	root := frameworkRootForTest(t)
 	dir := generateForTest(t, NewOptions{Profile: "minimal"})
