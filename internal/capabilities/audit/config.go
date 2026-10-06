@@ -2,6 +2,7 @@ package audit
 
 import (
 	"errors"
+	"strings"
 
 	"jimu/internal/config"
 )
@@ -11,10 +12,19 @@ const ConfigKey = "audit"
 
 // Config 审计能力配置（原 config.AuditConfig，P2.1 下沉）。
 type Config struct {
-	QueueSize       int    `mapstructure:"queue_size"`
-	BatchSize       int    `mapstructure:"batch_size"`
-	FlushIntervalMS int    `mapstructure:"flush_interval_ms"`
-	HashSecret      string `mapstructure:"hash_secret"` // 审计链 HMAC 密钥；为空时退化为 SHA-256
+	QueueSize       int             `mapstructure:"queue_size"`
+	BatchSize       int             `mapstructure:"batch_size"`
+	FlushIntervalMS int             `mapstructure:"flush_interval_ms"`
+	HashSecret      string          `mapstructure:"hash_secret"` // 审计链 HMAC 密钥；为空时退化为 SHA-256
+	Retention       RetentionConfig `mapstructure:"retention"`
+}
+
+// RetentionConfig controls cleanup of audit-owned records.
+type RetentionConfig struct {
+	Enabled      bool   `mapstructure:"enabled"`
+	Cron         string `mapstructure:"cron"`
+	BatchSize    int    `mapstructure:"batch_size"`
+	AuditLogDays int    `mapstructure:"audit_log_days"`
 }
 
 // ApplyDefaults 应用本能力的环境变量覆盖（无配置层默认值：各字段必填，由 Validate 兜底）。
@@ -30,6 +40,15 @@ func (c *Config) ApplyDefaults() {
 func (c Config) Validate() error {
 	if c.QueueSize <= 0 || c.BatchSize <= 0 || c.BatchSize > c.QueueSize || c.FlushIntervalMS <= 0 {
 		return errors.New("audit configuration")
+	}
+	if c.Retention.Enabled && strings.TrimSpace(c.Retention.Cron) == "" {
+		return errors.New("audit.retention.cron is required when enabled")
+	}
+	if c.Retention.Enabled && c.Retention.BatchSize < 0 {
+		return errors.New("audit.retention.batch_size must not be negative")
+	}
+	if c.Retention.AuditLogDays < 0 {
+		return errors.New("audit.retention.audit_log_days must not be negative")
 	}
 	return nil
 }

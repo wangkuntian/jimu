@@ -6,17 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+	"jimu/internal/shared/dbpurge"
+
 	"gorm.io/gorm"
 )
-
-var retentionDeletedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-	Namespace: "jimu",
-	Subsystem: "retention",
-	Name:      "deleted_total",
-	Help:      "Total number of rows deleted by the retention job",
-}, []string{"table"})
 
 const (
 	defaultRetentionBatchSize = 500
@@ -139,9 +132,7 @@ func (s *RetentionService) Run(ctx context.Context) ([]RetentionResult, error) {
 		}
 		cutoff := now.AddDate(0, 0, -rule.Days)
 		deleted, err := s.purge(ctx, rule, cutoff)
-		if deleted > 0 {
-			retentionDeletedTotal.WithLabelValues(rule.Table).Add(float64(deleted))
-		}
+		dbpurge.RecordDeleted(rule.Table, deleted)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", rule.Table, err))
 			continue

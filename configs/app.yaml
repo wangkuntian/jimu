@@ -147,6 +147,11 @@ audit:
   batch_size: 10         # 批量写入大小
   flush_interval_ms: 1000 # 刷新间隔（毫秒，开发环境刷新频率低）
   hash_secret: ""        # 审计链 HMAC 密钥（建议生产通过 AUDIT_HASH_SECRET 注入；为空则退化为 SHA-256）
+  retention:
+    enabled: false
+    cron: "30 3 * * *"
+    batch_size: 500
+    audit_log_days: 180
 
 # 文件存储配置
 storage:
