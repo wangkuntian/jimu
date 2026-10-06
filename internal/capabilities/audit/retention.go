@@ -17,6 +17,7 @@ func auditRetentionRules(cfg RetentionConfig) []dbpurge.Rule {
 		Table:      "audit_logs",
 		Model:      &auditdomain.AuditLog{},
 		TimeColumn: "created_at",
+		Condition:  "entry_hash = ''",
 		Days:       cfg.AuditLogDays,
 	}}
 }

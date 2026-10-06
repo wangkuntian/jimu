@@ -1002,7 +1002,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `server.rate_limit_rate` / `server.rate_limit_burst` | 全局限流速率（每秒）/ 桶容量 | `100` / `200` |
 | `server.max_concurrency` / `server.concurrency_wait_ms` | 并发处理上限 / 超限排队等待上限（毫秒，0=立即拒绝）；超限返回 `1010`/503，0 表示不限制 | `512` / `200` |
 | `ratelimit.tenant.enabled` / `ratelimit.tenant.limit` / `ratelimit.tenant.window_sec` | 租户维度限流开关 / 窗口内请求上限 / 窗口秒数（平台级视角 `tid=0` 跳过，Redis 异常 fail-open） | `false` / `6000` / `60` |
-| `audit.retention.enabled` / `cron` / `batch_size` / `audit_log_days` | 审计清理开关 / 调度 / 每批删除行数 / 审计日志保留天数（0=不清理） | `false` / `30 3 * * *` / `500` / `180` |
+| `audit.retention.enabled` / `cron` / `batch_size` / `audit_log_days` | 审计清理开关 / 调度 / 每批删除行数 / 未哈希旧审计记录保留天数（哈希链记录始终保留；0=不清理） | `false` / `30 3 * * *` / `500` / `180` |
 | `queue.retention.enabled` / `cron` / `batch_size` / `job_days` / `job_history_days` / `dead_letter_days` | 队列清理开关 / 调度 / 每批删除行数 / 终态任务、任务历史、已处理死信保留天数（0=不清理） | `false` / `30 3 * * *` / `500` / `7` / `30` / `30` |
 | `outbox.retention.enabled` / `cron` / `batch_size` / `outbox_event_days` | Outbox 清理开关 / 调度 / 每批删除行数 / 已发布事件保留天数（0=不清理） | `false` / `30 3 * * *` / `500` / `7` |
 | `dataops.retention.enabled` / `cron` / `batch_size` / `import_job_days` | 导入记录清理开关 / 调度 / 每批删除行数 / 已结束导入任务保留天数（0=不清理） | `false` / `30 3 * * *` / `500` / `90` |
