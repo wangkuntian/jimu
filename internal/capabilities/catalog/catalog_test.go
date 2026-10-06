@@ -54,7 +54,6 @@ func fixture() []contract.Descriptor {
 			Drivers: []string{"csv", "excel"}, Mount: contract.MountProtected},
 		{Name: "search", Owns: []string{"search_documents"}, Mount: contract.MountProtected},
 		{Name: "captcha", Mount: contract.MountPublic},
-		{Name: "feature", Mount: contract.MountProtected},
 		{Name: "uploadsec", Mount: contract.MountProtected},
 		{Name: "breach", Mount: contract.MountProtected},
 	}
@@ -182,7 +181,7 @@ func TestCatalogMigrationsShape(t *testing.T) {
 		"user": true, "access": true, "tenant": true,
 		"mfa": true, "auth": true, "passkey": true, "audit": true, "oauth": true,
 		"console": false,
-		"captcha": false, "breach": false, "feature": false, "uploadsec": false,
+		"captcha": false, "breach": false, "uploadsec": false,
 		"apikey": true, "queue": true, "outbox": true, "dataops": true, "search": true,
 	}
 	if got := migrationsOf(All()); !reflect.DeepEqual(got, want) {

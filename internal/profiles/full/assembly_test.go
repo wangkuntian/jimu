@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// nonCatalogEntries 是 full 形态里的非 catalog 条目（P2.4 裁定 7）：它们是
-// assembly.Capability 但不是 catalog 成员（catalog 仍 18 项，不入迁移/权限聚合）。
+// nonCatalogEntries 是 full 形态里的非 catalog 条目：它们是 assembly.Capability
+// 但不是 catalog 成员，不入迁移/权限聚合。
 var nonCatalogEntries = []string{
 	"storage", "notification", "retention", "ws", "grpc", "apidocs", "encryption",
 }
@@ -29,7 +29,7 @@ var nonCatalogEntries = []string{
 // 因此这里只断言**集合**而不是顺序。catalog 顺序只用于迁移与启用闭包，由
 // `capability.Resolve` 保证（它按传入切片顺序返回并补齐硬依赖）。
 func TestFullAssemblyShape(t *testing.T) {
-	cat := catalog.Names() // 18 项
+	cat := catalog.Names()
 	extra := map[string]bool{}
 	for _, n := range nonCatalogEntries {
 		extra[n] = true

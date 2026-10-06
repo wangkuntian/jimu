@@ -80,9 +80,10 @@ func TestAdminConfigServiceUpdateConfigError(t *testing.T) {
 
 func TestAdminConfigServiceIsValidKey(t *testing.T) {
 	svc := &AdminConfigService{}
-	for _, key := range []string{"rate_limit_rate", "rate_limit_burst", "log_level", "feature_flags"} {
+	for _, key := range []string{"rate_limit_rate", "rate_limit_burst", "log_level"} {
 		assert.True(t, svc.IsValidKey(key))
 	}
+	assert.False(t, svc.IsValidKey("feature_flags"))
 	assert.False(t, svc.IsValidKey("nope"))
 	assert.False(t, svc.IsValidKey(""))
 }

@@ -14,7 +14,6 @@ import (
 	consolemodule "jimu/internal/capabilities/console"
 	"jimu/internal/capabilities/dataops"
 	"jimu/internal/capabilities/encryption"
-	"jimu/internal/capabilities/feature"
 	grpcpkg "jimu/internal/capabilities/grpc"
 	mfamodule "jimu/internal/capabilities/mfa"
 	"jimu/internal/capabilities/notification"
@@ -68,7 +67,6 @@ func Assembly() assembly.Assembly {
 			{Descriptor: apikey.Descriptor, Wire: apikey.Wire},
 			{Descriptor: dataops.Descriptor, Wire: dataops.Wire,
 				Drivers: []string{"csv", "excel"}},
-			{Descriptor: feature.Descriptor, Wire: feature.Wire},
 			{Descriptor: uploadsec.Descriptor, Wire: uploadsec.Wire},
 			{Descriptor: search.Descriptor, Wire: search.Wire},
 			{Descriptor: retention.Descriptor, Wire: retention.Wire, Ungated: true},
