@@ -1,7 +1,6 @@
 package generator
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -125,39 +124,4 @@ func assetFiles(root string, assets []string) ([]string, error) {
 		}
 	}
 	return slices.Sorted(maps.Keys(found)), nil
-}
-
-// valuesRelPath 是唯一需要按能力裁剪的内核资产（S6②：设计 §3.8 明列的 values.yaml）。
-const valuesRelPath = "deploy/helm/values.yaml"
-
-// renderValuesYAML 把已复制的 deploy/helm/values.yaml 顶层键按能力集裁剪后落盘。
-// 键选择与渲染**复用 T4 的实现**（ValuesSections / RenderValuesYAML，裁定 ⑫），本函数只负责接线：
-// 资产的落盘在 T6，段选择器在 T4。
-//
-// 文件不存在时跳过（该选择不含 helm chart）；存在则必须解析成功（SectionBlocks 遇到无法识别的
-// 顶层行即报错，绝不静默丢内容）。
-func renderValuesYAML(root, dst string, set CapabilitySet) error {
-	target := filepath.Join(dst, filepath.FromSlash(valuesRelPath))
-	if _, err := os.Stat(target); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		return fmt.Errorf("inspect %s: %w", valuesRelPath, err)
-	}
-	src, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(valuesRelPath)))
-	if err != nil {
-		return fmt.Errorf("read %s: %w", valuesRelPath, err)
-	}
-	keep, err := ValuesSections(src, set)
-	if err != nil {
-		return fmt.Errorf("select %s keys: %w", valuesRelPath, err)
-	}
-	out, err := RenderValuesYAML(src, keep)
-	if err != nil {
-		return fmt.Errorf("render %s: %w", valuesRelPath, err)
-	}
-	if err := writeFile(target, out, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", valuesRelPath, err)
-	}
-	return nil
 }

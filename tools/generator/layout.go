@@ -378,6 +378,28 @@ func nonCatalogDescriptors(root string, inCatalog map[string]bool) ([]contract.D
 	return out, nil
 }
 
+// descriptorFile 在能力根包目录里找含 `var Descriptor` 的 .go 文件（非测试）；没有则返回 ""。
+func descriptorFile(dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		file := filepath.Join(dir, entry.Name())
+		content, err := os.ReadFile(file)
+		if err != nil {
+			return "", err
+		}
+		if strings.Contains(string(content), "var Descriptor") {
+			return file, nil
+		}
+	}
+	return "", nil
+}
+
 // knownCapabilityNames 返回软依赖错别字检查的全量能力名（Minor 6/S5）：catalog 18 ∪ Ungated 7。
 func knownCapabilityNames(descs []contract.Descriptor) []string {
 	out := make([]string, 0, len(descs))
@@ -499,23 +521,28 @@ func FrameworkRoot() string {
 // 5 层内没有 `configs/` 而加载不到能力配置段。找不到即 fail-closed 报错（绝不静默拿空源目录
 // 生成空项目），错误里带上层数与起点便于定位。
 func frameworkRoot() (string, error) {
-	start, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("resolve working directory: %w", err)
-	}
-	dir := start
-	for i := 0; i < config.SearchDepthUp; i++ {
-		if mod, err := moduleOf(filepath.Join(dir, "go.mod")); err == nil && mod == frameworkModule {
-			return dir, nil
+	var root string
+	err := config.WithWorkingDirectory("", func() error {
+		start, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("resolve working directory: %w", err)
 		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
+		dir := start
+		for i := 0; i < config.SearchDepthUp; i++ {
+			if mod, err := moduleOf(filepath.Join(dir, "go.mod")); err == nil && mod == frameworkModule {
+				root = dir
+				return nil
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
 		}
-		dir = parent
-	}
-	return "", fmt.Errorf("no framework source root within %d levels up from %s: run jimu from the framework checkout (or at most %d levels below its root), whose go.mod declares module %s",
-		config.SearchDepthUp, filepathSlash(start), config.SearchDepthUp-1, frameworkModule)
+		return fmt.Errorf("no framework source root within %d levels up from %s: run jimu from the framework checkout (or at most %d levels below its root), whose go.mod declares module %s",
+			config.SearchDepthUp, filepathSlash(start), config.SearchDepthUp-1, frameworkModule)
+	})
+	return root, err
 }
 
 var goModuleLine = regexp.MustCompile(`(?m)^[ \t]*module[ \t]+([^ \t\r\n]+)`)

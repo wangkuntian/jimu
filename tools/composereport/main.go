@@ -155,7 +155,6 @@ func fail(err error) {
 // 工作目录以吸收构造期相对路径副作用，因此不能并发。
 func measureAll(root string, profiles []string) ([]Metrics, error) {
 	names := registry.Names()
-	asms := registry.All()
 	if len(profiles) > 0 {
 		picked, err := pickProfiles(names, profiles)
 		if err != nil {
@@ -187,7 +186,11 @@ func measureAll(root string, profiles []string) ([]Metrics, error) {
 		if err != nil {
 			return nil, err
 		}
-		m, err := projectmetrics.Of(root, modulePath, asms[name], overlay)
+		spec, err := projectReportSpec(root, name)
+		if err != nil {
+			return nil, err
+		}
+		m, err := projectmetrics.Measure(root, modulePath, spec, overlay)
 		if err != nil {
 			return nil, err
 		}

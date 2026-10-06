@@ -69,7 +69,7 @@ go run ./tools/checkcapabilities 都必须绿）→ 原子换上 <dir>。产物�
 	cmd.Flags().String("module", "", "Go module path (default: derived from <dir>)")
 	cmd.Flags().Bool("no-tidy", false, "skip go mod tidy after generation (default: tidy runs and a failing tidy aborts)")
 	cmd.Flags().Bool("dry-run", false, "print the plan without writing anything")
-	cmd.Flags().Bool("force", false, "overwrite an existing generator product (requires its .jimu-generated marker)")
+	cmd.Flags().Bool("force", false, "overwrite an existing generated project (requires .jimu/manifest.json)")
 	cmd.Flags().Bool("report", false, "write <dir>/docs/profiles/generated-report.md (file count / code lines / direct deps / migrations / tables / routes)")
 	return cmd
 }

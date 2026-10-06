@@ -23,16 +23,6 @@ type shapeCapability struct {
 // HasDrivers 是否有选中的驱动（模板里控制 `Drivers: []string{...}` 字段）。
 func (c shapeCapability) HasDrivers() bool { return len(c.Drivers) > 0 }
 
-// shapeFiles 返回四份单形态产物的相对路径（按渲染顺序）。
-func shapeFiles(set CapabilitySet) []string {
-	return []string{
-		"internal/profiles/registry/registry.go",
-		filepath.ToSlash(filepath.Join("internal/profiles", set.Shape, "assembly.go")),
-		filepath.ToSlash(filepath.Join("internal/profiles", set.Shape, "drivers.go")),
-		"internal/profiles/active/assembly.go",
-	}
-}
-
 // RenderShape 渲染四份单形态产物到 dst。能力顺序沿用 set.Declared（catalog 拓扑序 = 装配顺序的
 // 合法序列，端口提供者先于消费者）。迁移携带能力（MigrationOnly）不参与装配，故不进 assembly。
 func RenderShape(root, dst string, set CapabilitySet) error {
@@ -82,9 +72,4 @@ func RenderShape(root, dst string, set CapabilitySet) error {
 		}
 	}
 	return nil
-}
-
-// renderShape 是 renderDerivedAll 里的落点包装。
-func renderShape(root, dst string, set CapabilitySet) error {
-	return RenderShape(root, dst, set)
 }

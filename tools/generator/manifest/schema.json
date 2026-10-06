@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jimu.example/schema/generator-manifest-v1.json",
+  "title": "Jimu generator manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "framework", "selection", "capabilities", "copy", "templates", "merges", "rewrites", "assets", "prune", "report", "generated_files", "digest"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "framework": {"$ref": "#/$defs/framework"},
+    "selection": {"$ref": "#/$defs/selection"},
+    "capabilities": {"type": "array", "items": {"$ref": "#/$defs/capability"}},
+    "copy": {"type": "array", "items": {"$ref": "#/$defs/copy"}},
+    "templates": {"type": "array", "items": {"$ref": "#/$defs/template"}},
+    "merges": {"type": "array", "items": {"$ref": "#/$defs/merge"}},
+    "rewrites": {"type": "array", "items": {"$ref": "#/$defs/rewrite"}},
+    "assets": {"type": "array", "items": {"$ref": "#/$defs/asset"}},
+    "prune": {"type": "array", "items": {"$ref": "#/$defs/prune"}},
+    "report": {"$ref": "#/$defs/report"},
+    "generated_files": {"type": "array", "items": {"type": "string"}},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "framework": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module", "version", "commit"],
+      "properties": {
+        "module": {"type": "string", "minLength": 1},
+        "version": {"type": "string"},
+        "commit": {"type": "string"}
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shape", "capabilities", "drivers"],
+      "properties": {
+        "shape": {"type": "string", "minLength": 1},
+        "profile": {"type": "string", "minLength": 1},
+        "capabilities": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "drivers": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}}
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "requires", "soft_requires", "migration_only", "domain_only", "owns", "configs", "permissions", "mount", "migrations", "drivers", "assets"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "requires": {"type": "array", "items": {"type": "string"}},
+        "soft_requires": {"type": "array", "items": {"type": "string"}},
+        "migration_only": {"type": "boolean"},
+        "domain_only": {"type": "boolean"},
+        "owns": {"type": "array", "items": {"type": "string"}},
+        "configs": {"type": "array", "items": {"type": "string"}},
+        "permissions": {"type": "array", "items": {"$ref": "#/$defs/permission"}},
+        "mount": {"type": "string"},
+        "migrations": {"type": "array", "items": {"type": "string"}},
+        "drivers": {"type": "array", "items": {"type": "string"}},
+        "assets": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "copy": {
+      "type": "object", "additionalProperties": false, "required": ["source", "destination", "optional", "include", "exclude"],
+      "properties": {"source": {"type": "string"}, "destination": {"type": "string"}, "optional": {"type": "boolean"}, "include": {"type": "array", "items": {"type": "string"}}, "exclude": {"type": "array", "items": {"type": "string"}}}
+    },
+    "permission": {
+      "type": "object", "additionalProperties": false, "required": ["name", "resource", "action"],
+      "properties": {"name": {"type": "string"}, "resource": {"type": "string"}, "action": {"type": "string"}}
+    },
+    "template": {
+      "type": "object", "additionalProperties": false, "required": ["source", "destination", "kind", "data"],
+      "properties": {"source": {"type": "string"}, "destination": {"type": "string"}, "kind": {"type": "string"}, "data": {"type": "object"}}
+    },
+    "merge": {
+      "type": "object", "additionalProperties": false, "required": ["source", "destination", "strategy", "sections"],
+      "properties": {"source": {"type": "string"}, "destination": {"type": "string"}, "strategy": {"type": "string"}, "sections": {"type": "array", "items": {"type": "string"}}}
+    },
+    "rewrite": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "from", "to", "files"],
+      "properties": {"kind": {"type": "string"}, "from": {"type": "string"}, "to": {"type": "string"}, "files": {"type": "array", "items": {"type": "string"}}}
+    },
+    "asset": {
+      "type": "object", "additionalProperties": false, "required": ["source", "destination", "include", "exclude"],
+      "properties": {"source": {"type": "string"}, "destination": {"type": "string"}, "include": {"type": "array", "items": {"type": "string"}}, "exclude": {"type": "array", "items": {"type": "string"}}}
+    },
+    "prune": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "path", "reason"],
+      "properties": {"kind": {"type": "string"}, "path": {"type": "string"}, "reason": {"type": "string"}}
+    },
+    "report": {
+      "type": "object", "additionalProperties": false, "required": ["name", "capabilities", "routes", "migrations", "tables", "heavy_deps"],
+      "properties": {"name": {"type": "string"}, "capabilities": {"type": "array", "items": {"type": "string"}}, "routes": {"type": "integer", "minimum": 0}, "migrations": {"type": "array", "items": {"type": "string"}}, "tables": {"type": "array", "items": {"type": "string"}}, "heavy_deps": {"type": "array", "items": {"type": "string"}}}
+    }
+  }
+}

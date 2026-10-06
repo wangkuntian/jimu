@@ -2,40 +2,32 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"jimu/tools/generator"
+	"jimu/tools/generator/frameworkmanifest"
+	"jimu/tools/generator/manifest"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// fakeGeneratedProject 造一个最小可用的「生成项目」：只需要 .jimu-generated（sourceRoot 指向
-// 框架仓，capabilities 是声明集）。add 会把产物渲染进暂存目录再与这个目录比对差异，因此 CLI
+// fakeGeneratedProject 造一个最小可用的 manifest 项目。add 会把产物渲染进暂存目录再与这个目录比对差异，因此 CLI
 // 层的 flag 接线可以在不跑完整 `jimu new` 的前提下被覆盖。
 func fakeGeneratedProject(t *testing.T, capabilities []string) string {
 	t.Helper()
 	dir := t.TempDir()
-	m := generator.Marker{
-		Generator:    "jimu new",
-		Version:      "p2.7",
-		SourceRoot:   generator.FrameworkRoot(),
-		Module:       "example.com/proj",
-		Shape:        "minimal",
-		Profile:      "minimal",
-		Capabilities: capabilities,
-		Drivers:      map[string][]string{},
-		Assets:       []string{},
-		Files:        []string{},
-	}
-	require.NotEmpty(t, m.SourceRoot, "测试必须能定位框架源根")
-	content, err := json.Marshal(m)
+	root := generator.FrameworkRoot()
+	require.NotEmpty(t, root, "测试必须能定位框架源根")
+	doc, err := frameworkmanifest.Export(frameworkmanifest.Request{
+		Root: root, With: strings.Join(capabilities, ","), Shape: "app", Module: "example.com/proj",
+	})
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".jimu-generated"), content, 0o644))
+	require.NoError(t, manifest.Write(filepath.Join(dir, ".jimu", "manifest.json"), doc))
 	return dir
 }
 
@@ -76,7 +68,7 @@ func TestModuleCreateCmdIsRemoved(t *testing.T) {
 }
 
 // TestCapabilityAddCmdDryRunWiresFlags 钉住 CLI → generator.AddOptions 的 flag 映射与
-// 「--dry-run 绝不落盘」：输出必须列出将改动的文件，且目录里除了 marker 什么都不多。
+// 「--dry-run 绝不落盘」：输出必须列出将改动的文件，且目录里除了 manifest 目录什么都不多。
 func TestCapabilityAddCmdDryRunWiresFlags(t *testing.T) {
 	dir := fakeGeneratedProject(t, []string{"user", "access", "auth", "encryption", "notification"})
 	var out bytes.Buffer
@@ -88,11 +80,11 @@ func TestCapabilityAddCmdDryRunWiresFlags(t *testing.T) {
 	assert.Contains(t, out.String(), "internal/capabilities/catalog/catalog.go")
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
-	require.Len(t, entries, 1, "--dry-run 只允许留下 marker")
-	assert.Equal(t, ".jimu-generated", entries[0].Name())
+	require.Len(t, entries, 1, "--dry-run 只允许留下 manifest 目录")
+	assert.Equal(t, ".jimu", entries[0].Name())
 }
 
-// TestCapabilityAddCmdUsesMarkerSourceRoot --from 缺省取 marker.SourceRoot（S7）。
+// TestCapabilityAddCmdUsesCurrentFramework --from 缺省取当前框架 checkout。
 func TestCapabilityAddCmdUsesMarkerSourceRoot(t *testing.T) {
 	dir := fakeGeneratedProject(t, []string{"user", "access", "auth"})
 	var out bytes.Buffer
@@ -117,12 +109,12 @@ func TestCapabilityAddCmdRejectsExistingUnlessForce(t *testing.T) {
 	require.NoError(t, force.Execute())
 }
 
-// TestCapabilityAddCmdRejectsForeignDirectory 没有 .jimu-generated 的目录一律拒绝。
+// TestCapabilityAddCmdRejectsForeignDirectory 没有 manifest 的目录一律拒绝。
 func TestCapabilityAddCmdRejectsForeignDirectory(t *testing.T) {
 	c := capabilityCommandForTest(&bytes.Buffer{})
 	c.SetArgs([]string{"capability", "add", "dataops", "--dir=" + t.TempDir()})
 	err := c.Execute()
-	require.ErrorContains(t, err, ".jimu-generated")
+	require.ErrorContains(t, err, ".jimu/manifest.json")
 }
 
 // TestCapabilityAddCmdRejectsMissingDependency 缺硬依赖的报错必须带「先加依赖」的指引。

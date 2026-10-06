@@ -178,7 +178,7 @@ docker rm -f jimu-test-mysql
 
 出货（为使用者生成独立项目）走层①脚手架 `jimu new` / `jimu capability add`；其中 `add` 向已生成项目追加已有能力，不创建框架能力，见 README「生成项目」章节。
 
-改完跑 `make check-capabilities`（6 条汇总行）与 `make profiles-check`（golden 依赖闭包）；新增能力、新增形态、新增驱动的完整步骤见 README「[开发规范 › 新增能力 / 驱动](../README.md#新增能力--驱动)」。
+改完跑 `make check-capabilities`（7 条汇总行，含生成器边界）与 `make profiles-check`（golden 依赖闭包）；新增能力、新增形态、新增驱动的完整步骤见 README「[开发规范 › 新增能力 / 驱动](../README.md#新增能力--驱动)」。
 
 ## 报告问题
 

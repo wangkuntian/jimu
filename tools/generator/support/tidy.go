@@ -1,4 +1,4 @@
-package generator
+package support
 
 // 本文件实现 ⑧ `go mod tidy`：生成项目的依赖从「本仓 go.mod 的超集」收缩成「本项目真实用到的
 // 直接依赖」（层①让 go.mod 变小的那一步，设计 §11 的层②边界）。

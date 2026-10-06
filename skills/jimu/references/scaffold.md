@@ -25,13 +25,13 @@
 | `--shape=<name>` | 生成项目的形态名（缺省由能力集推导） |
 | `--module=<path>` | 重写 `go.mod` 的 module 指令与文本里的 `jimu/` 前缀；**不改**框架运行期名字 / CLI 名 / 镜像名 / protobuf 描述符 |
 | `--dry-run` | 只打印计划，不落盘 |
-| `--force` | 只覆盖带 `.jimu-generated` 标记的产物（识别依据是标记，不是时间戳） |
+| `--force` | 只覆盖带 `.jimu/manifest.json` 的产物（识别依据是 manifest，不是时间戳） |
 | `--no-tidy` | 跳过 `go mod tidy`（`go.mod` 保持框架依赖集） |
 | `--report` | 写 `<dir>/docs/profiles/generated-report.md`（文件数 / 闭包 Go 文件数与代码行 / 直接依赖数 / 迁移数 / 表数 / 路由数 / 重型依赖 / 资产数） |
 
 **默认自检**：生成后跑 `go build ./...` 与生成项目自己的 `check-capabilities`，任一失败**整体回滚**。
 
-**生成物是子集**：内核目录原样复制；能力按复制集（声明集 ∪ 编译闭包 ∪ schema 依赖的迁移携带目录 ∪ 内核 domain 依赖）落地；`internal/profiles/{registry,<shape>,active}`、`internal/capabilities/catalog/*`、`configs/*.yaml`、`Makefile`/`Dockerfile`/`scripts/check_profiles.sh` 按能力集**渲染**（单形态，无 `PROFILE=`、无 overlay）；测试树按「逐文件 import 可满足性 + 资产依赖」裁剪（清单记入 `.jimu-generated`，该 dot 文件不参与全树扫描）。
+**生成物是子集**：内核目录原样复制；能力按复制集（声明集 ∪ 编译闭包 ∪ schema 依赖的迁移携带目录 ∪ 内核 domain 依赖）落地；`internal/profiles/{registry,<shape>,active}`、`internal/capabilities/catalog/*`、`configs/*.yaml`、`Makefile`/`Dockerfile`/`scripts/check_profiles.sh` 按能力集**渲染**（单形态，无 `PROFILE=`、无 overlay）；测试树按「逐文件 import 可满足性 + 资产依赖」裁剪（规则写入 `.jimu/manifest.json` 的 `prune` 段，文件清单写入 `generated_files`）。manifest 只支持 JSON，路径必须为相对路径。
 
 ## `jimu capability add <name>`
 
@@ -63,4 +63,4 @@ make check-templates                                 # 本仓模板漂移门禁
 | `frameworkRoot` 找不到源根（错误里带层数与起点） | 从过深目录执行：向上找 `module jimu` 源根有以下上限（`internal/config` 的 `SearchDepthUp`，与找 `configs/` 共用），超限即 fail-closed |
 | `go mod tidy` 失败 | 生成的 `go.mod` 与选中能力的 import 不一致；看 `--no-tidy` 是否能构建，定位是 tidy 还是复制集问题 |
 | 生成项目门禁红 | 模板漂移：`make check-templates` 复现，改 `templates/**` 或生成器的复制集 |
-| 重生成覆盖了手改文件 | 手改的文件不在 `.jimu-generated` 清单里，或用了 `--force`；报告与清单以 `.jimu-generated` 为准 |
+| 重生成覆盖了手改文件 | 手改的文件不在 manifest 的 `generated_files` 清单里，或用了 `--force`；报告与动作清单以 `.jimu/manifest.json` 为准 |

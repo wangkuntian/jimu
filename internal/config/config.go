@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"jimu/internal/kernel/observability"
 	"jimu/internal/kernel/reporter"
@@ -39,12 +40,41 @@ const (
 )
 
 var (
-	validHTTPModes  = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
-	validLogLevels  = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
-	validLogFormats = []string{LogFormatJSON, LogFormatConsole}
-	validDBDrivers  = []string{DBDriverMySQL, DBDriverPostgres, DBDriverMariaDB, ""}
-	validRedisModes = []string{RedisModeSingle, RedisModeSentinel, RedisModeCluster}
+	workingDirectoryMu sync.Mutex
+	validHTTPModes     = []string{HTTPModeDebug, HTTPModeRelease, HTTPModeTest}
+	validLogLevels     = []string{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
+	validLogFormats    = []string{LogFormatJSON, LogFormatConsole}
+	validDBDrivers     = []string{DBDriverMySQL, DBDriverPostgres, DBDriverMariaDB, ""}
+	validRedisModes    = []string{RedisModeSingle, RedisModeSentinel, RedisModeCluster}
 )
+
+// WithWorkingDirectory serializes process-wide cwd changes and restores the
+// caller's directory before returning. An empty dir only takes the lock.
+func WithWorkingDirectory(dir string, fn func() error) error {
+	if fn == nil {
+		return fmt.Errorf("working directory callback is nil")
+	}
+	workingDirectoryMu.Lock()
+	defer workingDirectoryMu.Unlock()
+	if dir == "" {
+		return fn()
+	}
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("read working directory: %w", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		return fmt.Errorf("change working directory to %s: %w", dir, err)
+	}
+	callbackErr := fn()
+	if err := os.Chdir(workingDirectory); err != nil {
+		if callbackErr == nil {
+			return fmt.Errorf("restore working directory: %w", err)
+		}
+		return fmt.Errorf("%v; restore working directory: %w", callbackErr, err)
+	}
+	return callbackErr
+}
 
 // CaptchaResult 验证码返回
 type CaptchaResult struct {

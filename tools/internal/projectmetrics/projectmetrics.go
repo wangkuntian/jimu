@@ -56,7 +56,7 @@ func init() {
 // modulePath 是本模块的 import 前缀（本仓 = jimu；生成项目 = --module 的值），闭包只统计它的包。
 // DirectDeps 不在这里：它是 module 级指标，本仓报告只数一次、生成项目报告也只数一次。
 func Of(root, modulePath string, asm assembly.Assembly, overlay map[string][]byte) (Metrics, error) {
-	res, err := assembly.ProbeAssembly(asm, nil)
+	res, err := assembly.ProbeAssemblyAt(root, asm, nil)
 	if err != nil {
 		return Metrics{}, fmt.Errorf("probe %s: %w", asm.Name, err)
 	}

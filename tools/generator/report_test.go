@@ -105,7 +105,7 @@ func TestReportSucceedsForEverySelection(t *testing.T) {
 }
 
 // TestReportRerunIsByteIdentical 独立重跑（`Report` + `WriteReport` 对已生成项目）必须与生成时写出的
-// 报告**逐字节相同**：markerSet 经 CapabilityRoots 重算 Copy/MigrationOnly/DomainOnly（否则
+// 报告**逐字节相同**：manifest 已保存 MigrationOnly/DomainOnly（否则
 // 「迁移携带能力 / 只带 domain 的能力」两行会退化成 `-`），且生成文件数不含报告自身。
 func TestReportRerunIsByteIdentical(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
@@ -117,9 +117,7 @@ func TestReportRerunIsByteIdentical(t *testing.T) {
 
 	rerun, err := Report(dir)
 	require.NoError(t, err)
-	rerunSet, err := markerSet(FrameworkRoot(), mustMarker(t, dir))
-	require.NoError(t, err)
-	require.NoError(t, WriteReport(dir, *rerun, rerunSet))
+	require.NoError(t, WriteReport(dir, *rerun, CapabilitySet{}))
 	second, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, string(first), string(second), "独立重跑必须逐字节幂等")
@@ -129,24 +127,13 @@ func TestReportRerunIsByteIdentical(t *testing.T) {
 	require.NoError(t, err)
 	m, err := Report(qdir)
 	require.NoError(t, err)
-	set, err := markerSet(FrameworkRoot(), mustMarker(t, qdir))
-	require.NoError(t, err)
-	assert.Equal(t, []string{"access", "tenant", "user"}, set.DomainOnly)
-	require.NoError(t, WriteReport(qdir, *m, set))
+	require.NoError(t, WriteReport(qdir, *m, CapabilitySet{}))
 	content, err := os.ReadFile(filepath.Join(qdir, filepath.FromSlash(reportRelPath)))
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "| 只带 domain 的能力（内核编译期依赖） | access, tenant, user |")
 }
 
-// mustMarker 读生成项目的 marker（测试辅助）。
-func mustMarker(t *testing.T, dir string) *Marker {
-	t.Helper()
-	m, err := LoadMarker(dir)
-	require.NoError(t, err)
-	return m
-}
-
-// TestReportRejectsForeignDirectory 未生成的目录没有 .jimu-generated → 明确报错（fail-closed），
+// TestReportRejectsForeignDirectory 未生成的目录没有 manifest → 明确报错（fail-closed），
 // 绝不按猜测度量任意目录。
 func TestReportRejectsForeignDirectory(t *testing.T) {
 	_, err := Report(t.TempDir())

@@ -1,4 +1,4 @@
-package generator
+package support
 
 import (
 	"fmt"
@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -65,6 +66,21 @@ var goModuleDirective = regexp.MustCompile(`^[ \t]*module[ \t]+jimu(?:[ \t]+(//.
 // goModuleValue 取 module 指令的值（module 后的第一个 token），用于写盘前的 fail-closed 校验；
 // 它与 goModuleDirective 相互独立，避免「正则没匹配上 ⇒ 静默漏改」的 fail-open。
 var goModuleValue = regexp.MustCompile(`(?m)^[ \t]*module[ \t]+([^ \t\r\n]+)`)
+
+func baseName(name string) string { return "jimu_rewrite_" + name }
+
+type textEdit struct {
+	start, end int
+	text       string
+}
+
+func applyTextEdits(src string, edits []textEdit) string {
+	slices.SortFunc(edits, func(a, b textEdit) int { return b.start - a.start })
+	for _, edit := range edits {
+		src = src[:edit.start] + edit.text + src[edit.end:]
+	}
+	return src
+}
 
 // RewriteModule 在 root 下应用 rewriteRules：from 恒为 "jimu"，to 为模块路径，name = 产物名
 // （= path.Base(module) 规范化：小写、非 [a-z0-9-] 折叠为 "-"、去首尾 "-"）。
@@ -256,6 +272,10 @@ func modulePathCollides(to, name string) bool {
 	return applyRewriteRules(probe, to, name, nil) != probe
 }
 
+// ModulePathCollides exposes the fail-closed module path predicate to the
+// generator facade and its legacy framework helpers.
+func ModulePathCollides(to, name string) bool { return modulePathCollides(to, name) }
+
 // rewriteModuleDirective 把 go.mod 的 module 指令指向 to，保留行尾形态与行尾注释
 // （规则表的 "module jimu\n" 字面量只覆盖「LF + 尾换行 + 无注释」这一常见形态）。
 func rewriteModuleDirective(content, module string) string {
@@ -311,6 +331,9 @@ func isRewriteTarget(base string) bool {
 	return textExtensions[strings.ToLower(filepath.Ext(base))]
 }
 
+// IsRewriteTarget reports whether a file participates in module rewriting.
+func IsRewriteTarget(base string) bool { return isRewriteTarget(base) }
+
 // artifactName 把模块路径规范化为产物名：小写，非 [a-z0-9-] 折叠为 "-"，去首尾 "-"。
 func artifactName(module string) string {
 	var b strings.Builder
@@ -324,6 +347,10 @@ func artifactName(module string) string {
 	return strings.Trim(b.String(), "-")
 }
 
+// ArtifactName exposes the generated binary name derivation used by the
+// facade's validation path.
+func ArtifactName(module string) string { return artifactName(module) }
+
 func relPath(root, p string) string {
 	rel, err := filepath.Rel(root, p)
 	if err != nil {
@@ -331,3 +358,6 @@ func relPath(root, p string) string {
 	}
 	return filepath.ToSlash(rel)
 }
+
+// RelPath returns a stable slash-separated path relative to root.
+func RelPath(root, p string) string { return relPath(root, p) }

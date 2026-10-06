@@ -4,7 +4,7 @@
 
 **权威口径**：README「[质量门禁](../../../README.md#质量门禁)」、「[Makefile 命令](../../../README.md#makefile-命令)」、[docs/profiles/compose-report.md](../../../docs/profiles/compose-report.md)。
 
-## `make check-capabilities`：6 条汇总行逐条
+## `make check-capabilities`：7 条汇总行逐条
 
 输出是 6 行 `✅ check-capabilities: …`（每行对应一条断言；实现在 `tools/checkcapabilities`）：
 
@@ -16,6 +16,7 @@
 | ④ | 唯一入口与选点包只 import 一个形态 | `cmd/server` 只 import `internal/assembly` + 选点包；`internal/profiles/active` **恰好**选一个形态；两者都不得 import `internal/profiles/registry` | [capability.md](capability.md) / [profile-driver.md](profile-driver.md) |
 | ⑤ | 资产归属唯一且无未声明资产 | 声明路径非空/存在/在资产根内（`deploy/`、`docs/openapi/`）；同一路径不被两个所有者声明（归一化比较）；资产根下每个文件都有所有者；每个形态覆盖全部内核资产组 | README「[非代码资产归属（P2.6）](../../../README.md#非代码资产归属p26)」 |
 | ⑥ | 能力树仅 catalog 允许跨能力 import | 能力生产、测试和驱动子包只依赖本能力或 `internal/contract`；`catalog` 是唯一组合根 | README「[开发规范](../../../README.md#开发规范)」 |
+| ⑦ | 生成器核心只经 `frameworkmanifest` 读取框架内部包 | `tools/generator` 的 manifest、plan、render、workspace、report 等核心子包（含测试）不得 import `internal/capabilities`、`internal/profiles` 或 `internal/contract`；`frameworkmanifest` 是唯一适配层。生成项目不携带 `tools/generator`，自动跳过此仓库侧扫描 | README「[生成项目](../../../README.md#生成项目jimu-new--jimu-capability-add)」 |
 
 ## `make profiles-check`：形态构建 + golden 依赖闭包
 

@@ -202,6 +202,9 @@ func assertNoStaleModulePath(t *testing.T, root string) {
 			return nil
 		}
 		rel := relPath(root, p)
+		if rel == markerFile {
+			return nil
+		}
 		inRawDesc := false
 		for i, line := range strings.Split(string(content), "\n") {
 			wasRawDesc := inRawDesc
