@@ -197,6 +197,11 @@ queue:
 # Outbox 配置
 outbox:
   publisher: "event_bus"     # 发布器类型：event_bus（内存事件总线）, mq（消息队列跨服务发布）
+  retention:
+    enabled: false
+    cron: "30 3 * * *"
+    batch_size: 500
+    outbox_event_days: 7
 
 # 调度器配置
 scheduler:
