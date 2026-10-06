@@ -69,7 +69,6 @@ type AuthConfig struct {
 	LoginRateLimit, LoginRateWindowSec       int
 	RegisterRateLimit, RegisterRateWindowSec int
 	BreachCheckEnabled                       bool
-	TrustedDeviceDays                        int
 	Provisioning                             AuthProvisioningConfig
 	WebAuthn                                 AuthWebAuthnConfig
 }

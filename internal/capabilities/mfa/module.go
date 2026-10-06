@@ -58,6 +58,9 @@ var Descriptor = contract.Descriptor{
 		{Name: "可信设备全部注销", Resource: "/api/v1/auth/devices", Action: "DELETE"},
 		{Name: "可信设备注销", Resource: "/api/v1/auth/devices/*", Action: "DELETE"},
 	},
+	Configs: []contract.ConfigSpec{
+		{Section: ConfigKey, New: func() any { return &Settings{} }},
+	},
 }
 
 // Descriptor 实现 contract.Describable。

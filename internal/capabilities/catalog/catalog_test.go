@@ -334,6 +334,8 @@ func TestDescriptorPermissionsCoverBusinessRoutes(t *testing.T) {
 func TestCatalogConfigSectionsShape(t *testing.T) {
 	want := map[string][]string{
 		"auth":      {"auth"},
+		"dataops":   {"dataops"},
+		"mfa":       {"mfa"},
 		"captcha":   {"captcha"},
 		"audit":     {"audit"},
 		"oauth":     {"oauth"},

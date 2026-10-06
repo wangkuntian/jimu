@@ -15,9 +15,9 @@ func (c Config) PortView() contract.AuthConfig {
 		AccessExpireMin: c.AccessExpireMin, RefreshExpireDay: c.RefreshExpireDay, PublicRegistration: c.PublicRegistration,
 		LoginRateLimit: c.LoginRateLimit, LoginRateWindowSec: c.LoginRateWindowSec,
 		RegisterRateLimit: c.RegisterRateLimit, RegisterRateWindowSec: c.RegisterRateWindowSec,
-		BreachCheckEnabled: c.BreachCheckEnabled, TrustedDeviceDays: c.TrustedDeviceDays,
-		WebAuthn:     contract.AuthWebAuthnConfig{Enabled: c.WebAuthn.Enabled, RPDisplayName: c.WebAuthn.RPDisplayName, RPID: c.WebAuthn.RPID, RPOrigins: append([]string(nil), c.WebAuthn.RPOrigins...), SessionTTLMin: c.WebAuthn.SessionTTLMin},
-		Provisioning: contract.AuthProvisioningConfig{Enabled: c.Provisioning.Enabled, OwnerRole: c.Provisioning.OwnerRole}}
+		BreachCheckEnabled: c.BreachCheckEnabled,
+		WebAuthn:           contract.AuthWebAuthnConfig{Enabled: c.WebAuthn.Enabled, RPDisplayName: c.WebAuthn.RPDisplayName, RPID: c.WebAuthn.RPID, RPOrigins: append([]string(nil), c.WebAuthn.RPOrigins...), SessionTTLMin: c.WebAuthn.SessionTTLMin},
+		Provisioning:       contract.AuthProvisioningConfig{Enabled: c.Provisioning.Enabled, OwnerRole: c.Provisioning.OwnerRole}}
 	for _, r := range c.Provisioning.Roles {
 		pr := contract.AuthProvisionRole{Name: r.Name, Description: r.Description}
 		for _, p := range r.Permissions {
@@ -49,7 +49,6 @@ type Config struct {
 	RegisterRateWindowSec int                `mapstructure:"register_rate_window_sec"`
 	ResetCodeTTLMin       int                `mapstructure:"reset_code_ttl_min"`     // 密码重置验证码有效期（分钟）
 	PasswordHistoryCount  int                `mapstructure:"password_history_count"` // 防复用：检查最近 N 个历史密码（0=关闭）
-	TrustedDeviceDays     int                `mapstructure:"trusted_device_days"`    // 可信设备有效期（天，0=关闭「记住此设备」）
 	BreachCheckEnabled    bool               `mapstructure:"breach_check_enabled"`   // 泄露口令检查（HIBP k-匿名范围查询，默认关闭）
 	Provisioning          ProvisioningConfig `mapstructure:"provisioning"`           // 开通式注册（注册 = 开通新租户）
 	WebAuthn              WebAuthnConfig     `mapstructure:"webauthn"`               // WebAuthn/通行密钥（无密码登录）
