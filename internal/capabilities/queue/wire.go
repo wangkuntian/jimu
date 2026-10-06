@@ -16,6 +16,11 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 		if err := EnsureRegistered(cfg.Type); err != nil {
 			return nil, err
 		}
+		if job, ok := newQueueRetentionJob(ctx.DB(), cfg.Retention, ctx.Logger()); ok {
+			if err := ctx.RegisterJob(job); err != nil {
+				return nil, err
+			}
+		}
 	}
 	factory := &outboxMQFactory{db: ctx.DB(), newQueue: New, registerComponent: ctx.RegisterComponent}
 	if cfg != nil {

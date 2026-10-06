@@ -186,6 +186,13 @@ queue:
     url: "amqp://guest:guest@127.0.0.1:5672/"
     queue: "jimu-jobs"
     exchange: ""
+  retention:
+    enabled: false
+    cron: "30 3 * * *"
+    batch_size: 500
+    job_days: 7
+    job_history_days: 30
+    dead_letter_days: 30
 
 # Outbox 配置
 outbox:
