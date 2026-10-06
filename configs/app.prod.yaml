@@ -187,6 +187,13 @@ upload:
     timeout_sec: 10           # 单次扫描超时（秒）
 
 # 队列配置
+dataops:
+  retention:
+    enabled: false
+    cron: "30 3 * * *"
+    batch_size: 500
+    import_job_days: 90
+
 queue:
   type: "redis"           # 队列类型：redis, kafka, rabbitmq
   # Kafka 队列配置（type=kafka 时使用；容器接线由后续 Plan 2 实现）

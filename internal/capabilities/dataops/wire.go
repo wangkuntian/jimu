@@ -11,6 +11,12 @@ import (
 
 // Wire 装配数据导入导出能力：返回用户导入管理端模块（/api/v1/admin/users/import*）。
 func Wire(ctx *assembly.Context) (contract.Module, error) {
+	cfg := assembly.MustSectionValue[Config](ctx, ConfigKey)
+	if job, ok := newDataopsRetentionJob(ctx.DB(), cfg.Retention, ctx.Logger()); ok {
+		if err := ctx.RegisterJob(job); err != nil {
+			return nil, err
+		}
+	}
 	// 驱动级可插拔（设计 §3.7）：打印本构建编入的导入/导出格式，便于诊断「格式未编译」类错误。
 	// 值渲染为标量字符串（logcheck R4 禁 slice）；key 取标准词汇表（names）以避免 R3 告警。
 	ctx.Logger().Infow("dataops import formats compiled", "names", formatNames(importer.RegisteredFormats()))
