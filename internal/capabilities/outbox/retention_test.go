@@ -31,6 +31,25 @@ func TestOutboxRetentionPreservesUnpublishedEvents(t *testing.T) {
 	assert.Equal(t, uint64(2), remaining[0].ID)
 }
 
+func TestOutboxRetentionUsesPublishedAt(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&Event{}))
+	old := time.Now().AddDate(0, 0, -100)
+	recent := time.Now().AddDate(0, 0, -1)
+	require.NoError(t, db.Create(&Event{ID: 1, CreatedAt: old, PublishedAt: &old}).Error)
+	require.NoError(t, db.Create(&Event{ID: 2, CreatedAt: old, PublishedAt: &recent}).Error)
+
+	results, err := dbpurge.New(db, 10).Run(context.Background(), outboxRetentionRules(RetentionConfig{EventDays: 30}))
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, int64(1), results[0].Deleted)
+	var remaining []Event
+	require.NoError(t, db.Find(&remaining).Error)
+	require.Len(t, remaining, 1)
+	assert.Equal(t, uint64(2), remaining[0].ID)
+}
+
 func TestOutboxRetentionJobDefaultsAndGate(t *testing.T) {
 	if _, ok := newOutboxRetentionJob(&gorm.DB{}, RetentionConfig{}, nil); ok {
 		t.Fatal("disabled retention must not register a job")

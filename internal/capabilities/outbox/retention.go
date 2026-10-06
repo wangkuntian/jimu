@@ -35,7 +35,7 @@ func outboxRetentionRules(cfg RetentionConfig) []dbpurge.Rule {
 	return []dbpurge.Rule{{
 		Table:      "outbox_events",
 		Model:      &Event{},
-		TimeColumn: "created_at",
+		TimeColumn: "published_at",
 		Condition:  "published_at IS NOT NULL",
 		Days:       cfg.EventDays,
 	}}

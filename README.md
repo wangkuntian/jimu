@@ -1004,7 +1004,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `ratelimit.tenant.enabled` / `ratelimit.tenant.limit` / `ratelimit.tenant.window_sec` | 租户维度限流开关 / 窗口内请求上限 / 窗口秒数（平台级视角 `tid=0` 跳过，Redis 异常 fail-open） | `false` / `6000` / `60` |
 | `audit.retention.enabled` / `cron` / `batch_size` / `audit_log_days` | 审计清理开关 / 调度 / 每批删除行数 / 未哈希旧审计记录保留天数（哈希链记录始终保留；0=不清理） | `false` / `30 3 * * *` / `500` / `180` |
 | `queue.retention.enabled` / `cron` / `batch_size` / `job_days` / `job_history_days` / `dead_letter_days` | 队列清理开关 / 调度 / 每批删除行数 / 终态任务、任务历史、已处理死信保留天数（0=不清理） | `false` / `30 3 * * *` / `500` / `7` / `30` / `30` |
-| `outbox.retention.enabled` / `cron` / `batch_size` / `outbox_event_days` | Outbox 清理开关 / 调度 / 每批删除行数 / 已发布事件保留天数（0=不清理） | `false` / `30 3 * * *` / `500` / `7` |
+| `outbox.retention.enabled` / `cron` / `batch_size` / `outbox_event_days` | Outbox 清理开关 / 调度 / 每批删除行数 / 从发布时间起计算的事件保留天数（0=不清理） | `false` / `30 3 * * *` / `500` / `7` |
 | `dataops.retention.enabled` / `cron` / `batch_size` / `import_job_days` | 导入记录清理开关 / 调度 / 每批删除行数 / 已结束导入任务保留天数（0=不清理） | `false` / `30 3 * * *` / `500` / `90` |
 | `http.tls.enabled` / `http.tls.cert_file` / `http.tls.key_file` / `http.tls.client_ca_file` | HTTP 服务端 TLS；`client_ca_file` 非空时启用 mTLS（要求并校验客户端证书） | `false` / — / — / — |
 | `grpc.tls.*` | gRPC 服务端 TLS/mTLS，字段与 `http.tls` 同构 | `false` |

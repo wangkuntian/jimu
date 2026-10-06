@@ -78,7 +78,7 @@ func TestOutboxRetentionRulesOwnPublishedEvents(t *testing.T) {
 	rules := outboxRetentionRules(RetentionConfig{EventDays: 7})
 	require.Len(t, rules, 1)
 	assert.Equal(t, "outbox_events", rules[0].Table)
-	assert.Equal(t, "created_at", rules[0].TimeColumn)
+	assert.Equal(t, "published_at", rules[0].TimeColumn)
 	assert.Equal(t, "published_at IS NOT NULL", rules[0].Condition)
 	assert.Equal(t, 7, rules[0].Days)
 }
