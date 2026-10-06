@@ -494,7 +494,7 @@
   ],
   "templates": [
     {
-      "source": "tools/generator/templates/project/Makefile.tmpl",
+      "source": "tools/generator/render/templates/project/Makefile.tmpl",
       "destination": "Makefile",
       "kind": "build",
       "data": {
@@ -504,7 +504,7 @@
       }
     },
     {
-      "source": "tools/generator/templates/project/Dockerfile.tmpl",
+      "source": "tools/generator/render/templates/project/Dockerfile.tmpl",
       "destination": "Dockerfile",
       "kind": "build",
       "data": {
@@ -514,7 +514,7 @@
       }
     },
     {
-      "source": "tools/generator/templates/project/check_profiles.sh.tmpl",
+      "source": "tools/generator/render/templates/project/check_profiles.sh.tmpl",
       "destination": "scripts/check_profiles.sh",
       "kind": "build",
       "data": {
@@ -524,7 +524,7 @@
       }
     },
     {
-      "source": "tools/generator/templates/project/registry.go.tmpl",
+      "source": "tools/generator/render/templates/project/registry.go.tmpl",
       "destination": "internal/profiles/registry/registry.go",
       "kind": "shape",
       "data": {
@@ -560,7 +560,7 @@
       }
     },
     {
-      "source": "tools/generator/templates/project/assembly.go.tmpl",
+      "source": "tools/generator/render/templates/project/assembly.go.tmpl",
       "destination": "internal/profiles/app/assembly.go",
       "kind": "shape",
       "data": {
@@ -596,7 +596,7 @@
       }
     },
     {
-      "source": "tools/generator/templates/project/drivers.go.tmpl",
+      "source": "tools/generator/render/templates/project/drivers.go.tmpl",
       "destination": "internal/profiles/app/drivers.go",
       "kind": "shape",
       "data": {
@@ -632,7 +632,7 @@
       }
     },
     {
-      "source": "tools/generator/templates/project/active.go.tmpl",
+      "source": "tools/generator/render/templates/project/active.go.tmpl",
       "destination": "internal/profiles/active/assembly.go",
       "kind": "shape",
       "data": {
@@ -640,7 +640,7 @@
       }
     },
     {
-      "source": "tools/generator/templates/project/catalog.go.tmpl",
+      "source": "tools/generator/render/templates/project/catalog.go.tmpl",
       "destination": "internal/capabilities/catalog/catalog.go",
       "kind": "catalog",
       "data": {
@@ -713,7 +713,7 @@
       }
     },
     {
-      "source": "tools/generator/templates/project/catalog_migration.go.tmpl",
+      "source": "tools/generator/render/templates/project/catalog_migration.go.tmpl",
       "destination": "internal/capabilities/catalog/migration.go",
       "kind": "catalog",
       "data": {
@@ -786,7 +786,7 @@
       }
     },
     {
-      "source": "tools/generator/templates/project/compose_spec.go.tmpl",
+      "source": "tools/generator/render/templates/project/compose_spec.go.tmpl",
       "destination": "tools/composereport/manifest_spec.go",
       "kind": "report",
       "data": null
@@ -800,7 +800,7 @@
       }
     },
     {
-      "source": "tools/generator/templates/project/migration_module.go.tmpl",
+      "source": "tools/generator/render/templates/project/migration_module.go.tmpl",
       "destination": "internal/capabilities/tenant/module.go",
       "kind": "migration-module",
       "data": {
@@ -1466,5 +1466,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:ae6a152cddc9e1709c2ebfdcffa311f20ff724f02cffee953e47b0dcbf36b87d"
+  "digest": "sha256:49e2c9e09ade01b933e96c0e2f97b07ad091216c51e0208a587709a31c68ffcb"
 }

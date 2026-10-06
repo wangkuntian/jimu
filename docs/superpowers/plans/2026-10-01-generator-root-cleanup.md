@@ -29,11 +29,11 @@
 
 **步骤：**
 
-- [ ] 将 `GenerateModule`、`GenerateModuleAt` 及其私有预检、渲染、写入和回滚函数迁入 `module` 包。
-- [ ] 将模块骨架模板迁入 `module/templates`，用独立 `go:embed` 和渲染函数读取。
-- [ ] 根包的同名函数改为委托 `module` 包，CLI 和原有外部调用不变。
-- [ ] 将模块单测迁到 `module` 包；为根包保留 golden/compile 测试所需的最小测试仓库 helper。
-- [ ] 运行聚焦测试并提交 `refactor(generator): isolate module scaffolder`。
+- [x] 将 `GenerateModule`、`GenerateModuleAt` 及其私有预检、渲染、写入和回滚函数迁入 `module` 包。
+- [x] 将模块骨架模板迁入 `module/templates`，用独立 `go:embed` 和渲染函数读取。
+- [x] 根包的同名函数改为委托 `module` 包，CLI 和原有外部调用不变。
+- [x] 将模块单测迁到 `module` 包；为根包保留 golden/compile 测试所需的最小测试仓库 helper。
+- [x] 运行聚焦测试并提交 `refactor(generator): isolate module scaffolder`。
 
 ### Task 2：迁移通用生成器支持原语
 
@@ -46,10 +46,10 @@
 
 **步骤：**
 
-- [ ] 将四组实现迁入 `support`，保持错误文本、路径处理、环境变量和回滚相关行为不变。
-- [ ] 根包提供同签名的薄包装，避免旧测试和内部兼容调用改变。
-- [ ] 将原语单测靠近 `support` 包，保留根包集成测试覆盖 facade 委托。
-- [ ] 运行聚焦测试并提交 `refactor(generator): isolate support primitives`。
+- [x] 将四组实现迁入 `support`，保持错误文本、路径处理、环境变量和回滚相关行为不变。
+- [x] 根包提供同签名的薄包装，避免旧测试和内部兼容调用改变。
+- [x] 将原语单测靠近 `support` 包，保留根包集成测试覆盖 facade 委托。
+- [x] 运行聚焦测试并提交 `refactor(generator): isolate support primitives`。
 
 ### Task 3：收拢模板引擎与文档
 
@@ -62,11 +62,11 @@
 
 **步骤：**
 
-- [ ] 让 `render` 包拥有模板 `embed`、枚举、读取和文本渲染实现。
-- [ ] 根包保留同签名包装，现有构建文件和旧模板调用保持可用。
-- [ ] 将框架模板源路径统一到 `tools/generator/render/templates/project`，刷新受影响的 manifest fixture。
-- [ ] README 增加生成器目录职责树，release note 说明根包 facade 与职责子包的最终边界。
-- [ ] 运行完整生成器测试、门禁与文档检查，提交 `docs(v0.3.3): document generator package layout`。
+- [x] 让 `render` 包拥有模板 `embed`、枚举、读取和文本渲染实现。
+- [x] 根包保留同签名包装，现有构建文件和旧模板调用保持可用。
+- [x] 将框架模板源路径统一到 `tools/generator/render/templates/project`，刷新受影响的 manifest fixture。
+- [x] README 增加生成器目录职责树，release note 说明根包 facade 与职责子包的最终边界。
+- [x] 运行完整生成器测试、门禁与文档检查，提交 `docs(v0.3.3): document generator package layout`。
 
 ### Task 4：全量验证
 

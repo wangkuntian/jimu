@@ -516,7 +516,15 @@ jimu/
 │   ├── profileassets/            # 打印某形态的非代码资产清单（go run ./tools/profileassets <profile>；-capabilities 列能力名）
 │   ├── internal/profileoverlay/  # overlay 模板与产物路径的共享实现（工具、门禁与报告同一份）
 │   ├── internal/profileassets/   # 资产归属派生（能力 Assets + 内核资产组 + 最长前缀；门禁与查询工具同一份）
-│   ├── generator/                # 代码生成器
+│   ├── generator/                # 代码生成器 facade 与框架编排
+│   │   ├── manifest/             # JSON manifest 模型、校验与 digest
+│   │   ├── frameworkmanifest/    # catalog/profile/Descriptor 到 manifest 的唯一适配层
+│   │   ├── plan/                 # manifest 到确定性执行计划
+│   │   ├── render/               # 计划执行、模板 embed 与文本渲染
+│   │   ├── workspace/            # 暂存、原子换入与增量更新
+│   │   ├── report/               # 框架无关的生成项目度量
+│   │   ├── module/               # capability create 模块骨架与专属模板
+│   │   └── support/              # 文件复制、module 重写、tidy 与生成项目自检
 │   └── logcheck/                 # 日志调用规范静态检查（make check-log-usage）
 ├── .github/                    # GitHub Actions + Dependabot
 ├── Makefile

@@ -134,16 +134,16 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 	catalogData := catalogTemplateData(selected)
 	cliData := map[string]any{"CLIImports": cliImports(root, selected)}
 	actions := []manifest.TemplateAction{
-		{Source: "tools/generator/templates/project/Makefile.tmpl", Destination: "Makefile", Kind: "build", Data: buildData},
-		{Source: "tools/generator/templates/project/Dockerfile.tmpl", Destination: "Dockerfile", Kind: "build", Data: buildData},
-		{Source: "tools/generator/templates/project/check_profiles.sh.tmpl", Destination: "scripts/check_profiles.sh", Kind: "build", Data: buildData},
-		{Source: "tools/generator/templates/project/registry.go.tmpl", Destination: "internal/profiles/registry/registry.go", Kind: "shape", Data: shapeData},
-		{Source: "tools/generator/templates/project/assembly.go.tmpl", Destination: filepath.ToSlash(filepath.Join("internal/profiles", selected.shape, "assembly.go")), Kind: "shape", Data: shapeData},
-		{Source: "tools/generator/templates/project/drivers.go.tmpl", Destination: filepath.ToSlash(filepath.Join("internal/profiles", selected.shape, "drivers.go")), Kind: "shape", Data: shapeData},
-		{Source: "tools/generator/templates/project/active.go.tmpl", Destination: "internal/profiles/active/assembly.go", Kind: "shape", Data: map[string]any{"Shape": selected.shape}},
-		{Source: "tools/generator/templates/project/catalog.go.tmpl", Destination: "internal/capabilities/catalog/catalog.go", Kind: "catalog", Data: catalogData},
-		{Source: "tools/generator/templates/project/catalog_migration.go.tmpl", Destination: "internal/capabilities/catalog/migration.go", Kind: "catalog", Data: catalogData},
-		{Source: "tools/generator/templates/project/compose_spec.go.tmpl", Destination: "tools/composereport/manifest_spec.go", Kind: "report"},
+		{Source: "tools/generator/render/templates/project/Makefile.tmpl", Destination: "Makefile", Kind: "build", Data: buildData},
+		{Source: "tools/generator/render/templates/project/Dockerfile.tmpl", Destination: "Dockerfile", Kind: "build", Data: buildData},
+		{Source: "tools/generator/render/templates/project/check_profiles.sh.tmpl", Destination: "scripts/check_profiles.sh", Kind: "build", Data: buildData},
+		{Source: "tools/generator/render/templates/project/registry.go.tmpl", Destination: "internal/profiles/registry/registry.go", Kind: "shape", Data: shapeData},
+		{Source: "tools/generator/render/templates/project/assembly.go.tmpl", Destination: filepath.ToSlash(filepath.Join("internal/profiles", selected.shape, "assembly.go")), Kind: "shape", Data: shapeData},
+		{Source: "tools/generator/render/templates/project/drivers.go.tmpl", Destination: filepath.ToSlash(filepath.Join("internal/profiles", selected.shape, "drivers.go")), Kind: "shape", Data: shapeData},
+		{Source: "tools/generator/render/templates/project/active.go.tmpl", Destination: "internal/profiles/active/assembly.go", Kind: "shape", Data: map[string]any{"Shape": selected.shape}},
+		{Source: "tools/generator/render/templates/project/catalog.go.tmpl", Destination: "internal/capabilities/catalog/catalog.go", Kind: "catalog", Data: catalogData},
+		{Source: "tools/generator/render/templates/project/catalog_migration.go.tmpl", Destination: "internal/capabilities/catalog/migration.go", Kind: "catalog", Data: catalogData},
+		{Source: "tools/generator/render/templates/project/compose_spec.go.tmpl", Destination: "tools/composereport/manifest_spec.go", Kind: "report"},
 		{Source: "cmd/cli/main.go", Destination: "cmd/cli/main.go", Kind: "cli", Data: cliData},
 	}
 	all, _ := allDescriptors()
@@ -154,7 +154,7 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 			continue
 		}
 		actions = append(actions, manifest.TemplateAction{
-			Source:      "tools/generator/templates/project/migration_module.go.tmpl",
+			Source:      "tools/generator/render/templates/project/migration_module.go.tmpl",
 			Destination: filepath.ToSlash(filepath.Join("internal/capabilities", name, "module.go")),
 			Kind:        "migration-module",
 			Data: map[string]any{
