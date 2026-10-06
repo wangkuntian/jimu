@@ -783,7 +783,7 @@ Expected: PASS
 **Files:**
 - Modify: `README.md`（能力清单章节：`SoftRequires`/`Owns` 语义、`make check-capabilities`、`/capabilities` 管理端点）
 - Modify: `docs/design/2026-09-18-capability-plugins-design.md`（§10 标记 P2.2/P2.3 完成）
-- Modify: `docs/plans/2026-09-21-p2-three-layer-mechanism.md`（P2.2/P2.3 状态与裁定记录）
+- Modify: `docs/superpowers/plans/2026-09-21-p2-three-layer-mechanism.md`（P2.2/P2.3 状态与裁定记录）
 - Modify: `docs/releases/v0.3.0.md`（变更条目 + 验证结果）
 
 - [ ] **Step 1: 文档更新**（上述四处，键与语义照 Task 1–5 的最终实现写）

@@ -189,7 +189,7 @@
 > 只 import 已声明驱动 —— 末项是「新增驱动目录 + blank import 却忘声明」的唯一捕获点：该场景对
 > 集合比较不可见，未声明项被 `available` 过滤），`make compose-report` 新增「重型依赖」列；两道门禁
 > 已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job（**P2.8 已收口**，见
-> [`docs/plans/2026-09-21-p2-three-layer-mechanism.md`](../plans/2026-09-21-p2-three-layer-mechanism.md) 的 P2.8 记录）。
+> [`docs/superpowers/plans/2026-09-21-p2-three-layer-mechanism.md`](../superpowers/plans/2026-09-21-p2-three-layer-mechanism.md) 的 P2.8 记录）。
 >
 > **实测闭包计数**（当时对形态入口包逐个 `go list -deps` 计数）：`full` = aws-sdk-go-v2 67 /
 > excelize 1 / kafka-go 49 / amqp091-go 1；`enterprise` 与 `minimal`/`saas`/`machine` 四类均为 0
@@ -202,7 +202,7 @@
 > 实现），驱动包 `dataops/excel` 仍注册导出方向供将来端点接入。govulncheck 的 `GO-2026-6452` 豁免
 > **保留**：拆包不解除可达性（`govulncheck ./...` 扫整个 module，`full` 仍 import Excel 驱动），
 > 复核条件改为「excelize 发布 v2.11.1（或含 rows.go 负索引防护的正式版本）后移除」。执行记录见
-> [`docs/plans/2026-09-22-p2.5-driver-pluggability.md`](../plans/2026-09-22-p2.5-driver-pluggability.md)。
+> [`docs/superpowers/plans/2026-09-22-p2.5-driver-pluggability.md`](../superpowers/plans/2026-09-22-p2.5-driver-pluggability.md)。
 
 ### 3.8 非代码资产模块化
 
@@ -274,7 +274,7 @@
 > **全部 0 FAIL**。`configs/*.yaml` 逐字节不变、catalog 仍 18 项、`go.mod` 未动；渲染
 > （`values.yaml`/`configs/app.yaml` 按能力裁剪、生成项目里未选中资产不出现、生成项目的 CLI 裁剪）
 > 明确留 **P2.7**；门禁**已接入** `make ci`/`release-check` 与 CI 的 `Capability Gates` job（P2.8 收口）。执行记录见
-> [`docs/plans/2026-09-23-p2.6-assets-and-conditionals.md`](../plans/2026-09-23-p2.6-assets-and-conditionals.md)。
+> [`docs/superpowers/plans/2026-09-23-p2.6-assets-and-conditionals.md`](../superpowers/plans/2026-09-23-p2.6-assets-and-conditionals.md)。
 
 ## 4. 边界规则与现状违反
 
@@ -427,7 +427,7 @@ profiles/
 > 开发者可见的行为变更：以形态入口 `main` 包（旧 `profiles/<name>/main.go`）为构建目标不再可用，替代是
 > `PROFILE=<name> make build-server`（产物 `bin/jimu-server[-<name>]`，`full` 仍是 `bin/jimu-server`）或
 > `docker build --build-arg PROFILE=<name>`。执行记录见
-> [`docs/plans/2026-09-23-p2.5b-unified-entry.md`](../plans/2026-09-23-p2.5b-unified-entry.md)。
+> [`docs/superpowers/plans/2026-09-23-p2.5b-unified-entry.md`](../superpowers/plans/2026-09-23-p2.5b-unified-entry.md)。
 
 ### 6.4 层③ 运行时
 
@@ -486,8 +486,8 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > `auth`，其 JWT/开通模板参数由组合根装配期传递。非 catalog 包（`storage`/`notification`/
 > `retention`）的段暂由组合根显式加载，**是否 catalogize 是 P2.2 的决定点**（P2.2 裁定推迟到
 > P2.5/P2.6，见下条）。子阶段拆分与执行
-> 记录见 [`docs/plans/2026-09-21-p2-three-layer-mechanism.md`](../plans/2026-09-21-p2-three-layer-mechanism.md)
-> 与 [`docs/plans/2026-09-21-config-ownership.md`](../plans/2026-09-21-config-ownership.md)。
+> 记录见 [`docs/superpowers/plans/2026-09-21-p2-three-layer-mechanism.md`](../superpowers/plans/2026-09-21-p2-three-layer-mechanism.md)
+> 与 [`docs/superpowers/plans/2026-09-21-config-ownership.md`](../superpowers/plans/2026-09-21-config-ownership.md)。
 >
 > **P2 进展（P2.2 能力自描述契约 + P2.3 层③ 运行时已完成）**：§6.1 的自描述契约落地 ——
 > `contract.Descriptor` 新增 `SoftRequires`（可选依赖：目标缺失只降级，**不自动补齐、不参与拓扑序**）
@@ -510,7 +510,7 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > `storage`/`notification`/`retention`/`ws`/`grpc`/`apidocs`/`encryption` 本轮保持**非 catalog**、
 > 由组合根显式装配（能力清单仍为 18 项，`configs/*.yaml` 零改动），是否 catalogize 连同 profile
 > 入口包一起在 **P2.5/P2.6** 定夺（与 P2.1 的裁定 2B 一致）。执行记录见
-> [`docs/plans/2026-09-22-p2-contract-and-runtime.md`](../plans/2026-09-22-p2-contract-and-runtime.md)。
+> [`docs/superpowers/plans/2026-09-22-p2-contract-and-runtime.md`](../superpowers/plans/2026-09-22-p2-contract-and-runtime.md)。
 >
 > **P2 进展（P2.4 层② 构建已完成）**：§6.3 的 profile 入口包与 `compose-report` 落地 ——
 > ⚠️ **本块的「5 个入口 `profiles/{full,minimal,saas,enterprise,machine}`」已被 P2.5b 取代**：
@@ -536,7 +536,7 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > P2.6/P2.7 §3.8）；迁移与结构种子仍按 catalog 全量清单执行，profile 驱动的迁移裁剪已在 P2.6 完成；`user`/`auth` 直接 import `outbox`/`queue`/`notification`/`ws` 的具体类型，导致
 > `minimal`/`saas`/`machine`/`enterprise` 闭包里留有这些能力的**编译期残留**（装配期一个都不
 > 构造），已由 golden 闭包门禁冻结，消除它们需把这些共享类型迁到 `contract`/内核。执行记录见
-> [`docs/plans/2026-09-21-p2-three-layer-mechanism.md`](../plans/2026-09-21-p2-three-layer-mechanism.md)
+> [`docs/superpowers/plans/2026-09-21-p2-three-layer-mechanism.md`](../superpowers/plans/2026-09-21-p2-three-layer-mechanism.md)
 > 的 P2.4 段。
 >
 > **P2 进展（P2.5 驱动级可插拔已完成）**：§3.7 落地 —— `storage`/`queue`/`dataops` 的第三方驱动
@@ -550,7 +550,7 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > `enterprise` 闭包的 `kafka-go`/`amqp091-go` 残留消失，`enterprise` 去掉 `aws-sdk-go-v2`（67 包）
 > 与 `excelize`。`GO-2026-6452` 豁免保留（拆包不解除可达性，复核条件 excelize ≥ v2.11.1）。
 > 机制细节与实测数字见 §3.7 的 P2.5 进展块；执行记录见
-> [`docs/plans/2026-09-22-p2.5-driver-pluggability.md`](../plans/2026-09-22-p2.5-driver-pluggability.md)。
+> [`docs/superpowers/plans/2026-09-22-p2.5-driver-pluggability.md`](../superpowers/plans/2026-09-22-p2.5-driver-pluggability.md)。
 >
 > **P2 进展（P2.5b 单一入口与构建期形态参数化已完成）**：层②入口从 5 个
 > `profiles/<name>/main.go` 收敛为**唯一入口 `cmd/server`** —— `cmd/server/main.go` 只 import
@@ -564,7 +564,7 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > 编译面口径不变：`full` 闭包 118 个重型依赖包、四个轻形态 0；`minimal` 84.7 MB vs `full` 123.1 MB
 > （仅本仓文件 +1、代码行 +25/+30 来自入口文件差异）。**驱动参数化仅限形态级**，`DRIVERS=` 式形态内
 > 选择留后续阶段。执行记录见
-> [`docs/plans/2026-09-23-p2.5b-unified-entry.md`](../plans/2026-09-23-p2.5b-unified-entry.md)。
+> [`docs/superpowers/plans/2026-09-23-p2.5b-unified-entry.md`](../superpowers/plans/2026-09-23-p2.5b-unified-entry.md)。
 >
 > **P2 进展（P2.6 非代码资产模块化与形态条件化已完成）**：§3.8 落地 ——
 > `contract.Descriptor.Assets` + 内核资产组 `ops`/`observability` + **最长前缀**归属（共享派生
@@ -583,7 +583,7 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > 因此**结构种子在所有形态都照常执行**，不含 `tenant` 的形态也会建出 `tenants`/`tenant_plans` 与
 > `tenant_id` 列（装配集仍不含 tenant，不挂路由、不 seed 额外数据）；`apidocs` 缺失时 swagger 目标 SKIP。`configs/*.yaml` 逐字节不变、catalog 仍 18 项；渲染归
 > P2.7、门禁接入 CI 已在 P2.8 收口。机制细节与实测数字见 §3.8 的 P2.6 进展块；执行记录见
-> [`docs/plans/2026-09-23-p2.6-assets-and-conditionals.md`](../plans/2026-09-23-p2.6-assets-and-conditionals.md)。
+> [`docs/superpowers/plans/2026-09-23-p2.6-assets-and-conditionals.md`](../superpowers/plans/2026-09-23-p2.6-assets-and-conditionals.md)。
 > **P2.7 进展（层① 脚手架已完成）**：§6.2 的出货口落地 —— `jimu new <dir> --profile=<name>` /
 > `--with=a,b[:drv]` 在任意目标目录生成**只含选中能力**、可构建可迁移可门禁的单体项目，
 > `jimu capability add <name>` 在已生成项目上增量追加能力（确定性重渲染，幂等）。落地口径：
@@ -619,7 +619,7 @@ P0 完成后即可供其他 feature 分支并行开发，P1–P3 逐步收敛。
 > 逐字节不变、catalog 仍 18 项、`go.mod` 不减小、5 形态路由数不变、`make compose-report` 输出逐字节
 > 不变。**行为变更**：新增 `jimu new` / `jimu capability add` 两条命令（生成项目是本仓结构的子集，
 > `configs/app.yaml` 按能力渲染，未选中能力目录/驱动/资产/段零出现）。执行记录见
-> [`docs/plans/2026-09-24-p2.7-scaffolding.md`](../plans/2026-09-24-p2.7-scaffolding.md)。
+> [`docs/superpowers/plans/2026-09-24-p2.7-scaffolding.md`](../superpowers/plans/2026-09-24-p2.7-scaffolding.md)。
 > ⚠️ **P2.6 已落地**：上方 P2.4 段落里的「迁移与结构种子仍按 catalog 全量清单执行」是**当时的**限制说明（保留原文）—— 迁移自 P2.6 起跟随编译期形态并**带上 schema 依赖**（`user`/`access` → `tenant`，整分支审查 C1），结构种子在各形态都照常执行，见 §3.8 的 P2.6 进展块。
 
 ## 11. 风险与取舍

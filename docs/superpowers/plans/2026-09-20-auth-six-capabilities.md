@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go 1.26 · goose v3.27.3（Provider + WithTableName）· gorm · sqlmock · testify · miniredis · go-webauthn
 
-**Spec:** `docs/design/2026-09-18-capability-plugins-design.md` §5.1（六能力去向表）、§5.4（tenancy=开通式注册；本计划裁定 #2 保留能力名 `tenant`）、§6.1（Descriptor）、§7（迁移归属）、§10（P1.6 行）；`docs/plans/2026-09-20-capability-seed-migrations.md` 裁定 #2（表归属：004 留 user 待 P1.6、013 归 mfa、011/012 留 auth、015 归 passkey）
+**Spec:** `docs/design/2026-09-18-capability-plugins-design.md` §5.1（六能力去向表）、§5.4（tenancy=开通式注册；本计划裁定 #2 保留能力名 `tenant`）、§6.1（Descriptor）、§7（迁移归属）、§10（P1.6 行）；`docs/superpowers/plans/2026-09-20-capability-seed-migrations.md` 裁定 #2（表归属：004 留 user 待 P1.6、013 归 mfa、011/012 留 auth、015 归 passkey）
 
 ## Global Constraints
 

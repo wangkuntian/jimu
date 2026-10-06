@@ -24,7 +24,7 @@ P2.8 门禁（§9）：四道 check-*            ← 已完成（四道门禁在
 
 ## P2.1 运行时配置归属（已完成）
 
-详见 `docs/plans/2026-09-21-config-ownership.md`（含执行记录与完成记录）。
+详见 `docs/superpowers/plans/2026-09-21-config-ownership.md`（含执行记录与完成记录）。
 
 - **已完成**：机制（`contract.ConfigSpec`/`Descriptor.Configs` + `app.LoadCapabilityConfigs`，prod 加严走可选 `ValidateProd`）；14 个段全部下沉 —— catalog 能力段 `auth`/`captcha`/`audit`/`oauth`/`queue`+`scheduler`/`outbox`/`uploadsec` 经 `Descriptor.Configs` 按启用集加载，非 catalog 包段 `storage`/`notification`（`email`+`sms`+`notification`）/`retention` 由组合根显式加载；`configs/*.yaml` 全程零改动。
 - **已完成（auth 段）**：按 §8 ¶2 **不拆段** —— `auth.Config` 拥有整个 `auth` 段（含嵌套 `webauthn`/`provisioning`）。`passkey`/`oauth` 收 `auth.Config`（`Requires` 含 auth）；`tenant` 由 `main` 构造自有的 `ProvisioningConfig`（auth 依赖 tenant，反向 import 越界）；`mfa` 改装配期传参（`Requires user`，不 import auth）。`provisioning.enabled`→`public_registration` 跨字段校验留在组合根；`jwt_secret` 的 prod 加严走 `ValidateProd` 钩子（`APP_ENV=prod` 时由 `LoadCapabilityConfigs` 按类型断言调用，已有装配级回归用例覆盖）。
@@ -33,7 +33,7 @@ P2.8 门禁（§9）：四道 check-*            ← 已完成（四道门禁在
 
 ## P2.2 能力自描述契约（§6.1）（已完成）
 
-执行记录见 `docs/plans/2026-09-22-p2-contract-and-runtime.md`。
+执行记录见 `docs/superpowers/plans/2026-09-22-p2-contract-and-runtime.md`。
 
 - **已完成**：`contract.Descriptor` 新增 `SoftRequires` / `Owns`（`Config` 在 P2.1 建立）。`Descriptor` 是能力元数据的唯一来源：启用闭包、配置段加载、权限点种子、路由挂载与能力门禁都只读它。**不改名为 `Capability`、`Migrations` 保持 `fs.FS`**（embed 进二进制的形态不动，改名/换形态没有收益）。
 - **已完成**：18 个能力逐个补声明 —— `Owns` 按 §7 表归属、逐条对齐迁移里 `CREATE TABLE` 的实际表名（13 个能力有表、5 个无表：`console`/`captcha`/`feature`/`uploadsec`/`breach`）。有表能力：`user`→`users`；`access`→`roles`/`permissions`/`role_permissions`/`user_roles`；`tenant`→`tenants`/`tenant_plans`；`audit`→`audit_logs`/`audit_chain_head`；`apikey`→`api_keys`；`queue`→`jobs`/`job_history`/`dead_letters`/`scheduled_jobs`；`dataops`→`import_jobs`；`search`→`search_documents`；`auth`→`login_histories`/`password_histories`；`mfa`→`user_mfa`/`trusted_devices`；`passkey`→`webauthn_credentials`；`oauth`→`user_oauth_bindings`；`outbox`→`outbox_events`。`SoftRequires` 取实际软依赖：`user`→`access`/`tenant`、`access`→`tenant`、`mfa`→`auth`、`auth`→`captcha`/`breach`、`apikey`→`tenant`、`outbox`→`queue`。
@@ -63,7 +63,7 @@ P2.8 门禁（§9）：四道 check-*            ← 已完成（四道门禁在
 
 ## P2.5 层② 驱动级可插拔（§3.7）（已完成）
 
-执行记录见 `docs/plans/2026-09-22-p2.5-driver-pluggability.md`。
+执行记录见 `docs/superpowers/plans/2026-09-22-p2.5-driver-pluggability.md`。
 
 - **已完成（机制）**：`storage/{local,s3}`、`queue/{redis,kafka,rabbitmq}`、`dataops/{csv,excel}` 各为独立驱动包，包内 `init()` 调用能力核心的 `Register`；核心只留接口 + 注册表（`New`/`Get` 查表，未注册即 **fail-closed**、不静默回退；`storage` 空 `type` 仍按 `local`，`queue.Wire` 启动即校验配置类型已编译）。
 - **已完成（两层声明）**：`contract.Descriptor.Drivers` = 能力声明的**可用集**（驱动包名：storage `[local s3]`、queue `[redis kafka rabbitmq]`、dataops `[csv excel]`；`s3` 包覆盖 `s3`/`oss`/`minio` 三个配置取值）+ `assembly.Capability.Drivers` = 形态选中的**子集**（装配期强制 ⊆ 可用集），形态入口在 `internal/profiles/<name>/drivers.go` blank import 落实。
@@ -75,7 +75,7 @@ P2.8 门禁（§9）：四道 check-*            ← 已完成（四道门禁在
 
 ## P2.5b 单一入口与构建期形态参数化（已完成）
 
-执行记录见 `docs/plans/2026-09-23-p2.5b-unified-entry.md`。
+执行记录见 `docs/superpowers/plans/2026-09-23-p2.5b-unified-entry.md`。
 
 - **已完成（唯一入口）**：删除 5 个 `profiles/<name>/main.go`，层②入口收敛为唯一 `cmd/server` —— `cmd/server/main.go` 只 import `internal/assembly` 与选点包 `internal/profiles/active`（提交态默认 `full`，`go build ./cmd/server`、`go test ./...`、IDE、`make swagger` 默认都是 full）。
 - **已完成（构建期切换形态）**：`tools/profileoverlay`（共享实现 `tools/internal/profileoverlay`）把选点文件替换为「只选该形态」的版本，产物落在 gitignored 的 `.overlay/<profile>/`、不改工作区；`PROFILE=minimal make build-server` → `bin/jimu-server-minimal`（`full` 仍是 `bin/jimu-server`）、`docker build --build-arg PROFILE=<name>`；非法形态名非零退出、无产物。
@@ -86,7 +86,7 @@ P2.8 门禁（§9）：四道 check-*            ← 已完成（四道门禁在
 
 ## P2.6 层② 非代码资产模块化（§3.8）（已完成）
 
-执行记录见 `docs/plans/2026-09-23-p2.6-assets-and-conditionals.md`。
+执行记录见 `docs/superpowers/plans/2026-09-23-p2.6-assets-and-conditionals.md`。
 
 - **已完成（资产归属与门禁）**：`contract.Descriptor.Assets` 声明能力的非代码资产（当前只有 `apidocs` → `["docs/openapi"]`）；内核运维/观测资产用**具名资产组** `ops`/`observability` 表达（**不新增 `obs` 能力**，catalog 仍 18 项）；归属判定 = **最长前缀匹配**（具体文件赢过目录），资产根 = `deploy/` 与 `docs/openapi/`（不含 `configs/`）。共享派生 `tools/internal/profileassets` + 查询 `go run ./tools/profileassets <profile>`（`-capabilities` 列能力名）。`make check-capabilities` 新增资产段 → **5 条汇总行**（四条断言：路径存在且在根内 / 同一路径不被两个所有者声明（归一化比较）/ 根下每个文件都有有效所有者 / 每个形态覆盖全部内核资产组）。
 - **已完成（本仓条件化）**：① `make swagger`/`swagger-check` 按形态资产集跳过（不含 `apidocs` 的 minimal/saas/enterprise/machine 打印 `SKIP` 并 exit 0，`PROFILE` 非法名仍非零）；② 能力自带 CLI 命令（`internal/capabilities/<name>/cli.Commands()`，实例 `jimu apikey issue|list`，补 `machine` 形态首把 API Key 的带外签发）；③ `jimu` CLI 的 `migrate`/`adopt-capabilities`/`seed` 跟随当前形态（从 `catalog.All()` 过滤、保持拓扑序，`capabilities.enabled` 不参与，`full` 逐值不变）；④ `internal/e2e` 按形态装配（`assembly.Resolve`/`WireFor`，`Run` 复用，单一 wiring）+ `requireCapabilities` 声明依赖；⑤ 4 个非 full 形态的路由面 golden 收在 `internal/profiles/registry/routes_golden_test.go`（32/48/55/28，与 `make compose-report` 逐值吻合）+ 跨形态挂载点一致性断言 `TestShapeMountsMatchFull`，`full` 仍由自己包内的 golden 钉住。
@@ -96,7 +96,7 @@ P2.8 门禁（§9）：四道 check-*            ← 已完成（四道门禁在
 
 ## P2.7 层① 脚手架（已完成）
 
-执行记录见 [`docs/plans/2026-09-24-p2.7-scaffolding.md`](2026-09-24-p2.7-scaffolding.md)（含 8 个任务的实现、裁定修订与审查收口）。
+执行记录见 [`docs/superpowers/plans/2026-09-24-p2.7-scaffolding.md`](2026-09-24-p2.7-scaffolding.md)（含 8 个任务的实现、裁定修订与审查收口）。
 
 - **已完成**：`jimu new <dir> --profile=<name>` / `--with=a,b[:drv]` 从当前框架 checkout 生成**只含选中能力**的可构建/可迁移/可门禁单体项目，`jimu capability add <name>` 在已生成项目上增量追加能力（确定性重渲染、幂等）。生成物 = 内核原样复制 + 能力按**复制集**（声明集 ∪ 编译闭包 ∪ schema 依赖的迁移携带目录 ∪ 内核编译期 domain 依赖）+ 四处派生文件（`catalog`、单形态 `registry`/`profiles/<shape>`/`active`、`configs/*.yaml`）+ 单形态构建文件 + `tools/**`（不含生成器）+ 选中资产（`deploy/**`、含 `apidocs` 时的 `docs/openapi/**`）；`--module` 受控重写（不改框架运行期名字）；默认 `go mod tidy` + **自检**（`go build ./...` + `go run ./tools/checkcapabilities`，失败整体回滚）；`--report` 写 `<dir>/docs/profiles/generated-report.md`（口径与 `tools/composereport` 共享 `tools/internal/projectmetrics`，本仓报告逐字节不变）；测试树按 import 可满足性 + **资产依赖**裁剪（未选 `apidocs` 时读 `docs/openapi` 的契约测试整组不进产物）。
 - **实测**（2026-09-26）：`--profile=minimal`（`example.com/proj`）= 生成 449 文件 / 闭包 181 文件 17522 行 / `go.mod` 直接依赖 47（tidy 后；框架仓 64）/ 迁移 10 / 表 9 / 路由 32（与 minimal 形态逐值一致）/ 重型依赖 0 / 资产 45；生成项目 `go build ./...` 绿、`check-capabilities` **5 条 ✅**、`go test ./...` 全绿、`make compose-report` 单形态文本正确且幂等。`--with=user,access,queue`：能力目录只含 `access encryption notification outbox queue tenant user`（+ `catalog`），重型依赖 **0**，419 文件 / 闭包 165 文件 16054 行 / 直接依赖 47 / 迁移 10 / 表 11 / 路由 34。

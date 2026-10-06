@@ -34,7 +34,7 @@
 | 7 | P1-A/P1-B1 | `internal/kernel/db/retention.go:29` 注释仍写"kernel 不应反向依赖 modules" |
 | 8 | P1-B1 终审 | CI 的 `CHANGELOG check` 因 `actions/checkout` 默认 `fetch-depth: 1` 可能取不到基线而静默通过 |
 | 9 | P1-B1 终审 | 本地 `golangci-lint`（v2.12.2）与 CI 固定版本（v2.7.2）不一致，`make lint` 结果不可比 |
-| 10 | P1-B1 终审裁定（待落地） | 版本日志恢复字面 `internal/platform/`、`oauth provider` 改写为 `oauth（provider 包）`（能力清单按 `/` 计数须为 14）；计划过滤器链补目录级例外（`grep -v '^docs/plans/'`、`grep -v '^docs/releases/'`） |
+| 10 | P1-B1 终审裁定（待落地） | 版本日志恢复字面 `internal/platform/`、`oauth provider` 改写为 `oauth（provider 包）`（能力清单按 `/` 计数须为 14）；计划过滤器链补目录级例外（`grep -v '^docs/superpowers/plans/'`、`grep -v '^docs/releases/'`） |
 
 ---
 
@@ -395,7 +395,7 @@ git add .github/workflows/ci.yml Makefile && git commit -m "chore(ci): fetch ful
 
 **Files:**
 - Modify: `docs/releases/v0.3.0.md`（恢复字面路径 + `oauth provider` 改写为 `oauth（provider 包）`）
-- Modify: `docs/plans/2026-09-18-platform-relocation.md`（过滤器链补例外 + 计数）
+- Modify: `docs/superpowers/plans/2026-09-18-platform-relocation.md`（过滤器链补例外 + 计数）
 - Modify: `docs/design/2026-09-18-capability-plugins-design.md`（§3.1 标题下方加一条全局注记：文中 `platform/x` 指其 P1-B1 **搬迁前**的位置）
 
 **Interfaces:**
@@ -408,15 +408,15 @@ git add .github/workflows/ci.yml Makefile && git commit -m "chore(ci): fetch ful
 
 - [ ] **Step 2: 计划过滤器链改为目录级例外**
 
-`docs/plans/2026-09-18-platform-relocation.md` 的 Step 3a 过滤器链：把逐个计划文件的单文件例外（P0 计划 / namespace-move 计划 / 本计划）换成一条目录级例外，`docs/releases/` 目录例外与设计文档单文件例外保留，最终为三条过滤器：
+`docs/superpowers/plans/2026-09-18-platform-relocation.md` 的 Step 3a 过滤器链：把逐个计划文件的单文件例外（P0 计划 / namespace-move 计划 / 本计划）换成一条目录级例外，`docs/releases/` 目录例外与设计文档单文件例外保留，最终为三条过滤器：
 
 ```bash
-  | grep -v '^docs/plans/' \
+  | grep -v '^docs/superpowers/plans/' \
   | grep -v '^docs/releases/' \
   | grep -v '^docs/design/2026-09-18-capability-plugins-design.md'
 ```
 
-并在该步骤的 3a 注释与「不留残余」约束里把例外写成「一处单文件例外（设计文档）+ 两个目录级例外（`docs/plans/`、`docs/releases/`）」与对应说明（逐个计划文件枚举例外已连续三次被新计划打破，故计划整体按目录排除；设计文档保留单文件粒度，使未来真正需要更新的设计文档仍会被扫出）。
+并在该步骤的 3a 注释与「不留残余」约束里把例外写成「一处单文件例外（设计文档）+ 两个目录级例外（`docs/superpowers/plans/`、`docs/releases/`）」与对应说明（逐个计划文件枚举例外已连续三次被新计划打破，故计划整体按目录排除；设计文档保留单文件粒度，使未来真正需要更新的设计文档仍会被扫出）。
 
 - [ ] **Step 3: 设计文档加全局注记**
 
@@ -429,9 +429,9 @@ git add .github/workflows/ci.yml Makefile && git commit -m "chore(ci): fetch ful
 - [ ] **Step 4: 验证**
 
 ```bash
-# 4a) 加宽模式零残留（三个例外：`docs/plans/`、`docs/releases/`、设计文档）
+# 4a) 加宽模式零残留（三个例外：`docs/superpowers/plans/`、`docs/releases/`、设计文档）
 grep -rnE '(^|[^A-Za-z0-9_-])(internal/)?platform\b' README.md AGENTS.md Makefile docs/ specs/ configs/ scripts/ .github/ internal/ tools/ 2>/dev/null \
-  | grep -v '^docs/plans/' \
+  | grep -v '^docs/superpowers/plans/' \
   | grep -v '^docs/releases/' \
   | grep -v '^docs/design/2026-09-18-capability-plugins-design.md'
 

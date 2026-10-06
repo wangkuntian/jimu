@@ -36,10 +36,10 @@
 - 移动：`docs/plans/*.md` 到 `docs/superpowers/plans/`
 - 修改：仓库内指向 `docs/plans` 或受迁移影响相对路径的文档与注释
 
-- [ ] 移动计划文件，保留文件名和历史内容。
-- [ ] 修复迁移后失效的 Markdown 链接、README/AGENTS/Dockerfile 注释及其他显式路径引用。
-- [ ] 检查 `docs/plans` 不再存在、计划文件数量不变、旧路径引用无残留。
-- [ ] 运行本地 Markdown 链接目标检查与 `git diff --check`。
+- [x] 移动计划文件，保留文件名和历史内容。
+- [x] 修复迁移后失效的 Markdown 链接、README/AGENTS/Dockerfile 注释及其他显式路径引用。
+- [x] 检查 `docs/plans` 不再存在、计划文件数量不变、旧路径引用无残留。
+- [x] 运行本地 Markdown 链接目标检查与 `git diff --check`。
 - [ ] 提交：`docs(plans): move plans under superpowers`
 
 ### Task 3：重建设计文档并精简 README

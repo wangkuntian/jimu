@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **零逻辑变化**：只改文件位置与路径字符串；不改任何标识符、函数签名、包名、行为。搬迁后包名保持不变（`auth` 目录的包仍是 `authmodule` 等），因此**不需要改任何 `package` 子句**
-- **不留残余**：Go / 脚本 / 配置 / Makefile 中的 `internal/modules` 引用必须归零（`docs/plans/2026-09-18-capability-plugins-p0.md` 是 P0 的历史执行记录，保留原样；设计文档 §3.6 表格单元与 §5 的"现状路径"表同理。注意：设计文档中**没有**任何含 `internal/modules` 的目录树块，§3.8 实为「非代码资产模块化」，因此本次**不改写前瞻布局**，只加历史注记）
+- **不留残余**：Go / 脚本 / 配置 / Makefile 中的 `internal/modules` 引用必须归零（`docs/superpowers/plans/2026-09-18-capability-plugins-p0.md` 是 P0 的历史执行记录，保留原样；设计文档 §3.6 表格单元与 §5 的"现状路径"表同理。注意：设计文档中**没有**任何含 `internal/modules` 的目录树块，§3.8 实为「非代码资产模块化」，因此本次**不改写前瞻布局**，只加历史注记）
 - **全绿**：`gofmt -l .`（无输出）、`go build ./...`、`go vet ./...`、`go test ./...`、`make check-log-usage`、`make release-check COMPOSE_ENV=.env.example`
 - **提交信息全英文**（Conventional Commits，`githooks/commit-msg` 拒绝 CJK）
 - 分支：从 `release/v0.3.0` 切 `feature/capability-namespace`，PR 目标 `release/v0.3.0`，squash 合并
@@ -195,16 +195,16 @@ git commit -m "refactor(capabilities): move business modules into the capabiliti
 grep -rnE '(^|[^A-Za-z0-9_./-])(internal/)?modules/' \
   --include='*.go' --include='*.md' --include='*.sh' --include='*.yml' --include='*.yaml' --include='*.json' \
   README.md Makefile docs/ specs/ configs/ scripts/ .github/ internal/ tools/ 2>/dev/null \
-  | grep -v '^docs/plans/2026-09-18-capability-plugins-p0.md' \
-  | grep -v '^docs/plans/2026-09-18-capability-namespace-move.md' \
+  | grep -v '^docs/superpowers/plans/2026-09-18-capability-plugins-p0.md' \
+  | grep -v '^docs/superpowers/plans/2026-09-18-capability-namespace-move.md' \
   | grep -v '^docs/design/2026-09-18-capability-plugins-design.md' \
   | grep -v '^docs/releases/'
 ```
 
 Expected: 无输出。**四处例外都是刻意的**：
 
-1. `docs/plans/2026-09-18-capability-plugins-p0.md` —— P0 的历史执行记录（当时的路径就是 `internal/modules/…`）；
-2. `docs/plans/2026-09-18-capability-namespace-move.md` —— 本计划自身，它记录的正是这次搬迁，天然大量出现旧路径；
+1. `docs/superpowers/plans/2026-09-18-capability-plugins-p0.md` —— P0 的历史执行记录（当时的路径就是 `internal/modules/…`）；
+2. `docs/superpowers/plans/2026-09-18-capability-namespace-move.md` —— 本计划自身，它记录的正是这次搬迁，天然大量出现旧路径；
 3. `docs/design/2026-09-18-capability-plugins-design.md` —— §3.6 表格单元与 §5 标题下已加历史注记，明确标注为改造前路径；
 4. `docs/releases/` —— 发布记录属冻结文本：`docs/releases/v0.2.0.md` 是已发布版本的记录，**不得回改**；`docs/releases/v0.3.0.md` 的本版「变更」条目记载的正是这次搬迁。
 

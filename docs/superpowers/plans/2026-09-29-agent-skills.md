@@ -8,7 +8,7 @@
 
 **Tech Stack:** Markdown（Agent Skills 约定：`SKILL.md` + YAML frontmatter）、bash、GNU Make、现有门禁工具（`make check-capabilities` / `profiles-check` / `compose-report-check`）
 
-**Spec:** [docs/design/2026-09-29-agent-skills-design.md](../design/2026-09-29-agent-skills-design.md)
+**Spec:** [docs/design/2026-09-29-agent-skills-design.md](../../design/2026-09-29-agent-skills-design.md)
 
 ## Global Constraints
 
