@@ -36,6 +36,12 @@ func copyTree(sourceRoot, destinationRoot, source, destination string, includes,
 			return err
 		}
 		rel = filepath.ToSlash(rel)
+		if rel != "." && isTransientEntry(entry.Name()) {
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
 		if rel != "." && excluded(rel, entry, excludes) {
 			if entry.IsDir() {
 				return fs.SkipDir
@@ -62,6 +68,14 @@ func copyTree(sourceRoot, destinationRoot, source, destination string, includes,
 		}
 		return copyFile(path, filepath.Join(destinationPath, filepath.FromSlash(rel)), fileInfo.Mode().Perm())
 	})
+}
+
+func isTransientEntry(name string) bool {
+	switch name {
+	case ".git", ".DS_Store", ".idea", ".vscode":
+		return true
+	}
+	return strings.HasSuffix(name, ".tmp-") || (strings.HasPrefix(name, ".") && strings.Contains(name, ".tmp-"))
 }
 
 func copyFile(source, destination string, mode os.FileMode) error {

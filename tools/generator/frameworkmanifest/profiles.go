@@ -165,7 +165,7 @@ func validateShape(shape string) error {
 		return fmt.Errorf("invalid --shape %q", shape)
 	}
 	for _, char := range shape {
-		if !((char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '_') {
+		if (char < 'a' || char > 'z') && (char < '0' || char > '9') && char != '_' {
 			return fmt.Errorf("invalid --shape %q", shape)
 		}
 	}

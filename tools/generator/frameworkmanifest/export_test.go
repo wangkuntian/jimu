@@ -140,6 +140,36 @@ func TestExportMatchesGoldens(t *testing.T) {
 	}
 }
 
+func TestCollectFilesSkipsTransientEntries(t *testing.T) {
+	root := t.TempDir()
+	write := func(path, content string) {
+		t.Helper()
+		path = filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("src/keep.go", "package keep\n")
+	write("src/.DS_Store", "finder metadata\n")
+	write("src/.idea/workspace.xml", "editor metadata\n")
+	write("src/nested/.tmp-123", "temporary file\n")
+
+	seen := map[string]bool{}
+	collectFiles(root, "src", nil, seen)
+
+	if !seen["src/keep.go"] {
+		t.Fatal("collectFiles dropped a regular source file")
+	}
+	for _, path := range []string{"src/.DS_Store", "src/.idea/workspace.xml", "src/nested/.tmp-123"} {
+		if seen[path] {
+			t.Fatalf("collectFiles included transient file %q", path)
+		}
+	}
+}
+
 func goldenPath(name string) string {
 	_, source, _, _ := runtime.Caller(0)
 	return filepath.Join(filepath.Dir(source), "testdata", name+".json")

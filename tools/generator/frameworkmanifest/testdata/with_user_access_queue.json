@@ -1271,7 +1271,6 @@
     "internal/contract/openapi_test.go",
     "internal/contract/outbox_mq_port.go",
     "internal/contract/ports.go",
-    "internal/e2e/.DS_Store",
     "internal/e2e/admin_routes_parity_test.go",
     "internal/e2e/api_contract_test.go",
     "internal/e2e/auth_routes_parity_test.go",
@@ -1466,5 +1465,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:49e2c9e09ade01b933e96c0e2f97b07ad091216c51e0208a587709a31c68ffcb"
+  "digest": "sha256:44b571b95cb6fa6d8aabefbfd6739104cb67957aa7f51278ec5303165deb6f0d"
 }

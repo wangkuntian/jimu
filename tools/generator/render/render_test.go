@@ -109,6 +109,27 @@ func TestExecuteFrameworkManifestTemplates(t *testing.T) {
 	}
 }
 
+func TestCopyTreeSkipsTransientEntries(t *testing.T) {
+	source := t.TempDir()
+	destination := t.TempDir()
+	writeFixture(t, source, "src/keep.go", "package keep\n")
+	writeFixture(t, source, "src/.DS_Store", "finder metadata\n")
+	writeFixture(t, source, "src/.idea/workspace.xml", "editor metadata\n")
+	writeFixture(t, source, "src/nested/.tmp-123", "temporary file\n")
+
+	if err := copyTree(source, destination, "src", "copied", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(destination, "copied/keep.go")); err != nil {
+		t.Fatalf("regular source file was not copied: %v", err)
+	}
+	for _, path := range []string{"copied/.DS_Store", "copied/.idea/workspace.xml", "copied/nested/.tmp-123"} {
+		if _, err := os.Stat(filepath.Join(destination, filepath.FromSlash(path))); !os.IsNotExist(err) {
+			t.Fatalf("transient file %q was copied, stat error = %v", path, err)
+		}
+	}
+}
+
 func writeFixture(t *testing.T, root, rel, content string) {
 	t.Helper()
 	path := filepath.Join(root, filepath.FromSlash(rel))

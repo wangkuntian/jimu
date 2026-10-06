@@ -385,6 +385,12 @@ func collectFiles(root, source string, excluded []string, seen map[string]bool) 
 			return err
 		}
 		rel = filepath.ToSlash(rel)
+		if rel != source && isTransientEntry(entry.Name()) {
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
 		if rel != source && excludedPath(rel, source, excluded) {
 			if entry.IsDir() {
 				return fs.SkipDir
@@ -396,6 +402,14 @@ func collectFiles(root, source string, excluded []string, seen map[string]bool) 
 		}
 		return nil
 	})
+}
+
+func isTransientEntry(name string) bool {
+	switch name {
+	case ".git", ".DS_Store", ".idea", ".vscode":
+		return true
+	}
+	return strings.HasSuffix(name, ".tmp-") || (strings.HasPrefix(name, ".") && strings.Contains(name, ".tmp-"))
 }
 
 func excludedPath(rel, source string, excluded []string) bool {
