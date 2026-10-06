@@ -3,8 +3,6 @@ package generator
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -87,17 +85,6 @@ var filePatches = map[string][][2]string{
 	},
 }
 
-// applyFilePatches 在复制完成后的生成树上应用 filePatches（按路径排序，保证确定性）。
-func applyFilePatches(dst, module string) error {
-	for _, rel := range sortedPatchPaths() {
-		path := filepath.Join(dst, filepath.FromSlash(rel))
-		if err := applyPatchFile(path, filePatches[rel], module); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // applyPatchFile 对单个文件应用有序字面量替换；任一条原文未命中即报错（fail-closed，绝不静默
 // 跳过：文案漂移而没人同步补丁时，生成项目会带着错误口径继续跑）。全部替换完成后一次写盘。
 func applyPatchFile(path string, patches [][2]string, module string) error {
@@ -131,14 +118,4 @@ func applyPatchFile(path string, patches [][2]string, module string) error {
 // 生产文件一律复制（工具必须能在生成项目内工作）。
 func skipToolTestFile(base string) bool {
 	return strings.HasSuffix(base, "_test.go")
-}
-
-// sortedPatchPaths 返回 filePatches 的键（排序）：map 遍历顺序随机，补丁应用必须确定。
-func sortedPatchPaths() []string {
-	out := make([]string, 0, len(filePatches))
-	for rel := range filePatches {
-		out = append(out, rel)
-	}
-	sort.Strings(out)
-	return out
 }

@@ -2,8 +2,6 @@ package generator
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -52,15 +50,6 @@ var catalogOutputs = []struct{ rel, tpl string }{
 	{"internal/capabilities/catalog/migration.go", "project/catalog_migration.go.tmpl"},
 }
 
-// catalogFiles 返回 catalog 渲染产物的相对路径（--dry-run 计数与落盘同源，不会漂移）。
-func catalogFiles() []string {
-	out := make([]string, 0, len(catalogOutputs))
-	for _, o := range catalogOutputs {
-		out = append(out, o.rel)
-	}
-	return out
-}
-
 // RenderCatalog 渲染生成项目的 internal/capabilities/catalog/{catalog.go,migration.go}，返回
 // 「相对路径 → 文件内容」。渲染成内存产物而不是直接落盘：黄金文件对比（T3）与后续
 // `jimu capability add` 的确定性重渲染都需要纯函数形态。
@@ -82,29 +71,6 @@ func RenderCatalog(set CapabilitySet) (map[string][]byte, error) {
 		out[o.rel] = rendered
 	}
 	return out, nil
-}
-
-// renderCatalog 是 renderDerivedAll 里的落点包装（与 renderShape 同形）：RenderCatalog 的产物写进
-// 生成目录。接入点收敛在此一处，new.go 不再直接拼装/写盘。
-func renderCatalog(dst string, set CapabilitySet) error {
-	files, err := RenderCatalog(set)
-	if err != nil {
-		return err
-	}
-	for _, o := range catalogOutputs {
-		content, ok := files[o.rel]
-		if !ok {
-			return fmt.Errorf("render catalog: 缺少产物 %s", o.rel)
-		}
-		target := filepath.Join(dst, filepath.FromSlash(o.rel))
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return fmt.Errorf("create directory for %s: %w", o.rel, err)
-		}
-		if err := os.WriteFile(target, content, goFileMode); err != nil {
-			return fmt.Errorf("write %s: %w", o.rel, err)
-		}
-	}
-	return nil
 }
 
 // catalogCoversAll 报告本次选择是否覆盖框架**全量** catalog。

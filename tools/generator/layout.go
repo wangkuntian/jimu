@@ -378,6 +378,28 @@ func nonCatalogDescriptors(root string, inCatalog map[string]bool) ([]contract.D
 	return out, nil
 }
 
+// descriptorFile 在能力根包目录里找含 `var Descriptor` 的 .go 文件（非测试）；没有则返回 ""。
+func descriptorFile(dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		file := filepath.Join(dir, entry.Name())
+		content, err := os.ReadFile(file)
+		if err != nil {
+			return "", err
+		}
+		if strings.Contains(string(content), "var Descriptor") {
+			return file, nil
+		}
+	}
+	return "", nil
+}
+
 // knownCapabilityNames 返回软依赖错别字检查的全量能力名（Minor 6/S5）：catalog 18 ∪ Ungated 7。
 func knownCapabilityNames(descs []contract.Descriptor) []string {
 	out := make([]string, 0, len(descs))
