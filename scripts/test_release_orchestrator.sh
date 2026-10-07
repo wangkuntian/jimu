@@ -269,6 +269,29 @@ test_tag_guard() {
   assert_contains "$output" '::error::merge commit is not current master tip' 'tag guard emits stable error'
 }
 
+test_dependabot_config() {
+  local config="$ROOT_DIR/.github/dependabot.yml"
+  local ecosystem
+  for ecosystem in gomod github-actions docker; do
+    if ! awk -v wanted="\"$ecosystem\"" '
+      /^  - package-ecosystem:/ {
+        in_block = index($0, wanted) > 0
+        found = found || in_block
+        next
+      }
+      in_block && /target-branch:[[:space:]]*"?dependabot-updates"?/ { target = 1 }
+      END { exit !(found && target) }
+    ' "$config"; then
+      printf 'ASSERT FAILED: %s is missing target-branch: dependabot-updates\n' "$ecosystem" >&2
+      exit 1
+    fi
+  done
+  if grep -Eq 'security-updates|security-only|target-branch:[[:space:]]*master' "$config"; then
+    printf 'ASSERT FAILED: dependabot config contains a security target override\n' >&2
+    exit 1
+  fi
+}
+
 case "${1:-core}" in
   core)
     test_validate_version
@@ -276,6 +299,9 @@ case "${1:-core}" in
     test_collection_window
     test_snapshot
     test_tag_guard
+    ;;
+  --dependabot-config)
+    test_dependabot_config
     ;;
   *)
     echo "unsupported test group: $1" >&2

@@ -1,0 +1,42 @@
+name: Dependabot Auto Merge
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  enable-auto-merge:
+    name: Enable Dependabot Auto Merge
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.base.ref == 'dependabot-updates' && github.event.pull_request.state == 'open'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
+          private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Enable squash auto merge after focused checks
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          checks=$(gh pr checks "$PR_NUMBER" --repo "$GH_REPO" --json name,state)
+          if ! jq -e 'any(.[]; .name == "Dependabot Focused Checks" and .state == "SUCCESS")' <<<"$checks" >/dev/null; then
+            echo "Focused checks are not successful yet; leaving the PR open."
+            exit 0
+          fi
+          gh pr merge "$PR_NUMBER" --repo "$GH_REPO" --auto --squash --delete-branch=false
