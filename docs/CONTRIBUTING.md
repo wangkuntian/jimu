@@ -26,7 +26,7 @@ make run
 
 ## 分支策略
 
-采用简化 GitHub Flow：`master` 为唯一长期分支（禁止直接 push，仅接受 release 分支合并），`release/x.y.z` 为集成与发布分支，日常开发从 release 切出、经 PR 合回。
+采用简化 GitHub Flow：`master` 为唯一长期分支（禁止直接 push，仅接受 release 分支合并），`release/vx.y.z` 为集成与发布分支，日常开发从 release 切出、经 PR 合回。
 
 - `feature/<issue>-<slug>` — 新功能
 - `fix/<issue>-<slug>` — 缺陷修复
@@ -64,9 +64,21 @@ fix(auth): reject expired refresh token
 
 1. 至少 1 人 review 通过
 2. feature/fix/hotfix → release PR 必须通过常规 CI、Docker 和提交消息检查；这些 workflow 只响应 PR，不在合并后的 branch push 上重复运行
-3. release/* → master 发布候选 PR 还必须通过一次 Scaffold Matrix；向 master 直接提交的其它来源分支会在该 required check 中失败；master 与 release/* 的 GitHub ruleset required checks 负责阻止未验证合并
+3. release/* → master 发布候选 PR 还必须通过一次 Scaffold Matrix；Dependabot 安全更新直达 master 时该检查成功跳过；master ruleset 的 required checks 阻止未验证合并，release ruleset 只保留 non-fast-forward 保护
 4. 合并策略：feature/fix/hotfix → release 用 squash merge；release → master 用 merge commit
 5. 合并后删除源分支
+
+## Dependabot 发布周期
+
+每个版本周期由 Release Issue 自动启动。创建标题严格为 `release: vX.Y.Z` 的 Issue，Actions 会校验版本并创建 `release/vX.Y.Z` 与固定汇总分支 `dependabot-updates`。同一时间只接受一个 active release cycle；重复事件会恢复已有资源，不会覆盖非本自动化管理的分支。
+
+Dependabot 普通版本更新指向 `dependabot-updates`，只运行 `CI (Dependabot Focused)` 中的格式、`go vet` 和普通 Go 测试。focused checks 成功后，GitHub App 自动 squash merge。这里使用检查完成后的 App merge，不要求启用 GitHub auto-merge。安全更新不受 `target-branch` 控制，仍直接指向 `master`；现有 CI 照常运行，`Scaffold Matrix` 以成功 skip 满足 required check，PR 链接会记录到活跃的 Release Issue。
+
+每日收集器至少等待 8 天，并且要求 `dependabot-updates` 最近 24 小时没有提交、没有待处理的 Dependabot PR。条件满足后会创建 `updates/vX.Y.Z -> release/vX.Y.Z` 汇总 PR，并将 Issue 标为 `release: candidate`。`CI (Go)`、`CI (Docker)`、`CI (Commits)` 都必须完成；各自检查成功或正常跳过且 PR head SHA 未变化后，GitHub App 才会自动 squash merge。汇总 PR 合入后，Actions 会自动创建 `release/vX.Y.Z -> master` 候选 PR。该 PR 使用 master ruleset 的完整 required checks，仍需维护者人工 review 和 merge。
+
+候选 PR 合入后，GitHub App 会验证 Release Issue 状态、PR marker 和合并提交，创建 `vX.Y.Z` tag。现有 `release.yml` 发布成功后，Issue 才标记为 `release: published`。发布失败或 tag 校验失败会保留现场并标记为 `release: blocked`。
+
+首次启用需要仓库管理员创建并安装 GitHub App，权限为 `contents: write`、`pull_requests: write`、`issues: write`、`metadata: read`，并设置 Actions secrets `JIMU_RELEASE_APP_ID`、`JIMU_RELEASE_APP_PRIVATE_KEY`。仓库默认 workflow token 可保持 `read`。当前 release ruleset 保持 `non_fast_forward`，不添加 release required checks；汇总 PR 的 App workflow 会在 merge 前检查三个 CI workflow。无需开启仓库 auto-merge。正常流程由 Issue、Dependabot PR、每日 schedule 和 PR/workflow 完成事件驱动，不需要手动触发 workflow。
 
 ## Tag 与发布
 

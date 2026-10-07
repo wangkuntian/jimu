@@ -492,6 +492,30 @@ test_scaffold_policy() {
   done
 }
 
+test_docs() {
+  local docs=("$ROOT_DIR/README.md" "$ROOT_DIR/docs/CONTRIBUTING.md" "$ROOT_DIR/docs/releases/v0.3.5.md")
+  local required
+  for required in \
+    'release: vX.Y.Z' \
+    'dependabot-updates' \
+    '8 天' \
+    '24 小时' \
+    'CI (Go)' \
+    'CI (Docker)' \
+    'CI (Commits)' \
+    'release ruleset' \
+    'non_fast_forward' \
+    'release: candidate' \
+    'Scaffold Matrix' \
+    'JIMU_RELEASE_APP_ID' \
+    '人工 review 和 merge'; do
+    if ! rg -Fq -- "$required" "${docs[@]}"; then
+      printf 'ASSERT FAILED: release automation docs are missing %s\n' "$required" >&2
+      exit 1
+    fi
+  done
+}
+
 case "${1:-core}" in
   core)
     test_validate_version
@@ -511,6 +535,9 @@ case "${1:-core}" in
     ;;
   --scaffold-policy)
     test_scaffold_policy
+    ;;
+  --docs)
+    test_docs
     ;;
   *)
     echo "unsupported test group: $1" >&2

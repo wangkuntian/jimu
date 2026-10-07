@@ -1150,6 +1150,14 @@ capabilities:
 
 CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)。
 
+### Dependabot 发布周期
+
+创建标题为 `release: vX.Y.Z` 的 Issue 后，Actions 会创建 `release/vX.Y.Z` 和固定汇总分支 `dependabot-updates`。普通版本更新 PR 只运行 focused checks；检查成功后由 GitHub App 自动 squash merge。安全更新仍直接指向 `master`，其 Scaffold Matrix required check 会成功跳过并把 PR 记录到活跃的 Release Issue。
+
+每日收集器至少等待 8 天，并要求 `dependabot-updates` 最近 24 小时没有新提交且没有待处理的 Dependabot PR。之后它会创建 `updates/vX.Y.Z` 汇总 PR，并将 Issue 标为 `release: candidate`。`CI (Go)`、`CI (Docker)`、`CI (Commits)` 全部完成且检查成功或正常跳过后，App 才自动 squash merge；随后自动打开 `release/vX.Y.Z -> master` 候选 PR，由维护者 review 和 merge。合并后 App 创建 tag，现有 `release.yml` 发布 GitHub Release。
+
+首次启用需要安装具有 `contents: write`、`pull_requests: write`、`issues: write`、`metadata: read` 权限的 GitHub App，并设置 Actions secrets `JIMU_RELEASE_APP_ID` 和 `JIMU_RELEASE_APP_PRIVATE_KEY`。自动化不依赖 GitHub auto-merge；release ruleset 保持现有 `non_fast_forward`，master ruleset 负责最终候选 PR 的完整 required checks。操作细节见[贡献指南](docs/CONTRIBUTING.md#dependabot-发布周期)和[设计稿](docs/superpowers/specs/2026-10-07-v0.3.5-dependabot-release-automation-design.md)。
+
 ## Makefile 命令
 
 | 命令 | 说明 |
