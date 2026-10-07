@@ -25,13 +25,20 @@ shift
 
 method=GET
 endpoint=""
+state_filter=""
 while (($#)); do
   case "$1" in
     -X|--method)
       method=$2
       shift 2
       ;;
-    --input|-f|-F|--raw-field|--field|--jq)
+    --field)
+      if [[ "$2" == state=* ]]; then
+        state_filter=${2#state=}
+      fi
+      shift 2
+      ;;
+    --input|-f|-F|--raw-field|--jq)
       shift 2
       ;;
     --paginate|--silent|--include)
@@ -55,11 +62,18 @@ case "$scenario:$method:$endpoint" in
     echo '{}'
     ;;
   ensure-cycle:GET:repos/wangkuntian/jimu/issues)
-    if [[ ${FAKE_CYCLE_STATE:-new} == duplicate ]]; then
+    if [[ ${FAKE_CYCLE_STATE:-new} == reuse-terminal && $state_filter == all ]]; then
+      echo '[{"number":76,"title":"release: v0.3.4","labels":[{"name":"release: published"}]}]'
+    elif [[ ${FAKE_CYCLE_STATE:-new} == unsafe-existing && $state_filter == all ]]; then
+      echo '[{"number":76,"title":"release: v0.3.4","labels":[{"name":"release: collecting"}]}]'
+    elif [[ ${FAKE_CYCLE_STATE:-new} == duplicate ]]; then
       echo '[{"number":99,"title":"release: v0.3.6","labels":[{"name":"release: collecting"}]}]'
     else
       echo '[]'
     fi
+    ;;
+  ensure-cycle:GET:repos/wangkuntian/jimu/issues/76/comments)
+    echo '[{"body":"<!-- jimu-release-automation:v0.3.4 -->"}]'
     ;;
   ensure-cycle:GET:repos/wangkuntian/jimu/git/ref/heads/master)
     echo '{"ref":"refs/heads/master","object":{"sha":"master-sha"}}'
@@ -68,14 +82,31 @@ case "$scenario:$method:$endpoint" in
     exit 1
     ;;
   ensure-cycle:GET:repos/wangkuntian/jimu/git/ref/heads/release/v0.3.5|ensure-cycle:GET:repos/wangkuntian/jimu/git/ref/heads/dependabot-updates)
-    if [[ ${FAKE_CYCLE_STATE:-new} == existing ]]; then
+    if [[ ${FAKE_CYCLE_STATE:-new} == existing || ${FAKE_CYCLE_STATE:-new} == reuse-terminal || ${FAKE_CYCLE_STATE:-new} == unsafe-existing ]]; then
       echo '{"ref":"refs/heads/dependabot-updates","object":{"sha":"dependabot-sha"}}'
     else
       exit 1
     fi
     ;;
+  ensure-cycle:GET:repos/wangkuntian/jimu/pulls*)
+    if [[ ${FAKE_CYCLE_STATE:-new} == reuse-terminal ]]; then
+      echo '[{"number":81,"user":{"login":"dependabot[bot]"},"state":"open","base":{"ref":"dependabot-updates"}}]'
+    else
+      echo '[]'
+    fi
+    ;;
+  ensure-cycle:PATCH:repos/wangkuntian/jimu/pulls/81)
+    echo '{"number":81,"state":"closed"}'
+    ;;
+  ensure-cycle:DELETE:repos/wangkuntian/jimu/git/ref/heads/dependabot-updates)
+    echo '{}'
+    ;;
   ensure-cycle:GET:repos/wangkuntian/jimu/issues/77/comments)
-    echo '[{"body":"<!-- jimu-release-automation:v0.3.5 -->"}]'
+    if [[ ${FAKE_CYCLE_STATE:-new} == existing ]]; then
+      echo '[{"body":"<!-- jimu-release-automation:v0.3.5 -->"}]'
+    else
+      echo '[]'
+    fi
     ;;
   ensure-cycle:POST:repos/wangkuntian/jimu/git/refs)
     echo '{"ref":"refs/heads/release/v0.3.5","object":{"sha":"release-sha"}}'
@@ -221,6 +252,24 @@ test_ensure_cycle() {
   output=$(FAKE_GH_SCENARIO=ensure-cycle FAKE_CYCLE_STATE=existing run_orchestrator ensure-cycle)
   if grep -q -- '--method POST' "$FAKE_GH_LOG"; then
     printf 'ASSERT FAILED: existing managed cycle was modified\n' >&2
+    exit 1
+  fi
+
+  : > "$FAKE_GH_LOG"
+  output=$(FAKE_GH_SCENARIO=ensure-cycle FAKE_CYCLE_STATE=reuse-terminal run_orchestrator ensure-cycle)
+  assert_contains "$output" 'dependabot_branch=dependabot-updates' 'next cycle reuses the fixed branch name'
+  assert_contains "$(cat "$FAKE_GH_LOG")" 'api repos/wangkuntian/jimu/pulls/81 --method PATCH --field state=closed' 'stale Dependabot PR is closed'
+  assert_contains "$(cat "$FAKE_GH_LOG")" 'api repos/wangkuntian/jimu/git/ref/heads/dependabot-updates --method DELETE' 'terminal cycle fixed branch is deleted before reset'
+
+  : > "$FAKE_GH_LOG"
+  set +e
+  output=$(FAKE_GH_SCENARIO=ensure-cycle FAKE_CYCLE_STATE=unsafe-existing run_orchestrator ensure-cycle 2>&1)
+  status=$?
+  set -e
+  assert_status 1 "$status" 'nonterminal old cycle cannot be reset'
+  assert_contains "$output" '::error::dependabot-updates exists without a terminal managed release cycle' 'unsafe reset emits stable error'
+  if grep -Eq -- '--method (PATCH|DELETE|POST)' "$FAKE_GH_LOG"; then
+    printf 'ASSERT FAILED: nonterminal cycle caused a remote mutation\n' >&2
     exit 1
   fi
 }

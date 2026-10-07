@@ -100,6 +100,37 @@ EOF
   api "repos/$repo/issues/$issue/comments" --method POST --field "body=$body" >/dev/null
 }
 
+reset_terminal_dependabot_cycle() {
+  local current_issue=$1 issue_json previous_issue="" previous_version="" number labels comments marker
+  issue_json=$(api "repos/$repo/issues" --paginate --field state=all --field per_page=100)
+  while IFS=$'\t' read -r number labels; do
+    [[ -n "$number" ]] || continue
+    [[ ",$labels," == *"release: published"* || ",$labels," == *"release: blocked"* ]] || continue
+    comments=$(issue_comments "$number" 2>/dev/null || true)
+    marker=$(grep -Eo '<!-- jimu-release-automation:v[0-9]+\.[0-9]+\.[0-9]+ -->' <<<"$comments" | head -n1 || true)
+    if [[ "$marker" =~ jimu-release-automation:(v[0-9]+\.[0-9]+\.[0-9]+) ]]; then
+      previous_issue=$number
+      previous_version=${BASH_REMATCH[1]}
+      break
+    fi
+  done < <(jq -r '.[] | select(.pull_request == null) | [.number, ([.labels[]?.name] | join(","))] | @tsv' <<<"$issue_json")
+
+  [[ -n "$previous_issue" && "$previous_issue" != "$current_issue" && -n "$previous_version" ]] || \
+    error "dependabot-updates exists without a terminal managed release cycle"
+
+  local pulls number author
+  pulls=$(api "repos/$repo/pulls" --paginate --field state=open --field base=dependabot-updates --field per_page=100)
+  while IFS=$'\t' read -r number author; do
+    [[ -n "$number" ]] || continue
+    [[ "$author" == "dependabot[bot]" ]] || error "unmanaged open PR targets dependabot-updates: #$number"
+    api "repos/$repo/pulls/$number" --method PATCH --field state=closed >/dev/null || \
+      error "failed to close stale Dependabot PR #$number"
+  done < <(jq -r '.[] | [.number, .user.login] | @tsv' <<<"$pulls")
+
+  api "repos/$repo/git/ref/heads/dependabot-updates" --method DELETE >/dev/null || \
+    error "failed to delete terminal cycle dependabot-updates branch"
+}
+
 ensure_cycle() {
   version_context "${1:-}"
   local issue=${RELEASE_ISSUE_NUMBER:-}
@@ -135,11 +166,14 @@ ensure_cycle() {
   if ref_exists heads dependabot-updates; then
     local comments
     comments=$(issue_comments "$issue" 2>/dev/null || true)
-    if ! grep -Fq "<!-- jimu-release-automation:$VERSION -->" <<<"$comments"; then
-      error "dependabot-updates exists but is not managed by this release cycle"
+    if grep -Fq "<!-- jimu-release-automation:$VERSION -->" <<<"$comments"; then
+      managed_comment=true
+      dependabot_sha=$(ref_sha heads dependabot-updates) || error "fixed Dependabot branch ref is unavailable"
+    else
+      reset_terminal_dependabot_cycle "$issue"
+      create_ref heads dependabot-updates "$release_sha" || error "failed to reset dependabot-updates"
+      dependabot_sha=$release_sha
     fi
-    managed_comment=true
-    dependabot_sha=$(ref_sha heads dependabot-updates) || error "fixed Dependabot branch ref is unavailable"
   else
     create_ref heads dependabot-updates "$release_sha" || error "failed to create dependabot-updates"
     dependabot_sha=$release_sha
