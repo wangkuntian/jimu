@@ -161,40 +161,42 @@ ensure_cycle() {
     fi
   done < <(jq -r '.[] | select(.pull_request == null) | [.number, .title, ([.labels[]?.name] | join(","))] | @tsv' <<<"$active_issues")
 
-  local master_sha release_sha dependabot_sha current_comments managed_comment=false release_exists=false fixed_exists=false
-  master_sha=$(ref_sha heads master) || error "master branch ref is unavailable"
+  local master_sha release_sha dependabot_sha current_comments current_base release_ref_sha fixed_ref_sha comparison merge_base
   current_comments=$(issue_comments "$issue" 2>/dev/null || true)
   if grep -Fq "<!-- jimu-release-automation:$VERSION -->" <<<"$current_comments"; then
     managed_comment=true
-  fi
-
-  if release_sha=$(ref_sha heads "$RELEASE_BRANCH"); then
-    release_exists=true
-    if [[ "$release_sha" != "$master_sha" && "$managed_comment" != true ]]; then
+    current_base=$(grep -Eo 'release base: `[0-9a-f]{40}`' <<<"$current_comments" | tail -n1 | sed -E 's/.*`([0-9a-f]{40})`.*/\1/' || true)
+    [[ "$current_base" =~ ^[0-9a-f]{40}$ ]] || error "release Issue marker is missing a valid baseline"
+    release_sha=$current_base
+  else
+    master_sha=$(ref_sha heads master) || error "master branch ref is unavailable"
+    release_sha=$master_sha
+    if release_ref_sha=$(ref_sha heads "$RELEASE_BRANCH"); then
       error "release branch already exists and is not managed"
     fi
-  fi
-
-  if ref_exists heads dependabot-updates; then
-    fixed_exists=true
-    if [[ "$managed_comment" == true ]]; then
-      dependabot_sha=$(ref_sha heads dependabot-updates) || error "fixed Dependabot branch ref is unavailable"
-    else
+    if ref_exists heads dependabot-updates; then
       reset_terminal_dependabot_cycle "$issue"
     fi
+    record_cycle_comment "$issue" "$VERSION" "$RELEASE_BRANCH" dependabot-updates "$release_sha"
   fi
 
-  if [[ "$release_exists" != true ]]; then
-    create_ref heads "$RELEASE_BRANCH" "$master_sha" || error "failed to create $RELEASE_BRANCH"
-    release_sha=$master_sha
+  if release_ref_sha=$(ref_sha heads "$RELEASE_BRANCH"); then
+    comparison=$(api "repos/$repo/compare/$release_sha...$release_ref_sha")
+    merge_base=$(jq -r '.merge_base_commit.sha // empty' <<<"$comparison")
+    [[ "$merge_base" == "$release_sha" ]] || error "release branch does not descend from the managed baseline"
+  else
+    create_ref heads "$RELEASE_BRANCH" "$release_sha" || error "failed to create $RELEASE_BRANCH"
+    release_ref_sha=$release_sha
   fi
-  if [[ "$fixed_exists" != true || "$managed_comment" != true ]]; then
+
+  if fixed_ref_sha=$(ref_sha heads dependabot-updates); then
+    comparison=$(api "repos/$repo/compare/$release_sha...$fixed_ref_sha")
+    merge_base=$(jq -r '.merge_base_commit.sha // empty' <<<"$comparison")
+    [[ "$merge_base" == "$release_sha" ]] || error "dependabot-updates does not descend from the active release baseline"
+    dependabot_sha=$fixed_ref_sha
+  else
     create_ref heads dependabot-updates "$release_sha" || error "failed to create dependabot-updates"
     dependabot_sha=$release_sha
-  fi
-
-  if [[ "$managed_comment" != true ]]; then
-    record_cycle_comment "$issue" "$VERSION" "$RELEASE_BRANCH" dependabot-updates "$release_sha"
   fi
   write_output version "$VERSION"
   write_output release_branch "$RELEASE_BRANCH"
@@ -259,29 +261,47 @@ collection_ready() {
   write_output version "$VERSION"
 }
 
-find_snapshot_pr() {
-  local json
-  json=$(api "repos/$repo/pulls" --paginate --field state=all --field head="$repo:$SNAPSHOT_BRANCH" --field base="$RELEASE_BRANCH" --field per_page=100)
-  jq -r '[.[] | select(.head.ref == $head and .base.ref == $base)] | .[0].number // empty' \
-    --arg head "$SNAPSHOT_BRANCH" --arg base "$RELEASE_BRANCH" <<<"$json"
-}
-
 create_snapshot() {
   version_context "${1:-}"
-  local fixed_sha snapshot_sha pr_number body
-  fixed_sha=$(ref_sha heads dependabot-updates) || error "dependabot-updates ref is unavailable"
+  local issue=${RELEASE_ISSUE_NUMBER:-}
+  [[ "$issue" =~ ^[0-9]+$ ]] || error "RELEASE_ISSUE_NUMBER is required"
 
-  if snapshot_sha=$(ref_sha heads "$SNAPSHOT_BRANCH"); then
-    :
+  local fixed_sha snapshot_sha snapshot_marker comments marker_body pr_list matching_pr pr_number body existing_sha
+  fixed_sha=$(ref_sha heads dependabot-updates) || error "dependabot-updates ref is unavailable"
+  snapshot_marker="<!-- jimu-release-automation:$VERSION snapshot:"
+  comments=$(issue_comments "$issue")
+  marker_body=$(grep -F "$snapshot_marker" <<<"$comments" | tail -n1 || true)
+  snapshot_sha=$(sed -nE 's/.*snapshot:([0-9a-f]{40}) -->.*/\1/p' <<<"$marker_body")
+
+  if existing_sha=$(ref_sha heads "$SNAPSHOT_BRANCH"); then
+    [[ -n "$snapshot_sha" ]] || error "snapshot branch already exists without a matching managed marker"
+    [[ "$existing_sha" == "$snapshot_sha" ]] || error "snapshot branch SHA differs from its managed marker"
+    snapshot_sha=$existing_sha
   else
-    create_ref heads "$SNAPSHOT_BRANCH" "$fixed_sha" || error "failed to create $SNAPSHOT_BRANCH"
-    snapshot_sha=$fixed_sha
+    if [[ -z "$snapshot_sha" ]]; then
+      snapshot_sha=$fixed_sha
+      api "repos/$repo/issues/$issue/comments" --method POST \
+        --field "body=$snapshot_marker$snapshot_sha -->" >/dev/null || \
+        error "failed to record snapshot branch marker"
+    fi
+    create_ref heads "$SNAPSHOT_BRANCH" "$snapshot_sha" || error "failed to create $SNAPSHOT_BRANCH"
   fi
 
-  pr_number=$(find_snapshot_pr)
-  if [[ -z "$pr_number" ]]; then
+  snapshot_marker="<!-- jimu-release-automation:$VERSION snapshot -->"
+  pr_list=$(api "repos/$repo/pulls" --paginate --field state=all --field head="$repo:$SNAPSHOT_BRANCH" --field base="$RELEASE_BRANCH" --field per_page=100)
+  matching_pr=$(jq -c '[.[] | select(.head.ref == $head and .base.ref == $base)] | .[0] // empty' \
+    --arg head "$SNAPSHOT_BRANCH" --arg base "$RELEASE_BRANCH" <<<"$pr_list")
+  if [[ -n "$matching_pr" ]]; then
+    local pr_body
+    pr_body=$(jq -r '.body // ""' <<<"$matching_pr")
+    [[ "$pr_body" == *"$snapshot_marker"* ]] || error "snapshot PR exists without a matching managed marker"
+    [[ "$pr_body" == *"<!-- jimu-release-automation:$VERSION snapshot-sha:$snapshot_sha -->"* ]] || \
+      error "snapshot PR exists without a matching source SHA marker"
+    pr_number=$(jq -er '.number' <<<"$matching_pr")
+  else
     body=$(cat <<EOF
-<!-- jimu-release-automation:$VERSION snapshot -->
+${snapshot_marker}
+<!-- jimu-release-automation:$VERSION snapshot-sha:$snapshot_sha -->
 Aggregated Dependabot updates for \`$VERSION\`.
 EOF
 )

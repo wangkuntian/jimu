@@ -78,14 +78,14 @@ case "$scenario:$method:$endpoint" in
     echo '[{"body":"<!-- jimu-release-automation:v0.3.4 -->\\n- release base: `1111111111111111111111111111111111111111`"}]'
     ;;
   ensure-cycle:GET:repos/wangkuntian/jimu/git/ref/heads/master)
-    echo '{"ref":"refs/heads/master","object":{"sha":"master-sha"}}'
+    echo '{"ref":"refs/heads/master","object":{"sha":"1111111111111111111111111111111111111111"}}'
     ;;
   ensure-cycle:GET:repos/wangkuntian/jimu/git/ref/tags/v0.3.5)
     exit 1
     ;;
   ensure-cycle:GET:repos/wangkuntian/jimu/git/ref/heads/release/v0.3.5)
-    if [[ ${FAKE_CYCLE_STATE:-new} == existing ]]; then
-      echo '{"ref":"refs/heads/release/v0.3.5","object":{"sha":"release-sha"}}'
+    if [[ ${FAKE_CYCLE_STATE:-new} == existing || ${FAKE_CYCLE_STATE:-new} == partial-release ]]; then
+      echo '{"ref":"refs/heads/release/v0.3.5","object":{"sha":"1111111111111111111111111111111111111111"}}'
     elif [[ ${FAKE_CYCLE_STATE:-new} == conflict-release ]]; then
       echo '{"ref":"refs/heads/release/v0.3.5","object":{"sha":"user-sha"}}'
     else
@@ -120,8 +120,8 @@ case "$scenario:$method:$endpoint" in
     echo '{}'
     ;;
   ensure-cycle:GET:repos/wangkuntian/jimu/issues/77/comments)
-    if [[ ${FAKE_CYCLE_STATE:-new} == existing ]]; then
-      echo '[{"body":"<!-- jimu-release-automation:v0.3.5 -->\\n- release base: `master-sha`"}]'
+    if [[ ${FAKE_CYCLE_STATE:-new} == existing || ${FAKE_CYCLE_STATE:-new} == partial-release ]]; then
+      echo '[{"body":"<!-- jimu-release-automation:v0.3.5 -->\\n- release base: `1111111111111111111111111111111111111111`"}]'
     else
       echo '[]'
     fi
@@ -157,24 +157,38 @@ case "$scenario:$method:$endpoint" in
     echo '{"ahead_by":1}'
     ;;
   create-snapshot:GET:repos/wangkuntian/jimu/git/ref/heads/dependabot-updates)
-    echo '{"ref":"refs/heads/dependabot-updates","object":{"sha":"dependabot-sha"}}'
+    echo '{"ref":"refs/heads/dependabot-updates","object":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}'
     ;;
   create-snapshot:GET:repos/wangkuntian/jimu/git/ref/heads/updates/v0.3.5)
-    if [[ ${FAKE_SNAPSHOT_STATE:-new} == existing ]]; then
-      echo '{"ref":"refs/heads/updates/v0.3.5","object":{"sha":"dependabot-sha"}}'
+    if [[ ${FAKE_SNAPSHOT_STATE:-new} == existing || ${FAKE_SNAPSHOT_STATE:-new} == orphan-managed || ${FAKE_SNAPSHOT_STATE:-new} == unmanaged-pr ]]; then
+      echo '{"ref":"refs/heads/updates/v0.3.5","object":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}'
+    elif [[ ${FAKE_SNAPSHOT_STATE:-new} == unmanaged ]]; then
+      echo '{"ref":"refs/heads/updates/v0.3.5","object":{"sha":"user-sha"}}'
     else
       exit 1
     fi
     ;;
-  create-snapshot:GET:repos/wangkuntian/jimu/pulls*)
-    if [[ ${FAKE_SNAPSHOT_STATE:-new} == existing ]]; then
-      echo '[{"number":123,"state":"open","head":{"ref":"updates/v0.3.5"},"base":{"ref":"release/v0.3.5"}}]'
+  create-snapshot:GET:repos/wangkuntian/jimu/issues/77/comments)
+    if [[ ${FAKE_SNAPSHOT_STATE:-new} == existing || ${FAKE_SNAPSHOT_STATE:-new} == orphan-managed || ${FAKE_SNAPSHOT_STATE:-new} == unmanaged-pr ]]; then
+      echo '[{"body":"<!-- jimu-release-automation:v0.3.5 snapshot:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->"}]'
     else
       echo '[]'
     fi
     ;;
+  create-snapshot:GET:repos/wangkuntian/jimu/pulls*)
+    if [[ ${FAKE_SNAPSHOT_STATE:-new} == existing ]]; then
+      echo '[{"number":123,"state":"open","head":{"ref":"updates/v0.3.5"},"base":{"ref":"release/v0.3.5"},"body":"<!-- jimu-release-automation:v0.3.5 snapshot -->\\n<!-- jimu-release-automation:v0.3.5 snapshot-sha:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->"}]'
+    elif [[ ${FAKE_SNAPSHOT_STATE:-new} == unmanaged-pr ]]; then
+      echo '[{"number":123,"state":"open","head":{"ref":"updates/v0.3.5"},"base":{"ref":"release/v0.3.5"},"body":"<!-- jimu-release-automation:v0.3.5 snapshot -->"}]'
+    else
+      echo '[]'
+    fi
+    ;;
+  create-snapshot:POST:repos/wangkuntian/jimu/issues/77/comments)
+    echo '{"id":2}'
+    ;;
   create-snapshot:POST:repos/wangkuntian/jimu/git/refs)
-    echo '{"ref":"refs/heads/updates/v0.3.5","object":{"sha":"dependabot-sha"}}'
+    echo '{"ref":"refs/heads/updates/v0.3.5","object":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}'
     ;;
   create-snapshot:POST:repos/wangkuntian/jimu/pulls)
     echo '{"number":123,"state":"open"}'
@@ -274,6 +288,13 @@ test_ensure_cycle() {
   assert_contains "$output" 'dependabot_branch=dependabot-updates' 'ensure-cycle reports fixed Dependabot branch'
   assert_contains "$(cat "$FAKE_GH_LOG")" 'api repos/wangkuntian/jimu/git/refs --method POST' 'ensure-cycle creates missing refs'
   assert_contains "$(cat "$FAKE_GH_LOG")" 'api repos/wangkuntian/jimu/issues/77/comments --method POST' 'ensure-cycle records managed resources'
+  local marker_line refs_line
+  marker_line=$(grep -n 'api repos/wangkuntian/jimu/issues/77/comments --method POST' "$FAKE_GH_LOG" | head -n1 | cut -d: -f1)
+  refs_line=$(grep -n 'api repos/wangkuntian/jimu/git/refs --method POST' "$FAKE_GH_LOG" | head -n1 | cut -d: -f1)
+  if (( marker_line >= refs_line )); then
+    printf 'ASSERT FAILED: release marker must be recorded before creating refs\n' >&2
+    exit 1
+  fi
 
   : > "$FAKE_GH_LOG"
   set +e
@@ -287,6 +308,15 @@ test_ensure_cycle() {
   output=$(FAKE_GH_SCENARIO=ensure-cycle FAKE_CYCLE_STATE=existing run_orchestrator ensure-cycle)
   if grep -q -- '--method POST' "$FAKE_GH_LOG"; then
     printf 'ASSERT FAILED: existing managed cycle was modified\n' >&2
+    exit 1
+  fi
+
+  : > "$FAKE_GH_LOG"
+  output=$(FAKE_GH_SCENARIO=ensure-cycle FAKE_CYCLE_STATE=partial-release run_orchestrator ensure-cycle)
+  assert_contains "$output" 'dependabot_branch=dependabot-updates' 'partial bootstrap resumes from its baseline marker'
+  assert_contains "$(cat "$FAKE_GH_LOG")" 'api repos/wangkuntian/jimu/git/refs --method POST --field ref=refs/heads/dependabot-updates' 'partial bootstrap creates only the missing fixed ref'
+  if grep -q -- '--field ref=refs/heads/release/v0.3.5' "$FAKE_GH_LOG"; then
+    printf 'ASSERT FAILED: partial bootstrap recreated the existing release branch\n' >&2
     exit 1
   fi
 
@@ -363,6 +393,35 @@ test_snapshot() {
     printf 'ASSERT FAILED: existing snapshot branch or PR was modified\n' >&2
     exit 1
   fi
+
+  : > "$FAKE_GH_LOG"
+  set +e
+  output=$(FAKE_GH_SCENARIO=create-snapshot FAKE_SNAPSHOT_STATE=unmanaged run_orchestrator create-snapshot 2>&1)
+  local status=$?
+  set -e
+  assert_status 1 "$status" 'unmanaged snapshot branch is rejected'
+  assert_contains "$output" '::error::snapshot branch already exists without a matching managed marker' 'unmanaged snapshot emits stable error'
+  if grep -Eq -- '--method (POST|PATCH|DELETE)' "$FAKE_GH_LOG"; then
+    printf 'ASSERT FAILED: unmanaged snapshot branch caused a remote mutation\n' >&2
+    exit 1
+  fi
+
+  : > "$FAKE_GH_LOG"
+  output=$(FAKE_GH_SCENARIO=create-snapshot FAKE_SNAPSHOT_STATE=orphan-managed run_orchestrator create-snapshot)
+  assert_contains "$output" 'pr_number=123' 'managed snapshot branch without PR is resumed'
+  assert_contains "$(cat "$FAKE_GH_LOG")" 'api repos/wangkuntian/jimu/pulls --method POST' 'orphan managed snapshot PR is created'
+  if grep -q 'api repos/wangkuntian/jimu/git/refs --method POST' "$FAKE_GH_LOG"; then
+    printf 'ASSERT FAILED: resumed snapshot branch was recreated\n' >&2
+    exit 1
+  fi
+
+  : > "$FAKE_GH_LOG"
+  set +e
+  output=$(FAKE_GH_SCENARIO=create-snapshot FAKE_SNAPSHOT_STATE=unmanaged-pr run_orchestrator create-snapshot 2>&1)
+  status=$?
+  set -e
+  assert_status 1 "$status" 'snapshot PR without source SHA marker is rejected'
+  assert_contains "$output" '::error::snapshot PR exists without a matching source SHA marker' 'unmanaged snapshot PR emits stable error'
 }
 
 test_tag_guard() {
@@ -410,6 +469,7 @@ test_dependabot_config() {
 
 test_workflow_contract() {
   local workflow="$ROOT_DIR/.github/workflows/release-dependency-automation.yml"
+  local issue_events release_workflow
   local collector_job
   [[ -f "$workflow" ]] || {
     printf 'ASSERT FAILED: release orchestration workflow is missing\n' >&2
@@ -430,6 +490,9 @@ test_workflow_contract() {
     'release_orchestrator.sh tag-after-merge' \
     'open-release-candidate' \
     'record-security-update' \
+    'snapshot-sha:' \
+    'APP_SLUG' \
+    'PR_AUTHOR' \
     ' final -->' \
     'snapshot -->'; do
     if ! grep -Fq "$required" "$workflow"; then
@@ -455,6 +518,20 @@ test_workflow_contract() {
     printf 'ASSERT FAILED: aggregate merge relies on GitHub auto-merge without required checks\n' >&2
     exit 1
   fi
+  issue_events=$(sed -n '/^  issues:/,/^  schedule:/p' "$workflow")
+  if [[ "$issue_events" != *'types: [opened, edited, reopened]'* || "$issue_events" == *'labeled'* ]]; then
+    printf 'ASSERT FAILED: bootstrap must not rerun for workflow-managed issue labels\n' >&2
+    exit 1
+  fi
+  release_workflow="$ROOT_DIR/.github/workflows/release.yml"
+  grep -Fq 'actions/create-github-app-token@v1' "$release_workflow" || {
+    printf 'ASSERT FAILED: Release workflow must use an App token to emit the published event\n' >&2
+    exit 1
+  }
+  grep -Fq 'token: ${{ steps.app-token.outputs.token }}' "$release_workflow" || {
+    printf 'ASSERT FAILED: GitHub Release creation is not using the App token\n' >&2
+    exit 1
+  }
   collector_job=$(sed -n '/^  collect:/,/^  merge-aggregate:/p' "$workflow")
   if [[ "$collector_job" != *'index("release: collecting")'* ]]; then
     printf 'ASSERT FAILED: daily collector must select only collecting release Issues\n' >&2

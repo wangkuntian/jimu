@@ -2,7 +2,7 @@ name: Release Dependency Automation
 
 on:
   issues:
-    types: [opened, edited, labeled, reopened]
+    types: [opened, edited, reopened]
   schedule:
     - cron: "15 2 * * *"
   pull_request:
@@ -28,7 +28,7 @@ permissions:
 jobs:
   bootstrap:
     name: Bootstrap Release Cycle
-    if: github.event_name == 'issues'
+    if: "github.event_name == 'issues' && startsWith(github.event.issue.title, 'release: v') && !contains(github.event.issue.labels.*.name, 'release: candidate') && !contains(github.event.issue.labels.*.name, 'release: blocked') && !contains(github.event.issue.labels.*.name, 'release: published')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -151,6 +151,7 @@ jobs:
         env:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
           set -euo pipefail
@@ -162,9 +163,10 @@ jobs:
           version="${RUN_BRANCH#updates/}"
           base_branch="release/$version"
           prs=$(gh pr list --repo "$GH_REPO" --state open --base "$base_branch" \
-            --json number,headRefName,headRefOid,baseRefName,body)
-          pr=$(jq -c --arg head "$RUN_BRANCH" --arg base "$base_branch" --arg version "$version" \
-            '[.[] | select(.headRefName == $head and .baseRefName == $base and (.body | contains("<!-- jimu-release-automation:" + $version + " snapshot -->")))] | .[0] // empty' <<<"$prs")
+            --json number,author,headRefName,headRefOid,baseRefName,body)
+          app_bot="${APP_SLUG}[bot]"
+          pr=$(jq -c --arg head "$RUN_BRANCH" --arg base "$base_branch" --arg version "$version" --arg app_bot "$app_bot" \
+            '[.[] | . as $pr | select($pr.headRefName == $head and $pr.baseRefName == $base and $pr.author.login == $app_bot and ($pr.body | contains("<!-- jimu-release-automation:" + $version + " snapshot -->")) and ($pr.body | contains("<!-- jimu-release-automation:" + $version + " snapshot-sha:" + $pr.headRefOid + " -->")))] | .[0] // empty' <<<"$prs")
           if [[ -z "$pr" ]]; then
             echo "No matching managed snapshot PR is open."
             exit 0
@@ -274,11 +276,16 @@ jobs:
           RELEASE_BRANCH: ${{ github.event.pull_request.base.ref }}
           SNAPSHOT_BRANCH: ${{ github.event.pull_request.head.ref }}
           SNAPSHOT_BODY: ${{ github.event.pull_request.body }}
+          SNAPSHOT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: |
           set -euo pipefail
           version="${SNAPSHOT_BRANCH#updates/}"
-          if ! grep -Fq "<!-- jimu-release-automation:$version snapshot -->" <<<"$SNAPSHOT_BODY"; then
-            echo "Snapshot PR does not carry the expected automation marker." >&2
+          if [[ "$PR_AUTHOR" != "${APP_SLUG}[bot]" ]] || \
+            ! grep -Fq "<!-- jimu-release-automation:$version snapshot -->" <<<"$SNAPSHOT_BODY" || \
+            ! grep -Fq "<!-- jimu-release-automation:$version snapshot-sha:$SNAPSHOT_HEAD_SHA -->" <<<"$SNAPSHOT_BODY"; then
+            echo "Snapshot PR author or markers do not match the release automation." >&2
             exit 1
           fi
           release_branch="release/$version"
@@ -335,9 +342,15 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RELEASE_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: |
           set -euo pipefail
           version="v${RELEASE_HEAD_REF#release/v}"
+          if [[ "$PR_AUTHOR" != "${APP_SLUG}[bot]" ]]; then
+            echo "Release candidate PR was not created by the configured GitHub App." >&2
+            exit 1
+          fi
           issues=$(gh api "repos/$GH_REPO/issues" --paginate --field state=all --field per_page=100)
           issue_number=$(jq -r --arg title "release: $version" \
             '.[] | select(.pull_request == null and .title == $title) | .number' <<<"$issues" | head -n1)

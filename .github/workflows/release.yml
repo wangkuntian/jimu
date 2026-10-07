@@ -70,9 +70,19 @@ jobs:
             } >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Create GitHub App token for Release event
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
+          private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
+          token: ${{ steps.app-token.outputs.token }}
           name: ${{ steps.notes.outputs.version }}
           body: ${{ steps.notes.outputs.body }}
           files: bin/jimu-*
