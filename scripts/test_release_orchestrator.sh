@@ -631,6 +631,12 @@ test_workflow_contract() {
     printf 'ASSERT FAILED: daily collector must select only collecting release Issues\n' >&2
     exit 1
   fi
+  for required in 'needs: bootstrap' 'always()' "github.event_name == 'schedule'" "github.event_name == 'issues'" "needs.bootstrap.result == 'success'"; do
+    if ! grep -Fq "$required" <<<"$collector_job"; then
+      printf 'ASSERT FAILED: collector must run after bootstrap and on its successful Issue event (%s)\n' "$required" >&2
+      exit 1
+    fi
+  done
 }
 
 test_dependabot_merge_contract() {
