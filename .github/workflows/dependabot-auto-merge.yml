@@ -46,7 +46,18 @@ jobs:
 
           pr_number=$(jq -r '.number' <<<"$pr")
           head_sha=$(jq -r '.headRefOid' <<<"$pr")
+          set +e
           checks=$(gh pr checks "$pr_number" --repo "$GH_REPO" --json bucket,workflow)
+          checks_status=$?
+          set -e
+          if [[ "$checks_status" == 8 ]]; then
+            echo "Focused checks are still pending."
+            exit 0
+          fi
+          if [[ "$checks_status" != 0 ]]; then
+            echo "Could not read the focused check state." >&2
+            exit "$checks_status"
+          fi
           if ! jq -e '([.[] | select(.workflow == "CI (Dependabot Focused)")] | length) > 0 and
             ([.[] | select(.workflow == "CI (Dependabot Focused)" and .bucket != "pass")] | length) == 0' \
             <<<"$checks" >/dev/null; then

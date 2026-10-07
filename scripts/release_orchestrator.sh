@@ -34,7 +34,7 @@ write_output() {
 version_value() {
   local value=${1:-${RELEASE_VERSION:-}}
   [[ -n "$value" ]] || error "release version is required"
-  [[ "$value" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || error "invalid release version: $value"
+  [[ "$value" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || error "invalid release version: $value"
   printf '%s\n' "$value"
 }
 
@@ -87,7 +87,7 @@ issue_comments() {
 }
 
 record_cycle_comment() {
-  local issue=$1 version=$2 release_branch=$3 dependabot_branch=$4
+  local issue=$1 version=$2 release_branch=$3 dependabot_branch=$4 release_sha=$5
   local body
   body=$(cat <<EOF
 <!-- jimu-release-automation:$version -->
@@ -95,28 +95,38 @@ Release cycle \`$version\` is managed by the automation.
 
 - release branch: \`$release_branch\`
 - Dependabot branch: \`$dependabot_branch\`
+- release base: \`$release_sha\`
 EOF
 )
   api "repos/$repo/issues/$issue/comments" --method POST --field "body=$body" >/dev/null
 }
 
 reset_terminal_dependabot_cycle() {
-  local current_issue=$1 issue_json previous_issue="" previous_version="" number labels comments marker
+  local current_issue=$1 issue_json previous_issue="" previous_version="" previous_base="" number title labels comments marker
   issue_json=$(api "repos/$repo/issues" --paginate --field state=all --field per_page=100)
-  while IFS=$'\t' read -r number labels; do
+  while IFS=$'\t' read -r number title labels; do
     [[ -n "$number" ]] || continue
     [[ ",$labels," == *"release: published"* || ",$labels," == *"release: blocked"* ]] || continue
     comments=$(issue_comments "$number" 2>/dev/null || true)
     marker=$(grep -Eo '<!-- jimu-release-automation:v[0-9]+\.[0-9]+\.[0-9]+ -->' <<<"$comments" | head -n1 || true)
+    previous_base=$(grep -Eo 'release base: `[0-9a-f]{40}`' <<<"$comments" | head -n1 | sed -E 's/.*`([0-9a-f]{40})`.*/\1/' || true)
     if [[ "$marker" =~ jimu-release-automation:(v[0-9]+\.[0-9]+\.[0-9]+) ]]; then
+      [[ "$title" == "release: ${BASH_REMATCH[1]}" ]] || continue
       previous_issue=$number
       previous_version=${BASH_REMATCH[1]}
-      break
+      [[ -n "$previous_base" ]] && break
     fi
-  done < <(jq -r '.[] | select(.pull_request == null) | [.number, ([.labels[]?.name] | join(","))] | @tsv' <<<"$issue_json")
+  done < <(jq -r '.[] | select(.pull_request == null) | [.number, .title, ([.labels[]?.name] | join(","))] | @tsv' <<<"$issue_json")
 
-  [[ -n "$previous_issue" && "$previous_issue" != "$current_issue" && -n "$previous_version" ]] || \
+  [[ -n "$previous_issue" && "$previous_issue" != "$current_issue" && -n "$previous_version" && -n "$previous_base" ]] || \
     error "dependabot-updates exists without a terminal managed release cycle"
+
+  local dependabot_sha comparison merge_base
+  dependabot_sha=$(ref_sha heads dependabot-updates) || error "fixed Dependabot branch ref is unavailable"
+  comparison=$(api "repos/$repo/compare/$previous_base...$dependabot_sha")
+  merge_base=$(jq -r '.merge_base_commit.sha // empty' <<<"$comparison")
+  [[ "$merge_base" == "$previous_base" ]] || \
+    error "dependabot-updates does not descend from the terminal cycle baseline"
 
   local pulls number author
   pulls=$(api "repos/$repo/pulls" --paginate --field state=open --field base=dependabot-updates --field per_page=100)
@@ -145,42 +155,46 @@ ensure_cycle() {
   while IFS=$'\t' read -r number title labels; do
     [[ -n "$number" ]] || continue
     [[ "$number" == "$issue" ]] && continue
-    [[ "$title" =~ ^release:\ v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+    [[ "$title" =~ ^release:\ v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || continue
     if [[ ",$labels," != *,release:\ published,* && ",$labels," != *,release:\ blocked,* ]]; then
       error "another active release cycle exists: issue #$number ($title)"
     fi
   done < <(jq -r '.[] | select(.pull_request == null) | [.number, .title, ([.labels[]?.name] | join(","))] | @tsv' <<<"$active_issues")
 
-  local master_sha release_sha dependabot_sha managed_comment=false
+  local master_sha release_sha dependabot_sha current_comments managed_comment=false release_exists=false fixed_exists=false
   master_sha=$(ref_sha heads master) || error "master branch ref is unavailable"
+  current_comments=$(issue_comments "$issue" 2>/dev/null || true)
+  if grep -Fq "<!-- jimu-release-automation:$VERSION -->" <<<"$current_comments"; then
+    managed_comment=true
+  fi
+
   if release_sha=$(ref_sha heads "$RELEASE_BRANCH"); then
-    if [[ "$release_sha" != "$master_sha" && -z "${ALLOW_EXISTING_RELEASE_BRANCH:-}" ]]; then
-      # Existing release branches are preserved; the cycle may already contain commits.
-      :
+    release_exists=true
+    if [[ "$release_sha" != "$master_sha" && "$managed_comment" != true ]]; then
+      error "release branch already exists and is not managed"
     fi
-  else
-    create_ref heads "$RELEASE_BRANCH" "$master_sha" || error "failed to create $RELEASE_BRANCH"
-    release_sha=$master_sha
   fi
 
   if ref_exists heads dependabot-updates; then
-    local comments
-    comments=$(issue_comments "$issue" 2>/dev/null || true)
-    if grep -Fq "<!-- jimu-release-automation:$VERSION -->" <<<"$comments"; then
-      managed_comment=true
+    fixed_exists=true
+    if [[ "$managed_comment" == true ]]; then
       dependabot_sha=$(ref_sha heads dependabot-updates) || error "fixed Dependabot branch ref is unavailable"
     else
       reset_terminal_dependabot_cycle "$issue"
-      create_ref heads dependabot-updates "$release_sha" || error "failed to reset dependabot-updates"
-      dependabot_sha=$release_sha
     fi
-  else
+  fi
+
+  if [[ "$release_exists" != true ]]; then
+    create_ref heads "$RELEASE_BRANCH" "$master_sha" || error "failed to create $RELEASE_BRANCH"
+    release_sha=$master_sha
+  fi
+  if [[ "$fixed_exists" != true || "$managed_comment" != true ]]; then
     create_ref heads dependabot-updates "$release_sha" || error "failed to create dependabot-updates"
     dependabot_sha=$release_sha
   fi
 
   if [[ "$managed_comment" != true ]]; then
-    record_cycle_comment "$issue" "$VERSION" "$RELEASE_BRANCH" dependabot-updates
+    record_cycle_comment "$issue" "$VERSION" "$RELEASE_BRANCH" dependabot-updates "$release_sha"
   fi
   write_output version "$VERSION"
   write_output release_branch "$RELEASE_BRANCH"
@@ -197,7 +211,7 @@ collection_ready() {
   local issue_json started_at cycle_age now_value now_epoch
   issue_json=$(api "repos/$repo/issues/$issue")
   started_at=$(jq -er '.created_at' <<<"$issue_json") || error "release issue has no created_at"
-  now_value=${NOW:-\$(date -u '+%Y-%m-%dT%H:%M:%SZ')}
+  now_value=${NOW:-$(date -u '+%Y-%m-%dT%H:%M:%SZ')}
   now_epoch=$(epoch "$now_value")
   cycle_age=$((now_epoch - $(epoch "$started_at")))
   if (( cycle_age < 8 * 24 * 60 * 60 )); then
@@ -288,16 +302,31 @@ tag_after_merge() {
   version_context "${1:-}"
   local pr_number=${2:-${RELEASE_PR_NUMBER:-}}
   [[ "$pr_number" =~ ^[0-9]+$ ]] || error "release PR number is required"
+  local issue=${RELEASE_ISSUE_NUMBER:-}
+  [[ "$issue" =~ ^[0-9]+$ ]] || error "RELEASE_ISSUE_NUMBER is required"
 
-  local pr_json merged merged_at head_ref base_ref merge_sha
+  local pr_json merged merged_at head_ref base_ref merge_sha pr_body
   pr_json=$(api "repos/$repo/pulls/$pr_number")
   merged=$(jq -r '.merged // false' <<<"$pr_json")
   merged_at=$(jq -r '.merged_at // empty' <<<"$pr_json")
   head_ref=$(jq -r '.head.ref // empty' <<<"$pr_json")
   base_ref=$(jq -r '.base.ref // empty' <<<"$pr_json")
   merge_sha=$(jq -r '.merge_commit_sha // empty' <<<"$pr_json")
+  pr_body=$(jq -r '.body // ""' <<<"$pr_json")
   [[ "$merged" == true && -n "$merged_at" ]] || error "release PR is not merged"
   [[ "$head_ref" == "$RELEASE_BRANCH" && "$base_ref" == master ]] || error "release PR must be release/* -> master"
+  [[ "$pr_body" == *"<!-- jimu-release-automation:$VERSION final -->"* ]] || \
+    error "release PR is not managed by this automation"
+
+  local issue_json issue_title candidate comments
+  issue_json=$(api "repos/$repo/issues/$issue")
+  issue_title=$(jq -r '.title // empty' <<<"$issue_json")
+  [[ "$issue_title" == "release: $VERSION" ]] || error "release Issue does not match tag version"
+  candidate=$(jq -r '[.labels[]?.name] | any(. == "release: candidate")' <<<"$issue_json")
+  [[ "$candidate" == true ]] || error "release issue is not in candidate state"
+  comments=$(issue_comments "$issue")
+  grep -Fq "<!-- jimu-release-automation:$VERSION -->" <<<"$comments" || \
+    error "release Issue is missing the automation marker"
 
   local master_sha
   master_sha=$(ref_sha heads master) || error "master branch ref is unavailable"

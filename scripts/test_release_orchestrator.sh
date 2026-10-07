@@ -66,6 +66,8 @@ case "$scenario:$method:$endpoint" in
       echo '[{"number":76,"title":"release: v0.3.4","labels":[{"name":"release: published"}]}]'
     elif [[ ${FAKE_CYCLE_STATE:-new} == unsafe-existing && $state_filter == all ]]; then
       echo '[{"number":76,"title":"release: v0.3.4","labels":[{"name":"release: collecting"}]}]'
+    elif [[ ${FAKE_CYCLE_STATE:-new} == bad-base && $state_filter == all ]]; then
+      echo '[{"number":76,"title":"release: v0.3.4","labels":[{"name":"release: published"}]}]'
     elif [[ ${FAKE_CYCLE_STATE:-new} == duplicate ]]; then
       echo '[{"number":99,"title":"release: v0.3.6","labels":[{"name":"release: collecting"}]}]'
     else
@@ -73,7 +75,7 @@ case "$scenario:$method:$endpoint" in
     fi
     ;;
   ensure-cycle:GET:repos/wangkuntian/jimu/issues/76/comments)
-    echo '[{"body":"<!-- jimu-release-automation:v0.3.4 -->"}]'
+    echo '[{"body":"<!-- jimu-release-automation:v0.3.4 -->\\n- release base: `1111111111111111111111111111111111111111`"}]'
     ;;
   ensure-cycle:GET:repos/wangkuntian/jimu/git/ref/heads/master)
     echo '{"ref":"refs/heads/master","object":{"sha":"master-sha"}}'
@@ -81,8 +83,17 @@ case "$scenario:$method:$endpoint" in
   ensure-cycle:GET:repos/wangkuntian/jimu/git/ref/tags/v0.3.5)
     exit 1
     ;;
-  ensure-cycle:GET:repos/wangkuntian/jimu/git/ref/heads/release/v0.3.5|ensure-cycle:GET:repos/wangkuntian/jimu/git/ref/heads/dependabot-updates)
-    if [[ ${FAKE_CYCLE_STATE:-new} == existing || ${FAKE_CYCLE_STATE:-new} == reuse-terminal || ${FAKE_CYCLE_STATE:-new} == unsafe-existing ]]; then
+  ensure-cycle:GET:repos/wangkuntian/jimu/git/ref/heads/release/v0.3.5)
+    if [[ ${FAKE_CYCLE_STATE:-new} == existing ]]; then
+      echo '{"ref":"refs/heads/release/v0.3.5","object":{"sha":"release-sha"}}'
+    elif [[ ${FAKE_CYCLE_STATE:-new} == conflict-release ]]; then
+      echo '{"ref":"refs/heads/release/v0.3.5","object":{"sha":"user-sha"}}'
+    else
+      exit 1
+    fi
+    ;;
+  ensure-cycle:GET:repos/wangkuntian/jimu/git/ref/heads/dependabot-updates)
+    if [[ ${FAKE_CYCLE_STATE:-new} == existing || ${FAKE_CYCLE_STATE:-new} == reuse-terminal || ${FAKE_CYCLE_STATE:-new} == unsafe-existing || ${FAKE_CYCLE_STATE:-new} == bad-base ]]; then
       echo '{"ref":"refs/heads/dependabot-updates","object":{"sha":"dependabot-sha"}}'
     else
       exit 1
@@ -95,6 +106,13 @@ case "$scenario:$method:$endpoint" in
       echo '[]'
     fi
     ;;
+  ensure-cycle:GET:repos/wangkuntian/jimu/compare/*)
+    if [[ ${FAKE_CYCLE_STATE:-new} == bad-base ]]; then
+      echo '{"merge_base_commit":{"sha":"2222222222222222222222222222222222222222"}}'
+    else
+      echo '{"merge_base_commit":{"sha":"1111111111111111111111111111111111111111"}}'
+    fi
+    ;;
   ensure-cycle:PATCH:repos/wangkuntian/jimu/pulls/81)
     echo '{"number":81,"state":"closed"}'
     ;;
@@ -103,7 +121,7 @@ case "$scenario:$method:$endpoint" in
     ;;
   ensure-cycle:GET:repos/wangkuntian/jimu/issues/77/comments)
     if [[ ${FAKE_CYCLE_STATE:-new} == existing ]]; then
-      echo '[{"body":"<!-- jimu-release-automation:v0.3.5 -->"}]'
+      echo '[{"body":"<!-- jimu-release-automation:v0.3.5 -->\\n- release base: `master-sha`"}]'
     else
       echo '[]'
     fi
@@ -162,7 +180,17 @@ case "$scenario:$method:$endpoint" in
     echo '{"number":123,"state":"open"}'
     ;;
   tag-after-merge:GET:repos/wangkuntian/jimu/pulls/42)
-    echo '{"merged":true,"merged_at":"2026-09-30T01:00:00Z","head":{"ref":"release/v0.3.5"},"base":{"ref":"master"},"merge_commit_sha":"merge-sha"}'
+    echo '{"merged":true,"merged_at":"2026-09-30T01:00:00Z","head":{"ref":"release/v0.3.5"},"base":{"ref":"master"},"merge_commit_sha":"merge-sha","body":"<!-- jimu-release-automation:v0.3.5 final -->"}'
+    ;;
+  tag-after-merge:GET:repos/wangkuntian/jimu/issues/77)
+    if [[ ${FAKE_TAG_STATE:-match} == bad-issue ]]; then
+      echo '{"title":"release: v0.3.5","labels":[{"name":"release: collecting"}]}'
+    else
+      echo '{"title":"release: v0.3.5","labels":[{"name":"release: candidate"}]}'
+    fi
+    ;;
+  tag-after-merge:GET:repos/wangkuntian/jimu/issues/77/comments)
+    echo '[{"body":"<!-- jimu-release-automation:v0.3.5 -->"}]'
     ;;
   tag-after-merge:GET:repos/wangkuntian/jimu/git/ref/heads/master)
     if [[ ${FAKE_TAG_STATE:-match} == mismatch ]]; then
@@ -229,6 +257,13 @@ test_validate_version() {
   set -e
   assert_status 1 "$status" 'missing v prefix is rejected'
   assert_contains "$output" '::error::invalid release version' 'invalid version emits stable error'
+
+  set +e
+  output=$(env PATH="$FAKE_BIN:$PATH" GH_REPO=wangkuntian/jimu GH_TOKEN=test RELEASE_VERSION=v01.2.3 "$SCRIPT" validate-version 2>&1)
+  status=$?
+  set -e
+  assert_status 1 "$status" 'leading zero in SemVer component is rejected'
+  assert_contains "$output" '::error::invalid release version' 'invalid SemVer emits stable error'
 }
 
 test_ensure_cycle() {
@@ -272,12 +307,37 @@ test_ensure_cycle() {
     printf 'ASSERT FAILED: nonterminal cycle caused a remote mutation\n' >&2
     exit 1
   fi
+
+  : > "$FAKE_GH_LOG"
+  set +e
+  output=$(FAKE_GH_SCENARIO=ensure-cycle FAKE_CYCLE_STATE=bad-base run_orchestrator ensure-cycle 2>&1)
+  status=$?
+  set -e
+  assert_status 1 "$status" 'fixed branch outside terminal cycle ancestry is rejected'
+  assert_contains "$output" '::error::dependabot-updates does not descend from the terminal cycle baseline' 'unrelated fixed branch emits stable error'
+  if grep -Eq -- '--method (PATCH|DELETE|POST)' "$FAKE_GH_LOG"; then
+    printf 'ASSERT FAILED: unrelated branch caused a remote mutation\n' >&2
+    exit 1
+  fi
+
+  : > "$FAKE_GH_LOG"
+  set +e
+  output=$(FAKE_GH_SCENARIO=ensure-cycle FAKE_CYCLE_STATE=conflict-release run_orchestrator ensure-cycle 2>&1)
+  status=$?
+  set -e
+  assert_status 1 "$status" 'unmanaged release branch is rejected'
+  assert_contains "$output" '::error::release branch already exists and is not managed' 'release conflict emits stable error'
 }
 
 test_collection_window() {
   local output
   output=$(FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=ready run_orchestrator collection-ready)
   assert_contains "$output" 'ready=true' 'ready cycle passes the collection window'
+
+  output=$(env -u NOW PATH="$FAKE_BIN:$PATH" GH_REPO=wangkuntian/jimu GH_TOKEN=test \
+    FAKE_GH_LOG="$FAKE_GH_LOG" FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=ready \
+    RELEASE_VERSION=v0.3.5 RELEASE_ISSUE_NUMBER=77 "$SCRIPT" collection-ready)
+  assert_contains "$output" 'ready=true' 'collection uses current UTC time when NOW is unset'
 
   output=$(FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=young run_orchestrator collection-ready)
   assert_contains "$output" 'ready=false' 'young cycle is held'
@@ -316,6 +376,13 @@ test_tag_guard() {
   set -e
   assert_status 1 "$status" 'stale merge commit is rejected'
   assert_contains "$output" '::error::merge commit is not current master tip' 'tag guard emits stable error'
+
+  set +e
+  output=$(FAKE_GH_SCENARIO=tag-after-merge FAKE_TAG_STATE=bad-issue run_orchestrator tag-after-merge v0.3.5 42 2>&1)
+  status=$?
+  set -e
+  assert_status 1 "$status" 'issue outside candidate state cannot be tagged'
+  assert_contains "$output" '::error::release issue is not in candidate state' 'candidate state failure emits stable error'
 }
 
 test_dependabot_config() {
@@ -359,7 +426,11 @@ test_workflow_contract() {
     'release_orchestrator.sh ensure-cycle' \
     'release_orchestrator.sh collection-ready' \
     'release_orchestrator.sh create-snapshot' \
-    'release_orchestrator.sh tag-after-merge'; do
+    'release_orchestrator.sh tag-after-merge' \
+    'open-release-candidate' \
+    'record-security-update' \
+    ' final -->' \
+    'snapshot -->'; do
     if ! grep -Fq "$required" "$workflow"; then
       printf 'ASSERT FAILED: workflow contract is missing %s\n' "$required" >&2
       exit 1
