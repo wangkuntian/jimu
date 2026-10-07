@@ -1,0 +1,96 @@
+name: Dependabot Auto Merge
+
+on:
+  workflow_run:
+    workflows: [CI (Dependabot Focused)]
+    types: [completed]
+
+concurrency:
+  group: release-dependency-automation
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  enable-auto-merge:
+    name: Merge Dependabot Update
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
+          private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: read
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Merge only after focused checks succeed
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          # Each run reconciles all open PRs because GitHub may replace pending runs in this concurrency group.
+          prs=$(gh pr list --repo "$GH_REPO" --state open --base dependabot-updates \
+            --json number,author,baseRefName,headRefName,headRefOid)
+          dependabot_prs=$(jq -c '[.[] | select(.author.login == "dependabot[bot]" and .baseRefName == "dependabot-updates")]' <<<"$prs")
+          if [[ "$(jq 'length' <<<"$dependabot_prs")" == 0 ]]; then
+            echo "No open Dependabot PRs target dependabot-updates."
+            exit 0
+          fi
+
+          issues=$(gh api "repos/$GH_REPO/issues" --method GET --paginate --field state=open --field per_page=100)
+          collecting_cycles=$(jq '[.[] | select(.pull_request == null and ([.labels[]?.name] | index("release: collecting")) != null)] | length' <<<"$issues")
+          if [[ "$collecting_cycles" != 1 ]]; then
+            echo "No unique collecting release cycle; leaving the Dependabot PR open."
+            exit 0
+          fi
+
+          reconcile_errors=0
+          while IFS= read -r pr; do
+            pr_number=$(jq -r '.number' <<<"$pr")
+            head_sha=$(jq -r '.headRefOid' <<<"$pr")
+            set +e
+            checks=$(gh pr checks "$pr_number" --repo "$GH_REPO" --json bucket,workflow)
+            checks_status=$?
+            set -e
+            if [[ "$checks_status" == 8 ]]; then
+              echo "Focused checks are still pending for PR #$pr_number."
+              continue
+            fi
+            if [[ "$checks_status" != 0 ]]; then
+              echo "Could not read the focused check state for PR #$pr_number." >&2
+              reconcile_errors=1
+              continue
+            fi
+            if ! jq -e '([.[] | select(.workflow == "CI (Dependabot Focused)")] | length) > 0 and
+              ([.[] | select(.workflow == "CI (Dependabot Focused)" and .bucket != "pass")] | length) == 0' \
+              <<<"$checks" >/dev/null; then
+              echo "Focused checks are not all successful for PR #$pr_number; leaving it open."
+              continue
+            fi
+
+            if ! current_sha=$(gh pr view "$pr_number" --repo "$GH_REPO" --json headRefOid --jq .headRefOid); then
+              echo "Could not read the current head SHA for PR #$pr_number." >&2
+              reconcile_errors=1
+              continue
+            fi
+            if [[ "$current_sha" != "$head_sha" ]]; then
+              echo "PR #$pr_number head changed while checks were inspected; waiting for its next workflow run."
+              continue
+            fi
+            if ! gh pr merge "$pr_number" --repo "$GH_REPO" --squash --delete-branch=false --match-head-commit "$head_sha"; then
+              echo "Could not merge PR #$pr_number; continuing with other Dependabot PRs." >&2
+              reconcile_errors=1
+            fi
+          done < <(jq -c '.[]' <<<"$dependabot_prs")
+          if [[ "$reconcile_errors" != 0 ]]; then
+            echo "One or more Dependabot PRs could not be reconciled." >&2
+            exit 1
+          fi

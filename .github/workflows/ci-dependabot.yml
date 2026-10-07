@@ -1,0 +1,44 @@
+name: CI (Dependabot Focused)
+
+on:
+  pull_request:
+    branches: [dependabot-updates]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: dependabot-focused-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.26.6"
+
+jobs:
+  focused:
+    name: Dependabot Focused Checks
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.base.ref == 'dependabot-updates'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Check formatting
+        run: |
+          if gofmt -l . | grep -q .; then
+            echo "The following files need formatting:"
+            gofmt -l .
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run focused Go tests
+        run: go test ./... -short -timeout 15m

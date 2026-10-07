@@ -165,11 +165,20 @@ jobs:
           CHANGES_RESULT: ${{ needs.changes.result }}
           HEAVY: ${{ needs.changes.outputs.heavy }}
           SHARDS_RESULT: ${{ needs.scaffold-shards.result }}
+          RELEASE_AUTHOR: ${{ github.event.pull_request.user.login }}
+          RELEASE_BASE: ${{ github.event.pull_request.base.ref }}
           RELEASE_SOURCE: ${{ github.head_ref }}
         run: |
           if [ "$CHANGES_RESULT" != success ]; then
             echo "::error::Scaffold input detection failed: $CHANGES_RESULT"
             exit 1
+          fi
+          if [ "$GITHUB_EVENT_NAME" = pull_request ] && \
+            [ "$RELEASE_BASE" = master ] && \
+            [ "$RELEASE_AUTHOR" = "dependabot[bot]" ] && \
+            [[ "$RELEASE_SOURCE" != release/* ]]; then
+            echo "Scaffold Matrix skipped for Dependabot security update targeting master."
+            exit 0
           fi
           if [ "$GITHUB_EVENT_NAME" = pull_request ] && [[ "$RELEASE_SOURCE" != release/* ]]; then
             echo "::error::Scaffold Matrix only accepts release/* -> master PRs: $RELEASE_SOURCE"
