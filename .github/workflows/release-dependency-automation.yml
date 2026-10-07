@@ -119,7 +119,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
 
-      - name: Check collection window and create snapshot PR
+      - name: Create or reconcile aggregate PR
         env:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -140,26 +140,32 @@ jobs:
 
           IFS=$'\t' read -r issue_number issue_title <<<"$issue_row"
           version="${issue_title#release: }"
+          aggregate=$(RELEASE_VERSION="$version" RELEASE_ISSUE_NUMBER="$issue_number" \
+            scripts/release_orchestrator.sh create-snapshot)
+          echo "$aggregate"
+          if ! grep -Fq 'created=true' <<<"$aggregate"; then
+            echo "No dependency commit is available yet; the next collection run will retry."
+            exit 0
+          fi
+
           readiness=$(RELEASE_VERSION="$version" RELEASE_ISSUE_NUMBER="$issue_number" \
             scripts/release_orchestrator.sh collection-ready)
           echo "$readiness"
           if ! grep -Fq 'ready=true' <<<"$readiness"; then
-            echo "The release cycle is not ready for aggregation."
+            echo "Aggregate PR is open; the release cycle is not ready for merge."
             exit 0
           fi
 
-          snapshot=$(RELEASE_VERSION="$version" RELEASE_ISSUE_NUMBER="$issue_number" \
-            scripts/release_orchestrator.sh create-snapshot)
-          echo "$snapshot"
-          pr_number=$(awk -F= '$1 == "pr_number" { print $2 }' <<<"$snapshot")
+          pr_number=$(awk -F= '$1 == "pr_number" { print $2 }' <<<"$aggregate")
           test -n "$pr_number"
           gh label create "release: candidate" --repo "$GH_REPO" --color "5319e7" --force >/dev/null 2>&1 || true
           gh issue edit "$issue_number" --repo "$GH_REPO" \
             --remove-label "release: collecting" --add-label "release: candidate" >/dev/null
 
   merge-aggregate:
-    name: Merge Validated Dependency Snapshot
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_run' && contains(fromJSON('["CI (Go)","CI (Docker)","CI (Commits)"]'), github.event.workflow_run.name))
+    name: Merge Validated Dependency Aggregate
+    needs: collect
+    if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_run' && contains(fromJSON('["CI (Go)","CI (Docker)","CI (Commits)"]'), github.event.workflow_run.name)))
     runs-on: ubuntu-latest
     steps:
       - name: Create GitHub App token
@@ -174,7 +180,7 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      - name: Merge snapshot only after all release checks pass
+      - name: Merge aggregate only after all release checks pass
         env:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -183,34 +189,49 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          if [[ "$EVENT_NAME" == schedule ]]; then
-            issues=$(gh api "repos/$GH_REPO/issues" --method GET --paginate --field state=open --field per_page=100)
-            issue=$(jq -c '
-              [.[] | select(.pull_request == null)
-                | select(.title | test("^release: v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))
-                | select(([.labels[]?.name] | index("release: candidate")) != null)]
-              | .[0] // empty' <<<"$issues")
-            if [[ -z "$issue" ]]; then
-              echo "No candidate release cycle to reconcile."
-              exit 0
-            fi
-            issue_title=$(jq -r '.title' <<<"$issue")
-            RUN_BRANCH="updates/${issue_title#release: }"
+          issues=$(gh api "repos/$GH_REPO/issues" --method GET --paginate --field state=open --field per_page=100)
+          candidate_issue=$(jq -c '
+            [.[] | select(.pull_request == null)
+              | select(.title | test("^release: v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))
+              | select(([.labels[]?.name] | index("release: candidate")) != null)]
+            | .[0] // empty' <<<"$issues")
+          if [[ -z "$candidate_issue" ]]; then
+            echo "No candidate release cycle to reconcile."
+            exit 0
           fi
-          if [[ ! "$RUN_BRANCH" =~ ^updates/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "Workflow run is not from a versioned dependency snapshot branch."
+          if [[ "$EVENT_NAME" == schedule ]]; then
+            issue_title=$(jq -r '.title' <<<"$candidate_issue")
+            RUN_BRANCH=dependabot-updates
+          fi
+          if [[ "$RUN_BRANCH" != dependabot-updates ]]; then
+            echo "Workflow run is not from the fixed Dependabot aggregation branch."
             exit 0
           fi
 
-          version="${RUN_BRANCH#updates/}"
-          base_branch="release/$version"
-          prs=$(gh pr list --repo "$GH_REPO" --state open --base "$base_branch" \
-            --json number,author,headRefName,headRefOid,baseRefName,body)
           app_bot="${APP_SLUG}[bot]"
+          if [[ "$EVENT_NAME" == schedule ]]; then
+            version="${issue_title#release: }"
+            base_branch="release/$version"
+          else
+            prs=$(gh pr list --repo "$GH_REPO" --state open --head dependabot-updates \
+              --json number,author,headRefName,headRefOid,baseRefName,body)
+            aggregate_pr=$(jq -c --arg app_bot "$app_bot" \
+              '[.[] | select(.baseRefName | startswith("release/"))
+                | select(.author.login == $app_bot)
+                | select(.body | contains(" aggregate -->"))] | .[0] // empty' <<<"$prs")
+            if [[ -z "$aggregate_pr" ]]; then
+              echo "No managed aggregate PR is open."
+              exit 0
+            fi
+            base_branch=$(jq -r '.baseRefName' <<<"$aggregate_pr")
+            version="${base_branch#release/}"
+          fi
+          prs=$(gh pr list --repo "$GH_REPO" --state open --base "$base_branch" --head dependabot-updates \
+            --json number,author,headRefName,headRefOid,baseRefName,body)
           pr=$(jq -c --arg head "$RUN_BRANCH" --arg base "$base_branch" --arg version "$version" --arg app_bot "$app_bot" \
-            '[.[] | . as $pr | select($pr.headRefName == $head and $pr.baseRefName == $base and $pr.author.login == $app_bot and ($pr.body | contains("<!-- jimu-release-automation:" + $version + " snapshot -->")) and ($pr.body | contains("<!-- jimu-release-automation:" + $version + " snapshot-sha:" + $pr.headRefOid + " -->")))] | .[0] // empty' <<<"$prs")
+            '[.[] | . as $pr | select($pr.headRefName == $head and $pr.baseRefName == $base and $pr.author.login == $app_bot and ($pr.body | contains("<!-- jimu-release-automation:" + $version + " aggregate -->")))] | .[0] // empty' <<<"$prs")
           if [[ -z "$pr" ]]; then
-            echo "No matching managed snapshot PR is open."
+            echo "No matching managed aggregate PR is open."
             exit 0
           fi
 
@@ -299,7 +320,7 @@ jobs:
 
   open-release-candidate:
     name: Open Release Candidate PR
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && startsWith(github.event.pull_request.base.ref, 'release/') && startsWith(github.event.pull_request.head.ref, 'updates/v') && contains(github.event.pull_request.body, 'snapshot -->')
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && startsWith(github.event.pull_request.base.ref, 'release/') && github.event.pull_request.head.ref == 'dependabot-updates' && contains(github.event.pull_request.body, ' aggregate -->')
     runs-on: ubuntu-latest
     steps:
       - name: Create GitHub App token
@@ -321,15 +342,13 @@ jobs:
           RELEASE_BRANCH: ${{ github.event.pull_request.base.ref }}
           SNAPSHOT_BRANCH: ${{ github.event.pull_request.head.ref }}
           SNAPSHOT_BODY: ${{ github.event.pull_request.body }}
-          SNAPSHOT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: |
           set -euo pipefail
-          version="${SNAPSHOT_BRANCH#updates/}"
+          version="${RELEASE_BRANCH#release/}"
           if [[ "$PR_AUTHOR" != "${APP_SLUG}[bot]" ]] || \
-            ! grep -Fq "<!-- jimu-release-automation:$version snapshot -->" <<<"$SNAPSHOT_BODY" || \
-            ! grep -Fq "<!-- jimu-release-automation:$version snapshot-sha:$SNAPSHOT_HEAD_SHA -->" <<<"$SNAPSHOT_BODY"; then
+            ! grep -Fq "<!-- jimu-release-automation:$version aggregate -->" <<<"$SNAPSHOT_BODY"; then
             echo "Snapshot PR author or markers do not match the release automation." >&2
             exit 1
           fi
@@ -357,7 +376,7 @@ jobs:
           else
             body=$(cat <<EOF
           <!-- jimu-release-automation:$version final -->
-          Release candidate for version $version, generated from the completed Dependabot snapshot.
+          Release candidate for version $version, generated from the completed Dependabot aggregate.
 
           Tracks #$issue_number. This PR requires human review and merge.
           EOF
@@ -368,12 +387,6 @@ jobs:
               --body "Release candidate PR was opened: $candidate_url" >/dev/null
           fi
 
-          if gh api "repos/$GH_REPO/git/refs/heads/$SNAPSHOT_BRANCH" --method DELETE >/dev/null 2>&1; then
-            echo "Deleted completed snapshot branch $SNAPSHOT_BRANCH."
-          elif gh api "repos/$GH_REPO/git/ref/heads/$SNAPSHOT_BRANCH" --method GET >/dev/null 2>&1; then
-            echo "Failed to delete completed snapshot branch $SNAPSHOT_BRANCH." >&2
-            exit 1
-          fi
           echo "Kept dependabot-updates as Dependabot's configured target; auto-merge is paused until the next collecting cycle."
 
   tag:
