@@ -292,6 +292,40 @@ test_dependabot_config() {
   fi
 }
 
+test_workflow_contract() {
+  local workflow="$ROOT_DIR/.github/workflows/release-dependency-automation.yml"
+  [[ -f "$workflow" ]] || {
+    printf 'ASSERT FAILED: release orchestration workflow is missing\n' >&2
+    exit 1
+  }
+  local required
+  for required in \
+    'issues:' \
+    'schedule:' \
+    'pull_request:' \
+    'workflow_run:' \
+    'concurrency:' \
+    'actions/create-github-app-token' \
+    'release_orchestrator.sh validate-version' \
+    'release_orchestrator.sh ensure-cycle' \
+    'release_orchestrator.sh collection-ready' \
+    'release_orchestrator.sh create-snapshot' \
+    'release_orchestrator.sh tag-after-merge'; do
+    if ! grep -Fq "$required" "$workflow"; then
+      printf 'ASSERT FAILED: workflow contract is missing %s\n' "$required" >&2
+      exit 1
+    fi
+  done
+  grep -Fq 'group: release-dependency-automation' "$workflow" || {
+    printf 'ASSERT FAILED: workflow does not serialize release cycles globally\n' >&2
+    exit 1
+  }
+  grep -Fq 'cancel-in-progress: false' "$workflow" || {
+    printf 'ASSERT FAILED: workflow may cancel a concurrent release cycle\n' >&2
+    exit 1
+  }
+}
+
 case "${1:-core}" in
   core)
     test_validate_version
@@ -302,6 +336,9 @@ case "${1:-core}" in
     ;;
   --dependabot-config)
     test_dependabot_config
+    ;;
+  --workflow-contract)
+    test_workflow_contract
     ;;
   *)
     echo "unsupported test group: $1" >&2

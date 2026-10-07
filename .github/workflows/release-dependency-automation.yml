@@ -1,0 +1,232 @@
+name: Release Dependency Automation
+
+on:
+  issues:
+    types: [opened, edited, labeled, reopened]
+  schedule:
+    - cron: "15 2 * * *"
+  pull_request:
+    branches: [master]
+    types: [closed]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  release:
+    types: [published]
+
+# The fixed dependabot-updates branch is shared by all release cycles. A single
+# non-canceling group prevents two Issue/schedule/PR events from racing on it.
+concurrency:
+  group: release-dependency-automation
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  bootstrap:
+    name: Bootstrap Release Cycle
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
+          private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Bootstrap matching release Issue
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$ISSUE_TITLE" =~ ^release:\ v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Issue title does not start a release cycle; ignoring it."
+            exit 0
+          fi
+
+          version="${ISSUE_TITLE#release: }"
+          ensure_label() {
+            gh label create "$1" --repo "$GH_REPO" --color "$2" --force >/dev/null 2>&1 || true
+          }
+          mark_blocked() {
+            ensure_label "release: blocked" "b60205"
+            gh issue edit "$ISSUE_NUMBER" --repo "$GH_REPO" \
+              --remove-label "release: collecting" --add-label "release: blocked" >/dev/null 2>&1 || true
+          }
+
+          ensure_label "release: collecting" "1d76db"
+          if ! RELEASE_VERSION="$version" RELEASE_ISSUE_NUMBER="$ISSUE_NUMBER" \
+            scripts/release_orchestrator.sh validate-version >/dev/null; then
+            mark_blocked
+            exit 1
+          fi
+
+          if ! RELEASE_VERSION="$version" RELEASE_ISSUE_NUMBER="$ISSUE_NUMBER" \
+            scripts/release_orchestrator.sh ensure-cycle; then
+            mark_blocked
+            exit 1
+          fi
+          gh issue edit "$ISSUE_NUMBER" --repo "$GH_REPO" --add-label "release: collecting" >/dev/null
+
+  collect:
+    name: Collect Dependabot Updates
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
+          private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Check collection window and create snapshot PR
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          issues=$(gh api "repos/$GH_REPO/issues" --paginate --field state=open --field per_page=100)
+          issue_row=$(jq -r '
+            [.[] | select(.pull_request == null)
+              | select(.title | test("^release: v[0-9]+\\.[0-9]+\\.[0-9]+$"))
+              | select(([.labels[]?.name] | index("release: blocked")) == null)
+              | select(([.labels[]?.name] | index("release: published")) == null)]
+            | .[0] | [.number, .title] | @tsv' <<<"$issues")
+          if [[ -z "$issue_row" ]]; then
+            echo "No active release Issue found; nothing to collect."
+            exit 0
+          fi
+
+          IFS=$'\t' read -r issue_number issue_title <<<"$issue_row"
+          version="${issue_title#release: }"
+          readiness=$(RELEASE_VERSION="$version" RELEASE_ISSUE_NUMBER="$issue_number" \
+            scripts/release_orchestrator.sh collection-ready)
+          echo "$readiness"
+          if ! grep -Fq 'ready=true' <<<"$readiness"; then
+            echo "The release cycle is not ready for aggregation."
+            exit 0
+          fi
+
+          snapshot=$(RELEASE_VERSION="$version" RELEASE_ISSUE_NUMBER="$issue_number" \
+            scripts/release_orchestrator.sh create-snapshot)
+          echo "$snapshot"
+          pr_number=$(awk -F= '$1 == "pr_number" { print $2 }' <<<"$snapshot")
+          test -n "$pr_number"
+          gh pr merge "$pr_number" --repo "$GH_REPO" --auto --squash --delete-branch=false
+
+          gh label create "release: candidate" --repo "$GH_REPO" --color "5319e7" --force >/dev/null 2>&1 || true
+          gh issue edit "$issue_number" --repo "$GH_REPO" \
+            --remove-label "release: collecting" --add-label "release: candidate" >/dev/null
+
+  tag:
+    name: Tag Merged Release
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master' && startsWith(github.event.pull_request.head.ref, 'release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
+          private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Create tag after release PR merge
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RELEASE_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          version="v${RELEASE_HEAD_REF#release/v}"
+          if ! RELEASE_VERSION="$version" RELEASE_PR_NUMBER="$PR_NUMBER" \
+            scripts/release_orchestrator.sh tag-after-merge "$version" "$PR_NUMBER"; then
+            echo "Tag creation failed; the release Issue remains available for recovery."
+            exit 1
+          fi
+
+          issues=$(gh api "repos/$GH_REPO/issues" --paginate --field state=all --field per_page=100)
+          issue_number=$(jq -r --arg title "release: $version" \
+            '.[] | select(.pull_request == null and .title == $title) | .number' <<<"$issues" | head -n1)
+          if [[ -n "$issue_number" ]]; then
+            gh issue comment "$issue_number" --repo "$GH_REPO" \
+              --body "Tag `$version` was created after release PR #$PR_NUMBER. Waiting for the Release workflow." >/dev/null
+          fi
+
+  release-status:
+    name: Record Release Workflow Result
+    if: github.event_name == 'release' || (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Release' && github.event.workflow_run.conclusion != 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
+          private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Update release Issue status
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == release ]]; then
+            RUN_BRANCH="$RELEASE_TAG"
+            RUN_CONCLUSION=success
+            RUN_URL="https://github.com/$GH_REPO/releases/tag/$RUN_BRANCH"
+          fi
+          if [[ ! "$RUN_BRANCH" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release workflow did not expose a version tag; nothing to update."
+            exit 0
+          fi
+
+          issues=$(gh api "repos/$GH_REPO/issues" --paginate --field state=all --field per_page=100)
+          issue_number=$(jq -r --arg title "release: $RUN_BRANCH" \
+            '.[] | select(.pull_request == null and .title == $title) | .number' <<<"$issues" | head -n1)
+          if [[ -z "$issue_number" ]]; then
+            echo "No matching release Issue found for $RUN_BRANCH."
+            exit 0
+          fi
+
+          if [[ "$RUN_CONCLUSION" == success ]]; then
+            gh label create "release: published" --repo "$GH_REPO" --color "0e8a16" --force >/dev/null 2>&1 || true
+            gh issue edit "$issue_number" --repo "$GH_REPO" \
+              --remove-label "release: candidate" --add-label "release: published" >/dev/null
+            gh issue comment "$issue_number" --repo "$GH_REPO" \
+              --body "Release workflow succeeded: $RUN_URL" >/dev/null
+          else
+            gh label create "release: blocked" --repo "$GH_REPO" --color "b60205" --force >/dev/null 2>&1 || true
+            gh issue edit "$issue_number" --repo "$GH_REPO" \
+              --remove-label "release: candidate" --add-label "release: blocked" >/dev/null
+            gh issue comment "$issue_number" --repo "$GH_REPO" \
+              --body "Release workflow finished with `$RUN_CONCLUSION`: $RUN_URL" >/dev/null
+            exit 1
+          fi
