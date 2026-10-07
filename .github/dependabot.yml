@@ -3,6 +3,7 @@ updates:
   # Go 依赖
   - package-ecosystem: "gomod"
     directory: "/"
+    target-branch: "dependabot-updates"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -31,6 +32,7 @@ updates:
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "dependabot-updates"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -48,6 +50,7 @@ updates:
   # Docker 镜像
   - package-ecosystem: "docker"
     directory: "/"
+    target-branch: "dependabot-updates"
     schedule:
       interval: "weekly"
       day: "monday"

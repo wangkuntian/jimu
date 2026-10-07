@@ -1,7 +1,7 @@
 .PHONY: run build test vet fmt fmt-check lint clean migrate migrate-down migrate-status seed help govulncheck test-backup-restore ci
 .PHONY: test-cover test-coverage-check test-race swagger-check smoke-check compose-check profiles-check compose-report
 .PHONY: check-log-usage check-capabilities check-templates compose-report-check
-.PHONY: check-skills skills-install
+.PHONY: check-skills skills-install test-release-orchestrator
 .PHONY: docker-build docker-run docker-stop docker-logs
 .PHONY: compose-up compose-down compose-restart compose-logs compose-migrate compose-seed
 .PHONY: bench loadtest proto secrets
@@ -72,6 +72,7 @@ help:
 	@echo "  make check-capabilities   校验能力自描述、驱动闭包、资产归属与生成器边界"
 	@echo "  make check-templates      模板漂移门禁：用生成器生成最小项目并真构建 + 跑生成项目的 check-capabilities"
 	@echo "  make check-skills         校验 skills/** 的 frontmatter 与 reference 引用完整性"
+	@echo "  make test-release-orchestrator 运行发布编排脚本的本地 fixture 测试"
 	@echo "  make skills-install       把 skills/<name>/ 软链到 .claude/skills/ 与 .agents/skills/"
 	@echo "  make test-scaffold-matrix 重型脚手架矩阵：真实生成项目 + build/vet/test/run（=CI 的 Scaffold Matrix job）"
 	@echo "  make profiles-check       构建 5 个形态（overlay 叠加 cmd/server）+ golden 依赖闭包门禁"
@@ -347,6 +348,10 @@ compose-report-check:
 ##               **不接入** make ci/release-check：聚合目标的发布语义不含它。
 check-skills:
 	@./scripts/check_skills.sh
+
+## test-release-orchestrator: 运行发布编排脚本的本地 fixture 测试
+test-release-orchestrator:
+	@./scripts/test_release_orchestrator.sh
 
 ## skills-install: 把 skills/<name>/ 软链到 .claude/skills/ 与 .agents/skills/（两者都在
 ##                 .gitignore 内）。幂等；目标已存在且不是指向本仓事实源的软链时拒绝覆盖，
