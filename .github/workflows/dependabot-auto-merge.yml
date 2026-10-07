@@ -1,11 +1,12 @@
 name: Dependabot Auto Merge
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened]
+  workflow_run:
+    workflows: [CI (Dependabot Focused)]
+    types: [completed]
 
 concurrency:
-  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  group: dependabot-auto-merge-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: true
 
 permissions:
@@ -14,8 +15,8 @@ permissions:
 
 jobs:
   enable-auto-merge:
-    name: Enable Dependabot Auto Merge
-    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.base.ref == 'dependabot-updates' && github.event.pull_request.state == 'open'
+    name: Merge Dependabot Update
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Create GitHub App token
@@ -27,16 +28,35 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
 
-      - name: Enable squash auto merge after focused checks
+      - name: Merge only after focused checks succeed
         env:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
           set -euo pipefail
-          checks=$(gh pr checks "$PR_NUMBER" --repo "$GH_REPO" --json name,state)
-          if ! jq -e 'any(.[]; .name == "Dependabot Focused Checks" and .state == "SUCCESS")' <<<"$checks" >/dev/null; then
-            echo "Focused checks are not successful yet; leaving the PR open."
+          prs=$(gh pr list --repo "$GH_REPO" --state open --base dependabot-updates \
+            --json number,author,baseRefName,headRefName,headRefOid)
+          pr=$(jq -c --arg head "$RUN_BRANCH" \
+            '[.[] | select(.headRefName == $head and .author.login == "dependabot[bot]" and .baseRefName == "dependabot-updates")] | .[0] // empty' <<<"$prs")
+          if [[ -z "$pr" ]]; then
+            echo "No matching open Dependabot PR for completed workflow run."
             exit 0
           fi
-          gh pr merge "$PR_NUMBER" --repo "$GH_REPO" --auto --squash --delete-branch=false
+
+          pr_number=$(jq -r '.number' <<<"$pr")
+          head_sha=$(jq -r '.headRefOid' <<<"$pr")
+          checks=$(gh pr checks "$pr_number" --repo "$GH_REPO" --json bucket,workflow)
+          if ! jq -e '([.[] | select(.workflow == "CI (Dependabot Focused)")] | length) > 0 and
+            ([.[] | select(.workflow == "CI (Dependabot Focused)" and .bucket != "pass")] | length) == 0' \
+            <<<"$checks" >/dev/null; then
+            echo "Focused checks are not all successful; leaving the PR open."
+            exit 0
+          fi
+
+          current_sha=$(gh pr view "$pr_number" --repo "$GH_REPO" --json headRefOid --jq .headRefOid)
+          if [[ "$current_sha" != "$head_sha" ]]; then
+            echo "PR head changed while checks were inspected; waiting for its next workflow run."
+            exit 0
+          fi
+          gh pr merge "$pr_number" --repo "$GH_REPO" --squash --delete-branch=false

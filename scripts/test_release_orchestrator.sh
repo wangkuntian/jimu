@@ -324,6 +324,36 @@ test_workflow_contract() {
     printf 'ASSERT FAILED: workflow may cancel a concurrent release cycle\n' >&2
     exit 1
   }
+  for required in 'CI (Go)' 'CI (Docker)' 'CI (Commits)' 'gh pr checks' 'gh pr merge'; do
+    if ! grep -Fq "$required" "$workflow"; then
+      printf 'ASSERT FAILED: aggregate merge gate is missing %s\n' "$required" >&2
+      exit 1
+    fi
+  done
+  if grep -Fq -- '--auto' "$workflow"; then
+    printf 'ASSERT FAILED: aggregate merge relies on GitHub auto-merge without required checks\n' >&2
+    exit 1
+  fi
+}
+
+test_dependabot_merge_contract() {
+  local workflow="$ROOT_DIR/.github/workflows/dependabot-auto-merge.yml"
+  grep -Fq 'workflow_run:' "$workflow" || {
+    printf 'ASSERT FAILED: Dependabot merge must wait for a completed focused workflow\n' >&2
+    exit 1
+  }
+  grep -Fq 'CI (Dependabot Focused)' "$workflow" || {
+    printf 'ASSERT FAILED: Dependabot merge does not subscribe to focused checks\n' >&2
+    exit 1
+  }
+  grep -Fq 'gh pr merge' "$workflow" || {
+    printf 'ASSERT FAILED: Dependabot merge command is missing\n' >&2
+    exit 1
+  }
+  if grep -Fq -- '--auto' "$workflow"; then
+    printf 'ASSERT FAILED: Dependabot merge relies on GitHub auto-merge without required checks\n' >&2
+    exit 1
+  fi
 }
 
 test_scaffold_policy() {
@@ -355,6 +385,9 @@ case "${1:-core}" in
     ;;
   --workflow-contract)
     test_workflow_contract
+    ;;
+  --dependabot-merge-contract)
+    test_dependabot_merge_contract
     ;;
   --scaffold-policy)
     test_scaffold_policy
