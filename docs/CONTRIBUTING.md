@@ -70,7 +70,7 @@ fix(auth): reject expired refresh token
 
 ## Dependabot 发布周期
 
-每个版本周期由 Release Issue 自动启动。创建标题严格为 `release: vX.Y.Z` 的 Issue，Actions 会校验版本并创建 `release/vX.Y.Z` 与固定汇总分支 `dependabot-updates`。同一时间只接受一个 active release cycle；重复事件会恢复已有资源，不会覆盖非本自动化管理的分支。
+每个版本周期由仓库 owner、member 或 collaborator 创建的 Release Issue 自动启动。标题严格为 `release: vX.Y.Z`；Actions 会校验版本并创建 `release/vX.Y.Z` 与固定汇总分支 `dependabot-updates`。同一时间只接受一个 active release cycle；重复事件会恢复已有资源，不会覆盖非本自动化管理的分支。
 
 Dependabot 普通版本更新指向 `dependabot-updates`，只运行 `CI (Dependabot Focused)` 中的格式、`go vet` 和普通 Go 测试。focused checks 成功后，GitHub App 自动 squash merge。这里使用检查完成后的 App merge，不要求启用 GitHub auto-merge。安全更新不受 `target-branch` 控制，仍直接指向 `master`；现有 CI 照常运行，`Scaffold Matrix` 以成功 skip 满足 required check，PR 链接会记录到活跃的 Release Issue。
 

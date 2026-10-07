@@ -508,6 +508,12 @@ test_workflow_contract() {
     printf 'ASSERT FAILED: workflow may cancel a concurrent release cycle\n' >&2
     exit 1
   }
+  if ! rg -Fq "github.event.issue.author_association == 'OWNER'" "$workflow" || \
+    ! rg -Fq "github.event.issue.author_association == 'MEMBER'" "$workflow" || \
+    ! rg -Fq "github.event.issue.author_association == 'COLLABORATOR'" "$workflow"; then
+    printf 'ASSERT FAILED: bootstrap lacks an authorized Issue author gate\n' >&2
+    exit 1
+  fi
   for required in 'CI (Go)' 'CI (Docker)' 'CI (Commits)' 'gh pr checks' 'gh pr merge'; do
     if ! grep -Fq "$required" "$workflow"; then
       printf 'ASSERT FAILED: aggregate merge gate is missing %s\n' "$required" >&2
