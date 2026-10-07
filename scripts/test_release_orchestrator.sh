@@ -326,6 +326,22 @@ test_workflow_contract() {
   }
 }
 
+test_scaffold_policy() {
+  local workflow="$ROOT_DIR/.github/workflows/ci-scaffold.yml"
+  local required
+  for required in \
+    "github.event.pull_request.user.login" \
+    "dependabot[bot]" \
+    "Scaffold Matrix skipped for Dependabot security update" \
+    "github.event.pull_request.base.ref" \
+    "startsWith(github.head_ref, 'release/')"; do
+    if ! grep -Fq "$required" "$workflow"; then
+      printf 'ASSERT FAILED: scaffold policy is missing %s\n' "$required" >&2
+      exit 1
+    fi
+  done
+}
+
 case "${1:-core}" in
   core)
     test_validate_version
@@ -339,6 +355,9 @@ case "${1:-core}" in
     ;;
   --workflow-contract)
     test_workflow_contract
+    ;;
+  --scaffold-policy)
+    test_scaffold_policy
     ;;
   *)
     echo "unsupported test group: $1" >&2
