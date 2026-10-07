@@ -27,6 +27,9 @@ jobs:
           private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-checks: read
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Merge only after focused checks succeed
         env:
@@ -70,4 +73,4 @@ jobs:
             echo "PR head changed while checks were inspected; waiting for its next workflow run."
             exit 0
           fi
-          gh pr merge "$pr_number" --repo "$GH_REPO" --squash --delete-branch=false
+          gh pr merge "$pr_number" --repo "$GH_REPO" --squash --delete-branch=false --match-head-commit "$head_sha"

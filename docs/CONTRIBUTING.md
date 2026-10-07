@@ -70,7 +70,7 @@ fix(auth): reject expired refresh token
 
 ## Dependabot 发布周期
 
-每个版本周期由仓库 owner、member 或 collaborator 创建的 Release Issue 自动启动。标题严格为 `release: vX.Y.Z`；Actions 会校验版本并创建 `release/vX.Y.Z` 与固定汇总分支 `dependabot-updates`。同一时间只接受一个 active release cycle；重复事件会恢复已有资源，不会覆盖非本自动化管理的分支。
+每个版本周期由仓库 owner 创建的 Release Issue 自动启动。标题严格为 `release: vX.Y.Z`；Actions 会校验版本并创建 `release/vX.Y.Z` 与固定汇总分支 `dependabot-updates`。同一时间只接受一个 active release cycle；重复事件会恢复已有资源，不会覆盖非本自动化管理的分支。
 
 Dependabot 普通版本更新指向 `dependabot-updates`，只运行 `CI (Dependabot Focused)` 中的格式、`go vet` 和普通 Go 测试。focused checks 成功后，GitHub App 自动 squash merge。这里使用检查完成后的 App merge，不要求启用 GitHub auto-merge。安全更新不受 `target-branch` 控制，仍直接指向 `master`；现有 CI 照常运行，`Scaffold Matrix` 以成功 skip 满足 required check，PR 链接会记录到活跃的 Release Issue。
 
@@ -78,7 +78,7 @@ Dependabot 普通版本更新指向 `dependabot-updates`，只运行 `CI (Depend
 
 候选 PR 合入后，GitHub App 会验证 Release Issue 状态、PR marker 和合并提交，创建 `vX.Y.Z` tag。现有 `release.yml` 发布成功后，Issue 才标记为 `release: published`。发布失败或 tag 校验失败会保留现场并标记为 `release: blocked`。
 
-首次启用需要仓库管理员创建并安装 GitHub App，权限为 `contents: write`、`pull_requests: write`、`issues: write`、`metadata: read`，并设置 Actions secrets `JIMU_RELEASE_APP_ID`、`JIMU_RELEASE_APP_PRIVATE_KEY`。仓库默认 workflow token 可保持 `read`。当前 release ruleset 保持 `non_fast_forward`，不添加 release required checks；汇总 PR 的 App workflow 会在 merge 前检查三个 CI workflow。无需开启仓库 auto-merge。正常流程由 Issue、Dependabot PR、每日 schedule 和 PR/workflow 完成事件驱动，不需要手动触发 workflow。
+首次启用需要仓库管理员创建并安装 GitHub App，权限为 `contents: write`、`pull_requests: write`、`checks: read`、`issues: write`、`metadata: read`，并设置 Actions secrets `JIMU_RELEASE_APP_ID`、`JIMU_RELEASE_APP_PRIVATE_KEY`。仓库默认 workflow token 可保持 `read`。当前 release ruleset 保持 `non_fast_forward`，不添加 release required checks；汇总 PR 的 App workflow 会在 merge 前检查三个 CI workflow。无需开启仓库 auto-merge。正常流程由 Issue、Dependabot PR、每日 schedule 和 PR/workflow 完成事件驱动，不需要手动触发 workflow。
 
 ## Tag 与发布
 

@@ -28,7 +28,7 @@ permissions:
 jobs:
   bootstrap:
     name: Bootstrap Release Cycle
-    if: "github.event_name == 'issues' && (github.event.issue.author_association == 'OWNER' || github.event.issue.author_association == 'MEMBER' || github.event.issue.author_association == 'COLLABORATOR') && startsWith(github.event.issue.title, 'release: v') && !contains(github.event.issue.labels.*.name, 'release: candidate') && !contains(github.event.issue.labels.*.name, 'release: blocked') && !contains(github.event.issue.labels.*.name, 'release: published')"
+    if: "github.event_name == 'issues' && github.event.issue.author_association == 'OWNER' && startsWith(github.event.issue.title, 'release: v') && !contains(github.event.issue.labels.*.name, 'release: candidate') && !contains(github.event.issue.labels.*.name, 'release: blocked') && !contains(github.event.issue.labels.*.name, 'release: published')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -146,6 +146,9 @@ jobs:
           private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-checks: read
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Merge snapshot only after all release checks pass
         env:
@@ -201,7 +204,7 @@ jobs:
             echo "Snapshot PR head changed while checks were inspected; waiting for its next CI run."
             exit 0
           fi
-          gh pr merge "$pr_number" --repo "$GH_REPO" --squash --delete-branch=false
+          gh pr merge "$pr_number" --repo "$GH_REPO" --squash --delete-branch=false --match-head-commit "$head_sha"
 
   record-security-update:
     name: Record Dependabot Security Update

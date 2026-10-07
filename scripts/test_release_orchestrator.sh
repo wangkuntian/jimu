@@ -509,14 +509,30 @@ test_workflow_contract() {
     exit 1
   }
   if ! rg -Fq "github.event.issue.author_association == 'OWNER'" "$workflow" || \
-    ! rg -Fq "github.event.issue.author_association == 'MEMBER'" "$workflow" || \
-    ! rg -Fq "github.event.issue.author_association == 'COLLABORATOR'" "$workflow"; then
+    rg -Fq "author_association == 'MEMBER'" "$workflow" || \
+    rg -Fq "author_association == 'COLLABORATOR'" "$workflow"; then
     printf 'ASSERT FAILED: bootstrap lacks an authorized Issue author gate\n' >&2
     exit 1
   fi
+  grep -Fq -- '--match-head-commit "$head_sha"' "$workflow" || {
+    printf 'ASSERT FAILED: snapshot merge must bind the validated head SHA atomically\n' >&2
+    exit 1
+  }
   for required in 'CI (Go)' 'CI (Docker)' 'CI (Commits)' 'gh pr checks' 'gh pr merge'; do
     if ! grep -Fq "$required" "$workflow"; then
       printf 'ASSERT FAILED: aggregate merge gate is missing %s\n' "$required" >&2
+      exit 1
+    fi
+  done
+  for required in 'permission-checks: read' 'permission-contents: write' 'permission-pull-requests: write'; do
+    if ! grep -Fq "$required" "$workflow"; then
+      printf 'ASSERT FAILED: snapshot merge token lacks %s\n' "$required" >&2
+      exit 1
+    fi
+  done
+  for required in 'permission-checks: read' 'permission-contents: write' 'permission-pull-requests: write'; do
+    if ! grep -Fq "$required" "$workflow"; then
+      printf 'ASSERT FAILED: snapshot merge token lacks %s\n' "$required" >&2
       exit 1
     fi
   done
@@ -543,6 +559,22 @@ test_workflow_contract() {
     printf 'ASSERT FAILED: daily collector must select only collecting release Issues\n' >&2
     exit 1
   fi
+  grep -Fq -- '--match-head-commit "$head_sha"' "$workflow" || {
+    printf 'ASSERT FAILED: Dependabot merge must bind the validated head SHA atomically\n' >&2
+    exit 1
+  }
+  grep -Fq 'permission-checks: read' "$workflow" || {
+    printf 'ASSERT FAILED: Dependabot merge token lacks Checks read permission\n' >&2
+    exit 1
+  }
+  grep -Fq 'permission-contents: write' "$workflow" || {
+    printf 'ASSERT FAILED: Dependabot merge token lacks Contents write permission\n' >&2
+    exit 1
+  }
+  grep -Fq 'permission-pull-requests: write' "$workflow" || {
+    printf 'ASSERT FAILED: Dependabot merge token lacks Pull requests write permission\n' >&2
+    exit 1
+  }
 }
 
 test_dependabot_merge_contract() {
@@ -563,6 +595,14 @@ test_dependabot_merge_contract() {
     printf 'ASSERT FAILED: Dependabot merge relies on GitHub auto-merge without required checks\n' >&2
     exit 1
   fi
+  grep -Fq -- '--match-head-commit "$head_sha"' "$workflow" || {
+    printf 'ASSERT FAILED: Dependabot merge must bind the validated head SHA atomically\n' >&2
+    exit 1
+  }
+  grep -Fq 'permission-checks: read' "$workflow" || {
+    printf 'ASSERT FAILED: Dependabot merge token lacks Checks read permission\n' >&2
+    exit 1
+  }
 }
 
 test_scaffold_policy() {
@@ -597,6 +637,7 @@ test_docs() {
     'release: candidate' \
     'Scaffold Matrix' \
     'JIMU_RELEASE_APP_ID' \
+    'checks: read' \
     '人工 review 和 merge'; do
     if ! rg -Fq -- "$required" "${docs[@]}"; then
       printf 'ASSERT FAILED: release automation docs are missing %s\n' "$required" >&2
