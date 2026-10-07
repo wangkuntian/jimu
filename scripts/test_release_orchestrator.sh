@@ -410,6 +410,7 @@ test_dependabot_config() {
 
 test_workflow_contract() {
   local workflow="$ROOT_DIR/.github/workflows/release-dependency-automation.yml"
+  local collector_job
   [[ -f "$workflow" ]] || {
     printf 'ASSERT FAILED: release orchestration workflow is missing\n' >&2
     exit 1
@@ -452,6 +453,11 @@ test_workflow_contract() {
   done
   if grep -Fq -- '--auto' "$workflow"; then
     printf 'ASSERT FAILED: aggregate merge relies on GitHub auto-merge without required checks\n' >&2
+    exit 1
+  fi
+  collector_job=$(sed -n '/^  collect:/,/^  merge-aggregate:/p' "$workflow")
+  if [[ "$collector_job" != *'index("release: collecting")'* ]]; then
+    printf 'ASSERT FAILED: daily collector must select only collecting release Issues\n' >&2
     exit 1
   fi
 }
