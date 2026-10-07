@@ -1,4 +1,4 @@
-// Package full 是完整形态（full profile）的能力清单：catalog 全量 18 项 + 7 个非 catalog
+// Package full 是完整形态（full profile）的能力清单：catalog 全量能力与本形态声明的非 catalog
 // 条目，与迁移/权限聚合的全量清单逐值一致，是全功能基准与零退化护栏。
 package full
 
@@ -14,7 +14,6 @@ import (
 	consolemodule "jimu/internal/capabilities/console"
 	"jimu/internal/capabilities/dataops"
 	"jimu/internal/capabilities/encryption"
-	"jimu/internal/capabilities/feature"
 	grpcpkg "jimu/internal/capabilities/grpc"
 	mfamodule "jimu/internal/capabilities/mfa"
 	"jimu/internal/capabilities/notification"
@@ -22,7 +21,6 @@ import (
 	"jimu/internal/capabilities/outbox"
 	passkeymodule "jimu/internal/capabilities/passkey"
 	"jimu/internal/capabilities/queue"
-	"jimu/internal/capabilities/retention"
 	"jimu/internal/capabilities/search"
 	"jimu/internal/capabilities/storage"
 	tenantmodule "jimu/internal/capabilities/tenant"
@@ -39,7 +37,7 @@ import (
 // notification/queue/outbox/breach 先于 tenant/user/auth/uploadsec/grpc；
 // tenant/access 先于 user；captcha/mfa 先于 auth；ws 先于 console）。
 //
-// 非 catalog 条目（encryption/storage/notification/retention/apidocs/grpc/ws）标记
+// 非 catalog 条目（encryption/storage/notification/apidocs/grpc/ws）标记
 // Ungated：由本清单决定是否装配，不受 capabilities.enabled 门控（P2.4 裁定 7）。
 func Assembly() assembly.Assembly {
 	return assembly.Assembly{
@@ -68,10 +66,8 @@ func Assembly() assembly.Assembly {
 			{Descriptor: apikey.Descriptor, Wire: apikey.Wire},
 			{Descriptor: dataops.Descriptor, Wire: dataops.Wire,
 				Drivers: []string{"csv", "excel"}},
-			{Descriptor: feature.Descriptor, Wire: feature.Wire},
 			{Descriptor: uploadsec.Descriptor, Wire: uploadsec.Wire},
 			{Descriptor: search.Descriptor, Wire: search.Wire},
-			{Descriptor: retention.Descriptor, Wire: retention.Wire, Ungated: true},
 			{Descriptor: apidocs.Descriptor, Wire: apidocs.Wire, Ungated: true},
 			{Descriptor: grpcpkg.Descriptor, Wire: grpcpkg.Wire, Ungated: true},
 		},

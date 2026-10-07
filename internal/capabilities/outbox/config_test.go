@@ -58,6 +58,31 @@ func TestValidateOutboxPublisher(t *testing.T) {
 	assert.Contains(t, err.Error(), "outbox.publisher")
 }
 
+func TestOutboxRetentionConfigValidation(t *testing.T) {
+	valid := Config{Publisher: PublisherEventBus, Retention: RetentionConfig{Enabled: true, Cron: "30 3 * * *", BatchSize: 500, EventDays: 7}}
+	require.NoError(t, valid.Validate())
+	for name, retention := range map[string]RetentionConfig{
+		"missing cron":   {Enabled: true, BatchSize: 500, EventDays: 7},
+		"negative batch": {Enabled: true, Cron: "30 3 * * *", BatchSize: -1, EventDays: 7},
+		"negative days":  {Enabled: true, Cron: "30 3 * * *", BatchSize: 500, EventDays: -1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := valid
+			cfg.Retention = retention
+			require.Error(t, cfg.Validate())
+		})
+	}
+}
+
+func TestOutboxRetentionRulesOwnPublishedEvents(t *testing.T) {
+	rules := outboxRetentionRules(RetentionConfig{EventDays: 7})
+	require.Len(t, rules, 1)
+	assert.Equal(t, "outbox_events", rules[0].Table)
+	assert.Equal(t, "published_at", rules[0].TimeColumn)
+	assert.Equal(t, "published_at IS NOT NULL", rules[0].Condition)
+	assert.Equal(t, 7, rules[0].Days)
+}
+
 func TestUsesMQ(t *testing.T) {
 	assert.True(t, Config{Publisher: PublisherMQ}.UsesMQ())
 	assert.False(t, Config{Publisher: PublisherEventBus}.UsesMQ())

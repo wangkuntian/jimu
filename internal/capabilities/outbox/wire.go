@@ -45,6 +45,11 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	}}); err != nil {
 		return nil, err
 	}
+	if job, ok := newOutboxRetentionJob(ctx.DB(), cfg.Retention, ctx.Logger()); ok {
+		if err := ctx.RegisterJob(job); err != nil {
+			return nil, err
+		}
+	}
 	return nil, nil
 }
 

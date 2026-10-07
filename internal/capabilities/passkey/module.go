@@ -26,11 +26,10 @@ type Module struct {
 
 // Deps passkey 模块的装配依赖。
 type Deps struct {
-	DB    *gorm.DB
-	Redis redistore.Client
-	// AuthCfg auth 能力配置（passkey.Requires 含 auth，方向合法）。
-	// 整个 auth 段由 auth 能力拥有（含 auth.webauthn），故 passkey 不单列配置段。
+	DB        *gorm.DB
+	Redis     redistore.Client
 	AuthCfg   contract.AuthConfig
+	Config    Config
 	Users     contract.UserinfoSource
 	Finalizer contract.LoginFinalizer
 	// FailClosed 限流器在 Redis 故障时是否拒绝（与 auth 一致）
@@ -41,12 +40,12 @@ type Deps struct {
 func New(deps Deps) *Module {
 	creds := passkeyinfra.NewMysqlWebAuthnCredentialRepository(deps.DB)
 	var handle *webauthn.WebAuthn
-	if deps.AuthCfg.WebAuthn.Enabled {
+	if deps.Config.Enabled {
 		// 配置合法性已由 config.Validate 保证；构造失败时保持 nil（调用返回未配置）
 		if h, err := webauthn.New(&webauthn.Config{
-			RPDisplayName: deps.AuthCfg.WebAuthn.RPDisplayName,
-			RPID:          deps.AuthCfg.WebAuthn.RPID,
-			RPOrigins:     deps.AuthCfg.WebAuthn.RPOrigins,
+			RPDisplayName: deps.Config.RPDisplayName,
+			RPID:          deps.Config.RPID,
+			RPOrigins:     deps.Config.RPOrigins,
 		}); err == nil {
 			handle = h
 		}
@@ -56,7 +55,7 @@ func New(deps Deps) *Module {
 		Credentials: creds,
 		WebAuthn:    handle,
 		Redis:       deps.Redis,
-		SessionTTL:  time.Duration(deps.AuthCfg.WebAuthn.SessionTTLMin) * time.Minute,
+		SessionTTL:  time.Duration(deps.Config.SessionTTLMin) * time.Minute,
 		Finalizer:   deps.Finalizer,
 	})
 	jwtUtil := auth.NewWithRotation(deps.AuthCfg.JWTSecret, deps.AuthCfg.JWTPreviousSecret, deps.AuthCfg.Issuer, deps.AuthCfg.AccessExpireMin, deps.AuthCfg.RefreshExpireDay)
@@ -82,6 +81,7 @@ var Descriptor = contract.Descriptor{
 	Migrations: migrationsFS,
 	Owns:       []string{"webauthn_credentials"},
 	Mount:      contract.MountSelfManaged,
+	Configs:    []contract.ConfigSpec{{Section: ConfigKey, New: func() any { return &Config{} }}},
 	Permissions: []contract.Permission{
 		{Name: "通行密钥登录开始", Resource: "/api/v1/auth/webauthn/login/begin", Action: "POST"},
 		{Name: "通行密钥登录完成", Resource: "/api/v1/auth/webauthn/login/finish", Action: "POST"},

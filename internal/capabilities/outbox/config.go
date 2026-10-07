@@ -17,7 +17,8 @@ var validPublishers = []string{PublisherEventBus, PublisherMQ}
 
 // Config Outbox 配置（原 config.OutboxConfig，P2.1 下沉）。
 type Config struct {
-	Publisher string `mapstructure:"publisher"` // 发布器类型：event_bus, mq
+	Publisher string          `mapstructure:"publisher"` // 发布器类型：event_bus, mq
+	Retention RetentionConfig `mapstructure:"retention"`
 }
 
 // ApplyDefaults 本能力无配置层默认值（publisher 必填，由 Validate 兜底）。
@@ -28,7 +29,7 @@ func (c *Config) ApplyDefaults() {}
 func (c Config) Validate() error {
 	for _, p := range validPublishers {
 		if c.Publisher == p {
-			return nil
+			return c.Retention.Validate()
 		}
 	}
 	return fmt.Errorf("outbox.publisher: %q, must be one of %v", c.Publisher, validPublishers)

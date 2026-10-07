@@ -18,4 +18,7 @@ var Descriptor = contract.Descriptor{
 	Migrations: migrationsFS,
 	Owns:       []string{"import_jobs"},
 	Drivers:    []string{"csv", "excel"},
+	Configs: []contract.ConfigSpec{
+		{Section: ConfigKey, New: func() any { return &Config{} }},
+	},
 }

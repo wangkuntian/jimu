@@ -83,12 +83,12 @@ done
 # 依赖闭包裁剪门禁
 # ---------------------------------------------------------------------------
 
-# 全量能力根包清单（catalog 18 + 非 catalog 7；新增能力请同步此表与 EXPECTED_*）。
-ALL_CAPS="access apidocs apikey audit auth breach captcha console dataops encryption feature grpc mfa notification oauth outbox passkey queue retention search storage tenant uploadsec user ws"
+# 全量能力根包清单；新增能力请同步此表与 EXPECTED_*。
+ALL_CAPS="access apidocs apikey audit auth breach captcha console dataops encryption grpc mfa notification oauth outbox passkey queue search storage tenant uploadsec user ws"
 
 # EXPECTED_<profile>：该形态二进制依赖闭包里允许出现的**能力根包**，逐值锁定（golden）。
 # 来源＝ internal/profiles/<profile>/assembly.go 的清单 + 传递必需的编译期依赖。
-EXPECTED_full="access apidocs apikey audit auth breach captcha console dataops encryption feature grpc mfa notification oauth outbox passkey queue retention search storage tenant uploadsec user ws"
+EXPECTED_full="access apidocs apikey audit auth breach captcha console dataops encryption grpc mfa notification oauth outbox passkey queue search storage tenant uploadsec user ws"
 EXPECTED_minimal="access auth encryption notification user"
 EXPECTED_saas="access audit auth encryption notification tenant user"
 EXPECTED_enterprise="access audit auth console dataops encryption notification oauth storage user ws"
@@ -97,9 +97,9 @@ EXPECTED_machine="access apikey encryption grpc user"
 # FORBIDDEN_<profile>：该形态闭包里明确禁止出现的能力（本次修复的逐形态「不得包含」清单）。
 # 未列出的形态按「ALL_CAPS − EXPECTED」即全部非预期能力处理（见下方 FORBIDDEN_* 逐条列明）。
 FORBIDDEN_full=""
-FORBIDDEN_minimal="tenant passkey oauth dataops audit console grpc storage queue outbox search feature uploadsec breach retention apidocs ws"
-FORBIDDEN_saas="apidocs apikey breach captcha console dataops feature grpc mfa oauth passkey retention search storage uploadsec ws"
-FORBIDDEN_enterprise="apidocs apikey breach captcha feature grpc mfa passkey retention search tenant uploadsec"
+FORBIDDEN_minimal="tenant passkey oauth dataops audit console grpc storage queue outbox search uploadsec breach apidocs ws"
+FORBIDDEN_saas="apidocs apikey breach captcha console dataops grpc mfa oauth passkey search storage uploadsec ws"
+FORBIDDEN_enterprise="apidocs apikey breach captcha grpc mfa passkey search tenant uploadsec"
 FORBIDDEN_machine="auth tenant mfa passkey oauth console audit dataops storage queue outbox notification"
 
 # ALLOWED_<profile>：从 FORBIDDEN 中显式豁免的既有类型级传递残留（见文件头注释），

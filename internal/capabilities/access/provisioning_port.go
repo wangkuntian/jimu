@@ -26,7 +26,7 @@ func (s provisioningRoleStore) transaction(ctx context.Context) *gorm.DB {
 	return s.db.WithContext(ctx)
 }
 
-func (s provisioningRoleStore) ProvisionRoles(ctx context.Context, tenantID uint64, cfg contract.AuthProvisioningConfig) (uint64, error) {
+func (s provisioningRoleStore) ProvisionRoles(ctx context.Context, tenantID uint64, cfg contract.ProvisioningRoles) (uint64, error) {
 	tx := s.transaction(ctx)
 	var ownerRoleID uint64
 	for _, template := range cfg.Roles {

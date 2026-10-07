@@ -18,27 +18,24 @@ import (
 	"gorm.io/gorm"
 )
 
-// ProvisioningConfig 开通式注册配置（tenant 自有的输入视图）。
-//
-// `auth.provisioning` 段由 auth 能力拥有（设计 §8 ¶2 不拆段），但 tenant 被 auth 依赖，
-// **不得** import auth 能力类型，故在此定义同形类型，由组合根从 auth 段构造后传入。
+// ProvisioningConfig 开通式注册配置的应用层视图。
 type ProvisioningConfig struct {
-	Enabled   bool
-	OwnerRole string
-	Roles     []ProvisionRoleTemplate
+	Enabled   bool                    `mapstructure:"enabled"`
+	OwnerRole string                  `mapstructure:"owner_role"`
+	Roles     []ProvisionRoleTemplate `mapstructure:"roles"`
 }
 
 // ProvisionRoleTemplate 开通租户时初始化的角色模板（见 ProvisioningConfig）。
 type ProvisionRoleTemplate struct {
-	Name        string
-	Description string
-	Permissions []ProvisionPermission
+	Name        string                `mapstructure:"name"`
+	Description string                `mapstructure:"description"`
+	Permissions []ProvisionPermission `mapstructure:"permissions"`
 }
 
 // ProvisionPermission 模板角色绑定的全局权限。
 type ProvisionPermission struct {
-	Resource string
-	Action   string
+	Resource string `mapstructure:"resource"`
+	Action   string `mapstructure:"action"`
 }
 
 // GormTenantProvisioner 基于单事务的租户开通实现（实现 contract.TenantProvisioner）。
@@ -105,11 +102,11 @@ func (p *GormTenantProvisioner) Provision(ctx context.Context, params contract.P
 		}
 
 		// 3. 按模板初始化角色 + 权限绑定；owner 绑定 owner_role（缺省第一个角色）
-		rolesCfg := contract.AuthProvisioningConfig{Enabled: p.cfg.Enabled, OwnerRole: p.cfg.OwnerRole}
+		rolesCfg := contract.ProvisioningRoles{OwnerRole: p.cfg.OwnerRole}
 		for _, role := range p.cfg.Roles {
-			r := contract.AuthProvisionRole{Name: role.Name, Description: role.Description}
+			r := contract.ProvisioningRole{Name: role.Name, Description: role.Description}
 			for _, perm := range role.Permissions {
-				r.Permissions = append(r.Permissions, contract.AuthProvisionPermission{Resource: perm.Resource, Action: perm.Action})
+				r.Permissions = append(r.Permissions, contract.ProvisioningPermission{Resource: perm.Resource, Action: perm.Action})
 			}
 			rolesCfg.Roles = append(rolesCfg.Roles, r)
 		}

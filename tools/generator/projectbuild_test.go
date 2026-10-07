@@ -52,7 +52,7 @@ const testGoCacheEnv = "JIMU_TEST_GOCACHE"
 // heavyBuildConcurrency 是重型矩阵里「同时跑几个真实生成项目的 go build/vet/test/run」的上限：
 // 取值 = CI runner 的 vCPU 数（ubuntu-latest 标准 runner 为 4 核）。
 //
-// 定死在 2 会把 4 核用掉一半：25 个选区构建网的子用例耗时之和约 1088s，`sem=2` 下墙钟约 560s，
+// 定死在 2 会把 4 核用掉一半：历史全量选区构建网的子用例耗时之和约 1088s，`sem=2` 下墙钟约 560s，
 // 而这段墙钟占了整个 Scaffold Matrix job（861s）的 65%。并发链接/编译对 CPU、内存与磁盘压力都大
 // （历史事故：共享构建缓存涨到 25G 把磁盘写满，故构建测试一律用 newTestGoCache 的专用缓存），
 // 所以这个数是**显式的上限**而不是无限并发；如果重型 job 出现内存/磁盘压力，先降它。

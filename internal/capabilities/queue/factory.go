@@ -21,10 +21,11 @@ const (
 // Config 队列配置。Type/Kafka/RabbitMQ 来自 app.yaml 的 queue 段
 // （mapstructure 标签保证与下沉前的键名映射一致）；Redis 为装配期注入，不来自配置。
 type Config struct {
-	Type     Type             `mapstructure:"type"`
-	Redis    redistore.Client `mapstructure:"-"`
-	Kafka    KafkaConfig      `mapstructure:"kafka"`
-	RabbitMQ RabbitMQConfig   `mapstructure:"rabbitmq"`
+	Type      Type             `mapstructure:"type"`
+	Redis     redistore.Client `mapstructure:"-"`
+	Kafka     KafkaConfig      `mapstructure:"kafka"`
+	RabbitMQ  RabbitMQConfig   `mapstructure:"rabbitmq"`
+	Retention RetentionConfig  `mapstructure:"retention"`
 }
 
 // Factory 按配置构造队列实现。驱动包在 init() 中调用 Register 注册。

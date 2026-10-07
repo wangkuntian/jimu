@@ -23,7 +23,7 @@ import (
 
 // AddOptions 是 `jimu capability add` 的全部输入。
 type AddOptions struct {
-	Name   string // 要加入的能力名（框架全量集合：catalog 18 ∪ Ungated 7）
+	Name   string // 要加入的能力名（框架全量集合）
 	From   string // 框架源根；空则从当前 jimu checkout 解析
 	Dir    string // 生成项目根
 	Module string // 覆盖 manifest 里的 module（默认取 manifest rewrite）

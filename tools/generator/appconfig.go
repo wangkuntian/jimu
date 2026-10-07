@@ -18,7 +18,7 @@ import (
 //	① 内核段   —— internal/config.Config 的 mapstructure 顶层字段（unmarshalConfig 覆盖的全部段）；
 //	② 声明段   —— 选中能力的 contract.Descriptor.Configs（只有 7 个能力声明）；
 //	③ 自读段   —— 能力在自己的 Load() 里 config.LoadSection 读、但**未**在 Configs 声明的段
-//	              （storage/retention/notification，见 selfReadSections）。
+//	              （storage/notification，见 selfReadSections）。
 //
 // 只对**生成项目**成立：本仓 configs/*.yaml 是逐字节冻结的蓝本，生成器只读不改。
 
@@ -41,15 +41,14 @@ func KernelSections() []string {
 
 // selfReadSections 是「能力自读但未在 Descriptor.Configs 声明」的段映射（第三类来源）：
 // 非 catalog（Ungated）能力在自己的 Load() 里直接 config.LoadSection(dec, <段>, …)，只靠
-// Descriptor.Configs 派生段集合会漏掉它们（storage/config.go:18、retention/config.go:49、
-// notification/config.go:63-69），生成项目的 configs/app.yaml 会缺段。
+// Descriptor.Configs 派生段集合会漏掉它们（storage/config.go、notification/config.go），
+// 生成项目的 configs/app.yaml 会缺段。
 //
 // 键是能力名，值是该能力拥有的段（按源码顺序）。漂移护栏：
 // TestSelfReadSectionsMatchTheFrameworkSources 扫描 internal/capabilities/**/config.go 的
 // LoadSection 实参逐值比对 —— 这张表与能力源码必须始终一致。
 var selfReadSections = map[string][]string{
 	"storage":      {"storage"},
-	"retention":    {"retention"},
 	"notification": {"email", "sms", "notification"},
 }
 

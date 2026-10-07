@@ -16,7 +16,6 @@ import (
 	"jimu/internal/capabilities/captcha"
 	consolemodule "jimu/internal/capabilities/console"
 	"jimu/internal/capabilities/dataops"
-	"jimu/internal/capabilities/feature"
 	mfamodule "jimu/internal/capabilities/mfa"
 	oauthmodule "jimu/internal/capabilities/oauth"
 	"jimu/internal/capabilities/outbox"
@@ -49,7 +48,6 @@ var entries = []contract.Descriptor{
 	dataops.Descriptor,
 	search.Descriptor,
 	captcha.Descriptor,
-	feature.Descriptor,
 	uploadsec.Descriptor,
 	breach.Descriptor,
 }

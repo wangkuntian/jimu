@@ -17,8 +17,8 @@ queue:
 scheduler:
   store: "memory"
 
-# 保留段注释（随 retention 段一起被裁掉）
-retention:
+# 未选中的自定义段及注释会一起被裁掉
+sample:
   enabled: false
 
 storage:

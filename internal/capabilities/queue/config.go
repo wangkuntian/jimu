@@ -35,7 +35,7 @@ func (c *Config) ApplyDefaults() {}
 func (c *Config) Validate() error {
 	for _, t := range validQueueTypes {
 		if c.Type == t {
-			return nil
+			return c.Retention.Validate()
 		}
 	}
 	return fmt.Errorf("queue.type: %q, must be one of %v", c.Type, validQueueTypes)

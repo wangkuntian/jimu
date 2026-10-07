@@ -1,6 +1,6 @@
 ---
 name: jimu
-description: 在 jimu 框架仓内改动时使用：新增/删除能力、新增形态（profile）或驱动、编写能力内迁移与存量库 adopt、运行四道能力门禁与报告、排查运行时降级、使用 jimu new 脚手架生成项目。Use when adding capabilities, profiles, drivers, migrations, or running capability gates in the jimu repo.
+description: 在 jimu 框架仓内改动时使用：新增/删除能力、新增形态（profile）或驱动、编写能力内迁移与存量库 adopt、运行能力与形态门禁、排查运行时降级、使用 jimu new 脚手架生成项目。Use when adding capabilities, profiles, drivers, migrations, or running capability gates in the jimu repo.
 ---
 
 # jimu 框架仓操作指南
@@ -23,7 +23,7 @@ description: 在 jimu 框架仓内改动时使用：新增/删除能力、新增
 |---|---|
 | `internal/kernel/` | 内核（不可勾选）：JWT/Session/限流机制、db、租户上下文、Casbin 强制器、logger 等 |
 | `internal/capabilities/<name>/` | 能力实现：静态 `Descriptor` + `Wire` 入口，按职责实现 `contract.Module` 与分层目录 |
-| `internal/capabilities/catalog/` | 能力清单（唯一真源；18 项 catalog + 非 catalog 条目标 `Ungated`） |
+| `internal/capabilities/catalog/` | 能力清单（唯一真源；非 catalog 条目在形态清单中标 `Ungated`） |
 | `internal/capability/` | 描述符解析叶子包（`Resolve` / `ValidateDeclarations` / `Degraded`） |
 | `internal/assembly/` | 装配与生命周期（`Assembly` / `Capability` / `Run` / `ProbeAssembly`） |
 | `internal/profiles/<name>/` | 形态清单（`full`/`minimal`/`saas`/`enterprise`/`machine`）+ `registry`（形态总表）+ `active`（选点包） |
@@ -47,8 +47,8 @@ description: 在 jimu 框架仓内改动时使用：新增/删除能力、新增
 ## 最常用的验收命令
 
 ```bash
-make check-capabilities     # 7 条汇总行：自描述 ↔ 迁移、驱动、入口/选点包、资产归属、跨能力 import、生成器边界
-make profiles-check         # 5 形态 overlay 构建 + golden 依赖闭包
+make check-capabilities     # 能力声明、迁移、驱动、形态装配、资产归属与生成器边界
+make profiles-check         # 全部形态 overlay 构建 + golden 依赖闭包
 make compose-report-check   # 入库报告 == 本次实测（平台相关列掩码后比对）
 make check-skills           # 本 skill 自身的契约校验
 ```

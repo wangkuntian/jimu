@@ -54,7 +54,6 @@ func fixture() []contract.Descriptor {
 			Drivers: []string{"csv", "excel"}, Mount: contract.MountProtected},
 		{Name: "search", Owns: []string{"search_documents"}, Mount: contract.MountProtected},
 		{Name: "captcha", Mount: contract.MountPublic},
-		{Name: "feature", Mount: contract.MountProtected},
 		{Name: "uploadsec", Mount: contract.MountProtected},
 		{Name: "breach", Mount: contract.MountProtected},
 	}
@@ -182,7 +181,7 @@ func TestCatalogMigrationsShape(t *testing.T) {
 		"user": true, "access": true, "tenant": true,
 		"mfa": true, "auth": true, "passkey": true, "audit": true, "oauth": true,
 		"console": false,
-		"captcha": false, "breach": false, "feature": false, "uploadsec": false,
+		"captcha": false, "breach": false, "uploadsec": false,
 		"apikey": true, "queue": true, "outbox": true, "dataops": true, "search": true,
 	}
 	if got := migrationsOf(All()); !reflect.DeepEqual(got, want) {
@@ -331,15 +330,19 @@ func TestDescriptorPermissionsCoverBusinessRoutes(t *testing.T) {
 
 // TestCatalogConfigSectionsShape 钉住各能力声明的配置段（ConfigSpec.New 是函数值，
 // 无法参与 TestDescriptorsAreWellFormed 的逐值比较，故单独钉住段键与 SectionConfig 契约）。
-// 非 catalog 包（storage/notification/retention）的段由组合根显式加载，此处不出现（③ 裁定 B）。
+// 非 catalog 包（storage/notification）的段由组合根显式加载，此处不出现（③ 裁定 B）。
 func TestCatalogConfigSectionsShape(t *testing.T) {
 	want := map[string][]string{
 		"auth":      {"auth"},
+		"dataops":   {"dataops"},
+		"mfa":       {"mfa"},
 		"captcha":   {"captcha"},
 		"audit":     {"audit"},
 		"oauth":     {"oauth"},
+		"passkey":   {"passkey"},
 		"queue":     {"queue", "scheduler"},
 		"outbox":    {"outbox"},
+		"tenant":    {"tenant"},
 		"uploadsec": {"upload"},
 	}
 	got := make(map[string][]string, len(want))

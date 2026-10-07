@@ -162,7 +162,9 @@
         "tenants",
         "tenant_plans"
       ],
-      "configs": null,
+      "configs": [
+        "tenant"
+      ],
       "permissions": [
         {
           "name": "租户列表",
@@ -772,14 +774,12 @@
           "dataops",
           "search",
           "captcha",
-          "feature",
           "uploadsec",
           "breach",
           "encryption",
           "storage",
           "notification",
           "ws",
-          "retention",
           "apidocs",
           "grpc"
         ],
@@ -855,14 +855,12 @@
           "dataops",
           "search",
           "captcha",
-          "feature",
           "uploadsec",
           "breach",
           "encryption",
           "storage",
           "notification",
           "ws",
-          "retention",
           "apidocs",
           "grpc"
         ],
@@ -1545,6 +1543,9 @@
     "internal/profiles/minimal/drivers.go",
     "internal/profiles/profiles.go",
     "internal/profiles/registry/registry.go",
+    "internal/shared/dbpurge/dbpurge.go",
+    "internal/shared/dbpurge/dbpurge_integration_test.go",
+    "internal/shared/dbpurge/dbpurge_test.go",
     "internal/shared/errors/errors.go",
     "internal/shared/errors/errors_test.go",
     "internal/shared/i18n/i18n.go",
@@ -1586,5 +1587,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:81b41d62d8038e8101a80a995adbdc97d9a1536fda416032d96b9c2eccc02175"
+  "digest": "sha256:2f74fadde4d7252fed550d3f3216040eaf2b0048a14990c9c2a40b2e33cdedb6"
 }

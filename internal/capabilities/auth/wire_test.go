@@ -6,17 +6,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestValidateConfigProvisioningRequiresPublicRegistration auth 段的跨字段校验：
-// 开通式注册必须同时开启公开注册（原 config.validateCommon 语义）。
+// TestValidateConfigProvisioningRequiresPublicRegistration 验证 tenant 开通式注册
+// 必须同时开启 auth 公开注册。
 func TestValidateConfigProvisioningRequiresPublicRegistration(t *testing.T) {
-	err := validateConfig(&Config{
-		Provisioning: ProvisioningConfig{Enabled: true},
-	})
+	err := validateConfig(&Config{}, true)
 	require.ErrorIs(t, err, errProvisioningRequiresPublicRegistration)
 
-	require.NoError(t, validateConfig(&Config{
-		PublicRegistration: true,
-		Provisioning:       ProvisioningConfig{Enabled: true},
-	}))
-	require.NoError(t, validateConfig(&Config{}))
+	require.NoError(t, validateConfig(&Config{PublicRegistration: true}, true))
+	require.NoError(t, validateConfig(&Config{}, false))
 }

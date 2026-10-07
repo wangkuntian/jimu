@@ -245,7 +245,7 @@ type RegisterTenantRequest struct {
 	TenantCode string // 租户编码（可选；空则自动生成）
 }
 
-// RegisterProvisioned 开通式注册（auth.provisioning.enabled）：单事务创建
+// RegisterProvisioned 开通式注册（tenant.provisioning.enabled）：单事务创建
 // 新租户 + owner 用户 + 模板角色与权限绑定。未启用时返回参数错误。
 // 实际开通事务由 tenant 能力经 contract.TenantProvisioner 端口执行。
 func (s *AuthService) RegisterProvisioned(ctx context.Context, req RegisterTenantRequest) (*contract.ProvisionResult, error) {

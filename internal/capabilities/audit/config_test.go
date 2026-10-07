@@ -49,11 +49,16 @@ func loadConfig(dec config.SectionDecoder) (*Config, error) {
 }
 
 func TestLoadValidAuditConfig(t *testing.T) {
-	dec := &fakeDecoder{values: map[string]any{"audit": Config{QueueSize: 256, BatchSize: 50, FlushIntervalMS: 500, HashSecret: "s"}}}
+	dec := &fakeDecoder{values: map[string]any{"audit": Config{
+		QueueSize: 256, BatchSize: 50, FlushIntervalMS: 500, HashSecret: "s",
+		Retention: RetentionConfig{Cron: "30 3 * * *", BatchSize: 500, AuditLogDays: 180},
+	}}}
 	got, err := loadConfig(dec)
 	require.NoError(t, err)
 	assert.Equal(t, 256, got.QueueSize)
 	assert.Equal(t, "s", got.HashSecret)
+	assert.False(t, got.Retention.Enabled)
+	assert.Equal(t, 180, got.Retention.AuditLogDays)
 }
 
 // TestValidateAuditConfig 逐条覆盖原有校验语义（队列/批量/刷盘间隔）。
@@ -72,6 +77,26 @@ func TestValidateAuditConfig(t *testing.T) {
 			_, err := loadConfig(&fakeDecoder{values: map[string]any{"audit": cfg}})
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "audit")
+		})
+	}
+}
+
+func TestValidateAuditRetentionConfig(t *testing.T) {
+	valid := Config{
+		QueueSize: 256, BatchSize: 50, FlushIntervalMS: 500,
+		Retention: RetentionConfig{Enabled: true, Cron: "30 3 * * *", BatchSize: 500, AuditLogDays: 180},
+	}
+	require.NoError(t, valid.Validate())
+
+	for name, retention := range map[string]RetentionConfig{
+		"missing cron":   {Enabled: true, BatchSize: 500, AuditLogDays: 180},
+		"negative batch": {Enabled: true, Cron: "30 3 * * *", BatchSize: -1, AuditLogDays: 180},
+		"negative days":  {Enabled: true, Cron: "30 3 * * *", BatchSize: 500, AuditLogDays: -1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := valid
+			cfg.Retention = retention
+			require.Error(t, cfg.Validate())
 		})
 	}
 }

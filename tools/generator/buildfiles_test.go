@@ -264,8 +264,8 @@ func TestBuildFilesRenderForEveryCapabilitySelection(t *testing.T) {
 // 能力**根包**集合 —— 用 `go list -deps` 按 check_profiles.sh 的 cap_roots 同口径独立求出，
 // 不再从被测函数里取期望值。
 //
-// 覆盖 25 个 `--with=<cap>` 选择 + 5 个 `--profile=<name>` 形态（生成项目的形态名即 profile 名）。
-// 成本 = 每个选择一次项目复制 + 一次 go list（不链接、不产二进制），因此不必 25 次真实构建。
+// 覆盖所有 `--with=<cap>` 选择 + 各 `--profile=<name>` 形态（生成项目的形态名即 profile 名）。
+// 成本 = 每个选择一次项目复制 + 一次 go list（不链接、不产二进制），因此不必逐项真实构建。
 //
 // 这条网在 T8 抓到了真实缺陷：`--with=mfa`/`--with=breach` 的 golden 曾多写 `access`（复制集里
 // 有它，出货二进制里没有），生成项目自己的 `make profiles-check` 会红。

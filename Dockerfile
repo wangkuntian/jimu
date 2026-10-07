@@ -15,7 +15,7 @@ COPY go.mod go.sum ./
 
 # Copy source and build
 COPY . .
-# 形态（profile）：full（默认）/minimal/saas/enterprise/machine；见 Makefile 与 docs/plans 的 P2.5b。
+# 形态（profile）：full（默认）/minimal/saas/enterprise/machine；见 Makefile 与 docs/superpowers/plans 的 P2.5b。
 ARG PROFILE=full
 # 捕获工具打印的 overlay JSON 路径（busybox ash 支持 $(...)）；赋值语句的退出码就是命令替换的
 # 退出码，形态名非法时构建失败 —— 若直接写进 go build 的 -overlay=，失败只会留下空的 overlay，

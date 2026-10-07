@@ -35,8 +35,7 @@ func newScaffoldCmd() *cobra.Command {
   --profile=<name>      取该形态的清单（full/minimal/saas/enterprise/machine）
   --with=<cap>[:<drv>]  按能力名解析（硬依赖闭包 + 拓扑序），可用冒号指定驱动
                         （默认取该能力 Descriptor.Drivers 首项），如 --with=queue:kafka,user
-                        能力名可取自 catalog 18 项与 7 个 Ungated 能力
-                        （apidocs/storage/notification/retention/ws/grpc/encryption）
+                        能力名可取自 catalog 与形态声明的 Ungated 能力
 
 生成顺序：复制/渲染 → go mod tidy → 自检（生成项目内 go build ./... 与
 go run ./tools/checkcapabilities 都必须绿）→ 原子换上 <dir>。产物先写 <dir>.tmp-<rand>，

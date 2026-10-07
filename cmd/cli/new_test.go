@@ -39,7 +39,7 @@ func TestNewCmdWiresEveryFlag(t *testing.T) {
 // TestNewCmdDryRunDistinguishesAssemblyFromCopySet ④：`--dry-run` 的两个能力集口径不同且必须各自
 // 标注 —— 装配集（写进 marker/assembly 的声明集）与复制集（额外含编译闭包/迁移携带/内核编译期
 // domain 依赖的目录）。曾经只打一行 `capabilities` 且打的是复制集，读者会把它当装配集。
-// `minimal` 装配 5 个能力，复制集额外包含 schema 依赖 tenant。
+// `minimal` 装配集不含 schema 依赖 tenant，复制集会额外携带它。
 func TestNewCmdDryRunDistinguishesAssemblyFromCopySet(t *testing.T) {
 	var out bytes.Buffer
 	c := newCommandForTest(&out)
@@ -51,7 +51,7 @@ func TestNewCmdDryRunDistinguishesAssemblyFromCopySet(t *testing.T) {
 	copySet := planLine(t, plan, "copy set")
 	assert.Contains(t, assembly, "(装配集)")
 	assert.Contains(t, copySet, "(复制集")
-	// 装配集只有 minimal 的 5 个能力；tenant 只作迁移携带，不进装配。
+	// tenant 只作迁移携带，不进装配集。
 	assert.NotContains(t, assembly, "outbox")
 	assert.NotContains(t, assembly, "queue")
 	assert.NotContains(t, copySet, "outbox")

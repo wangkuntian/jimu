@@ -79,8 +79,8 @@ func TestLoadSectionValidateSeesDecodedValue(t *testing.T) {
 func TestLoadSectionDottedKey(t *testing.T) {
 	dec := &fakeSectionDecoder{}
 	var got retentionSection
-	require.NoError(t, LoadSection(dec, "auth.webauthn", &got))
-	assert.Equal(t, "auth.webauthn", dec.seen)
+	require.NoError(t, LoadSection(dec, "tenant.provisioning", &got))
+	assert.Equal(t, "tenant.provisioning", dec.seen)
 }
 
 // TestLoadSectionErrors 解码与校验错误都上抛，且带段名便于定位。

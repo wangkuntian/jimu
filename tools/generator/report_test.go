@@ -82,7 +82,7 @@ func TestNewProjectReportWritesFileAndKeepsItOutOfTheFileList(t *testing.T) {
 	assert.True(t, strings.HasSuffix(string(content), "\n"), "报告以换行收尾")
 }
 
-// TestReportSucceedsForEverySelection 是 `--report` 的系统网：25 个 `--with=<cap>` 选择逐个生成项目
+// TestReportSucceedsForEverySelection 是 `--report` 的系统网：每个 `--with=<cap>` 选择逐个生成项目
 // 后，Report 必须能算出每一项（它经 `assembly.ProbeAssembly` 求路由/迁移/表 —— 装配失败的选区会让
 // `jimu new --report` 整体失败，不能只在 minimal/mfa 等少数选区上验证）。
 //
@@ -98,7 +98,7 @@ func TestReportSucceedsForEverySelection(t *testing.T) {
 			assert.Contains(t, m.Capabilities, name)
 			assert.Positive(t, m.Files)
 			assert.Positive(t, m.Lines)
-			// 路由数可以为 0（如 storage/ws/retention 这类不注册 HTTP 路由的选区），但不得为负。
+			// 路由数可以为 0（如 storage/ws 这类不注册 HTTP 路由的选区），但不得为负。
 			assert.GreaterOrEqual(t, m.Routes, 0)
 		})
 	}

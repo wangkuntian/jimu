@@ -21,7 +21,7 @@
 
 | 参数 | 说明 |
 |---|---|
-| `--profile=<name>` / `--with=<cap>[:<drv>][,…]` | 能力集二选一（互斥）。`--with` 的名字取自 **catalog 18 ∪ Ungated 7**（`apidocs`/`storage`/`notification`/`retention`/`ws`/`grpc`/`encryption`）；驱动默认取该能力 `Descriptor.Drivers` 首项（`queue→redis`、`storage→local`、`dataops→csv`），用 `<cap>:<drv>` 覆盖 |
+| `--profile=<name>` / `--with=<cap>[:<drv>][,…]` | 能力集二选一（互斥）。`--with` 的名字取自 catalog 与 Ungated 能力；驱动默认取该能力 `Descriptor.Drivers` 首项（`queue→redis`、`storage→local`、`dataops→csv`），用 `<cap>:<drv>` 覆盖 |
 | `--shape=<name>` | 生成项目的形态名（缺省由能力集推导） |
 | `--module=<path>` | 重写 `go.mod` 的 module 指令与文本里的 `jimu/` 前缀；**不改**框架运行期名字 / CLI 名 / 镜像名 / protobuf 描述符 |
 | `--dry-run` | 只打印计划，不落盘 |

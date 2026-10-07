@@ -23,7 +23,7 @@ type CapabilitySet struct {
 	Shape         string              // 形态名：--profile 的名字，或 --shape（默认 "app"）
 	Profile       string              // 非空表示来自 --profile（驱动集取自形态清单）
 	Declared      []string            // 选定集（含 Ungated 非 catalog 条目；catalog 拓扑序 + Ungated 追加）
-	Known         []string            // 软依赖错别字检查的全量能力名（catalog 18 ∪ Ungated 7，Minor 6/S5）
+	Known         []string            // 软依赖错别字检查的全量能力名（Minor 6/S5）
 	Copy          []string            // 实际复制的能力根包目录（S1：声明集 ∪ 编译闭包 ∪ schema 依赖闭包）
 	Roots         []string            // 出货二进制的「能力根包」import 闭包（golden 口径，见 CapabilityRoots）
 	MigrationOnly []string            // 只为 schema 依赖而复制的能力（S2：只带 migrations + domain + 生成的 module.go）
@@ -99,7 +99,7 @@ var kernelFiles = []string{
 //	--profile=<name>：能力集 = registry.Lookup(name) 的清单（含 Ungated）；
 //	                 驱动集 = 该清单 assembly.Capability.Drivers。
 //	--with=a,b[:drv]：能力集 = capability.Resolve(框架全量能力, names)（Requires 闭包 + 拓扑序；
-//	                 catalog 18 ∪ Ungated 7 都可选，Ungated 渲染时置 Ungated: true）；
+//	                 catalog 与 Ungated 能力都可选，Ungated 渲染时置 Ungated: true）；
 //	                 驱动集 = 各能力 Descriptor.Drivers 首项（S4），冒号后缀逐项覆盖。
 //
 // 两者都给 → 报错 mutually exclusive；都不给 → 报错（要求二选一）。两者都合法：
@@ -126,7 +126,7 @@ func ParseCapabilitySet(profile, with, shape string) (CapabilitySet, error) {
 	if err != nil {
 		return CapabilitySet{}, err
 	}
-	// --with 的能力名解析用**框架全量集合**（catalog 18 ∪ Ungated 7，Important 3）：
+	// --with 的能力名解析用**框架全量集合**（catalog 与 Ungated 能力，Important 3）：
 	// Ungated 条目仍不受 capabilities.enabled 门控，只是可以被单独选中。
 	descs, inCatalog, err := capabilityDescriptors(root)
 	if err != nil {
@@ -326,8 +326,7 @@ const capabilityDirPrefix = "internal/capabilities"
 // 比对 —— 将来有人往 app 里再加一个能力 domain 而没同步本表，该测试会红。
 var kernelRequiredDomains = []string{"access/domain", "tenant/domain", "user/domain"}
 
-// capabilityDescriptors 返回**框架全量能力描述符**：catalog 的 18 项 + 7 个 Ungated
-// （apidocs/storage/notification/retention/ws/grpc/encryption）从源码读出的声明。
+// capabilityDescriptors 返回**框架全量能力描述符**：catalog 清单与 Ungated 能力的声明。
 // `--with` 的能力名解析用这一份全量集合（Important 3）：Ungated 仍不受 `capabilities.enabled`
 // 门控（P2.4 裁定），只是可以被 `jimu new` 单独选中。
 func capabilityDescriptors(root string) ([]contract.Descriptor, map[string]bool, error) {
@@ -400,7 +399,7 @@ func descriptorFile(dir string) (string, error) {
 	return "", nil
 }
 
-// knownCapabilityNames 返回软依赖错别字检查的全量能力名（Minor 6/S5）：catalog 18 ∪ Ungated 7。
+// knownCapabilityNames 返回软依赖错别字检查的全量能力名（Minor 6/S5）。
 func knownCapabilityNames(descs []contract.Descriptor) []string {
 	out := make([]string, 0, len(descs))
 	for _, d := range descs {

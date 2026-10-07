@@ -288,7 +288,7 @@ func renderReport(ms []Metrics, deps int) string {
 
 	b.WriteString("# 形态编译面报告\n\n")
 	b.WriteString("> 由 `make compose-report`（`tools/composereport`）生成，**请勿手工编辑**：改动形态组成后\n")
-	b.WriteString("> 重跑该命令并提交本文件。设计依据见[能力可插拔设计](../design/2026-09-18-capability-plugins-design.md) §6.3 / §11。\n\n")
+	b.WriteString("> 重跑该命令并提交本文件。profile 设计见[形态与项目生成](../design/profiles-and-project-generation.md)。\n\n")
 
 	b.WriteString("## 指标口径\n\n")
 	b.WriteString("| 指标 | 口径 |\n|---|---|\n")

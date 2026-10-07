@@ -41,7 +41,6 @@ var fullRoutesGolden = []string{
 	"GET /api/v1/admin/audit",
 	"GET /api/v1/admin/config",
 	"GET /api/v1/admin/error-codes",
-	"GET /api/v1/admin/features",
 	"GET /api/v1/admin/jobs",
 	"GET /api/v1/admin/jobs/:id",
 	"GET /api/v1/admin/jobs/dead-letters",
@@ -115,7 +114,6 @@ var fullRoutesGolden = []string{
 	"POST /api/v1/users",
 	"POST /api/v1/users/batch-delete",
 	"PUT /api/v1/admin/config/:key",
-	"PUT /api/v1/admin/features/:name",
 	"PUT /api/v1/admin/users/:id",
 	"PUT /api/v1/auth/webauthn/credentials/:id",
 	"PUT /api/v1/permissions/:id",
@@ -126,7 +124,7 @@ var fullRoutesGolden = []string{
 	"PUT /api/v1/users/:id",
 }
 
-// fullMountsGolden 是 full 形态 25 个条目的归一化挂载点。零值/未识别取值会被
+// fullMountsGolden 是 full 形态 24 个条目的归一化挂载点。零值/未识别取值会被
 // Descriptor.Normalized() 折叠为 MountProtected（fail-closed），因此误分类只可能表现为
 // 期望 public/self-managed 的条目落回 protected —— 本表逐条钉住。
 var fullMountsGolden = map[string]contract.MountPoint{
@@ -148,10 +146,8 @@ var fullMountsGolden = map[string]contract.MountPoint{
 	"oauth":        contract.MountPublic,
 	"apikey":       contract.MountProtected,
 	"dataops":      contract.MountProtected,
-	"feature":      contract.MountProtected,
 	"uploadsec":    contract.MountProtected,
 	"search":       contract.MountProtected,
-	"retention":    contract.MountProtected,
 	"apidocs":      contract.MountPublic,
 	"grpc":         contract.MountProtected,
 	"ws":           contract.MountProtected,

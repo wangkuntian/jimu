@@ -98,6 +98,13 @@ queue:
     url: "amqp://guest:guest@rabbitmq:5672/"
     queue: "jimu-q"
     exchange: "jimu-x"
+  retention:
+    enabled: true
+    cron: "30 3 * * *"
+    batch_size: 500
+    job_days: 7
+    job_history_days: 30
+    dead_letter_days: 30
 `)))
 	cfg, err := loadQueue(viperSection{v: v})
 	require.NoError(t, err)
@@ -109,6 +116,33 @@ queue:
 	assert.Equal(t, "amqp://guest:guest@rabbitmq:5672/", cfg.RabbitMQ.URL)
 	assert.Equal(t, "jimu-q", cfg.RabbitMQ.QueueName, "YAML 键沿用 queue")
 	assert.Equal(t, "jimu-x", cfg.RabbitMQ.Exchange)
+	assert.True(t, cfg.Retention.Enabled)
+	assert.Equal(t, 7, cfg.Retention.JobDays)
+}
+
+func TestQueueRetentionConfigValidation(t *testing.T) {
+	valid := Config{Type: TypeRedis, Retention: RetentionConfig{Enabled: true, Cron: "30 3 * * *", BatchSize: 500, JobDays: 7}}
+	require.NoError(t, valid.Validate())
+	for name, retention := range map[string]RetentionConfig{
+		"missing cron":   {Enabled: true, BatchSize: 500, JobDays: 7},
+		"negative batch": {Enabled: true, Cron: "30 3 * * *", BatchSize: -1, JobDays: 7},
+		"negative days":  {Enabled: true, Cron: "30 3 * * *", BatchSize: 500, JobDays: -1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := valid
+			cfg.Retention = retention
+			require.Error(t, cfg.Validate())
+		})
+	}
+}
+
+func TestQueueRetentionRulesOwnQueueTables(t *testing.T) {
+	rules := queueRetentionRules(RetentionConfig{JobDays: 7, JobHistoryDays: 30, DeadLetterDays: 30})
+	require.Len(t, rules, 3)
+	assert.Equal(t, []string{"jobs", "job_history", "dead_letters"}, []string{rules[0].Table, rules[1].Table, rules[2].Table})
+	assert.Equal(t, []string{"status IN ?", "", "resolved = ?"}, []string{rules[0].Condition, rules[1].Condition, rules[2].Condition})
+	assert.Equal(t, []any{[]string{"success", "dead"}}, rules[0].Args)
+	assert.Equal(t, []any{true}, rules[2].Args)
 }
 
 // TestLoadSchedulerSection 调度器段独立解码。

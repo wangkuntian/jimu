@@ -69,7 +69,6 @@ func (s *AdminConfigService) IsValidKey(key string) bool {
 		"rate_limit_rate":  true,
 		"rate_limit_burst": true,
 		"log_level":        true,
-		"feature_flags":    true,
 	}
 	return allowed[key]
 }

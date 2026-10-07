@@ -1,7 +1,7 @@
 # 形态编译面报告
 
 > 由 `make compose-report`（`tools/composereport`）生成，**请勿手工编辑**：改动形态组成后
-> 重跑该命令并提交本文件。设计依据见[能力可插拔设计](../design/2026-09-18-capability-plugins-design.md) §6.3 / §11。
+> 重跑该命令并提交本文件。profile 设计见[形态与项目生成](../design/profiles-and-project-generation.md)。
 
 ## 指标口径
 
@@ -26,11 +26,11 @@
 
 | 形态 | 二进制 (MB) | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 | 重型依赖 |
 |---|---:|---:|---:|---:|---:|---:|---:|---|
-| `full` | 123.2 | 100.0% | 99 | 25 | 23 | 337 | 35063 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
-| `minimal` | 84.7 | 68.8% | 32 | 10 | 9 | 155 | 15950 | - |
-| `saas` | 84.9 | 69.0% | 48 | 13 | 11 | 181 | 18562 | - |
-| `enterprise` | 85.3 | 69.3% | 55 | 16 | 13 | 222 | 21487 | - |
-| `machine` | 81.9 | 66.5% | 28 | 10 | 8 | 146 | 15305 | - |
+| `full` | 123.1 | 100.0% | 97 | 25 | 23 | 336 | 34913 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
+| `minimal` | 84.7 | 68.8% | 32 | 10 | 9 | 155 | 15832 | - |
+| `saas` | 84.9 | 69.0% | 48 | 13 | 11 | 183 | 18659 | - |
+| `enterprise` | 85.3 | 69.3% | 55 | 16 | 13 | 226 | 21655 | - |
+| `machine` | 81.9 | 66.5% | 28 | 10 | 8 | 146 | 15299 | - |
 
 ## 验收断言
 
@@ -38,10 +38,10 @@
 （不写死数字，内核膨胀或能力增减只会让真实的裁剪失效暴露出来）：
 
 - 二进制：`minimal` 是 `full` 的 68.8%（要求 ≤ 85%）
-- 路由数：`minimal` 32 < `full` 99
+- 路由数：`minimal` 32 < `full` 97
 - 表数：`minimal` 9 < `full` 23
-- 本仓 Go 文件：`minimal` 155 < `full` 337
-- 本仓代码行：`minimal` 15950 < `full` 35063
+- 本仓 Go 文件：`minimal` 155 < `full` 336
+- 本仓代码行：`minimal` 15832 < `full` 34913
 
 ## 层②边界：go.mod 直接依赖
 
@@ -54,7 +54,7 @@
 
 | 形态 | 装配的能力（按装配顺序） |
 |---|---|
-| `full` | encryption storage notification queue outbox breach tenant access user captcha mfa auth passkey audit ws console oauth apikey dataops feature uploadsec search retention apidocs grpc |
+| `full` | encryption storage notification queue outbox breach tenant access user captcha mfa auth passkey audit ws console oauth apikey dataops uploadsec search apidocs grpc |
 | `minimal` | encryption notification access user auth |
 | `saas` | encryption notification tenant access user auth audit |
 | `enterprise` | encryption storage notification access user auth audit ws console oauth dataops |
