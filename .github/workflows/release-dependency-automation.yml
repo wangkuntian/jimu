@@ -99,7 +99,13 @@ jobs:
 
   collect:
     name: Collect Dependabot Updates
-    if: github.event_name == 'schedule'
+    needs: bootstrap
+    if: >-
+      always() &&
+      (
+        github.event_name == 'schedule' ||
+        (github.event_name == 'issues' && needs.bootstrap.result == 'success')
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
