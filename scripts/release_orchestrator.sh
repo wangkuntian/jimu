@@ -20,7 +20,19 @@ repo=${GH_REPO:-}
 [[ -n "$repo" ]] || error "GH_REPO is required"
 
 api() {
-  gh api "$@"
+  local endpoint=$1 arg has_method=false
+  shift
+  for arg in "$@"; do
+    if [[ "$arg" == --method || "$arg" == -X ]]; then
+      has_method=true
+      break
+    fi
+  done
+  if [[ "$has_method" == true ]]; then
+    gh api "$endpoint" "$@"
+  else
+    gh api "$endpoint" --method GET "$@"
+  fi
 }
 
 write_output() {
@@ -137,7 +149,7 @@ reset_terminal_dependabot_cycle() {
       error "failed to close stale Dependabot PR #$number"
   done < <(jq -r '.[] | [.number, .user.login] | @tsv' <<<"$pulls")
 
-  api "repos/$repo/git/ref/heads/dependabot-updates" --method DELETE >/dev/null || \
+  api "repos/$repo/git/refs/heads/dependabot-updates" --method DELETE >/dev/null || \
     error "failed to delete terminal cycle dependabot-updates branch"
 }
 
@@ -335,15 +347,16 @@ tag_after_merge() {
   pr_body=$(jq -r '.body // ""' <<<"$pr_json")
   [[ "$merged" == true && -n "$merged_at" ]] || error "release PR is not merged"
   [[ "$head_ref" == "$RELEASE_BRANCH" && "$base_ref" == master ]] || error "release PR must be release/* -> master"
+  [[ "$(jq -r '.user.login // empty' <<<"$pr_json")" == "${RELEASE_APP_SLUG:-}[bot]" ]] || \
+    error "release PR was not created by the configured App"
   [[ "$pr_body" == *"<!-- jimu-release-automation:$VERSION final -->"* ]] || \
     error "release PR is not managed by this automation"
-
-  local issue_json issue_title candidate comments
+  local issue_json issue_title eligible comments
   issue_json=$(api "repos/$repo/issues/$issue")
   issue_title=$(jq -r '.title // empty' <<<"$issue_json")
   [[ "$issue_title" == "release: $VERSION" ]] || error "release Issue does not match tag version"
-  candidate=$(jq -r '[.labels[]?.name] | any(. == "release: candidate")' <<<"$issue_json")
-  [[ "$candidate" == true ]] || error "release issue is not in candidate state"
+  eligible=$(jq -r '[.labels[]?.name] | any(. == "release: candidate" or . == "release: blocked")' <<<"$issue_json")
+  [[ "$eligible" == true ]] || error "release issue is not in candidate or retryable blocked state"
   comments=$(issue_comments "$issue")
   grep -Fq "<!-- jimu-release-automation:$VERSION -->" <<<"$comments" || \
     error "release Issue is missing the automation marker"
@@ -352,11 +365,24 @@ tag_after_merge() {
   master_sha=$(ref_sha heads master) || error "master branch ref is unavailable"
   [[ "$merge_sha" == "$master_sha" ]] || error "merge commit is not current master tip"
 
-  if ref_exists tags "$VERSION"; then
-    error "release tag already exists: $VERSION"
+  local existing_tag_json existing_tag_sha existing_tag_type existing_commit tag_json tag_sha
+  if existing_tag_json=$(ref_json tags "$VERSION" 2>/dev/null); then
+    existing_tag_sha=$(jq -er '.object.sha' <<<"$existing_tag_json") || error "existing release tag has no object SHA"
+    existing_tag_type=$(jq -r '.object.type // empty' <<<"$existing_tag_json")
+    if [[ "$existing_tag_type" == tag ]]; then
+      existing_tag_json=$(api "repos/$repo/git/tags/$existing_tag_sha")
+      existing_commit=$(jq -er '.object.sha' <<<"$existing_tag_json") || error "existing release tag object is invalid"
+    else
+      existing_commit=$existing_tag_sha
+    fi
+    [[ "$existing_commit" == "$merge_sha" ]] || error "release tag already points to a different commit"
+    write_output version "$VERSION"
+    write_output tag "$VERSION"
+    write_output tag_sha "$existing_tag_sha"
+    write_output merge_sha "$merge_sha"
+    return 0
   fi
 
-  local tag_json tag_sha
   tag_json=$(api "repos/$repo/git/tags" --method POST \
     --field "tag=$VERSION" \
     --field "message=Release $VERSION" \

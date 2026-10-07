@@ -70,13 +70,13 @@ fix(auth): reject expired refresh token
 
 ## Dependabot 发布周期
 
-每个版本周期由仓库 owner 创建的 Release Issue 自动启动。标题严格为 `release: vX.Y.Z`；Actions 会校验版本并创建 `release/vX.Y.Z` 与固定汇总分支 `dependabot-updates`。同一时间只接受一个 active release cycle；重复事件会恢复已有资源，不会覆盖非本自动化管理的分支。
+每个版本周期由仓库 owner 创建的 Release Issue 自动启动。标题严格为 `release: vX.Y.Z`；Actions 会校验版本并创建 `release/vX.Y.Z` 与固定汇总分支 `dependabot-updates`。同一时间只接受一个 active release cycle；重复事件会恢复已有资源，不会覆盖非本自动化管理的分支。blocked 周期修复原因后，在原 Issue 重新添加 `release: collecting` 标签即可自动重试 bootstrap。
 
-Dependabot 普通版本更新指向 `dependabot-updates`，只运行 `CI (Dependabot Focused)` 中的格式、`go vet` 和普通 Go 测试。focused checks 成功后，GitHub App 自动 squash merge。这里使用检查完成后的 App merge，不要求启用 GitHub auto-merge。安全更新不受 `target-branch` 控制，仍直接指向 `master`；现有 CI 照常运行，`Scaffold Matrix` 以成功 skip 满足 required check，PR 链接会记录到活跃的 Release Issue。
+Dependabot 普通版本更新指向 `dependabot-updates`，只运行 `CI (Dependabot Focused)` 中的格式、`go vet` 和普通 Go 测试。每次检查完成事件都会扫描所有 open 的目标 PR，并根据当前 check 状态和 head SHA 决定是否由 GitHub App squash merge；因此共享并发组折叠 pending 事件时仍会重试其他已通过的 PR。这里使用检查完成后的 App merge，不要求启用 GitHub auto-merge。安全更新不受 `target-branch` 控制，仍直接指向 `master`；现有 CI 照常运行，`Scaffold Matrix` 以成功 skip 满足 required check，PR 链接会记录到活跃的 Release Issue。
 
-每日收集器至少等待 8 天，并且要求 `dependabot-updates` 最近 24 小时没有提交、没有待处理的 Dependabot PR。条件满足后会创建 `updates/vX.Y.Z -> release/vX.Y.Z` 汇总 PR，并将 Issue 标为 `release: candidate`。`CI (Go)`、`CI (Docker)`、`CI (Commits)` 都必须完成；各自检查成功或正常跳过且 PR head SHA 未变化后，GitHub App 才会自动 squash merge。汇总 PR 合入后，Actions 会自动创建 `release/vX.Y.Z -> master` 候选 PR。该 PR 使用 master ruleset 的完整 required checks，仍需维护者人工 review 和 merge。
+每日收集器至少等待 8 天，并且要求 `dependabot-updates` 最近 24 小时没有提交、没有待处理的 Dependabot PR。条件满足后会创建 `updates/vX.Y.Z -> release/vX.Y.Z` 汇总 PR，并将 Issue 标为 `release: candidate`。`CI (Go)`、`CI (Docker)`、`CI (Commits)` 都必须完成；各自检查成功或正常跳过且 PR head SHA 未变化后，GitHub App 才会自动 squash merge。汇总 PR 合入后，Actions 会自动创建 `release/vX.Y.Z -> master` 候选 PR。该 PR 使用 master ruleset 的完整 required checks，仍需维护者人工 review 和 merge。之后会删除版本化 snapshot branch；固定 `dependabot-updates` 保留为静态 target，但 candidate 阶段的新 PR 不会自动合并，下一 cycle bootstrap 时清理并重建。
 
-候选 PR 合入后，GitHub App 会验证 Release Issue 状态、PR marker 和合并提交，创建 `vX.Y.Z` tag。现有 `release.yml` 发布成功后，Issue 才标记为 `release: published`。发布失败或 tag 校验失败会保留现场并标记为 `release: blocked`。
+候选 PR 合入后，GitHub App 会验证 App 创建者、Release Issue 状态、PR marker 和合并提交，创建 `vX.Y.Z` tag。`release.yml` 只接受该 App push 的 tag，并再次确认 tag commit、候选 merge commit 和当前 master tip 三者完全一致，避免手工打 tag或直接为 master 打 tag 绕过候选 PR。相同 merge commit 的 tag 重试可恢复；tag 指向其他 commit 时拒绝发布。Release workflow 失败会保留 `release: blocked`，修复失败原因后可重跑同一个 tag；成功发布后 Issue 标记为 `release: published`。
 
 首次启用需要仓库管理员创建并安装 GitHub App，权限为 `contents: write`、`pull_requests: write`、`checks: read`、`issues: write`、`metadata: read`，并设置 Actions secrets `JIMU_RELEASE_APP_ID`、`JIMU_RELEASE_APP_PRIVATE_KEY`。仓库默认 workflow token 可保持 `read`。当前 release ruleset 保持 `non_fast_forward`，不添加 release required checks；汇总 PR 的 App workflow 会在 merge 前检查三个 CI workflow。无需开启仓库 auto-merge。正常流程由 Issue、Dependabot PR、每日 schedule 和 PR/workflow 完成事件驱动，不需要手动触发 workflow。
 

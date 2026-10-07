@@ -2,7 +2,7 @@ name: Release Dependency Automation
 
 on:
   issues:
-    types: [opened, edited, reopened]
+    types: [opened, edited, reopened, labeled]
   schedule:
     - cron: "15 2 * * *"
   pull_request:
@@ -28,7 +28,16 @@ permissions:
 jobs:
   bootstrap:
     name: Bootstrap Release Cycle
-    if: "github.event_name == 'issues' && github.event.issue.author_association == 'OWNER' && startsWith(github.event.issue.title, 'release: v') && !contains(github.event.issue.labels.*.name, 'release: candidate') && !contains(github.event.issue.labels.*.name, 'release: blocked') && !contains(github.event.issue.labels.*.name, 'release: published')"
+    if: >-
+      github.event_name == 'issues' &&
+      github.event.issue.author_association == 'OWNER' &&
+      startsWith(github.event.issue.title, 'release: v') &&
+      !contains(github.event.issue.labels.*.name, 'release: candidate') &&
+      !contains(github.event.issue.labels.*.name, 'release: published') &&
+      (
+        (github.event.action != 'labeled' && !contains(github.event.issue.labels.*.name, 'release: blocked')) ||
+        (github.event.action == 'labeled' && github.event.label.name == 'release: collecting' && contains(github.event.issue.labels.*.name, 'release: blocked'))
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -41,6 +50,9 @@ jobs:
           private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
 
       - name: Bootstrap matching release Issue
         env:
@@ -48,6 +60,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_ACTION: ${{ github.event.action }}
         run: |
           set -euo pipefail
           if [[ ! "$ISSUE_TITLE" =~ ^release:\ v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
@@ -77,7 +90,12 @@ jobs:
             mark_blocked
             exit 1
           fi
-          gh issue edit "$ISSUE_NUMBER" --repo "$GH_REPO" --add-label "release: collecting" >/dev/null
+          if [[ "$ISSUE_ACTION" == labeled ]]; then
+            gh issue edit "$ISSUE_NUMBER" --repo "$GH_REPO" \
+              --remove-label "release: blocked" --add-label "release: collecting" >/dev/null
+          else
+            gh issue edit "$ISSUE_NUMBER" --repo "$GH_REPO" --add-label "release: collecting" >/dev/null
+          fi
 
   collect:
     name: Collect Dependabot Updates
@@ -101,7 +119,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
-          issues=$(gh api "repos/$GH_REPO/issues" --paginate --field state=open --field per_page=100)
+          issues=$(gh api "repos/$GH_REPO/issues" --method GET --paginate --field state=open --field per_page=100)
           issue_row=$(jq -r '
             [.[] | select(.pull_request == null)
               | select(.title | test("^release: v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))
@@ -135,7 +153,7 @@ jobs:
 
   merge-aggregate:
     name: Merge Validated Dependency Snapshot
-    if: github.event_name == 'workflow_run' && contains(fromJSON('["CI (Go)","CI (Docker)","CI (Commits)"]'), github.event.workflow_run.name)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_run' && contains(fromJSON('["CI (Go)","CI (Docker)","CI (Commits)"]'), github.event.workflow_run.name))
     runs-on: ubuntu-latest
     steps:
       - name: Create GitHub App token
@@ -156,8 +174,23 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
+          if [[ "$EVENT_NAME" == schedule ]]; then
+            issues=$(gh api "repos/$GH_REPO/issues" --method GET --paginate --field state=open --field per_page=100)
+            issue=$(jq -c '
+              [.[] | select(.pull_request == null)
+                | select(.title | test("^release: v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))
+                | select(([.labels[]?.name] | index("release: candidate")) != null)]
+              | .[0] // empty' <<<"$issues")
+            if [[ -z "$issue" ]]; then
+              echo "No candidate release cycle to reconcile."
+              exit 0
+            fi
+            issue_title=$(jq -r '.title' <<<"$issue")
+            RUN_BRANCH="updates/${issue_title#release: }"
+          fi
           if [[ ! "$RUN_BRANCH" =~ ^updates/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo "Workflow run is not from a versioned dependency snapshot branch."
             exit 0
@@ -235,7 +268,7 @@ jobs:
             exit 0
           fi
 
-          issues=$(gh api "repos/$GH_REPO/issues" --paginate --field state=open --field per_page=100)
+          issues=$(gh api "repos/$GH_REPO/issues" --method GET --paginate --field state=open --field per_page=100)
           issue=$(jq -c '
             [.[] | select(.pull_request == null)
               | select(.title | test("^release: v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))
@@ -250,7 +283,7 @@ jobs:
           pr_url=$(jq -r '.url' <<<"$pr")
           issue_number=$(jq -r '.number' <<<"$issue")
           marker="<!-- jimu-release-automation:security-pr-$pr_number -->"
-          comments=$(gh api "repos/$GH_REPO/issues/$issue_number/comments" --paginate)
+          comments=$(gh api "repos/$GH_REPO/issues/$issue_number/comments" --method GET --paginate)
           if grep -Fq "$marker" <<<"$comments"; then
             echo "Security update PR was already recorded on the Release Issue."
             exit 0
@@ -271,6 +304,9 @@ jobs:
           private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
 
       - name: Open the human-reviewed release PR
         env:
@@ -296,29 +332,43 @@ jobs:
             echo "Snapshot PR branches do not belong to the same release version."
             exit 1
           fi
-
-          existing=$(gh pr list --repo "$GH_REPO" --state open --base master --head "$release_branch" --json number)
-          if [[ "$(jq 'length' <<<"$existing")" -gt 0 ]]; then
-            echo "Release candidate PR already exists; leaving it unchanged."
-            exit 0
-          fi
-
-          issues=$(gh api "repos/$GH_REPO/issues" --paginate --field state=all --field per_page=100)
-          issue_number=$(jq -r --arg title "release: $version" \
-            '.[] | select(.pull_request == null and .title == $title) | .number' <<<"$issues" | head -n1)
+          issues=$(gh api "repos/$GH_REPO/issues" --method GET --paginate --field state=all --field per_page=100)
+          issue=$(jq -c --arg title "release: $version" \
+            '.[] | select(.pull_request == null and .title == $title and ([.labels[]?.name] | index("release: candidate")) != null)' <<<"$issues" | head -n1)
+          issue_number=$(jq -r '.number // empty' <<<"${issue:-{}}")
           [[ -n "$issue_number" ]] || { echo "Matching Release Issue not found." >&2; exit 1; }
 
-          body=$(cat <<EOF
+          app_bot="${APP_SLUG}[bot]"
+          existing=$(gh pr list --repo "$GH_REPO" --state open --base master --head "$release_branch" \
+            --json number,author,headRefName,baseRefName,body)
+          existing_pr=$(jq -c --arg head "$release_branch" --arg app_bot "$app_bot" --arg version "$version" \
+            '[.[] | select(.headRefName == $head and .baseRefName == "master" and .author.login == $app_bot and (.body | contains("<!-- jimu-release-automation:" + $version + " final -->")))] | .[0] // empty' <<<"$existing")
+          if [[ -n "$existing_pr" ]]; then
+            candidate_pr_number=$(jq -r '.number' <<<"$existing_pr")
+          elif [[ "$(jq 'length' <<<"$existing")" -gt 0 ]]; then
+            echo "An unmanaged pull request already uses $release_branch; refusing to replace it." >&2
+            exit 1
+          else
+            body=$(cat <<EOF
           <!-- jimu-release-automation:$version final -->
-          Release candidate for `$version`, generated from the completed Dependabot snapshot.
+          Release candidate for version $version, generated from the completed Dependabot snapshot.
 
           Tracks #$issue_number. This PR requires human review and merge.
           EOF
           )
-          gh pr create --repo "$GH_REPO" --base master --head "$release_branch" \
-            --title "release: $version" --body "$body"
-          gh issue comment "$issue_number" --repo "$GH_REPO" \
-            --body "Release candidate PR was opened: $release_branch -> master." >/dev/null
+            candidate_url=$(gh pr create --repo "$GH_REPO" --base master --head "$release_branch" \
+              --title "release: $version" --body "$body")
+            gh issue comment "$issue_number" --repo "$GH_REPO" \
+              --body "Release candidate PR was opened: $candidate_url" >/dev/null
+          fi
+
+          if gh api "repos/$GH_REPO/git/refs/heads/$SNAPSHOT_BRANCH" --method DELETE >/dev/null 2>&1; then
+            echo "Deleted completed snapshot branch $SNAPSHOT_BRANCH."
+          elif gh api "repos/$GH_REPO/git/ref/heads/$SNAPSHOT_BRANCH" --method GET >/dev/null 2>&1; then
+            echo "Failed to delete completed snapshot branch $SNAPSHOT_BRANCH." >&2
+            exit 1
+          fi
+          echo "Kept dependabot-updates as Dependabot's configured target; auto-merge is paused until the next collecting cycle."
 
   tag:
     name: Tag Merged Release
@@ -350,16 +400,22 @@ jobs:
         run: |
           set -euo pipefail
           version="v${RELEASE_HEAD_REF#release/v}"
-          if [[ "$PR_AUTHOR" != "${APP_SLUG}[bot]" ]]; then
-            echo "Release candidate PR was not created by the configured GitHub App." >&2
-            exit 1
-          fi
-          issues=$(gh api "repos/$GH_REPO/issues" --paginate --field state=all --field per_page=100)
+          issues=$(gh api "repos/$GH_REPO/issues" --method GET --paginate --field state=all --field per_page=100)
           issue_number=$(jq -r --arg title "release: $version" \
             '.[] | select(.pull_request == null and .title == $title) | .number' <<<"$issues" | head -n1)
           [[ -n "$issue_number" ]] || { echo "Matching Release Issue not found." >&2; exit 1; }
+          if [[ "$PR_AUTHOR" != "${APP_SLUG}[bot]" ]]; then
+            gh label create "release: blocked" --repo "$GH_REPO" --color "b60205" --force >/dev/null 2>&1 || true
+            gh issue edit "$issue_number" --repo "$GH_REPO" \
+              --remove-label "release: candidate" --add-label "release: blocked" >/dev/null 2>&1 || true
+            gh issue comment "$issue_number" --repo "$GH_REPO" \
+              --body "Rejected a non-App-created release candidate PR; no tag was created." >/dev/null 2>&1 || true
+            echo "Release candidate PR was not created by the configured GitHub App." >&2
+            exit 1
+          fi
           if ! RELEASE_VERSION="$version" RELEASE_PR_NUMBER="$PR_NUMBER" \
-            RELEASE_ISSUE_NUMBER="$issue_number" scripts/release_orchestrator.sh tag-after-merge "$version" "$PR_NUMBER"; then
+            RELEASE_ISSUE_NUMBER="$issue_number" RELEASE_APP_SLUG="$APP_SLUG" \
+            scripts/release_orchestrator.sh tag-after-merge "$version" "$PR_NUMBER"; then
             gh label create "release: blocked" --repo "$GH_REPO" --color "b60205" --force >/dev/null 2>&1 || true
             gh issue edit "$issue_number" --repo "$GH_REPO" \
               --remove-label "release: candidate" --add-label "release: blocked" >/dev/null 2>&1 || true
@@ -407,7 +463,7 @@ jobs:
             exit 0
           fi
 
-          issues=$(gh api "repos/$GH_REPO/issues" --paginate --field state=all --field per_page=100)
+          issues=$(gh api "repos/$GH_REPO/issues" --method GET --paginate --field state=all --field per_page=100)
           issue_number=$(jq -r --arg title "release: $RUN_BRANCH" \
             '.[] | select(.pull_request == null and .title == $title) | .number' <<<"$issues" | head -n1)
           if [[ -z "$issue_number" ]]; then
@@ -418,7 +474,7 @@ jobs:
           if [[ "$RUN_CONCLUSION" == success ]]; then
             gh label create "release: published" --repo "$GH_REPO" --color "0e8a16" --force >/dev/null 2>&1 || true
             gh issue edit "$issue_number" --repo "$GH_REPO" \
-              --remove-label "release: candidate" --add-label "release: published" >/dev/null
+              --remove-label "release: candidate" --remove-label "release: blocked" --add-label "release: published" >/dev/null
             gh issue comment "$issue_number" --repo "$GH_REPO" \
               --body "Release workflow succeeded: $RUN_URL" >/dev/null
           else

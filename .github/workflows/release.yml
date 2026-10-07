@@ -11,9 +11,9 @@ permissions:
 env:
   GO_VERSION: "1.26.6"
 
-# tag 只负责发布已经验证过的 master tip。
-# 发布候选的常规门禁与重型 Scaffold Matrix 由 release/* → master PR 的 required checks 承担；
-# 这里拒绝不是当前 master tip 的 tag，避免绕过候选 PR 直接发布旧提交或分支提交。
+# tag 只负责发布由 GitHub App 创建并合并的 release/* → master 候选 PR。
+# master ruleset 承担候选 PR 的常规门禁与 Scaffold Matrix；本 workflow 再校验候选 PR、Issue、tag 和 master tip 一致，
+# 避免直接给当前 master 打 tag 绕过受管发布入口。
 jobs:
   release:
     name: Publish Release
@@ -29,17 +29,76 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
+          private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: read
+          permission-issues: read
+
       - name: Verify tag points to current master tip
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          TAG_ACTOR: ${{ github.actor }}
         run: |
+          set -euo pipefail
           git fetch --no-tags origin master
-          tag_sha=$(git rev-parse "refs/tags/${GITHUB_REF_NAME}^{commit}")
-          master_sha=$(git rev-parse "origin/master^{commit}")
-          if [ "$tag_sha" != "$master_sha" ]; then
-            echo "Tag ${GITHUB_REF_NAME} points to ${tag_sha}, but origin/master is ${master_sha}."
-            echo "Create the release tag only after the release candidate PR has merged."
+          if [[ "$TAG_ACTOR" != "${APP_SLUG}[bot]" ]]; then
+            echo "::error::Tag does not point to a managed release candidate: tag push must come from the configured GitHub App"
             exit 1
           fi
-          echo "${GITHUB_REF_NAME} matches origin/master at ${master_sha}."
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Tag does not point to a managed release candidate: invalid version tag $GITHUB_REF_NAME"
+            exit 1
+          fi
+
+          version=${GITHUB_REF_NAME#v}
+          release_branch="release/$GITHUB_REF_NAME"
+          app_bot="${APP_SLUG}[bot]"
+          pull_requests=$(gh api "repos/$GH_REPO/pulls" --method GET \
+            --field state=closed --field base=master --field "head=$GH_OWNER:$release_branch" --paginate)
+          candidate_pr=$(jq -c --arg release_branch "$release_branch" --arg app_bot "$app_bot" --arg version "$GITHUB_REF_NAME" '
+            [.[] | . as $pr | select($pr.head.ref == $release_branch and $pr.base.ref == "master" and $pr.merged_at != null
+              and $pr.user.login == $app_bot
+              and (($pr.body // "") | contains("<!-- jimu-release-automation:" + $version + " final -->")))]
+            | sort_by(.merged_at) | last // empty' <<<"$pull_requests")
+          if [[ -z "$candidate_pr" ]]; then
+            echo "::error::Tag does not point to a managed release candidate: no App-created candidate PR"
+            exit 1
+          fi
+
+          issues=$(gh api "repos/$GH_REPO/issues" --method GET --field state=all --field per_page=100 --paginate)
+          issue=$(jq -c --arg title "release: $GITHUB_REF_NAME" '
+            [.[] | select(.pull_request == null and .title == $title
+              and (([.labels[]?.name] | index("release: candidate")) != null
+                or ([.labels[]?.name] | index("release: blocked")) != null))] | .[0] // empty' <<<"$issues")
+          if [[ -z "$issue" ]]; then
+            echo "::error::Tag does not point to a managed release candidate: matching Issue is not in candidate or retryable blocked state"
+            exit 1
+          fi
+          issue_number=$(jq -r '.number' <<<"$issue")
+          comments=$(gh api "repos/$GH_REPO/issues/$issue_number/comments" --method GET --paginate)
+          if ! grep -Fq "<!-- jimu-release-automation:$GITHUB_REF_NAME -->" <<<"$comments"; then
+            echo "::error::Tag does not point to a managed release candidate: Release Issue marker is missing"
+            exit 1
+          fi
+
+          tag_sha=$(git rev-parse "refs/tags/${GITHUB_REF_NAME}^{commit}")
+          master_sha=$(git rev-parse "origin/master^{commit}")
+          candidate_sha=$(jq -r '.merge_commit_sha // empty' <<<"$candidate_pr")
+          if [[ "$tag_sha" != "$master_sha" || "$tag_sha" != "$candidate_sha" ]]; then
+            echo "::error::Tag does not point to a managed release candidate: tag=$tag_sha candidate=$candidate_sha master=$master_sha"
+            exit 1
+          fi
+          echo "${GITHUB_REF_NAME} matches managed candidate PR and current master at ${master_sha}."
 
       - name: Build release binaries
         run: |
@@ -69,15 +128,6 @@ jobs:
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Create GitHub App token for Release event
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
-          private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v3

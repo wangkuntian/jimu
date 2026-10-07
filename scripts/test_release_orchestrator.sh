@@ -116,7 +116,7 @@ case "$scenario:$method:$endpoint" in
   ensure-cycle:PATCH:repos/wangkuntian/jimu/pulls/81)
     echo '{"number":81,"state":"closed"}'
     ;;
-  ensure-cycle:DELETE:repos/wangkuntian/jimu/git/ref/heads/dependabot-updates)
+  ensure-cycle:DELETE:repos/wangkuntian/jimu/git/refs/heads/dependabot-updates)
     echo '{}'
     ;;
   ensure-cycle:GET:repos/wangkuntian/jimu/issues/77/comments)
@@ -194,11 +194,17 @@ case "$scenario:$method:$endpoint" in
     echo '{"number":123,"state":"open"}'
     ;;
   tag-after-merge:GET:repos/wangkuntian/jimu/pulls/42)
-    echo '{"merged":true,"merged_at":"2026-09-30T01:00:00Z","head":{"ref":"release/v0.3.5"},"base":{"ref":"master"},"merge_commit_sha":"merge-sha","body":"<!-- jimu-release-automation:v0.3.5 final -->"}'
+    if [[ ${FAKE_TAG_STATE:-match} == unmanaged-pr ]]; then
+      echo '{"merged":true,"merged_at":"2026-09-30T01:00:00Z","head":{"ref":"release/v0.3.5","sha":"release-head-sha"},"base":{"ref":"master"},"merge_commit_sha":"merge-sha","user":{"login":"human-user"},"body":"<!-- jimu-release-automation:v0.3.5 final -->"}'
+    else
+      echo '{"merged":true,"merged_at":"2026-09-30T01:00:00Z","head":{"ref":"release/v0.3.5","sha":"release-head-sha"},"base":{"ref":"master"},"merge_commit_sha":"merge-sha","user":{"login":"release-app[bot]"},"body":"<!-- jimu-release-automation:v0.3.5 final -->"}'
+    fi
     ;;
   tag-after-merge:GET:repos/wangkuntian/jimu/issues/77)
     if [[ ${FAKE_TAG_STATE:-match} == bad-issue ]]; then
       echo '{"title":"release: v0.3.5","labels":[{"name":"release: collecting"}]}'
+    elif [[ ${FAKE_TAG_STATE:-match} == retry-blocked ]]; then
+      echo '{"title":"release: v0.3.5","labels":[{"name":"release: blocked"}]}'
     else
       echo '{"title":"release: v0.3.5","labels":[{"name":"release: candidate"}]}'
     fi
@@ -214,7 +220,18 @@ case "$scenario:$method:$endpoint" in
     fi
     ;;
   tag-after-merge:GET:repos/wangkuntian/jimu/git/ref/tags/v0.3.5)
-    exit 1
+    if [[ ${FAKE_TAG_STATE:-match} == tag-exists-match || ${FAKE_TAG_STATE:-match} == tag-exists-mismatch ]]; then
+      echo '{"ref":"refs/tags/v0.3.5","object":{"type":"tag","sha":"annotated-tag-sha"}}'
+    else
+      exit 1
+    fi
+    ;;
+  tag-after-merge:GET:repos/wangkuntian/jimu/git/tags/annotated-tag-sha)
+    if [[ ${FAKE_TAG_STATE:-match} == tag-exists-match ]]; then
+      echo '{"object":{"type":"commit","sha":"merge-sha"}}'
+    else
+      echo '{"object":{"type":"commit","sha":"other-sha"}}'
+    fi
     ;;
   tag-after-merge:POST:repos/wangkuntian/jimu/git/tags)
     echo '{"sha":"annotated-tag-sha"}'
@@ -288,6 +305,7 @@ test_ensure_cycle() {
   assert_contains "$output" 'dependabot_branch=dependabot-updates' 'ensure-cycle reports fixed Dependabot branch'
   assert_contains "$(cat "$FAKE_GH_LOG")" 'api repos/wangkuntian/jimu/git/refs --method POST' 'ensure-cycle creates missing refs'
   assert_contains "$(cat "$FAKE_GH_LOG")" 'api repos/wangkuntian/jimu/issues/77/comments --method POST' 'ensure-cycle records managed resources'
+  assert_contains "$(cat "$FAKE_GH_LOG")" 'api repos/wangkuntian/jimu/git/ref/tags/v0.3.5 --method GET' 'API reads with parameters use GET explicitly'
   local marker_line refs_line
   marker_line=$(grep -n 'api repos/wangkuntian/jimu/issues/77/comments --method POST' "$FAKE_GH_LOG" | head -n1 | cut -d: -f1)
   refs_line=$(grep -n 'api repos/wangkuntian/jimu/git/refs --method POST' "$FAKE_GH_LOG" | head -n1 | cut -d: -f1)
@@ -324,7 +342,7 @@ test_ensure_cycle() {
   output=$(FAKE_GH_SCENARIO=ensure-cycle FAKE_CYCLE_STATE=reuse-terminal run_orchestrator ensure-cycle)
   assert_contains "$output" 'dependabot_branch=dependabot-updates' 'next cycle reuses the fixed branch name'
   assert_contains "$(cat "$FAKE_GH_LOG")" 'api repos/wangkuntian/jimu/pulls/81 --method PATCH --field state=closed' 'stale Dependabot PR is closed'
-  assert_contains "$(cat "$FAKE_GH_LOG")" 'api repos/wangkuntian/jimu/git/ref/heads/dependabot-updates --method DELETE' 'terminal cycle fixed branch is deleted before reset'
+  assert_contains "$(cat "$FAKE_GH_LOG")" 'api repos/wangkuntian/jimu/git/refs/heads/dependabot-updates --method DELETE' 'terminal cycle fixed branch is deleted before reset'
 
   : > "$FAKE_GH_LOG"
   set +e
@@ -426,22 +444,47 @@ test_snapshot() {
 
 test_tag_guard() {
   local output
-  output=$(FAKE_GH_SCENARIO=tag-after-merge FAKE_TAG_STATE=match run_orchestrator tag-after-merge v0.3.5 42)
+  output=$(FAKE_GH_SCENARIO=tag-after-merge RELEASE_APP_SLUG=release-app run_orchestrator tag-after-merge v0.3.5 42)
   assert_contains "$output" 'tag=v0.3.5' 'matching master tip allows tag creation'
 
+  output=$(FAKE_GH_SCENARIO=tag-after-merge FAKE_TAG_STATE=retry-blocked RELEASE_APP_SLUG=release-app run_orchestrator tag-after-merge v0.3.5 42)
+  assert_contains "$output" 'tag=v0.3.5' 'blocked issue can retry a failed Release workflow tag validation'
+
+  : > "$FAKE_GH_LOG"
+  output=$(FAKE_GH_SCENARIO=tag-after-merge FAKE_TAG_STATE=tag-exists-match RELEASE_APP_SLUG=release-app run_orchestrator tag-after-merge v0.3.5 42)
+  assert_contains "$output" 'tag=v0.3.5' 'existing tag for the validated merge is idempotently accepted'
+  if grep -Fq -- '--method POST' "$FAKE_GH_LOG"; then
+    printf 'ASSERT FAILED: idempotent tag recovery attempted another write\n' >&2
+    exit 1
+  fi
+
   set +e
-  output=$(FAKE_GH_SCENARIO=tag-after-merge FAKE_TAG_STATE=mismatch run_orchestrator tag-after-merge v0.3.5 42 2>&1)
+  output=$(FAKE_GH_SCENARIO=tag-after-merge FAKE_TAG_STATE=tag-exists-mismatch RELEASE_APP_SLUG=release-app run_orchestrator tag-after-merge v0.3.5 42 2>&1)
+  local status=$?
+  set -e
+  assert_status 1 "$status" 'existing tag for a different commit is rejected'
+  assert_contains "$output" '::error::release tag already points to a different commit' 'conflicting tag emits stable error'
+
+  set +e
+  output=$(FAKE_GH_SCENARIO=tag-after-merge FAKE_TAG_STATE=mismatch RELEASE_APP_SLUG=release-app run_orchestrator tag-after-merge v0.3.5 42 2>&1)
   local status=$?
   set -e
   assert_status 1 "$status" 'stale merge commit is rejected'
   assert_contains "$output" '::error::merge commit is not current master tip' 'tag guard emits stable error'
 
   set +e
-  output=$(FAKE_GH_SCENARIO=tag-after-merge FAKE_TAG_STATE=bad-issue run_orchestrator tag-after-merge v0.3.5 42 2>&1)
+  output=$(FAKE_GH_SCENARIO=tag-after-merge FAKE_TAG_STATE=bad-issue RELEASE_APP_SLUG=release-app run_orchestrator tag-after-merge v0.3.5 42 2>&1)
   status=$?
   set -e
   assert_status 1 "$status" 'issue outside candidate state cannot be tagged'
-  assert_contains "$output" '::error::release issue is not in candidate state' 'candidate state failure emits stable error'
+  assert_contains "$output" '::error::release issue is not in candidate or retryable blocked state' 'candidate state failure emits stable error'
+
+  set +e
+  output=$(FAKE_GH_SCENARIO=tag-after-merge FAKE_TAG_STATE=unmanaged-pr run_orchestrator tag-after-merge v0.3.5 42 2>&1)
+  status=$?
+  set -e
+  assert_status 1 "$status" 'human-authored PR with copied marker cannot create a tag'
+  assert_contains "$output" '::error::release PR was not created by the configured App' 'non-App PR rejection emits stable error'
 }
 
 test_dependabot_config() {
@@ -489,7 +532,10 @@ test_workflow_contract() {
     'release_orchestrator.sh create-snapshot' \
     'release_orchestrator.sh tag-after-merge' \
     'open-release-candidate' \
+    'release: $version' \
+    'final -->' \
     'record-security-update' \
+    'Rejected a non-App-created release candidate PR' \
     'snapshot-sha:' \
     'APP_SLUG' \
     'PR_AUTHOR' \
@@ -524,12 +570,26 @@ test_workflow_contract() {
       exit 1
     fi
   done
-  for required in 'permission-checks: read' 'permission-contents: write' 'permission-pull-requests: write'; do
-    if ! grep -Fq "$required" "$workflow"; then
-      printf 'ASSERT FAILED: snapshot merge token lacks %s\n' "$required" >&2
-      exit 1
-    fi
-  done
+  grep -Fq 'github.event_name == '\''schedule'\''' "$workflow" || {
+    printf 'ASSERT FAILED: aggregate merge gate lacks scheduled recovery\n' >&2
+    exit 1
+  }
+  grep -Fq 'gh pr checks' "$workflow" || {
+    printf 'ASSERT FAILED: aggregate merge gate does not reconcile current PR checks\n' >&2
+    exit 1
+  }
+  grep -Fq "github.event_name == 'schedule'" "$workflow" || {
+    printf 'ASSERT FAILED: aggregate merge gate lacks scheduled recovery\n' >&2
+    exit 1
+  }
+  grep -Fq 'git/refs/heads/$SNAPSHOT_BRANCH" --method DELETE' "$workflow" || {
+    printf 'ASSERT FAILED: completed snapshot branch is not deleted\n' >&2
+    exit 1
+  }
+  grep -Fq 'Kept dependabot-updates as Dependabot' "$workflow" || {
+    printf 'ASSERT FAILED: fixed Dependabot target branch lifecycle is undocumented in workflow\n' >&2
+    exit 1
+  }
   for required in 'permission-checks: read' 'permission-contents: write' 'permission-pull-requests: write'; do
     if ! grep -Fq "$required" "$workflow"; then
       printf 'ASSERT FAILED: snapshot merge token lacks %s\n' "$required" >&2
@@ -541,10 +601,22 @@ test_workflow_contract() {
     exit 1
   fi
   issue_events=$(sed -n '/^  issues:/,/^  schedule:/p' "$workflow")
-  if [[ "$issue_events" != *'types: [opened, edited, reopened]'* || "$issue_events" == *'labeled'* ]]; then
-    printf 'ASSERT FAILED: bootstrap must not rerun for workflow-managed issue labels\n' >&2
+  if [[ "$issue_events" != *'types: [opened, edited, reopened, labeled]'* ]]; then
+    printf 'ASSERT FAILED: bootstrap must accept the explicit collecting-label recovery event\n' >&2
     exit 1
   fi
+  grep -Fq "github.event.label.name == 'release: collecting'" "$workflow" || {
+    printf 'ASSERT FAILED: blocked-cycle recovery is not restricted to the collecting label\n' >&2
+    exit 1
+  }
+  grep -Fq 'contains(github.event.issue.labels.*.name, '\''release: blocked'\'')' "$workflow" || {
+    printf 'ASSERT FAILED: collecting-label recovery must only apply to blocked cycles\n' >&2
+    exit 1
+  }
+  grep -Fq -- '--remove-label "release: blocked" --add-label "release: collecting"' "$workflow" || {
+    printf 'ASSERT FAILED: successful bootstrap retry does not clear the blocked label\n' >&2
+    exit 1
+  }
   release_workflow="$ROOT_DIR/.github/workflows/release.yml"
   grep -Fq 'actions/create-github-app-token@v1' "$release_workflow" || {
     printf 'ASSERT FAILED: Release workflow must use an App token to emit the published event\n' >&2
@@ -559,22 +631,6 @@ test_workflow_contract() {
     printf 'ASSERT FAILED: daily collector must select only collecting release Issues\n' >&2
     exit 1
   fi
-  grep -Fq -- '--match-head-commit "$head_sha"' "$workflow" || {
-    printf 'ASSERT FAILED: Dependabot merge must bind the validated head SHA atomically\n' >&2
-    exit 1
-  }
-  grep -Fq 'permission-checks: read' "$workflow" || {
-    printf 'ASSERT FAILED: Dependabot merge token lacks Checks read permission\n' >&2
-    exit 1
-  }
-  grep -Fq 'permission-contents: write' "$workflow" || {
-    printf 'ASSERT FAILED: Dependabot merge token lacks Contents write permission\n' >&2
-    exit 1
-  }
-  grep -Fq 'permission-pull-requests: write' "$workflow" || {
-    printf 'ASSERT FAILED: Dependabot merge token lacks Pull requests write permission\n' >&2
-    exit 1
-  }
 }
 
 test_dependabot_merge_contract() {
@@ -583,8 +639,36 @@ test_dependabot_merge_contract() {
     printf 'ASSERT FAILED: Dependabot merge must wait for a completed focused workflow\n' >&2
     exit 1
   }
+  grep -Fq 'group: release-dependency-automation' "$workflow" || {
+    printf 'ASSERT FAILED: Dependabot merge must share the release-cycle branch lock\n' >&2
+    exit 1
+  }
+  grep -Fq 'cancel-in-progress: false' "$workflow" || {
+    printf 'ASSERT FAILED: Dependabot merge must not cancel a branch-lock holder\n' >&2
+    exit 1
+  }
   grep -Fq 'CI (Dependabot Focused)' "$workflow" || {
     printf 'ASSERT FAILED: Dependabot merge does not subscribe to focused checks\n' >&2
+    exit 1
+  }
+  grep -Fq 'while IFS= read -r pr; do' "$workflow" || {
+    printf 'ASSERT FAILED: completed workflow events must reconcile every eligible Dependabot PR\n' >&2
+    exit 1
+  }
+  grep -Fq 'select(.author.login == "dependabot[bot]" and .baseRefName == "dependabot-updates")' "$workflow" || {
+    printf 'ASSERT FAILED: Dependabot reconciliation does not select all eligible target PRs\n' >&2
+    exit 1
+  }
+  grep -Fq 'if ! gh pr merge' "$workflow" || {
+    printf 'ASSERT FAILED: one PR merge failure must not stop reconciliation of later PRs\n' >&2
+    exit 1
+  }
+  if grep -Fq "if: github.event.workflow_run.conclusion == 'success'" "$workflow"; then
+    printf 'ASSERT FAILED: failed workflow completions must still wake PR reconciliation\n' >&2
+    exit 1
+  fi
+  grep -Fq 'release: collecting' "$workflow" || {
+    printf 'ASSERT FAILED: Dependabot auto merge is not limited to collecting cycles\n' >&2
     exit 1
   }
   grep -Fq 'gh pr merge' "$workflow" || {
@@ -603,6 +687,12 @@ test_dependabot_merge_contract() {
     printf 'ASSERT FAILED: Dependabot merge token lacks Checks read permission\n' >&2
     exit 1
   }
+  for required in 'permission-contents: write' 'permission-pull-requests: write'; do
+    if ! grep -Fq "$required" "$workflow"; then
+      printf 'ASSERT FAILED: Dependabot merge token lacks %s\n' "$required" >&2
+      exit 1
+    fi
+  done
 }
 
 test_scaffold_policy() {
@@ -616,6 +706,35 @@ test_scaffold_policy() {
     "startsWith(github.head_ref, 'release/')"; do
     if ! grep -Fq "$required" "$workflow"; then
       printf 'ASSERT FAILED: scaffold policy is missing %s\n' "$required" >&2
+      exit 1
+    fi
+  done
+}
+
+test_release_policy() {
+  local workflow="$ROOT_DIR/.github/workflows/release.yml"
+  local required
+  for required in \
+    'actions/create-github-app-token@v1' \
+    'permission-pull-requests: read' \
+    'permission-issues: read' \
+    'APP_SLUG' \
+    'TAG_ACTOR' \
+    'tag push must come from the configured GitHub App' \
+    'release: candidate' \
+    'release: blocked' \
+    '^v(0|[1-9][0-9]*)' \
+    'user.login == $app_bot' \
+    'merge_commit_sha' \
+    'candidate_sha' \
+    'master_sha' \
+    'tag=$tag_sha candidate=$candidate_sha master=$master_sha' \
+    'permission-contents: write' \
+    'Tag does not point to a managed release candidate' \
+    'final -->' \
+    'Release Issue marker is missing'; do
+    if ! grep -Fq "$required" "$workflow"; then
+      printf 'ASSERT FAILED: release publication gate is missing %s\n' "$required" >&2
       exit 1
     fi
   done
@@ -638,6 +757,7 @@ test_docs() {
     'Scaffold Matrix' \
     'JIMU_RELEASE_APP_ID' \
     'checks: read' \
+    '候选 merge commit' \
     '人工 review 和 merge'; do
     if ! rg -Fq -- "$required" "${docs[@]}"; then
       printf 'ASSERT FAILED: release automation docs are missing %s\n' "$required" >&2
@@ -665,6 +785,9 @@ case "${1:-core}" in
     ;;
   --scaffold-policy)
     test_scaffold_policy
+    ;;
+  --release-policy)
+    test_release_policy
     ;;
   --docs)
     test_docs
