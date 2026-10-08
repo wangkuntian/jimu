@@ -709,6 +709,7 @@ jobs:
           fi
 
           if [[ "$RUN_CONCLUSION" == success ]]; then
+            gh label create "release: published" --repo "$GH_REPO" --color "0e8a16" --force >/dev/null
             python3 scripts/release_issue.py published "$RUN_BRANCH" "https://github.com/$GH_REPO/releases/tag/$RUN_BRANCH"
           else
             gh label create "release: blocked" --repo "$GH_REPO" --color "b60205" --force >/dev/null 2>&1 || true
