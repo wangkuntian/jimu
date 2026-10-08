@@ -133,14 +133,14 @@ case "$scenario:$method:$endpoint" in
     echo '{"id":1}'
     ;;
   collection-ready:GET:repos/wangkuntian/jimu/issues/77)
-    if [[ ${FAKE_COLLECTION_STATE:-ready} == young ]]; then
-      echo '{"created_at":"2026-09-28T00:00:00Z"}'
+    if [[ ${FAKE_COLLECTION_STATE:-ready} == young || ${FAKE_COLLECTION_STATE:-ready} == young-open-pr ]]; then
+      echo '{"created_at":"2026-09-30T00:00:00Z"}'
     else
       echo '{"created_at":"2026-09-20T00:00:00Z"}'
     fi
     ;;
   collection-ready:GET:repos/wangkuntian/jimu/pulls*)
-    if [[ ${FAKE_COLLECTION_STATE:-ready} == open-pr ]]; then
+    if [[ ${FAKE_COLLECTION_STATE:-ready} == open-pr || ${FAKE_COLLECTION_STATE:-ready} == young-open-pr ]]; then
       echo '[{"number":88,"user":{"login":"dependabot[bot]"},"state":"open"}]'
     else
       echo '[]'
@@ -148,13 +148,17 @@ case "$scenario:$method:$endpoint" in
     ;;
   collection-ready:GET:repos/wangkuntian/jimu/commits*)
     if [[ ${FAKE_COLLECTION_STATE:-ready} == recent ]]; then
-      echo '[{"sha":"dependabot-sha","commit":{"committer":{"date":"2026-09-29T18:00:00Z"}}}]'
+      echo '[{"sha":"dependabot-sha","commit":{"committer":{"date":"2026-09-30T00:00:00Z"}}}]'
     else
       echo '[{"sha":"dependabot-sha","commit":{"committer":{"date":"2026-09-25T00:00:00Z"}}}]'
     fi
     ;;
   collection-ready:GET:repos/wangkuntian/jimu/compare/*)
-    echo '{"ahead_by":1}'
+    if [[ ${FAKE_COLLECTION_STATE:-ready} == empty ]]; then
+      echo '{"ahead_by":0}'
+    else
+      echo '{"ahead_by":1}'
+    fi
     ;;
   create-snapshot:GET:repos/wangkuntian/jimu/git/ref/heads/dependabot-updates)
     echo '{"ref":"refs/heads/dependabot-updates","object":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}'
@@ -240,7 +244,6 @@ run_orchestrator() {
     FAKE_GH_LOG="$FAKE_GH_LOG" \
     RELEASE_VERSION=v0.3.5 \
     RELEASE_ISSUE_NUMBER=77 \
-    NOW=2026-09-30T00:00:00Z \
     "$SCRIPT" "$@"
 }
 
@@ -362,24 +365,28 @@ test_ensure_cycle() {
   assert_contains "$output" '::error::release branch already exists and is not managed' 'release conflict emits stable error'
 }
 
-test_collection_window() {
+test_collection_readiness() {
   local output
   output=$(FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=ready run_orchestrator collection-ready)
-  assert_contains "$output" 'ready=true' 'ready cycle passes the collection window'
+  assert_contains "$output" 'ready=true' 'dependency changes without pending PRs are ready'
 
-  output=$(env -u NOW PATH="$FAKE_BIN:$PATH" GH_REPO=wangkuntian/jimu GH_TOKEN=test \
-    FAKE_GH_LOG="$FAKE_GH_LOG" FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=ready \
-    RELEASE_VERSION=v0.3.5 RELEASE_ISSUE_NUMBER=77 "$SCRIPT" collection-ready)
-  assert_contains "$output" 'ready=true' 'collection uses current UTC time when NOW is unset'
-
-  output=$(FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=young run_orchestrator collection-ready)
-  assert_contains "$output" 'ready=false' 'young cycle is held'
+  output=$(NOW=2026-09-30T00:00:00Z FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=young run_orchestrator collection-ready)
+  assert_contains "$output" 'ready=true' 'newly created cycle needs no minimum age'
 
   output=$(FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=open-pr run_orchestrator collection-ready)
   assert_contains "$output" 'ready=false' 'open Dependabot PR blocks collection'
+  assert_contains "$output" 'reason=open Dependabot PRs remain on dependabot-updates' 'pending dependency updates retain the merge gate'
 
-  output=$(FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=recent run_orchestrator collection-ready)
-  assert_contains "$output" 'ready=false' 'recent update resets quiet window'
+  output=$(NOW=2026-09-30T00:00:00Z FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=young-open-pr run_orchestrator collection-ready)
+  assert_contains "$output" 'ready=false' 'new cycles must still wait for pending dependency PRs'
+  assert_contains "$output" 'reason=open Dependabot PRs remain on dependabot-updates' 'pending PR gate applies regardless of cycle age'
+
+  output=$(NOW=2026-09-30T00:00:00Z FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=recent run_orchestrator collection-ready)
+  assert_contains "$output" 'ready=true' 'newly merged dependency changes need no quiet period'
+
+  output=$(FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=empty run_orchestrator collection-ready)
+  assert_contains "$output" 'ready=false' 'no dependency changes cannot become a candidate'
+  assert_contains "$output" 'reason=no dependency update was merged in this cycle' 'empty cycle has an explicit reason'
 }
 
 test_snapshot() {
@@ -732,8 +739,7 @@ test_docs() {
   for required in \
     'release: vX.Y.Z' \
     'dependabot-updates' \
-    '8 天' \
-    '24 小时' \
+    '没有待处理 Dependabot PR' \
     'CI (Go)' \
     'CI (Docker)' \
     'CI (Commits)' \
@@ -750,13 +756,17 @@ test_docs() {
       exit 1
     fi
   done
+  if rg -q '8 天|24 小时' "${docs[@]}"; then
+    printf 'ASSERT FAILED: release automation docs retain removed collection delays\n' >&2
+    exit 1
+  fi
 }
 
 case "${1:-core}" in
   core)
     test_validate_version
     test_ensure_cycle
-    test_collection_window
+    test_collection_readiness
     test_snapshot
     test_tag_guard
     ;;

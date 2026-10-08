@@ -58,16 +58,6 @@ version_context() {
   AGGREGATE_BRANCH=dependabot-updates
 }
 
-epoch() {
-  local value=$1 normalized
-  normalized=${value%%.*}
-  if date -u -d "$normalized" +%s >/dev/null 2>&1; then
-    date -u -d "$normalized" +%s
-  else
-    date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$normalized" +%s
-  fi
-}
-
 ref_json() {
   local kind=$1 name=$2
   api "repos/$repo/git/ref/$kind/$name"
@@ -222,40 +212,12 @@ collection_ready() {
   local issue=${RELEASE_ISSUE_NUMBER:-}
   [[ "$issue" =~ ^[0-9]+$ ]] || error "RELEASE_ISSUE_NUMBER is required"
 
-  local issue_json started_at cycle_age now_value now_epoch
-  issue_json=$(api "repos/$repo/issues/$issue")
-  started_at=$(jq -er '.created_at' <<<"$issue_json") || error "release issue has no created_at"
-  now_value=${NOW:-$(date -u '+%Y-%m-%dT%H:%M:%SZ')}
-  now_epoch=$(epoch "$now_value")
-  cycle_age=$((now_epoch - $(epoch "$started_at")))
-  if (( cycle_age < 8 * 24 * 60 * 60 )); then
-    write_output ready false
-    write_output reason "release cycle is younger than 8 days"
-    return 0
-  fi
-
   local pulls dependabot_count
   pulls=$(api "repos/$repo/pulls" --paginate --field state=open --field base=dependabot-updates --field per_page=100)
   dependabot_count=$(jq '[.[] | select(.user.login == "dependabot[bot]")] | length' <<<"$pulls")
   if (( dependabot_count > 0 )); then
     write_output ready false
     write_output reason "open Dependabot PRs remain on dependabot-updates"
-    return 0
-  fi
-
-  local commits latest_commit latest_date quiet_age
-  commits=$(api "repos/$repo/commits" --paginate --field sha=dependabot-updates --field per_page=1)
-  latest_commit=$(jq -r '.[0].sha // empty' <<<"$commits")
-  latest_date=$(jq -r '.[0].commit.committer.date // .[0].commit.author.date // empty' <<<"$commits")
-  if [[ -z "$latest_commit" || -z "$latest_date" ]]; then
-    write_output ready false
-    write_output reason "dependabot-updates has no commit history"
-    return 0
-  fi
-  quiet_age=$((now_epoch - $(epoch "$latest_date")))
-  if (( quiet_age < 24 * 60 * 60 )); then
-    write_output ready false
-    write_output reason "dependabot-updates changed within the last 24 hours"
     return 0
   fi
 
@@ -269,7 +231,7 @@ collection_ready() {
   fi
 
   write_output ready true
-  write_output reason "collection window is complete"
+  write_output reason "dependency changes are ready for CI validation"
   write_output version "$VERSION"
 }
 

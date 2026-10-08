@@ -74,7 +74,7 @@ fix(auth): reject expired refresh token
 
 Dependabot 普通版本更新指向 `dependabot-updates`，只运行 `CI (Dependabot Focused)` 中的格式、`go vet` 和普通 Go 测试。每次检查完成事件都会扫描所有 open 的目标 PR，并根据当前 check 状态和 head SHA 决定是否由 GitHub App squash merge；因此共享并发组折叠 pending 事件时仍会重试其他已通过的 PR。这里使用检查完成后的 App merge，不要求启用 GitHub auto-merge。安全更新不受 `target-branch` 控制，仍直接指向 `master`；现有 CI 照常运行，`Scaffold Matrix` 以成功 skip 满足 required check，PR 链接会记录到活跃的 Release Issue。
 
-Issue bootstrap 成功后会立即检查一次收集资格；`dependabot-updates` 出现首个依赖提交后立即创建 `dependabot-updates -> release/vX.Y.Z` 汇总 PR，之后每日重试。该 PR 会自动吸收固定分支后续提交，但汇总仍须等待至少 8 天，并要求最近 24 小时没有提交、没有待处理 Dependabot PR。条件满足后将 Issue 标为 `release: candidate`。`CI (Go)`、`CI (Docker)`、`CI (Commits)` 都必须完成；各自检查成功或正常跳过且 PR head SHA 未变化后，GitHub App 才会自动 squash merge。汇总 PR 合入后，Actions 会自动创建 `release/vX.Y.Z -> master` 候选 PR。该 PR 使用 master ruleset 的完整 required checks，仍需维护者人工 review 和 merge。candidate 阶段暂停固定分支的自动合并，下一 cycle bootstrap 时清理并重建。
+Issue bootstrap 成功后会立即检查一次收集资格；`dependabot-updates` 出现首个依赖提交后立即创建 `dependabot-updates -> release/vX.Y.Z` 汇总 PR，之后每日重试。该 PR 会自动吸收固定分支后续提交；有依赖差异且没有待处理 Dependabot PR 时即可将 Issue 标为 `release: candidate`，无需等待固定收集期或提交静默期。`CI (Go)`、`CI (Docker)`、`CI (Commits)` 都必须完成；各自检查成功或正常跳过且 PR head SHA 未变化后，GitHub App 才会自动 squash merge。汇总 PR 合入后，Actions 会自动创建 `release/vX.Y.Z -> master` 候选 PR。该 PR 使用 master ruleset 的完整 required checks，仍需维护者人工 review 和 merge。candidate 阶段暂停固定分支的自动合并，下一 cycle bootstrap 时清理并重建。
 
 候选 PR 合入后，GitHub App 会验证 App 创建者、Release Issue 状态、PR marker 和合并提交，创建 `vX.Y.Z` tag。`release.yml` 只接受该 App push 的 tag，并再次确认 tag commit、候选 merge commit 和当前 master tip 三者完全一致，避免手工打 tag或直接为 master 打 tag 绕过候选 PR。相同 merge commit 的 tag 重试可恢复；tag 指向其他 commit 时拒绝发布。Release workflow 失败会保留 `release: blocked`，修复失败原因后可重跑同一个 tag；成功发布后 Issue 标记为 `release: published`。
 
