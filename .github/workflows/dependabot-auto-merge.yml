@@ -39,7 +39,7 @@ jobs:
           # Each run reconciles all open PRs because GitHub may replace pending runs in this concurrency group.
           prs=$(gh pr list --repo "$GH_REPO" --state open --base dependabot-updates \
             --json number,author,baseRefName,headRefName,headRefOid)
-          dependabot_prs=$(jq -c '[.[] | select(.author.login == "dependabot[bot]" and .baseRefName == "dependabot-updates")]' <<<"$prs")
+          dependabot_prs=$(jq -c '[.[] | select((.author.login == "dependabot[bot]" or .author.login == "app/dependabot") and .baseRefName == "dependabot-updates")]' <<<"$prs")
           if [[ "$(jq 'length' <<<"$dependabot_prs")" == 0 ]]; then
             echo "No open Dependabot PRs target dependabot-updates."
             exit 0

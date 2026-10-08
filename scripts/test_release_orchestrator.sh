@@ -648,7 +648,7 @@ test_dependabot_merge_contract() {
     printf 'ASSERT FAILED: completed workflow events must reconcile every eligible Dependabot PR\n' >&2
     exit 1
   }
-  grep -Fq 'select(.author.login == "dependabot[bot]" and .baseRefName == "dependabot-updates")' "$workflow" || {
+  grep -Fq 'select((.author.login == "dependabot[bot]" or .author.login == "app/dependabot") and .baseRefName == "dependabot-updates")' "$workflow" || {
     printf 'ASSERT FAILED: Dependabot reconciliation does not select all eligible target PRs\n' >&2
     exit 1
   }

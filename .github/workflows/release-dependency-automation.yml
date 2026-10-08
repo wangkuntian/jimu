@@ -289,7 +289,7 @@ jobs:
           set -euo pipefail
           prs=$(gh pr list --repo "$GH_REPO" --state open --base master --head "$RUN_BRANCH" \
             --json number,author,baseRefName,headRefName,url)
-          pr=$(jq -c '[.[] | select(.baseRefName == "master" and .author.login == "dependabot[bot]")] | .[0] // empty' <<<"$prs")
+          pr=$(jq -c '[.[] | select(.baseRefName == "master" and (.author.login == "dependabot[bot]" or .author.login == "app/dependabot"))] | .[0] // empty' <<<"$prs")
           if [[ -z "$pr" ]]; then
             echo "No open master-targeted Dependabot PR matches this workflow run."
             exit 0
