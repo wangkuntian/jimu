@@ -21,7 +21,9 @@
 - [x] 发布成功后更新 Issue 并关闭。
   - published 事件确认成功后同步 Release 链接与 published 标签，再关闭 Issue；失败不关闭。
   - 回归验证成功/失败与重试顺序，提交。
-- [x] 同步 README、贡献指南、v0.3.5 说明、旧设计与计划；发布回归（37 个 CLI、20 个 Issue 测试和 Bash 契约）、actionlint、能力与形态门禁通过；只读审查指出的问题已修复。
+- [x] 同步 README、贡献指南、v0.3.5 说明、旧设计与计划；发布回归（48 个 CLI、20 个 Issue 测试和 Bash 契约）、actionlint、能力与形态门禁通过；只读审查指出的问题已修复。
+
+提交记录：`48e323b`（官方 CLI 与 PR 发布）、`f99b6db`（Issue 同步与关闭）、`1315c12`（workflow 串联及文档）、`abd0173`（published 标签初始化）、`c57ba04`（基线推进和连续 API 中断恢复）。
 
 ## 验证边界
 
