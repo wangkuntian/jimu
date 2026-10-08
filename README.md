@@ -1165,6 +1165,7 @@ Issue 正文的自动维护区随 PR 创建、同步、关闭或合并更新，�
 | 命令 | 说明 |
 |------|------|
 | `make run` | 运行服务（开发模式） |
+| `make test-release-orchestrator` | 发布编排 Bash 契约、Dependabot CLI 和 Issue 正文/收尾回归测试 |
 | `make dev` | 开发模式：fmt + vet + 构建 + 运行 |
 | `make build` | 编译 server + cli |
 | `make build-server` | 编译服务端（`PROFILE=<name>` 选形态，默认 full；overlay 叠加 `./cmd/server`，产物 `bin/jimu-server[-<name>]`） |

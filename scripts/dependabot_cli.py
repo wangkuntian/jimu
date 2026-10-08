@@ -267,9 +267,54 @@ def same_tree(left, right):
 
 
 def app_commit(context, commit, message):
-    return (commit.get("message") == message and
+    return (commit.get("message") in {message, message.partition("\n\n")[0]} and
             all(commit.get(role, {}).get(field) == value for role in ("author", "committer")
                 for field, value in context.author().items()))
+
+
+def validate_recovery_commit(context, commit, tree, update, marker, base):
+    message = commit.get("message", "")
+    require(isinstance(message, str) and app_commit(context, commit, message),
+            "existing dependency branch commit is not authored by the release App")
+    legacy_message = update["message"].partition("\n\n")[0]
+    identity = message == legacy_message
+    if "\n\n" in message:
+        summary, body = message.split("\n\n", 1)
+        identity = body == marker and bool(re.fullmatch(r"chore\(deps\): (?:bump|update) [ -~]+", summary))
+    elif len(update["names"]) == 1:
+        # Earlier publisher commits have no identity marker. Their exact
+        # dependency name still identifies a single update across versions.
+        identity = bool(re.fullmatch(r"chore\(deps\): (?:bump|update) " + re.escape(update["names"][0]) +
+                                     r"(?: from [ -~]+ to [ -~]+)?", message))
+    require(identity, "existing dependency branch has different dependency identities")
+    parents = [parent.get("sha") for parent in commit.get("parents", [])]
+    require(len(parents) in {1, 2} and all(SHA.fullmatch(parent or "") for parent in parents),
+            "interrupted dependency branch has unexpected parents")
+    old_base = parents[-1]
+    comparison = context.github.api("compare/" + old_base + "..." + base)
+    require(comparison.get("merge_base_commit", {}).get("sha") == old_base,
+            "orphan dependency baseline is not an ancestor of the current base")
+    _, old_tree = context.github.tree(old_base)
+    changed = {path for path in old_tree.keys() | tree.keys()
+               if not same_tree({path: old_tree[path]} if path in old_tree else {},
+                                {path: tree[path]} if path in tree else {})}
+    require(changed and changed <= {path for path, _ in update["changes"]},
+            "orphan dependency branch changes files outside the scanned update")
+    for path in changed:
+        for entries in (old_tree, tree):
+            entry = entries.get(path)
+            require(entry is None or (entry["type"] == "blob" and entry["mode"] == "100644"),
+                    "orphan dependency path is not a regular file")
+    return parents
+
+
+def recover_orphan(context, commit, tree, update, marker, base):
+    parents = validate_recovery_commit(context, commit, tree, update, marker, base)
+    if len(parents) == 2:
+        # A retry can itself stop after advancing the ref. Verify its immediate
+        # predecessor as another App update, without walking arbitrary history.
+        previous, previous_tree = context.github.tree(parents[0])
+        validate_recovery_commit(context, previous, previous_tree, update, marker, base)
 
 
 def validate_pull(context, pull, branch, marker, state="open"):
@@ -290,6 +335,7 @@ def plan_updates(context, ecosystem, updates, base):
     for update in updates:
         branch = "dependabot-cli/" + context.version + "/" + ecosystem + "/" + update["key"]
         marker = "<!-- jimu-release-automation:" + context.version + " dependency:" + ecosystem + ":" + update["key"] + " -->"
+        update = dict(update, message=update["message"] + "\n\n" + marker)
         matching = [p for p in pulls if p.get("head", {}).get("ref") == branch or marker in (p.get("body") or "")]
         candidates = [p for p in matching if p.get("state") == "open"]
         require(len(candidates) <= 1, "multiple PRs claim the same managed dependency set")
@@ -329,22 +375,20 @@ def plan_updates(context, ecosystem, updates, base):
                 require(len(tree_markers) == 1, "managed dependency PR is missing its tree marker")
                 if tree_markers[0] != head_commit["tree"]["sha"]:
                     # A non-forced ref update may succeed immediately before the
-                    # PR body write is interrupted. Only the exact desired App
-                    # commit directly above the last marked tree is recoverable.
-                    parents = [parent.get("sha") for parent in head_commit.get("parents", [])]
-                    require(len(parents) == 2 and parents[1] == base and
-                            app_commit(context, head_commit, update["message"]) and same_tree(head_tree, desired),
-                            "managed dependency branch contains unexpected tree changes")
-                    parent = github.api("git/commits/" + parents[0])
-                    require(parent.get("tree", {}).get("sha") == tree_markers[0],
-                            "dependency branch does not descend directly from its managed tree")
+                    # PR body write is interrupted. Match its App dependency
+                    # identity and file scope before advancing from a newer base.
+                    commit, tree = head_commit, head_tree
+                    visited = set()
+                    while commit["tree"]["sha"] != tree_markers[0]:
+                        require(commit["sha"] not in visited, "dependency recovery history contains a cycle")
+                        visited.add(commit["sha"])
+                        parents = validate_recovery_commit(context, commit, tree, update, marker, base)
+                        require(len(parents) == 2, "interrupted dependency PR has unexpected parents")
+                        commit, tree = github.tree(parents[0])
             else:
                 # Recover a ref created before an interrupted PR API call, without
                 # trusting a branch name as ownership of existing repository work.
-                require(app_commit(context, head_commit, update["message"]) and
-                        [parent.get("sha") for parent in head_commit.get("parents", [])] == [base]
-                        and same_tree(head_tree, desired),
-                        "existing dependency branch is not a recoverable managed update")
+                recover_orphan(context, head_commit, head_tree, update, marker, base)
             unchanged = same_tree(head_tree, desired)
         else:
             unchanged = False

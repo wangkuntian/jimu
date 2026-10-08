@@ -139,6 +139,18 @@ class GitHub:
         if method == "GET" and path.startswith("git/trees/"):
             sha = path.removeprefix("git/trees/")
             return {"sha": sha, "tree": self.trees[sha], "truncated": False}
+        if method == "GET" and path.startswith("compare/"):
+            old, new = path.removeprefix("compare/").split("...")
+            pending, ancestors = [new], set()
+            while pending:
+                sha = pending.pop()
+                if sha in ancestors:
+                    continue
+                ancestors.add(sha)
+                pending.extend(p["sha"] for p in self.commits[sha]["parents"])
+            return {"status": "identical" if old == new else "ahead" if old in ancestors else "diverged",
+                    "merge_base_commit": {"sha": old if old in ancestors else "f" * 40},
+                    "base_commit": self.commits[old], "commits": [], "files": []}
         if method == "GET" and path == "pulls":
             result = [p for p in self.pulls if (query.get("state", ["open"])[0] == "all" or p["state"] == query.get("state", ["open"])[0])
                       and ("base" not in query or p["base"]["ref"] == query["base"][0])]
@@ -251,7 +263,8 @@ class PublisherTests(unittest.TestCase):
         self.assertIn("Tracks #73", pull["body"])
         self.assertEqual(create_event()["data"]["updated-dependency-files"][0]["content"].encode(), self.github.content(pull["head"]["ref"], "go.mod"))
         commit = self.github.commits[pull["head"]["sha"]]
-        self.assertEqual("chore(deps): bump example.test/lib from 1.1.0 to 1.2.0", commit["message"])
+        self.assertEqual("chore(deps): bump example.test/lib from 1.1.0 to 1.2.0", commit["message"].split("\n\n")[0])
+        self.assertIn("<!-- jimu-release-automation:v0.3.5 dependency:go:", commit["message"])
         self.assertEqual([BASE], [p["sha"] for p in commit["parents"]])
         self.assertEqual(b"user documentation\n", self.github.content(pull["head"]["ref"], "README.md"))
 
@@ -328,6 +341,125 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(count, len(self.github.commits))
         self.assertEqual(1, len(self.github.pulls))
 
+    def advance_base(self, modifications=None, ancestor=True):
+        entries = copy.deepcopy(self.github.trees[self.github.commits[BASE]["tree"]["sha"]])
+        for path, content in (modifications or {}).items():
+            sha = blob_sha(content)
+            self.github.blobs[sha] = content
+            entries = [dict(e, sha=sha) if e["path"] == path else e for e in entries]
+        new_base = "b" * 40
+        self.github.commits[new_base] = {"sha": new_base, "tree": {"sha": self.github.store_tree(entries)},
+                                       "parents": [{"sha": BASE}] if ancestor else [],
+                                       "author": {"name": "User", "email": "user@example.test"}}
+        self.github.refs["dependabot-updates"] = new_base
+        return new_base
+
+    def test_orphan_recovers_after_base_advances_with_same_or_other_tree_changes(self):
+        for modifications in ({}, {"Dockerfile": b"FROM alpine:3.21\n"}):
+            with self.subTest(modifications=modifications):
+                self.github = GitHub()
+                self.github.fail_pr_once = True
+                self.assertNotEqual(0, self.apply()[0])
+                branch = next(b for b in self.github.refs if b.startswith("dependabot-cli/"))
+                old_head = self.github.refs[branch]
+                new_base = self.advance_base(modifications)
+                event = create_event()
+                event["data"]["base-commit-sha"] = new_base
+                code, _, errors = self.apply([event], base=new_base)
+                self.assertEqual(0, code, errors)
+                self.assertEqual(1, len(self.github.pulls))
+                self.assertEqual(branch, self.github.pulls[0]["head"]["ref"])
+                self.assertEqual(modifications.get("Dockerfile", b"FROM alpine:3.20\n"), self.github.content(branch, "Dockerfile"))
+                if modifications:
+                    head = self.github.refs[branch]
+                    self.assertEqual([old_head, new_base], [p["sha"] for p in self.github.commits[head]["parents"]])
+                else:
+                    self.assertEqual(old_head, self.github.refs[branch])
+
+    def test_orphan_recovers_with_fresh_version_after_base_advances(self):
+        self.github.fail_pr_once = True
+        self.assertNotEqual(0, self.apply()[0])
+        new_base = self.advance_base({"Dockerfile": b"FROM alpine:3.21\n"})
+        event = create_event("module example.test/app\nrequire example.test/lib v1.3.0\n")
+        event["data"].update({"base-commit-sha": new_base, "pr-title": "Bump example.test/lib from 1.1.0 to 1.3.0"})
+        code, _, errors = self.apply([event], base=new_base)
+        self.assertEqual(0, code, errors)
+        branch = self.github.pulls[0]["head"]["ref"]
+        self.assertEqual(event["data"]["updated-dependency-files"][0]["content"].encode(), self.github.content(branch, "go.mod"))
+        self.assertEqual(b"FROM alpine:3.21\n", self.github.content(branch, "Dockerfile"))
+
+    def test_orphan_recovery_after_base_advance_can_itself_be_retried(self):
+        self.github.fail_pr_once = True
+        self.assertNotEqual(0, self.apply()[0])
+        new_base = self.advance_base({"Dockerfile": b"FROM alpine:3.21\n"})
+        event = create_event()
+        event["data"]["base-commit-sha"] = new_base
+        self.github.fail_pr_once = True
+        self.assertNotEqual(0, self.apply([event], base=new_base)[0])
+        count = len(self.github.commits)
+        code, _, errors = self.apply([event], base=new_base)
+        self.assertEqual(0, code, errors)
+        self.assertEqual(count, len(self.github.commits))
+        self.assertEqual(1, len(self.github.pulls))
+
+    def test_orphan_group_identity_survives_changed_group_title(self):
+        event = create_event()
+        event["data"]["dependencies"].append({"name": "example.test/second", "version": "2.0.0", "previous-version": "1.0.0", "requirements": []})
+        event["data"]["pr-title"] = "Bump the library group with 2 updates"
+        self.github.fail_pr_once = True
+        self.assertNotEqual(0, self.apply([event])[0])
+        new_base = self.advance_base()
+        event["data"].update({"base-commit-sha": new_base, "pr-title": "Bump the library group across 1 directory with 2 updates"})
+        code, _, errors = self.apply([event], base=new_base)
+        self.assertEqual(0, code, errors)
+
+    def test_legacy_orphan_single_dependency_survives_new_version_title(self):
+        self.github.fail_pr_once = True
+        self.assertNotEqual(0, self.apply()[0])
+        branch = next(b for b in self.github.refs if b.startswith("dependabot-cli/"))
+        commit = self.github.commits[self.github.refs[branch]]
+        commit["message"] = commit["message"].partition("\n\n")[0]
+        new_base = self.advance_base()
+        event = create_event("module example.test/app\nrequire example.test/lib v1.3.0\n")
+        event["data"].update({"base-commit-sha": new_base, "pr-title": "Bump example.test/lib from 1.1.0 to 1.3.0"})
+        code, _, errors = self.apply([event], base=new_base)
+        self.assertEqual(0, code, errors)
+
+    def test_orphan_from_unrelated_base_is_refused(self):
+        self.github.fail_pr_once = True
+        self.assertNotEqual(0, self.apply()[0])
+        new_base = self.advance_base(ancestor=False)
+        event = create_event()
+        event["data"]["base-commit-sha"] = new_base
+        writes = len(self.github.writes)
+        self.assertNotEqual(0, self.apply([event], base=new_base)[0])
+        self.assertEqual(writes, len(self.github.writes))
+
+    def test_orphan_with_other_dependency_or_unrelated_tree_change_is_refused(self):
+        for mutation in ("readme", "other_dependency", "human_committer"):
+            with self.subTest(mutation=mutation):
+                self.github = GitHub()
+                self.github.fail_pr_once = True
+                self.assertNotEqual(0, self.apply()[0])
+                branch = next(b for b in self.github.refs if b.startswith("dependabot-cli/"))
+                head = self.github.commits[self.github.refs[branch]]
+                if mutation == "readme":
+                    sha = blob_sha(b"user change\n")
+                    self.github.blobs[sha] = b"user change\n"
+                    entries = self.github.trees[head["tree"]["sha"]]
+                    entries = [dict(e, sha=sha) if e["path"] == "README.md" else e for e in entries]
+                    head["tree"]["sha"] = self.github.store_tree(entries)
+                elif mutation == "other_dependency":
+                    head["message"] = "chore(deps): bump other.test/lib from 1.0.0 to 2.0.0"
+                else:
+                    head["committer"]["name"] = "Human"
+                new_base = self.advance_base()
+                event = create_event()
+                event["data"]["base-commit-sha"] = new_base
+                writes = len(self.github.writes)
+                self.assertNotEqual(0, self.apply([event], base=new_base)[0])
+                self.assertEqual(writes, len(self.github.writes))
+
     def test_new_batch_reuses_merged_dependency_branch_safely(self):
         self.assertEqual(0, self.apply()[0])
         prior = self.github.pulls[0]
@@ -397,6 +529,99 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(count, len(self.github.commits))
         self.assertEqual(head, self.github.pulls[0]["head"]["sha"])
         self.assertEqual(event["data"]["pr-title"], self.github.pulls[0]["title"])
+
+    def test_interrupted_pr_body_update_recovers_after_base_and_version_advance(self):
+        self.assertEqual(0, self.apply()[0])
+        previous = create_event("module example.test/app\nrequire example.test/lib v1.3.0\n")
+        previous["data"]["pr-title"] = "Bump example.test/lib from 1.1.0 to 1.3.0"
+        self.github.fail_patch_pr_once = True
+        self.assertNotEqual(0, self.apply([previous])[0])
+        old = self.github.pulls[0]["head"]["sha"]
+        new_base = self.advance_base({"Dockerfile": b"FROM alpine:3.21\n"})
+        event = create_event("module example.test/app\nrequire example.test/lib v1.4.0\n")
+        event["data"].update({"base-commit-sha": new_base, "pr-title": "Bump example.test/lib from 1.1.0 to 1.4.0"})
+        code, _, errors = self.apply([event], base=new_base)
+        self.assertEqual(0, code, errors)
+        self.assertEqual(1, len(self.github.pulls))
+        pull = self.github.pulls[0]
+        self.assertEqual([old, new_base], [p["sha"] for p in self.github.commits[pull["head"]["sha"]]["parents"]])
+        self.assertEqual(event["data"]["updated-dependency-files"][0]["content"].encode(), self.github.content(pull["head"]["ref"], "go.mod"))
+        self.assertEqual(b"FROM alpine:3.21\n", self.github.content(pull["head"]["ref"], "Dockerfile"))
+
+    def test_multiple_interrupted_body_updates_recover_only_through_managed_commits(self):
+        for mutation in (None, "human", "unrelated_file", "cycle"):
+            with self.subTest(mutation=mutation):
+                self.github = GitHub()
+                self.assertEqual(0, self.apply()[0])
+                initial_body = self.github.pulls[0]["body"]
+                first = create_event("module example.test/app\nrequire example.test/lib v1.3.0\n")
+                first["data"]["pr-title"] = "Bump example.test/lib from 1.1.0 to 1.3.0"
+                self.github.fail_patch_pr_once = True
+                self.assertNotEqual(0, self.apply([first])[0])
+                intermediate = self.github.pulls[0]["head"]["sha"]
+                new_base = self.advance_base({"Dockerfile": b"FROM alpine:3.21\n"})
+                second = create_event("module example.test/app\nrequire example.test/lib v1.4.0\n")
+                second["data"].update({"base-commit-sha": new_base, "pr-title": "Bump example.test/lib from 1.1.0 to 1.4.0"})
+                self.github.fail_patch_pr_once = True
+                self.assertNotEqual(0, self.apply([second], base=new_base)[0])
+                final_head = self.github.pulls[0]["head"]["sha"]
+                self.assertEqual(initial_body, self.github.pulls[0]["body"])
+                commit = self.github.commits[intermediate]
+                if mutation == "human":
+                    commit["committer"]["name"] = "Human"
+                elif mutation == "unrelated_file":
+                    content = b"unrelated edit\n"
+                    sha = blob_sha(content)
+                    self.github.blobs[sha] = content
+                    entries = self.github.trees[commit["tree"]["sha"]]
+                    entries = [dict(e, sha=sha) if e["path"] == "README.md" else e for e in entries]
+                    commit["tree"]["sha"] = self.github.store_tree(entries)
+                elif mutation == "cycle":
+                    commit["parents"][0]["sha"] = final_head
+                writes, commits = len(self.github.writes), len(self.github.commits)
+                code, _, errors = self.apply([second], base=new_base)
+                if mutation:
+                    self.assertNotEqual(0, code)
+                    self.assertEqual(writes, len(self.github.writes))
+                    self.assertEqual(initial_body, self.github.pulls[0]["body"])
+                else:
+                    self.assertEqual(0, code, errors)
+                    self.assertEqual(commits, len(self.github.commits))
+                    self.assertEqual(second["data"]["pr-title"], self.github.pulls[0]["title"])
+                    self.assertNotEqual(initial_body, self.github.pulls[0]["body"])
+                self.assertEqual(final_head, self.github.pulls[0]["head"]["sha"])
+
+    def test_interrupted_pr_body_update_rejects_extra_file_changes_after_base_advance(self):
+        self.assertEqual(0, self.apply()[0])
+        event = create_event("module example.test/app\nrequire example.test/lib v1.3.0\n")
+        self.github.fail_patch_pr_once = True
+        self.assertNotEqual(0, self.apply([event])[0])
+        head = self.github.commits[self.github.pulls[0]["head"]["sha"]]
+        sha = blob_sha(b"unrelated edits\n")
+        self.github.blobs[sha] = b"unrelated edits\n"
+        entries = self.github.trees[head["tree"]["sha"]]
+        entries = [dict(e, sha=sha) if e["path"] == "README.md" else e for e in entries]
+        head["tree"]["sha"] = self.github.store_tree(entries)
+        new_base = self.advance_base()
+        event["data"]["base-commit-sha"] = new_base
+        count = len(self.github.writes)
+        self.assertNotEqual(0, self.apply([event], base=new_base)[0])
+        self.assertEqual(count, len(self.github.writes))
+
+    def test_orphan_retry_rejects_human_predecessor(self):
+        self.github.fail_pr_once = True
+        self.assertNotEqual(0, self.apply()[0])
+        branch = next(b for b in self.github.refs if b.startswith("dependabot-cli/"))
+        prior = self.github.refs[branch]
+        new_base = self.advance_base({"Dockerfile": b"FROM alpine:3.21\n"})
+        event = create_event()
+        event["data"]["base-commit-sha"] = new_base
+        self.github.fail_pr_once = True
+        self.assertNotEqual(0, self.apply([event], base=new_base)[0])
+        self.github.commits[prior]["committer"]["name"] = "Human"
+        count = len(self.github.writes)
+        self.assertNotEqual(0, self.apply([event], base=new_base)[0])
+        self.assertEqual(count, len(self.github.writes))
 
     def test_merged_branch_retry_recovers_new_pr_creation_interruption(self):
         self.assertEqual(0, self.apply()[0])
