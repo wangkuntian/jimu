@@ -55,7 +55,7 @@ version_context() {
   value=$(version_value "${1:-}")
   VERSION=$value
   RELEASE_BRANCH="release/$value"
-  SNAPSHOT_BRANCH="updates/$value"
+  AGGREGATE_BRANCH=dependabot-updates
 }
 
 epoch() {
@@ -278,55 +278,43 @@ create_snapshot() {
   local issue=${RELEASE_ISSUE_NUMBER:-}
   [[ "$issue" =~ ^[0-9]+$ ]] || error "RELEASE_ISSUE_NUMBER is required"
 
-  local fixed_sha snapshot_sha snapshot_marker comments marker_body pr_list matching_pr pr_number body existing_sha
+  local compare ahead_by pr_list matching_pr pr_number body aggregate_marker
   fixed_sha=$(ref_sha heads dependabot-updates) || error "dependabot-updates ref is unavailable"
-  snapshot_marker="<!-- jimu-release-automation:$VERSION snapshot:"
-  comments=$(issue_comments "$issue")
-  marker_body=$(grep -F "$snapshot_marker" <<<"$comments" | tail -n1 || true)
-  snapshot_sha=$(sed -nE 's/.*snapshot:([0-9a-f]{40}) -->.*/\1/p' <<<"$marker_body")
-
-  if existing_sha=$(ref_sha heads "$SNAPSHOT_BRANCH"); then
-    [[ -n "$snapshot_sha" ]] || error "snapshot branch already exists without a matching managed marker"
-    [[ "$existing_sha" == "$snapshot_sha" ]] || error "snapshot branch SHA differs from its managed marker"
-    snapshot_sha=$existing_sha
-  else
-    if [[ -z "$snapshot_sha" ]]; then
-      snapshot_sha=$fixed_sha
-      api "repos/$repo/issues/$issue/comments" --method POST \
-        --field "body=$snapshot_marker$snapshot_sha -->" >/dev/null || \
-        error "failed to record snapshot branch marker"
-    fi
-    create_ref heads "$SNAPSHOT_BRANCH" "$snapshot_sha" || error "failed to create $SNAPSHOT_BRANCH"
+  compare=$(api "repos/$repo/compare/$RELEASE_BRANCH...dependabot-updates")
+  ahead_by=$(jq -r '.ahead_by // 0' <<<"$compare")
+  if (( ahead_by < 1 )); then
+    write_output version "$VERSION"
+    write_output aggregate_branch dependabot-updates
+    write_output created false
+    write_output reason "dependabot-updates has no dependency commit to aggregate"
+    return 0
   fi
 
-  snapshot_marker="<!-- jimu-release-automation:$VERSION snapshot -->"
-  pr_list=$(api "repos/$repo/pulls" --paginate --field state=all --field head="$repo:$SNAPSHOT_BRANCH" --field base="$RELEASE_BRANCH" --field per_page=100)
+  aggregate_marker="<!-- jimu-release-automation:$VERSION aggregate -->"
+  pr_list=$(api "repos/$repo/pulls" --paginate --field state=all --field head="$repo:$AGGREGATE_BRANCH" --field base="$RELEASE_BRANCH" --field per_page=100)
   matching_pr=$(jq -c '[.[] | select(.head.ref == $head and .base.ref == $base)] | .[0] // empty' \
-    --arg head "$SNAPSHOT_BRANCH" --arg base "$RELEASE_BRANCH" <<<"$pr_list")
+    --arg head "$AGGREGATE_BRANCH" --arg base "$RELEASE_BRANCH" <<<"$pr_list")
   if [[ -n "$matching_pr" ]]; then
     local pr_body
     pr_body=$(jq -r '.body // ""' <<<"$matching_pr")
-    [[ "$pr_body" == *"$snapshot_marker"* ]] || error "snapshot PR exists without a matching managed marker"
-    [[ "$pr_body" == *"<!-- jimu-release-automation:$VERSION snapshot-sha:$snapshot_sha -->"* ]] || \
-      error "snapshot PR exists without a matching source SHA marker"
+    [[ "$pr_body" == *"$aggregate_marker"* ]] || error "aggregate PR exists without a matching managed marker"
     pr_number=$(jq -er '.number' <<<"$matching_pr")
   else
     body=$(cat <<EOF
-${snapshot_marker}
-<!-- jimu-release-automation:$VERSION snapshot-sha:$snapshot_sha -->
+${aggregate_marker}
 Aggregated Dependabot updates for \`$VERSION\`.
 EOF
 )
     pr_number=$(api "repos/$repo/pulls" --method POST \
       --field "title=chore(release): aggregate Dependabot updates for $VERSION" \
-      --field "head=$SNAPSHOT_BRANCH" \
+      --field "head=$AGGREGATE_BRANCH" \
       --field "base=$RELEASE_BRANCH" \
-      --field "body=$body" | jq -er '.number') || error "failed to create snapshot PR"
+      --field "body=$body" | jq -er '.number') || error "failed to create aggregate PR"
   fi
 
   write_output version "$VERSION"
-  write_output snapshot_branch "$SNAPSHOT_BRANCH"
-  write_output snapshot_sha "$snapshot_sha"
+  write_output aggregate_branch dependabot-updates
+  write_output created true
   write_output pr_number "$pr_number"
 }
 
@@ -406,7 +394,7 @@ case "$command" in
     version_context "${1:-}"
     write_output version "$VERSION"
     write_output release_branch "$RELEASE_BRANCH"
-    write_output snapshot_branch "$SNAPSHOT_BRANCH"
+    write_output aggregate_branch dependabot-updates
     ;;
   ensure-cycle)
     ensure_cycle "${1:-}"
