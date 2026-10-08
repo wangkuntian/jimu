@@ -762,6 +762,27 @@ test_docs() {
   fi
 }
 
+test_issue_template() {
+  local template="$ROOT_DIR/.github/ISSUE_TEMPLATE/release_cycle.md"
+  local required
+  [[ -f "$template" ]] || {
+    printf 'ASSERT FAILED: release Issue template is missing\n' >&2
+    exit 1
+  }
+  for required in \
+    'name: Release cycle' \
+    'title: "release: v"' \
+    'labels: "release: collecting"' \
+    'Release version' \
+    'Release scope' \
+    'Related pull requests'; do
+    if ! grep -Fq -- "$required" "$template"; then
+      printf 'ASSERT FAILED: release Issue template is missing %s\n' "$required" >&2
+      exit 1
+    fi
+  done
+}
+
 case "${1:-core}" in
   core)
     test_validate_version
@@ -787,6 +808,9 @@ case "${1:-core}" in
     ;;
   --docs)
     test_docs
+    ;;
+  --issue-template)
+    test_issue_template
     ;;
   *)
     echo "unsupported test group: $1" >&2
