@@ -103,6 +103,9 @@ jobs:
       - name: "🧾 Structured log usage check"
         run: make check-log-usage
 
+      - name: Check release automation
+        run: make test-release-orchestrator
+
       - name: "🧹 golangci-lint"
         uses: golangci/golangci-lint-action@v9
         with:

@@ -130,14 +130,18 @@ reset_terminal_dependabot_cycle() {
   [[ "$merge_base" == "$previous_base" ]] || \
     error "dependabot-updates does not descend from the terminal cycle baseline"
 
-  local pulls number author
+  local pulls number author body
   pulls=$(api "repos/$repo/pulls" --paginate --field state=open --field base=dependabot-updates --field per_page=100)
-  while IFS=$'\t' read -r number author; do
+  while IFS=$'\t' read -r number author body; do
     [[ -n "$number" ]] || continue
-    [[ "$author" == "dependabot[bot]" ]] || error "unmanaged open PR targets dependabot-updates: #$number"
+    if [[ "$author" != "dependabot[bot]" ]]; then
+      [[ -n ${RELEASE_APP_SLUG:-} && "$author" == "${RELEASE_APP_SLUG}[bot]" && \
+         "$body" == *"<!-- jimu-release-automation:$previous_version dependency:"* ]] || \
+        error "unmanaged open PR targets dependabot-updates: #$number"
+    fi
     api "repos/$repo/pulls/$number" --method PATCH --field state=closed >/dev/null || \
       error "failed to close stale Dependabot PR #$number"
-  done < <(jq -r '.[] | [.number, .user.login] | @tsv' <<<"$pulls")
+  done < <(jq -r '.[] | [.number, .user.login, (.body // "")] | @tsv' <<<"$pulls")
 
   api "repos/$repo/git/refs/heads/dependabot-updates" --method DELETE >/dev/null || \
     error "failed to delete terminal cycle dependabot-updates branch"
@@ -214,17 +218,18 @@ collection_ready() {
 
   local pulls dependabot_count
   pulls=$(api "repos/$repo/pulls" --paginate --field state=open --field base=dependabot-updates --field per_page=100)
-  dependabot_count=$(jq '[.[] | select(.user.login == "dependabot[bot]")] | length' <<<"$pulls")
+  # Every pending update must settle before the aggregate is merged, including CLI App PRs.
+  dependabot_count=$(jq 'length' <<<"$pulls")
   if (( dependabot_count > 0 )); then
     write_output ready false
     write_output reason "open Dependabot PRs remain on dependabot-updates"
     return 0
   fi
 
-  local compare ahead_by
+  local compare changed_files
   compare=$(api "repos/$repo/compare/$RELEASE_BRANCH...dependabot-updates")
-  ahead_by=$(jq -r '.ahead_by // 0' <<<"$compare")
-  if (( ahead_by < 1 )); then
+  changed_files=$(jq -er '.files | length' <<<"$compare") || error "dependency comparison has no file list"
+  if (( changed_files < 1 )); then
     write_output ready false
     write_output reason "no dependency update was merged in this cycle"
     return 0
@@ -240,11 +245,11 @@ create_snapshot() {
   local issue=${RELEASE_ISSUE_NUMBER:-}
   [[ "$issue" =~ ^[0-9]+$ ]] || error "RELEASE_ISSUE_NUMBER is required"
 
-  local compare ahead_by pr_list matching_pr pr_number body aggregate_marker
+  local compare changed_files pr_list matching_pr pr_number body aggregate_marker
   fixed_sha=$(ref_sha heads dependabot-updates) || error "dependabot-updates ref is unavailable"
   compare=$(api "repos/$repo/compare/$RELEASE_BRANCH...dependabot-updates")
-  ahead_by=$(jq -r '.ahead_by // 0' <<<"$compare")
-  if (( ahead_by < 1 )); then
+  changed_files=$(jq -er '.files | length' <<<"$compare") || error "dependency comparison has no file list"
+  if (( changed_files < 1 )); then
     write_output version "$VERSION"
     write_output aggregate_branch dependabot-updates
     write_output created false
@@ -253,7 +258,7 @@ create_snapshot() {
   fi
 
   aggregate_marker="<!-- jimu-release-automation:$VERSION aggregate -->"
-  pr_list=$(api "repos/$repo/pulls" --paginate --field state=all --field head="$repo:$AGGREGATE_BRANCH" --field base="$RELEASE_BRANCH" --field per_page=100)
+  pr_list=$(api "repos/$repo/pulls" --paginate --field state=open --field head="${repo%%/*}:$AGGREGATE_BRANCH" --field base="$RELEASE_BRANCH" --field per_page=100)
   matching_pr=$(jq -c '[.[] | select(.head.ref == $head and .base.ref == $base)] | .[0] // empty' \
     --arg head "$AGGREGATE_BRANCH" --arg base "$RELEASE_BRANCH" <<<"$pr_list")
   if [[ -n "$matching_pr" ]]; then

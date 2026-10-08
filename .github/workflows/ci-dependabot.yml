@@ -18,7 +18,12 @@ env:
 jobs:
   focused:
     name: Dependabot Focused Checks
-    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.base.ref == 'dependabot-updates'
+    if: >-
+      github.event.pull_request.base.ref == 'dependabot-updates' &&
+      (github.event.pull_request.user.login == 'dependabot[bot]' ||
+       (github.event.pull_request.user.type == 'Bot' &&
+        startsWith(github.event.pull_request.head.ref, 'dependabot-cli/') &&
+        contains(github.event.pull_request.body, ' dependency:')))
     runs-on: ubuntu-latest
     steps:
       - name: Check out the pull request

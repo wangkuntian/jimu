@@ -142,6 +142,8 @@ case "$scenario:$method:$endpoint" in
   collection-ready:GET:repos/wangkuntian/jimu/pulls*)
     if [[ ${FAKE_COLLECTION_STATE:-ready} == open-pr || ${FAKE_COLLECTION_STATE:-ready} == young-open-pr ]]; then
       echo '[{"number":88,"user":{"login":"dependabot[bot]"},"state":"open"}]'
+    elif [[ ${FAKE_COLLECTION_STATE:-ready} == cli-pr ]]; then
+      echo '[{"number":89,"user":{"login":"release-app[bot]"},"state":"open"}]'
     else
       echo '[]'
     fi
@@ -155,9 +157,11 @@ case "$scenario:$method:$endpoint" in
     ;;
   collection-ready:GET:repos/wangkuntian/jimu/compare/*)
     if [[ ${FAKE_COLLECTION_STATE:-ready} == empty ]]; then
-      echo '{"ahead_by":0}'
+      echo '{"ahead_by":0,"files":[]}'
+    elif [[ ${FAKE_COLLECTION_STATE:-ready} == synced ]]; then
+      echo '{"ahead_by":5,"files":[]}'
     else
-      echo '{"ahead_by":1}'
+      echo '{"ahead_by":1,"files":[{"filename":"go.mod","status":"modified"}]}'
     fi
     ;;
   create-snapshot:GET:repos/wangkuntian/jimu/git/ref/heads/dependabot-updates)
@@ -165,9 +169,11 @@ case "$scenario:$method:$endpoint" in
     ;;
   create-snapshot:GET:repos/wangkuntian/jimu/compare/*)
     if [[ ${FAKE_SNAPSHOT_STATE:-new} == empty ]]; then
-      echo '{"ahead_by":0}'
+      echo '{"ahead_by":0,"files":[]}'
+    elif [[ ${FAKE_SNAPSHOT_STATE:-new} == synced ]]; then
+      echo '{"ahead_by":5,"files":[]}'
     else
-      echo '{"ahead_by":1}'
+      echo '{"ahead_by":1,"files":[{"filename":"go.mod","status":"modified"}]}'
     fi
     ;;
   create-snapshot:GET:repos/wangkuntian/jimu/pulls*)
@@ -175,6 +181,8 @@ case "$scenario:$method:$endpoint" in
       echo '[{"number":123,"state":"open","head":{"ref":"dependabot-updates"},"base":{"ref":"release/v0.3.5"},"body":"<!-- jimu-release-automation:v0.3.5 aggregate -->"}]'
     elif [[ ${FAKE_SNAPSHOT_STATE:-new} == unmanaged-pr ]]; then
       echo '[{"number":123,"state":"open","head":{"ref":"dependabot-updates"},"base":{"ref":"release/v0.3.5"},"body":"unmanaged aggregate PR"}]'
+    elif [[ ${FAKE_SNAPSHOT_STATE:-new} == next-batch && $state_filter != open ]]; then
+      echo '[{"number":122,"state":"closed","merged_at":"2026-10-08T00:00:00Z","head":{"ref":"dependabot-updates"},"base":{"ref":"release/v0.3.5"},"body":"<!-- jimu-release-automation:v0.3.5 aggregate -->"}]'
     else
       echo '[]'
     fi
@@ -387,6 +395,12 @@ test_collection_readiness() {
   output=$(FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=empty run_orchestrator collection-ready)
   assert_contains "$output" 'ready=false' 'no dependency changes cannot become a candidate'
   assert_contains "$output" 'reason=no dependency update was merged in this cycle' 'empty cycle has an explicit reason'
+
+  output=$(FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=cli-pr run_orchestrator collection-ready)
+  assert_contains "$output" 'ready=false' 'App-created dependency PR must settle before aggregate merge'
+
+  output=$(FAKE_GH_SCENARIO=collection-ready FAKE_COLLECTION_STATE=synced run_orchestrator collection-ready)
+  assert_contains "$output" 'ready=false' 'different commit history without file changes is not a new dependency batch'
 }
 
 test_snapshot() {
@@ -404,6 +418,19 @@ test_snapshot() {
   assert_contains "$output" 'aggregate_branch=dependabot-updates' 'aggregate branch is reported'
   assert_contains "$output" 'pr_number=123' 'aggregate PR number is returned'
   assert_contains "$(cat "$FAKE_GH_LOG")" 'api repos/wangkuntian/jimu/pulls --method POST --field title=chore(release): aggregate Dependabot updates for v0.3.5 --field head=dependabot-updates --field base=release/v0.3.5' 'live aggregate PR uses the fixed Dependabot branch as its head'
+
+  : > "$FAKE_GH_LOG"
+  output=$(FAKE_GH_SCENARIO=create-snapshot FAKE_SNAPSHOT_STATE=next-batch run_orchestrator create-snapshot)
+  assert_contains "$output" 'pr_number=123' 'next dependency batch creates a new aggregate after the prior batch merged'
+  assert_contains "$(cat "$FAKE_GH_LOG")" 'api repos/wangkuntian/jimu/pulls --method POST' 'a merged aggregate is never reused as an open aggregate'
+
+  : > "$FAKE_GH_LOG"
+  output=$(FAKE_GH_SCENARIO=create-snapshot FAKE_SNAPSHOT_STATE=synced run_orchestrator create-snapshot)
+  assert_contains "$output" 'created=false' 'synchronized identical files never create an empty next aggregate'
+  if grep -q 'api repos/wangkuntian/jimu/pulls --method POST' "$FAKE_GH_LOG"; then
+    printf 'ASSERT FAILED: synchronized batch created an empty aggregate\n' >&2
+    exit 1
+  fi
 
   : > "$FAKE_GH_LOG"
   output=$(FAKE_GH_SCENARIO=create-snapshot FAKE_SNAPSHOT_STATE=existing run_orchestrator create-snapshot)
@@ -519,7 +546,7 @@ test_workflow_contract() {
     'record-security-update' \
     'Rejected a non-App-created release candidate PR' \
     'aggregate -->' \
-    'head dependabot-updates' \
+    'RUN_BRANCH=dependabot-updates' \
     'created=true' \
     'APP_SLUG' \
     'PR_AUTHOR' \
@@ -530,7 +557,7 @@ test_workflow_contract() {
       exit 1
     fi
   done
-  grep -Fq 'group: release-dependency-automation' "$workflow" || {
+  grep -Fq "|| 'release-dependency-automation'" "$workflow" || {
     printf 'ASSERT FAILED: workflow does not serialize release cycles globally\n' >&2
     exit 1
   }
@@ -607,11 +634,11 @@ test_workflow_contract() {
     exit 1
   }
   collector_job=$(sed -n '/^  collect:/,/^  merge-aggregate:/p' "$workflow")
-  if [[ "$collector_job" != *'index("release: collecting")'* ]]; then
-    printf 'ASSERT FAILED: daily collector must select only collecting release Issues\n' >&2
+  if [[ "$collector_job" != *'python3 scripts/release_issue.py active'* ]]; then
+    printf 'ASSERT FAILED: daily collector must select an open managed release Issue\n' >&2
     exit 1
   fi
-  for required in 'needs: bootstrap' 'always()' "github.event_name == 'schedule'" "github.event_name == 'issues'" "needs.bootstrap.result == 'success'"; do
+  for required in 'needs: [bootstrap, scan]' 'always()' "github.event_name == 'schedule'" "github.event_name == 'issues'" "needs.bootstrap.result == 'success'"; do
     if ! grep -Fq "$required" <<<"$collector_job"; then
       printf 'ASSERT FAILED: collector must run after bootstrap and on its successful Issue event (%s)\n' "$required" >&2
       exit 1
@@ -648,10 +675,12 @@ test_dependabot_merge_contract() {
     printf 'ASSERT FAILED: completed workflow events must reconcile every eligible Dependabot PR\n' >&2
     exit 1
   }
-  grep -Fq 'select((.author.login == "dependabot[bot]" or .author.login == "app/dependabot") and .baseRefName == "dependabot-updates")' "$workflow" || {
-    printf 'ASSERT FAILED: Dependabot reconciliation does not select all eligible target PRs\n' >&2
-    exit 1
-  }
+  for required in 'python3 scripts/release_issue.py active' '.user.login == "dependabot[bot]"' '.user.login == $app_bot' ' dependency:'; do
+    grep -Fq "$required" "$workflow" || {
+      printf 'ASSERT FAILED: Dependabot reconciliation misses managed PRs or open Issue gate (%s)\n' "$required" >&2
+      exit 1
+    }
+  done
   grep -Fq 'if ! gh pr merge' "$workflow" || {
     printf 'ASSERT FAILED: one PR merge failure must not stop reconciliation of later PRs\n' >&2
     exit 1
@@ -660,10 +689,6 @@ test_dependabot_merge_contract() {
     printf 'ASSERT FAILED: failed workflow completions must still wake PR reconciliation\n' >&2
     exit 1
   fi
-  grep -Fq 'release: collecting' "$workflow" || {
-    printf 'ASSERT FAILED: Dependabot auto merge is not limited to collecting cycles\n' >&2
-    exit 1
-  }
   grep -Fq 'gh pr merge' "$workflow" || {
     printf 'ASSERT FAILED: Dependabot merge command is missing\n' >&2
     exit 1
@@ -783,6 +808,50 @@ test_issue_template() {
   done
 }
 
+test_self_hosted_dependabot_contract() {
+  local workflow="$ROOT_DIR/.github/workflows/release-dependency-automation.yml"
+  local script="$ROOT_DIR/scripts/run_dependabot_cli.sh"
+  local config_dir="$ROOT_DIR/.github/dependabot-cli"
+  [[ -x "$script" ]] || {
+    printf 'ASSERT FAILED: self-hosted Dependabot script is missing or not executable\n' >&2
+    exit 1
+  }
+  [[ -d "$config_dir" ]] || {
+    printf 'ASSERT FAILED: self-hosted Dependabot config directory is missing\n' >&2
+    exit 1
+  }
+  for config in go.yml github-actions.yml docker.yml; do
+    [[ -f "$config_dir/$config" ]] || {
+      printf 'ASSERT FAILED: self-hosted Dependabot config is missing %s\n' "$config" >&2
+      exit 1
+    }
+    grep -Fq '"branch": "dependabot-updates"' "$config_dir/$config" || {
+      printf 'ASSERT FAILED: self-hosted Dependabot config does not target dependabot-updates: %s\n' "$config" >&2
+      exit 1
+    }
+  done
+  for required in \
+    'Download Dependabot CLI' \
+    'run_dependabot_cli.sh' \
+    'DEPENDABOT_CLI_VERSION' \
+    'issues' \
+    'schedule:' \
+    'cron: "0 18 * * *"' \
+    'needs: bootstrap' \
+    'needs: [bootstrap, scan]' \
+    "github.event_name == 'issues'" \
+    "github.event_name == 'schedule'"; do
+    if ! grep -Fq -- "$required" "$workflow"; then
+      printf 'ASSERT FAILED: self-hosted Dependabot workflow is missing %s\n' "$required" >&2
+      exit 1
+    fi
+  done
+  grep -Fq 'open-pull-requests-limit: 0' "$ROOT_DIR/.github/dependabot.yml" || {
+    printf 'ASSERT FAILED: hosted Dependabot version updates are not disabled\n' >&2
+    exit 1
+  }
+}
+
 case "${1:-core}" in
   core)
     test_validate_version
@@ -811,6 +880,9 @@ case "${1:-core}" in
     ;;
   --issue-template)
     test_issue_template
+    ;;
+  --self-hosted-dependabot)
+    test_self_hosted_dependabot_contract
     ;;
   *)
     echo "unsupported test group: $1" >&2
