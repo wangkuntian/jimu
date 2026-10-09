@@ -1160,6 +1160,8 @@ Issue 正文的自动维护区随 PR 创建、同步、关闭或合并更新，�
 
 Go 扫描按公开模块处理（`goprivate` 为空、`gonoproxy` 和 `gonosumdb` 为 `none`），使用 Go 官方模块代理与校验数据库，保留 `go.sum` 校验，避免上游重打 tag 后直连 GitHub 取得不同内容。
 
+Go 模块通过官方分组一次更新到同一 PR，避免多条 PR 并行修改 `go.mod/go.sum` 后相互冲突；Actions 和 Docker 更新独立检查与合并。已关闭但仍保留分支的更新 PR 不会自动重开；删除受管临时分支后，下次扫描可从当前汇总基线创建新 PR。
+
 首次启用需要安装具有 `contents: write`、`pull_requests: write`、`workflows: write`、`checks: read`、`issues: write`、`metadata: read` 权限的 GitHub App，并设置 Actions secrets `JIMU_RELEASE_APP_ID` 和 `JIMU_RELEASE_APP_PRIVATE_KEY`。扫描只使用只读 token，创建更新 PR 的步骤单独使用 App token；`workflows: write` 用于 Actions 依赖更新。自动化不依赖 GitHub auto-merge；release ruleset 保持 `non_fast_forward`，master ruleset 负责最终候选 PR 的完整 required checks。操作细节见[贡献指南](docs/CONTRIBUTING.md#dependabot-发布周期)和[补全设计](docs/superpowers/specs/2026-10-08-release-cycle-completion-design.md)。
 
 ## Makefile 命令

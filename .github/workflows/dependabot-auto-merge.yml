@@ -62,7 +62,6 @@ jobs:
           fi
 
           reconcile_errors=0
-          merged_number=""
           while IFS= read -r pr; do
             pr_number=$(jq -r '.number' <<<"$pr")
             head_sha=$(jq -r '.head.sha' <<<"$pr")
@@ -100,20 +99,8 @@ jobs:
               reconcile_errors=1
               continue
             fi
-            merged_number="$pr_number"
-            break
           done < <(jq -c '.[]' <<<"$dependabot_prs")
 
-          if [[ -n "$merged_number" ]]; then
-            echo "Merged one dependency PR (#$merged_number); closing stale siblings before the next scan."
-            while IFS= read -r stale; do
-              stale_number=$(jq -r '.number' <<<"$stale")
-              [[ "$stale_number" == "$merged_number" ]] && continue
-              gh pr close "$stale_number" --repo "$GH_REPO" --comment \
-                "Closed after another dependency update advanced dependabot-updates; the next Release Issue scan will recreate this update from the current baseline." \
-                >/dev/null || reconcile_errors=1
-            done < <(jq -c '.[]' <<<"$dependabot_prs")
-          fi
           if [[ "$reconcile_errors" != 0 ]]; then
             echo "One or more Dependabot PRs could not be reconciled." >&2
             exit 1

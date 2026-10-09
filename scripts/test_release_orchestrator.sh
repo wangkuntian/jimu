@@ -634,7 +634,7 @@ test_workflow_contract() {
       exit 1
     fi
   done
-  grep -Fq 'actions/create-github-app-token@v1' "$release_workflow" || {
+  grep -Fq 'uses: actions/create-github-app-token@' "$release_workflow" || {
     printf 'ASSERT FAILED: Release workflow must use an App token to emit the published event\n' >&2
     exit 1
   }
@@ -703,18 +703,10 @@ test_dependabot_merge_contract() {
     printf 'ASSERT FAILED: Dependabot merge command is missing\n' >&2
     exit 1
   }
-  grep -Fq 'merged_number=' "$workflow" || {
-    printf 'ASSERT FAILED: Dependabot merge must stop after one baseline update\n' >&2
+  if grep -Fq 'gh pr close' "$workflow"; then
+    printf 'ASSERT FAILED: merging one ecosystem must not discard other dependency PRs\n' >&2
     exit 1
-  }
-  grep -Fq 'gh pr close' "$workflow" || {
-    printf 'ASSERT FAILED: stale sibling Dependabot PRs must be closed before rescanning\n' >&2
-    exit 1
-  }
-  grep -Fq "github.event.pull_request.base.ref == 'dependabot-updates'" "$release_workflow" || {
-    printf 'ASSERT FAILED: closing a stale dependency PR must trigger a new scan\n' >&2
-    exit 1
-  }
+  fi
   if grep -Fq -- '--auto' "$workflow"; then
     printf 'ASSERT FAILED: Dependabot merge relies on GitHub auto-merge without required checks\n' >&2
     exit 1
@@ -755,7 +747,7 @@ test_release_policy() {
   local workflow="$ROOT_DIR/.github/workflows/release.yml"
   local required
   for required in \
-    'actions/create-github-app-token@v1' \
+    'uses: actions/create-github-app-token@' \
     'permission-pull-requests: read' \
     'permission-issues: read' \
     'APP_SLUG' \

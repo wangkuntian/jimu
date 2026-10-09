@@ -6,10 +6,7 @@
     "commit-message-options": {"prefix": "chore", "include-scope": true},
     "source": {"provider": "github", "directory": "/", "branch": "dependabot-updates"},
     "dependency-groups": [
-      {"name": "gin", "rules": {"patterns": ["github.com/gin-gonic/*"]}},
-      {"name": "gorm", "rules": {"patterns": ["gorm.io/*"]}},
-      {"name": "casbin", "rules": {"patterns": ["github.com/casbin/*"]}},
-      {"name": "go-redis", "rules": {"patterns": ["github.com/redis/go-redis/*"]}}
+      {"name": "go-modules", "rules": {"patterns": ["*"]}}
     ]
   },
   "credentials": [{"type": "git_source", "host": "github.com", "username": "x-access-token", "password": "$LOCAL_GITHUB_ACCESS_TOKEN"}]
