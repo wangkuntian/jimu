@@ -664,6 +664,7 @@ test_workflow_contract() {
 
 test_dependabot_merge_contract() {
   local workflow="$ROOT_DIR/.github/workflows/dependabot-auto-merge.yml"
+  local release_workflow="$ROOT_DIR/.github/workflows/release-dependency-automation.yml"
   grep -Fq 'workflow_run:' "$workflow" || {
     printf 'ASSERT FAILED: Dependabot merge must wait for a completed focused workflow\n' >&2
     exit 1
@@ -700,6 +701,18 @@ test_dependabot_merge_contract() {
   fi
   grep -Fq 'gh pr merge' "$workflow" || {
     printf 'ASSERT FAILED: Dependabot merge command is missing\n' >&2
+    exit 1
+  }
+  grep -Fq 'merged_number=' "$workflow" || {
+    printf 'ASSERT FAILED: Dependabot merge must stop after one baseline update\n' >&2
+    exit 1
+  }
+  grep -Fq 'gh pr close' "$workflow" || {
+    printf 'ASSERT FAILED: stale sibling Dependabot PRs must be closed before rescanning\n' >&2
+    exit 1
+  }
+  grep -Fq "github.event.pull_request.base.ref == 'dependabot-updates'" "$release_workflow" || {
+    printf 'ASSERT FAILED: closing a stale dependency PR must trigger a new scan\n' >&2
     exit 1
   }
   if grep -Fq -- '--auto' "$workflow"; then
