@@ -739,6 +739,19 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(event["data"]["updated-dependency-files"][0]["content"].encode(),
                          self.github.content(current["head"]["ref"], "go.mod"))
 
+    def test_retired_dependency_pr_creation_interruption_can_be_recovered(self):
+        self.assertEqual(0, self.apply()[0])
+        previous = self.github.pulls[0]
+        previous.update(state="closed", merged_at=None)
+        del self.github.refs[previous["head"]["ref"]]
+        self.github.fail_pr_once = True
+        event = create_event("module example.test/app\nrequire example.test/lib v1.3.0\n")
+        self.assertNotEqual(0, self.apply([event])[0])
+        code, _, errors = self.apply([event])
+        self.assertEqual(0, code, errors)
+        self.assertEqual(2, len(self.github.pulls))
+        self.assertEqual("closed", previous["state"])
+
     def test_empty_jsonl_and_invalid_later_file_block_entire_batch(self):
         invalid = create_event()
         invalid["data"]["dependencies"][0]["name"] = "other.test/lib"
