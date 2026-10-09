@@ -8,6 +8,7 @@ result_dir=$2
 mkdir -p "$result_dir"
 
 for ecosystem in go github-actions docker; do
+  echo "Dependabot CLI: $mode $ecosystem" >&2
   case "$mode" in
     prepare)
       python3 "$ROOT_DIR/scripts/dependabot_cli.py" prepare \
