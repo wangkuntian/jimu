@@ -1,0 +1,10 @@
+{
+  "job": {
+    "package-manager": "github_actions",
+    "allowed-updates": [{"update-type": "all"}],
+    "commit-message-options": {"prefix": "chore", "include-scope": true},
+    "source": {"provider": "github", "directory": "/", "branch": "dependabot-updates"},
+    "dependency-groups": [{"name": "github-actions", "rules": {"patterns": ["actions/*"]}}]
+  },
+  "credentials": [{"type": "git_source", "host": "github.com", "username": "x-access-token", "password": "$LOCAL_GITHUB_ACCESS_TOKEN"}]
+}

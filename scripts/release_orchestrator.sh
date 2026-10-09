@@ -55,17 +55,7 @@ version_context() {
   value=$(version_value "${1:-}")
   VERSION=$value
   RELEASE_BRANCH="release/$value"
-  SNAPSHOT_BRANCH="updates/$value"
-}
-
-epoch() {
-  local value=$1 normalized
-  normalized=${value%%.*}
-  if date -u -d "$normalized" +%s >/dev/null 2>&1; then
-    date -u -d "$normalized" +%s
-  else
-    date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$normalized" +%s
-  fi
+  AGGREGATE_BRANCH=dependabot-updates
 }
 
 ref_json() {
@@ -140,14 +130,18 @@ reset_terminal_dependabot_cycle() {
   [[ "$merge_base" == "$previous_base" ]] || \
     error "dependabot-updates does not descend from the terminal cycle baseline"
 
-  local pulls number author
+  local pulls number author body
   pulls=$(api "repos/$repo/pulls" --paginate --field state=open --field base=dependabot-updates --field per_page=100)
-  while IFS=$'\t' read -r number author; do
+  while IFS=$'\t' read -r number author body; do
     [[ -n "$number" ]] || continue
-    [[ "$author" == "dependabot[bot]" ]] || error "unmanaged open PR targets dependabot-updates: #$number"
+    if [[ "$author" != "dependabot[bot]" ]]; then
+      [[ -n ${RELEASE_APP_SLUG:-} && "$author" == "${RELEASE_APP_SLUG}[bot]" && \
+         "$body" == *"<!-- jimu-release-automation:$previous_version dependency:"* ]] || \
+        error "unmanaged open PR targets dependabot-updates: #$number"
+    fi
     api "repos/$repo/pulls/$number" --method PATCH --field state=closed >/dev/null || \
       error "failed to close stale Dependabot PR #$number"
-  done < <(jq -r '.[] | [.number, .user.login] | @tsv' <<<"$pulls")
+  done < <(jq -r '.[] | [.number, .user.login, (.body // "")] | @tsv' <<<"$pulls")
 
   api "repos/$repo/git/refs/heads/dependabot-updates" --method DELETE >/dev/null || \
     error "failed to delete terminal cycle dependabot-updates branch"
@@ -222,54 +216,27 @@ collection_ready() {
   local issue=${RELEASE_ISSUE_NUMBER:-}
   [[ "$issue" =~ ^[0-9]+$ ]] || error "RELEASE_ISSUE_NUMBER is required"
 
-  local issue_json started_at cycle_age now_value now_epoch
-  issue_json=$(api "repos/$repo/issues/$issue")
-  started_at=$(jq -er '.created_at' <<<"$issue_json") || error "release issue has no created_at"
-  now_value=${NOW:-$(date -u '+%Y-%m-%dT%H:%M:%SZ')}
-  now_epoch=$(epoch "$now_value")
-  cycle_age=$((now_epoch - $(epoch "$started_at")))
-  if (( cycle_age < 8 * 24 * 60 * 60 )); then
-    write_output ready false
-    write_output reason "release cycle is younger than 8 days"
-    return 0
-  fi
-
   local pulls dependabot_count
   pulls=$(api "repos/$repo/pulls" --paginate --field state=open --field base=dependabot-updates --field per_page=100)
-  dependabot_count=$(jq '[.[] | select(.user.login == "dependabot[bot]")] | length' <<<"$pulls")
+  # Every pending update must settle before the aggregate is merged, including CLI App PRs.
+  dependabot_count=$(jq 'length' <<<"$pulls")
   if (( dependabot_count > 0 )); then
     write_output ready false
     write_output reason "open Dependabot PRs remain on dependabot-updates"
     return 0
   fi
 
-  local commits latest_commit latest_date quiet_age
-  commits=$(api "repos/$repo/commits" --paginate --field sha=dependabot-updates --field per_page=1)
-  latest_commit=$(jq -r '.[0].sha // empty' <<<"$commits")
-  latest_date=$(jq -r '.[0].commit.committer.date // .[0].commit.author.date // empty' <<<"$commits")
-  if [[ -z "$latest_commit" || -z "$latest_date" ]]; then
-    write_output ready false
-    write_output reason "dependabot-updates has no commit history"
-    return 0
-  fi
-  quiet_age=$((now_epoch - $(epoch "$latest_date")))
-  if (( quiet_age < 24 * 60 * 60 )); then
-    write_output ready false
-    write_output reason "dependabot-updates changed within the last 24 hours"
-    return 0
-  fi
-
-  local compare ahead_by
+  local compare changed_files
   compare=$(api "repos/$repo/compare/$RELEASE_BRANCH...dependabot-updates")
-  ahead_by=$(jq -r '.ahead_by // 0' <<<"$compare")
-  if (( ahead_by < 1 )); then
+  changed_files=$(jq -er '.files | length' <<<"$compare") || error "dependency comparison has no file list"
+  if (( changed_files < 1 )); then
     write_output ready false
     write_output reason "no dependency update was merged in this cycle"
     return 0
   fi
 
   write_output ready true
-  write_output reason "collection window is complete"
+  write_output reason "dependency changes are ready for CI validation"
   write_output version "$VERSION"
 }
 
@@ -278,55 +245,43 @@ create_snapshot() {
   local issue=${RELEASE_ISSUE_NUMBER:-}
   [[ "$issue" =~ ^[0-9]+$ ]] || error "RELEASE_ISSUE_NUMBER is required"
 
-  local fixed_sha snapshot_sha snapshot_marker comments marker_body pr_list matching_pr pr_number body existing_sha
+  local compare changed_files pr_list matching_pr pr_number body aggregate_marker
   fixed_sha=$(ref_sha heads dependabot-updates) || error "dependabot-updates ref is unavailable"
-  snapshot_marker="<!-- jimu-release-automation:$VERSION snapshot:"
-  comments=$(issue_comments "$issue")
-  marker_body=$(grep -F "$snapshot_marker" <<<"$comments" | tail -n1 || true)
-  snapshot_sha=$(sed -nE 's/.*snapshot:([0-9a-f]{40}) -->.*/\1/p' <<<"$marker_body")
-
-  if existing_sha=$(ref_sha heads "$SNAPSHOT_BRANCH"); then
-    [[ -n "$snapshot_sha" ]] || error "snapshot branch already exists without a matching managed marker"
-    [[ "$existing_sha" == "$snapshot_sha" ]] || error "snapshot branch SHA differs from its managed marker"
-    snapshot_sha=$existing_sha
-  else
-    if [[ -z "$snapshot_sha" ]]; then
-      snapshot_sha=$fixed_sha
-      api "repos/$repo/issues/$issue/comments" --method POST \
-        --field "body=$snapshot_marker$snapshot_sha -->" >/dev/null || \
-        error "failed to record snapshot branch marker"
-    fi
-    create_ref heads "$SNAPSHOT_BRANCH" "$snapshot_sha" || error "failed to create $SNAPSHOT_BRANCH"
+  compare=$(api "repos/$repo/compare/$RELEASE_BRANCH...dependabot-updates")
+  changed_files=$(jq -er '.files | length' <<<"$compare") || error "dependency comparison has no file list"
+  if (( changed_files < 1 )); then
+    write_output version "$VERSION"
+    write_output aggregate_branch dependabot-updates
+    write_output created false
+    write_output reason "dependabot-updates has no dependency commit to aggregate"
+    return 0
   fi
 
-  snapshot_marker="<!-- jimu-release-automation:$VERSION snapshot -->"
-  pr_list=$(api "repos/$repo/pulls" --paginate --field state=all --field head="$repo:$SNAPSHOT_BRANCH" --field base="$RELEASE_BRANCH" --field per_page=100)
+  aggregate_marker="<!-- jimu-release-automation:$VERSION aggregate -->"
+  pr_list=$(api "repos/$repo/pulls" --paginate --field state=open --field head="${repo%%/*}:$AGGREGATE_BRANCH" --field base="$RELEASE_BRANCH" --field per_page=100)
   matching_pr=$(jq -c '[.[] | select(.head.ref == $head and .base.ref == $base)] | .[0] // empty' \
-    --arg head "$SNAPSHOT_BRANCH" --arg base "$RELEASE_BRANCH" <<<"$pr_list")
+    --arg head "$AGGREGATE_BRANCH" --arg base "$RELEASE_BRANCH" <<<"$pr_list")
   if [[ -n "$matching_pr" ]]; then
     local pr_body
     pr_body=$(jq -r '.body // ""' <<<"$matching_pr")
-    [[ "$pr_body" == *"$snapshot_marker"* ]] || error "snapshot PR exists without a matching managed marker"
-    [[ "$pr_body" == *"<!-- jimu-release-automation:$VERSION snapshot-sha:$snapshot_sha -->"* ]] || \
-      error "snapshot PR exists without a matching source SHA marker"
+    [[ "$pr_body" == *"$aggregate_marker"* ]] || error "aggregate PR exists without a matching managed marker"
     pr_number=$(jq -er '.number' <<<"$matching_pr")
   else
     body=$(cat <<EOF
-${snapshot_marker}
-<!-- jimu-release-automation:$VERSION snapshot-sha:$snapshot_sha -->
+${aggregate_marker}
 Aggregated Dependabot updates for \`$VERSION\`.
 EOF
 )
     pr_number=$(api "repos/$repo/pulls" --method POST \
       --field "title=chore(release): aggregate Dependabot updates for $VERSION" \
-      --field "head=$SNAPSHOT_BRANCH" \
+      --field "head=$AGGREGATE_BRANCH" \
       --field "base=$RELEASE_BRANCH" \
-      --field "body=$body" | jq -er '.number') || error "failed to create snapshot PR"
+      --field "body=$body" | jq -er '.number') || error "failed to create aggregate PR"
   fi
 
   write_output version "$VERSION"
-  write_output snapshot_branch "$SNAPSHOT_BRANCH"
-  write_output snapshot_sha "$snapshot_sha"
+  write_output aggregate_branch dependabot-updates
+  write_output created true
   write_output pr_number "$pr_number"
 }
 
@@ -406,7 +361,7 @@ case "$command" in
     version_context "${1:-}"
     write_output version "$VERSION"
     write_output release_branch "$RELEASE_BRANCH"
-    write_output snapshot_branch "$SNAPSHOT_BRANCH"
+    write_output aggregate_branch dependabot-updates
     ;;
   ensure-cycle)
     ensure_cycle "${1:-}"
