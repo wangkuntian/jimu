@@ -341,6 +341,7 @@ def plan_updates(context, ecosystem, updates, base):
         require(len(candidates) <= 1, "multiple PRs claim the same managed dependency set")
         pull = candidates[0] if candidates else None
         previous = None
+        head = github.ref(branch, optional=True)
         if pull:
             validate_pull(context, pull, branch, marker)
         else:
@@ -348,8 +349,8 @@ def plan_updates(context, ecosystem, updates, base):
             if matching:
                 previous = max(matching, key=lambda p: p["number"])
                 validate_pull(context, previous, branch, marker, state="closed")
-                require(previous.get("merged_at"), "dependency PR was closed without merging; refusing to reopen it")
-        head = github.ref(branch, optional=True)
+                require(previous.get("merged_at") or head is None,
+                        "dependency PR was closed without merging; refusing to reopen it")
         require(not pull or head == pull.get("head", {}).get("sha"), "dependency PR head ref changed")
         desired = dict(base_tree)
         entries = []
