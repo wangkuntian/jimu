@@ -110,7 +110,8 @@ jobs:
     if: >-
       always() &&
       (github.event_name == 'schedule' ||
-       (github.event_name == 'issues' && needs.bootstrap.result == 'success'))
+       (github.event_name == 'issues' && needs.bootstrap.result == 'success') ||
+       (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.base.ref == 'dependabot-updates'))
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
