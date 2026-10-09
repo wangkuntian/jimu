@@ -436,6 +436,7 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
 
       - name: Create GitHub App token
+        if: github.event_name != 'pull_request' || hashFiles('scripts/release_issue.py') != ''
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
@@ -447,6 +448,7 @@ jobs:
           permission-pull-requests: read
 
       - name: Refresh the managed Issue section
+        if: github.event_name != 'pull_request' || hashFiles('scripts/release_issue.py') != ''
         env:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

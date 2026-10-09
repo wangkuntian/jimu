@@ -565,9 +565,9 @@ test_workflow_contract() {
     printf 'ASSERT FAILED: workflow may cancel a concurrent release cycle\n' >&2
     exit 1
   }
-  if ! rg -Fq "github.event.issue.author_association == 'OWNER'" "$workflow" || \
-    rg -Fq "author_association == 'MEMBER'" "$workflow" || \
-    rg -Fq "author_association == 'COLLABORATOR'" "$workflow"; then
+  if ! grep -Fq "github.event.issue.author_association == 'OWNER'" "$workflow" || \
+    grep -Fq "author_association == 'MEMBER'" "$workflow" || \
+    grep -Fq "author_association == 'COLLABORATOR'" "$workflow"; then
     printf 'ASSERT FAILED: bootstrap lacks an authorized Issue author gate\n' >&2
     exit 1
   fi
@@ -785,12 +785,12 @@ test_docs() {
     'checks: read' \
     '候选 merge commit' \
     '人工 review 和 merge'; do
-    if ! rg -Fq -- "$required" "${docs[@]}"; then
+    if ! grep -Fq -- "$required" "${docs[@]}"; then
       printf 'ASSERT FAILED: release automation docs are missing %s\n' "$required" >&2
       exit 1
     fi
   done
-  if rg -q '8 天|24 小时' "${docs[@]}"; then
+  if grep -Eq '8 天|24 小时' "${docs[@]}"; then
     printf 'ASSERT FAILED: release automation docs retain removed collection delays\n' >&2
     exit 1
   fi
