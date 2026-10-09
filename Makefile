@@ -352,6 +352,9 @@ check-skills:
 ## test-release-orchestrator: 运行发布编排脚本的本地 fixture 测试
 test-release-orchestrator:
 	@./scripts/test_release_orchestrator.sh
+	@for group in --dependabot-config --workflow-contract --dependabot-merge-contract --scaffold-policy --release-policy --docs --issue-template --self-hosted-dependabot; do bash scripts/test_release_orchestrator.sh $$group || exit; done
+	@python3 -B scripts/test_dependabot_cli.py
+	@python3 -B scripts/test_release_issue.py
 
 ## skills-install: 把 skills/<name>/ 软链到 .claude/skills/ 与 .agents/skills/（两者都在
 ##                 .gitignore 内）。幂等；目标已存在且不是指向本仓事实源的软链时拒绝覆盖，

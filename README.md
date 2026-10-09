@@ -1152,17 +1152,20 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 
 ### Dependabot 发布周期
 
-创建标题为 `release: vX.Y.Z` 的 Issue 后，Actions 会创建 `release/vX.Y.Z` 和固定汇总分支 `dependabot-updates`。普通版本更新 PR 只运行 focused checks；每次检查完成事件都会重查所有待处理 PR，当前检查成功后由 GitHub App 自动 squash merge。blocked 周期修复原因后可在 Release Issue 重新添加 `release: collecting` 标签恢复。安全更新仍直接指向 `master`，其 Scaffold Matrix required check 会成功跳过并把 PR 记录到活跃的 Release Issue。
+通过 Release cycle 模板创建标题为 `release: vX.Y.Z` 的 Issue 后，Actions 会创建 `release/vX.Y.Z` 和固定汇总分支 `dependabot-updates`。官方 Dependabot CLI 随后立即扫描 Go、GitHub Actions 和 Docker 依赖，并在每天上海时间 02:00 重试；仅扫描未关闭且未 blocked/published 的受管周期。版本更新 PR 由 Jimu GitHub App 创建，使用 `dependabot-cli/<version>/<ecosystem>/<key>` 分支，只运行 focused checks；当前检查成功后 App 自动 squash merge。托管 Dependabot 版本更新设为关闭，已有 PR 仍可处理；安全更新仍直接指向 `master`，其 Scaffold Matrix required check 成功跳过。blocked 周期修复后可在 Release Issue 重新添加 `release: collecting` 标签恢复。
 
-Issue bootstrap 成功后会立即检查一次依赖收集资格；`dependabot-updates` 出现首个依赖提交后立即创建 `dependabot-updates -> release/vX.Y.Z` 汇总 PR，之后每天重查。该 PR 会自动吸收固定分支后续提交，但仍须至少经过 8 天、最近 24 小时没有新提交且没有待处理 Dependabot PR 才能标为 candidate 并合并。`CI (Go)`、`CI (Docker)`、`CI (Commits)` 全部完成且检查成功或正常跳过后，App 才自动 squash merge；随后自动打开 `release/vX.Y.Z -> master` 候选 PR，由维护者 review 和 merge。固定 `dependabot-updates` 在 candidate 阶段暂停自动合并，下一 cycle bootstrap 时清理并重建。候选 PR 合并后 App 才创建 tag；`release.yml` 只接受 App push 的 tag，并再次校验 tag、受管候选 merge 和当前 master tip 一致，再发布 GitHub Release。
+`dependabot-updates` 出现首个依赖提交后立即创建 `dependabot-updates -> release/vX.Y.Z` 汇总 PR，并继续每天重查；有依赖差异且没有待处理 Dependabot PR 时即可标为 candidate，不要求周期年龄或提交静默期。`CI (Go)`、`CI (Docker)`、`CI (Commits)` 全部完成且检查成功或正常跳过后，App 才自动 squash merge；依赖汇总或 feature/fix 合入 release 后打开 `release/vX.Y.Z -> master` 候选 PR，由维护者人工 review 和 merge。candidate 阶段仍扫描依赖，后续批次合入 release 后自动进入同一候选 PR；每批汇总合入后同步固定分支，下一 cycle 验证旧周期后重建。候选 PR 合并后 App 创建 tag；`release.yml` 校验 tag、受管候选 merge 和当前 master tip 一致，再发布 GitHub Release。
 
-首次启用需要安装具有 `contents: write`、`pull_requests: write`、`checks: read`、`issues: write`、`metadata: read` 权限的 GitHub App，并设置 Actions secrets `JIMU_RELEASE_APP_ID` 和 `JIMU_RELEASE_APP_PRIVATE_KEY`。自动化不依赖 GitHub auto-merge；release ruleset 保持现有 `non_fast_forward`，master ruleset 负责最终候选 PR 的完整 required checks。操作细节见[贡献指南](docs/CONTRIBUTING.md#dependabot-发布周期)和[设计稿](docs/superpowers/specs/2026-10-07-v0.3.5-dependabot-release-automation-design.md)。
+Issue 正文的自动维护区随 PR 创建、同步、关闭或合并更新，列出 dependency、feature、fix、汇总及最终候选 PR；用户描述保持原样。Release 发布成功后更新发布链接和 `release: published` 状态，再关闭 Issue；失败保持 `release: blocked`。每日运行同时按 GitHub 当前状态补偿候选 PR、tag 与发布收尾，避免单次事件遗漏。Actions 定时启动可能延迟。
+
+首次启用需要安装具有 `contents: write`、`pull_requests: write`、`workflows: write`、`checks: read`、`issues: write`、`metadata: read` 权限的 GitHub App，并设置 Actions secrets `JIMU_RELEASE_APP_ID` 和 `JIMU_RELEASE_APP_PRIVATE_KEY`。扫描只使用只读 token，创建更新 PR 的步骤单独使用 App token；`workflows: write` 用于 Actions 依赖更新。自动化不依赖 GitHub auto-merge；release ruleset 保持 `non_fast_forward`，master ruleset 负责最终候选 PR 的完整 required checks。操作细节见[贡献指南](docs/CONTRIBUTING.md#dependabot-发布周期)和[补全设计](docs/superpowers/specs/2026-10-08-release-cycle-completion-design.md)。
 
 ## Makefile 命令
 
 | 命令 | 说明 |
 |------|------|
 | `make run` | 运行服务（开发模式） |
+| `make test-release-orchestrator` | 发布编排 Bash 契约、Dependabot CLI 和 Issue 正文/收尾回归测试 |
 | `make dev` | 开发模式：fmt + vet + 构建 + 运行 |
 | `make build` | 编译 server + cli |
 | `make build-server` | 编译服务端（`PROFILE=<name>` 选形态，默认 full；overlay 叠加 `./cmd/server`，产物 `bin/jimu-server[-<name>]`） |
