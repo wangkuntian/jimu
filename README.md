@@ -1158,6 +1158,8 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 
 Issue 正文的自动维护区随 PR 创建、同步、关闭或合并更新，列出 dependency、feature、fix、汇总及最终候选 PR；用户描述保持原样。Release 发布成功后更新发布链接和 `release: published` 状态，再关闭 Issue；失败保持 `release: blocked`。每日运行同时按 GitHub 当前状态补偿候选 PR、tag 与发布收尾，避免单次事件遗漏。Actions 定时启动可能延迟。
 
+Go 扫描按公开模块处理（`goprivate` 为空、`gonoproxy` 和 `gonosumdb` 为 `none`），使用 Go 官方模块代理与校验数据库，保留 `go.sum` 校验，避免上游重打 tag 后直连 GitHub 取得不同内容。
+
 首次启用需要安装具有 `contents: write`、`pull_requests: write`、`workflows: write`、`checks: read`、`issues: write`、`metadata: read` 权限的 GitHub App，并设置 Actions secrets `JIMU_RELEASE_APP_ID` 和 `JIMU_RELEASE_APP_PRIVATE_KEY`。扫描只使用只读 token，创建更新 PR 的步骤单独使用 App token；`workflows: write` 用于 Actions 依赖更新。自动化不依赖 GitHub auto-merge；release ruleset 保持 `non_fast_forward`，master ruleset 负责最终候选 PR 的完整 required checks。操作细节见[贡献指南](docs/CONTRIBUTING.md#dependabot-发布周期)和[补全设计](docs/superpowers/specs/2026-10-08-release-cycle-completion-design.md)。
 
 ## Makefile 命令

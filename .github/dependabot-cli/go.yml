@@ -1,6 +1,7 @@
 {
   "job": {
     "package-manager": "go_modules",
+    "experiments": {"goprivate": "", "gonoproxy": "none", "gonosumdb": "none"},
     "allowed-updates": [{"dependency-type": "direct", "update-type": "all"}],
     "commit-message-options": {"prefix": "chore", "include-scope": true},
     "source": {"provider": "github", "directory": "/", "branch": "dependabot-updates"},
