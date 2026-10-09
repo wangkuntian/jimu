@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 env:
-  GO_VERSION: "1.26.6"
+  GO_VERSION: "1.26.9"
 
 # tag 只负责发布由 GitHub App 创建并合并的 release/* → master 候选 PR。
 # master ruleset 承担候选 PR 的常规门禁与 Scaffold Matrix；本 workflow 再校验候选 PR、Issue、tag 和 master tip 一致，
