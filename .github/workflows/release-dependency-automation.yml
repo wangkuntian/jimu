@@ -50,7 +50,7 @@ jobs:
 
       - name: Create GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
           private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
@@ -128,7 +128,7 @@ jobs:
       - name: Create GitHub App token to synchronize the scan baseline
         if: steps.cycle.outputs.active == 'true'
         id: baseline-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
           private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
@@ -181,7 +181,7 @@ jobs:
       - name: Create GitHub App token for dependency PRs
         if: steps.cycle.outputs.active == 'true'
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
           private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
@@ -222,7 +222,7 @@ jobs:
 
       - name: Create GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
           private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
@@ -280,7 +280,7 @@ jobs:
 
       - name: Create GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
           private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
@@ -377,7 +377,7 @@ jobs:
     steps:
       - name: Create GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
           private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
@@ -438,7 +438,7 @@ jobs:
       - name: Create GitHub App token
         if: github.event_name != 'pull_request' || hashFiles('scripts/release_issue.py') != ''
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
           private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
@@ -466,7 +466,7 @@ jobs:
     steps:
       - name: Create GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
           private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
@@ -586,7 +586,7 @@ jobs:
 
       - name: Create GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
           private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
@@ -661,7 +661,7 @@ jobs:
 
       - name: Create GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.JIMU_RELEASE_APP_ID }}
           private-key: ${{ secrets.JIMU_RELEASE_APP_PRIVATE_KEY }}
