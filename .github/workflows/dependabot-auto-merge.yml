@@ -1,8 +1,8 @@
-name: Dependabot Auto Merge
+name: Release (Dependabot Merge)
 
 on:
   workflow_run:
-    workflows: [CI (Dependabot Focused), Release Dependency Automation]
+    workflows: [CI (Dependabot Focused), Release (Dependencies)]
     types: [completed]
 
 concurrency:

@@ -2,7 +2,7 @@
 
 **目标：** 补齐已确认的五项发布流程，直接在 `release/v0.3.5` 工作，每项完成后独立英文 commit。
 
-**设计：** [自动化补全设计](../specs/2026-10-08-release-cycle-completion-design.md)。沿用单个 Release Dependency Automation workflow，扫描与写入隔离 token，脚本承担可测试的数据处理。
+**设计：** [自动化补全设计](../specs/2026-10-08-release-cycle-completion-design.md)。沿用单个 `Release (Dependencies)` workflow，扫描与写入隔离 token，脚本承担可测试的数据处理。
 
 ## 任务与验收
 

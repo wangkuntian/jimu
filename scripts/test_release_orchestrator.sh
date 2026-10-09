@@ -625,6 +625,15 @@ test_workflow_contract() {
     exit 1
   }
   release_workflow="$ROOT_DIR/.github/workflows/release.yml"
+  for required in \
+    'name: Release (Dependencies)' \
+    'name: Release (Publish)' \
+    'name: Release (Dependabot Merge)'; do
+    if ! grep -Fq "$required" "$workflow" "$release_workflow" "$ROOT_DIR/.github/workflows/dependabot-auto-merge.yml"; then
+      printf 'ASSERT FAILED: release workflow naming contract is missing %s\n' "$required" >&2
+      exit 1
+    fi
+  done
   grep -Fq 'actions/create-github-app-token@v1' "$release_workflow" || {
     printf 'ASSERT FAILED: Release workflow must use an App token to emit the published event\n' >&2
     exit 1
