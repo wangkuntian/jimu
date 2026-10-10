@@ -22,7 +22,7 @@ import (
 // runner 上要 257s，而它只是 tools 分片里的一个包 —— 那一片因此成了整个 Race job 的长杆。按形态切开
 // 后每片只度量自己那部分。**这不是减少 race 覆盖**：每个形态仍然在某个分片里被 `-race` 跑过，只是
 // 不再挤在同一个进程/同一台 runner 上；跨形态关系（minimal ≤ 85% full 之类）仍由未设该变量时的
-// 完整度量断言（默认路径的 Test job，非 race，整包 23s）。
+// 完整度量断言（非 race 的 `Capability Gates` job 全量跑该包，整包 23s）。
 const profileShardEnv = "JIMU_METRICS_PROFILES"
 
 // 本文件只覆盖 report 本体的渲染与 overlay 口径；度量原语（路由/迁移/表/闭包/行数/直接依赖）
@@ -185,7 +185,7 @@ func TestMinimalCompiledSurfaceIsMateriallySmaller(t *testing.T) {
 
 // TestProfileCompiledSurface 是上面那条完整度量的**单形态切片**（见 profileShardEnv）：
 // CI 的 race 分片用 JIMU_METRICS_PROFILES=<p1,p2> 指定它负责的形态，只断言**该形态自身可独立判定**
-// 的性质；跨形态关系留在完整度量里（默认路径的 Test job 跑它）。形态名拼错会让 measureAll 报错，
+// 的性质；跨形态关系留在完整度量里（非 race 的 `Capability Gates` job 全量跑该包）。形态名拼错会让 measureAll 报错，
 // 不会静默少测。
 func TestProfileCompiledSurface(t *testing.T) {
 	if testing.Short() {

@@ -23,7 +23,8 @@
 # composereport 的形态切分：那条重型用例在 `-race` 下每个形态都要做一次全依赖图 packages.Load +
 # 全闭包行数统计（实测整包 257s，是 tools 分片唯一的压力来源）。按形态对半切后每片只度量自己那部分，
 # **每个形态仍然在某个分片里被 `-race` 跑过**；跨形态关系（minimal ≤ 85% full 之类）由未设
-# JIMU_METRICS_PROFILES 时的完整度量断言（非 race 的 Test job，整包 23s）。形态名单来自
+# JIMU_METRICS_PROFILES 时的完整度量断言（非 race 的 `Capability Gates` job 全量跑该包，整包 23s，
+# 见 ci.yml 的 `Run the composereport package tests`）。形态名单来自
 # `tools/profileoverlay -list`（registry 唯一来源），不写死。
 #
 # generator 的用例切分：两条已知最重的用例定向分到不同分片（隔离实测各占该包 ~24% / ~22%，
@@ -89,7 +90,8 @@ SHARD_TEST_TIMEOUT=15m
 # （一形态一片）后墙钟零收益 —— 每片分片步骤 133–138s 里 ~96% 与形态数无关，是
 # `go run ./tools/profileoverlay -list` 守卫（82–106s）+ race 编译（24–31s），真正的形态度量
 # 只有 3.9–5.3s；4 片时最长 composereport 步骤 136s，与 5 片等价却少占一个并发槽（正式
-# 流水线还要与 lint/门禁/DB/Docker 共 5 个 job 并行）。**将来想加片前先看这组数**。
+# 流水线还要与 lint / Capability Gates / Performance Regression / DB Integration / Docker Build /
+# Cache Warmup 共 6 个 job 并行，公共仓并发上限 20 ⇒ 分片数 ≤ 14）。**将来想加片前先看这组数**。
 COMPOSEREPORT_SHARDS=4
 COMPOSEREPORT_PKG="./tools/composereport"
 COMPOSEREPORT_IMPORT="$MODULE/tools/composereport"
@@ -401,6 +403,9 @@ cmd_run() {
         exit 1
       }
       echo "▶ race 分片 ${shard}：$COMPOSEREPORT_PKG 的形态 $profiles"
+      # 注意：这里的 `-run '^TestProfileCompiledSurface$'` 只跑重型的那一条用例。该包**其余用例**
+      # 由 ci.yml 的 `Capability Gates` job 以非 race 全量 `go test ./tools/composereport/...` 覆盖
+      # （tools 分片显式排除本包）。改这里的 `-run` 前先确认那一侧仍在跑，否则会静默丢用例。
       env "$COMPOSEREPORT_ENV=$profiles" go test -race -run '^TestProfileCompiledSurface$' \
         "$COMPOSEREPORT_IMPORT" -timeout "$SHARD_TEST_TIMEOUT" ${cover_args[@]+"${cover_args[@]}"}
       ;;

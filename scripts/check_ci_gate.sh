@@ -10,6 +10,7 @@
 #   该域适用(true) 且 job 非 success        → fail
 #   该域适用(true) 但 job 是 skipped        → fail（门禁悄悄消失必须报错）
 #   该域不适用(false) 且 job 是 skipped     → 通过
+#   该域不适用(false) 但 job 是 success     → fail（不该跑却跑了，触发口径漂移；比宽松解释更严格是有意为之）
 #   该域不适用(false) 但 job 既非 skipped 又非 success（如 failure）→ fail（触发口径漂移必须暴露）
 #
 # 用法：
