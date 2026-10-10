@@ -15,7 +15,7 @@ import (
 // 不要用 `runtime.Caller(0)` 再向上拼层数：生成项目的重型矩阵构建一律带 `-trimpath`
 // （`tools/generator` 的 trimpathGoflags，为了让测试用的 GOCACHE 跨运行复用），编译期路径会被重写成
 // **模块相对路径**（如 `example.com/proj/internal/app/seed_test.go`），据此推出的「根」是字符串而不是
-// 磁盘目录 —— 实测报 `chdir example.com/proj: no such file or directory`（CI 的 Scaffold Matrix，
+// 磁盘目录 —— 实测报 `chdir example.com/proj: no such file or directory`（CI 的 Scaffold Gate，
 // 由 `internal/app/seed_test.go` 的 TestRunSeedWithCasbin 暴露）。
 //
 // 判据用 go.mod 而不是固定层数：框架仓与生成项目各自有 go.mod，同一份测试代码在两边都能定位到**自己**

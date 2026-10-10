@@ -1,0 +1,55 @@
+name: Dependabot Auto-merge
+
+# 只做一件事：让 dependabot 的 minor/patch PR 在 dependency-updates 上开启 GitHub 原生 auto-merge，
+# 由 GitHub 负责「等 required check 满足后再合」。等检查的事不自己轮询、不串 workflow_run。
+#
+# 安全约束（改这个文件前先读）：
+#   1. 本 workflow **绝不 checkout、绝不执行 PR 内容**，只调 GitHub API；
+#   2. 判定条件全部满足才动手，缺一不启用；
+#   3. auto-merge 的安全性依赖 dependency-updates 的 ruleset **确实 require `PR Gate`** ——
+#      否则 `--auto` 会在没有任何检查的情况下立即合并。
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [dependency-updates]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  enable-auto-merge:
+    name: Enable Auto-merge
+    if: >-
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.base.ref == 'dependency-updates' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch the dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # 白名单判定，fail-closed：只有 update-type **明确等于** minor 或 patch 才启用 auto-merge。
+      # 空值 / 未知值 / major 一律不启用 —— 不能写成「!= major 就合」，否则元数据缺失时会放行。
+      #
+      # 为什么这条白名单能挡住「分组 PR 夹带 major」：dependabot.yml 里 gomod 的家族组刻意不设
+      # update-types（同族必须原子升级），所以组内可能同时含 major。fetch-metadata 对分组 PR 会按
+      # 提交信息里的 updated-dependencies 逐条解析出各自的 update-type，再由 maxSemver() 取**最高**
+      # 等级作为 update-type 输出（v2 的 src/dependabot/output.ts 的 UPDATE_TYPES_PRIORITY =
+      # [major, minor, patch]，用 find() 取第一个命中项）。因此「输出是 minor/patch」⇒ 组内**没有**
+      # major；反过来组内只要有一个 major，输出必是 version-update:semver-major。
+      - name: Enable auto-merge for minor and patch updates
+        if: >-
+          steps.meta.outputs.update-type == 'version-update:semver-minor' ||
+          steps.meta.outputs.update-type == 'version-update:semver-patch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge --auto --squash --delete-branch "${{ github.event.pull_request.html_url }}"

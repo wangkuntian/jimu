@@ -1,4 +1,4 @@
-name: CI (Scaffold Matrix)
+name: CI (Scaffold)
 
 # 重型脚手架矩阵：真实生成项目 + `go build/vet/test/run`（由 JIMU_HEAVY_MATRIX=1 门控，
 # 本地等价命令 `make test-scaffold-matrix`）。**普通开发 PR 不跑** —— 冷跑要十几到几十分钟，
@@ -17,12 +17,12 @@ name: CI (Scaffold Matrix)
 #      正在跑的矩阵 —— 被取消的 run **不会执行缓存 save 步骤**，滚动缓存等于白配；
 #   3. 能加夜间 schedule 而不会连带把轻量 job 也定时跑一遍。
 #
-# 拆分前运行时间（实测，run 36383945753 的 Scaffold Matrix job）：job 14m46s，其中 test 步骤 861s，
+# 拆分前运行时间（实测，run 36383945753 的 Scaffold Gate job）：job 14m46s，其中 test 步骤 861s，
 # 构成是 25 个选区构建网 ≈560s（占 65%）、5+5 个生成项目测试树 239s、其余门控用例 ~150s、
 # 编译/缓存恢复 ~100s。已做的优化：`heavyBuildConcurrency` 从 2 提到 4（标准 runner 是
 # 4 vCPU，定死在 2 只用一半 CPU；旧注释里的「2 vCPU」是从 `CPU 时间 3330s / 墙钟 28min ≈ 2`
 # 反推出来的，那个 2 其实是当时的并发上限）+ 下面这份滚动缓存。现在拆成 4 个构建、
-# 2 个生成项目测试、1 个其余用例并行作业；原 Scaffold Matrix 名称由聚合 job 保留。
+# 2 个生成项目测试、1 个其余用例并行作业；聚合 job 以 Scaffold Gate 这一名称对外保留单一必需检查。
 
 on:
   workflow_dispatch:
@@ -44,11 +44,13 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: "1.26.6"
+  # 与 .github/actions/go-setup 的 go-version 默认值保持一致（本文件用自己的 setup-go，
+  # 因为它的缓存是 scaffold-gocache、与 CI 分片的滚动缓存不共用）
+  GO_VERSION: "1.26.9"
 
 jobs:
   changes:
-    name: Scaffold Changes
+    name: Changes
     runs-on: ubuntu-latest
     outputs:
       heavy: ${{ steps.filter.outputs.heavy }}
@@ -142,7 +144,7 @@ jobs:
           # job 内、跑完全丢」的假象），但仍受 Go 自身的 5 天未使用裁剪兜底（cmd/go/internal/cache
           # 的 trimInterval=24h / trimLimit=5d，无大小上限）。
           if [ -n "${SIZE_MB:-}" ] && [ "$SIZE_MB" -gt 6144 ]; then
-            echo "::error::scaffold GOCACHE ${SIZE_MB} MB 超过 6 GiB（仓库 actions/cache 配额 10 GB）：请把 ci-scaffold.yml 里 cache key 的 -v1 后缀递增（-v2、-v3…，release.yml 同步）后重跑；不要在本 job 内删除缓存内容"
+            echo "::error::scaffold GOCACHE ${SIZE_MB} MB 超过 6 GiB（仓库 actions/cache 配额 10 GB）：请把 ci-scaffold.yml 里 cache key 的 -v1 后缀递增（-v2、-v3…）后重跑；不要在本 job 内删除缓存内容"
             exit 1
           fi
 
@@ -155,7 +157,7 @@ jobs:
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
   scaffold-matrix:
-    name: Scaffold Matrix
+    name: Scaffold Gate
     needs: [changes, scaffold-shards]
     if: always()
     runs-on: ubuntu-latest
@@ -172,7 +174,7 @@ jobs:
             exit 1
           fi
           if [ "$GITHUB_EVENT_NAME" = pull_request ] && [[ "$RELEASE_SOURCE" != release/* ]]; then
-            echo "::error::Scaffold Matrix only accepts release/* -> master PRs: $RELEASE_SOURCE"
+            echo "::error::Scaffold Gate only accepts release/* -> master PRs: $RELEASE_SOURCE"
             exit 1
           fi
           if [ "$HEAVY" = true ] && [ "$SHARDS_RESULT" != success ]; then

@@ -1,90 +1,102 @@
-name: CI (Go)
+name: CI (PR)
 
-# Go 代码质量门禁：lint / test（含覆盖率）/ race（分片并行）/ benchmark / govulncheck。
-# 仅当 Go 相关代码或测试/构建脚本变更时触发。
-# 镜像构建与安全扫描见 ci-docker.yml（Dockerfile/compose/deploy 变更）；
-# 重型脚手架矩阵见 ci-scaffold.yml（只在发布候选 PR、手动触发与定时任务运行）。
+# 唯一的 PR pipeline：一个 router 决定「这次提交该跑什么」，代码域与镜像域各出一个稳定聚合检查。
+# 分片规则、覆盖率合并与「并集 == 全集」守卫都在 scripts/test_shards.sh（单一事实源）。
+# 重型脚手架矩阵见 ci-scaffold.yml；tag 发布见 release.yml。
 #
-# 构建缓存：setup-go 自带的缓存 key 只含 go.mod 哈希，而 Actions 的缓存条目**按 key 不可变**、
-# 命中即「只恢复不重存」—— 快照在首次保存那一刻就冻结，之后每个 commit 的 first-party 编译产物
-# 全部随 runner 丢弃（每一轮都只有依赖是热的；实测每个 job 在出第一条 `ok` 之前要先付 90–115s）。
-# 因此每个 Go job 额外挂一条**滚动** actions/cache：把 GOCACHE 指到自己的目录
-# （`${{ runner.temp }}/gocache-<风味>`），key 取 `<go.sum 哈希>-<sha>` —— 主 key 只在重跑同一
-# commit 时命中，其余靠 restore-keys 拿最近一份快照、跑完存新条目，收益能跨 commit 累积。
-# 风味分开（vet / cover / race / gates）是为了不让 `-race`、`-cover`、静态分析与门禁构建的产物互相挤占同一份快照；同一风味的多个 race
-# 分片共享一份（谁先跑完谁存，下一轮大家都用得上）。bench 未挂：它只有 2 分钟、不是长杆。
-# 配额：仓库 actions/cache 上限 10 GB，超限按 LRU 淘汰。
+# 门控一律用 job 级 if + router output，**不用** trigger 级 on.pull_request.paths ——
+# 后者会让被过滤掉的 required check 永久 pending。
 
 on:
-  # 手动触发：重跑整套轻量门禁（重型脚手架矩阵不在这里，见 ci-scaffold.yml 的 workflow_dispatch）
   workflow_dispatch:
   pull_request:
-    branches: [master, release/*]
+    branches: [master, release/*, dependency-updates]
 
-# 同分支连续推送取消旧 run（本 workflow 独立取消，不干扰 ci-docker）
 concurrency:
-  group: ci-go-${{ github.ref }}
+  group: ci-pr-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
-  GO_VERSION: "1.26.6"
   GOLANGCI_LINT_VERSION: "v2.7.2"
 
 jobs:
+  # ── 唯一的 router：一次 diff 分析，产出四个输出（code / go / docker / shards）────────
   changes:
     name: Changes
     runs-on: ubuntu-latest
     outputs:
+      code: ${{ steps.filter.outputs.code }}
       go: ${{ steps.filter.outputs.go }}
+      docker: ${{ steps.filter.outputs.docker }}
+      shards: ${{ steps.plan.outputs.shards }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Detect Go and capability changes
+      - name: Detect what this change touches
         id: filter
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
-            echo "go=true" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
+            echo "code=true"   >> "$GITHUB_OUTPUT"
+            echo "go=true"     >> "$GITHUB_OUTPUT"
+            echo "docker=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if git diff --name-only "$BASE_SHA...$HEAD_SHA" | grep -Eq '^(cmd/|internal/|tools/|go\.mod$|go\.sum$|internal/capabilities/.*/migrations/|proto/|configs/|scripts/|Makefile$|deploy/|docs/openapi/|\.github/workflows/ci\.yml$)'; then
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          # 用 here-string 而不是 `printf | grep -q`：后者在大输入下 grep 提前退出会让 printf 收到
+          # SIGPIPE，配合 `set -o pipefail` 把整条管线判成 141 ⇒ if 为假 ⇒ 布尔全 false ⇒
+          # 所有内层 job 被跳过而聚合门禁报绿（fail-open，可由提交者构造大 changeset 触发）。
+          # code：任何非文档改动（沿用原 ci-commit.yml 的口径，决定提交消息门禁是否跑）
+          if grep -qvE '(^docs/|\.md$|^LICENSE$)' <<<"$changed"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+          # go：代码质量门禁关心的路径（沿用原 ci.yml 的口径）
+          if grep -Eq '^(cmd/|internal/|tools/|go\.mod$|go\.sum$|internal/capabilities/.*/migrations/|proto/|configs/|scripts/|Makefile$|deploy/|docs/openapi/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
             echo "go=true" >> "$GITHUB_OUTPUT"
           else
             echo "go=false" >> "$GITHUB_OUTPUT"
           fi
+          # docker：镜像可发布性关心的路径（沿用原 ci-docker.yml 的口径）
+          if grep -Eq '^(Dockerfile$|docker-compose\.yml$|deploy/|\.env\.example$|scripts/|Makefile$|cmd/|internal/|tools/|go\.mod$|go\.sum$|configs/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
+            echo "docker=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "docker=false" >> "$GITHUB_OUTPUT"
+          fi
+      # 分片清单由 router 产出：`shards-json` 只做常量派生，但脚本在子命令分发之前会无条件执行
+      # `go list -m` 取模块前缀，所以这一步依赖 runner 自带的 Go（可接受的隐含依赖：Changes 跑在
+      # ubuntu-latest 上实测成功；真坏了会以非零退出终止 router job，属 fail-closed）。
+      # 不能放在 Lint & Policy 里 —— `code` 口径排除 docs/，而 `go` 口径包含 docs/openapi/，
+      # 只改 docs/openapi/** 时 Lint 会被跳过、分片却仍要跑，届时输出为空会让矩阵解析失败。
+      # 放在 router 还让分片与 Lint 并行起跑。
+      - name: "🗂️ Emit the shard matrix"
+        id: plan
+        run: echo "shards=$(bash scripts/test_shards.sh shards-json)" >> "$GITHUB_OUTPUT"
 
+  # ── 代码域：静态与策略检查（原 Lint + Govulncheck + Race plan + 提交消息门禁）────
   lint:
-    name: Lint
+    name: Lint & Policy
     needs: changes
-    if: needs.changes.outputs.go == 'true'
+    # 用 code（非文档改动）而不是 go：原 ci-commit.yml 对 .golangci.yml / .github 等改动也要查提交消息
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
-          # CHANGELOG 门禁用 git diff origin/<base_ref>...HEAD 判定，需要基线分支历史
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v7
+      - uses: ./.github/actions/go-setup
         with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: "♻️ Restore the Go build cache"
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/gocache-vet
-          key: gocache-vet-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
-          restore-keys: |
-            gocache-vet-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
-            gocache-vet-${{ runner.os }}-
-
-      - name: "🛠️ Point GOCACHE at the rolling build cache"
-        # job 级 env 里拿不到 runner 上下文（actionlint: context "runner" is not allowed here），
-        # 所以在这一步写进 $GITHUB_ENV —— 它对其后的所有步骤生效
-        run: echo "GOCACHE=${{ runner.temp }}/gocache-vet" >> "$GITHUB_ENV"
+          flavor: lint
 
       - name: "🔍 gofmt check"
         run: |
@@ -96,9 +108,7 @@ jobs:
           echo "✅ All files properly formatted"
 
       - name: "🔬 go vet"
-        run: |
-          go vet ./...
-          echo "✅ go vet passed"
+        run: go vet ./...
 
       - name: "🧾 Structured log usage check"
         run: make check-log-usage
@@ -110,7 +120,11 @@ jobs:
           args: --timeout=5m
           install-mode: goinstall
 
-      - name: "📝 CHANGELOG check"
+      - name: "🛡️ govulncheck"
+        run: make govulncheck
+
+      # 需要基线分支历史，故本 job 用 fetch-depth: 0
+      - name: "📄 Release notes check"
         if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
         run: |
           if git diff --name-only origin/${{ github.base_ref }}...HEAD \
@@ -118,18 +132,127 @@ jobs:
             | grep -qv '^$'; then
             if ! git diff --name-only origin/${{ github.base_ref }}...HEAD \
               | grep -Eq '^CHANGELOG\.md$|^docs/releases/'; then
-              echo "❌ PR changes source files but CHANGELOG is not updated"
+              echo "❌ PR changes source files but the release notes are not updated"
               echo "👉 Please update docs/releases/<target version>.md"
               exit 1
             fi
           fi
-          echo "✅ CHANGELOG check passed"
+          echo "✅ Release notes check passed"
 
-  test:
-    name: Test
+      - name: "📝 Commit message policy"
+        if: github.event_name == 'pull_request'
+        run: |
+          if git fetch --no-tags origin "refs/pull/${{ github.event.pull_request.number }}/merge"; then
+            scripts/check_commit_messages.sh "origin/${{ github.event.pull_request.base.ref }}" "FETCH_HEAD"
+          elif git fetch --no-tags origin "refs/pull/${{ github.event.pull_request.number }}/head"; then
+            echo "PR merge ref unavailable (conflicts?); falling back to head ref"
+            scripts/check_commit_messages.sh "origin/${{ github.event.pull_request.base.ref }}" "FETCH_HEAD"
+          else
+            echo "cannot fetch PR refs; checking head sha only"
+            scripts/check_commit_messages.sh "" "${{ github.event.pull_request.head.sha }}"
+          fi
+
+  # ── 代码域：能力/形态/报告门禁（不需要 DB/Redis）────────────────────────────────
+  gates:
+    name: Capability Gates
     needs: changes
     if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/go-setup
+        with:
+          flavor: gates
+      - name: "🧩 Capability declarations match the code"
+        run: make check-capabilities
+      - name: "🏗️ Every profile builds and trims its closure"
+        run: make profiles-check
+      - name: "📊 The compose report matches the measurement"
+        run: make compose-report-check
+      # 覆盖 tools/composereport 的**全部**测试。该包的重型用例 TestProfileCompiledSurface 由
+      # composereport-* 分片在 -race 下按形态分片执行（见 scripts/test_shards.sh 的 composereport-*
+      # 分支注释），
+      # 但**其余 9 个用例不在任何分片里**（`tools` 分片显式排除该包，见同脚本的 shard_packages）——
+      # 合并前的 Test job 会跑它们，新设计若不加这一步就会静默丢掉它们，其中包括唯一的
+      # TestMinimalCompiledSurfaceIsMateriallySmaller（minimal ≤ 85% full / 路由 / 表 / 文件 / 行数）
+      # 与 TestRenderReportPinsTheCommittedShape。本步非 race、约 23s，与分片并行、不在关键路径。
+      - name: "🧪 Run the composereport package tests"
+        run: go test ./tools/composereport/... -count=1 -timeout 10m
+      # 从 Coverage & Docs 的尾部移来（见该 job 的注释）：两者都不依赖分片产物，
+      # 放这里与分片并行、不再占用关键路径尾部
+      - name: "📋 Check OpenAPI is current"
+        run: make swagger-check
+      - name: "📜 Check smoke scripts"
+        run: make smoke-check
+
+  # ── 代码域：性能回归（保持独立 job，不与门禁语义混合）──────────────────────────
+  bench:
+    name: Performance Regression
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/go-setup
+        with:
+          flavor: gates
+          # 只恢复不保存：`gates` 风味的唯一保存者是 Capability Gates job —— 同一 flavor 允许多个
+          # 恢复者、但只允许一个保存者，否则先结束的一方写出快照、另一方产物丢失
+          # （不变量见 action.yml 的 save 输入说明）
+          save: "false"
+      - name: "📈 Install benchstat"
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+      - name: "⏱️ Run benchmark"
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          scripts/bench_ci.sh --absolute
+
+  # ── 代码域：缓存预热（只编译不跑测试，把「完整」快照写进滚动缓存）────────────────
+  # 为什么需要它见 Task 12 的说明：分片共用一个滚动 key，而保存是「先到先得」⇒ 最先结束的
+  # 轻分片（caps-b，分片步骤仅 ~7s、不构建 tools/**）会抢到保存权，快照只含它构建过的目标，
+  # 于是每个新 commit 上只有 1/13 分片命中、其余全额重编译（实测 caps-b 7s→178s、core 88s→238s，
+  # PR 墙钟被抬到 6m51s）。本 job 把**全部**包与测试二进制编译一遍并作为该 flavor 的唯一保存者；
+  # 它与分片**并行**（不是串行前置）⇒ 本轮墙钟不变，收益从下一次同 go.mod 的 run 开始兑现。
+  warmup:
+    name: Cache Warmup
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/go-setup
+        with:
+          flavor: shards
+          save: "true"
+      - name: "🔥 Compile every test binary into the rolling cache"
+        # -run='^$' 不匹配任何用例 ⇒ 不执行测试函数；因此**不需要 DB/Redis services**。
+        # 注意（脆弱前提）：-run 只过滤 Test*/Benchmark*/Example* —— **TestMain 与包级 init()
+        # 仍会执行**。当前全仓唯一的 TestMain（tools/generator）与 3 处测试 init() 都只做内存/
+        # 文件系统操作、不连库，所以无 services 是安全的；一旦将来新增连库的 TestMain/init()，
+        # 这里会以「缺 DB 连接」的形态失败，且该 flavor 会**失去唯一保存者** ⇒ 13 个分片静默退回
+        # 全量冷编译（正是本 job 要修的病，且没有告警）。届时必须给本 job 加 services，或改用
+        # 不执行任何用户代码的编译方案。
+        #
+        # 标志锁步：下面这行 go test 的构建参数（-race / -covermode / -coverprofile）必须与
+        # `scripts/test_shards.sh` 分片实际调用的那套**保持一致** —— 任一处新增 -tags /
+        # -coverpkg / -gcflags 等会改变 instrumented 构建哈希的参数，都会让预热产物与分片需求
+        # 不匹配：预热仍会「成功」并保存，但分片全部退回冷编译。**CI 不会报任何错。**
+        run: go test -race -covermode=atomic -coverprofile=/tmp/warmup.out -run='^$' ./...
+
+  # ── 代码域：分片（竞态 + 覆盖率，一遍跑完）─────────────────────────────────────
+  shards:
+    name: Test & Race (${{ matrix.shard }})
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.changes.outputs.shards) }}
     services:
       mariadb:
         image: mariadb:12.1.2-noble
@@ -165,57 +288,115 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
-
     steps:
       - uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
+      - uses: ./.github/actions/go-setup
         with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: "♻️ Restore the Go build cache"
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/gocache-cover
-          key: gocache-cover-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
-          restore-keys: |
-            gocache-cover-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
-            gocache-cover-${{ runner.os }}-
-
-      - name: "🛠️ Point GOCACHE at the rolling build cache"
-        # job 级 env 里拿不到 runner 上下文（actionlint: context "runner" is not allowed here），
-        # 所以在这一步写进 $GITHUB_ENV —— 它对其后的所有步骤生效
-        run: echo "GOCACHE=${{ runner.temp }}/gocache-cover" >> "$GITHUB_ENV"
-
-      - name: "📦 Install coverage tools"
-        run: sudo apt-get update && sudo apt-get install -y bc
-
-      - name: "🧪 Run tests with coverage"
+          flavor: shards
+          # 只恢复不保存：`shards` flavor 的唯一保存者是上面的 Cache Warmup job
+          # （同一 flavor 多个保存者会写出不完整快照，见 action.yml 的 save 输入说明）
+          save: "false"
+      - name: "🏎️ Run shard (race + coverage)"
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: "3306"
           DB_USER: root
           DB_PASSWORD: root
           DB_NAME: jimu_test
-        # 重型脚手架矩阵（真实生成项目 + build/vet/test/run）已由 JIMU_HEAVY_MATRIX 门控并搬到
-        # 独立的 ci-scaffold.yml，本 job 只跑轻量断言
-        run: go test ./... -coverprofile=coverage.out -timeout 15m
+        run: bash scripts/test_shards.sh run ${{ matrix.shard }} --cover
+      - name: "📤 Upload the coverage profile"
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cover-${{ matrix.shard }}
+          path: cover-${{ matrix.shard }}.out
+          if-no-files-found: ignore
+          retention-days: 1
 
-      - name: "🗄️  Verify backup/restore round trip (mysql + postgres)"
+  # ── 代码域：分片跑完后的聚合校验（合并分片 profile + 覆盖率阈值）──────────────────
+  coverage:
+    name: Coverage & Docs
+    needs: [changes, shards]
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: cover-*
+          merge-multiple: true
+          path: cover
+      - uses: ./.github/actions/go-setup
+        with:
+          flavor: lint
+          cache: "false"
+      - name: "🧮 Merge the shard coverage profiles"
+        run: bash scripts/test_shards.sh merge-cover cover coverage.out
+      - name: "📊 Check coverage threshold"
+        run: make test-coverage-check
+      # swagger-check 与 smoke-check **不放这里**：它们不依赖分片产物，排在合并/阈值之后
+      # 会白占 15–20s 关键路径；已移入 Capability Gates job（该 job 只 1m17s、有富余）。
+
+  # ── 代码域：数据库集成（备份/恢复回环 + PostgreSQL 迁移冒烟）─────────────────────
+  db:
+    name: DB Integration
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mariadb:
+        image: mariadb:12.1.2-noble
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: jimu_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: jimu_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d jimu_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:8.4.0-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/go-setup
+        with:
+          flavor: shards
+          save: "false"
+      - name: "🗄️ Verify backup/restore round trip (mysql + postgres)"
         run: |
           # 客户端版本须 >= 服务端：CI 的 postgres service 是 17，Ubuntu 自带客户端为 16，
           # 因此统一走共享安装脚本（与备份镜像同一份逻辑）
           sudo PG_CLIENT_VERSION=17 bash scripts/install_db_clients.sh
-          # 直接调用 scripts/backup.sh 与 scripts/restore.sh（host 模式），
-          # 覆盖客户端探测、方言分支与恢复校验，而不是内联重写一套 dump 逻辑
           MODE=host DB_DRIVER=mysql \
             DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root DB_PASSWORD=root DB_NAME=jimu_test \
             ./scripts/test_backup_restore.sh
           MODE=host DB_DRIVER=postgres \
             DB_HOST=127.0.0.1 DB_PORT=5432 DB_USER=postgres DB_PASSWORD=postgres DB_NAME=jimu_test \
             ./scripts/test_backup_restore.sh
-
       - name: "🐘 Run postgres migration smoke"
         env:
           DB_DRIVER: postgres
@@ -226,101 +407,76 @@ jobs:
           DB_NAME: jimu_test
         run: go test ./internal/kernel/db/... -run TestMigrationIntegration -v
 
-      - name: "📊 Check coverage threshold"
-        run: |
-          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-          THRESHOLD=70
-          echo "📈 Total coverage: ${COVERAGE}%"
-          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
-            echo "❌ Coverage ${COVERAGE}% is below threshold ${THRESHOLD}%"
-            go tool cover -func=coverage.out
-            exit 1
-          fi
-          echo "✅ Coverage check passed (${COVERAGE}% >= ${THRESHOLD}%)"
-
-      - name: "📋 Check OpenAPI is current"
-        run: |
-          make swagger
-          git diff --exit-code docs/openapi
-
-      - name: "📜 Check smoke scripts"
-        run: |
-          bash -n scripts/test_runtime_security.sh
-          bash -n scripts/smoke_api_contract.sh
-          bash -n scripts/test_backup_restore.sh
-          bash -n scripts/race_shards.sh
-
-  # 能力/形态门禁（P2.8 收口）：把「声明与实际一致」「每个形态真能构建且闭包被裁剪」
-  # 「编译面报告不漂移」三道门禁放到 PR 路径上。三者都不需要 DB/Redis —— profiles-check 未设
-  # JIMU_PROFILES_SMOKE 时逐形态打印 SKIP 并成功退出，所以这里不挂 services。
-  # check-templates 不列在这里：它的用例 TestTemplatesDrift 由 ci-scaffold.yml 的重型矩阵覆盖。
-  gates:
-    name: Capability Gates
+  # ── 镜像域：compose 校验 + 构建（原 ci-docker.yml 的 compose-config 并入此处）────
+  docker:
+    name: Docker Build
     needs: changes
-    if: needs.changes.outputs.go == 'true'
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: "📐 Validate docker-compose.yml"
+        run: docker compose config --quiet
+      - name: "⬇️ Check secrets files exist"
+        run: |
+          for f in secrets/db_root_password.txt secrets/db_password.txt \
+                   secrets/jwt_secret.txt secrets/otel_auth_password.txt \
+                   secrets/zo_auth_token.txt; do
+            [ -f "$f" ] || echo "⚠ $f 缺失（运行 make secrets 生成）"
+          done
+      - name: "🐳 Build Docker image"
+        run: docker build -t jimu:${{ github.sha }} .
+      - name: "💾 Save image artifact"
+        run: docker save jimu:${{ github.sha }} -o jimu-image.tar
+      - name: "📤 Upload image artifact"
+        uses: actions/upload-artifact@v7
+        with:
+          name: docker-image
+          path: jimu-image.tar
+          retention-days: 1
+
+  security:
+    name: Security Scan
+    needs: [changes, docker]
+    if: needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
+      - name: "📥 Download image artifact"
+        uses: actions/download-artifact@v8
         with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: "♻️ Restore the Go build cache"
-        uses: actions/cache@v4
+          name: docker-image
+          path: .
+      - name: "📦 Load Docker image"
+        run: docker load -i jimu-image.tar
+      - name: "🔐 Trivy image scan"
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          path: ${{ runner.temp }}/gocache-gates
-          key: gocache-gates-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
-          restore-keys: |
-            gocache-gates-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
-            gocache-gates-${{ runner.os }}-
+          image-ref: jimu:${{ github.sha }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+      - name: "📋 Generate SBOM"
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: jimu:${{ github.sha }}
+          format: cyclonedx
+          output: jimu-sbom.json
+      - name: "📤 Upload SBOM artifact"
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom
+          path: jimu-sbom.json
 
-      - name: "🛠️ Point GOCACHE at the rolling build cache"
-        run: echo "GOCACHE=${{ runner.temp }}/gocache-gates" >> "$GITHUB_ENV"
-
-      - name: "🧩 Capability declarations match the code"
-        run: make check-capabilities
-
-      - name: "🏗️ Every profile builds and trims its closure"
-        run: make profiles-check
-
-      - name: "📊 The compose report matches the measurement"
-        run: make compose-report-check
-
-  # race-plan：分片清单的唯一来源是 scripts/race_shards.sh（见该文件头的实测归因），
-  # 这里把它转成矩阵，避免「workflow 里的分片列表」与「脚本里的分片规则」两处漂移。
-  race-plan:
-    name: Race plan
-    needs: changes
-    if: needs.changes.outputs.go == 'true'
+  smoke:
+    name: Image Smoke Test
+    needs: [changes, docker]
+    if: needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
-    outputs:
-      shards: ${{ steps.plan.outputs.shards }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: "🧭 Emit the race shard matrix"
-        id: plan
-        run: echo "shards=$(bash scripts/race_shards.sh shards-json)" >> "$GITHUB_OUTPUT"
-
-  # 分片并行：**每个包仍然全量跑 `-race`**，只是不再让重型包挤在同一个 4 vCPU runner 上互相
-  # 争抢。分片前把 `go test -race ./...` 放在一个 job 里时，端到端被争抢放大得远超各自隔离耗时
-  # （composereport 隔离 14.8s → 378.4s，25.5×；generator 238.8s → 729.8s，3.1×；
-  # internal/** 只放大 0.9–2.6×），Race job 因此从 P2.6 的 11m58s 涨到 18m21s。分片后总
-  # runner 分钟数反而下降 —— 被争抢烧掉的时间多于各分片重复支付的编译时间。
-  # 分片规则、generator 用例切分与「并集 == 全集」守卫都在 scripts/race_shards.sh。
-  race:
-    name: Race Detector (${{ matrix.shard }})
-    needs: [changes, race-plan]
-    if: needs.changes.outputs.go == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: ${{ fromJSON(needs.race-plan.outputs.shards) }}
+    timeout-minutes: 20
     services:
       mariadb:
         image: mariadb:12.1.2-noble
@@ -331,19 +487,6 @@ jobs:
           - 3306:3306
         options: >-
           --health-cmd="mariadb-admin ping --silent"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: jimu_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres -d jimu_test"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
@@ -358,71 +501,90 @@ jobs:
           --health-retries=5
     steps:
       - uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
+      - name: "📥 Download image artifact"
+        uses: actions/download-artifact@v8
         with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: "♻️ Restore the Go build cache"
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/gocache-race
-          key: gocache-race-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
-          restore-keys: |
-            gocache-race-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
-            gocache-race-${{ runner.os }}-
-
-      - name: "🛠️ Point GOCACHE at the rolling build cache"
-        # job 级 env 里拿不到 runner 上下文（actionlint: context "runner" is not allowed here），
-        # 所以在这一步写进 $GITHUB_ENV —— 它对其后的所有步骤生效
-        run: echo "GOCACHE=${{ runner.temp }}/gocache-race" >> "$GITHUB_ENV"
-
-      - name: "🏎️ Run race tests (${{ matrix.shard }})"
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: "3306"
-          DB_USER: root
-          DB_PASSWORD: root
-          DB_NAME: jimu_test
-        # 分片规则与「开跑前先证明分片并集 == 全集」的守卫都在脚本里；重型脚手架矩阵由
-        # ci-scaffold.yml 承担，不在本 workflow 的默认路径上
-        run: bash scripts/race_shards.sh run ${{ matrix.shard }}
-
-  bench:
-    name: Performance Regression
-    needs: changes
-    if: needs.changes.outputs.go == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: "📈 Install benchstat"
-        run: go install golang.org/x/perf/cmd/benchstat@latest
-
-      - name: "⏱️ Run benchmark"
+          name: docker-image
+          path: .
+      - name: "📦 Load Docker image"
+        run: docker load -i jimu-image.tar
+      - name: "🚀 Start container and verify health"
         run: |
-          export PATH="$(go env GOPATH)/bin:$PATH"
-          scripts/bench_ci.sh --absolute
+          docker run -d --name jimu-smoke \
+            --add-host=host.docker.internal:host-gateway \
+            -p 18080:8080 -p 19090:9090 \
+            -e APP_ENV=dev \
+            -e DB_HOST=host.docker.internal -e DB_PORT=3306 \
+            -e DB_USER=root -e DB_PASSWORD=root \
+            -e DB_NAME=jimu_test \
+            -e REDIS_ADDR=host.docker.internal:6379 \
+            -e MANAGEMENT_HOST=0.0.0.0 \
+            -e JWT_SECRET=smoke-test-secret \
+            jimu:${{ github.sha }}
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:19090/livez >/dev/null 2>&1; then
+              echo "✅ livez OK"
+              break
+            fi
+            sleep 2
+          done
+          if ! curl -sf http://127.0.0.1:19090/livez >/dev/null; then
+            echo "❌ livez not reachable, container logs:"
+            docker logs jimu-smoke
+            exit 1
+          fi
+          curl -sf http://127.0.0.1:19090/livez
+          curl -sf http://127.0.0.1:19090/readyz
+          echo "✅ Image smoke test passed"
 
-  govulncheck:
-    name: Govulncheck
-    needs: changes
-    if: needs.changes.outputs.go == 'true'
+  # ── 聚合门禁（required checks 只认这两个名字，分片数怎么变都不用改 ruleset）────────
+  pr-gate:
+    name: PR Gate
+    needs: [changes, lint, gates, bench, warmup, shards, coverage, db]
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Validate the PR gate
+        env:
+          ROUTER: ${{ needs.changes.result }}
+          CODE: ${{ needs.changes.outputs.code }}
+          GO: ${{ needs.changes.outputs.go }}
+          LINT: ${{ needs.lint.result }}
+          GATES: ${{ needs.gates.result }}
+          BENCH: ${{ needs.bench.result }}
+          WARMUP: ${{ needs.warmup.result }}
+          SHARDS: ${{ needs.shards.result }}
+          COVERAGE: ${{ needs.coverage.result }}
+          DB: ${{ needs.db.result }}
+        # 判定逻辑在 scripts/check_ci_gate.sh（两个聚合门禁共用同一份实现，避免逻辑块重复；
+        # 该脚本的判定表可在本地用位置参数传入模拟结论逐条单测，见本任务 Step 1，不需要跑 CI）
+        run: |
+          bash scripts/check_ci_gate.sh "PR Gate" "$ROUTER" \
+            "Lint & Policy=$LINT=$CODE" \
+            "Capability Gates=$GATES=$GO" \
+            "Performance Regression=$BENCH=$GO" \
+            "Cache Warmup=$WARMUP=$GO" \
+            "Test & Race=$SHARDS=$GO" \
+            "Coverage & Docs=$COVERAGE=$GO" \
+            "DB Integration=$DB=$GO"
 
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: "🛡️ govulncheck"
-        # 统一走 make（豁免清单与本地一致，见 scripts/govulncheck.sh）
-        run: make govulncheck
+  image-gate:
+    name: Image Gate
+    needs: [changes, docker, security, smoke]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate the image gate
+        env:
+          ROUTER: ${{ needs.changes.result }}
+          DOCKER_FLAG: ${{ needs.changes.outputs.docker }}
+          DOCKER: ${{ needs.docker.result }}
+          SECURITY: ${{ needs.security.result }}
+          SMOKE: ${{ needs.smoke.result }}
+        run: |
+          bash scripts/check_ci_gate.sh "Image Gate" "$ROUTER" \
+            "Docker Build=$DOCKER=$DOCKER_FLAG" \
+            "Security Scan=$SECURITY=$DOCKER_FLAG" \
+            "Image Smoke Test=$SMOKE=$DOCKER_FLAG"

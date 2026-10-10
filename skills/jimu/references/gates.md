@@ -34,7 +34,7 @@
 
 - `make check-templates`：用生成器在临时目录生成最小项目并真构建 + 跑生成项目自己的 `check-capabilities`
 - 所有「真实生成项目 + `go build/vet/test/run`」的用例由 **`JIMU_HEAVY_MATRIX=1`** 门控（只认字面量 `1`；`-short`/未设都跳过）；本地入口 `make test-scaffold-matrix`
-- CI 侧在独立 workflow `.github/workflows/ci-scaffold.yml` 的 `Scaffold Matrix` job，**默认不在 PR 上跑**：只在 `push release/**`、tag、`workflow_dispatch`、PR 打 `heavy-ci` 标签（只认 `labeled` 事件）时运行
+- CI 侧在 `.github/workflows/ci-scaffold.yml` 的 `Scaffold Gate` job，**默认不在普通 PR 上跑**：只在 `release/*` → `master` 的发布候选 PR、`workflow_dispatch` 手动触发与每周一定时运行
 
 ## 聚合目标成员
 

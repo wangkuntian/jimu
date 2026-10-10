@@ -148,7 +148,7 @@ func fail(err error) {
 //
 // 形态子集是给 CI 的 race 分片用的：这条用例在 `-race` 下的进程内度量（每个形态一次
 // `packages.Load` 全依赖图 + 全闭包行数统计）在 4 vCPU runner 上要几分钟，而它只是 tools 分片里的
-// 一个包 —— 按形态切成多片后每片只度量自己那部分（见 scripts/race_shards.sh；跨形态关系仍由
+// 一个包 —— 按形态切成多片后每片只度量自己那部分（见 scripts/test_shards.sh；跨形态关系仍由
 // 未设子集时的完整度量断言）。
 //
 // 二进制并行构建（互不共享状态），随后逐形态顺序探测：ProbeAssembly 会临时切换

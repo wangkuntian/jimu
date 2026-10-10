@@ -1185,7 +1185,7 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 | `make compose-report` | 生成形态编译面报告 `docs/profiles/compose-report.md`（二进制/路由/迁移/表/本仓闭包代码量与文件数/重型依赖列；不连库、不启动监听） |
 | `make compose-report-check` | 报告漂移门禁：重新实测并比对入库报告的**平台无关部分**（路由/迁移/表/本仓闭包文件数与代码行/重型依赖/直接依赖数）；二进制大小列**平台相关**（darwin 与 linux 实测值不同），不参与逐字节比对、只作归档打印到日志（相对关系由 `tools/composereport` 的单测在度量所在机器上断言）。已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job（P2.8 收口） |
 | `make swagger` | 生成 API 文档（`docs/openapi` 归 `apidocs` 能力：当前形态未编入 apidocs 时打印 `SKIP` 并成功退出；`PROFILE` 非法则失败） |
-| `make swagger-check` | 校验 OpenAPI 文档为最新（与 CI Test job 一致；同样按形态跳过，`release.yml` 使用它） |
+| `make swagger-check` | 校验 OpenAPI 文档为最新（CI 的 `Capability Gates` job 复用本目标；同样按形态跳过） |
 | `make cli` | 编译 CLI |
 | `make docker-build` | 构建 Docker 镜像（`PROFILE=<name>` 选形态，经 `--build-arg PROFILE=<name>`，默认 full） |
 | `make docker-run` | 直接运行 Docker 容器 |
