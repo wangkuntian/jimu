@@ -94,9 +94,14 @@ updates:
       github-actions:
         patterns:
           - "*"
+        # 与家族组不同：这里的组只收 minor/patch，major 单独开 PR 供人工评估
+        update-types:
+          - "minor"
+          - "patch"
 
-  # Docker 镜像：同样用 ["*"]，避免写死镜像名后新增镜像漏管（compose 里的
-  # otel/opentelemetry-collector-contrib、public.ecr.aws/zinclabs/openobserve 原先就不在列）
+  # Dockerfile 镜像：用 ["*"] 避免写死镜像名后新增镜像漏管。
+  # 注意：`docker` 生态**只读** Dockerfile/Containerfile（按文件名匹配），**不读**
+  # docker-compose.yml —— compose 内的镜像由下面独立的 `docker-compose` 生态覆盖。
   - package-ecosystem: "docker"
     directory: "/"
     target-branch: "dependency-updates"
@@ -116,3 +121,33 @@ updates:
       docker-images:
         patterns:
           - "*"
+        # 与家族组不同：这里的组只收 minor/patch，major 单独开 PR 供人工评估
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Docker Compose 镜像（docker-compose.yml）：`docker` 生态不覆盖它，必须独立声明。
+  # 原先写死的 mariadb/redis/adminer 三个 pattern 之所以从未匹配，正是因为这些镜像只出现在
+  # compose 与 deploy/backup/Dockerfile 里。
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    target-branch: "dependency-updates"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:30"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      docker-compose-images:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
