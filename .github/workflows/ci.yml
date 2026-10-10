@@ -196,6 +196,28 @@ jobs:
           export PATH="$(go env GOPATH)/bin:$PATH"
           scripts/bench_ci.sh --absolute
 
+  # ── 代码域：缓存预热（只编译不跑测试，把「完整」快照写进滚动缓存）────────────────
+  # 为什么需要它见 Task 12 的说明：分片共用一个滚动 key，而保存是「先到先得」⇒ 最先结束的
+  # 轻分片（caps-b，分片步骤仅 ~7s、不构建 tools/**）会抢到保存权，快照只含它构建过的目标，
+  # 于是每个新 commit 上只有 1/13 分片命中、其余全额重编译（实测 caps-b 7s→178s、core 88s→238s，
+  # PR 墙钟被抬到 6m51s）。本 job 把**全部**包与测试二进制编译一遍并作为该 flavor 的唯一保存者；
+  # 它与分片**并行**（不是串行前置）⇒ 本轮墙钟不变，收益从下一次同 go.mod 的 run 开始兑现。
+  warmup:
+    name: Cache Warmup
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/go-setup
+        with:
+          flavor: shards
+          save: "true"
+      - name: "🔥 Compile every test binary into the rolling cache"
+        # -run='^$' 不匹配任何用例 ⇒ 只编译不执行；因此**不需要 DB/Redis services**
+        run: go test -race -covermode=atomic -coverprofile=/tmp/warmup.out -run='^$' ./...
+
   # ── 代码域：分片（竞态 + 覆盖率，一遍跑完）─────────────────────────────────────
   shards:
     name: Test & Race (${{ matrix.shard }})
@@ -247,6 +269,7 @@ jobs:
       - uses: ./.github/actions/go-setup
         with:
           flavor: shards
+          save: "false"
       - name: "🏎️ Run shard (race + coverage)"
         env:
           DB_HOST: 127.0.0.1
@@ -281,6 +304,7 @@ jobs:
       - uses: ./.github/actions/go-setup
         with:
           flavor: lint
+          cache: "false"
       - name: "🧮 Merge the shard coverage profiles"
         run: bash scripts/test_shards.sh merge-cover cover coverage.out
       - name: "📊 Check coverage threshold"
@@ -335,6 +359,7 @@ jobs:
       - uses: ./.github/actions/go-setup
         with:
           flavor: shards
+          save: "false"
       - name: "🗄️ Verify backup/restore round trip (mysql + postgres)"
         run: |
           # 客户端版本须 >= 服务端：CI 的 postgres service 是 17，Ubuntu 自带客户端为 16，
@@ -489,7 +514,7 @@ jobs:
   # ── 聚合门禁（required checks 只认这两个名字，分片数怎么变都不用改 ruleset）────────
   pr-gate:
     name: PR Gate
-    needs: [changes, lint, gates, bench, shards, coverage, db]
+    needs: [changes, lint, gates, bench, warmup, shards, coverage, db]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -502,6 +527,7 @@ jobs:
           LINT: ${{ needs.lint.result }}
           GATES: ${{ needs.gates.result }}
           BENCH: ${{ needs.bench.result }}
+          WARMUP: ${{ needs.warmup.result }}
           SHARDS: ${{ needs.shards.result }}
           COVERAGE: ${{ needs.coverage.result }}
           DB: ${{ needs.db.result }}
@@ -512,6 +538,7 @@ jobs:
             "Lint & Policy=$LINT=$CODE" \
             "Capability Gates=$GATES=$GO" \
             "Performance Regression=$BENCH=$GO" \
+            "Cache Warmup=$WARMUP=$GO" \
             "Test & Race=$SHARDS=$GO" \
             "Coverage & Docs=$COVERAGE=$GO" \
             "DB Integration=$DB=$GO"

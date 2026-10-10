@@ -17,6 +17,10 @@ inputs:
     description: 缓存目录；留空则用 $RUNNER_TEMP/gocache-<flavor>
     required: false
     default: ""
+  save:
+    description: 是否保存缓存；false 时只恢复（避免轻分片抢先写出不完整的快照）
+    required: false
+    default: "true"
 
 runs:
   using: composite
@@ -37,12 +41,24 @@ runs:
         echo "path=$path" >> "$GITHUB_OUTPUT"
 
     - name: "♻️ Restore the rolling build cache"
-      if: inputs.cache == 'true'
+      if: inputs.cache == 'true' && inputs.save == 'true'
       uses: actions/cache@v4
       with:
         path: ${{ steps.resolve.outputs.path }}
         # 主 key 带 sha：Actions 缓存条目按 key 不可变、命中即「只恢复不重存」，
         # 因此主 key 只在重跑同一 commit 时命中，其余靠 restore-keys 拿最近快照、跑完存新条目
+        key: gocache-${{ inputs.flavor }}-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
+        restore-keys: |
+          gocache-${{ inputs.flavor }}-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
+          gocache-${{ inputs.flavor }}-${{ runner.os }}-
+
+    - name: "♻️ Restore the rolling build cache (restore-only)"
+      if: inputs.cache == 'true' && inputs.save != 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.resolve.outputs.path }}
+        # 与保存步骤共用同一组 key/restore-keys（两者的 if 互斥、不会同跑）：只恢复不写回，
+        # 避免抢先保存出不完整快照（保存权归该 flavor 的唯一保存者，如 ci.yml 的 warmup job）
         key: gocache-${{ inputs.flavor }}-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
         restore-keys: |
           gocache-${{ inputs.flavor }}-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
