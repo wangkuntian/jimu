@@ -170,6 +170,15 @@ jobs:
         run: make profiles-check
       - name: "📊 The compose report matches the measurement"
         run: make compose-report-check
+      # 覆盖 tools/composereport 的**全部**测试。该包的重型用例 TestProfileCompiledSurface 由
+      # composereport-* 分片在 -race 下按形态分片执行（见 scripts/test_shards.sh 的 composereport-*
+      # 分支注释），
+      # 但**其余 9 个用例不在任何分片里**（`tools` 分片显式排除该包，见同脚本的 shard_packages）——
+      # 合并前的 Test job 会跑它们，新设计若不加这一步就会静默丢掉它们，其中包括唯一的
+      # TestMinimalCompiledSurfaceIsMateriallySmaller（minimal ≤ 85% full / 路由 / 表 / 文件 / 行数）
+      # 与 TestRenderReportPinsTheCommittedShape。本步非 race、约 23s，与分片并行、不在关键路径。
+      - name: "🧪 Run the composereport package tests"
+        run: go test ./tools/composereport/... -count=1 -timeout 10m
       # 从 Coverage & Docs 的尾部移来（见该 job 的注释）：两者都不依赖分片产物，
       # 放这里与分片并行、不再占用关键路径尾部
       - name: "📋 Check OpenAPI is current"
