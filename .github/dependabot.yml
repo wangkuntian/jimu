@@ -144,6 +144,10 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    # compose 里的本应用镜像写作 ${JIMU_IMAGE:-jimu:latest}；docker-compose 生态会把 `:-` 后面的
+    # 默认值当作镜像名解析 ⇒ 会去查 Docker Hub 上的 `jimu` 并产生噪声/失败检查。忽略它。
+    ignore:
+      - dependency-name: "jimu"
     groups:
       docker-compose-images:
         patterns:
