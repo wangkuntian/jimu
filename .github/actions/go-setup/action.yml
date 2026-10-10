@@ -1,0 +1,54 @@
+name: Go setup with rolling build cache
+description: 安装 Go、恢复滚动 GOCACHE、并把它导出给后续步骤（CI 各 Go job 的统一入口；Go 版本在此定义一次）
+
+inputs:
+  flavor:
+    description: 缓存风味（lint / shards / gates），不同风味不共用同一份快照
+    required: true
+  go-version:
+    description: Go 版本（本仓唯一事实源）
+    required: false
+    default: "1.26.6"
+  cache:
+    description: 是否启用滚动构建缓存
+    required: false
+    default: "true"
+  cache-path:
+    description: 缓存目录；留空则用 $RUNNER_TEMP/gocache-<flavor>
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: ${{ inputs.go-version }}
+
+    - name: Resolve the cache path
+      id: resolve
+      shell: bash
+      # 不用 ${{ runner.temp }}，改用 runner 上一定存在的 $RUNNER_TEMP，
+      # 这样 composite action 内部无需调用方传入路径
+      run: |
+        path="${{ inputs.cache-path }}"
+        [ -n "$path" ] || path="$RUNNER_TEMP/gocache-${{ inputs.flavor }}"
+        echo "path=$path" >> "$GITHUB_OUTPUT"
+
+    - name: "♻️ Restore the rolling build cache"
+      if: inputs.cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.resolve.outputs.path }}
+        # 主 key 带 sha：Actions 缓存条目按 key 不可变、命中即「只恢复不重存」，
+        # 因此主 key 只在重跑同一 commit 时命中，其余靠 restore-keys 拿最近快照、跑完存新条目
+        key: gocache-${{ inputs.flavor }}-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-${{ github.sha }}
+        restore-keys: |
+          gocache-${{ inputs.flavor }}-${{ runner.os }}-${{ hashFiles('go.mod','go.sum') }}-
+          gocache-${{ inputs.flavor }}-${{ runner.os }}-
+
+    - name: "🛠️ Point GOCACHE at the rolling build cache"
+      if: inputs.cache == 'true'
+      shell: bash
+      run: echo "GOCACHE=${{ steps.resolve.outputs.path }}" >> "$GITHUB_ENV"
