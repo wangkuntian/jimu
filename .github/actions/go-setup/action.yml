@@ -18,7 +18,12 @@ inputs:
     required: false
     default: ""
   save:
-    description: 是否保存缓存；false 时只恢复（避免轻分片抢先写出不完整的快照）
+    description: >-
+      是否保存缓存。**不变量：同一个 flavor 只允许一个 save=true 的调用方**，其余必须传 "false"
+      （只恢复）。原因：缓存 key 不可变、保存先到先得 —— 若同一 flavor 有多个保存者，最先结束的
+      那个（往往是构建量最小的 job）会写出不完整快照，之后所有 job 只能命中这份残缺快照 ⇒ 每个
+      新 commit 上大部分 job 全额重编译（实测分片步骤 7s → 178s、PR 墙钟被抬到 6m51s）。
+      破坏该不变量的后果是**静默的性能回归，CI 不会报错**。
     required: false
     default: "true"
 

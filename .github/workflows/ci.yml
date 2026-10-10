@@ -215,7 +215,18 @@ jobs:
           flavor: shards
           save: "true"
       - name: "🔥 Compile every test binary into the rolling cache"
-        # -run='^$' 不匹配任何用例 ⇒ 只编译不执行；因此**不需要 DB/Redis services**
+        # -run='^$' 不匹配任何用例 ⇒ 不执行测试函数；因此**不需要 DB/Redis services**。
+        # 注意（脆弱前提）：-run 只过滤 Test*/Benchmark*/Example* —— **TestMain 与包级 init()
+        # 仍会执行**。当前全仓唯一的 TestMain（tools/generator）与 3 处测试 init() 都只做内存/
+        # 文件系统操作、不连库，所以无 services 是安全的；一旦将来新增连库的 TestMain/init()，
+        # 这里会以「缺 DB 连接」的形态失败，且该 flavor 会**失去唯一保存者** ⇒ 13 个分片静默退回
+        # 全量冷编译（正是本 job 要修的病，且没有告警）。届时必须给本 job 加 services，或改用
+        # 不执行任何用户代码的编译方案。
+        #
+        # 标志锁步：下面这行 go test 的构建参数（-race / -covermode / -coverprofile）必须与
+        # `scripts/test_shards.sh` 分片实际调用的那套**保持一致** —— 任一处新增 -tags /
+        # -coverpkg / -gcflags 等会改变 instrumented 构建哈希的参数，都会让预热产物与分片需求
+        # 不匹配：预热仍会「成功」并保存，但分片全部退回冷编译。**CI 不会报任何错。**
         run: go test -race -covermode=atomic -coverprofile=/tmp/warmup.out -run='^$' ./...
 
   # ── 代码域：分片（竞态 + 覆盖率，一遍跑完）─────────────────────────────────────
@@ -269,6 +280,8 @@ jobs:
       - uses: ./.github/actions/go-setup
         with:
           flavor: shards
+          # 只恢复不保存：`shards` flavor 的唯一保存者是上面的 Cache Warmup job
+          # （同一 flavor 多个保存者会写出不完整快照，见 action.yml 的 save 输入说明）
           save: "false"
       - name: "🏎️ Run shard (race + coverage)"
         env:
