@@ -296,7 +296,6 @@ check-log-usage:
 ##                      （可用集目录存在、核心零驱动、形态选中集==import 闭包、驱动归属）；
 ##                      已接入 make ci/release-check 与 CI 的 Capability Gates job（P2.8 收口）。
 check-capabilities:
-	@exit 1
 	@go run ./tools/checkcapabilities
 
 ## check-templates: 模板漂移门禁 —— 用生成器在临时目录生成最小项目并构建 + 跑生成项目的
