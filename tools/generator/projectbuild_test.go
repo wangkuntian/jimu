@@ -38,14 +38,14 @@ func newProjectForTest(t *testing.T, opts NewOptions) (*Result, error) {
 }
 
 // heavyMatrixEnv 门控「真实生成 + 构建/测试」的重型矩阵：未设置时默认路径只跑轻量的生成/渲染/文件断言，
-// CI 的 `Scaffold Matrix` job 设 JIMU_HEAVY_MATRIX=1 跑满（见 requireHeavyMatrix）。
+// CI 的 `Scaffold Gate` job 设 JIMU_HEAVY_MATRIX=1 跑满（见 requireHeavyMatrix）。
 const heavyMatrixEnv = "JIMU_HEAVY_MATRIX"
 
 // scaffoldShardEnv 只对两条选区网生效；本地未设置时仍执行全部选区。
 const scaffoldShardEnv = "JIMU_SCAFFOLD_SHARD"
 
 // testGoCacheEnv 把测试用的 GOCACHE 指到一个**可跨运行复用**的目录（见 newTestGoCache）；
-// CI 的 Scaffold Matrix job 靠它让冷缓存只在首次付出代价 —— 前提是生成项目的构建都带 -trimpath
+// CI 的 Scaffold Gate job 靠它让冷缓存只在首次付出代价 —— 前提是生成项目的构建都带 -trimpath
 // （见 trimpathGoflags）：否则路径相关条目会无界增长，缓存既不收敛也换不来时间。
 const testGoCacheEnv = "JIMU_TEST_GOCACHE"
 
@@ -53,7 +53,7 @@ const testGoCacheEnv = "JIMU_TEST_GOCACHE"
 // 取值 = CI runner 的 vCPU 数（ubuntu-latest 标准 runner 为 4 核）。
 //
 // 定死在 2 会把 4 核用掉一半：历史全量选区构建网的子用例耗时之和约 1088s，`sem=2` 下墙钟约 560s，
-// 而这段墙钟占了整个 Scaffold Matrix job（861s）的 65%。并发链接/编译对 CPU、内存与磁盘压力都大
+// 而这段墙钟占了整个 Scaffold Gate job（861s）的 65%。并发链接/编译对 CPU、内存与磁盘压力都大
 // （历史事故：共享构建缓存涨到 25G 把磁盘写满，故构建测试一律用 newTestGoCache 的专用缓存），
 // 所以这个数是**显式的上限**而不是无限并发；如果重型 job 出现内存/磁盘压力，先降它。
 const heavyBuildConcurrency = 4
@@ -97,13 +97,13 @@ func requireHeavyMatrix(t *testing.T) {
 		t.Skip("重型脚手架矩阵在 -short 下跳过")
 	}
 	if os.Getenv(heavyMatrixEnv) != "1" {
-		t.Skip("真实生成 + 构建/测试矩阵需要 JIMU_HEAVY_MATRIX=1（CI 的 Scaffold Matrix job）")
+		t.Skip("真实生成 + 构建/测试矩阵需要 JIMU_HEAVY_MATRIX=1（CI 的 Scaffold Gate job）")
 	}
 }
 
 // newTestGoCache 返回本次构建测试使用的 GOCACHE：
 //
-//	JIMU_TEST_GOCACHE 非空 → 原样用它（**不删除**）：CI 的 Scaffold Matrix job 把它指向 actions/cache
+//	JIMU_TEST_GOCACHE 非空 → 原样用它（**不删除**）：CI 的 Scaffold Gate job 把它指向 actions/cache
 //	                         的目录，跨运行复用构建产物；
 //	否则                  → <t.TempDir()>/gocache（随测试删除），避免往共享缓存堆链接产物
 //	                         （曾涨到 25G 写满磁盘并写坏默认缓存）。

@@ -39,6 +39,9 @@ ENV ?= dev
 # 仅在 golangci-lint 完全缺失时才退化为 go vet（不具备版本一致性）
 LINT_VERSION ?= v2.7.2
 
+# govulncheck 版本：CI 的 `Lint & Policy` 走 `make govulncheck`，故此处是唯一事实源
+GOVULNCHECK_VERSION ?= v1.8.0
+
 # 根据 APP_ENV 自动生成 --profile 参数：dev 环境启动 adminer
 COMPOSE_DEV_PROFILE = $(if $(filter dev,$(APP_ENV)),dev)
 # observability（OpenObserve 监控栈）默认开启（与 docker-compose 的 ${OTEL_ENABLED:-true} 一致）；
@@ -73,7 +76,7 @@ help:
 	@echo "  make check-templates      模板漂移门禁：用生成器生成最小项目并真构建 + 跑生成项目的 check-capabilities"
 	@echo "  make check-skills         校验 skills/** 的 frontmatter 与 reference 引用完整性"
 	@echo "  make skills-install       把 skills/<name>/ 软链到 .claude/skills/ 与 .agents/skills/"
-	@echo "  make test-scaffold-matrix 重型脚手架矩阵：真实生成项目 + build/vet/test/run（=CI 的 Scaffold Matrix job）"
+	@echo "  make test-scaffold-matrix 重型脚手架矩阵：真实生成项目 + build/vet/test/run（=CI 的 Scaffold Gate job）"
 	@echo "  make profiles-check       构建 5 个形态（overlay 叠加 cmd/server）+ golden 依赖闭包门禁"
 	@echo "                            （JIMU_PROFILES_SMOKE=1 时额外启动并检查 /readyz）"
 	@echo "  make compose-report       生成各形态（overlay 叠加 cmd/server）的编译面报告 docs/profiles/compose-report.md"
@@ -304,11 +307,11 @@ check-capabilities:
 ##                   依赖，模块缓存在 CI 上预热）。用例本身被 JIMU_HEAVY_MATRIX 门控，故这里
 ##                   显式置 1（不置会静默 SKIP）。它不必单独接入聚合目标：`make ci`/`release-check`
 ##                   里的 test-scaffold-matrix 会跑到同一条用例（TestTemplatesDrift），CI 侧由
-##                   ci-scaffold.yml 的 Scaffold Matrix job 承担。
+##                   ci-scaffold.yml 的 Scaffold Gate job 承担。
 check-templates:
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -run TestTemplatesDrift -count=1 -timeout 30m
 
-## test-scaffold-matrix: 重型脚手架矩阵（CI 的 Scaffold Matrix job 就是这条）：JIMU_HEAVY_MATRIX=1
+## test-scaffold-matrix: 重型脚手架矩阵（CI 的 Scaffold Gate job 就是这条）：JIMU_HEAVY_MATRIX=1
 ##                       下的真实生成 + go build/vet/test/run；耗时数分钟起（本机冷 ~8 分钟，
 ##                       CI 2 核冷跑预计 30+ 分钟，-timeout 60m 覆盖首跑），不进默认 `make test`。
 ##                       JIMU_TEST_GOCACHE=<dir> 可指定跨运行复用的 GOCACHE（CI 用 actions/cache）。
@@ -395,15 +398,16 @@ bench-ci:
 loadtest:
 	@./scripts/loadtest.sh
 
-## govulncheck: 依赖漏洞扫描（go run 免安装；豁免清单见 scripts/govulncheck.sh）
+## govulncheck: 依赖漏洞扫描（go run 免安装；版本 pin 在 GOVULNCHECK_VERSION）
+##              对**可达**漏洞零容忍；上游尚无修复版本时的处置政策见 docs/SECURITY.md
 govulncheck:
-	@bash scripts/govulncheck.sh
+	@go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
-## test-cover: 运行测试并生成覆盖率（与 CI Test job 一致）
+## test-cover: 运行测试并生成覆盖率（CI 侧由分片 profile 合并后调用 make test-coverage-check）
 test-cover:
 	go test ./... -coverprofile=coverage.out
 
-## test-coverage-check: 校验覆盖率阈值（默认 70%，与 CI Test job 一致）
+## test-coverage-check: 校验覆盖率阈值（默认 70%；CI 的 Coverage & Docs job 复用本目标）
 test-coverage-check:
 	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
 	THRESHOLD=70; \
@@ -414,11 +418,11 @@ test-coverage-check:
 	fi; \
 	echo "✅ Coverage check passed ($${COVERAGE}% >= $${THRESHOLD}%)"
 
-## test-race: 竞争检测测试（与 CI Test job 一致）
+## test-race: 竞争检测测试（CI 侧由 scripts/test_shards.sh 分片跑 `-race -covermode=atomic`）
 test-race:
 	go test -race ./...
 
-## swagger-check: 校验 OpenAPI 文档为最新（与 CI Test job 一致；当前形态未编入 apidocs 时跳过）
+## swagger-check: 校验 OpenAPI 文档为最新（CI 的 Capability Gates job 复用本目标；当前形态未编入 apidocs 时跳过）
 swagger-check:
 	@assets=$$(go run ./tools/profileassets "$(PROFILE)") || exit 1; \
 	printf '%s\n' "$$assets" | grep -qx 'docs/openapi' || { echo "SKIP swagger-check：形态 $(PROFILE) 未编入 apidocs"; exit 0; }; \
@@ -427,11 +431,13 @@ swagger-check:
 	git diff --exit-code docs/openapi || { echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; }; \
 	echo "✅ OpenAPI 文档为最新"
 
-## smoke-check: 校验 smoke 脚本语法（与 CI Test job 一致）
+## smoke-check: bash -n 校验 9 个脚本的语法（含分片脚本 scripts/test_shards.sh 与聚合门禁
+##              scripts/check_ci_gate.sh）；CI 由 Capability Gates job 调用。
 smoke-check:
+	@bash -n scripts/test_shards.sh
+	@bash -n scripts/check_ci_gate.sh
 	@bash -n scripts/test_runtime_security.sh
 	@bash -n scripts/smoke_api_contract.sh
-	@bash -n scripts/govulncheck.sh
 	@bash -n scripts/install_db_clients.sh
 	@bash -n scripts/db_common.sh
 	@bash -n scripts/backup.sh
@@ -445,12 +451,12 @@ compose-check:
 	@./scripts/smoke_api_contract.sh
 
 ## ci: 本地 CI 检查（无外部依赖部分，完整 CI 见 .github/workflows/ci.yml）；
-##     末尾含重型脚手架矩阵（test-scaffold-matrix，耗时数分钟起），与 CI 的 Scaffold Matrix job 对齐
+##     末尾含重型脚手架矩阵（test-scaffold-matrix，耗时数分钟起），与 CI 的 Scaffold Gate job 对齐
 ci: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck test-scaffold-matrix
 	@echo "✅ All local CI checks passed"
 
 ## release-check: 本地发布前检查（Go 门禁 + govulncheck + 隔离 Compose/API smoke + 重型脚手架矩阵）；
-##                tag workflow 依赖 release/* → master PR 的 Scaffold Matrix required check，不重复运行该矩阵
+##                tag workflow 依赖 release/* → master PR 的 Scaffold Gate required check，不重复运行该矩阵
 release-check: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check test govulncheck compose-check test-scaffold-matrix
 	@echo "All checks passed"
 
