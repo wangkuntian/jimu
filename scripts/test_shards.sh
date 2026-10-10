@@ -61,14 +61,15 @@ GENERATOR_IMPORT="$MODULE/tools/generator"
 # generator 分片数。改这里必须同时确认 .github/workflows/ci.yml 的 race 矩阵来自
 # `shards-json`（是自动派生的，无需手改）—— 分片名会自动变成 generator-1…generator-N。
 # 依据：实测 composereport 两片各 4m25s/3m46s、generator 三片合计约 6m30s 工作量。
-GENERATOR_SHARDS=4
+GENERATOR_SHARDS=5
 
 # 定向分片：下标 0 是 generator-1，依此类推；空串表示该片不额外定向。
 # 只影响均衡度，不影响正确性（守卫保证用例不丢、不重）。
 GENERATOR_PINS=(
-  ""
   "TestCheckProfilesGoldenMatchesTheGeneratedClosure"
   "TestReportSucceedsForEverySelection"
+  ""
+  ""
   ""
 )
 
@@ -79,7 +80,7 @@ SHARD_TEST_TIMEOUT=15m
 # packages.Load + 全闭包行数统计，整包实测 257s（隔离后依然如此），是 tools 分片变成长杆的唯一
 # 原因。切成 COMPOSEREPORT_SHARDS 片后每片只度量自己那部分形态；**每个形态仍被 `-race` 跑过**。
 # 片数不取「一形态一片」是为了不顶到并发上限（免费公共仓 20 个并发 job）。
-COMPOSEREPORT_SHARDS=4
+COMPOSEREPORT_SHARDS=5
 COMPOSEREPORT_PKG="./tools/composereport"
 COMPOSEREPORT_IMPORT="$MODULE/tools/composereport"
 # 与 tools/composereport/main_test.go 的 profileShardEnv 同名，它是这条切片的开关
