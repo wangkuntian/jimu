@@ -73,7 +73,8 @@ fix(auth): reject expired refresh token
 
 - 发布当日从 release 分支合并到 master 后，在 master tip 打 `vMAJOR.MINOR.PATCH` tag（SemVer，无预发布标签）
 - 发布候选 PR 合并后，在当前 `master` tip 打 `vMAJOR.MINOR.PATCH` tag；tag workflow 会校验 tag 必须指向当前 `master` tip，然后并行构建 `full` 与 `minimal` 两个形态 × 4 平台的 8 个二进制（`jimu-<profile>-<os>-<arch>`，产物内注入该 tag 作为版本号）并创建 GitHub Release，不重复运行完整 CI 或 `Scaffold Gate`
-- 依赖更新：dependabot 的 PR 面向 `dependency-updates`，minor/patch 由 `.github/workflows/dependabot-auto-merge.yml` 自动合并（major 留人工）；master 前进后 `.github/workflows/sync-dependency-branch.yml` 自动把 master 合入该分支；开版用 `Start Release Branch` workflow（手动输入版本号）从该分支创建 `release/<version>`
+- 依赖更新：dependabot 的 PR 面向 `dependency-updates`，minor/patch 由 `.github/workflows/dependabot-auto-merge.yml` 自动合并（major 留人工）；开版用 `Start Release Branch` workflow（手动输入版本号）从该分支创建 `release/<version>`
+- `dependency-updates` 与 master 的同步**不自动化**（v0.3.6 移除了 `sync-dependency-branch.yml`）：向该分支直推会被 ruleset 的 `required_status_checks` 拒绝，而走 PR 又受两条 GitHub 限制（`GITHUB_TOKEN` 默认不允许创建 PR；即使允许，`GITHUB_TOKEN` 创建的 PR 也不会自动触发工作流）。因此该分支可能略落后于 master；**冲突时 dependabot 自身会 rebase**，且发布候选 PR 会做全量校验，风险是「晚发现」而非「不发现」
 - `make release-check` 仍可在本地发布前人工运行；tag 与 release notes 同步推送；不发布未经 tag 的 commit
 - 回滚：master 不接受 force push，用 revert commit 或新 hotfix PR；release 分支回滚切 hotfix 分支修复后重复合并流程
 
