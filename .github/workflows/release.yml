@@ -1,5 +1,13 @@
 name: Release
 
+# tag 只负责发布已经验证过的 master tip。
+# 发布候选的常规门禁与重型 Scaffold Gate 由 release/* → master PR 的 required checks 承担；
+# 这里拒绝不是当前 master tip 的 tag，避免绕过候选 PR 直接发布旧提交或分支提交。
+#
+# 发布物：full 与 minimal 两个形态 × 4 平台 = 8 个二进制，名为 jimu-<profile>-<os>-<arch>
+# （v0.3.5 起改名；旧名 jimu-<os>-<arch> 不再产出）。
+# 采用 verify → build(矩阵) → publish 三段：4 次交叉编译之间无法复用编译缓存（Go 构建缓存键含
+# GOOS/GOARCH，实测单次约 68s），加 minimal 后串行约 9 分钟，故必须并行。
 on:
   push:
     tags:
@@ -8,29 +16,18 @@ on:
 permissions:
   contents: write
 
-env:
-  GO_VERSION: "1.26.6"
-
-# tag 只负责发布已经验证过的 master tip。
-# 发布候选的常规门禁与重型 Scaffold Matrix 由 release/* → master PR 的 required checks 承担；
-# 这里拒绝不是当前 master tip 的 tag，避免绕过候选 PR 直接发布旧提交或分支提交。
 jobs:
-  release:
-    name: Publish Release
+  verify:
+    name: Verify Tag
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
       - name: Verify tag points to current master tip
         run: |
+          set -euo pipefail
           git fetch --no-tags origin master
           tag_sha=$(git rev-parse "refs/tags/${GITHUB_REF_NAME}^{commit}")
           master_sha=$(git rev-parse "origin/master^{commit}")
@@ -41,17 +38,85 @@ jobs:
           fi
           echo "${GITHUB_REF_NAME} matches origin/master at ${master_sha}."
 
-      - name: Build release binaries
+  build:
+    name: Build (${{ matrix.profile }} ${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      # 显式列出 8 个组合（而不是 profile × goos × goarch 的 product）：语义直白、actionlint 必定通过，
+      # 且不用在矩阵求值阶段读 env 上下文（strategy.matrix 里读不到 env）。
+      # 加形态时在此追加 4 行（矩阵是本仓唯一的形态 × 平台事实源）。
+      matrix:
+        include:
+          - { profile: full,    goos: linux,  goarch: amd64 }
+          - { profile: full,    goos: linux,  goarch: arm64 }
+          - { profile: full,    goos: darwin, goarch: amd64 }
+          - { profile: full,    goos: darwin, goarch: arm64 }
+          - { profile: minimal, goos: linux,  goarch: amd64 }
+          - { profile: minimal, goos: linux,  goarch: arm64 }
+          - { profile: minimal, goos: darwin, goarch: amd64 }
+          - { profile: minimal, goos: darwin, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v7
+
+      # 只用 setup-go 自带的 module cache，不挂 GOCACHE 滚动缓存：
+      # 8 个矩阵 job 会各存一份条目、挤占仓库 10 GB 配额，而发布是低频动作（冷跑约 1m40）
+      # （flavor 是 go-setup 的必填输入；cache:"false" 时它只参与缓存路径/键，不会存下条目）
+      - uses: ./.github/actions/go-setup
+        with:
+          flavor: release
+          cache: "false"
+
+      - name: "🏗️ Build jimu-${{ matrix.profile }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+        env:
+          PROFILE: ${{ matrix.profile }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
-          mkdir -p bin
-          GOOS=linux GOARCH=amd64 go build -o bin/jimu-linux-amd64 ./cmd/server
-          GOOS=linux GOARCH=arm64 go build -o bin/jimu-linux-arm64 ./cmd/server
-          GOOS=darwin GOARCH=amd64 go build -o bin/jimu-darwin-amd64 ./cmd/server
-          GOOS=darwin GOARCH=arm64 go build -o bin/jimu-darwin-arm64 ./cmd/server
+          set -euo pipefail
+          # 两步写法：形态名非法时 profileoverlay 非零退出并中断构建。若写成
+          # `go build -overlay="$(...)"`，失败只留下空的 overlay，go 会**静默按 full 构建**并成功退出。
+          overlay="$(go run ./tools/profileoverlay "${PROFILE}")"
+          mkdir -p dist
+          # CGO_ENABLED=0 与 Dockerfile 对齐（纯 Go 交叉编译，不依赖目标平台 C 工具链）。
+          # 注入版本号：cmd/server/main.go 的 `var version` 默认是 "dev"，不注入则发布产物自报 dev。
+          CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build \
+            -ldflags "-X main.version=${GITHUB_REF_NAME}" \
+            -overlay="$overlay" \
+            -o "dist/jimu-${PROFILE}-${GOOS}-${GOARCH}" ./cmd/server
+
+      - name: "📤 Upload jimu-${{ matrix.profile }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+        uses: actions/upload-artifact@v7
+        with:
+          name: jimu-${{ matrix.profile }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/jimu-${{ matrix.profile }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Verify & Publish
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: "📥 Download all release binaries"
+        uses: actions/download-artifact@v8
+        with:
+          pattern: jimu-*
+          merge-multiple: true
+          path: dist
+
+      - name: "🔎 List the release assets"
+        run: ls -l dist
 
       - name: Read release notes
         id: notes
         run: |
+          set -euo pipefail
           VERSION=${GITHUB_REF_NAME}
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           NOTES_FILE="docs/releases/${VERSION}.md"
@@ -75,6 +140,6 @@ jobs:
         with:
           name: ${{ steps.notes.outputs.version }}
           body: ${{ steps.notes.outputs.body }}
-          files: bin/jimu-*
+          files: dist/jimu-*
           draft: false
           prerelease: false
