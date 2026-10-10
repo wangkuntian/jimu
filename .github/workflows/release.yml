@@ -78,7 +78,9 @@ jobs:
           set -euo pipefail
           # 两步写法：形态名非法时 profileoverlay 非零退出并中断构建。若写成
           # `go build -overlay="$(...)"`，失败只留下空的 overlay，go 会**静默按 full 构建**并成功退出。
-          overlay="$(go run ./tools/profileoverlay "${PROFILE}")"
+          # GOOS/GOARCH 是本 step 的 env，直接 `go run` 会为**目标平台**编译出跑不起来的生成器
+          # （非本机目标报 `exec format error`），故这一行显式清空它们，让工具跑在 runner 本机。
+          overlay="$(GOOS= GOARCH= go run ./tools/profileoverlay "${PROFILE}")"
           mkdir -p dist
           # CGO_ENABLED=0 与 Dockerfile 对齐（纯 Go 交叉编译，不依赖目标平台 C 工具链）。
           # 注入版本号：cmd/server/main.go 的 `var version` 默认是 "dev"，不注入则发布产物自报 dev。

@@ -40,7 +40,8 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           set -euo pipefail
-          overlay="$(go run ./tools/profileoverlay "${PROFILE}")"
+          # GOOS/GOARCH 是本 step 的 env，直接 `go run` 会为目标平台编译生成器（exec format error）
+          overlay="$(GOOS= GOARCH= go run ./tools/profileoverlay "${PROFILE}")"
           mkdir -p dist
           CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build \
             -ldflags "-X main.version=probe-${PROFILE}" \
