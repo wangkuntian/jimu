@@ -60,6 +60,8 @@ CI 的 `govulncheck` 门禁（`make govulncheck`）对**可达**漏洞零容忍�
 2. 在 PR 描述与对应 `docs/releases/<version>.md` 中写明漏洞 ID、可达路径、缓解措施与复核条件（例如「待上游发布含修复的版本后移除缓解并复测」）；
 3. 只有在上述记录齐备时，才由维护者在审查中显式接受该风险。
 
+**图像扫描的显式例外**：CI 的镜像扫描（`Image Gate` 的 Trivy 步骤）只对**有修复版本**的 CRITICAL/HIGH 失败（`ignore-unfixed: true`）。理由：对上游尚未修复的漏洞卡红，会把这些 PR 永久堵死，而维护者对此无能为力。这不是静默放行 —— 这些条目仍写入 SBOM artifact（`jimu-sbom.json`，生成时不过滤 `unfixed`）供审查与后续复核。本条与上面 govulncheck 的零容忍条款**并列**，是依赖漏洞政策中的**显式例外**，不是对它的放宽。
+
 历史：曾用 `scripts/govulncheck.sh` 的窄豁免清单承载 (1)(3)，v0.3.5 在 `GO-2026-6452` 随 excelize 升级消失后删除该脚本（豁免清单已无可达对象，机制退化为死代码）。
 
 ## 已知限制
