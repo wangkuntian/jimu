@@ -427,8 +427,11 @@ swagger-check:
 	git diff --exit-code docs/openapi || { echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; }; \
 	echo "✅ OpenAPI 文档为最新"
 
-## smoke-check: 校验 smoke 脚本语法（与 CI Test job 一致）
+## smoke-check: bash -n 校验 10 个脚本的语法（含分片脚本 scripts/test_shards.sh 与聚合门禁
+##              scripts/check_ci_gate.sh）；CI 由 Capability Gates job 调用。
 smoke-check:
+	@bash -n scripts/test_shards.sh
+	@bash -n scripts/check_ci_gate.sh
 	@bash -n scripts/test_runtime_security.sh
 	@bash -n scripts/smoke_api_contract.sh
 	@bash -n scripts/govulncheck.sh
