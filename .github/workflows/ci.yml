@@ -198,6 +198,10 @@ jobs:
       - uses: ./.github/actions/go-setup
         with:
           flavor: gates
+          # 只恢复不保存：`gates` 风味的唯一保存者是 Capability Gates job —— 同一 flavor 允许多个
+          # 恢复者、但只允许一个保存者，否则先结束的一方写出快照、另一方产物丢失
+          # （不变量见 action.yml 的 save 输入说明）
+          save: "false"
       - name: "📈 Install benchstat"
         run: go install golang.org/x/perf/cmd/benchstat@latest
       - name: "⏱️ Run benchmark"
