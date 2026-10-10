@@ -8,7 +8,7 @@ inputs:
   go-version:
     description: Go 版本（本仓唯一事实源）
     required: false
-    default: "1.26.6"
+    default: "1.26.9"
   cache:
     description: 是否启用滚动构建缓存
     required: false
