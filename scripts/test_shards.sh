@@ -31,11 +31,17 @@
 # 名单从 `go test -list` 实时取，不写死 —— 新增用例自动归位，rename/删除用例也不会让分片失效。
 #
 # 用法：
-#   scripts/race_shards.sh shards-json     # workflow 矩阵用的 JSON 数组（如 ["core",…]）
-#   scripts/race_shards.sh shards          # 分片名逐行列出
-#   scripts/race_shards.sh list <shard>    # 打印该分片覆盖的包
-#   scripts/race_shards.sh run <shard>     # 执行该分片的 go test -race（CI 用）
-#   scripts/race_shards.sh verify          # 守卫：包/用例/形态的并集 == 全集、且互不重叠
+#   scripts/test_shards.sh shards-json            # workflow 矩阵用的 JSON 数组（如 ["core",…]）
+#   scripts/test_shards.sh shards                 # 分片名逐行列出
+#   scripts/test_shards.sh list <shard>           # 打印该分片覆盖的包
+#   scripts/test_shards.sh run <shard> [--cover]  # 执行该分片；--cover 同时产出 cover-<shard>.out
+#   scripts/test_shards.sh merge-cover <dir> <out> # 合并分片覆盖率 profile（表头 + 正文拼接）
+#   scripts/test_shards.sh verify                 # 守卫：包/用例/形态的并集 == 全集、且互不重叠
+#
+# 本脚本同时服务两件事：竞争检测（`-race`）与覆盖率（`-covermode=atomic -coverprofile`）。
+# 两者可以同跑（`go test -race -covermode=atomic`），因此 CI 只跑一遍测试套件：
+# 每片产出自己的 profile，由 `merge-cover` 拼接（分片按包/用例/形态互不重叠，故拼接无重复计数；
+# set 与 atomic 两种插桩模式的覆盖率实测等价，见 spec「机制探针」）。
 #
 # `run` 开跑前会自己跑一次守卫（fail-closed）：分片清单落后于代码树（新增包没人覆盖、
 # 用例切分漏了用例、形态切片漏了形态）会直接失败，而不是静默少测。
@@ -54,7 +60,8 @@ GENERATOR_IMPORT="$MODULE/tools/generator"
 
 # generator 分片数。改这里必须同时确认 .github/workflows/ci.yml 的 race 矩阵来自
 # `shards-json`（是自动派生的，无需手改）—— 分片名会自动变成 generator-1…generator-N。
-GENERATOR_SHARDS=3
+# 依据：实测 composereport 两片各 4m25s/3m46s、generator 三片合计约 6m30s 工作量。
+GENERATOR_SHARDS=4
 
 # 定向分片：下标 0 是 generator-1，依此类推；空串表示该片不额外定向。
 # 只影响均衡度，不影响正确性（守卫保证用例不丢、不重）。
@@ -62,6 +69,7 @@ GENERATOR_PINS=(
   ""
   "TestCheckProfilesGoldenMatchesTheGeneratedClosure"
   "TestReportSucceedsForEverySelection"
+  ""
 )
 
 # 单分片超时：与分片前的 `go test -race ./... -timeout 15m` 一致。
@@ -71,7 +79,7 @@ SHARD_TEST_TIMEOUT=15m
 # packages.Load + 全闭包行数统计，整包实测 257s（隔离后依然如此），是 tools 分片变成长杆的唯一
 # 原因。切成 COMPOSEREPORT_SHARDS 片后每片只度量自己那部分形态；**每个形态仍被 `-race` 跑过**。
 # 片数不取「一形态一片」是为了不顶到并发上限（免费公共仓 20 个并发 job）。
-COMPOSEREPORT_SHARDS=2
+COMPOSEREPORT_SHARDS=4
 COMPOSEREPORT_PKG="./tools/composereport"
 COMPOSEREPORT_IMPORT="$MODULE/tools/composereport"
 # 与 tools/composereport/main_test.go 的 profileShardEnv 同名，它是这条切片的开关
@@ -91,13 +99,22 @@ all_profiles() {
   printf '%s\n' "$profiles_cache"
 }
 
-# 第 i 片 composereport 负责的形态（把形态列表按片数对半切，保持 registry 顺序）
+# 第 i 片 composereport 负责的形态（把形态列表按片数切分，保持 registry 顺序；余数分给前面的片，
+# 故 COMPOSEREPORT_SHARDS 不整除形态数时每片仍非空 —— 片数多于形态数时守卫照样能抓到空片）
 composereport_profiles() {
-  local idx="$1" total per start end
+  local idx="$1" total base extra per before start end
   total=$(all_profiles | wc -l | tr -d ' ')
-  per=$(((total + COMPOSEREPORT_SHARDS - 1) / COMPOSEREPORT_SHARDS))
-  start=$(((idx - 1) * per + 1))
-  end=$((idx * per))
+  base=$((total / COMPOSEREPORT_SHARDS))
+  extra=$((total % COMPOSEREPORT_SHARDS))
+  if [ "$idx" -le "$extra" ]; then
+    per=$((base + 1))
+    before=$(((idx - 1) * per))
+  else
+    per=$base
+    before=$((extra * (base + 1) + (idx - extra - 1) * base))
+  fi
+  start=$((before + 1))
+  end=$((before + per))
   all_profiles | sed -n "${start},${end}p"
 }
 
@@ -316,7 +333,7 @@ cmd_shards_json() {
 cmd_list() {
   local shard="${1:-}"
   [ -n "$shard" ] || {
-    echo "用法: race_shards.sh list <shard>" >&2
+    echo "用法: test_shards.sh list <shard>" >&2
     exit 2
   }
   shard_packages "$shard"
@@ -324,15 +341,32 @@ cmd_list() {
 
 cmd_run() {
   local shard="${1:-}"
+  local cover=0
+  shift || true
+  case "${1:-}" in
+    --cover) cover=1 ;;
+    "") ;;
+    *) echo "❌ 未知参数: $1" >&2; exit 2 ;;
+  esac
   [ -n "$shard" ] || {
-    echo "用法: race_shards.sh run <shard>" >&2
+    echo "用法: test_shards.sh run <shard> [--cover]" >&2
     exit 2
   }
+  # 覆盖率参数用「数组 + 变量」两份表示：数组给 go test 用，
+  # 字符串给 GENERATOR_LIST_FLAGS 用（预编译必须带同样的参数才能复用编译产物）。
+  local cover_args=() cover_env=""
+  if [ "$cover" -eq 1 ]; then
+    cover_args=(-covermode=atomic "-coverprofile=cover-${shard}.out")
+    cover_env="-covermode=atomic -coverprofile=cover-${shard}.out"
+  fi
   # fail-closed：先证明分片清单没有落后于代码树。包集每次必查；用例/形态切片只在对应分片上查，
   # 且复用下面 go test 的 race 编译产物（不额外付编译费）。
   _verify_packages
   case "$shard" in
-    generator-*) export GENERATOR_LIST_FLAGS=-race && _verify_generator_tests ;;
+    generator-*)
+      export GENERATOR_LIST_FLAGS="-race $cover_env"
+      _verify_generator_tests
+      ;;
     composereport-*) _verify_composereport_shards ;;
   esac
 
@@ -345,7 +379,8 @@ cmd_run() {
         exit 1
       }
       echo "▶ race 分片 ${shard}：$GENERATOR_PKG 的 $(printf '%s' "$pattern" | tr '|' '\n' | wc -l | tr -d ' ') 条用例"
-      go test -race -run "^(${pattern})$" "$GENERATOR_IMPORT" -timeout "$SHARD_TEST_TIMEOUT"
+      go test -race -run "^(${pattern})$" "$GENERATOR_IMPORT" -timeout "$SHARD_TEST_TIMEOUT" \
+        ${cover_args[@]+"${cover_args[@]}"}
       ;;
     composereport-*)
       local idx="${shard#composereport-}" profiles
@@ -356,7 +391,7 @@ cmd_run() {
       }
       echo "▶ race 分片 ${shard}：$COMPOSEREPORT_PKG 的形态 $profiles"
       env "$COMPOSEREPORT_ENV=$profiles" go test -race -run '^TestProfileCompiledSurface$' \
-        "$COMPOSEREPORT_IMPORT" -timeout "$SHARD_TEST_TIMEOUT"
+        "$COMPOSEREPORT_IMPORT" -timeout "$SHARD_TEST_TIMEOUT" ${cover_args[@]+"${cover_args[@]}"}
       ;;
     *)
       local pkgs
@@ -367,9 +402,38 @@ cmd_run() {
       }
       echo "▶ race 分片 ${shard}：$(printf '%s\n' "$pkgs" | wc -l | tr -d ' ') 个包"
       # shellcheck disable=SC2086  # 包列表按空格拆分传给 go test
-      go test -race $pkgs -timeout "$SHARD_TEST_TIMEOUT"
+      go test -race $pkgs -timeout "$SHARD_TEST_TIMEOUT" ${cover_args[@]+"${cover_args[@]}"}
       ;;
   esac
+}
+
+# 合并分片覆盖率 profile：Go 的文本 profile 是「一行 mode 头 + 若干 file:line 区间计数」，
+# 分片之间按包/用例/形态互不重叠（由 verify 守卫保证），所以「保留一份表头 + 正文顺序拼接」
+# 即可得到与单轮全量连跑完全一致的结果（实测 total 96.1% == 96.1%，见 spec「机制探针」）。
+cmd_merge_cover() {
+  local dir="${1:-}" out="${2:-}"
+  [ -n "$dir" ] && [ -n "$out" ] || {
+    echo "用法: test_shards.sh merge-cover <dir> <out>" >&2
+    exit 2
+  }
+  local files=()
+  while IFS= read -r f; do files+=("$f"); done < <(find "$dir" -maxdepth 1 -name '*.out' | sort)
+  [ "${#files[@]}" -gt 0 ] || {
+    echo "❌ $dir 下没有找到任何 *.out（分片是否都没产出 profile？）" >&2
+    exit 1
+  }
+  local header
+  header=$(head -1 "${files[0]}")
+  case "$header" in
+    mode:*) ;;
+    *) echo "❌ ${files[0]} 不是合法的 Go 覆盖率 profile（首行应为 mode: ...）" >&2; exit 1 ;;
+  esac
+  {
+    printf '%s\n' "$header"
+    local f
+    for f in "${files[@]}"; do tail -n +2 "$f"; done
+  } > "$out"
+  echo "✅ 合并 ${#files[@]} 个分片 profile → ${out}（$(wc -l < "$out" | tr -d ' ') 行）"
 }
 
 usage() {
@@ -382,6 +446,7 @@ case "${1:-}" in
   shards-json) cmd_shards_json ;;
   list) shift; cmd_list "$@" ;;
   run) shift; cmd_run "$@" ;;
+  merge-cover) shift; cmd_merge_cover "$@" ;;
   verify) cmd_verify ;;
   "" | -h | --help) usage ;;
   *)

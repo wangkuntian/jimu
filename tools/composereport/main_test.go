@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// profileShardEnv 让 CI 的 race 分片只度量指定形态（逗号分隔，见 scripts/race_shards.sh）。
+// profileShardEnv 让 CI 的 race 分片只度量指定形态（逗号分隔，见 scripts/test_shards.sh）。
 //
 // 动机（实测）：`-race` 下每个形态都要做一次全依赖图 packages.Load + 全闭包行数统计，整包在 4 vCPU
 // runner 上要 257s，而它只是 tools 分片里的一个包 —— 那一片因此成了整个 Race job 的长杆。按形态切开
