@@ -23,7 +23,7 @@ env:
   GOLANGCI_LINT_VERSION: "v2.7.2"
 
 jobs:
-  # ── 唯一的 router：一次 diff 分析，产出三个布尔 ───────────────────────────────
+  # ── 唯一的 router：一次 diff 分析，产出四个输出（code / go / docker / shards）────────
   changes:
     name: Changes
     runs-on: ubuntu-latest
@@ -50,25 +50,30 @@ jobs:
             exit 0
           fi
           changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          # 用 here-string 而不是 `printf | grep -q`：后者在大输入下 grep 提前退出会让 printf 收到
+          # SIGPIPE，配合 `set -o pipefail` 把整条管线判成 141 ⇒ if 为假 ⇒ 布尔全 false ⇒
+          # 所有内层 job 被跳过而聚合门禁报绿（fail-open，可由提交者构造大 changeset 触发）。
           # code：任何非文档改动（沿用原 ci-commit.yml 的口径，决定提交消息门禁是否跑）
-          if printf '%s\n' "$changed" | grep -qvE '(^docs/|\.md$|^LICENSE$)'; then
+          if grep -qvE '(^docs/|\.md$|^LICENSE$)' <<<"$changed"; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "code=false" >> "$GITHUB_OUTPUT"
           fi
           # go：代码质量门禁关心的路径（沿用原 ci.yml 的口径）
-          if printf '%s\n' "$changed" | grep -Eq '^(cmd/|internal/|tools/|go\.mod$|go\.sum$|internal/capabilities/.*/migrations/|proto/|configs/|scripts/|Makefile$|deploy/|docs/openapi/|\.github/workflows/ci\.yml$)'; then
+          if grep -Eq '^(cmd/|internal/|tools/|go\.mod$|go\.sum$|internal/capabilities/.*/migrations/|proto/|configs/|scripts/|Makefile$|deploy/|docs/openapi/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
             echo "go=true" >> "$GITHUB_OUTPUT"
           else
             echo "go=false" >> "$GITHUB_OUTPUT"
           fi
           # docker：镜像可发布性关心的路径（沿用原 ci-docker.yml 的口径）
-          if printf '%s\n' "$changed" | grep -Eq '^(Dockerfile$|docker-compose\.yml$|deploy/|\.env\.example$|scripts/|Makefile$|cmd/|internal/|tools/|go\.mod$|go\.sum$|configs/|\.github/workflows/ci\.yml$)'; then
+          if grep -Eq '^(Dockerfile$|docker-compose\.yml$|deploy/|\.env\.example$|scripts/|Makefile$|cmd/|internal/|tools/|go\.mod$|go\.sum$|configs/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
             echo "docker=true" >> "$GITHUB_OUTPUT"
           else
             echo "docker=false" >> "$GITHUB_OUTPUT"
           fi
-      # 分片清单由 router 产出（`shards-json` 只读脚本常量，不需要 Go）：
+      # 分片清单由 router 产出：`shards-json` 只做常量派生，但脚本在子命令分发之前会无条件执行
+      # `go list -m` 取模块前缀，所以这一步依赖 runner 自带的 Go（可接受的隐含依赖：Changes 跑在
+      # ubuntu-latest 上实测成功；真坏了会以非零退出终止 router job，属 fail-closed）。
       # 不能放在 Lint & Policy 里 —— `code` 口径排除 docs/，而 `go` 口径包含 docs/openapi/，
       # 只改 docs/openapi/** 时 Lint 会被跳过、分片却仍要跑，届时输出为空会让矩阵解析失败。
       # 放在 router 还让分片与 Lint 并行起跑。
@@ -135,7 +140,7 @@ jobs:
           echo "✅ Release notes check passed"
 
       - name: "📝 Commit message policy"
-        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        if: github.event_name == 'pull_request'
         run: |
           if git fetch --no-tags origin "refs/pull/${{ github.event.pull_request.number }}/merge"; then
             scripts/check_commit_messages.sh "origin/${{ github.event.pull_request.base.ref }}" "FETCH_HEAD"
@@ -259,7 +264,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
-  # ── 代码域：分片跑完后的聚合校验（覆盖率阈值 + OpenAPI + smoke 脚本语法）──────────
+  # ── 代码域：分片跑完后的聚合校验（合并分片 profile + 覆盖率阈值）──────────────────
   coverage:
     name: Coverage & Docs
     needs: [changes, shards]
@@ -501,7 +506,7 @@ jobs:
           COVERAGE: ${{ needs.coverage.result }}
           DB: ${{ needs.db.result }}
         # 判定逻辑在 scripts/check_ci_gate.sh（两个聚合门禁共用同一份实现，避免逻辑块重复；
-        # 该脚本的 5 行判定表可在本地用模拟环境变量单测，见本任务 Step 3）
+        # 该脚本的判定表可在本地用位置参数传入模拟结论逐条单测，见本任务 Step 1，不需要跑 CI）
         run: |
           bash scripts/check_ci_gate.sh "PR Gate" "$ROUTER" \
             "Lint & Policy=$LINT=$CODE" \
