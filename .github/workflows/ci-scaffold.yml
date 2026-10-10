@@ -144,7 +144,7 @@ jobs:
           # job 内、跑完全丢」的假象），但仍受 Go 自身的 5 天未使用裁剪兜底（cmd/go/internal/cache
           # 的 trimInterval=24h / trimLimit=5d，无大小上限）。
           if [ -n "${SIZE_MB:-}" ] && [ "$SIZE_MB" -gt 6144 ]; then
-            echo "::error::scaffold GOCACHE ${SIZE_MB} MB 超过 6 GiB（仓库 actions/cache 配额 10 GB）：请把 ci-scaffold.yml 里 cache key 的 -v1 后缀递增（-v2、-v3…，release.yml 同步）后重跑；不要在本 job 内删除缓存内容"
+            echo "::error::scaffold GOCACHE ${SIZE_MB} MB 超过 6 GiB（仓库 actions/cache 配额 10 GB）：请把 ci-scaffold.yml 里 cache key 的 -v1 后缀递增（-v2、-v3…）后重跑；不要在本 job 内删除缓存内容"
             exit 1
           fi
 
