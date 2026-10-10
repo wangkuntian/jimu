@@ -39,6 +39,9 @@ ENV ?= dev
 # 仅在 golangci-lint 完全缺失时才退化为 go vet（不具备版本一致性）
 LINT_VERSION ?= v2.7.2
 
+# govulncheck 版本：CI 的 `Lint & Policy` 走 `make govulncheck`，故此处是唯一事实源
+GOVULNCHECK_VERSION ?= v1.8.0
+
 # 根据 APP_ENV 自动生成 --profile 参数：dev 环境启动 adminer
 COMPOSE_DEV_PROFILE = $(if $(filter dev,$(APP_ENV)),dev)
 # observability（OpenObserve 监控栈）默认开启（与 docker-compose 的 ${OTEL_ENABLED:-true} 一致）；
@@ -395,9 +398,10 @@ bench-ci:
 loadtest:
 	@./scripts/loadtest.sh
 
-## govulncheck: 依赖漏洞扫描（go run 免安装；豁免清单见 scripts/govulncheck.sh）
+## govulncheck: 依赖漏洞扫描（go run 免安装；版本 pin 在 GOVULNCHECK_VERSION）
+##              对**可达**漏洞零容忍；上游尚无修复版本时的处置政策见 docs/SECURITY.md
 govulncheck:
-	@bash scripts/govulncheck.sh
+	@go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 ## test-cover: 运行测试并生成覆盖率（CI 侧由分片 profile 合并后调用 make test-coverage-check）
 test-cover:
@@ -427,14 +431,13 @@ swagger-check:
 	git diff --exit-code docs/openapi || { echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; }; \
 	echo "✅ OpenAPI 文档为最新"
 
-## smoke-check: bash -n 校验 10 个脚本的语法（含分片脚本 scripts/test_shards.sh 与聚合门禁
+## smoke-check: bash -n 校验 9 个脚本的语法（含分片脚本 scripts/test_shards.sh 与聚合门禁
 ##              scripts/check_ci_gate.sh）；CI 由 Capability Gates job 调用。
 smoke-check:
 	@bash -n scripts/test_shards.sh
 	@bash -n scripts/check_ci_gate.sh
 	@bash -n scripts/test_runtime_security.sh
 	@bash -n scripts/smoke_api_contract.sh
-	@bash -n scripts/govulncheck.sh
 	@bash -n scripts/install_db_clients.sh
 	@bash -n scripts/db_common.sh
 	@bash -n scripts/backup.sh
