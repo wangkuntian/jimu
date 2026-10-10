@@ -60,11 +60,17 @@ GENERATOR_IMPORT="$MODULE/tools/generator"
 
 # generator 分片数。改这里必须同时确认 .github/workflows/ci.yml 的 race 矩阵来自
 # `shards-json`（是自动派生的，无需手改）—— 分片名会自动变成 generator-1…generator-N。
-# 依据：实测 composereport 两片各 4m25s/3m46s、generator 三片合计约 6m30s 工作量。
+# 依据（实测，run 38016751586 热跑）：4 片时 generator 组的最长分片是整条流水线的长杆
+# （job 287s / 分片步骤 226s）；提到 5 片后最长分片降到 job 197s / 步骤 139s，各片测试工作
+# 65.5 / 84.3 / 53.8 / 35.1 / 46.5s —— 没有空闲片，再加片只会多付固定开销。generator 是
+# 分片配平里唯一有效的那根杠杆（composereport 的步骤几乎全是固定成本，见下）。
 GENERATOR_SHARDS=5
 
 # 定向分片：下标 0 是 generator-1，依此类推；空串表示该片不额外定向。
 # 只影响均衡度，不影响正确性（守卫保证用例不丢、不重）。
+# 两条已知最重的用例定向分到**不同**分片，其余用例按名字排序取模轮转；分片数变了要重新定
+# 这两条的位置，让最重的落在轮转池最轻的片上（5 片时按本机逐用例 race 耗时定的池子权重是
+# 14.6 / 17.5 / 29.8 / 24.6 / 30.2s，故 pin 依次放 generator-1、generator-2，上界最小）。
 GENERATOR_PINS=(
   "TestCheckProfilesGoldenMatchesTheGeneratedClosure"
   "TestReportSucceedsForEverySelection"
@@ -79,8 +85,12 @@ SHARD_TEST_TIMEOUT=15m
 # tools/composereport 的重型用例按**形态**切片：它在 `-race` 下每个形态都要做一次全依赖图
 # packages.Load + 全闭包行数统计，整包实测 257s（隔离后依然如此），是 tools 分片变成长杆的唯一
 # 原因。切成 COMPOSEREPORT_SHARDS 片后每片只度量自己那部分形态；**每个形态仍被 `-race` 跑过**。
-# 片数不取「一形态一片」是为了不顶到并发上限（免费公共仓 20 个并发 job）。
-COMPOSEREPORT_SHARDS=5
+# 片数保持 4（形态按 registry 顺序切成 2/1/1/1）：实测（run 38016751586）把片数提到 5
+# （一形态一片）后墙钟零收益 —— 每片分片步骤 133–138s 里 ~96% 与形态数无关，是
+# `go run ./tools/profileoverlay -list` 守卫（82–106s）+ race 编译（24–31s），真正的形态度量
+# 只有 3.9–5.3s；4 片时最长 composereport 步骤 136s，与 5 片等价却少占一个并发槽（正式
+# 流水线还要与 lint/门禁/DB/Docker 共 5 个 job 并行）。**将来想加片前先看这组数**。
+COMPOSEREPORT_SHARDS=4
 COMPOSEREPORT_PKG="./tools/composereport"
 COMPOSEREPORT_IMPORT="$MODULE/tools/composereport"
 # 与 tools/composereport/main_test.go 的 profileShardEnv 同名，它是这条切片的开关
