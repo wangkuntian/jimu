@@ -1,0 +1,79 @@
+name: TMP Release Matrix Probe
+
+# 复刻 release.yml 的 build 矩阵与 artifact 契约（不含 verify/publish），用完即删。
+# 目的：在打 tag 之前验证 matrix include 的 8 个组合、artifact 名、下载与 dist/ 落地契约。
+on:
+  push:
+    branches: [feature/ci-pipeline]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Probe (${{ matrix.profile }} ${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { profile: full,    goos: linux,  goarch: amd64 }
+          - { profile: full,    goos: linux,  goarch: arm64 }
+          - { profile: full,    goos: darwin, goarch: amd64 }
+          - { profile: full,    goos: darwin, goarch: arm64 }
+          - { profile: minimal, goos: linux,  goarch: amd64 }
+          - { profile: minimal, goos: linux,  goarch: arm64 }
+          - { profile: minimal, goos: darwin, goarch: amd64 }
+          - { profile: minimal, goos: darwin, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/go-setup
+        with:
+          # flavor 是 go-setup 的必填输入；cache:"false" 时它只参与缓存路径/键
+          flavor: probe
+          cache: "false"
+      - name: Build
+        env:
+          PROFILE: ${{ matrix.profile }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          overlay="$(go run ./tools/profileoverlay "${PROFILE}")"
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build \
+            -ldflags "-X main.version=probe-${PROFILE}" \
+            -overlay="$overlay" \
+            -o "dist/jimu-${PROFILE}-${GOOS}-${GOARCH}" ./cmd/server
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jimu-${{ matrix.profile }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/jimu-${{ matrix.profile }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          if-no-files-found: error
+          retention-days: 1
+
+  collect:
+    name: Probe Collect
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: jimu-*
+          merge-multiple: true
+          path: dist
+      - name: Assert the 8 expected binaries landed
+        run: |
+          set -euo pipefail
+          ls -l dist
+          for p in full minimal; do
+            for os in linux darwin; do
+              for arch in amd64 arm64; do
+                f="dist/jimu-${p}-${os}-${arch}"
+                [ -f "$f" ] || { echo "::error::缺少产物 $f"; exit 1; }
+              done
+            done
+          done
+          echo "✅ 8 个产物命名与落地契约成立"
