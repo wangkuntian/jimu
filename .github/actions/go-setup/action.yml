@@ -13,10 +13,6 @@ inputs:
     description: 是否启用滚动构建缓存
     required: false
     default: "true"
-  cache-path:
-    description: 缓存目录；留空则用 $RUNNER_TEMP/gocache-<flavor>
-    required: false
-    default: ""
   save:
     description: >-
       是否保存缓存。**不变量：同一个 flavor 只允许一个 save=true 的调用方**，其余必须传 "false"
@@ -38,12 +34,8 @@ runs:
     - name: Resolve the cache path
       id: resolve
       shell: bash
-      # 不用 ${{ runner.temp }}，改用 runner 上一定存在的 $RUNNER_TEMP，
-      # 这样 composite action 内部无需调用方传入路径
-      run: |
-        path="${{ inputs.cache-path }}"
-        [ -n "$path" ] || path="$RUNNER_TEMP/gocache-${{ inputs.flavor }}"
-        echo "path=$path" >> "$GITHUB_OUTPUT"
+      # 缓存目录固定在 runner 的临时目录下，无需调用方指定
+      run: echo "path=$RUNNER_TEMP/gocache-${{ inputs.flavor }}" >> "$GITHUB_OUTPUT"
 
     - name: "♻️ Restore the rolling build cache"
       if: inputs.cache == 'true' && inputs.save == 'true'

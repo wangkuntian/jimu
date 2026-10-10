@@ -30,7 +30,7 @@ shift 2
 
 fail=0
 [ "$router" = "success" ] || {
-  echo "::error::${label}: 路由 job 未成功（$router），判定不可信"
+  echo "::error::${label}: 路由 job 未成功（${router}），判定不可信"
   fail=1
 }
 
