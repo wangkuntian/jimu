@@ -32,6 +32,7 @@ make run
 - `fix/<issue>-<slug>` — 缺陷修复
 - `hotfix/<issue>-<slug>` — 线上紧急修复
 - `dependabot/*` — 自动化分支，人工不得基于它开发
+- `dependency-updates` — 常驻分支，只接收 dependabot 的依赖更新 PR（minor/patch 自动合并）。发布分支从它切出，因此依赖升级随版本进入 master；它本身不是发布线，master 仍然只接受 `release/*` 来源的 PR。
 
 分支名小写，单词用短横线，`slug` 不超过 5 个单词。鼓励带 issue ID。
 
@@ -51,7 +52,7 @@ type(scope): summary
 
 - summary 与正文全部使用英文：小写开头、祈使句、不加句号
 - 一个 commit 只包含一个清晰主题；多行 commit 可在正文说明 why 和风险
-- 由 `githooks/commit-msg` 强制检查（`make hooks` 安装，即 `core.hooksPath` 指向 `githooks/`）；CI (Commits workflow) 兜底；确需跳过用 `git commit --no-verify`
+- 由 `githooks/commit-msg` 强制检查（`make hooks` 安装，即 `core.hooksPath` 指向 `githooks/`）；CI 的 `Lint & Policy` job 兜底；确需跳过用 `git commit --no-verify`
 
 示例：
 
@@ -63,15 +64,16 @@ fix(auth): reject expired refresh token
 ## Pull Request
 
 1. 至少 1 人 review 通过
-2. feature/fix/hotfix → release PR 必须通过常规 CI、Docker 和提交消息检查；这些 workflow 只响应 PR，不在合并后的 branch push 上重复运行
-3. release/* → master 发布候选 PR 还必须通过一次 Scaffold Matrix；向 master 直接提交的其它来源分支会在该 required check 中失败；master 与 release/* 的 GitHub ruleset required checks 负责阻止未验证合并
+2. feature/fix/hotfix → release PR 必须通过 `PR Gate`（代码质量、门禁、分片、覆盖率、DB 集成、提交消息、版本日志）与 `Image Gate`（镜像构建、漏洞扫描、容器冒烟）；这些 workflow 只响应 PR，不在合并后的 branch push 上重复运行
+3. release/* → master 发布候选 PR 还必须通过一次 `Scaffold Gate`；向 master 直接提交的其它来源分支会在该 required check 中失败。master 有 required checks（`PR Gate`/`Image Gate`/`Scaffold Gate`，`strict` 策略要求分支与 master 同步）；release/* 只有 `non_fast_forward` 规则、无 required checks
 4. 合并策略：feature/fix/hotfix → release 用 squash merge；release → master 用 merge commit
 5. 合并后删除源分支
 
 ## Tag 与发布
 
 - 发布当日从 release 分支合并到 master 后，在 master tip 打 `vMAJOR.MINOR.PATCH` tag（SemVer，无预发布标签）
-- 发布候选 PR 合并后，在当前 `master` tip 打 `vMAJOR.MINOR.PATCH` tag；tag workflow 会校验 tag 必须指向当前 `master` tip，然后只构建四平台二进制并创建 GitHub Release，不重复运行完整 CI 或 Scaffold Matrix
+- 发布候选 PR 合并后，在当前 `master` tip 打 `vMAJOR.MINOR.PATCH` tag；tag workflow 会校验 tag 必须指向当前 `master` tip，然后并行构建 `full` 与 `minimal` 两个形态 × 4 平台的 8 个二进制（`jimu-<profile>-<os>-<arch>`，产物内注入该 tag 作为版本号）并创建 GitHub Release，不重复运行完整 CI 或 `Scaffold Gate`
+- 依赖更新：dependabot 的 PR 面向 `dependency-updates`，minor/patch 由 `.github/workflows/dependabot-auto-merge.yml` 自动合并（major 留人工）；master 前进后 `.github/workflows/sync-dependency-branch.yml` 自动把 master 合入该分支；开版用 `Start Release Branch` workflow（手动输入版本号）从该分支创建 `release/<version>`
 - `make release-check` 仍可在本地发布前人工运行；tag 与 release notes 同步推送；不发布未经 tag 的 commit
 - 回滚：master 不接受 force push，用 revert commit 或新 hotfix PR；release 分支回滚切 hotfix 分支修复后重复合并流程
 
