@@ -407,7 +407,8 @@ govulncheck:
 test-cover:
 	go test ./... -coverprofile=coverage.out
 
-## test-coverage-check: 校验覆盖率阈值（默认 70%；CI 的 Coverage & Docs job 复用本目标）
+## test-coverage-check: 校验全仓覆盖率阈值（默认 70%）与逐包「不低于」下限
+##                      （逐包下限实现见 scripts/check_coverage_floors.sh；CI 的 Coverage & Docs job 复用本目标）
 test-coverage-check:
 	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
 	THRESHOLD=70; \
@@ -417,6 +418,7 @@ test-coverage-check:
 		go tool cover -func=coverage.out; exit 1; \
 	fi; \
 	echo "✅ Coverage check passed ($${COVERAGE}% >= $${THRESHOLD}%)"
+	@bash scripts/check_coverage_floors.sh coverage.out
 
 ## test-race: 竞争检测测试（CI 侧由 scripts/test_shards.sh 分片跑 `-race -covermode=atomic`）
 test-race:
