@@ -412,6 +412,7 @@ test-cover:
 test-coverage-check:
 	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
 	THRESHOLD=70; \
+	printf '%s' "$${COVERAGE}" | grep -Eq '^[0-9]+([.][0-9]+)?$$' || { echo "❌ 无法解析总覆盖率：go tool cover -func 失败，或 coverage.out 陈旧/不可读（COVERAGE='$${COVERAGE}'）"; exit 1; }; \
 	echo "📈 Total coverage: $${COVERAGE}%"; \
 	if [ $$(awk "BEGIN{print ($${COVERAGE}<$${THRESHOLD})}") -eq 1 ]; then \
 		echo "❌ Coverage $${COVERAGE}% is below threshold $${THRESHOLD}%"; \

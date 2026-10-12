@@ -29,6 +29,24 @@ jimu/internal/kernel/http/middleware|
 '
 
 floors="${COVERAGE_FLOORS:-$FLOORS}"
+
+# 下限表格式校验（fail closed）：一行都不许含糊。畸形行若放行，会以两种方式让门禁
+# 静默消失（fail open）——漏掉 `|` 被当成「下限未设（仅打印）」，非法下限值被 awk 的
+# `+ 0` 当成 0 而报「✅ 余量」。故：格式不符即 stderr 列出非法行，exit 2。
+badfloors=$(printf '%s\n' "$floors" | awk '
+  {
+    line = $0
+    gsub(/^[ \t]+|[ \t]+$/, "", line)
+    if (line == "") next
+    if (line !~ /^[^|]+\|([0-9]+(\.[0-9]+)?)?$/) print line
+  }
+')
+if [ -n "$badfloors" ]; then
+  echo "❌ 下限表格式非法：每行应为「<目录前缀>|<下限%>」，下限留空或为数字（如 50.5）。非法行：" >&2
+  while IFS= read -r badline; do printf '   %s\n' "$badline" >&2; done <<< "$badfloors"
+  exit 2
+fi
+
 profile="${1:-coverage.out}"
 [ -f "$profile" ] || {
   echo "❌ 找不到覆盖率 profile: $profile" >&2
