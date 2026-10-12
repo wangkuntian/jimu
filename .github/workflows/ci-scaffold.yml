@@ -7,13 +7,12 @@ name: CI (Scaffold)
 # 触发口径（任一满足）：
 #   ① 手动 workflow_dispatch：只跑这条重型 workflow（这是它独立成文件的主要理由之一 —— 挂在 ci.yml 上
 #      时手动触发会把 Lint/Test/Race/Bench/Govulncheck 一起拉起来）；
-#   ② release/* → master 的 PR（发布候选全量验证）与 dependabot/* → master 的依赖 PR
-#      （依赖升级当场被矩阵验证，不攒到发布才第一次跑）；
-#   ③ dependabot/** → master 的 PR：依赖升级必须**当场**被脚手架矩阵验证。攒批分支
-#      `dependency-updates` 已移除，依赖 PR 直接面向 master —— 若这里不放行，依赖 PR 会在
-#      `Scaffold Gate` 上红且无法合并；放行后升级被模板/闭包打破会在 PR 当场暴露，而不是等到发布。
-#   ④ 每周一次的夜间定时：模板/闭包漂移在两次 release 之间就能抓到。
-# ①②③ 之外的其它来源 PR 由下面的 `Scaffold Gate` 聚合 job fail-closed 拒绝。
+#   ② release/* → master 的 PR：发布候选全量验证；以及 dependabot/* → master 的依赖 PR：
+#      依赖升级必须**当场**被脚手架矩阵验证（攒批分支 `dependency-updates` 已移除，依赖 PR 直接
+#      面向 master —— 若这里不放行，依赖 PR 会在 `Scaffold Gate` 上红且无法合并；放行后升级被
+#      模板/闭包打破会在 PR 当场暴露，而不是等到发布才发现）；
+#   ③ 每周一次的夜间定时：模板/闭包漂移在两次 release 之间就能抓到。
+# ①② 之外的其它来源 PR 由下面的 `Scaffold Gate` 聚合 job fail-closed 拒绝。
 # tag 发布不再重复执行矩阵；release→master PR 的必需检查负责验证要发布的 master tip。
 #
 # 为什么独立成 workflow（而不是 ci.yml 里的一个 job）：
