@@ -15,7 +15,22 @@
 # 用法：check_coverage_floors.sh [coverage.out]
 # 环境变量 COVERAGE_FLOORS 可覆盖内置下限表，仅用于本文件的本地单测。
 # 环境变量 SKIP_COVERAGE_FLOORS=1 跳过本判定（本地 `make ci` 无 DB 口径时使用；CI 不设该变量）。
+# 该豁免在 CI 中被**硬守卫**拒绝（fail closed，见下）；判定键是 GitHub 自己设的
+# `GITHUB_ACTIONS=true`，而不是通用的 `CI=true`。
 set -euo pipefail
+
+# 硬守卫（fail closed）：CI 里绝不许跳过。判定键必须是 GitHub 自己设的 `GITHUB_ACTIONS=true`，
+# **不能**用通用的 `CI=true` —— 本地开发者环境也常导出 `CI=true`，用它会让本地 `make ci` 的
+# 豁免反而失效（豁免恰恰是给本地用的，本地无 DB 口径必然低于 CI 下限）；`GITHUB_ACTIONS`
+# 只在 GitHub Actions 里为 true，因此它才是「真的在 CI 上」的可靠标记。
+# 本守卫必须位于豁免分支**之前**：先判「CI 里不许跳」，再判「要不要跳」，这样即便将来有人把
+# `SKIP_COVERAGE_FLOORS=1` 写进 `.github/workflows/**`，逐包门禁也不会静默失效（只打印一行
+# 说明却 exit 0），而是当场非零退出、把误配置暴露出来。退出码 2 与本文件其他「用法/配置错误」
+# 一致（下限表格式非法、profile 缺失同为 2）。
+if [ "${GITHUB_ACTIONS:-}" = "true" ] && [ "${SKIP_COVERAGE_FLOORS:-}" = "1" ]; then
+  echo "❌ 检测到 GITHUB_ACTIONS 环境下设置了 SKIP_COVERAGE_FLOORS：逐包覆盖率下限门禁不允许在 CI 中被跳过（该变量仅供本地 make ci 使用）。请从 workflow 中移除该变量。" >&2
+  exit 2
+fi
 
 # 本地豁免开关：本机 `make ci` 无 DB 口径 ⇒ `*/infrastructure` 测试 SKIP ⇒ 读数天然低于
 # 取自 CI（DB 口径）的下限。CI 的 `Coverage & Docs` job 不设该变量，判定照常执行。
