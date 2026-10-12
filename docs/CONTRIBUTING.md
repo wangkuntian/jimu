@@ -74,7 +74,7 @@ fix(auth): reject expired refresh token
 - 发布候选 PR 合并后，在当前 `master` tip 打 `vMAJOR.MINOR.PATCH` tag；tag workflow 会校验 tag 必须指向当前 `master` tip，然后并行构建 `full` 与 `minimal` 两个形态 × 4 平台的 8 个二进制（`jimu-<profile>-<os>-<arch>`，产物内注入该 tag 作为版本号）并创建 GitHub Release，不重复运行完整 CI 或 `Scaffold Gate`
 - 依赖更新：dependabot 的 PR **直接面向 `master`**（默认分支），minor/patch 由 `.github/workflows/dependabot-auto-merge.yml` 自动合并（major 留人工评估）。依赖 PR 与发布候选 PR 走同一套 master 门禁 —— `PR Gate`/`Image Gate`/`Scaffold Gate` 三道都要过，因此升级会被**脚手架矩阵当场验证**，而不是攒到发布候选 PR 才第一次跑
 - 发布流程：`Start Release Branch` workflow（手动触发）**只需输入版本号**，总是从 `master` 切出 `release/<version>`；依赖升级平时已经直接进 master，发布分支天然包含它们，不再有「吸收」步骤
-- 来源白名单：`Scaffold Gate` 只对发布候选 PR 真跑矩阵，其来源白名单维护在 `.github/workflows/ci-scaffold.yml`（shards job 的 `head_ref` 守卫与聚合 job 的来源判定）。**该白名单必须包含 dependabot 分支**，否则依赖 PR 会在 `Scaffold Gate` 上红且无法合并（master ruleset 没有 bypass actor）
+- 来源白名单：`Scaffold Gate` 的来源白名单维护在 `.github/workflows/ci-scaffold.yml`（shards job 的 `head_ref` 守卫与聚合 job 的来源判定），**已同时放行 `release/*`（发布候选）与 `dependabot/*`（依赖升级）**；其余来源一律 fail-closed。`dependabot-auto-merge.yml` 的 `branches`/`base.ref` 亦已改为 `master`。注意这两处是**配套**的：若只改 `dependabot.yml` 的 `target-branch` 而不放行白名单，依赖 PR 会在 `Scaffold Gate` 上红且无法合并（master ruleset 没有 bypass actor）
 - 历史说明：v0.3.5 曾引入常驻分支 `dependency-updates` 攒批依赖升级；v0.3.6 先移除了它的同步自动化（`sync-dependency-branch.yml`），并在本版本重切时连同该分支与其 ruleset 一并删除。移除原因：该分支必须 require `PR Gate`（否则 `--auto` 会抢跑），而 required check **同时拦截直推** ⇒ 同步只能走 PR；`GITHUB_TOKEN` 默认不允许创建 PR，即使允许，用它创建的 PR 也不会触发工作流 ⇒ 自动化无解；且 `Start Release Branch` 从它切出会漏掉 master 的提交。现在只有 `master` 一条长期分支
 - `make release-check` 仍可在本地发布前人工运行；tag 与 release notes 同步推送；不发布未经 tag 的 commit
 - 回滚：master 不接受 force push，用 revert commit 或新 hotfix PR；release 分支回滚切 hotfix 分支修复后重复合并流程
