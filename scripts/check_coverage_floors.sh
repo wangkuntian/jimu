@@ -18,14 +18,14 @@ set -euo pipefail
 # 下限表：一处定义；`前缀|<下限%>`。下限留空 = 只打印不判定。
 # 仅包含本刀涉及的包（spec §5）；数值由校准 run 填入（基线 − 0.5pp，见 Task 9）。
 FLOORS='
-jimu/internal/capabilities/tenant|
-jimu/internal/capabilities/user|
-jimu/internal/capabilities/access|
-jimu/internal/capabilities/audit|
-jimu/internal/capabilities/apikey|
-jimu/internal/kernel/tenant|
-jimu/internal/kernel/auth|
-jimu/internal/kernel/http/middleware|
+jimu/internal/capabilities/tenant|48.2
+jimu/internal/capabilities/user|61.4
+jimu/internal/capabilities/access|69.2
+jimu/internal/capabilities/audit|70.7
+jimu/internal/capabilities/apikey|79.6
+jimu/internal/kernel/tenant|91.1
+jimu/internal/kernel/auth|51.4
+jimu/internal/kernel/http/middleware|91.3
 '
 
 floors="${COVERAGE_FLOORS:-$FLOORS}"
