@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -104,8 +105,22 @@ func TestA1_4_NoneAlgTokenIsRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("构造 alg=none token 失败：%v", err)
 	}
-	if _, err := j.Parse(raw, TokenTypeAccess); err == nil {
+	// 只断言 err == nil 的粒度不足以锁住白名单：删掉 jwt.go:70 的 WithValidMethods 后，
+	// token 仍会被 :78 的 keyfunc 类型校验拒绝（err != nil），断言照样绿 —— 防线归属被掩盖。
+	// 因此把粒度提高到「拒绝原因必须指向白名单」：
+	//   - errors.Is(..., jwt.ErrTokenSignatureInvalid)：不耦合文案，锁住「签名/白名单类」拒绝；
+	//   - Contains("signing method none is invalid")：锁住拒绝来自白名单而非 keyfunc。
+	// 代价：Contains 耦合了 jwt/v5 的错误文案（parser.go: "signing method %v is invalid"），
+	// 升级 jwt/v5 时需同步；这是「证明防线归属」的必要成本。
+	_, err = j.Parse(raw, TokenTypeAccess)
+	if err == nil {
 		t.Fatal("alg=none token 必须被拒绝")
+	}
+	if !errors.Is(err, jwt.ErrTokenSignatureInvalid) {
+		t.Fatalf("alg=none 必须因签名/白名单被拒，got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "signing method none is invalid") {
+		t.Fatalf("alg=none 的拒绝原因必须指向白名单（signing method none is invalid），got: %v", err)
 	}
 }
 
@@ -123,8 +138,17 @@ func TestA1_5_NonHS256TokensAreRejected(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := j.Parse(raw, TokenTypeAccess); err == nil {
+		// 与 A1.4 同理：err != nil 的粒度无法区分「被白名单拦住」与「被 keyfunc 类型校验拦住」。
+		// Contains 耦合 jwt/v5 错误文案（见 A1.4 注释），用于锁死白名单这一防线归属。
+		_, err = j.Parse(raw, TokenTypeAccess)
+		if err == nil {
 			t.Fatal("RSA 签名的 token 必须被拒绝")
+		}
+		if !errors.Is(err, jwt.ErrTokenSignatureInvalid) {
+			t.Fatalf("RSA token 必须因签名/白名单被拒，got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "signing method RS256 is invalid") {
+			t.Fatalf("RSA token 的拒绝原因必须指向白名单（signing method RS256 is invalid），got: %v", err)
 		}
 	})
 
