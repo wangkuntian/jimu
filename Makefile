@@ -410,7 +410,7 @@ test-cover:
 ## test-coverage-check: 校验全仓覆盖率阈值（默认 70%）与逐包「不低于」下限
 ##                      （逐包下限实现见 scripts/check_coverage_floors.sh；CI 的 Coverage & Docs job 复用本目标）
 test-coverage-check:
-	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
+	@COVERAGE=$$(go tool cover -func=coverage.out | grep -E '^total:' | awk '{print $$3}' | sed 's/%//'); \
 	THRESHOLD=70; \
 	printf '%s' "$${COVERAGE}" | grep -Eq '^[0-9]+([.][0-9]+)?$$' || { echo "❌ 无法解析总覆盖率：go tool cover -func 失败，或 coverage.out 陈旧/不可读（COVERAGE='$${COVERAGE}'）"; exit 1; }; \
 	echo "📈 Total coverage: $${COVERAGE}%"; \
