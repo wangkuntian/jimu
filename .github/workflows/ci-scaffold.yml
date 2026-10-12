@@ -2,13 +2,18 @@ name: CI (Scaffold)
 
 # 重型脚手架矩阵：真实生成项目 + `go build/vet/test/run`（由 JIMU_HEAVY_MATRIX=1 门控，
 # 本地等价命令 `make test-scaffold-matrix`）。**普通开发 PR 不跑** —— 冷跑要十几到几十分钟，
-# 只在发布候选 PR 上运行，避免每个开发 PR 都等待重型矩阵。
+# 只在发布候选 PR 与 dependabot 依赖 PR 上运行，避免每个开发 PR 都等待重型矩阵。
 #
 # 触发口径（任一满足）：
 #   ① 手动 workflow_dispatch：只跑这条重型 workflow（这是它独立成文件的主要理由之一 —— 挂在 ci.yml 上
 #      时手动触发会把 Lint/Test/Race/Bench/Govulncheck 一起拉起来）；
-#   ② release/* → master 的 PR：发布候选全量验证；
-#   ③ 每周一次的夜间定时：模板/闭包漂移在两次 release 之间就能抓到。
+#   ② release/* → master 的 PR（发布候选全量验证）与 dependabot/* → master 的依赖 PR
+#      （依赖升级当场被矩阵验证，不攒到发布才第一次跑）；
+#   ③ dependabot/** → master 的 PR：依赖升级必须**当场**被脚手架矩阵验证。攒批分支
+#      `dependency-updates` 已移除，依赖 PR 直接面向 master —— 若这里不放行，依赖 PR 会在
+#      `Scaffold Gate` 上红且无法合并；放行后升级被模板/闭包打破会在 PR 当场暴露，而不是等到发布。
+#   ④ 每周一次的夜间定时：模板/闭包漂移在两次 release 之间就能抓到。
+# ①②③ 之外的其它来源 PR 由下面的 `Scaffold Gate` 聚合 job fail-closed 拒绝。
 # tag 发布不再重复执行矩阵；release→master PR 的必需检查负责验证要发布的 master tip。
 #
 # 为什么独立成 workflow（而不是 ci.yml 里的一个 job）：
@@ -27,7 +32,8 @@ name: CI (Scaffold)
 on:
   workflow_dispatch:
   pull_request:
-    # 只监听 release/* → master 的发布候选 PR；普通 feature/fix → release PR 不跑重型矩阵。
+    # 监听面向 master 的 PR：release/*（发布候选）与 dependabot/**（依赖升级）会真跑矩阵，
+    # 其它来源由下面的 Scaffold Gate 聚合 job fail-closed 拒绝；feature/fix → release 不跑重型矩阵。
     types: [opened, synchronize, reopened]
     branches: [master]
   schedule:
@@ -77,7 +83,7 @@ jobs:
   scaffold-shards:
     name: Scaffold (${{ matrix.name }})
     needs: changes
-    if: needs.changes.outputs.heavy == 'true' && (github.event_name != 'pull_request' || startsWith(github.head_ref, 'release/'))
+    if: needs.changes.outputs.heavy == 'true' && (github.event_name != 'pull_request' || startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'dependabot/'))
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -173,8 +179,10 @@ jobs:
             echo "::error::Scaffold input detection failed: $CHANGES_RESULT"
             exit 1
           fi
-          if [ "$GITHUB_EVENT_NAME" = pull_request ] && [[ "$RELEASE_SOURCE" != release/* ]]; then
-            echo "::error::Scaffold Gate only accepts release/* -> master PRs: $RELEASE_SOURCE"
+          # 只接受 release/* 与 dependabot/* 来源的 master PR：前者是发布候选，后者是依赖升级
+          # （依赖 PR 直接面向 master，必须当场被脚手架矩阵验证；其余来源仍 fail-closed）。
+          if [ "$GITHUB_EVENT_NAME" = pull_request ] && [[ "$RELEASE_SOURCE" != release/* && "$RELEASE_SOURCE" != dependabot/* ]]; then
+            echo "::error::Scaffold Gate only accepts release/* and dependabot/* -> master PRs: $RELEASE_SOURCE"
             exit 1
           fi
           if [ "$HEAVY" = true ] && [ "$SHARDS_RESULT" != success ]; then
