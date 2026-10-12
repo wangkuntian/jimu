@@ -1,6 +1,6 @@
 services:
   mariadb:
-    image: mariadb:12.1.2-noble
+    image: mariadb:12.3.3-noble
     restart: unless-stopped
     environment:
       MARIADB_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
@@ -24,7 +24,7 @@ services:
       - db_password
 
   redis:
-    image: redis:8.4.0-alpine
+    image: redis:8.10.2-alpine
     restart: unless-stopped
     volumes:
       - jimu-redis-data:/data
@@ -91,7 +91,7 @@ services:
 
   # 可选的 observability profile：OpenObserve 统一承载 日志/指标/追踪/告警/仪表盘
   openobserve:
-    image: public.ecr.aws/zinclabs/openobserve:v0.92.2
+    image: public.ecr.aws/zinclabs/openobserve:v1.0.4
     profiles: ["observability"]
     restart: unless-stopped
     environment:
@@ -110,7 +110,7 @@ services:
 
   # 可选的 observability profile：OTel Collector 采集数据库指标（MySQL/Redis）→ OpenObserve
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.115.1
+    image: otel/opentelemetry-collector-contrib:0.162.0
     profiles: ["observability"]
     restart: unless-stopped
     command: ["--config=/etc/otelcol/config.yaml"]
