@@ -39,7 +39,7 @@ runs:
 
     - name: "♻️ Restore the rolling build cache"
       if: inputs.cache == 'true' && inputs.save == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ${{ steps.resolve.outputs.path }}
         # 主 key 带 sha：Actions 缓存条目按 key 不可变、命中即「只恢复不重存」，
@@ -51,7 +51,7 @@ runs:
 
     - name: "♻️ Restore the rolling build cache (restore-only)"
       if: inputs.cache == 'true' && inputs.save != 'true'
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v6
       with:
         path: ${{ steps.resolve.outputs.path }}
         # 与保存步骤共用同一组 key/restore-keys（两者的 if 互斥、不会同跑）：只恢复不写回，
