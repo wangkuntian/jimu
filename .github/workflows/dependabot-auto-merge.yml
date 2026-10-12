@@ -1,17 +1,17 @@
 name: Dependabot Auto-merge
 
-# 只做一件事：让 dependabot 的 minor/patch PR 在 dependency-updates 上开启 GitHub 原生 auto-merge，
+# 只做一件事：让 dependabot 的 minor/patch PR 在 master 上开启 GitHub 原生 auto-merge，
 # 由 GitHub 负责「等 required check 满足后再合」。等检查的事不自己轮询、不串 workflow_run。
 #
 # 安全约束（改这个文件前先读）：
 #   1. 本 workflow **绝不 checkout、绝不执行 PR 内容**，只调 GitHub API；
 #   2. 判定条件全部满足才动手，缺一不启用；
-#   3. auto-merge 的安全性依赖 dependency-updates 的 ruleset **确实 require `PR Gate`** ——
+#   3. auto-merge 的安全性依赖 master 的 ruleset **确实 require `PR Gate`** ——
 #      否则 `--auto` 会在没有任何检查的情况下立即合并。
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
-    branches: [dependency-updates]
+    branches: [master]
 
 permissions:
   contents: write
@@ -27,7 +27,7 @@ jobs:
     if: >-
       github.actor == 'dependabot[bot]' &&
       github.event.pull_request.user.login == 'dependabot[bot]' &&
-      github.event.pull_request.base.ref == 'dependency-updates' &&
+      github.event.pull_request.base.ref == 'master' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
