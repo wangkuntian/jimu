@@ -421,6 +421,12 @@ test-coverage-check:
 	echo "✅ Coverage check passed ($${COVERAGE}% >= $${THRESHOLD}%)"
 	@bash scripts/check_coverage_floors.sh coverage.out
 
+# test-coverage-check-local: 供 `make ci` 使用的包装。本地 `make ci` 无 DB 口径（`*/infrastructure`
+#   测试 SKIP），逐包读数天然低于取自 CI 的下限，故以 SKIP_COVERAGE_FLOORS=1 跳过逐包判定；
+#   该下限由 CI 的 `Coverage & Docs` job 执行（不设此变量）。理由见 docs/releases/v0.3.6.md。
+test-coverage-check-local:
+	SKIP_COVERAGE_FLOORS=1 $(MAKE) --no-print-directory test-coverage-check
+
 ## test-race: 竞争检测测试（CI 侧由 scripts/test_shards.sh 分片跑 `-race -covermode=atomic`）
 test-race:
 	go test -race ./...
@@ -455,7 +461,7 @@ compose-check:
 
 ## ci: 本地 CI 检查（无外部依赖部分，完整 CI 见 .github/workflows/ci.yml）；
 ##     末尾含重型脚手架矩阵（test-scaffold-matrix，耗时数分钟起），与 CI 的 Scaffold Gate job 对齐
-ci: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck test-scaffold-matrix
+ci: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check test-cover test-coverage-check-local test-race swagger-check smoke-check build govulncheck test-scaffold-matrix
 	@echo "✅ All local CI checks passed"
 
 ## release-check: 本地发布前检查（Go 门禁 + govulncheck + 隔离 Compose/API smoke + 重型脚手架矩阵）；
