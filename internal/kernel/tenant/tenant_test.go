@@ -89,7 +89,7 @@ func TestMiddlewareSkipsZeroTenant(t *testing.T) {
 
 // T3.1（常量面）默认租户 ID 固定为 1，与迁移 005_add_tenants.sql 的种子行同值。
 // T3.1 的编码面（默认租户 code == "default"）需要读库，落在
-// internal/capabilities/tenant/infrastructure/tenant_invariant_integration_test.go（Task 8）。
+// internal/capabilities/tenant/infrastructure/default_tenant_invariant_integration_test.go（Task 8）。
 func TestT3_1_DefaultTenantID(t *testing.T) {
 	if DefaultTenantID != 1 {
 		t.Fatalf("DefaultTenantID = %d, want 1", DefaultTenantID)

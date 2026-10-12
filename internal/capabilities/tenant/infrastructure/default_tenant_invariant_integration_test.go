@@ -2,7 +2,7 @@
 // 执行测试函数（实测：同包内 `aa_test.go` 先于 `zz_test.go`）。`default_...` <
 // `mysql_repository_integration_test.go` ⇒ 本测试先于同包的 `TRUNCATE tenants`
 // （mysql_repository_integration_test.go:40）执行，因而能在种子行被抹掉**之前**观测
-// 005_add_tenants.sql:27-28 自己写入的默认租户行。
+// 005_tenants.sql:27-28 自己写入的默认租户行。
 //
 // 这是 T3.1b 的**唯一**鉴别力来源，本测试**不得自播种**被断言的那一行：若本文件改名排到
 // truncate 之后（或同包出现更早的 truncate），迁移种子就观测不到了 —— 此时要么断言变红
@@ -36,12 +36,17 @@ func init() {
 	})
 }
 
-// T3.1b 默认租户编码：005_add_tenants.sql:27-28 的种子行为 id=1 / code=default。
+// T3.1b 默认租户编码：005_tenants.sql:27-28 的种子行为 id=1 / code=default。
 // T3.2 删除默认租户 → 拒绝，且行仍然存在。
 // T4.3 更新已存在租户的名称不得改动编码（哨兵；真实守卫见 T4.3 处注释）。
 func TestT3_1b_T3_2_T4_3_DefaultTenantIsSeededProtectedAndImmutable(t *testing.T) {
 	tdb := testutil.SkipUnlessMysql(t)
-	defer tdb.Close()
+	// 关连接必须用 `t.Cleanup` 而**不是** `defer tdb.Close()`：测试体的 defer 早于**所有**
+	// `t.Cleanup` 执行（实测顺序 `body → defer → t.Cleanup`），而下面的还原也是 t.Cleanup。
+	// t.Cleanup 是 **LIFO**，故本行先注册 ⇒ 还原先跑（连接仍可用）、Close 最后跑。
+	// 若改回 `defer`，还原会先 `FindByID` 拿到 `sql: database is closed`，cleanup 里的
+	// assert 失败并让本测试在**有库时必然 FAIL**（fix round 2 的 Critical）。
+	t.Cleanup(func() { _ = tdb.Close() })
 
 	require.NoError(t, tdb.Migrate(), "goose 迁移应成功")
 
@@ -60,6 +65,7 @@ func TestT3_1b_T3_2_T4_3_DefaultTenantIsSeededProtectedAndImmutable(t *testing.T
 	// 展示名永久改写（消除「未来新增断言默认租户 name」或本地共享库多包连跑的顺序依赖）。
 	// 注册点放在 T3.1b 之后：种子缺失时上面的 require 已 FailNow，不会注册出「还原不存在的行」
 	// 的二次噪音失败——那种情况下的失败必须是单纯、可诊断的种子缺失。
+	// 本 cleanup 晚于函数开头的 Close cleanup 注册 ⇒ LIFO 下**先于** Close 执行（连接仍可用）。
 	originalName := got.Name
 	t.Cleanup(func() {
 		restore := originalName
