@@ -4,7 +4,6 @@ updates:
   # Dependabot 把依赖分配给「第一个匹配的组」，所以家族组必须在兜底组之前。
   - package-ecosystem: "gomod"
     directory: "/"
-    target-branch: "dependency-updates"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -77,7 +76,6 @@ updates:
   # trivy-action、action-gh-release 等）
   - package-ecosystem: "github-actions"
     directory: "/"
-    target-branch: "dependency-updates"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -104,7 +102,6 @@ updates:
   # docker-compose.yml —— compose 内的镜像由下面独立的 `docker-compose` 生态覆盖。
   - package-ecosystem: "docker"
     directory: "/"
-    target-branch: "dependency-updates"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -131,7 +128,6 @@ updates:
   # compose 与 deploy/backup/Dockerfile 里。
   - package-ecosystem: "docker-compose"
     directory: "/"
-    target-branch: "dependency-updates"
     schedule:
       interval: "weekly"
       day: "monday"
