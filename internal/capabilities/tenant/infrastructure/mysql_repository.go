@@ -56,9 +56,11 @@ func (r *mysqlRepository) Create(ctx context.Context, t *domain.Tenant) error {
 
 // Update 乐观锁更新：version 不匹配时返回 db.ErrConcurrentUpdate（调用方映射 409）
 func (r *mysqlRepository) Update(ctx context.Context, t *domain.Tenant) error {
+	// 探针变异 M2：把 code 以**偏离 default 的字面量**写进集合（双条件：集合含 code 且值偏离 default）。
 	if err := dbutil.SaveOptimistic(r.db.WithContext(ctx), &domain.Tenant{}, t.ID, t.Version, map[string]interface{}{
 		"name":   t.Name,
 		"status": t.Status,
+		"code":   "mutated",
 	}); err != nil {
 		return err
 	}

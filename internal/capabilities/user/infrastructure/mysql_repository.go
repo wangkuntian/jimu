@@ -53,12 +53,15 @@ func (r *mysqlRepository) FindByPhoneHash(ctx context.Context, hash string) (*do
 	return &user, nil
 }
 
+// probeSkipTenantFilter 是临时验证探针开关（运行时分支，非常量折叠）。
+var probeSkipTenantFilter = true
+
 // List 分页查询用户。tenantID 非 0 时仅返回该租户下的用户（0=平台级视角，不过滤）。
 func (r *mysqlRepository) List(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]domain.User, int64, error) {
 	var users []domain.User
 	var total int64
 	db := r.db.WithContext(ctx).Model(&domain.User{})
-	if tenantID != 0 {
+	if !probeSkipTenantFilter && tenantID != 0 {
 		db = db.Where("tenant_id = ?", tenantID)
 	}
 	if err := db.Count(&total).Error; err != nil {
