@@ -1260,6 +1260,7 @@
     "internal/capabilities/access/infrastructure/mysql_permission_repository_test.go",
     "internal/capabilities/access/infrastructure/mysql_repository.go",
     "internal/capabilities/access/infrastructure/mysql_repository_test.go",
+    "internal/capabilities/access/infrastructure/role_tenant_invariant_integration_test.go",
     "internal/capabilities/access/interfaces/handler.go",
     "internal/capabilities/access/interfaces/handler_test.go",
     "internal/capabilities/access/interfaces/permission_handler.go",
@@ -1357,6 +1358,7 @@
     "internal/capabilities/user/infrastructure/mysql_repository.go",
     "internal/capabilities/user/infrastructure/mysql_repository_integration_test.go",
     "internal/capabilities/user/infrastructure/mysql_repository_test.go",
+    "internal/capabilities/user/infrastructure/user_tenant_invariant_integration_test.go",
     "internal/capabilities/user/interfaces/admin_users.go",
     "internal/capabilities/user/interfaces/admin_users_test.go",
     "internal/capabilities/user/interfaces/handler.go",
@@ -1401,8 +1403,10 @@
     "internal/kernel/access/roles.go",
     "internal/kernel/access/roles_test.go",
     "internal/kernel/auth/apikey_context.go",
+    "internal/kernel/auth/apikey_context_test.go",
     "internal/kernel/auth/fuzz_test.go",
     "internal/kernel/auth/jwt.go",
+    "internal/kernel/auth/jwt_hardening_test.go",
     "internal/kernel/auth/jwt_test.go",
     "internal/kernel/auth/limiter.go",
     "internal/kernel/auth/limiter_test.go",
@@ -1490,6 +1494,7 @@
     "internal/kernel/http/middleware/security_test.go",
     "internal/kernel/http/middleware/signature.go",
     "internal/kernel/http/middleware/signature_test.go",
+    "internal/kernel/http/middleware/tenant_context_test.go",
     "internal/kernel/http/middleware/timeout.go",
     "internal/kernel/http/middleware/timeout_test.go",
     "internal/kernel/http/middleware/validate.go",
@@ -1587,5 +1592,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:2f74fadde4d7252fed550d3f3216040eaf2b0048a14990c9c2a40b2e33cdedb6"
+  "digest": "sha256:584570e48baccc8eaa7d52be15d69dc0c28d094f46abf930b3cbcc745a259b17"
 }

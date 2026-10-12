@@ -119,6 +119,12 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=5m
           install-mode: goinstall
+          # 关掉 config verify：它每次都要去 golangci-lint.run **下载 JSON schema**，
+          # 那个站点超时就会让本步失败 ⇒ Lint & Policy 红 ⇒ PR Gate 红 ⇒ **所有 PR 被挡**
+          # （实测：2026-10-12 依赖 PR #146 因 `context deadline exceeded` 被 blocked，
+          # 与 PR 内容无关）。关掉只失去「配置 schema 早检」这一层：非法 .golangci.yml
+          # 仍会让下面的 `golangci-lint run` 直接报错，故风险很小。
+          verify: false
 
       - name: "🛡️ govulncheck"
         run: make govulncheck

@@ -407,16 +407,25 @@ govulncheck:
 test-cover:
 	go test ./... -coverprofile=coverage.out
 
-## test-coverage-check: 校验覆盖率阈值（默认 70%；CI 的 Coverage & Docs job 复用本目标）
+## test-coverage-check: 校验全仓覆盖率阈值（默认 70%）与逐包「不低于」下限
+##                      （逐包下限实现见 scripts/check_coverage_floors.sh；CI 的 Coverage & Docs job 复用本目标）
 test-coverage-check:
-	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
+	@COVERAGE=$$(go tool cover -func=coverage.out | grep -E '^total:' | awk '{print $$3}' | sed 's/%//'); \
 	THRESHOLD=70; \
+	printf '%s' "$${COVERAGE}" | grep -Eq '^[0-9]+([.][0-9]+)?$$' || { echo "❌ 无法解析总覆盖率：go tool cover -func 失败，或 coverage.out 陈旧/不可读（COVERAGE='$${COVERAGE}'）"; exit 1; }; \
 	echo "📈 Total coverage: $${COVERAGE}%"; \
 	if [ $$(awk "BEGIN{print ($${COVERAGE}<$${THRESHOLD})}") -eq 1 ]; then \
 		echo "❌ Coverage $${COVERAGE}% is below threshold $${THRESHOLD}%"; \
 		go tool cover -func=coverage.out; exit 1; \
 	fi; \
 	echo "✅ Coverage check passed ($${COVERAGE}% >= $${THRESHOLD}%)"
+	@bash scripts/check_coverage_floors.sh coverage.out
+
+# test-coverage-check-local: 供 `make ci` 使用的包装。本地 `make ci` 无 DB 口径（`*/infrastructure`
+#   测试 SKIP），逐包读数天然低于取自 CI 的下限，故以 SKIP_COVERAGE_FLOORS=1 跳过逐包判定；
+#   该下限由 CI 的 `Coverage & Docs` job 执行（不设此变量）。理由见 docs/releases/v0.3.6.md。
+test-coverage-check-local:
+	SKIP_COVERAGE_FLOORS=1 $(MAKE) --no-print-directory test-coverage-check
 
 ## test-race: 竞争检测测试（CI 侧由 scripts/test_shards.sh 分片跑 `-race -covermode=atomic`）
 test-race:
@@ -452,7 +461,7 @@ compose-check:
 
 ## ci: 本地 CI 检查（无外部依赖部分，完整 CI 见 .github/workflows/ci.yml）；
 ##     末尾含重型脚手架矩阵（test-scaffold-matrix，耗时数分钟起），与 CI 的 Scaffold Gate job 对齐
-ci: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check test-cover test-coverage-check test-race swagger-check smoke-check build govulncheck test-scaffold-matrix
+ci: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check test-cover test-coverage-check-local test-race swagger-check smoke-check build govulncheck test-scaffold-matrix
 	@echo "✅ All local CI checks passed"
 
 ## release-check: 本地发布前检查（Go 门禁 + govulncheck + 隔离 Compose/API smoke + 重型脚手架矩阵）；
