@@ -32,7 +32,6 @@ make run
 - `fix/<issue>-<slug>` — 缺陷修复
 - `hotfix/<issue>-<slug>` — 线上紧急修复
 - `dependabot/*` — 自动化分支，人工不得基于它开发
-- `dependency-updates` — 常驻分支，只接收 dependabot 的依赖更新 PR（minor/patch 自动合并）。发布分支从它切出，因此依赖升级随版本进入 master；它本身不是发布线，master 仍然只接受 `release/*` 来源的 PR。
 
 分支名小写，单词用短横线，`slug` 不超过 5 个单词。鼓励带 issue ID。
 
@@ -73,8 +72,10 @@ fix(auth): reject expired refresh token
 
 - 发布当日从 release 分支合并到 master 后，在 master tip 打 `vMAJOR.MINOR.PATCH` tag（SemVer，无预发布标签）
 - 发布候选 PR 合并后，在当前 `master` tip 打 `vMAJOR.MINOR.PATCH` tag；tag workflow 会校验 tag 必须指向当前 `master` tip，然后并行构建 `full` 与 `minimal` 两个形态 × 4 平台的 8 个二进制（`jimu-<profile>-<os>-<arch>`，产物内注入该 tag 作为版本号）并创建 GitHub Release，不重复运行完整 CI 或 `Scaffold Gate`
-- 依赖更新：dependabot 的 PR 面向 `dependency-updates`，minor/patch 由 `.github/workflows/dependabot-auto-merge.yml` 自动合并（major 留人工）；开版用 `Start Release Branch` workflow（手动输入版本号）从该分支创建 `release/<version>`
-- `dependency-updates` 与 master 的同步**不自动化**（v0.3.6 移除了 `sync-dependency-branch.yml`）：向该分支直推会被 ruleset 的 `required_status_checks` 拒绝，而走 PR 又受两条 GitHub 限制（`GITHUB_TOKEN` 默认不允许创建 PR；即使允许，`GITHUB_TOKEN` 创建的 PR 也不会自动触发工作流）。因此该分支可能略落后于 master；**冲突时 dependabot 自身会 rebase**，且发布候选 PR 会做全量校验，风险是「晚发现」而非「不发现」
+- 依赖更新：dependabot 的 PR **直接面向 `master`**（默认分支），minor/patch 由 `.github/workflows/dependabot-auto-merge.yml` 自动合并（major 留人工评估）。依赖 PR 与发布候选 PR 走同一套 master 门禁 —— `PR Gate`/`Image Gate`/`Scaffold Gate` 三道都要过，因此升级会被**脚手架矩阵当场验证**，而不是攒到发布候选 PR 才第一次跑
+- 发布流程：`Start Release Branch` workflow（手动触发）**只需输入版本号**，总是从 `master` 切出 `release/<version>`；依赖升级平时已经直接进 master，发布分支天然包含它们，不再有「吸收」步骤
+- 来源白名单：`Scaffold Gate` 只对发布候选 PR 真跑矩阵，其来源白名单维护在 `.github/workflows/ci-scaffold.yml`（shards job 的 `head_ref` 守卫与聚合 job 的来源判定）。**该白名单必须包含 dependabot 分支**，否则依赖 PR 会在 `Scaffold Gate` 上红且无法合并（master ruleset 没有 bypass actor）
+- 历史说明：v0.3.5 曾引入常驻分支 `dependency-updates` 攒批依赖升级；v0.3.6 先移除了它的同步自动化（`sync-dependency-branch.yml`），并在本版本重切时连同该分支与其 ruleset 一并删除。移除原因：该分支必须 require `PR Gate`（否则 `--auto` 会抢跑），而 required check **同时拦截直推** ⇒ 同步只能走 PR；`GITHUB_TOKEN` 默认不允许创建 PR，即使允许，用它创建的 PR 也不会触发工作流 ⇒ 自动化无解；且 `Start Release Branch` 从它切出会漏掉 master 的提交。现在只有 `master` 一条长期分支
 - `make release-check` 仍可在本地发布前人工运行；tag 与 release notes 同步推送；不发布未经 tag 的 commit
 - 回滚：master 不接受 force push，用 revert commit 或新 hotfix PR；release 分支回滚切 hotfix 分支修复后重复合并流程
 
