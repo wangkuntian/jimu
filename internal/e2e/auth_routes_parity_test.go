@@ -29,6 +29,7 @@ func TestAuthRoutesParity(t *testing.T) {
 		http.MethodPost + " /api/v1/auth/logout",
 		http.MethodPost + " /api/v1/auth/logout-all",
 		http.MethodGet + " /api/v1/auth/me",
+		http.MethodGet + " /api/v1/auth/config",
 		http.MethodGet + " /api/v1/auth/login-history",
 		// mfa：TOTP + 可信设备
 		http.MethodPost + " /api/v1/auth/mfa/setup",

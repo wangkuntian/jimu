@@ -152,14 +152,30 @@ func TestOpenAPIListEndpointsCarryTypedData(t *testing.T) {
 	}
 }
 
-// TestOpenAPIAuthEndpointsCarryTypedData 登录/刷新/注册的成功响应必须是具体类型：
-// 前端据此生成 TokenPair 与注册响应的字段类型，而不是 unknown。
+// TestOpenAPIAuthEndpointsCarryTypedData 登录/刷新/注册/me/config 的成功响应必须是具体类型：
+// 前端据此生成 TokenPair、注册响应、MeView 与 AuthConfigResponse 的字段类型，而不是 unknown。
 func TestOpenAPIAuthEndpointsCarryTypedData(t *testing.T) {
 	spec := readOpenAPI(t)
 
 	assertRefResponse(t, spec, "/auth/login", "post", 200, "#/definitions/contract.TokenPair")
 	assertRefResponse(t, spec, "/auth/refresh", "post", 200, "#/definitions/contract.TokenPair")
 	assertRefResponse(t, spec, "/auth/register", "post", 200, "#/definitions/application.RegisterResponse")
+	assertRefResponse(t, spec, "/auth/me", "get", 200, "#/definitions/application.MeView")
+	assertRefResponse(t, spec, "/auth/config", "get", 200, "#/definitions/interfaces.AuthConfigResponse")
+
+	me := definitionProperties(t, spec, "application.MeView")
+	for _, field := range []string{"user", "roles", "permissions"} {
+		if _, ok := me[field]; !ok {
+			t.Fatalf("application.MeView 缺少字段 %s", field)
+		}
+	}
+
+	authConfig := definitionProperties(t, spec, "interfaces.AuthConfigResponse")
+	for _, field := range []string{"public_registration", "provisioning_enabled"} {
+		if _, ok := authConfig[field]; !ok {
+			t.Fatalf("interfaces.AuthConfigResponse 缺少字段 %s", field)
+		}
+	}
 
 	register := definitionProperties(t, spec, "application.RegisterResponse")
 	if _, ok := register["user"]; !ok {
