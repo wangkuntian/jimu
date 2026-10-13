@@ -1280,6 +1280,8 @@
     "internal/capabilities/auth/application/benchmark_test.go",
     "internal/capabilities/auth/application/breach_test.go",
     "internal/capabilities/auth/application/login_history.go",
+    "internal/capabilities/auth/application/permissions.go",
+    "internal/capabilities/auth/application/permissions_test.go",
     "internal/capabilities/auth/application/quota.go",
     "internal/capabilities/auth/application/reset_store.go",
     "internal/capabilities/auth/application/reset_test.go",
@@ -1593,5 +1595,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:201bd3b5ab0f0767524c419fac86529661fe4edfd00c1341286d1aafe0a8bbf0"
+  "digest": "sha256:0d5eb4a705d5137b0604e68245ee50c1060890350312b8e30f3d3c2c76321f35"
 }
