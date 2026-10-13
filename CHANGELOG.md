@@ -2,6 +2,7 @@
 
 所有 notable 变更按版本号记录在 [docs/releases/](docs/releases/) 目录，每个 release 版本一个文件，同时作为 GitHub Release 的 body 来源（`release.yml` 读取）：
 
+- [v0.4.0](docs/releases/v0.4.0.md)（开发中）
 - [v0.2.0](docs/releases/v0.2.0.md)（发布前，随 `release/v0.2.0` 持续更新）
 - [v0.1.1](docs/releases/v0.1.1.md)
 - [v0.1.0](docs/releases/v0.1.0.md)
