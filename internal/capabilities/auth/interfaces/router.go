@@ -23,6 +23,7 @@ func RegisterAuthRoutes(r *gin.RouterGroup, service *application.AuthService, jw
 		authGroup.POST("/refresh", middleware.ValidateJSON(&refreshRequest{}), handler.RefreshToken)
 		authGroup.POST("/forgot-password", middleware.ValidateJSON(&forgotPasswordRequest{}), handler.ForgotPassword)
 		authGroup.POST("/reset-password", middleware.ValidateJSON(&resetPasswordRequest{}), handler.ResetPassword)
+		authGroup.GET("/config", handler.AuthConfig)
 
 		protected := authGroup.Group("")
 		protected.Use(auth.AuthMiddleware(jwtUtil))

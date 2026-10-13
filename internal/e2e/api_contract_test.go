@@ -485,3 +485,23 @@ func repoRoot(t *testing.T) string {
 		dir = parent
 	}
 }
+
+// TestAuthConfigEndpoint 断言真实装配下 /auth/config 的取值来自 dev 配置
+// （configs/app.yaml：public_registration=true、tenant.provisioning.enabled=false）。
+func TestAuthConfigEndpoint(t *testing.T) {
+	requireCapabilities(t, "auth")
+	r := newTestApp(t)
+
+	w := doJSON(t, r, http.MethodGet, "/api/v1/auth/config", "", "")
+	require.Equal(t, http.StatusOK, w.Code)
+	resp := parseResp(t, w)
+	require.Equal(t, 0, resp.Code)
+
+	var data struct {
+		PublicRegistration  bool `json:"public_registration"`
+		ProvisioningEnabled bool `json:"provisioning_enabled"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Data, &data))
+	require.True(t, data.PublicRegistration)
+	require.False(t, data.ProvisioningEnabled)
+}

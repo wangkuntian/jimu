@@ -61,6 +61,7 @@ var fullRoutesGolden = []string{
 	"GET /api/v1/audits/:id",
 	"GET /api/v1/audits/export",
 	"GET /api/v1/audits/verify",
+	"GET /api/v1/auth/config",
 	"GET /api/v1/auth/devices",
 	"GET /api/v1/auth/login-history",
 	"GET /api/v1/auth/webauthn/credentials",

@@ -1140,7 +1140,7 @@
       "user",
       "auth"
     ],
-    "routes": 32,
+    "routes": 33,
     "migrations": [
       "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
       "internal/capabilities/access/migrations/mysql/008_role_version.sql",
@@ -1295,6 +1295,7 @@
     "internal/capabilities/auth/infrastructure/mysql_password_history.go",
     "internal/capabilities/auth/infrastructure/mysql_password_history_test.go",
     "internal/capabilities/auth/interfaces/config.go",
+    "internal/capabilities/auth/interfaces/config_handler.go",
     "internal/capabilities/auth/interfaces/handler.go",
     "internal/capabilities/auth/interfaces/handler_test.go",
     "internal/capabilities/auth/interfaces/protected.go",
@@ -1592,5 +1593,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:584570e48baccc8eaa7d52be15d69dc0c28d094f46abf930b3cbcc745a259b17"
+  "digest": "sha256:201bd3b5ab0f0767524c419fac86529661fe4edfd00c1341286d1aafe0a8bbf0"
 }

@@ -14,6 +14,7 @@ func TestOpenAPIIncludesCRUDContract(t *testing.T) {
 	required := map[string][]string{
 		"/auth/login":             {"post"},
 		"/auth/register":          {"post"},
+		"/auth/config":            {"get"},
 		"/auth/refresh":           {"post"},
 		"/auth/logout":            {"post"},
 		"/auth/logout-all":        {"post"},
@@ -30,6 +31,7 @@ func TestOpenAPIIncludesCRUDContract(t *testing.T) {
 	public := map[string]bool{
 		"post /auth/login":    true,
 		"post /auth/register": true,
+		"get /auth/config":    true,
 		"post /auth/refresh":  true,
 	}
 	for path, methods := range required {

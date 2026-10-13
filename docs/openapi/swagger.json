@@ -371,6 +371,26 @@
                 ]
             }
         },
+        "/auth/config": {
+            "get": {
+                "description": "返回客户端渲染登录/注册入口所需的公开开关。无论是否开放公开注册，本端点都存在。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "获取认证能力开关",
+                "responses": {
+                    "200": {
+                        "description": "成功，返回注册相关开关",
+                        "schema": {
+                            "$ref": "#/definitions/interfaces.AuthConfigResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/devices": {
             "get": {
                 "description": "返回当前用户的可信设备（登录时可跳过 TOTP 的设备）。密码始终必需，设备令牌仅替代 TOTP 因子；改密或登出全部设备会吊销全部可信设备。",
@@ -3222,6 +3242,19 @@
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "interfaces.AuthConfigResponse": {
+            "type": "object",
+            "properties": {
+                "provisioning_enabled": {
+                    "description": "ProvisioningEnabled 开通式注册：注册 = 开通新租户，tenant_name 必填",
+                    "type": "boolean"
+                },
+                "public_registration": {
+                    "description": "PublicRegistration 是否开放公开注册（false 时 /auth/register 路由不注册）",
+                    "type": "boolean"
                 }
             }
         },

@@ -214,6 +214,15 @@ definitions:
       total:
         type: integer
     type: object
+  interfaces.AuthConfigResponse:
+    properties:
+      provisioning_enabled:
+        description: ProvisioningEnabled 开通式注册：注册 = 开通新租户，tenant_name 必填
+        type: boolean
+      public_registration:
+        description: PublicRegistration 是否开放公开注册（false 时 /auth/register 路由不注册）
+        type: boolean
+    type: object
   interfaces.disableTOTPRequest:
     properties:
       code:
@@ -572,6 +581,19 @@ paths:
       summary: 校验审计链完整性
       tags:
       - 审计日志
+  /auth/config:
+    get:
+      description: 返回客户端渲染登录/注册入口所需的公开开关。无论是否开放公开注册，本端点都存在。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回注册相关开关
+          schema:
+            $ref: '#/definitions/interfaces.AuthConfigResponse'
+      summary: 获取认证能力开关
+      tags:
+      - 认证
   /auth/devices:
     delete:
       description: 注销当前用户全部可信设备，用于设备丢失或异常登录后的止损。
