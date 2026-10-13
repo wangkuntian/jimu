@@ -951,6 +951,8 @@ curl http://localhost:8080/api/v1/admin/monitoring/status \
 
 只读端点，不消费令牌地查看某 `scope` + `key` 的当前计数与剩余窗口（如登录爆破防护）：
 
+> **⚠️ 已知限制**：该端点目前**运行时不可用** —— `console` 能力声明 `MountSelfManaged`，其 `/api/v1/admin/*` 挂在未套认证链的根路由上，组内又用 `AdminAuth()` 读 gin context 的 `user_id`/`roles`（无人写入），因此**即使带合法的管理员 token 也会返回 401**。契约地址与鉴权声明已修正（见 `docs/releases/v0.4.0.md`），接线修复列为本仓后续项。下面的示例展示的是修复接线后应有的行为。
+
 ```bash
 curl "http://localhost:8080/api/v1/admin/ratelimit/auth?scope=login&key=ip:1.2.3.4" \
   -H "Authorization: Bearer <access_token>"
