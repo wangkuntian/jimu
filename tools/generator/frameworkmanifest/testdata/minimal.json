@@ -1285,6 +1285,8 @@
     "internal/capabilities/auth/application/permissions.go",
     "internal/capabilities/auth/application/permissions_test.go",
     "internal/capabilities/auth/application/quota.go",
+    "internal/capabilities/auth/application/register.go",
+    "internal/capabilities/auth/application/register_test.go",
     "internal/capabilities/auth/application/reset_store.go",
     "internal/capabilities/auth/application/reset_test.go",
     "internal/capabilities/auth/application/service.go",
@@ -1600,5 +1602,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:91344db127e136878ee7c9eb4ad9edff4909f05377e429a3421e3820b1783785"
+  "digest": "sha256:2632f831d71f4149b26be02f79b0d4612628033d3909d2c700d8aa88a99ea82d"
 }

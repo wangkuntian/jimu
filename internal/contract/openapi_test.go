@@ -152,6 +152,31 @@ func TestOpenAPIListEndpointsCarryTypedData(t *testing.T) {
 	}
 }
 
+// TestOpenAPIAuthEndpointsCarryTypedData 登录/刷新/注册的成功响应必须是具体类型：
+// 前端据此生成 TokenPair 与注册响应的字段类型，而不是 unknown。
+func TestOpenAPIAuthEndpointsCarryTypedData(t *testing.T) {
+	spec := readOpenAPI(t)
+
+	assertRefResponse(t, spec, "/auth/login", "post", 200, "#/definitions/contract.TokenPair")
+	assertRefResponse(t, spec, "/auth/refresh", "post", 200, "#/definitions/contract.TokenPair")
+	assertRefResponse(t, spec, "/auth/register", "post", 200, "#/definitions/application.RegisterResponse")
+
+	register := definitionProperties(t, spec, "application.RegisterResponse")
+	if _, ok := register["user"]; !ok {
+		t.Fatal("application.RegisterResponse 缺少 user 字段")
+	}
+	if _, ok := register["tenant"]; !ok {
+		t.Fatal("application.RegisterResponse 缺少 tenant 字段（开通式注册时返回）")
+	}
+
+	user := definitionProperties(t, spec, "application.RegisterUserView")
+	for _, field := range []string{"id", "username", "email", "phone", "status", "tenant_id"} {
+		if _, ok := user[field]; !ok {
+			t.Fatalf("application.RegisterUserView 缺少字段 %s", field)
+		}
+	}
+}
+
 func assertRefResponse(t *testing.T, spec map[string]any, path, method string, statusCode int, wantRef string) {
 	t.Helper()
 	operation := operationOf(t, spec, path, method)

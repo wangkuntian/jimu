@@ -369,7 +369,26 @@ func TestAPIContract(t *testing.T) {
 	// 1. 注册新用户
 	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/register", "", `{"username":"e2euser","password":"e2epass123"}`)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, 0, parseResp(t, w).Code)
+	registeredResp := parseResp(t, w)
+	require.Equal(t, 0, registeredResp.Code)
+
+	// 注册响应的线上形状统一为 {user, tenant?}：普通注册只有 user，
+	// 不得再退回裸账号对象（data 顶层带 id/username），也不得含密码。
+	var registered struct {
+		User struct {
+			ID       uint64 `json:"id"`
+			Username string `json:"username"`
+			Password string `json:"password"`
+		} `json:"user"`
+		Tenant     any    `json:"tenant"`
+		TopLevelID uint64 `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(registeredResp.Data, &registered))
+	require.NotZero(t, registered.User.ID, "注册响应必须是 {user} 形状")
+	require.Equal(t, "e2euser", registered.User.Username)
+	require.Empty(t, registered.User.Password, "注册响应不得含密码字段")
+	require.Zero(t, registered.TopLevelID, "data 顶层不得再是裸账号对象")
+	require.Nil(t, registered.Tenant, "普通注册不得返回 tenant")
 
 	// 2. 管理员登录
 	adminToken := login(t, r, "admin", "admin123")

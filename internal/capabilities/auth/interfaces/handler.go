@@ -36,7 +36,7 @@ func NewAuthHandler(service *application.AuthService, cfg Config, limiter *platf
 // @Accept       json
 // @Produce      json
 // @Param        body  body      loginRequest  true  "登录信息"
-// @Success      200   {object}  response.Body  "成功，返回 accessToken 和 refreshToken"
+// @Success      200   {object}  contract.TokenPair  "成功，返回 accessToken 和 refreshToken"
 // @Failure      400   {object}  contract.ErrorResponse  "参数错误（用户名或密码格式不符）"
 // @Failure      401   {object}  contract.ErrorResponse  "认证失败（用户名或密码错误）"
 // @Failure      429   {object}  contract.ErrorResponse  "请求过于频繁，请稍后再试"
@@ -113,7 +113,7 @@ func currentUserID(c *gin.Context) (uint64, bool) {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      loginRequest  true  "注册信息（用户名和密码；开通式注册另需 tenant_name）"
-// @Success      200   {object}  response.Body  "成功，返回用户信息（开通式注册额外返回 tenant）"
+// @Success      200   {object}  application.RegisterResponse  "成功，返回用户信息（开通式注册额外返回 tenant）"
 // @Failure      400   {object}  contract.ErrorResponse  "参数错误（如用户名已存在、租户编码格式无效或已存在）"
 // @Failure      429   {object}  contract.ErrorResponse  "请求过于频繁"
 // @Router       /auth/register [post]
@@ -140,7 +140,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 			response.Fail(c, err)
 			return
 		}
-		response.OK(c, gin.H{"user": res.User, "tenant": res.Tenant})
+		response.OK(c, application.NewRegisterResponse(res))
 		return
 	}
 
@@ -149,7 +149,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, user)
+	response.OK(c, application.RegisterResponse{User: application.NewRegisterUserView(*user)})
 }
 
 // ForgotPassword godoc
@@ -205,7 +205,7 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      refreshRequest  true  "刷新令牌"
-// @Success      200   {object}  response.Body  "成功，返回新的 token 对"
+// @Success      200   {object}  contract.TokenPair  "成功，返回新的 token 对"
 // @Failure      400   {object}  contract.ErrorResponse  "参数错误"
 // @Failure      401   {object}  contract.ErrorResponse  "刷新令牌无效或已过期"
 // @Router       /auth/refresh [post]

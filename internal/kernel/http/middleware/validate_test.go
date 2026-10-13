@@ -44,6 +44,41 @@ func TestValidateJSONTranslatesFieldErrors(t *testing.T) {
 	}
 }
 
+type validateJSONFreshStub struct {
+	Username       string `json:"username" binding:"required"`
+	RememberDevice bool   `json:"remember_device"`
+	TenantName     string `json:"tenant_name"`
+}
+
+// TestValidateJSONBindsFreshStatePerRequest 钉住 JSON 绑定同样不跨请求串值：
+// 与 ValidateQuery 同源 —— dst 在路由注册期只求值一次，复用同一实例时
+// 上一次请求出现、本次请求省略的字段会保留旧值（json 解码不会清零缺失字段）。
+// 认证侧 loginRequest 带 totp_code / remember_device / tenant_name，
+// 上一次的 remember_device=true 或 tenant_name 会泄漏到下一次省略它们的请求。
+func TestValidateJSONBindsFreshStatePerRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/", ValidateJSON(&validateJSONFreshStub{}), func(c *gin.Context) {
+		req := c.MustGet("validated_req").(*validateJSONFreshStub)
+		c.String(http.StatusOK, "%s|%t|%s", req.Username, req.RememberDevice, req.TenantName)
+	})
+
+	post := func(body string) string {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+		return w.Body.String()
+	}
+
+	if got := post(`{"username":"acme","remember_device":true,"tenant_name":"acme"}`); got != "acme|true|acme" {
+		t.Fatalf("first request = %q, want acme|true|acme", got)
+	}
+	if got := post(`{"username":"bob"}`); got != "bob|false|" {
+		t.Fatalf("fresh request = %q, want bob|false|（不得继承上一次的 remember_device/tenant_name）", got)
+	}
+}
+
 type validateQueryStub struct {
 	Keyword string `form:"keyword"`
 	Status  *int8  `form:"status" binding:"omitempty,oneof=0 1"`

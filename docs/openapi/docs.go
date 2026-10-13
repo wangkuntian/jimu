@@ -577,7 +577,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回 accessToken 和 refreshToken",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/contract.TokenPair"
                         }
                     },
                     "400": {
@@ -912,7 +912,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回新的 token 对",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/contract.TokenPair"
                         }
                     },
                     "400": {
@@ -958,7 +958,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回用户信息（开通式注册额外返回 tenant）",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.RegisterResponse"
                         }
                     },
                     "400": {
@@ -3244,6 +3244,63 @@ const docTemplate = `{
                 }
             }
         },
+        "application.RegisterResponse": {
+            "type": "object",
+            "properties": {
+                "tenant": {
+                    "$ref": "#/definitions/application.RegisterTenantView"
+                },
+                "user": {
+                    "$ref": "#/definitions/application.RegisterUserView"
+                }
+            }
+        },
+        "application.RegisterTenantView": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.RegisterUserView": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "tenant_id": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
         "application.TenantBodyResponse": {
             "type": "object",
             "properties": {
@@ -3472,6 +3529,24 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "contract.TokenPair": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "device_token": {
+                    "description": "DeviceToken 仅在「记住此设备」成功签发时返回，客户端需安全保存。",
+                    "type": "string"
+                },
+                "expires_in": {
+                    "type": "integer"
+                },
+                "refresh_token": {
+                    "type": "string"
                 }
             }
         },
