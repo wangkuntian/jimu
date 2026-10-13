@@ -1,8 +1,10 @@
 package app_test
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"log"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -21,6 +23,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // newMockGormDB 用 sqlmock 构建 gorm.DB（跳过版本初始化，避免真实连接）
@@ -40,11 +43,16 @@ var seedDBSeq uint64
 // newSeedSqliteDB 打开独立的内存 sqlite。
 // 用命名共享缓存 DSN：普通 :memory: 每连接独立库，RunSeed 事务与 casbin
 // 的 AutoMigrate 可能落在不同连接上导致表不可见。
-func newSeedSqliteDB(t *testing.T) *gorm.DB {
+// 可选传入 GORM logger，用于断言探针不会经生产 logger 打出 error 行。
+func newSeedSqliteDB(t *testing.T, gormLog ...gormlogger.Interface) *gorm.DB {
 	t.Helper()
 	seq := atomic.AddUint64(&seedDBSeq, 1)
 	dsn := fmt.Sprintf("file:seed_%d_%d?mode=memory&cache=shared", time.Now().UnixNano(), seq)
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	cfg := &gorm.Config{}
+	if len(gormLog) > 0 && gormLog[0] != nil {
+		cfg.Logger = gormLog[0]
+	}
+	db, err := gorm.Open(sqlite.Open(dsn), cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		sqlDB, err := db.DB()
@@ -360,6 +368,93 @@ func TestRunSeedWithCasbin(t *testing.T) {
 	assert.Equal(t, int64(len(seededPermissions())), permCount2, "permissions 不应重复插入")
 	assert.Equal(t, int64(len(seededPermissions())), rpCount2, "role_permissions 不应重复插入")
 	assert.Equal(t, userCountBefore, userCount2, "admin 用户不应重复创建")
+}
+
+// captureLogger 捕获 Errorw 调用，供启动自检断言。
+type captureLogger struct {
+	messages []string
+	fields   []any
+}
+
+func (l *captureLogger) Errorw(msg string, keysAndValues ...interface{}) {
+	l.messages = append(l.messages, msg)
+	l.fields = append(l.fields, keysAndValues...)
+}
+
+// TestWarnIfNoAccounts 启动自检：库中一个账号都没有时必须给出可执行的提示；
+// 有账号、表不存在、db 为空时都不得报错（容器启动早于迁移是允许的时序）。
+func TestWarnIfNoAccounts(t *testing.T) {
+	t.Run("empty table warns", func(t *testing.T) {
+		db := newSeedSqliteDB(t)
+		migrateSeedTables(t, db)
+		log := &captureLogger{}
+
+		if !app.WarnIfNoAccounts(db, log) {
+			t.Fatal("returned false, want true")
+		}
+		require.Len(t, log.messages, 1)
+		require.Contains(t, log.fields, "hint")
+		// 提示必须可执行：同时给出补种与放开注册两条下一步
+		hint := fmt.Sprint(log.fields...)
+		require.Contains(t, hint, "ADMIN_PASSWORD")
+		require.Contains(t, hint, "auth.public_registration")
+	})
+
+	t.Run("existing account stays quiet", func(t *testing.T) {
+		db := newSeedSqliteDB(t)
+		migrateSeedTables(t, db)
+		// 走既有种子路径造出 admin，避免依赖模型的 ID 钩子/原始 SQL
+		t.Setenv("ADMIN_PASSWORD", "secret123")
+		require.NoError(t, app.RunSeed(db, catalog.All()))
+		log := &captureLogger{}
+
+		if app.WarnIfNoAccounts(db, log) {
+			t.Fatal("returned true, want false")
+		}
+		require.Empty(t, log.messages)
+	})
+
+	t.Run("unmigrated database stays quiet", func(t *testing.T) {
+		db := newSeedSqliteDB(t)
+		log := &captureLogger{}
+
+		if app.WarnIfNoAccounts(db, log) {
+			t.Fatal("returned true, want false（表不存在时不得误报）")
+		}
+		require.Empty(t, log.messages)
+	})
+
+	// 生产 GORM logger 把**每条**报错语句都打到 error 级（kernel/db/gorm_logger.go 的 Trace），
+	// 因此探针在表未建时必须连语句都不发，否则每次启动都会多一行 "db query failed"。
+	t.Run("unmigrated database issues no gorm error line", func(t *testing.T) {
+		var buf bytes.Buffer
+		gormLog := gormlogger.New(log.New(&buf, "", 0), gormlogger.Config{LogLevel: gormlogger.Error, Colorful: false})
+		db := newSeedSqliteDB(t, gormLog)
+		log := &captureLogger{}
+
+		if app.WarnIfNoAccounts(db, log) {
+			t.Fatal("returned true, want false（表不存在时不得误报）")
+		}
+		require.Empty(t, log.messages)
+		require.Empty(t, buf.String(), "探针不得经生产 GORM logger 打出 error 行")
+	})
+
+	t.Run("nil logger stays quiet", func(t *testing.T) {
+		db := newSeedSqliteDB(t)
+		migrateSeedTables(t, db)
+
+		if app.WarnIfNoAccounts(db, nil) {
+			t.Fatal("returned true, want false")
+		}
+	})
+
+	t.Run("nil database stays quiet", func(t *testing.T) {
+		log := &captureLogger{}
+		if app.WarnIfNoAccounts(nil, log) {
+			t.Fatal("returned true, want false")
+		}
+		require.Empty(t, log.messages)
+	})
 }
 
 // TestRunSeed_SkipsDisabledCapabilityPermissions 验证权限点来自启用集聚合：

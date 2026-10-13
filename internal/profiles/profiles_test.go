@@ -1,12 +1,21 @@
 package profiles_test
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"testing"
+	"time"
 
+	"jimu/internal/app"
 	"jimu/internal/assembly"
 	"jimu/internal/capabilities/catalog"
+	userdomain "jimu/internal/capabilities/user/domain"
+	"jimu/internal/config"
 	"jimu/internal/contract"
+	"jimu/internal/kernel/logger"
+	"jimu/internal/profiles"
 	"jimu/internal/profiles/enterprise"
 	"jimu/internal/profiles/full"
 	"jimu/internal/profiles/machine"
@@ -14,6 +23,8 @@ import (
 	"jimu/internal/profiles/saas"
 
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // profileAssemblies 是设计 §2 的 5 个形态入口。
@@ -123,4 +134,62 @@ func providedPorts(t *testing.T, a assembly.Assembly) map[string]bool {
 		}
 	}
 	return out
+}
+
+// newProfilesSqliteDB 打开独立的内存 sqlite（命名共享缓存的理由同 internal/app/seed_test.go：
+// 普通 :memory: 每连接一个库，事务与查询可能落在不同连接上看不到表）。
+func newProfilesSqliteDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	dsn := fmt.Sprintf("file:profiles_seed_%d?mode=memory&cache=shared", time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	return db
+}
+
+// TestStructuralSeedSkipsWithNoAdminPassword 钉住启动行为不变：ADMIN_PASSWORD 未设置时
+// StructuralSeed 必须正常返回 nil（容器启动早于 CLI 迁移，表可能还不存在），且只有库中
+// 确实一个账号都没有时才补 error 级自检提示（app.WarnIfNoAccounts）。
+func TestStructuralSeedSkipsWithNoAdminPassword(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD", "")
+
+	cases := []struct {
+		name       string
+		migrate    bool
+		wantNoAcct bool
+	}{
+		{name: "empty database warns and returns nil", migrate: true, wantNoAcct: true},
+		{name: "unmigrated database stays quiet and returns nil", migrate: false, wantNoAcct: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := newProfilesSqliteDB(t)
+			if tc.migrate {
+				require.NoError(t, db.AutoMigrate(&userdomain.User{}))
+			}
+
+			logPath := filepath.Join(t.TempDir(), "server.log")
+			log := logger.New(config.LogConfig{Output: logPath})
+			ctx, _, err := assembly.WireFor(
+				&app.Container{Config: &config.Config{}, DB: db, Logger: log},
+				nil, nil, assembly.Assembly{Name: "structural-seed-test"}, nil,
+			)
+			require.NoError(t, err)
+
+			require.NoError(t, profiles.StructuralSeed(ctx), "跳过路径必须返回 nil，服务启动不得失败")
+
+			out, err := os.ReadFile(logPath)
+			require.NoError(t, err)
+			if tc.wantNoAcct {
+				require.Contains(t, string(out), "no account exists")
+			} else {
+				require.NotContains(t, string(out), "no account exists")
+			}
+		})
+	}
 }
