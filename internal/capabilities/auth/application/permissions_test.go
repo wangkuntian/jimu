@@ -37,8 +37,9 @@ func TestEffectivePermissionsDeduplicatesAcrossRoles(t *testing.T) {
 
 	got := EffectivePermissions([]string{"admin", "operator"}, policies)
 
-	if len(got) != 1 {
-		t.Fatalf("got %#v, want exactly one point", got)
+	want := PermissionPoint{Resource: "/api/v1/tenants", Action: "GET"}
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("got %#v, want exactly [%#v]", got, want)
 	}
 }
 
@@ -55,6 +56,9 @@ func TestEffectivePermissionsSortsDeterministically(t *testing.T) {
 		{Resource: "/api/v1/audits", Action: "GET"},
 		{Resource: "/api/v1/tenants", Action: "GET"},
 		{Resource: "/api/v1/tenants", Action: "POST"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %#v, want %#v", got, want)
 	}
 	for i := range want {
 		if got[i] != want[i] {

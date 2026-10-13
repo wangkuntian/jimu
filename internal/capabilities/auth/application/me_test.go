@@ -48,6 +48,15 @@ func TestMeFailsWhenUserMissing(t *testing.T) {
 	require.Equal(t, apperrors.CodeUserNotFound, appCode(err), "err = %v", err)
 }
 
+// TestMeMapsNonNotFoundErrorsToInternal 只有「确实不存在」才是 404；
+// DB 故障等其它错误必须保留为内部错误，否则会话引导会把瞬时故障误报成账号被删。
+func TestMeMapsNonNotFoundErrorsToInternal(t *testing.T) {
+	service := newMeService(&fakeUserRepo{findByIDErr: stderrors.New("db down")}, &fakeAuthorizationStore{})
+
+	_, err := service.Me(context.Background(), 42, 7)
+	require.Equal(t, apperrors.CodeInternalError, appCode(err), "err = %v", err)
+}
+
 func TestMeFailsWhenRolesLookupFails(t *testing.T) {
 	repo := &fakeUserRepo{users: map[string]*contract.Account{
 		"alice": {ID: 42, Username: "alice", Status: 1},

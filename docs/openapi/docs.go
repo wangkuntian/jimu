@@ -31,8 +31,19 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
             }
         },
         "/admin/ratelimit/auth": {
@@ -75,13 +86,24 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.Body"
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
             }
         },
         "/admin/users/{id}/roles": {

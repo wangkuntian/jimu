@@ -31,8 +31,10 @@ func NewAdminRateLimitHandler(rdb redistore.Client) *AdminRateLimitHandler {
 // @Tags admin/ratelimit
 // @Param scope query string true "限流作用域" Enums(login, register)
 // @Param key query string true "限流键（如 ip:1.2.3.4 或 username:alice）"
+// @Security BearerAuth
 // @Success 200 {object} response.Body
 // @Failure 400 {object} response.Body
+// @Failure 401 {object} response.Body
 // @Failure 500 {object} response.Body
 // @Router /admin/ratelimit/auth [get]
 func (h *AdminRateLimitHandler) AuthPeek(c *gin.Context) {

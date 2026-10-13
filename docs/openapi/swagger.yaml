@@ -524,6 +524,12 @@ paths:
           description: 成功，返回错误码列表
           schema:
             $ref: '#/definitions/response.Body'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
       summary: 获取错误码列表
       tags:
       - 系统管理
@@ -553,10 +559,16 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
       summary: 查看认证限流状态
       tags:
       - admin/ratelimit

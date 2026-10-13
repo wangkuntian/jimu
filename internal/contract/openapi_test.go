@@ -30,6 +30,9 @@ func TestOpenAPIIncludesCRUDContract(t *testing.T) {
 		"/audits":                 {"get"},
 		"/audits/{id}":            {"get"},
 		"/tenants":                {"get", "post"},
+		// 管理端运维端点：必须声明鉴权（未列入 public 集合，故下方的 security 断言覆盖它们）
+		"/admin/error-codes":    {"get"},
+		"/admin/ratelimit/auth": {"get"},
 	}
 	public := map[string]bool{
 		"post /auth/login":    true,

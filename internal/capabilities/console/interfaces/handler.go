@@ -23,7 +23,9 @@ func NewHandler(service *application.Service) *Handler {
 // @Description  获取所有业务错误码及其对应的 HTTP 状态码映射。用于前端和第三方系统集成时参考。包含错误码、错误消息、HTTP 状态码和分类信息。
 // @Tags         系统管理
 // @Produce      json
+// @Security     BearerAuth
 // @Success      200  {object}  response.Body  "成功，返回错误码列表"
+// @Failure      401  {object}  response.Body  "未认证"
 // @Router       /admin/error-codes [get]
 func (h *Handler) GetErrorCodes(c *gin.Context) {
 	response.OK(c, errors.AllErrorCodes())

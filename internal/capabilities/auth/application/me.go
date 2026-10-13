@@ -2,8 +2,10 @@ package application
 
 import (
 	"context"
+	stderrors "errors"
 	"time"
 
+	"jimu/internal/contract"
 	"jimu/internal/kernel/access"
 	"jimu/internal/shared/errors"
 )
@@ -32,7 +34,12 @@ type MeView struct {
 func (s *AuthService) Me(ctx context.Context, userID, tenantID uint64) (*MeView, error) {
 	account, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
-		return nil, errors.Wrap(errors.CodeUserNotFound, "user not found", err)
+		// 只有「确实不存在」才映射 404；其余错误（如 DB 故障）必须保留为内部错误，
+		// 否则一次瞬时故障会被会话引导误报成「账号已删除」。
+		if stderrors.Is(err, contract.ErrNotFound) {
+			return nil, errors.Wrap(errors.CodeUserNotFound, "user not found", err)
+		}
+		return nil, errors.Wrap(errors.CodeInternalError, "failed to load user", err)
 	}
 
 	// 两个切片都初始化为空切片：响应的 roles/permissions 必须是 [] 而不是 null
