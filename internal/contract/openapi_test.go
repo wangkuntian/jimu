@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -64,6 +65,27 @@ func readOpenAPI(t *testing.T) map[string]any {
 		t.Fatal(err)
 	}
 	return spec
+}
+
+// TestOpenAPIPathsCarryNoBasePathPrefix 钉住 swag 的 @Router 注解不得自带 basePath 前缀：
+// 注解写 /api/v1/xxx 时，生成的路径键与 basePath 组合后会变成 /api/v1/api/v1/xxx，
+// 客户端无法调用（v0.4.0 前 /admin/error-codes 与 /admin/ratelimit/auth 就是这样）。
+func TestOpenAPIPathsCarryNoBasePathPrefix(t *testing.T) {
+	spec := readOpenAPI(t)
+
+	basePath, _ := spec["basePath"].(string)
+	if basePath == "" {
+		t.Fatal("swagger.json 缺少 basePath")
+	}
+	paths, _ := spec["paths"].(map[string]any)
+	if len(paths) == 0 {
+		t.Fatal("swagger.json 没有任何路径")
+	}
+	for path := range paths {
+		if strings.HasPrefix(path, basePath+"/") {
+			t.Errorf("路径 %q 自带 basePath 前缀 %q：@Router 注解不应写 /api/v1 前缀", path, basePath)
+		}
+	}
 }
 
 func assertQueryParams(t *testing.T, operation map[string]any, path string) {

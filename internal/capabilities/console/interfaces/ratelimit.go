@@ -34,7 +34,7 @@ func NewAdminRateLimitHandler(rdb redistore.Client) *AdminRateLimitHandler {
 // @Success 200 {object} response.Body
 // @Failure 400 {object} response.Body
 // @Failure 500 {object} response.Body
-// @Router /api/v1/admin/ratelimit/auth [get]
+// @Router /admin/ratelimit/auth [get]
 func (h *AdminRateLimitHandler) AuthPeek(c *gin.Context) {
 	scope := strings.TrimSpace(c.Query("scope"))
 	key := strings.TrimSpace(c.Query("key"))

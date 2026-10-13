@@ -9,6 +9,75 @@
     "host": "localhost:8080",
     "basePath": "/api/v1",
     "paths": {
+        "/admin/error-codes": {
+            "get": {
+                "description": "获取所有业务错误码及其对应的 HTTP 状态码映射。用于前端和第三方系统集成时参考。包含错误码、错误消息、HTTP 状态码和分类信息。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统管理"
+                ],
+                "summary": "获取错误码列表",
+                "responses": {
+                    "200": {
+                        "description": "成功，返回错误码列表",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/ratelimit/auth": {
+            "get": {
+                "description": "不消费令牌地返回某 scope（如 login）+ key（如 ip:1.2.3.4）当前的计数与剩余窗口",
+                "tags": [
+                    "admin/ratelimit"
+                ],
+                "summary": "查看认证限流状态",
+                "parameters": [
+                    {
+                        "enum": [
+                            "login",
+                            "register"
+                        ],
+                        "type": "string",
+                        "description": "限流作用域",
+                        "name": "scope",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "限流键（如 ip:1.2.3.4 或 username:alice）",
+                        "name": "key",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/users/{id}/roles": {
             "post": {
                 "description": "替换指定用户的全部角色（按角色名）。角色名在用户所属租户内解析，不存在返回 404。",
@@ -65,75 +134,6 @@
                         "BearerAuth": []
                     }
                 ]
-            }
-        },
-        "/api/v1/admin/error-codes": {
-            "get": {
-                "description": "获取所有业务错误码及其对应的 HTTP 状态码映射。用于前端和第三方系统集成时参考。包含错误码、错误消息、HTTP 状态码和分类信息。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "系统管理"
-                ],
-                "summary": "获取错误码列表",
-                "responses": {
-                    "200": {
-                        "description": "成功，返回错误码列表",
-                        "schema": {
-                            "$ref": "#/definitions/response.Body"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/admin/ratelimit/auth": {
-            "get": {
-                "description": "不消费令牌地返回某 scope（如 login）+ key（如 ip:1.2.3.4）当前的计数与剩余窗口",
-                "tags": [
-                    "admin/ratelimit"
-                ],
-                "summary": "查看认证限流状态",
-                "parameters": [
-                    {
-                        "enum": [
-                            "login",
-                            "register"
-                        ],
-                        "type": "string",
-                        "description": "限流作用域",
-                        "name": "scope",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "限流键（如 ip:1.2.3.4 或 username:alice）",
-                        "name": "key",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/response.Body"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/response.Body"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/response.Body"
-                        }
-                    }
-                }
             }
         },
         "/audits": {

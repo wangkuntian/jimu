@@ -342,6 +342,52 @@ info:
   title: Jimu API
   version: "1.0"
 paths:
+  /admin/error-codes:
+    get:
+      description: 获取所有业务错误码及其对应的 HTTP 状态码映射。用于前端和第三方系统集成时参考。包含错误码、错误消息、HTTP 状态码和分类信息。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回错误码列表
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: 获取错误码列表
+      tags:
+      - 系统管理
+  /admin/ratelimit/auth:
+    get:
+      description: 不消费令牌地返回某 scope（如 login）+ key（如 ip:1.2.3.4）当前的计数与剩余窗口
+      parameters:
+      - description: 限流作用域
+        enum:
+        - login
+        - register
+        in: query
+        name: scope
+        required: true
+        type: string
+      - description: 限流键（如 ip:1.2.3.4 或 username:alice）
+        in: query
+        name: key
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: 查看认证限流状态
+      tags:
+      - admin/ratelimit
   /admin/users/{id}/roles:
     post:
       consumes:
@@ -379,52 +425,6 @@ paths:
       summary: 分配用户角色
       tags:
       - 权限管理
-  /api/v1/admin/error-codes:
-    get:
-      description: 获取所有业务错误码及其对应的 HTTP 状态码映射。用于前端和第三方系统集成时参考。包含错误码、错误消息、HTTP 状态码和分类信息。
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功，返回错误码列表
-          schema:
-            $ref: '#/definitions/response.Body'
-      summary: 获取错误码列表
-      tags:
-      - 系统管理
-  /api/v1/admin/ratelimit/auth:
-    get:
-      description: 不消费令牌地返回某 scope（如 login）+ key（如 ip:1.2.3.4）当前的计数与剩余窗口
-      parameters:
-      - description: 限流作用域
-        enum:
-        - login
-        - register
-        in: query
-        name: scope
-        required: true
-        type: string
-      - description: 限流键（如 ip:1.2.3.4 或 username:alice）
-        in: query
-        name: key
-        required: true
-        type: string
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/response.Body'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/response.Body'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/response.Body'
-      summary: 查看认证限流状态
-      tags:
-      - admin/ratelimit
   /audits:
     get:
       description: 分页获取系统审计日志。记录用户的操作行为（如登录、创建、修改、删除等），用于安全审计和行为追踪。支持按 ID、创建时间排序。
