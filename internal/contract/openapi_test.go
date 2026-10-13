@@ -18,6 +18,7 @@ func TestOpenAPIIncludesCRUDContract(t *testing.T) {
 		"/auth/refresh":           {"post"},
 		"/auth/logout":            {"post"},
 		"/auth/logout-all":        {"post"},
+		"/auth/me":                {"get"},
 		"/users":                  {"get", "post"},
 		"/users/{id}":             {"get", "put", "delete"},
 		"/roles":                  {"get", "post"},

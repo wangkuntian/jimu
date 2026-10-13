@@ -1275,6 +1275,7 @@
     "internal/contract/ports.go",
     "internal/e2e/admin_routes_parity_test.go",
     "internal/e2e/api_contract_test.go",
+    "internal/e2e/auth_me_test.go",
     "internal/e2e/auth_routes_parity_test.go",
     "internal/e2e/grpc_contract_test.go",
     "internal/e2e/helpers_test.go",
@@ -1473,5 +1474,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:292c51cdef3e5a925091d2d6b069ca7d4ca07302c2e54bd823370b5e7fb8d5af"
+  "digest": "sha256:e29d407bf1cda94c015f935f74a45a6cd6e009a03a5a15ed85894a226017ba3a"
 }

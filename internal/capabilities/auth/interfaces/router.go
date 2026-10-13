@@ -29,6 +29,7 @@ func RegisterAuthRoutes(r *gin.RouterGroup, service *application.AuthService, jw
 		protected.Use(auth.AuthMiddleware(jwtUtil))
 		protected.POST("/logout", handler.Logout)
 		protected.POST("/logout-all", handler.LogoutAll)
+		protected.GET("/me", handler.Me)
 		protected.GET("/login-history", middleware.ValidateQuery(&pagination.Pagination{}), handler.LoginHistory)
 	}
 }

@@ -319,3 +319,39 @@ func writeAuthRateLimitHeaders(c *gin.Context, limit int, window time.Duration) 
 func normalizeUsername(username string) string {
 	return strings.ToLower(strings.TrimSpace(username))
 }
+
+// optionalUint64 读 gin context 的 uint64 值，缺失或类型不符返回 0。
+// 与 audit 中间件的同名助手同源：认证-only 子组不套 tenant.Middleware，
+// 因此租户要从 AuthMiddleware 写入的 gin context 取（其值即已验签 claim）。
+func optionalUint64(c *gin.Context, key string) uint64 {
+	value, ok := c.Get(key)
+	if !ok {
+		return 0
+	}
+	result, _ := value.(uint64)
+	return result
+}
+
+// Me godoc
+// @Summary      获取当前会话身份与权限点
+// @Description  返回当前用户的身份、角色与有效权限点（resource + action，与 Casbin 策略同形，resource 支持通配）。
+// @Tags         认证
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  application.MeView  "成功，返回身份与权限点"
+// @Failure      401  {object}  contract.ErrorResponse  "未认证"
+// @Failure      404  {object}  contract.ErrorResponse  "用户不存在"
+// @Router       /auth/me [get]
+func (h *AuthHandler) Me(c *gin.Context) {
+	userID := optionalUint64(c, "user_id")
+	if userID == 0 {
+		response.Fail(c, errors.New(errors.CodeUnauthorized, "missing user context"))
+		return
+	}
+	view, err := h.service.Me(c.Request.Context(), userID, optionalUint64(c, "tenant_id"))
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, view)
+}

@@ -1140,7 +1140,7 @@
       "user",
       "auth"
     ],
-    "routes": 33,
+    "routes": 34,
     "migrations": [
       "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
       "internal/capabilities/access/migrations/mysql/008_role_version.sql",
@@ -1280,6 +1280,8 @@
     "internal/capabilities/auth/application/benchmark_test.go",
     "internal/capabilities/auth/application/breach_test.go",
     "internal/capabilities/auth/application/login_history.go",
+    "internal/capabilities/auth/application/me.go",
+    "internal/capabilities/auth/application/me_test.go",
     "internal/capabilities/auth/application/permissions.go",
     "internal/capabilities/auth/application/permissions_test.go",
     "internal/capabilities/auth/application/quota.go",
@@ -1397,6 +1399,7 @@
     "internal/contract/ports.go",
     "internal/e2e/admin_routes_parity_test.go",
     "internal/e2e/api_contract_test.go",
+    "internal/e2e/auth_me_test.go",
     "internal/e2e/auth_routes_parity_test.go",
     "internal/e2e/grpc_contract_test.go",
     "internal/e2e/helpers_test.go",
@@ -1595,5 +1598,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:0d5eb4a705d5137b0604e68245ee50c1060890350312b8e30f3d3c2c76321f35"
+  "digest": "sha256:56f6f96f2f2c9291c9d20afbfc1807f75bdd8c8f617379f5d2ea952a6d7147e7"
 }
