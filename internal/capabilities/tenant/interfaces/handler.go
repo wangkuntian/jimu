@@ -38,7 +38,7 @@ func NewTenantHandler(service *application.TenantService) *TenantHandler {
 // @Produce      json
 // @Param        body  body      application.CreateTenantRequest  true  "租户信息（编码和名称）"
 // @Security     BearerAuth
-// @Success      201  {object}  response.Body  "创建成功，返回租户信息"
+// @Success      201  {object}  application.TenantBodyResponse  "创建成功，返回租户信息"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误（编码格式无效）"
 // @Failure      409  {object}  contract.ErrorResponse  "租户编码已存在"
 // @Failure      500  {object}  contract.ErrorResponse  "服务器内部错误"
@@ -65,7 +65,7 @@ func (h *TenantHandler) Create(c *gin.Context) {
 // @Param        order      query     string  false  "排序方向（asc 或 desc，默认 desc）"
 // @Param        keyword    query     string  false  "编码或名称模糊匹配"
 // @Param        status     query     int     false  "状态（0=停用 1=启用）"
-// @Success      200        {object}  contract.PageResponse  "成功，返回分页租户列表"
+// @Success      200        {object}  application.TenantPageResponse  "成功，返回分页租户列表"
 // @Failure      400        {object}  contract.ErrorResponse  "参数错误（如无效的排序字段）"
 // @Failure      500        {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /tenants [get]
@@ -93,7 +93,7 @@ func (h *TenantHandler) List(c *gin.Context) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        id   path      int  true  "租户 ID"
-// @Success      200  {object}  response.Body  "成功，返回租户信息"
+// @Success      200  {object}  application.TenantBodyResponse  "成功，返回租户信息"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
 // @Failure      404  {object}  contract.ErrorResponse  "租户不存在"
 // @Failure      500  {object}  contract.ErrorResponse  "服务器内部错误"

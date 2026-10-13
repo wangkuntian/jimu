@@ -137,6 +137,87 @@ definitions:
       resource:
         type: string
     type: object
+  application.PlanPageResponse:
+    properties:
+      code:
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/application.PlanResponse'
+        type: array
+      message:
+        type: string
+      page:
+        type: integer
+      page_size:
+        type: integer
+      request_id:
+        type: string
+      total:
+        type: integer
+    type: object
+  application.PlanResponse:
+    properties:
+      code:
+        type: string
+      id:
+        type: integer
+      max_api_keys:
+        type: integer
+      max_roles:
+        type: integer
+      max_users:
+        type: integer
+      name:
+        type: string
+    type: object
+  application.TenantBodyResponse:
+    properties:
+      code:
+        type: integer
+      data:
+        $ref: '#/definitions/application.TenantResponse'
+      message:
+        type: string
+      request_id:
+        type: string
+    type: object
+  application.TenantPageResponse:
+    properties:
+      code:
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/application.TenantResponse'
+        type: array
+      message:
+        type: string
+      page:
+        type: integer
+      page_size:
+        type: integer
+      request_id:
+        type: string
+      total:
+        type: integer
+    type: object
+  application.TenantResponse:
+    properties:
+      code:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      plan_id:
+        type: integer
+      status:
+        type: integer
+      updated_at:
+        type: string
+    type: object
   application.UpdatePermissionRequest:
     properties:
       action:
@@ -1702,7 +1783,7 @@ paths:
         "200":
           description: 成功，返回分页套餐列表
           schema:
-            $ref: '#/definitions/contract.PageResponse'
+            $ref: '#/definitions/application.PlanPageResponse'
         "400":
           description: 参数错误
           schema:
@@ -1842,7 +1923,7 @@ paths:
         "200":
           description: 成功，返回分页租户列表
           schema:
-            $ref: '#/definitions/contract.PageResponse'
+            $ref: '#/definitions/application.TenantPageResponse'
         "400":
           description: 参数错误（如无效的排序字段）
           schema:
@@ -1873,7 +1954,7 @@ paths:
         "201":
           description: 创建成功，返回租户信息
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/application.TenantBodyResponse'
         "400":
           description: 参数错误（编码格式无效）
           schema:
@@ -1942,7 +2023,7 @@ paths:
         "200":
           description: 成功，返回租户信息
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/application.TenantBodyResponse'
         "400":
           description: 参数错误（ID 格式无效）
           schema:

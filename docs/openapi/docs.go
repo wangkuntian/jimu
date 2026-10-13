@@ -2071,7 +2071,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回分页套餐列表",
                         "schema": {
-                            "$ref": "#/definitions/contract.PageResponse"
+                            "$ref": "#/definitions/application.PlanPageResponse"
                         }
                     },
                     "400": {
@@ -2291,7 +2291,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回分页租户列表",
                         "schema": {
-                            "$ref": "#/definitions/contract.PageResponse"
+                            "$ref": "#/definitions/application.TenantPageResponse"
                         }
                     },
                     "400": {
@@ -2340,7 +2340,7 @@ const docTemplate = `{
                     "201": {
                         "description": "创建成功，返回租户信息",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.TenantBodyResponse"
                         }
                     },
                     "400": {
@@ -2423,7 +2423,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回租户信息",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.TenantBodyResponse"
                         }
                     },
                     "400": {
@@ -3188,6 +3188,130 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "resource": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.PlanPageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.PlanResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.PlanResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "max_api_keys": {
+                    "type": "integer"
+                },
+                "max_roles": {
+                    "type": "integer"
+                },
+                "max_users": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.TenantBodyResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "$ref": "#/definitions/application.TenantResponse"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.TenantPageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.TenantResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.TenantResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "plan_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "updated_at": {
                     "type": "string"
                 }
             }

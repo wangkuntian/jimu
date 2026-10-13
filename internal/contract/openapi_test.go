@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -123,4 +124,78 @@ func assertHasQueryParam(t *testing.T, operation map[string]any, name string) {
 		}
 	}
 	t.Fatalf("缺少 query 参数 %s", name)
+}
+
+// TestOpenAPIListEndpointsCarryTypedData 钉住本轮前端消费的租户/套餐端点必须声明具体 DTO：
+// data 为 []{} 或裸对象时前端只能手写视图模型，字段变化不会在编译期报错。
+// 同时钉住本轮的改动边界：未纳入范围的端点继续声明 response.Body。
+func TestOpenAPIListEndpointsCarryTypedData(t *testing.T) {
+	spec := readOpenAPI(t)
+
+	assertRefResponse(t, spec, "/tenants", "get", 200, "#/definitions/application.TenantPageResponse")
+	assertRefResponse(t, spec, "/tenants", "post", 201, "#/definitions/application.TenantBodyResponse")
+	assertRefResponse(t, spec, "/tenants/{id}", "get", 200, "#/definitions/application.TenantBodyResponse")
+	assertRefResponse(t, spec, "/tenant-plans", "get", 200, "#/definitions/application.PlanPageResponse")
+
+	assertRefResponse(t, spec, "/tenants/{id}", "put", 200, "#/definitions/response.Body")
+	assertRefResponse(t, spec, "/tenants/{id}", "delete", 200, "#/definitions/response.Body")
+	assertRefResponse(t, spec, "/tenants/usage", "get", 200, "#/definitions/response.Body")
+
+	tenants := definitionProperties(t, spec, "application.TenantPageResponse")
+	assertItemsRef(t, tenants, "data", "#/definitions/application.TenantResponse")
+
+	tenant := definitionProperties(t, spec, "application.TenantResponse")
+	for _, field := range []string{"id", "code", "name", "status", "plan_id", "created_at"} {
+		if _, ok := tenant[field]; !ok {
+			t.Fatalf("application.TenantResponse 缺少字段 %s", field)
+		}
+	}
+}
+
+func assertRefResponse(t *testing.T, spec map[string]any, path, method string, statusCode int, wantRef string) {
+	t.Helper()
+	operation := operationOf(t, spec, path, method)
+	responses, _ := operation["responses"].(map[string]any)
+	resp, _ := responses[strconv.Itoa(statusCode)].(map[string]any)
+	schema, _ := resp["schema"].(map[string]any)
+	if got, _ := schema["$ref"].(string); got != wantRef {
+		t.Fatalf("%s %s 的 %d schema = %q, want %q", method, path, statusCode, got, wantRef)
+	}
+}
+
+func definitionProperties(t *testing.T, spec map[string]any, name string) map[string]any {
+	t.Helper()
+	defs, _ := spec["definitions"].(map[string]any)
+	def, ok := defs[name].(map[string]any)
+	if !ok {
+		t.Fatalf("缺少 definition %s", name)
+	}
+	props, _ := def["properties"].(map[string]any)
+	return props
+}
+
+func assertItemsRef(t *testing.T, props map[string]any, field, wantRef string) {
+	t.Helper()
+	entry, ok := props[field].(map[string]any)
+	if !ok {
+		t.Fatalf("缺少字段 %s", field)
+	}
+	items, _ := entry["items"].(map[string]any)
+	if got, _ := items["$ref"].(string); got != wantRef {
+		t.Fatalf("字段 %s 的 items = %q, want %q", field, got, wantRef)
+	}
+}
+
+func operationOf(t *testing.T, spec map[string]any, path, method string) map[string]any {
+	t.Helper()
+	paths, _ := spec["paths"].(map[string]any)
+	item, ok := paths[path].(map[string]any)
+	if !ok {
+		t.Fatalf("缺少路径 %s", path)
+	}
+	operation, ok := item[method].(map[string]any)
+	if !ok {
+		t.Fatalf("缺少 %s %s", method, path)
+	}
+	return operation
 }

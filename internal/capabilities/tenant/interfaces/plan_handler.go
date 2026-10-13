@@ -52,7 +52,7 @@ func (h *PlanHandler) CreatePlan(c *gin.Context) {
 // @Security     BearerAuth
 // @Param        page       query     int  false  "页码（默认 1）"
 // @Param        page_size  query     int  false  "每页数量（默认 20，最大 100）"
-// @Success      200  {object}  contract.PageResponse  "成功，返回分页套餐列表"
+// @Success      200  {object}  application.PlanPageResponse  "成功，返回分页套餐列表"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误"
 // @Router       /tenant-plans [get]
 func (h *PlanHandler) ListPlans(c *gin.Context) {
