@@ -3,6 +3,8 @@ package search
 import (
 	"context"
 
+	"jimu/internal/shared/sqlpattern"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -69,12 +71,12 @@ func (s *mysqlSearcher) Search(ctx context.Context, tenantID uint64, query strin
 
 // searchLike CJK 回退路径：标题命中权重高于正文，按分值倒序返回
 func (s *mysqlSearcher) searchLike(ctx context.Context, tenantID uint64, query string, limit int) ([]Result, error) {
-	pattern := likePattern(query)
+	pattern := sqlpattern.LikeContains(query)
 	var rows []rowWithScore
 
 	q := s.db.WithContext(ctx).Table("search_documents").
-		Select("id, tenant_id, doc_type, doc_id, title, body, CASE WHEN title LIKE ? ESCAPE '"+likeEscapeChar+"' THEN "+itoa(cjkFallbackScore)+" ELSE 1 END AS score", pattern).
-		Where("title LIKE ? ESCAPE '"+likeEscapeChar+"' OR body LIKE ? ESCAPE '"+likeEscapeChar+"'", pattern, pattern).
+		Select("id, tenant_id, doc_type, doc_id, title, body, CASE WHEN title LIKE ? ESCAPE '"+sqlpattern.EscapeChar+"' THEN "+itoa(cjkFallbackScore)+" ELSE 1 END AS score", pattern).
+		Where("title LIKE ? ESCAPE '"+sqlpattern.EscapeChar+"' OR body LIKE ? ESCAPE '"+sqlpattern.EscapeChar+"'", pattern, pattern).
 		Order("score DESC, id ASC").
 		Limit(normalizeLimit(limit))
 	if tenantID != 0 {

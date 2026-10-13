@@ -1446,6 +1446,8 @@
     "internal/shared/response/response.go",
     "internal/shared/response/response_contract_test.go",
     "internal/shared/response/response_test.go",
+    "internal/shared/sqlpattern/like.go",
+    "internal/shared/sqlpattern/like_test.go",
     "internal/shared/testutil/assert.go",
     "internal/shared/testutil/reporoot.go",
     "internal/shared/testutil/reporoot_test.go",
@@ -1474,5 +1476,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:e29d407bf1cda94c015f935f74a45a6cd6e009a03a5a15ed85894a226017ba3a"
+  "digest": "sha256:147db052149ebacee31ee6e8b676680ebbb9d1409975c837ff28c602bead7589"
 }
