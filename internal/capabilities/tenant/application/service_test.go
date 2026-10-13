@@ -20,6 +20,8 @@ type fakeTenantRepository struct {
 	findErr error
 	listErr error
 
+	lastFilter domain.TenantListFilter
+
 	created *domain.Tenant
 	updated *domain.Tenant
 	deleted uint64
@@ -33,7 +35,8 @@ func (r *fakeTenantRepository) FindByCode(context.Context, string) (*domain.Tena
 	return r.tenant, r.findErr
 }
 
-func (r *fakeTenantRepository) List(_ context.Context, offset, limit int, sort, order string) ([]domain.Tenant, int64, error) {
+func (r *fakeTenantRepository) List(_ context.Context, offset, limit int, sort, order string, filter domain.TenantListFilter) ([]domain.Tenant, int64, error) {
+	r.lastFilter = filter
 	return r.tenants, r.total, r.listErr
 }
 
@@ -118,12 +121,29 @@ func TestTenantServiceListPassesPagination(t *testing.T) {
 	repo := &fakeTenantRepository{tenants: []domain.Tenant{{ID: 1, Code: "default", Name: "默认租户"}}, total: 1}
 	service := NewTenantService(repo)
 
-	tenants, total, err := service.List(context.Background(), pagination.Pagination{Page: 1, PageSize: 10, Sort: "code", Order: "asc"})
+	tenants, total, err := service.List(context.Background(), pagination.Pagination{Page: 1, PageSize: 10, Sort: "code", Order: "asc"}, domain.TenantListFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if total != 1 || len(tenants) != 1 || tenants[0].Code != "default" {
 		t.Fatalf("tenants = %#v total = %d", tenants, total)
+	}
+}
+
+func TestTenantServiceListPassesFilter(t *testing.T) {
+	repo := &fakeTenantRepository{}
+	status := int8(0)
+
+	_, _, err := NewTenantService(repo).List(context.Background(),
+		pagination.Pagination{Page: 1, PageSize: 20}, domain.TenantListFilter{Keyword: "acme", Status: &status})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.lastFilter.Keyword != "acme" {
+		t.Fatalf("keyword = %q, want acme", repo.lastFilter.Keyword)
+	}
+	if repo.lastFilter.Status == nil || *repo.lastFilter.Status != 0 {
+		t.Fatalf("status = %v, want 0", repo.lastFilter.Status)
 	}
 }
 

@@ -2273,6 +2273,18 @@ const docTemplate = `{
                         "description": "排序方向（asc 或 desc，默认 desc）",
                         "name": "order",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "编码或名称模糊匹配",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "状态（0=停用 1=启用）",
+                        "name": "status",
+                        "in": "query"
                     }
                 ],
                 "responses": {

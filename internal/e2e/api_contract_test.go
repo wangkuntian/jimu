@@ -505,3 +505,54 @@ func TestAuthConfigEndpoint(t *testing.T) {
 	require.True(t, data.PublicRegistration)
 	require.False(t, data.ProvisioningEnabled)
 }
+
+// TestTenantListFilters 断言租户列表的 keyword/status 筛选在 HTTP 层生效，
+// 且 LIKE 通配符被转义（keyword="%" 不得退化为「匹配全部」）。
+func TestTenantListFilters(t *testing.T) {
+	requireCapabilities(t, "auth", "user", "access", "tenant")
+	r := newTestApp(t)
+	admin := login(t, r, "admin", "admin123")
+
+	create := func(code, name string) uint64 {
+		w := doJSON(t, r, http.MethodPost, "/api/v1/tenants", admin, `{"code":"`+code+`","name":"`+name+`"}`)
+		require.Equal(t, http.StatusCreated, w.Code)
+		var data struct {
+			ID uint64 `json:"id"`
+		}
+		require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &data))
+		return data.ID
+	}
+
+	acmeID := create("acme", "Acme Inc")
+	create("bravo", "Bravo Ltd")
+
+	// keyword 命中 code
+	w := doJSON(t, r, http.MethodGet, "/api/v1/tenants?keyword=acme", admin, "")
+	require.Equal(t, http.StatusOK, w.Code)
+	resp := parseResp(t, w)
+	require.EqualValues(t, 1, resp.Total)
+
+	// keyword 命中 name（大小写不敏感由数据库排序规则决定，此处用精确子串）
+	w = doJSON(t, r, http.MethodGet, "/api/v1/tenants?keyword=Bravo", admin, "")
+	require.EqualValues(t, 1, parseResp(t, w).Total)
+
+	// LIKE 通配符必须被转义：'%' 不应匹配到任何租户
+	w = doJSON(t, r, http.MethodGet, "/api/v1/tenants?keyword=%25", admin, "")
+	require.EqualValues(t, 0, parseResp(t, w).Total, "keyword=%% 被当成通配符了：LIKE 未转义")
+
+	// status 筛选：把 acme 停用后，status=0 只应命中它
+	w = doJSON(t, r, http.MethodPut, "/api/v1/tenants/"+strconv.FormatUint(acmeID, 10), admin, `{"status":0}`)
+	require.Equal(t, http.StatusOK, w.Code)
+	w = doJSON(t, r, http.MethodGet, "/api/v1/tenants?status=0", admin, "")
+	paused := parseResp(t, w)
+	require.EqualValues(t, 1, paused.Total)
+	var pausedIDs []struct {
+		ID uint64 `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(paused.Data, &pausedIDs))
+	require.Equal(t, acmeID, pausedIDs[0].ID)
+
+	// keyword + status 组合
+	w = doJSON(t, r, http.MethodGet, "/api/v1/tenants?keyword=acme&status=1", admin, "")
+	require.EqualValues(t, 0, parseResp(t, w).Total)
+}

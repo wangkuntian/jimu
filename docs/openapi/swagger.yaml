@@ -1828,6 +1828,14 @@ paths:
         in: query
         name: order
         type: string
+      - description: 编码或名称模糊匹配
+        in: query
+        name: keyword
+        type: string
+      - description: 状态（0=停用 1=启用）
+        in: query
+        name: status
+        type: integer
       produces:
       - application/json
       responses:

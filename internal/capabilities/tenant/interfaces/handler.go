@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"jimu/internal/capabilities/tenant/application"
+	"jimu/internal/capabilities/tenant/domain"
 	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
@@ -14,6 +15,15 @@ import (
 
 type TenantHandler struct {
 	service *application.TenantService
+}
+
+// listTenantsQuery 租户列表查询参数：分页 + 可选筛选。
+type listTenantsQuery struct {
+	pagination.Pagination
+	// Keyword 对 code 与 name 做子串匹配
+	Keyword string `form:"keyword"`
+	// Status 0=停用 1=启用；不传表示不过滤（故用指针区分「未传」与 0）
+	Status *int8 `form:"status" binding:"omitempty,oneof=0 1"`
 }
 
 func NewTenantHandler(service *application.TenantService) *TenantHandler {
@@ -53,22 +63,27 @@ func (h *TenantHandler) Create(c *gin.Context) {
 // @Param        page_size  query     int     false  "每页数量（默认 20，最大 100）"
 // @Param        sort       query     string  false  "排序字段（支持 id、code、created_at，默认 id）"
 // @Param        order      query     string  false  "排序方向（asc 或 desc，默认 desc）"
+// @Param        keyword    query     string  false  "编码或名称模糊匹配"
+// @Param        status     query     int     false  "状态（0=停用 1=启用）"
 // @Success      200        {object}  contract.PageResponse  "成功，返回分页租户列表"
 // @Failure      400        {object}  contract.ErrorResponse  "参数错误（如无效的排序字段）"
 // @Failure      500        {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /tenants [get]
 func (h *TenantHandler) List(c *gin.Context) {
-	p, _ := c.MustGet("validated_query").(*pagination.Pagination)
-	if err := p.Normalize("id", "code", "created_at"); err != nil {
+	q, _ := c.MustGet("validated_query").(*listTenantsQuery)
+	if err := q.Normalize("id", "code", "created_at"); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	tenants, total, err := h.service.List(c.Request.Context(), *p)
+	tenants, total, err := h.service.List(c.Request.Context(), q.Pagination, domain.TenantListFilter{
+		Keyword: q.Keyword,
+		Status:  q.Status,
+	})
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	response.Page(c, tenants, total, p.Page, p.PageSize)
+	response.Page(c, tenants, total, q.Page, q.PageSize)
 }
 
 // Get godoc
@@ -165,7 +180,7 @@ func RegisterTenantRoutes(r *gin.RouterGroup, service *application.TenantService
 	tenants := r.Group("/tenants")
 	{
 		tenants.POST("", middleware.ValidateJSON(&application.CreateTenantRequest{}), handler.Create)
-		tenants.GET("", middleware.ValidateQuery(&pagination.Pagination{}), handler.List)
+		tenants.GET("", middleware.ValidateQuery(&listTenantsQuery{}), handler.List)
 		tenants.PUT("/:id", middleware.ValidateJSON(&application.UpdateTenantRequest{}), handler.Update)
 		tenants.DELETE("/:id", handler.Delete)
 		tenants.GET("/:id", handler.Get)

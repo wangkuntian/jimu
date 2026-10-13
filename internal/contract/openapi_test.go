@@ -28,6 +28,7 @@ func TestOpenAPIIncludesCRUDContract(t *testing.T) {
 		"/permissions/{id}":       {"get", "put", "delete"},
 		"/audits":                 {"get"},
 		"/audits/{id}":            {"get"},
+		"/tenants":                {"get", "post"},
 	}
 	public := map[string]bool{
 		"post /auth/login":    true,
@@ -45,8 +46,12 @@ func TestOpenAPIIncludesCRUDContract(t *testing.T) {
 			if !ok {
 				t.Fatalf("missing %s %s", method, path)
 			}
-			if method == "get" && (path == "/users" || path == "/roles" || path == "/permissions" || path == "/audits") {
+			if method == "get" && (path == "/users" || path == "/roles" || path == "/permissions" || path == "/audits" || path == "/tenants") {
 				assertQueryParams(t, operation, path)
+			}
+			if method == "get" && path == "/tenants" {
+				assertHasQueryParam(t, operation, "keyword")
+				assertHasQueryParam(t, operation, "status")
 			}
 			if !public[method+" "+path] {
 				if _, ok := operation["security"]; !ok {
@@ -106,4 +111,16 @@ func assertQueryParams(t *testing.T, operation map[string]any, path string) {
 			t.Fatalf("%s missing query param %s", path, name)
 		}
 	}
+}
+
+func assertHasQueryParam(t *testing.T, operation map[string]any, name string) {
+	t.Helper()
+	params, _ := operation["parameters"].([]any)
+	for _, param := range params {
+		item, _ := param.(map[string]any)
+		if item["in"] == "query" && item["name"] == name {
+			return
+		}
+	}
+	t.Fatalf("缺少 query 参数 %s", name)
 }
