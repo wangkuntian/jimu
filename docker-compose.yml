@@ -91,7 +91,7 @@ services:
 
   # 可选的 observability profile：OpenObserve 统一承载 日志/指标/追踪/告警/仪表盘
   openobserve:
-    image: public.ecr.aws/zinclabs/openobserve:v1.0.4
+    image: public.ecr.aws/zinclabs/openobserve:v1.1.1
     profiles: ["observability"]
     restart: unless-stopped
     environment:
