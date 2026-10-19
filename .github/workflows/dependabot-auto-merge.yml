@@ -7,7 +7,12 @@ name: Dependabot Auto-merge
 #   1. 本 workflow **绝不 checkout、绝不执行 PR 内容**，只调 GitHub API；
 #   2. 判定条件全部满足才动手，缺一不启用；
 #   3. auto-merge 的安全性依赖 master 的 ruleset **确实 require `PR Gate`** ——
-#      否则 `--auto` 会在没有任何检查的情况下立即合并。
+#      否则 `--auto` 会在没有任何检查的情况下立即合并。这一条不再只是注释里的假设：
+#      `Require the master gates` 步骤每次开 auto-merge 前**实测**一遍，读不到或少了任何一门
+#      都只发 warning、不启用 auto-merge；
+#   4. 镜像 tag 只接受「正经版本号」：PR #167 把 otel collector 从 `0.162.0` 换成
+#      `0.162.0-386`（同一个版本的 i386 单架构 tag），dependabot 按 tag 字符串把它当成升级，
+#      三道门禁全绿于是被自动合并。`Require plain image tags` 步骤做否定断言（见下方注释）。
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
@@ -37,6 +42,185 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # 守卫①：确认 master 的 ruleset 仍然 require 三道门。用 `/rules/branches/{branch}` 而不是
+      # `/rulesets/{id}`：GITHUB_TOKEN 的可用权限清单里**没有** `administration`，读 ruleset 详情会
+      # 403；`/rules/branches/{branch}` 是只读数据（实测匿名即可访问），GITHUB_TOKEN 够用。
+      - name: Require the master gates
+        id: gates
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # 重试 3 次：api.github.com 偶发 connection reset（本地实测反复出现），
+          # 读不到时仍然 fail-closed（只 warning、不启用 auto-merge），但不能因为它变红噪声。
+          contexts=""
+          read_ok=false
+          for attempt in 1 2 3; do
+            if contexts="$(gh api "repos/${GITHUB_REPOSITORY}/rules/branches/master" \
+              --jq '[.[] | select(.type == "required_status_checks")
+                     | .parameters.required_status_checks[].context] | join("\n")')"; then
+              read_ok=true
+              break
+            fi
+            echo "::warning::cannot read the master rules (attempt ${attempt}/3)"
+            sleep 5
+          done
+
+          ok=true
+          if [ "$read_ok" != true ]; then
+            echo "::warning::cannot read the master rules, skip auto-merge"
+            ok=false
+          else
+            echo "master requires: $(tr '\n' ',' <<<"$contexts")"
+            for want in "PR Gate" "Image Gate" "Scaffold Gate"; do
+              if ! grep -qxF "$want" <<<"$contexts"; then
+                echo "::warning::master no longer requires '${want}', skip auto-merge"
+                ok=false
+              fi
+            done
+          fi
+          echo "ok=${ok}" >> "$GITHUB_OUTPUT"
+
+      # 守卫②：镜像 tag 的形状断言。只读 API 取 PR 改动的 patch，不 checkout、不执行 PR 内容。
+      # 拒绝：裸数字后缀（`-386`）、平台名后缀（`-amd64`/`-arm64`/`-ppc64le`…）、
+      #       `nightly`/`dev`/`snapshot`/`canary`/`edge`/`beta`/`alpha`/`rc` 前缀、完全没有数字的
+      #       tag（如 `latest`）。
+      # 放行：常规版本号（`0.162.0`/`v1.1.1`/`11.4`/`5`）、发行版后缀（`-alpine`/`-noble`/`-slim`）
+      #       与 `@sha256:` 摘要 pin。
+      # 判据来自 diff 里**新增**的 `image:` / `FROM` 行；docker 类文件若读不出可判定的引用
+      # （patch 缺失、没有新增 image/FROM 行），一律不自动合并（fail-closed）。
+      - name: Require plain image tags
+        id: tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+          import time
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          pr = os.environ["PR_NUMBER"]
+
+
+          def gh_json(path):
+              """只读 API，重试 3 次（api.github.com 偶发 connection reset）；仍失败就抛错。"""
+              last = None
+              for attempt in range(3):
+                  try:
+                      out = subprocess.run(["gh", "api", path], check=True,
+                                           capture_output=True, text=True).stdout
+                      return json.loads(out)
+                  except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+                      last = exc
+                      print(f"::warning::cannot read {path} (attempt {attempt + 1}/3)")
+                      time.sleep(5)
+              raise SystemExit(f"cannot read {path}: {last}")
+
+
+          # per_page=100 保证一页装下，避免分页拼接出非法 JSON。
+          files = gh_json(f"repos/{repo}/pulls/{pr}/files?per_page=100")
+
+          DOCKERISH = re.compile(
+              r"(^|/)([^/]*\.)?(dockerfile|containerfile)(\.[^/]*)?$"
+              r"|(^|/)(docker-)?compose(\.[^/]*)?\.ya?ml$", re.I)
+          IMAGE = re.compile(r"^\s*image:\s*(\S+)\s*$")
+          FROM = re.compile(r"^\s*FROM\s+(.+)$", re.I)
+          PLATFORMS = {
+              "386", "i386", "amd64", "arm", "arm64", "armv7", "aarch64", "loong64",
+              "mips64", "ppc64", "ppc64le", "riscv64", "s390x", "x86_64",
+          }
+          BAD_PREFIX = ("nightly", "snapshot", "canary", "edge", "dev", "beta",
+                        "alpha", "rc", "test")
+
+
+          def added_refs(patch):
+              """新增行里的镜像引用（compose 的 image: / Dockerfile 的 FROM）。"""
+              refs = []
+              for line in patch.splitlines():
+                  if not line.startswith("+") or line.startswith("+++"):
+                      continue
+                  body = line[1:]
+                  m = IMAGE.match(body)
+                  if m:
+                      refs.append(m.group(1))
+                      continue
+                  m = FROM.match(body)
+                  if m:
+                      tokens = [t for t in m.group(1).split() if not t.startswith("--")]
+                      if tokens:
+                          refs.append(tokens[0])
+              return refs
+
+
+          def tag_problem(ref):
+              ref = ref.strip().strip("\"'")
+              if "@sha256:" in ref:
+                  return None                      # 摘要 pin，没有 tag 语义
+              _, sep, tag = ref.rpartition(":")
+              if not sep:
+                  return "no explicit tag"
+              if not any(c.isdigit() for c in tag):
+                  return f"tag {tag!r} carries no version number"
+              base, *suffixes = tag.split("-")
+              for s in suffixes:
+                  if s.isdigit():
+                      return f"tag {tag!r} has a bare numeric suffix (arch/build tag)"
+                  low = s.lower()
+                  if low in PLATFORMS or low.startswith(BAD_PREFIX):
+                      return f"tag {tag!r} carries the {s!r} platform/nightly suffix"
+              return None
+
+
+          blocked = []
+          for f in files:
+              name = f["filename"]
+              patch = f.get("patch") or ""
+              refs = added_refs(patch)
+              # 既不是 docker 类文件、也没有新增镜像引用（如 go.mod），跳过。
+              if not DOCKERISH.search(name) and not refs:
+                  continue
+              if not patch:
+                  blocked.append(f"{name}: cannot read the diff patch")
+                  continue
+              if not refs:
+                  blocked.append(f"{name}: no added image:/FROM line to verify")
+                  continue
+              for ref in refs:
+                  problem = tag_problem(ref)
+                  if problem:
+                      blocked.append(f"{name}: {ref} -> {problem}")
+
+          if blocked:
+              for b in blocked:
+                  print(f"::warning::skip auto-merge: {b}")
+              sys.exit(1)
+          print("all image tags look like plain versions")
+          PY
+          then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 守卫失效时**撤销**已经挂上的 auto-merge：本 workflow 在 `synchronize` 上会重跑，dependabot
+      # 之后若又推来一个「怪 tag」，只做「这一轮不启用」是不够的 —— 上一轮挂上的 `--auto` 还开着，
+      # 等检查绿了照样会合。条件与下面启用那一步互补；本来没挂过时 `--disable-auto` 会报错，忽略即可。
+      - name: Disarm auto-merge when a guard fails
+        if: >-
+          steps.gates.outputs.ok != 'true' ||
+          steps.tags.outputs.ok != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh pr merge --disable-auto "${{ github.event.pull_request.html_url }}"
+          || echo "::notice::auto-merge was not armed"
+
       # 白名单判定，fail-closed：只有 update-type **明确等于** minor 或 patch 才启用 auto-merge。
       # 空值 / 未知值 / major 一律不启用 —— 不能写成「!= major 就合」，否则元数据缺失时会放行。
       #
@@ -48,8 +232,10 @@ jobs:
       # major；反过来组内只要有一个 major，输出必是 version-update:semver-major。
       - name: Enable auto-merge for minor and patch updates
         if: >-
-          steps.meta.outputs.update-type == 'version-update:semver-minor' ||
-          steps.meta.outputs.update-type == 'version-update:semver-patch'
+          steps.gates.outputs.ok == 'true' &&
+          steps.tags.outputs.ok == 'true' &&
+          (steps.meta.outputs.update-type == 'version-update:semver-minor' ||
+           steps.meta.outputs.update-type == 'version-update:semver-patch')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh pr merge --auto --squash --delete-branch "${{ github.event.pull_request.html_url }}"
