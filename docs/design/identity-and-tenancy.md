@@ -63,6 +63,14 @@ flowchart LR
 
 `user` 持有用户主体、自助账户操作和管理操作。`auth` 持有凭证认证与会话用例，登录流程按需消费 MFA、tenant provisioning、breach 与 captcha 端口；`passkey` 持有 WebAuthn 凭证并通过 `LoginFinalizer` 复用 auth 登录收尾。`apikey` 持有 API Key 数据和验证入口。管理用例需要分配角色时，经 contract 委托 `access`，不会直接访问其 repository。
 
+### 会话身份与权限点的下发（`/auth/me`）
+
+`GET /api/v1/auth/me` 是自助端点，挂在 auth 的**认证-only 子组**（只有 `auth.AuthMiddleware`，不套授权与租户中间件），它的身份与权限来源有明确口径：
+
+- **身份取自已验签的凭证，不取数据库、也不取请求参数。** `user_id` 与 `tenant_id` 均读 `auth.AuthMiddleware` 写入 gin context 的值（`c.Set("user_id", …)`/`c.Set("tenant_id", …)`），其中 `tenant_id` 就是已验签 token 的 `tid` claim，与审计中间件读同一处。**不读账号行的 `tenant_id`** —— 数据库里的归属可能滞后于签发时的凭证归属；也**不能用 `tenant.FromContext`** —— 该子组不套 `tenant.Middleware()`，`FromContext` 在这里恒返回 `0`。
+- **权限点由 `kernel/access` 的角色与策略查询派生、原样透出。** `roles` 来自 `DBAuthorizationStore.RolesForUser`；`permissions` 由同一 store 的 `Policies` 取到「角色 × (resource, action)」全量后，在 auth 的 application 层**按用户角色过滤、去重、按 `(resource, action)` 排序**再下发，不翻译成额外权限码。判定语义与 `conf/rbac_model.conf` 的 matcher 完全一致，因此客户端复刻 `keyMatch(请求路径, resource)` 与 `action == "*"` 即可得到与后端相同的结论。
+- **零角色不是错误。** 无任何角色的用户（如公开注册的账号）返回 `200` 与两个空数组；`roles` 仅供展示，授权判定一律用 `permissions`。
+
 ### 租户数据规则
 
 - 用户、角色、审计等业务数据依据各自模型中的租户归属字段隔离；资源可见性由业务仓储或用例根据 context 执行。

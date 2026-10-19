@@ -5,6 +5,7 @@ import (
 
 	"jimu/internal/capabilities/tenant/domain"
 	dbutil "jimu/internal/kernel/db"
+	"jimu/internal/shared/sqlpattern"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -36,10 +37,17 @@ func (r *mysqlRepository) FindByCode(ctx context.Context, code string) (*domain.
 	return &t, nil
 }
 
-func (r *mysqlRepository) List(ctx context.Context, offset, limit int, sort, order string) ([]domain.Tenant, int64, error) {
+func (r *mysqlRepository) List(ctx context.Context, offset, limit int, sort, order string, filter domain.TenantListFilter) ([]domain.Tenant, int64, error) {
 	var tenants []domain.Tenant
 	var total int64
 	db := r.db.WithContext(ctx).Model(&domain.Tenant{})
+	if filter.Keyword != "" {
+		pattern := sqlpattern.LikeContains(filter.Keyword)
+		db = db.Where("code LIKE ? ESCAPE '"+sqlpattern.EscapeChar+"' OR name LIKE ? ESCAPE '"+sqlpattern.EscapeChar+"'", pattern, pattern)
+	}
+	if filter.Status != nil {
+		db = db.Where("status = ?", *filter.Status)
+	}
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}

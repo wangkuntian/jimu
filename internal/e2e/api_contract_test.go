@@ -369,7 +369,26 @@ func TestAPIContract(t *testing.T) {
 	// 1. 注册新用户
 	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/register", "", `{"username":"e2euser","password":"e2epass123"}`)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, 0, parseResp(t, w).Code)
+	registeredResp := parseResp(t, w)
+	require.Equal(t, 0, registeredResp.Code)
+
+	// 注册响应的线上形状统一为 {user, tenant?}：普通注册只有 user，
+	// 不得再退回裸账号对象（data 顶层带 id/username），也不得含密码。
+	var registered struct {
+		User struct {
+			ID       uint64 `json:"id"`
+			Username string `json:"username"`
+			Password string `json:"password"`
+		} `json:"user"`
+		Tenant     any    `json:"tenant"`
+		TopLevelID uint64 `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(registeredResp.Data, &registered))
+	require.NotZero(t, registered.User.ID, "注册响应必须是 {user} 形状")
+	require.Equal(t, "e2euser", registered.User.Username)
+	require.Empty(t, registered.User.Password, "注册响应不得含密码字段")
+	require.Zero(t, registered.TopLevelID, "data 顶层不得再是裸账号对象")
+	require.Nil(t, registered.Tenant, "普通注册不得返回 tenant")
 
 	// 2. 管理员登录
 	adminToken := login(t, r, "admin", "admin123")
@@ -484,4 +503,75 @@ func repoRoot(t *testing.T) string {
 		}
 		dir = parent
 	}
+}
+
+// TestAuthConfigEndpoint 断言真实装配下 /auth/config 的取值来自 dev 配置
+// （configs/app.yaml：public_registration=true、tenant.provisioning.enabled=false）。
+func TestAuthConfigEndpoint(t *testing.T) {
+	requireCapabilities(t, "auth")
+	r := newTestApp(t)
+
+	w := doJSON(t, r, http.MethodGet, "/api/v1/auth/config", "", "")
+	require.Equal(t, http.StatusOK, w.Code)
+	resp := parseResp(t, w)
+	require.Equal(t, 0, resp.Code)
+
+	var data struct {
+		PublicRegistration  bool `json:"public_registration"`
+		ProvisioningEnabled bool `json:"provisioning_enabled"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Data, &data))
+	require.True(t, data.PublicRegistration)
+	require.False(t, data.ProvisioningEnabled)
+}
+
+// TestTenantListFilters 断言租户列表的 keyword/status 筛选在 HTTP 层生效，
+// 且 LIKE 通配符被转义（keyword="%" 不得退化为「匹配全部」）。
+func TestTenantListFilters(t *testing.T) {
+	requireCapabilities(t, "auth", "user", "access", "tenant")
+	r := newTestApp(t)
+	admin := login(t, r, "admin", "admin123")
+
+	create := func(code, name string) uint64 {
+		w := doJSON(t, r, http.MethodPost, "/api/v1/tenants", admin, `{"code":"`+code+`","name":"`+name+`"}`)
+		require.Equal(t, http.StatusCreated, w.Code)
+		var data struct {
+			ID uint64 `json:"id"`
+		}
+		require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &data))
+		return data.ID
+	}
+
+	acmeID := create("acme", "Acme Inc")
+	create("bravo", "Bravo Ltd")
+
+	// keyword 命中 code
+	w := doJSON(t, r, http.MethodGet, "/api/v1/tenants?keyword=acme", admin, "")
+	require.Equal(t, http.StatusOK, w.Code)
+	resp := parseResp(t, w)
+	require.EqualValues(t, 1, resp.Total)
+
+	// keyword 命中 name（大小写不敏感由数据库排序规则决定，此处用精确子串）
+	w = doJSON(t, r, http.MethodGet, "/api/v1/tenants?keyword=Bravo", admin, "")
+	require.EqualValues(t, 1, parseResp(t, w).Total)
+
+	// LIKE 通配符必须被转义：'%' 不应匹配到任何租户
+	w = doJSON(t, r, http.MethodGet, "/api/v1/tenants?keyword=%25", admin, "")
+	require.EqualValues(t, 0, parseResp(t, w).Total, "keyword=%% 被当成通配符了：LIKE 未转义")
+
+	// status 筛选：把 acme 停用后，status=0 只应命中它
+	w = doJSON(t, r, http.MethodPut, "/api/v1/tenants/"+strconv.FormatUint(acmeID, 10), admin, `{"status":0}`)
+	require.Equal(t, http.StatusOK, w.Code)
+	w = doJSON(t, r, http.MethodGet, "/api/v1/tenants?status=0", admin, "")
+	paused := parseResp(t, w)
+	require.EqualValues(t, 1, paused.Total)
+	var pausedIDs []struct {
+		ID uint64 `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(paused.Data, &pausedIDs))
+	require.Equal(t, acmeID, pausedIDs[0].ID)
+
+	// keyword + status 组合
+	w = doJSON(t, r, http.MethodGet, "/api/v1/tenants?keyword=acme&status=1", admin, "")
+	require.EqualValues(t, 0, parseResp(t, w).Total)
 }

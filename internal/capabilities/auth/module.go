@@ -56,7 +56,7 @@ func New(db *gorm.DB, rdb redistore.Client, cfg Config, failClosed bool, captcha
 	passwordHistoryRepo := authinfra.NewMysqlPasswordHistoryRepository(db)
 	allDeps := append([]interface{}{}, deps...)
 	allDeps = append(allDeps, resetStore, application.WithPasswordHistory(cfg.PasswordHistoryCount),
-		loginHistoryRepo, passwordHistoryRepo)
+		loginHistoryRepo, passwordHistoryRepo, access.NewDBAuthorizationStore(db))
 	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin, allDeps...)
 	m := &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaVerifier,
 		provisioningEnabled: provisioningEnabled}

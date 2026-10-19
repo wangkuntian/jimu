@@ -58,8 +58,8 @@ func (s *TenantService) Get(ctx context.Context, id uint64) (*TenantResponse, er
 }
 
 // List 分页获取租户列表。
-func (s *TenantService) List(ctx context.Context, p pagination.Pagination) ([]TenantResponse, int64, error) {
-	tenants, total, err := s.repo.List(ctx, p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
+func (s *TenantService) List(ctx context.Context, p pagination.Pagination, filter domain.TenantListFilter) ([]TenantResponse, int64, error) {
+	tenants, total, err := s.repo.List(ctx, p.GetOffset(), p.GetLimit(), p.Sort, p.Order, filter)
 	if err != nil {
 		return nil, 0, errors.Wrap(errors.CodeInternalError, "failed to list tenants", err)
 	}

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 
 	appErrs "jimu/internal/shared/errors"
@@ -21,9 +22,15 @@ type fieldError struct {
 // ValidateJSON 返回一个中间件，自动绑定并验证 JSON 请求体。
 // 验证失败时返回 400 + code:1001，并在 details 中附带字段级错误；
 // 成功时将绑定的对象存入 context key "validated_req"，供 handler 通过 c.MustGet 获取。
+//
+// 与 ValidateQuery 同源：dst 只作为类型样板，中间件在路由注册期只求值一次。
+// 若直接复用同一个 dst，本次请求省略的字段会保留上一个请求写入的值
+// （JSON 解码不会清零未出现的字段，例如上一次的 remember_device=true 或
+// tenant_name 泄漏到下一次请求）。因此每次请求都按 dst 的类型新建实例后再绑定。
 func ValidateJSON(dst interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if err := c.ShouldBindJSON(dst); err != nil {
+		target := newBindingTarget(dst)
+		if err := c.ShouldBindJSON(target); err != nil {
 			locale := localeOf(c)
 			details := translateValidationDetails(err, locale)
 			msg := i18n.T("invalid_param", locale)
@@ -34,7 +41,7 @@ func ValidateJSON(dst interface{}) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		c.Set("validated_req", dst)
+		c.Set("validated_req", target)
 		c.Next()
 	}
 }
@@ -42,9 +49,15 @@ func ValidateJSON(dst interface{}) gin.HandlerFunc {
 // ValidateQuery 返回一个中间件，自动绑定并验证 Query 参数。
 // 验证失败时返回 400 + code:1001，并在 details 中附带字段级错误；
 // 成功时将绑定的对象存入 context key "validated_query"。
+//
+// dst 只作为类型样板：中间件在路由注册期只求值一次，若直接复用同一个 dst，
+// 本次请求未出现的字段会保留上一个请求写入的值（跨请求串值，例如上一次的
+// status=0 泄漏到下一次不带 status 的请求）。因此每次请求都按 dst 的类型
+// 新建实例后再绑定。
 func ValidateQuery(dst interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if err := c.ShouldBindQuery(dst); err != nil {
+		target := newBindingTarget(dst)
+		if err := c.ShouldBindQuery(target); err != nil {
 			locale := localeOf(c)
 			details := translateValidationDetails(err, locale)
 			msg := i18n.T("invalid_param", locale)
@@ -55,9 +68,19 @@ func ValidateQuery(dst interface{}) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		c.Set("validated_query", dst)
+		c.Set("validated_query", target)
 		c.Next()
 	}
+}
+
+// newBindingTarget 返回本次请求独立的绑定目标：dst 为结构体指针时新建同类型零值，
+// 否则原样返回（非结构体目标保持既有行为）。
+func newBindingTarget(dst interface{}) interface{} {
+	t := reflect.TypeOf(dst)
+	if t != nil && t.Kind() == reflect.Ptr && t.Elem().Kind() == reflect.Struct {
+		return reflect.New(t.Elem()).Interface()
+	}
+	return dst
 }
 
 // localeOf 读取 gin context 中的语言，缺省 zh

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -13,9 +15,11 @@ func TestOpenAPIIncludesCRUDContract(t *testing.T) {
 	required := map[string][]string{
 		"/auth/login":             {"post"},
 		"/auth/register":          {"post"},
+		"/auth/config":            {"get"},
 		"/auth/refresh":           {"post"},
 		"/auth/logout":            {"post"},
 		"/auth/logout-all":        {"post"},
+		"/auth/me":                {"get"},
 		"/users":                  {"get", "post"},
 		"/users/{id}":             {"get", "put", "delete"},
 		"/roles":                  {"get", "post"},
@@ -25,10 +29,15 @@ func TestOpenAPIIncludesCRUDContract(t *testing.T) {
 		"/permissions/{id}":       {"get", "put", "delete"},
 		"/audits":                 {"get"},
 		"/audits/{id}":            {"get"},
+		"/tenants":                {"get", "post"},
+		// 管理端运维端点：必须声明鉴权（未列入 public 集合，故下方的 security 断言覆盖它们）
+		"/admin/error-codes":    {"get"},
+		"/admin/ratelimit/auth": {"get"},
 	}
 	public := map[string]bool{
 		"post /auth/login":    true,
 		"post /auth/register": true,
+		"get /auth/config":    true,
 		"post /auth/refresh":  true,
 	}
 	for path, methods := range required {
@@ -41,8 +50,12 @@ func TestOpenAPIIncludesCRUDContract(t *testing.T) {
 			if !ok {
 				t.Fatalf("missing %s %s", method, path)
 			}
-			if method == "get" && (path == "/users" || path == "/roles" || path == "/permissions" || path == "/audits") {
+			if method == "get" && (path == "/users" || path == "/roles" || path == "/permissions" || path == "/audits" || path == "/tenants") {
 				assertQueryParams(t, operation, path)
+			}
+			if method == "get" && path == "/tenants" {
+				assertHasQueryParam(t, operation, "keyword")
+				assertHasQueryParam(t, operation, "status")
 			}
 			if !public[method+" "+path] {
 				if _, ok := operation["security"]; !ok {
@@ -66,6 +79,27 @@ func readOpenAPI(t *testing.T) map[string]any {
 	return spec
 }
 
+// TestOpenAPIPathsCarryNoBasePathPrefix 钉住 swag 的 @Router 注解不得自带 basePath 前缀：
+// 注解写 /api/v1/xxx 时，生成的路径键与 basePath 组合后会变成 /api/v1/api/v1/xxx，
+// 客户端无法调用（v0.4.0 前 /admin/error-codes 与 /admin/ratelimit/auth 就是这样）。
+func TestOpenAPIPathsCarryNoBasePathPrefix(t *testing.T) {
+	spec := readOpenAPI(t)
+
+	basePath, _ := spec["basePath"].(string)
+	if basePath == "" {
+		t.Fatal("swagger.json 缺少 basePath")
+	}
+	paths, _ := spec["paths"].(map[string]any)
+	if len(paths) == 0 {
+		t.Fatal("swagger.json 没有任何路径")
+	}
+	for path := range paths {
+		if strings.HasPrefix(path, basePath+"/") {
+			t.Errorf("路径 %q 自带 basePath 前缀 %q：@Router 注解不应写 /api/v1 前缀", path, basePath)
+		}
+	}
+}
+
 func assertQueryParams(t *testing.T, operation map[string]any, path string) {
 	t.Helper()
 	params, _ := operation["parameters"].([]any)
@@ -81,4 +115,131 @@ func assertQueryParams(t *testing.T, operation map[string]any, path string) {
 			t.Fatalf("%s missing query param %s", path, name)
 		}
 	}
+}
+
+func assertHasQueryParam(t *testing.T, operation map[string]any, name string) {
+	t.Helper()
+	params, _ := operation["parameters"].([]any)
+	for _, param := range params {
+		item, _ := param.(map[string]any)
+		if item["in"] == "query" && item["name"] == name {
+			return
+		}
+	}
+	t.Fatalf("缺少 query 参数 %s", name)
+}
+
+// TestOpenAPIListEndpointsCarryTypedData 钉住本轮前端消费的租户/套餐端点必须声明具体 DTO：
+// data 为 []{} 或裸对象时前端只能手写视图模型，字段变化不会在编译期报错。
+// 同时钉住本轮的改动边界：未纳入范围的端点继续声明 response.Body。
+func TestOpenAPIListEndpointsCarryTypedData(t *testing.T) {
+	spec := readOpenAPI(t)
+
+	assertRefResponse(t, spec, "/tenants", "get", 200, "#/definitions/application.TenantPageResponse")
+	assertRefResponse(t, spec, "/tenants", "post", 201, "#/definitions/application.TenantBodyResponse")
+	assertRefResponse(t, spec, "/tenants/{id}", "get", 200, "#/definitions/application.TenantBodyResponse")
+	assertRefResponse(t, spec, "/tenant-plans", "get", 200, "#/definitions/application.PlanPageResponse")
+
+	assertRefResponse(t, spec, "/tenants/{id}", "put", 200, "#/definitions/response.Body")
+	assertRefResponse(t, spec, "/tenants/{id}", "delete", 200, "#/definitions/response.Body")
+	assertRefResponse(t, spec, "/tenants/usage", "get", 200, "#/definitions/response.Body")
+
+	tenants := definitionProperties(t, spec, "application.TenantPageResponse")
+	assertItemsRef(t, tenants, "data", "#/definitions/application.TenantResponse")
+
+	tenant := definitionProperties(t, spec, "application.TenantResponse")
+	for _, field := range []string{"id", "code", "name", "status", "plan_id", "created_at"} {
+		if _, ok := tenant[field]; !ok {
+			t.Fatalf("application.TenantResponse 缺少字段 %s", field)
+		}
+	}
+}
+
+// TestOpenAPIAuthEndpointsCarryTypedData 登录/刷新/注册/me/config 的成功响应必须是具体类型：
+// 前端据此生成 TokenPair、注册响应、MeView 与 AuthConfigResponse 的字段类型，而不是 unknown。
+func TestOpenAPIAuthEndpointsCarryTypedData(t *testing.T) {
+	spec := readOpenAPI(t)
+
+	assertRefResponse(t, spec, "/auth/login", "post", 200, "#/definitions/contract.TokenPair")
+	assertRefResponse(t, spec, "/auth/refresh", "post", 200, "#/definitions/contract.TokenPair")
+	assertRefResponse(t, spec, "/auth/register", "post", 200, "#/definitions/application.RegisterResponse")
+	assertRefResponse(t, spec, "/auth/me", "get", 200, "#/definitions/application.MeView")
+	assertRefResponse(t, spec, "/auth/config", "get", 200, "#/definitions/interfaces.AuthConfigResponse")
+
+	me := definitionProperties(t, spec, "application.MeView")
+	for _, field := range []string{"user", "roles", "permissions"} {
+		if _, ok := me[field]; !ok {
+			t.Fatalf("application.MeView 缺少字段 %s", field)
+		}
+	}
+
+	authConfig := definitionProperties(t, spec, "interfaces.AuthConfigResponse")
+	for _, field := range []string{"public_registration", "provisioning_enabled"} {
+		if _, ok := authConfig[field]; !ok {
+			t.Fatalf("interfaces.AuthConfigResponse 缺少字段 %s", field)
+		}
+	}
+
+	register := definitionProperties(t, spec, "application.RegisterResponse")
+	if _, ok := register["user"]; !ok {
+		t.Fatal("application.RegisterResponse 缺少 user 字段")
+	}
+	if _, ok := register["tenant"]; !ok {
+		t.Fatal("application.RegisterResponse 缺少 tenant 字段（开通式注册时返回）")
+	}
+
+	user := definitionProperties(t, spec, "application.RegisterUserView")
+	for _, field := range []string{"id", "username", "email", "phone", "status", "tenant_id"} {
+		if _, ok := user[field]; !ok {
+			t.Fatalf("application.RegisterUserView 缺少字段 %s", field)
+		}
+	}
+}
+
+func assertRefResponse(t *testing.T, spec map[string]any, path, method string, statusCode int, wantRef string) {
+	t.Helper()
+	operation := operationOf(t, spec, path, method)
+	responses, _ := operation["responses"].(map[string]any)
+	resp, _ := responses[strconv.Itoa(statusCode)].(map[string]any)
+	schema, _ := resp["schema"].(map[string]any)
+	if got, _ := schema["$ref"].(string); got != wantRef {
+		t.Fatalf("%s %s 的 %d schema = %q, want %q", method, path, statusCode, got, wantRef)
+	}
+}
+
+func definitionProperties(t *testing.T, spec map[string]any, name string) map[string]any {
+	t.Helper()
+	defs, _ := spec["definitions"].(map[string]any)
+	def, ok := defs[name].(map[string]any)
+	if !ok {
+		t.Fatalf("缺少 definition %s", name)
+	}
+	props, _ := def["properties"].(map[string]any)
+	return props
+}
+
+func assertItemsRef(t *testing.T, props map[string]any, field, wantRef string) {
+	t.Helper()
+	entry, ok := props[field].(map[string]any)
+	if !ok {
+		t.Fatalf("缺少字段 %s", field)
+	}
+	items, _ := entry["items"].(map[string]any)
+	if got, _ := items["$ref"].(string); got != wantRef {
+		t.Fatalf("字段 %s 的 items = %q, want %q", field, got, wantRef)
+	}
+}
+
+func operationOf(t *testing.T, spec map[string]any, path, method string) map[string]any {
+	t.Helper()
+	paths, _ := spec["paths"].(map[string]any)
+	item, ok := paths[path].(map[string]any)
+	if !ok {
+		t.Fatalf("缺少路径 %s", path)
+	}
+	operation, ok := item[method].(map[string]any)
+	if !ok {
+		t.Fatalf("缺少 %s %s", method, path)
+	}
+	return operation
 }

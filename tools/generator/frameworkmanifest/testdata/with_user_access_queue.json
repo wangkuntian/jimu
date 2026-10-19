@@ -1275,6 +1275,7 @@
     "internal/contract/ports.go",
     "internal/e2e/admin_routes_parity_test.go",
     "internal/e2e/api_contract_test.go",
+    "internal/e2e/auth_me_test.go",
     "internal/e2e/auth_routes_parity_test.go",
     "internal/e2e/grpc_contract_test.go",
     "internal/e2e/helpers_test.go",
@@ -1445,6 +1446,8 @@
     "internal/shared/response/response.go",
     "internal/shared/response/response_contract_test.go",
     "internal/shared/response/response_test.go",
+    "internal/shared/sqlpattern/like.go",
+    "internal/shared/sqlpattern/like_test.go",
     "internal/shared/testutil/assert.go",
     "internal/shared/testutil/reporoot.go",
     "internal/shared/testutil/reporoot_test.go",
@@ -1473,5 +1476,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:292c51cdef3e5a925091d2d6b069ca7d4ca07302c2e54bd823370b5e7fb8d5af"
+  "digest": "sha256:147db052149ebacee31ee6e8b676680ebbb9d1409975c837ff28c602bead7589"
 }

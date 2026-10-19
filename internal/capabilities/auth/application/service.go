@@ -12,6 +12,7 @@ import (
 
 	authdomain "jimu/internal/capabilities/auth/domain"
 	"jimu/internal/contract"
+	"jimu/internal/kernel/access"
 	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
@@ -22,6 +23,7 @@ import (
 
 type AuthService struct {
 	userRepo             contract.AccountRepository
+	authz                access.AuthorizationStore
 	jwtUtil              *auth.JWT
 	sessions             auth.SessionStore
 	lockout              *auth.LoginFailureTracker
@@ -72,6 +74,8 @@ func NewAuthService(userRepo contract.AccountRepository, jwtUtil *auth.JWT, sess
 			s.passwordHistory = d
 		case passwordHistoryCount:
 			s.passwordHistoryCount = int(d)
+		case access.AuthorizationStore:
+			s.authz = d
 		}
 	}
 	return s

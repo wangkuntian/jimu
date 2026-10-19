@@ -104,6 +104,157 @@ definitions:
     - password
     - username
     type: object
+  application.MeUser:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      status:
+        type: integer
+      tenant_id:
+        type: integer
+      username:
+        type: string
+    type: object
+  application.MeView:
+    properties:
+      permissions:
+        items:
+          $ref: '#/definitions/application.PermissionPoint'
+        type: array
+      roles:
+        items:
+          type: string
+        type: array
+      user:
+        $ref: '#/definitions/application.MeUser'
+    type: object
+  application.PermissionPoint:
+    properties:
+      action:
+        type: string
+      resource:
+        type: string
+    type: object
+  application.PlanPageResponse:
+    properties:
+      code:
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/application.PlanResponse'
+        type: array
+      message:
+        type: string
+      page:
+        type: integer
+      page_size:
+        type: integer
+      request_id:
+        type: string
+      total:
+        type: integer
+    type: object
+  application.PlanResponse:
+    properties:
+      code:
+        type: string
+      id:
+        type: integer
+      max_api_keys:
+        type: integer
+      max_roles:
+        type: integer
+      max_users:
+        type: integer
+      name:
+        type: string
+    type: object
+  application.RegisterResponse:
+    properties:
+      tenant:
+        $ref: '#/definitions/application.RegisterTenantView'
+      user:
+        $ref: '#/definitions/application.RegisterUserView'
+    type: object
+  application.RegisterTenantView:
+    properties:
+      code:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      status:
+        type: integer
+    type: object
+  application.RegisterUserView:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      phone:
+        type: string
+      status:
+        type: integer
+      tenant_id:
+        type: integer
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  application.TenantBodyResponse:
+    properties:
+      code:
+        type: integer
+      data:
+        $ref: '#/definitions/application.TenantResponse'
+      message:
+        type: string
+      request_id:
+        type: string
+    type: object
+  application.TenantPageResponse:
+    properties:
+      code:
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/application.TenantResponse'
+        type: array
+      message:
+        type: string
+      page:
+        type: integer
+      page_size:
+        type: integer
+      request_id:
+        type: string
+      total:
+        type: integer
+    type: object
+  application.TenantResponse:
+    properties:
+      code:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      plan_id:
+        type: integer
+      status:
+        type: integer
+      updated_at:
+        type: string
+    type: object
   application.UpdatePermissionRequest:
     properties:
       action:
@@ -213,6 +364,27 @@ definitions:
         type: string
       total:
         type: integer
+    type: object
+  contract.TokenPair:
+    properties:
+      access_token:
+        type: string
+      device_token:
+        description: DeviceToken 仅在「记住此设备」成功签发时返回，客户端需安全保存。
+        type: string
+      expires_in:
+        type: integer
+      refresh_token:
+        type: string
+    type: object
+  interfaces.AuthConfigResponse:
+    properties:
+      provisioning_enabled:
+        description: ProvisioningEnabled 开通式注册：注册 = 开通新租户，tenant_name 必填
+        type: boolean
+      public_registration:
+        description: PublicRegistration 是否开放公开注册（false 时 /auth/register 路由不注册）
+        type: boolean
     type: object
   interfaces.disableTOTPRequest:
     properties:
@@ -342,6 +514,64 @@ info:
   title: Jimu API
   version: "1.0"
 paths:
+  /admin/error-codes:
+    get:
+      description: 获取所有业务错误码及其对应的 HTTP 状态码映射。用于前端和第三方系统集成时参考。包含错误码、错误消息、HTTP 状态码和分类信息。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回错误码列表
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: 获取错误码列表
+      tags:
+      - 系统管理
+  /admin/ratelimit/auth:
+    get:
+      description: 不消费令牌地返回某 scope（如 login）+ key（如 ip:1.2.3.4）当前的计数与剩余窗口
+      parameters:
+      - description: 限流作用域
+        enum:
+        - login
+        - register
+        in: query
+        name: scope
+        required: true
+        type: string
+      - description: 限流键（如 ip:1.2.3.4 或 username:alice）
+        in: query
+        name: key
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: 查看认证限流状态
+      tags:
+      - admin/ratelimit
   /admin/users/{id}/roles:
     post:
       consumes:
@@ -379,52 +609,6 @@ paths:
       summary: 分配用户角色
       tags:
       - 权限管理
-  /api/v1/admin/error-codes:
-    get:
-      description: 获取所有业务错误码及其对应的 HTTP 状态码映射。用于前端和第三方系统集成时参考。包含错误码、错误消息、HTTP 状态码和分类信息。
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功，返回错误码列表
-          schema:
-            $ref: '#/definitions/response.Body'
-      summary: 获取错误码列表
-      tags:
-      - 系统管理
-  /api/v1/admin/ratelimit/auth:
-    get:
-      description: 不消费令牌地返回某 scope（如 login）+ key（如 ip:1.2.3.4）当前的计数与剩余窗口
-      parameters:
-      - description: 限流作用域
-        enum:
-        - login
-        - register
-        in: query
-        name: scope
-        required: true
-        type: string
-      - description: 限流键（如 ip:1.2.3.4 或 username:alice）
-        in: query
-        name: key
-        required: true
-        type: string
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/response.Body'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/response.Body'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/response.Body'
-      summary: 查看认证限流状态
-      tags:
-      - admin/ratelimit
   /audits:
     get:
       description: 分页获取系统审计日志。记录用户的操作行为（如登录、创建、修改、删除等），用于安全审计和行为追踪。支持按 ID、创建时间排序。
@@ -572,6 +756,19 @@ paths:
       summary: 校验审计链完整性
       tags:
       - 审计日志
+  /auth/config:
+    get:
+      description: 返回客户端渲染登录/注册入口所需的公开开关。无论是否开放公开注册，本端点都存在。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回注册相关开关
+          schema:
+            $ref: '#/definitions/interfaces.AuthConfigResponse'
+      summary: 获取认证能力开关
+      tags:
+      - 认证
   /auth/devices:
     delete:
       description: 注销当前用户全部可信设备，用于设备丢失或异常登录后的止损。
@@ -686,7 +883,7 @@ paths:
         "200":
           description: 成功，返回 accessToken 和 refreshToken
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/contract.TokenPair'
         "400":
           description: 参数错误（用户名或密码格式不符）
           schema:
@@ -770,6 +967,29 @@ paths:
       security:
       - BearerAuth: []
       summary: 退出所有会话
+      tags:
+      - 认证
+  /auth/me:
+    get:
+      description: 返回当前用户的身份、角色与有效权限点（resource + action，与 Casbin 策略同形，resource 支持通配）。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功，返回身份与权限点
+          schema:
+            $ref: '#/definitions/application.MeView'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: 用户不存在
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取当前会话身份与权限点
       tags:
       - 认证
   /auth/mfa/disable:
@@ -873,7 +1093,7 @@ paths:
         "200":
           description: 成功，返回新的 token 对
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/contract.TokenPair'
         "400":
           description: 参数错误
           schema:
@@ -907,7 +1127,7 @@ paths:
         "200":
           description: 成功，返回用户信息（开通式注册额外返回 tenant）
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/application.RegisterResponse'
         "400":
           description: 参数错误（如用户名已存在、租户编码格式无效或已存在）
           schema:
@@ -1624,7 +1844,7 @@ paths:
         "200":
           description: 成功，返回分页套餐列表
           schema:
-            $ref: '#/definitions/contract.PageResponse'
+            $ref: '#/definitions/application.PlanPageResponse'
         "400":
           description: 参数错误
           schema:
@@ -1750,13 +1970,21 @@ paths:
         in: query
         name: order
         type: string
+      - description: 编码或名称模糊匹配
+        in: query
+        name: keyword
+        type: string
+      - description: 状态（0=停用 1=启用）
+        in: query
+        name: status
+        type: integer
       produces:
       - application/json
       responses:
         "200":
           description: 成功，返回分页租户列表
           schema:
-            $ref: '#/definitions/contract.PageResponse'
+            $ref: '#/definitions/application.TenantPageResponse'
         "400":
           description: 参数错误（如无效的排序字段）
           schema:
@@ -1787,7 +2015,7 @@ paths:
         "201":
           description: 创建成功，返回租户信息
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/application.TenantBodyResponse'
         "400":
           description: 参数错误（编码格式无效）
           schema:
@@ -1856,7 +2084,7 @@ paths:
         "200":
           description: 成功，返回租户信息
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/application.TenantBodyResponse'
         "400":
           description: 参数错误（ID 格式无效）
           schema:

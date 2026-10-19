@@ -63,6 +63,9 @@ ENV
 compose config --quiet
 compose up -d --build
 compose exec -T server ./jimu migrate up
+# 结构种子：造出 admin 超管。公开注册的用户零角色，调管理端点会被权限中间件 403，
+# 故联动链路必须用 admin；种子同时把启用集的能力权限点写进库。
+compose exec -T -e ADMIN_PASSWORD=smoke-admin-pass server ./jimu seed
 
 registered=0
 for _ in $(seq 1 60); do
@@ -104,3 +107,60 @@ curl -fsS "${BASE_URL}/auth/logout" -X POST -H "Authorization: Bearer ${ACCESS}"
 
 grep -q '"code":0' /tmp/jimu-refresh.json
 grep -q '"code":0' /tmp/jimu-logout.json
+
+# ===== 联动链路：认证开关 → 会话引导 → 租户筛选/创建 → 套餐分配 → 用量 =====
+ADMIN=$(curl -fsS "${BASE_URL}/auth/login" -X POST -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"smoke-admin-pass"}')
+ADMIN_ACCESS=$(printf "%s" "$ADMIN" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+test -n "$ADMIN_ACCESS"
+
+# 1) 认证开关对客户端可见（dev 配置：允许公开注册、不开通式建租户）
+curl -fsS "${BASE_URL}/auth/config" >/tmp/jimu-auth-config.json
+grep -q '"public_registration":true' /tmp/jimu-auth-config.json
+grep -q '"provisioning_enabled":false' /tmp/jimu-auth-config.json
+
+# 2) 管理员会话引导：非空角色 + 非空权限点，且含租户列表读权限
+curl -fsS -H "Authorization: Bearer ${ADMIN_ACCESS}" "${BASE_URL}/auth/me" >/tmp/jimu-me.json
+grep -q '"code":0' /tmp/jimu-me.json
+grep -q '"roles":\["' /tmp/jimu-me.json
+grep -q '"resource":"/api/v1/tenants","action":"GET"' /tmp/jimu-me.json
+
+# 3) 零角色注册用户的会话引导是 200 + 空数组（证明 /auth/me 不在权限中间件下）
+smoke_me_status=$(curl -sS -o /tmp/jimu-me-smoke.json -w "%{http_code}" \
+  -H "Authorization: Bearer ${ACCESS}" "${BASE_URL}/auth/me" || true)
+test "$smoke_me_status" = "200"
+grep -q '"roles":\[\]' /tmp/jimu-me-smoke.json
+grep -q '"permissions":\[\]' /tmp/jimu-me-smoke.json
+
+# 4) 同一注册用户调管理端点必须 403（与第 3 步成对照：有身份但无角色）
+smoke_tenants_status=$(curl -sS -o /tmp/jimu-tenants-smoke.json -w "%{http_code}" \
+  -H "Authorization: Bearer ${ACCESS}" "${BASE_URL}/tenants" || true)
+test "$smoke_tenants_status" = "403"
+
+# 5) 租户列表筛选：keyword 命中 code + status 生效
+curl -fsS -H "Authorization: Bearer ${ADMIN_ACCESS}" "${BASE_URL}/tenants?keyword=default&status=1" >/tmp/jimu-tenants.json
+grep -q '"code":0' /tmp/jimu-tenants.json
+grep -q '"code":"default"' /tmp/jimu-tenants.json
+
+# 筛选真的生效：不存在的关键字必须 0 条（不假设库里只有默认租户一行）
+curl -fsS -H "Authorization: Bearer ${ADMIN_ACCESS}" "${BASE_URL}/tenants?keyword=__no_such_tenant__" >/tmp/jimu-tenants-none.json
+grep -q '"code":0' /tmp/jimu-tenants-none.json
+grep -q '"total":0' /tmp/jimu-tenants-none.json
+
+# 6) 建租户 → 取套餐 → 分配套餐 → 用量
+curl -fsS -H "Authorization: Bearer ${ADMIN_ACCESS}" -H "Content-Type: application/json" \
+  -X POST "${BASE_URL}/tenants" -d '{"code":"smoke-tenant","name":"Smoke Tenant"}' >/tmp/jimu-tenant-create.json
+grep -q '"code":0' /tmp/jimu-tenant-create.json
+TENANT_ID=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' /tmp/jimu-tenant-create.json | head -1)
+test -n "$TENANT_ID"
+
+curl -fsS -H "Authorization: Bearer ${ADMIN_ACCESS}" "${BASE_URL}/tenant-plans?page_size=1" >/tmp/jimu-plans.json
+PLAN_ID=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' /tmp/jimu-plans.json | head -1)
+test -n "$PLAN_ID"
+
+curl -fsS -H "Authorization: Bearer ${ADMIN_ACCESS}" -H "Content-Type: application/json" \
+  -X PUT "${BASE_URL}/tenants/${TENANT_ID}/plan" -d "{\"plan_id\":${PLAN_ID}}" >/tmp/jimu-plan-assign.json
+grep -q '"code":0' /tmp/jimu-plan-assign.json
+
+curl -fsS -H "Authorization: Bearer ${ADMIN_ACCESS}" "${BASE_URL}/tenants/usage" >/tmp/jimu-usage.json
+grep -q '"code":0' /tmp/jimu-usage.json

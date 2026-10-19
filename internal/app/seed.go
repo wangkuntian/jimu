@@ -14,6 +14,7 @@ import (
 	"github.com/casbin/casbin/v3"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // RunSeed 插入初始数据
@@ -144,6 +145,40 @@ func RunSeedWithCasbin(db *gorm.DB, caps []contract.Descriptor) error {
 		return err
 	}
 	return SeedCasbinPolicies(db)
+}
+
+// NoAccountLogger 启动自检所需的最小日志面（*logger.Logger 满足）。
+type NoAccountLogger interface {
+	Errorw(msg string, keysAndValues ...interface{})
+}
+
+// WarnIfNoAccounts 是结构性种子被跳过时的最后一道自检：
+// 库中一个账号都没有意味着 API 没有任何可用登录（生产关闭公开注册时即为死局），
+// 此时给出 error 级提示与下一步；返回是否已提示。
+//
+// 表不存在或查询失败一律静默降级：容器启动早于 CLI 迁移是已知且允许的时序，
+// 服务启动不得因为缺 ADMIN_PASSWORD 或表未建而失败。
+// 探针走 Discard 会话并先做建表预检：生产 GORM logger 会把每条报错语句打成 error
+// （kernel/db/gorm_logger.go 的 Trace），若直接查询缺失的 users 表，容器每次启动都会
+// 多出一行 "db query failed" —— 那是把允许的时序渲染成故障。
+func WarnIfNoAccounts(db *gorm.DB, log NoAccountLogger) bool {
+	if db == nil || log == nil {
+		return false
+	}
+	probe := db.Session(&gorm.Session{Logger: gormlogger.Discard})
+	if !probe.Migrator().HasTable(&userdomain.User{}) {
+		return false
+	}
+	var count int64
+	if err := probe.Model(&userdomain.User{}).Count(&count).Error; err != nil {
+		return false
+	}
+	if count > 0 {
+		return false
+	}
+	log.Errorw("no account exists and structural seed is disabled; the API has no usable login",
+		"hint", "set ADMIN_PASSWORD and restart the server, or enable auth.public_registration")
+	return true
 }
 
 // 确保接口实现

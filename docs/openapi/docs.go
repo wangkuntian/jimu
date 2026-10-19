@@ -15,6 +15,97 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/admin/error-codes": {
+            "get": {
+                "description": "获取所有业务错误码及其对应的 HTTP 状态码映射。用于前端和第三方系统集成时参考。包含错误码、错误消息、HTTP 状态码和分类信息。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统管理"
+                ],
+                "summary": "获取错误码列表",
+                "responses": {
+                    "200": {
+                        "description": "成功，返回错误码列表",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/admin/ratelimit/auth": {
+            "get": {
+                "description": "不消费令牌地返回某 scope（如 login）+ key（如 ip:1.2.3.4）当前的计数与剩余窗口",
+                "tags": [
+                    "admin/ratelimit"
+                ],
+                "summary": "查看认证限流状态",
+                "parameters": [
+                    {
+                        "enum": [
+                            "login",
+                            "register"
+                        ],
+                        "type": "string",
+                        "description": "限流作用域",
+                        "name": "scope",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "限流键（如 ip:1.2.3.4 或 username:alice）",
+                        "name": "key",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
         "/admin/users/{id}/roles": {
             "post": {
                 "description": "替换指定用户的全部角色（按角色名）。角色名在用户所属租户内解析，不存在返回 404。",
@@ -71,75 +162,6 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ]
-            }
-        },
-        "/api/v1/admin/error-codes": {
-            "get": {
-                "description": "获取所有业务错误码及其对应的 HTTP 状态码映射。用于前端和第三方系统集成时参考。包含错误码、错误消息、HTTP 状态码和分类信息。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "系统管理"
-                ],
-                "summary": "获取错误码列表",
-                "responses": {
-                    "200": {
-                        "description": "成功，返回错误码列表",
-                        "schema": {
-                            "$ref": "#/definitions/response.Body"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/admin/ratelimit/auth": {
-            "get": {
-                "description": "不消费令牌地返回某 scope（如 login）+ key（如 ip:1.2.3.4）当前的计数与剩余窗口",
-                "tags": [
-                    "admin/ratelimit"
-                ],
-                "summary": "查看认证限流状态",
-                "parameters": [
-                    {
-                        "enum": [
-                            "login",
-                            "register"
-                        ],
-                        "type": "string",
-                        "description": "限流作用域",
-                        "name": "scope",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "限流键（如 ip:1.2.3.4 或 username:alice）",
-                        "name": "key",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/response.Body"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/response.Body"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/response.Body"
-                        }
-                    }
-                }
             }
         },
         "/audits": {
@@ -377,6 +399,26 @@ const docTemplate = `{
                 ]
             }
         },
+        "/auth/config": {
+            "get": {
+                "description": "返回客户端渲染登录/注册入口所需的公开开关。无论是否开放公开注册，本端点都存在。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "获取认证能力开关",
+                "responses": {
+                    "200": {
+                        "description": "成功，返回注册相关开关",
+                        "schema": {
+                            "$ref": "#/definitions/interfaces.AuthConfigResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/devices": {
             "get": {
                 "description": "返回当前用户的可信设备（登录时可跳过 TOTP 的设备）。密码始终必需，设备令牌仅替代 TOTP 因子；改密或登出全部设备会吊销全部可信设备。",
@@ -557,7 +599,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回 accessToken 和 refreshToken",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/contract.TokenPair"
                         }
                     },
                     "400": {
@@ -682,6 +724,43 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "未认证或会话无效",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/auth/me": {
+            "get": {
+                "description": "返回当前用户的身份、角色与有效权限点（resource + action，与 Casbin 策略同形，resource 支持通配）。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "获取当前会话身份与权限点",
+                "responses": {
+                    "200": {
+                        "description": "成功，返回身份与权限点",
+                        "schema": {
+                            "$ref": "#/definitions/application.MeView"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "用户不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -855,7 +934,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回新的 token 对",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/contract.TokenPair"
                         }
                     },
                     "400": {
@@ -901,7 +980,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回用户信息（开通式注册额外返回 tenant）",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.RegisterResponse"
                         }
                     },
                     "400": {
@@ -2014,7 +2093,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回分页套餐列表",
                         "schema": {
-                            "$ref": "#/definitions/contract.PageResponse"
+                            "$ref": "#/definitions/application.PlanPageResponse"
                         }
                     },
                     "400": {
@@ -2216,13 +2295,25 @@ const docTemplate = `{
                         "description": "排序方向（asc 或 desc，默认 desc）",
                         "name": "order",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "编码或名称模糊匹配",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "状态（0=停用 1=启用）",
+                        "name": "status",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "成功，返回分页租户列表",
                         "schema": {
-                            "$ref": "#/definitions/contract.PageResponse"
+                            "$ref": "#/definitions/application.TenantPageResponse"
                         }
                     },
                     "400": {
@@ -2271,7 +2362,7 @@ const docTemplate = `{
                     "201": {
                         "description": "创建成功，返回租户信息",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.TenantBodyResponse"
                         }
                     },
                     "400": {
@@ -2354,7 +2445,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回租户信息",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.TenantBodyResponse"
                         }
                     },
                     "400": {
@@ -3072,6 +3163,238 @@ const docTemplate = `{
                 }
             }
         },
+        "application.MeUser": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "tenant_id": {
+                    "type": "integer"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.MeView": {
+            "type": "object",
+            "properties": {
+                "permissions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.PermissionPoint"
+                    }
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "user": {
+                    "$ref": "#/definitions/application.MeUser"
+                }
+            }
+        },
+        "application.PermissionPoint": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "resource": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.PlanPageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.PlanResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.PlanResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "max_api_keys": {
+                    "type": "integer"
+                },
+                "max_roles": {
+                    "type": "integer"
+                },
+                "max_users": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.RegisterResponse": {
+            "type": "object",
+            "properties": {
+                "tenant": {
+                    "$ref": "#/definitions/application.RegisterTenantView"
+                },
+                "user": {
+                    "$ref": "#/definitions/application.RegisterUserView"
+                }
+            }
+        },
+        "application.RegisterTenantView": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.RegisterUserView": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "tenant_id": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.TenantBodyResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "$ref": "#/definitions/application.TenantResponse"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.TenantPageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.TenantResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.TenantResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "plan_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "application.UpdatePermissionRequest": {
             "type": "object",
             "required": [
@@ -3228,6 +3551,37 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "contract.TokenPair": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "device_token": {
+                    "description": "DeviceToken 仅在「记住此设备」成功签发时返回，客户端需安全保存。",
+                    "type": "string"
+                },
+                "expires_in": {
+                    "type": "integer"
+                },
+                "refresh_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "interfaces.AuthConfigResponse": {
+            "type": "object",
+            "properties": {
+                "provisioning_enabled": {
+                    "description": "ProvisioningEnabled 开通式注册：注册 = 开通新租户，tenant_name 必填",
+                    "type": "boolean"
+                },
+                "public_registration": {
+                    "description": "PublicRegistration 是否开放公开注册（false 时 /auth/register 路由不注册）",
+                    "type": "boolean"
                 }
             }
         },

@@ -1140,7 +1140,7 @@
       "user",
       "auth"
     ],
-    "routes": 32,
+    "routes": 34,
     "migrations": [
       "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
       "internal/capabilities/access/migrations/mysql/008_role_version.sql",
@@ -1280,7 +1280,13 @@
     "internal/capabilities/auth/application/benchmark_test.go",
     "internal/capabilities/auth/application/breach_test.go",
     "internal/capabilities/auth/application/login_history.go",
+    "internal/capabilities/auth/application/me.go",
+    "internal/capabilities/auth/application/me_test.go",
+    "internal/capabilities/auth/application/permissions.go",
+    "internal/capabilities/auth/application/permissions_test.go",
     "internal/capabilities/auth/application/quota.go",
+    "internal/capabilities/auth/application/register.go",
+    "internal/capabilities/auth/application/register_test.go",
     "internal/capabilities/auth/application/reset_store.go",
     "internal/capabilities/auth/application/reset_test.go",
     "internal/capabilities/auth/application/service.go",
@@ -1295,6 +1301,7 @@
     "internal/capabilities/auth/infrastructure/mysql_password_history.go",
     "internal/capabilities/auth/infrastructure/mysql_password_history_test.go",
     "internal/capabilities/auth/interfaces/config.go",
+    "internal/capabilities/auth/interfaces/config_handler.go",
     "internal/capabilities/auth/interfaces/handler.go",
     "internal/capabilities/auth/interfaces/handler_test.go",
     "internal/capabilities/auth/interfaces/protected.go",
@@ -1394,6 +1401,7 @@
     "internal/contract/ports.go",
     "internal/e2e/admin_routes_parity_test.go",
     "internal/e2e/api_contract_test.go",
+    "internal/e2e/auth_me_test.go",
     "internal/e2e/auth_routes_parity_test.go",
     "internal/e2e/grpc_contract_test.go",
     "internal/e2e/helpers_test.go",
@@ -1564,6 +1572,8 @@
     "internal/shared/response/response.go",
     "internal/shared/response/response_contract_test.go",
     "internal/shared/response/response_test.go",
+    "internal/shared/sqlpattern/like.go",
+    "internal/shared/sqlpattern/like_test.go",
     "internal/shared/testutil/assert.go",
     "internal/shared/testutil/reporoot.go",
     "internal/shared/testutil/reporoot_test.go",
@@ -1592,5 +1602,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:584570e48baccc8eaa7d52be15d69dc0c28d094f46abf930b3cbcc745a259b17"
+  "digest": "sha256:2632f831d71f4149b26be02f79b0d4612628033d3909d2c700d8aa88a99ea82d"
 }

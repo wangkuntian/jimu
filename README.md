@@ -160,6 +160,32 @@ docker compose run --rm -e ADMIN_PASSWORD=admin123 server ./jimu seed
 
 `secrets/*.txt` 仅在 MariaDB 数据卷首次初始化时创建数据库账号。已存在数据卷时，改写 Secret 文件不会自动修改库内密码；请先轮换数据库账号密码，再重启 `server`，避免因凭据不一致反复重启。
 
+### 首次启动与前端联调
+
+首次拉起环境、或与前端（jimu-web）联调时，按下面的顺序走：
+
+```bash
+# 1. 起依赖并迁移
+docker compose up -d mariadb redis
+make migrate
+
+# 2. 结构种子：必须通过环境变量提供管理员密码，否则没有可用登录
+ADMIN_PASSWORD=admin123 make seed
+#    写入默认租户（code=default）、基础权限（含租户管理）、超级管理员角色与 admin 用户
+
+# 3. 启动后端
+make run
+
+# 4. 另开一个终端启动前端（jimu-web）；其 Vite proxy 把 /api 转发到 http://localhost:8080
+pnpm run dev
+```
+
+联调要点：
+
+- **管理端点要用 `admin`**：`POST /auth/login` 拿到 token 后即可调 `/api/v1/tenants` 等管理接口。
+- **公开注册的用户没有角色**：`GET /api/v1/auth/me` 会返回 `200` 加空的 `roles`/`permissions`（这是会话引导的正常结果），但同一 token 调管理端点会得到 `403`。前端要把 `403` 渲染成无权限页，不要当成会话失效。
+- 注册入口是否显示、`tenant_name` 是否必填，由公开端点 `GET /api/v1/auth/config` 决定，不要靠试 `POST /auth/register` 是否 `404` 来判断。
+
 服务启动后访问：
 - API: http://localhost:8080
 - Swagger UI: http://localhost:8080/swagger/index.html （非 release 模式）
@@ -306,7 +332,9 @@ make cli
 
 ## 数据种子
 
-`jimu seed` 按当前 profile 的能力集合播种其声明的权限点。默认租户、套餐、管理员角色和管理员账户属于结构性种子；`ADMIN_PASSWORD` 未设置时跳过管理员种子并记录告警。迁移与运行时装配的边界见[能力架构](docs/design/capability-architecture.md)、[身份与租户](docs/design/identity-and-tenancy.md)和[配置与数据生命周期](docs/design/configuration-and-data-lifecycle.md)。
+`jimu seed` 按当前 profile 的能力集合播种其声明的权限点。默认租户、套餐、管理员角色和管理员账户属于结构性种子；`ADMIN_PASSWORD` 未设置时跳过管理员种子并记录告警。
+
+服务启动期也执行同一份结构性种子（各形态共享）：`ADMIN_PASSWORD` 未设置时跳过并告警，且**当数据库中一个账号都没有**（`users` 表已存在）时追加一条 error 级日志与下一步（设置 `ADMIN_PASSWORD` 重启，或开启 `auth.public_registration`）——**启动行为不变，仍成功启动**；`users` 表尚未建立（容器启动早于 CLI 迁移）或查询失败时静默降级，不影响启动。迁移与运行时装配的边界见[能力架构](docs/design/capability-architecture.md)、[身份与租户](docs/design/identity-and-tenancy.md)和[配置与数据生命周期](docs/design/configuration-and-data-lifecycle.md)。
 
 ## 形态（profile）
 
@@ -586,6 +614,49 @@ curl -X POST http://localhost:8080/api/v1/auth/refresh \
   -d '{"refresh_token": "<refresh_token>"}'
 ```
 
+### 会话身份与注册开关
+
+注册开关是公开端点（无需鉴权），无论是否开放公开注册都存在：关闭时 `public_registration` 为 `false`，供前端决定是否渲染注册入口、`tenant_name` 是否必填。
+
+```bash
+curl http://localhost:8080/api/v1/auth/config
+```
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "public_registration": true,
+    "provisioning_enabled": false
+  }
+}
+```
+
+会话引导返回当前用户身份、角色与**有效权限点**（需 access token）。该端点只做认证、不做权限校验，因此零角色用户返回 `200` + 两个空数组：
+
+```bash
+curl http://localhost:8080/api/v1/auth/me \
+  -H "Authorization: Bearer <access_token>"
+```
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "user": {"id": 1, "username": "admin", "status": 1, "tenant_id": 1, "created_at": "2026-10-13T10:00:00Z"},
+    "roles": ["超级管理员"],
+    "permissions": [
+      {"resource": "/api/v1/admin/*", "action": "GET"},
+      {"resource": "/api/v1/tenants", "action": "GET"}
+    ]
+  }
+}
+```
+
+`roles` 仅供展示；授权判定一律用 `permissions`：`resource` 支持 `keyMatch` 通配（首个 `*` 之前的前缀相等），`action` 为 `*` 表示任意 action，客户端按 Casbin 同一语义自行匹配。`tenant_id` 取自已验签 token 的 `tid` claim，不取账号行。
+
 ### 创建用户
 
 ```bash
@@ -712,7 +783,20 @@ curl -X POST http://localhost:8080/api/v1/auth/register \
   -d '{"username":"founder1","password":"secret123","tenant_name":"Acme Inc","tenant_code":"acme"}'
 ```
 
-响应包含 `user`（owner）与 `tenant`（新租户）。owner 登录后自动获得模板中 `owner_role` 指定的角色（缺省为模板第一个角色）。`tenant_code` 统一转小写存储，不传自动生成。模板中引用的权限需先由 `jimu seed` 写入全局权限表，缺失条目跳过。未启用开通式时，注册保持普通语义（用户归默认租户，忽略租户字段）。
+两种注册模式的响应同形：`data` 为 `{user, tenant?}` —— 普通注册只有 `user`，开通式注册额外返回 `tenant`（新租户）。owner 登录后自动获得模板中 `owner_role` 指定的角色（缺省为模板第一个角色）。`tenant_code` 统一转小写存储，不传自动生成。模板中引用的权限需先由 `jimu seed` 写入全局权限表，缺失条目跳过。未启用开通式时，注册保持普通语义（用户归默认租户，忽略租户字段）。
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "user": {"id": 12, "username": "founder1", "status": 1, "tenant_id": 5, "created_at": "2026-10-13T10:00:00Z"},
+    "tenant": {"id": 5, "code": "acme", "name": "Acme Inc", "status": 1}
+  }
+}
+```
+
+注册不签发 token（前端注册成功后跳登录页）。`GET /api/v1/auth/config` 的 `provisioning_enabled` 决定 `tenant_name` 是否必填。
 
 相关错误码：`2002` 用户名/邮箱已存在、`5002` 租户编码已存在、`5004` 租户编码格式无效。
 
@@ -737,8 +821,8 @@ curl -X POST http://localhost:8080/api/v1/tenants \
   -H "Content-Type: application/json" \
   -d '{"code": "acme", "name": "Acme Inc"}'
 
-# 租户列表（分页）
-curl "http://localhost:8080/api/v1/tenants?page=1&page_size=20" \
+# 租户列表（分页 + 可选筛选：keyword 模糊匹配 code/name，status 0-停用 1-启用）
+curl "http://localhost:8080/api/v1/tenants?page=1&page_size=20&keyword=acme&status=1" \
   -H "Authorization: Bearer <access_token>"
 
 # 租户详情
@@ -755,6 +839,8 @@ curl -X PUT http://localhost:8080/api/v1/tenants/<tenant_id> \
 curl -X DELETE http://localhost:8080/api/v1/tenants/<tenant_id> \
   -H "Authorization: Bearer <access_token>"
 ```
+
+`keyword` 里的 `%`/`_`/`!` 会被转义（`!` 是转义字符本身），按字面子串匹配（不会退化成通配）；`status` 只在**传参**时过滤，要「不过滤」必须省略该参数（`?status=` 这样的空值会绑定为 `0`，即只查停用）。
 
 相关错误码：`5001` 租户不存在、`5002` 租户编码已存在、`5003` 默认租户受保护、`5004` 租户编码格式无效。
 
@@ -864,6 +950,8 @@ curl http://localhost:8080/api/v1/admin/monitoring/status \
 ### 查看认证限流状态
 
 只读端点，不消费令牌地查看某 `scope` + `key` 的当前计数与剩余窗口（如登录爆破防护）：
+
+> **⚠️ 已知限制**：该端点目前**运行时不可用** —— `console` 能力声明 `MountSelfManaged`，其 `/api/v1/admin/*` 挂在未套认证链的根路由上，组内又用 `AdminAuth()` 读 gin context 的 `user_id`/`roles`（无人写入），因此**即使带合法的管理员 token 也会返回 401**。契约地址与鉴权声明已修正（见 `docs/releases/v0.4.0.md`），接线修复列为本仓后续项。下面的示例展示的是修复接线后应有的行为。
 
 ```bash
 curl "http://localhost:8080/api/v1/admin/ratelimit/auth?scope=login&key=ip:1.2.3.4" \

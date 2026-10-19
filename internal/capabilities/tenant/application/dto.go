@@ -45,3 +45,35 @@ func ToTenantResponses(tenants []domain.Tenant) []TenantResponse {
 	}
 	return out
 }
+
+// TenantPageResponse 租户列表的分页信封。
+// swag 2.0 不支持泛型，故按实体各定义一个具体分页类型（字段与 response.Page 输出一致）。
+type TenantPageResponse struct {
+	Code      int              `json:"code"`
+	Message   string           `json:"message"`
+	Data      []TenantResponse `json:"data"`
+	Total     int64            `json:"total"`
+	Page      int              `json:"page"`
+	PageSize  int              `json:"page_size"`
+	RequestID string           `json:"request_id,omitempty"`
+}
+
+// PlanPageResponse 套餐列表的分页信封。
+type PlanPageResponse struct {
+	Code      int            `json:"code"`
+	Message   string         `json:"message"`
+	Data      []PlanResponse `json:"data"`
+	Total     int64          `json:"total"`
+	Page      int            `json:"page"`
+	PageSize  int            `json:"page_size"`
+	RequestID string         `json:"request_id,omitempty"`
+}
+
+// TenantBodyResponse 单实体租户响应的信封：与 response.Body 的 JSON 形状一致
+// （response.OK/Created 写入 code/message/data/request_id）。
+type TenantBodyResponse struct {
+	Code      int            `json:"code"`
+	Message   string         `json:"message"`
+	Data      TenantResponse `json:"data"`
+	RequestID string         `json:"request_id,omitempty"`
+}

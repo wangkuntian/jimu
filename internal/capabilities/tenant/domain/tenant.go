@@ -22,11 +22,19 @@ type Tenant struct {
 
 func (Tenant) TableName() string { return "tenants" }
 
+// TenantListFilter 租户列表筛选条件。零值表示不过滤。
+type TenantListFilter struct {
+	// Keyword 对 code 与 name 做子串匹配（LIKE 通配符已转义）
+	Keyword string
+	// Status 为 nil 时不过滤；否则按 0/1 精确匹配
+	Status *int8
+}
+
 // TenantRepository 租户仓储接口
 type TenantRepository interface {
 	FindByID(ctx context.Context, id uint64) (*Tenant, error)
 	FindByCode(ctx context.Context, code string) (*Tenant, error)
-	List(ctx context.Context, offset, limit int, sort, order string) ([]Tenant, int64, error)
+	List(ctx context.Context, offset, limit int, sort, order string, filter TenantListFilter) ([]Tenant, int64, error)
 	Create(ctx context.Context, tenant *Tenant) error
 	Update(ctx context.Context, tenant *Tenant) error
 	Delete(ctx context.Context, id uint64) error

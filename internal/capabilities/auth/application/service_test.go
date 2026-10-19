@@ -260,9 +260,14 @@ type fakeUserRepo struct {
 	created         []string
 	findByEmailHash func(ctx context.Context, hash string) (*contract.Account, error)
 	updatePassword  func(ctx context.Context, id uint64, hashed string) error
+	// findByIDErr 注入 FindByID 的错误（非 contract.ErrNotFound 时用于验证错误映射）
+	findByIDErr error
 }
 
 func (r *fakeUserRepo) FindByID(_ context.Context, id uint64) (*contract.Account, error) {
+	if r.findByIDErr != nil {
+		return nil, r.findByIDErr
+	}
 	for _, user := range r.users {
 		if user.ID == id {
 			return user, nil
