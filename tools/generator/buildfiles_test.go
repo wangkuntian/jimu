@@ -42,6 +42,28 @@ func TestGeneratedMakefileHasNoProfileBranch(t *testing.T) {
 	}
 }
 
+func TestGeneratedMakefileUsesSharedLifecycleContract(t *testing.T) {
+	set, err := ParseCapabilitySet("minimal", "", "")
+	require.NoError(t, err)
+	out, err := RenderMakefile(set)
+	require.NoError(t, err)
+	src := string(out)
+	assert.NotContains(t, src, "include .env")
+	assert.NotContains(t, src, "\nrun:")
+	assert.Contains(t, src, "\ndev:")
+	assert.Contains(t, src, "\nimage:")
+	assert.Contains(t, src, "IMAGE_REPO ?= jimu")
+	assert.Contains(t, src, "IMAGE_TAG = $(IMAGE_REPO):$(VERSION)")
+	assert.Contains(t, src, "docker tag $(IMAGE_TAG) $(LATEST_TAG)")
+	assert.Contains(t, src, "## help:")
+	assert.Contains(t, src, "VERSION ?= dev")
+	assert.Contains(t, src, "APP_VERSION ?= dev")
+	assert.Contains(t, src, "LDFLAGS := -X main.version=$(APP_VERSION)")
+	for _, gone := range []string{"\nup:", "\ndown:", "\nup-observability:"} {
+		assert.NotContains(t, src, gone)
+	}
+}
+
 func TestGeneratedMakefileKeepsSwaggerWhenApidocsSelected(t *testing.T) {
 	set, err := ParseCapabilitySet("full", "", "")
 	require.NoError(t, err)

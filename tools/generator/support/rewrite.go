@@ -48,9 +48,10 @@ var rewriteRules = []struct {
 }
 
 // 明确**不改**：框架 CLI 二进制名与运行期标识 —— Dockerfile 的 `-o jimu`、`COPY --from=builder
-// /app/jimu .`、`./jimu migrate`、`addgroup -S jimu`/`USER jimu`、Makefile 的 `DOCKER_IMAGE = jimu:latest`
-// 与 `DOCKER_CONTAINER := jimu-server`、`deploy/**` 里的容器/镜像名。这些是**框架自己的名字**，
-// 不是项目名（第 1 节裁定 3 的「不改框架 CLI 二进制名 jimu」）。
+// /app/jimu .`、`./jimu migrate`、`addgroup -S jimu`/`USER jimu`、Makefile 的
+// `IMAGE_REPO ?= jimu` / `IMAGE_TAG = $(IMAGE_REPO):$(VERSION)` 与 `DOCKER_CONTAINER := jimu-server`、
+// `deploy/**` 里的容器/镜像名。这些是**框架自己的名字**，不是项目名
+// （第 1 节裁定 3 的「不改框架 CLI 二进制名 jimu」）。
 
 // textExtensions 是文本文件后缀白名单；Makefile/Dockerfile 无后缀，按文件名单独判定。
 var textExtensions = map[string]bool{
