@@ -183,7 +183,7 @@ Expected: PASS
 - Delete: `scripts/gen-secrets.sh`
 
 **Interfaces:**
-- Consumes: `SECRETS_DIR`（默认仓库根 `secrets/`）、`ADMIN_PASSWORD`（可选非交互输入）、`LEGACY_ENV_FILE`（测试用，默认仓库根 `.env`）
+- Consumes: `SECRETS_DIR`（默认仓库根 `secrets/`）、`ADMIN_PASSWORD`（可选非交互输入）、`LEGACY_ENV_FILE`（可选；默认空，只有 Makefile 在首次迁移时显式指向旧 `.env`）
 - Produces: 核心 secret 文件，以及 `--observability` 时生成的 OpenObserve 三文件
 - CLI: `scripts/init-secrets.sh [--observability] [--allow-new-security-keys]`
 
@@ -259,6 +259,8 @@ ZO_OBSERVE_ROOT_USER_PASSWORD
 ```
 
 不得导入 `DB_HOST`、`HTTP_HOST_PORT`、`COMPOSE_*` 等普通配置。迁移后提示 `.env` 已停用，但不删除该文件。
+
+`LEGACY_ENV_FILE` 默认必须为空；脚本不得主动读取仓库根 `.env`。`make init` 在旧 `.env` 存在时显式传入该路径。
 
 - [ ] **Step 5: 实现已有数据卷保护**
 
@@ -466,7 +468,7 @@ $(COMPOSE_ENV) $(COMPOSE) up -d --no-build
 
 实现：
 
-- `init`：`./scripts/init-secrets.sh`
+- `init`：旧 `.env` 存在时执行 `LEGACY_ENV_FILE=$(CURDIR)/.env ./scripts/init-secrets.sh`，否则执行 `./scripts/init-secrets.sh`
 - `init-observability`：`./scripts/init-secrets.sh --observability`
 - `up-observability`：依赖 `init-observability image`，使用 `$(COMPOSE_ALL)`
 - `down` / `restart` / `status` / `logs`：使用 `$(COMPOSE_ALL)`
