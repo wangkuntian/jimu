@@ -77,7 +77,7 @@ func ValidateQuery(dst interface{}) gin.HandlerFunc {
 // 否则原样返回（非结构体目标保持既有行为）。
 func newBindingTarget(dst interface{}) interface{} {
 	t := reflect.TypeOf(dst)
-	if t != nil && t.Kind() == reflect.Ptr && t.Elem().Kind() == reflect.Struct {
+	if t != nil && t.Kind() == reflect.Pointer && t.Elem().Kind() == reflect.Struct {
 		return reflect.New(t.Elem()).Interface()
 	}
 	return dst

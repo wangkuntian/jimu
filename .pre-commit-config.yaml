@@ -24,7 +24,7 @@ repos:
 
   # golangci-lint（完整静态检查，已覆盖原 go-lint/golint——golint 已弃用且不再维护）
   - repo: https://github.com/golangci/golangci-lint
-    rev: v2.7.2
+    rev: v2.15.0
     hooks:
       - id: golangci-lint
         args: [--timeout=5m]

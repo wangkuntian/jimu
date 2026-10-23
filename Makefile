@@ -37,7 +37,7 @@ ENV ?= dev
 # golangci-lint 版本：与 .github/workflows/ci.yml 的 GOLANGCI_LINT_VERSION 一致，
 # 使本地 `make lint` 与 CI 的 lint 结论含义相同；本地二进制版本不同时改用 go run 固定版本；
 # 仅在 golangci-lint 完全缺失时才退化为 go vet（不具备版本一致性）
-LINT_VERSION ?= v2.7.2
+LINT_VERSION ?= v2.15.0
 
 # govulncheck 版本：CI 的 `Lint & Policy` 走 `make govulncheck`，故此处是唯一事实源
 GOVULNCHECK_VERSION ?= v1.8.0

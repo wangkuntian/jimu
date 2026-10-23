@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 env:
-  GOLANGCI_LINT_VERSION: "v2.7.2"
+  GOLANGCI_LINT_VERSION: "v2.15.0"
 
 jobs:
   # ── 唯一的 router：一次 diff 分析，产出四个输出（code / go / docker / shards）────────
