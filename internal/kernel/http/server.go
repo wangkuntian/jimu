@@ -141,7 +141,7 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 				"api_base":         "/api/v1",
 				"health":           "management 端口 /livez、/readyz（默认 9090）",
 				"metrics":          "management 端口 /metrics（默认 9090）",
-				"observability_ui": "OpenObserve http://localhost:5080（OTEL_ENABLED 开启时）",
+				"observability_ui": "OpenObserve http://localhost:5080（make up-observability 后可用）",
 			})
 		})
 	}

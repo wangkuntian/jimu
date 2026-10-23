@@ -18,6 +18,52 @@
 
 ## 设计方案
 
+### 配置分层与边界
+
+运行时配置按职责分为四层，入口之间不复制同一含义的值：
+
+| 层 | 载体 | 职责 | 日常是否编辑 |
+|---|---|---|---|
+| 业务基线 | `configs/app.yaml` | 应用行为、连接默认值、安全与功能开关 | 是 |
+| 环境差异 | `configs/app.prod.yaml` | 只声明相对基线的生产差异，未出现的键继承 `app.yaml` | 按部署需要 |
+| 运行时注入 | 进程环境变量及 `_FILE` | 部署平台注入连接参数、Secret 路径和临时覆盖 | 部署时 |
+| 敏感材料 | `secrets/*.txt`、`secrets/openobserve.env` | 数据库、JWT、字段加密、审计、管理员和观测凭据 | 否，由脚本生成 |
+
+`docker-compose.yml`、`compose.observability.yml` 与 `Makefile` 属于运行接线和编排，不是业务配置入口。Compose 内固定使用 `DB_HOST=mariadb`、`REDIS_ADDR=redis:6379` 等容器地址；`PROFILE` 约束构建、迁移与种子使用同一形态，`VERSION` 只决定镜像标签。
+
+正常入口不读取项目根 `.env`。Compose 调用统一携带 `--env-file /dev/null`，避免旧文件被自动加载；项目根 `.env` 仅作为一次性迁移来源。
+
+### Secret 生成与迁移
+
+`scripts/init-secrets.sh` 是 core/observability Secret 的唯一生成入口。`make init` 是旧 `.env` 的唯一公开迁移入口；`make up` / `make up-observability` 只调用不带 `LEGACY_ENV_FILE` 的内部准备目标：
+
+- `secrets/` 使用 `0700`，文件使用 `0600`；已存在的非空文件默认保留，只有显式 `FORCE=1` 才重建。
+- 写入采用临时文件加原子替换，失败不留下半写入文件；命令输出只列文件名和用途，不打印值。
+- 首次非交互初始化生成随机强管理员密码；TTY 环境允许操作者输入初始密码。`ADMIN_PASSWORD_FILE` 同时供 CLI seed、启动期结构种子和 Compose `jimu-init` 使用。
+- `encryption_key.txt` 恰好 32 字节；非空 `security.encryption_key` 也必须是 32 字节，其他长度启动失败。
+- 旧 `.env` 只通过 `LEGACY_ENV_FILE=/path/to/.env scripts/init-secrets.sh` 导入已知 Secret 键；普通端口、地址和卷名不会迁移。
+- 缺少数据库 Secret 且已有 MariaDB 数据卷时初始化失败，避免生成新密码锁死已有数据；为既有数据卷新增安全密钥必须显式设置 `ALLOW_NEW_SECURITY_KEYS=1`。
+- OpenObserve 凭据只在 `--observability` 路径生成。`otel_auth_password.txt` 是密码源，`openobserve.env` 与 `zo_auth_token.txt` 从它派生；已有 OpenObserve 数据卷但找不到原密码时初始化失败，不覆盖原实例。
+
+### `make up` 启动流程
+
+```mermaid
+flowchart LR
+    U[make up] --> P[prepare-secrets]
+    P --> S[scripts/init-secrets.sh]
+    S --> B[make image]
+    B --> C[compose up -d --no-build]
+    C --> J[jimu-init]
+    J --> H[等待 MariaDB / Redis 健康]
+    H --> M[./jimu migrate up]
+    M --> D[./jimu seed]
+    D --> V[server]
+```
+
+`prepare-secrets` 不传 `LEGACY_ENV_FILE`，因此 `make up` 不会因项目根存在旧 `.env` 而迁移凭据。需要迁移时，操作者必须显式执行 `make init`。
+
+`jimu-init` 是一次性服务，固定执行 `./jimu migrate up && ./jimu seed`，失败时不会启动 `server`。`server` 通过 `depends_on.condition: service_completed_successfully` 等待它成功退出。`make up-observability` 复用同一流程，再叠加 `compose.observability.yml`，最后调用 `scripts/observability.sh start` 初始化 dashboard 和默认告警；核心 `make up` 不要求 OpenObserve 凭据。
+
 ### 配置加载流程
 
 ```mermaid
@@ -72,7 +118,7 @@ flowchart LR
 
 `encryption` 能力通过 GORM hooks 为标记字段提供 AES-GCM 加密和 HMAC 盲索引，支持密文存储及等值查询。密钥由内核安全配置提供；当前实现未配置密钥时会以明文保存这些字段。密码使用不可逆哈希，不经过字段加密流程。全库透明加密属于数据库或部署层责任。
 
-启用加密能力后，它从内核安全配置构造 Cipher 并在 GORM 注册写入加密、读取解密和盲索引 hooks。无密钥时 Cipher 按现行兼容行为退化为明文；因此仅编入能力不代表敏感字段已获得静态加密保护，部署方必须配置有效密钥。
+启用加密能力后，它从内核安全配置构造 Cipher 并在 GORM 注册写入加密、读取解密和盲索引 hooks。无密钥时 Cipher 按现行兼容行为退化为明文；因此仅编入能力不代表敏感字段已获得静态加密保护，部署方必须配置恰好 32 字节的有效密钥。
 
 ## 关键决策
 

@@ -13,7 +13,7 @@ export SECRETS_DIR="$JIMU_SECRETS_DIR"
 
 cd "$ROOT"
 
-./scripts/init-secrets.sh
+./scripts/init-secrets.sh --no-legacy
 
 docker compose --env-file /dev/null -f docker-compose.yml up -d --wait mariadb redis
 

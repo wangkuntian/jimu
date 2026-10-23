@@ -20,11 +20,17 @@ spec:
           image: public.ecr.aws/zinclabs/openobserve:v0.92.2
           imagePullPolicy: IfNotPresent
           env:
-            # 生产环境请通过 Secret 注入 ZO_ROOT_USER_EMAIL / ZO_ROOT_USER_PASSWORD
+            # 凭据从 jimu-secrets 注入，不使用固定默认密码
             - name: ZO_ROOT_USER_EMAIL
-              value: "admin@jimu.local"
+              valueFrom:
+                secretKeyRef:
+                  name: jimu-secrets
+                  key: ZO_ROOT_USER_EMAIL
             - name: ZO_ROOT_USER_PASSWORD
-              value: "Admin@12345"
+              valueFrom:
+                secretKeyRef:
+                  name: jimu-secrets
+                  key: ZO_ROOT_USER_PASSWORD
             - name: ZO_DATA_DIR
               value: /data
             - name: ZO_HTTP_PORT

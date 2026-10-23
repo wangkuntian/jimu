@@ -22,7 +22,7 @@ import (
 func RunSeed(db *gorm.DB, caps []contract.Descriptor) error {
 	adminPassword := AdminPassword()
 	if adminPassword == "" {
-		return fmt.Errorf("ADMIN_PASSWORD is required")
+		return fmt.Errorf("ADMIN_PASSWORD or ADMIN_PASSWORD_FILE is required")
 	}
 
 	return db.Transaction(func(tx *gorm.DB) error {
@@ -176,7 +176,7 @@ func WarnIfNoAccounts(db *gorm.DB, log NoAccountLogger) bool {
 		return false
 	}
 	log.Errorw("no account exists and structural seed is disabled; the API has no usable login",
-		"hint", "set ADMIN_PASSWORD and restart the server, or enable auth.public_registration")
+		"hint", "set ADMIN_PASSWORD or ADMIN_PASSWORD_FILE and restart the server, or enable auth.public_registration")
 	return true
 }
 

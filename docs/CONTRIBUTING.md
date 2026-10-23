@@ -5,8 +5,8 @@
 ## 开发环境
 
 - Go 1.26+
-- MariaDB 10.5+ / Redis 6+
-- (可选) Docker Compose 一键起依赖
+- Docker 24+（含 Compose v2）
+- Air（`go install github.com/air-verse/air@latest`，仅 `make dev` 需要）
 
 ```bash
 # 克隆
@@ -14,15 +14,14 @@ git clone https://github.com/your-org/jimu.git
 cd jimu
 go mod download
 
-# 启动依赖
-docker-compose up -d mariadb redis
+# 启动依赖、迁移/种子并以 Air 热重载
+make dev
 
-# 迁移 + 种子
-make migrate && make seed
-
-# 启动
-make run
+# 或启动容器化核心栈
+make up
 ```
+
+`make dev` 与 `make up` 都会通过 `scripts/init-secrets.sh` 补齐 `secrets/`，且不会传入 `LEGACY_ENV_FILE`。旧 `.env` 的唯一公开迁移入口是 `make init`：它会检测项目根 `.env`，也可通过 `LEGACY_ENV_FILE` 指定其它旧文件。
 
 ## 分支策略
 
@@ -122,7 +121,7 @@ fix(auth): reject expired refresh token
 - 版本号使用 SemVer：`vMAJOR.MINOR.PATCH`
 - 条目使用中文，面向使用者说明结果，不写内部流水账
 - 没有内容的分类可以省略，但 `亮点`、`验证`、`说明` 必须保留
-- `验证` 必须包含 `make release-check COMPOSE_ENV=.env.example` 的结果，除非明确说明无法运行
+- `验证` 必须包含 `make release-check` 的结果，除非明确说明无法运行
 
 ## 代码规范
 

@@ -5,7 +5,7 @@
 # 不影响 mariadb / redis / server 等业务容器。
 #
 # 用法:
-#   ./scripts/observability.sh start     # 启动 openobserve + otel-collector 并初始化 dashboard / 默认告警
+#   ./scripts/observability.sh start     # 启动服务并初始化 dashboard；配置 webhook 时同步默认告警
 #   ./scripts/observability.sh stop      # 停止并删除监控栈容器（保留业务容器与数据卷）
 #   ./scripts/observability.sh restart   # 重启监控栈
 #   ./scripts/observability.sh status    # 查看监控栈容器状态
@@ -37,12 +37,12 @@ start() {
   if [ ! -s "$password_file" ] || [ ! -s "$env_file" ]; then
     echo "==> 初始化 observability secret：$SECRETS_DIR"
     SECRETS_DIR="$SECRETS_DIR" \
-      "$ROOT_DIR/scripts/init-secrets.sh" --observability
+      "$ROOT_DIR/scripts/init-secrets.sh" --observability --no-legacy
   fi
   [ -s "$password_file" ] \
-    || { echo "❌ 缺少可用的 $password_file；请先运行 scripts/init-secrets.sh --observability" >&2; exit 1; }
+    || { echo "❌ 缺少可用的 $password_file；请通过 make up-observability 重新初始化观测 Secret" >&2; exit 1; }
   [ -s "$env_file" ] \
-    || { echo "❌ 缺少可用的 $env_file；请先运行 scripts/init-secrets.sh --observability" >&2; exit 1; }
+    || { echo "❌ 缺少可用的 $env_file；请通过 make up-observability 重新初始化观测 Secret" >&2; exit 1; }
   zo_password="$(cat "$password_file")"
 
   echo "==> 启动监控栈服务：${SERVICES[*]}"

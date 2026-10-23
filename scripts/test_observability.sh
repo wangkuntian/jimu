@@ -72,7 +72,7 @@ grep -Fq \
 [ ! -e "$SECRETS_DIR/otel_auth_password.txt" ]
 
 run_observability start
-[ "$(cat "$INIT_LOG")" = "--observability" ]
+[ "$(cat "$INIT_LOG")" = "--observability --no-legacy" ]
 grep -Fq \
   "compose --env-file /dev/null -f $PROJECT_DIR/docker-compose.yml -f $PROJECT_DIR/compose.observability.yml up -d openobserve otel-collector" \
   "$DOCKER_LOG"

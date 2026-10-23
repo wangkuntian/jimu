@@ -170,7 +170,7 @@ func TestRunSeed_MissingAdminPassword(t *testing.T) {
 	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "")
 	err := app.RunSeed(nil, nil)
-	require.ErrorContains(t, err, "ADMIN_PASSWORD is required")
+	require.ErrorContains(t, err, "ADMIN_PASSWORD or ADMIN_PASSWORD_FILE is required")
 }
 
 func TestRunSeed_PermissionQueryError(t *testing.T) {
@@ -351,7 +351,7 @@ func TestRunSeedWithCasbin_SeedError(t *testing.T) {
 	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "")
 	err := app.RunSeedWithCasbin(nil, nil)
-	require.ErrorContains(t, err, "ADMIN_PASSWORD is required")
+	require.ErrorContains(t, err, "ADMIN_PASSWORD or ADMIN_PASSWORD_FILE is required")
 }
 
 // TestRunSeedWithCasbin 用 sqlite 内存库端到端跑完整种子（含 casbin 策略）。

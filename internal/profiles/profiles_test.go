@@ -152,7 +152,8 @@ func newProfilesSqliteDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// TestStructuralSeedSkipsWithNoAdminPassword 钉住启动行为不变：ADMIN_PASSWORD 未设置时
+// TestStructuralSeedSkipsWithNoAdminPassword 钉住启动行为不变：ADMIN_PASSWORD 与
+// ADMIN_PASSWORD_FILE 都未设置时
 // StructuralSeed 必须正常返回 nil（容器启动早于 CLI 迁移，表可能还不存在），且只有库中
 // 确实一个账号都没有时才补 error 级自检提示（app.WarnIfNoAccounts）。
 func TestStructuralSeedSkipsWithNoAdminPassword(t *testing.T) {

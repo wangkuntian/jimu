@@ -1,5 +1,6 @@
 .PHONY: help build build-server build-cli clean dev
-.PHONY: image init init-observability up up-observability down restart status logs adminer
+.PHONY: image init prepare-secrets prepare-observability-secrets
+.PHONY: up up-observability down restart status logs adminer
 .PHONY: migrate migrate-down migrate-status seed
 .PHONY: backup restore build-backup-image compose-db-backup compose-db-restore test-backup-restore
 .PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race
@@ -68,24 +69,30 @@ clean: ## 清理构建产物
 ##@ Compose 生命周期
 
 init: ## 初始化核心 Secret（旧 .env 仅用于显式迁移）
-	@if [ -f "$(CURDIR)/.env" ]; then \
-		LEGACY_ENV_FILE="$(CURDIR)/.env" SECRETS_DIR=$(JIMU_SECRETS_DIR) ./scripts/init-secrets.sh; \
+	@legacy_env="$(LEGACY_ENV_FILE)"; \
+	if [ -z "$$legacy_env" ] && [ -f "$(CURDIR)/.env" ]; then legacy_env="$(CURDIR)/.env"; fi; \
+	if [ -n "$$legacy_env" ]; then \
+		LEGACY_ENV_FILE="$$legacy_env" SECRETS_DIR=$(JIMU_SECRETS_DIR) ./scripts/init-secrets.sh; \
 	else \
 		SECRETS_DIR=$(JIMU_SECRETS_DIR) ./scripts/init-secrets.sh; \
 	fi
 
-init-observability: ## 初始化核心与观测 Secret
-	@SECRETS_DIR=$(JIMU_SECRETS_DIR) ./scripts/init-secrets.sh --observability
+prepare-secrets:
+	@SECRETS_DIR=$(JIMU_SECRETS_DIR) ./scripts/init-secrets.sh --no-legacy
+
+prepare-observability-secrets:
+	@SECRETS_DIR=$(JIMU_SECRETS_DIR) ./scripts/init-secrets.sh --observability --no-legacy
 
 image: ## 构建版本镜像并更新 latest
 	docker build --build-arg PROFILE=$(PROFILE) -t $(IMAGE_TAG) .
 	docker tag $(IMAGE_TAG) $(LATEST_TAG)
 
-up: init image ## 初始化 Secret、构建镜像并启动核心栈
+up: prepare-secrets image ## 初始化 Secret、构建镜像并启动核心栈
 	$(COMPOSE_ENV) $(COMPOSE) up -d --no-build
 
-up-observability: init-observability image ## 启动核心栈与 OpenObserve 观测栈
+up-observability: prepare-observability-secrets image ## 启动观测栈并初始化 dashboard（配置 webhook 时同步告警）
 	$(COMPOSE_ENV) $(COMPOSE_ALL) up -d --no-build
+	JIMU_SECRETS_DIR=$(JIMU_SECRETS_DIR) ./scripts/observability.sh start
 
 down: ## 停止全部 Compose 服务（保留数据卷）
 	$(COMPOSE_ENV) $(COMPOSE_ALL) down

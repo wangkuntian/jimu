@@ -44,6 +44,8 @@ assert_contains "$help" "make up-observability " "help 缺少 up-observability"
 assert_contains "$help" "make image " "help 缺少 image"
 assert_contains "$help" "make check " "help 缺少 check"
 assert_not_contains "$help" "make compose-up " "help 仍列出 compose-up"
+assert_not_contains "$help" "make init-observability " "help 仍列出 init-observability"
+assert_not_contains "$help" "make prepare-observability-secrets " "help 暴露了内部 observability Secret 入口"
 if grep -Fq 'include .env' "$ROOT/Makefile"; then
   fail "Makefile 仍隐式加载 .env"
 fi
@@ -53,7 +55,8 @@ for target in \
   run \
   secrets \
   docker-build docker-run docker-stop docker-logs \
-  compose-up compose-down compose-restart compose-logs compose-migrate compose-seed; do
+  compose-up compose-down compose-restart compose-logs compose-migrate compose-seed \
+  init-observability; do
   assert_target_removed "$target"
 done
 
@@ -71,6 +74,9 @@ assert_contains "$build_server_app_version_plan" '-X main.version=v1.2.3' "APP_V
 up_plan="$(run_make -n up VERSION=v9.9.9)"
 assert_contains "$up_plan" "JIMU_IMAGE=jimu:v9.9.9" "up 未使用版本镜像"
 assert_contains "$up_plan" "docker compose --env-file /dev/null -f docker-compose.yml up -d --no-build" "up 未禁用隐式构建"
+assert_contains "$up_plan" './scripts/init-secrets.sh --no-legacy' "up 未显式禁用旧 .env 迁移"
+assert_not_contains "$up_plan" "LEGACY_ENV_FILE" "up 不得迁移旧 .env"
+assert_not_contains "$up_plan" "./scripts/observability.sh start" "up 不得启动观测栈"
 printf '%s\n' "$up_plan" >"$WORK/up.plan"
 init_line="$(grep -nF './scripts/init-secrets.sh' "$WORK/up.plan" | head -n 1 | cut -d: -f1)"
 image_line="$(grep -nF 'docker build --build-arg PROFILE=full' "$WORK/up.plan" | head -n 1 | cut -d: -f1)"
@@ -90,10 +96,17 @@ parallel_up_line="$(grep -nF 'up -d --no-build' "$WORK/parallel-up.plan" | head 
 [ "$parallel_image_line" -lt "$parallel_up_line" ] || fail "make -j up 未保证镜像先于 Compose"
 
 observability_plan="$(run_make -n up-observability VERSION=v9.9.9)"
-assert_contains "$observability_plan" './scripts/init-secrets.sh --observability' "up-observability 未初始化观测凭据"
+assert_contains "$observability_plan" './scripts/init-secrets.sh --observability --no-legacy' "up-observability 未初始化观测凭据"
 assert_contains "$observability_plan" '-f compose.observability.yml' "up-observability 未叠加观测栈"
 assert_contains "$observability_plan" "JIMU_IMAGE=jimu:v9.9.9" "up-observability 未使用版本镜像"
 assert_contains "$observability_plan" '--no-build' "up-observability 未禁用隐式构建"
+assert_contains "$observability_plan" './scripts/observability.sh start' "up-observability 未初始化 dashboard/告警"
+assert_not_contains "$observability_plan" "LEGACY_ENV_FILE" "up-observability 不得迁移旧 .env"
+printf '%s\n' "$observability_plan" >"$WORK/observability.plan"
+observability_up_line="$(grep -nF 'up -d --no-build' "$WORK/observability.plan" | head -n 1 | cut -d: -f1)"
+observability_start_line="$(grep -nF './scripts/observability.sh start' "$WORK/observability.plan" | head -n 1 | cut -d: -f1)"
+[ -n "$observability_up_line" ] && [ -n "$observability_start_line" ] || fail "up-observability 计划缺少启动或观测初始化步骤"
+[ "$observability_up_line" -lt "$observability_start_line" ] || fail "up-observability 必须先启动服务再初始化 dashboard/告警"
 
 echo "== 生命周期与运维入口 =="
 for target in down restart status logs; do
@@ -145,19 +158,32 @@ assert_not_contains "$no_env_output" "legacy=$NO_ENV_REAL/.env" "无旧 .env 时
 
 with_env_output="$(env -u LEGACY_ENV_FILE make -C "$WITH_ENV_DIR" --no-print-directory init)"
 assert_contains "$with_env_output" "legacy=$WITH_ENV_REAL/.env" "存在旧 .env 时未传入 LEGACY_ENV_FILE"
+CUSTOM_LEGACY_FILE="$WORK/custom-legacy.env"
+touch "$CUSTOM_LEGACY_FILE"
+custom_legacy_output="$(LEGACY_ENV_FILE="$CUSTOM_LEGACY_FILE" make -C "$WITH_ENV_DIR" --no-print-directory init)"
+assert_contains "$custom_legacy_output" "legacy=$CUSTOM_LEGACY_FILE" "显式 LEGACY_ENV_FILE 未传入"
+assert_not_contains "$custom_legacy_output" "legacy=$WITH_ENV_REAL/.env" "显式 LEGACY_ENV_FILE 被根 .env 覆盖"
+with_env_init_plan="$(env -u LEGACY_ENV_FILE make -C "$WITH_ENV_DIR" --no-print-directory -n init)"
+assert_contains "$with_env_init_plan" "LEGACY_ENV_FILE" "make -n init 未展示旧 .env 迁移入口"
+with_env_up_plan="$(env -u LEGACY_ENV_FILE make -C "$WITH_ENV_DIR" --no-print-directory -n up)"
+assert_not_contains "$with_env_up_plan" "LEGACY_ENV_FILE" "存在旧 .env 时 make -n up 仍迁移"
+with_env_observability_plan="$(env -u LEGACY_ENV_FILE make -C "$WITH_ENV_DIR" --no-print-directory -n up-observability)"
+assert_not_contains "$with_env_observability_plan" "LEGACY_ENV_FILE" "存在旧 .env 时 make -n up-observability 仍迁移"
 
 CUSTOM_SECRETS_DIR="$WORK/custom-secrets"
 custom_init_output="$(env -u LEGACY_ENV_FILE -u SECRETS_DIR make -C "$NO_ENV_DIR" --no-print-directory init JIMU_SECRETS_DIR="$CUSTOM_SECRETS_DIR")"
 assert_contains "$custom_init_output" "secrets_dir=$CUSTOM_SECRETS_DIR" "init 未传递自定义 JIMU_SECRETS_DIR"
-custom_observability_output="$(env -u LEGACY_ENV_FILE -u SECRETS_DIR make -C "$NO_ENV_DIR" --no-print-directory init-observability JIMU_SECRETS_DIR="$CUSTOM_SECRETS_DIR")"
-assert_contains "$custom_observability_output" "secrets_dir=$CUSTOM_SECRETS_DIR" "init-observability 未传递自定义 JIMU_SECRETS_DIR"
-assert_contains "$custom_observability_output" "args=--observability" "init-observability 未传递 --observability"
+custom_observability_output="$(env -u LEGACY_ENV_FILE -u SECRETS_DIR make -C "$NO_ENV_DIR" --no-print-directory prepare-observability-secrets JIMU_SECRETS_DIR="$CUSTOM_SECRETS_DIR")"
+assert_contains "$custom_observability_output" "secrets_dir=$CUSTOM_SECRETS_DIR" "observability 准备目标未传递自定义 JIMU_SECRETS_DIR"
+assert_contains "$custom_observability_output" "args=--observability --no-legacy" "observability 准备目标未禁用旧 .env 迁移"
 
 echo "== dev 入口 =="
 dev_plan="$(run_make -n dev)"
 assert_contains "$dev_plan" 'ENV=dev PROFILE=full ./scripts/dev.sh' "dev 未按 ENV/PROFILE 调用本地脚本"
 [ -f "$ROOT/scripts/dev.sh" ] || fail "缺少 scripts/dev.sh"
 bash -n "$ROOT/scripts/dev.sh"
+grep -Fq './scripts/init-secrets.sh --no-legacy' "$ROOT/scripts/dev.sh" \
+  || fail "dev.sh 仍可能迁移旧 .env"
 grep -Fq 'cmd = "go build -overlay=\"$JIMU_OVERLAY\" -o ./tmp/server ./cmd/server"' "$ROOT/.air.toml" \
   || fail ".air.toml 未使用 JIMU_OVERLAY 构建"
 

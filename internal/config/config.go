@@ -155,8 +155,9 @@ type SecurityConfig struct {
 	// CSRF 防护密钥。非空时启用 CSRF 中间件（Bearer 认证请求自动跳过，不影响 JWT API）
 	CSRFSecret string `mapstructure:"csrf_secret"`
 
-	// 字段级加密密钥（AES-256-GCM，≥32 字节）。空则明文模式（email/phone 不加密存储，仍计算盲索引）。
-	// 建议 ENCRYPTION_KEY 环境变量注入；启用后存量明文行可正常解密读回。
+	// 字段级加密密钥（AES-256-GCM，非空时必须恰好 32 字节）。空则明文模式
+	// （email/phone 不加密存储，仍计算盲索引）。建议 ENCRYPTION_KEY 或 ENCRYPTION_KEY_FILE 注入；
+	// 启用后存量明文行可正常解密读回。
 	EncryptionKey string `mapstructure:"encryption_key"`
 
 	// IP 白名单（CIDR 或单个 IP）。为空表示不限制；非空时仅放行列表内来源，
@@ -298,7 +299,7 @@ type LogConfig struct {
 }
 
 // Load 加载配置
-// 优先级：环境变量 > .env > app.{env}.yaml > app.yaml
+// 优先级：环境变量 > app.{env}.yaml > app.yaml
 func Load() (*Config, error) {
 	cfg, _, err := LoadWithSections()
 	return cfg, err
@@ -380,8 +381,8 @@ func buildViper() (*viper.Viper, error) {
 
 	v := viper.New()
 
-	// 注意：.env 文件由 docker-compose 的 env_file 注入为环境变量
-	// 不需要 viper 加载 .env，避免与 docker-compose 冲突
+	// 正常启动不加载项目根 .env；Compose 使用 --env-file /dev/null 禁止自动读取，
+	// 只显式注入运行时变量与 secret 文件路径。
 
 	// 加载 yaml 配置
 	v.SetConfigName("app")

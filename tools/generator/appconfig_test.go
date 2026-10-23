@@ -16,6 +16,7 @@ import (
 
 	"jimu/internal/capabilities/catalog"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -340,15 +341,49 @@ func TestRenderAppConfigPreservesSourceOrderAndIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestAppConfigProdCoversEveryNonCapabilitySection：S6① 的资产不变量 —— app.prod.yaml 与
-// app.yaml 段集合一致，只少 capabilities（prod 覆盖文件不再放大段集合）。顺序不必一致
-// （两份蓝本的段序本就不同），段集合才是口径。
-func TestAppConfigProdCoversEveryNonCapabilitySection(t *testing.T) {
+// TestAppConfigProdOnlyOverridesBaseSections：生产覆盖只能使用基线已有的段，且不能引入
+// capabilities。prod 只保存差异，因此允许是 app.yaml 段集合的真子集。
+func TestAppConfigProdOnlyOverridesBaseSections(t *testing.T) {
 	appKeys, _, err := SectionBlocks(readRepoFile(t, "configs/app.yaml"))
 	require.NoError(t, err)
 	prodKeys, _, err := SectionBlocks(readRepoFile(t, "configs/app.prod.yaml"))
 	require.NoError(t, err)
-	assert.ElementsMatch(t, slices.DeleteFunc(slices.Clone(appKeys), func(k string) bool { return k == "capabilities" }), prodKeys)
+	assert.NotContains(t, prodKeys, "capabilities")
+	for _, key := range prodKeys {
+		assert.Contains(t, appKeys, key, "app.prod.yaml 不得引入 app.yaml 不存在的段")
+	}
+}
+
+// TestAppConfigProdContainsOnlyOverrides 钉住“生产文件只保存差异”：prod 的每个叶子值都必须
+// 存在于 app.yaml，且值必须不同。新增生产段或从基线复制默认值时，此测试会失败。
+func TestAppConfigProdContainsOnlyOverrides(t *testing.T) {
+	load := func(rel string) *viper.Viper {
+		v := viper.New()
+		v.SetConfigFile(filepath.Join(frameworkRootForTest(t), filepath.FromSlash(rel)))
+		require.NoError(t, v.ReadInConfig())
+		return v
+	}
+	base := load("configs/app.yaml")
+	prod := load("configs/app.prod.yaml")
+
+	var walk func(string, any)
+	walk = func(path string, value any) {
+		if nested, ok := value.(map[string]any); ok {
+			for key, child := range nested {
+				childPath := key
+				if path != "" {
+					childPath = path + "." + key
+				}
+				walk(childPath, child)
+			}
+			return
+		}
+		require.Truef(t, base.IsSet(path), "app.prod.yaml 引入了 app.yaml 不存在的配置项 %q", path)
+		assert.NotEqualf(t, base.Get(path), value, "app.prod.yaml 的 %q 与基线相同，应删除", path)
+	}
+	for key, value := range prod.AllSettings() {
+		walk(key, value)
+	}
 }
 
 // TestRenderAppConfigKeepsOnlySelectedSections 用小型 fixture 覆盖段选择（含行内/独立注释、

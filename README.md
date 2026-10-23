@@ -94,89 +94,54 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 
 ### 前置条件
 
+- Docker 24+（含 Compose v2）
 - Go 1.26+
-- MariaDB 10.5+
-- Redis 6+
 
-### 安装
+### 首次启动
 
 ```bash
 git clone https://github.com/your-org/jimu.git
 cd jimu
-go mod download
+make init       # 仅首次需要，可检查生成的 admin 密码
+make up         # 构建 jimu:dev 并启动核心栈
 ```
 
-### 配置
+业务配置只看 `configs/app.yaml`。`secrets/` 由 `make init` 或 `make up` 自动生成，文件权限为 `0600`，不要手工编辑；正常启动不会读取项目根 `.env`。旧 `.env` 只允许通过公开的 `make init` 做一次性迁移：
 
 ```bash
-cp .env.example .env
-# 编辑 .env 修改数据库、Redis、OpenObserve、OTEL 推送等连接信息
+make init       # 检测到项目根 .env 时会显式迁移
+LEGACY_ENV_FILE=/path/to/old/.env make init  # 或指定其它旧文件
 ```
 
-`.env.example` 覆盖全部可调环境变量（镜像/端口/数据卷、OpenObserve 账号与端口、OTEL 开关与端点）：
-- **docker compose** 自动读取项目根 `.env` 做变量插值（也可用 `--env-file` 指定）
-- **make** 通过 `include .env + export` 将变量注入子进程（deploy 脚本、compose 命令）
-- docker-compose.yml 内的 `${VAR:-默认}` 均可在 `.env` 覆盖，缺省用 yml 内默认值
+`make up` 只补齐缺失 Secret，绝不传入 `LEGACY_ENV_FILE`；随后以 `--env-file /dev/null` 启动 Compose，构建 `jimu:dev`，再由一次性 `jimu-init` 等待 MariaDB/Redis、执行迁移和结构种子，最后启动 `server`。管理员初始密码保存在 `secrets/admin_password.txt`。
 
-### 方式一：本地运行
+`secrets/*.txt` 与已有 MariaDB 数据卷中的账号密码绑定。改写 Secret 文件不会自动修改库内密码；请先轮换数据库账号密码，再执行 `make restart`，避免因凭据不一致反复重启。
+
+镜像标签由 `VERSION` 控制；本地二进制版本由 `APP_VERSION` 控制：
 
 ```bash
-# 1. 启动依赖
-docker compose up -d mariadb redis
-
-# 2. 运行迁移
-make migrate
-
-# 3. 初始化数据（管理员密码通过环境变量提供）
-ADMIN_PASSWORD=admin123 make seed
-
-# seed 写入：默认租户（code=default）、基础权限（含租户管理）、超级管理员角色、admin 用户
-
-# 4. 启动服务
-make run
+make up VERSION=v0.4.0
+make image VERSION=v0.4.0   # 同时生成 jimu:v0.4.0 与 jimu:latest
 ```
 
-### 方式二：Docker Compose 一键启动
+### 本地热重载开发
 
 ```bash
-# 1. 构建镜像
-make docker-build
-
-# 2. 创建密码文件
-mkdir -p secrets
-echo "your-root-password" > secrets/db_root_password.txt
-echo "your-db-password" > secrets/db_password.txt
-openssl rand -hex 32 > secrets/jwt_secret.txt
-
-# 3. 启动全部服务
-make compose-up
-
-# 4. 运行迁移
-docker compose run --rm server ./jimu migrate up
-
-# 5. 初始化数据
-docker compose run --rm -e ADMIN_PASSWORD=admin123 server ./jimu seed
+go install github.com/air-verse/air@latest
+make dev
 ```
 
-`secrets/*.txt` 仅在 MariaDB 数据卷首次初始化时创建数据库账号。已存在数据卷时，改写 Secret 文件不会自动修改库内密码；请先轮换数据库账号密码，再重启 `server`，避免因凭据不一致反复重启。
+`make dev` 启动本地 MariaDB/Redis 依赖，使用 `secrets/` 中的凭据执行迁移和种子，然后通过 Air 热重载后端。
 
 ### 首次启动与前端联调
 
-首次拉起环境、或与前端（jimu-web）联调时，按下面的顺序走：
+首次拉起环境、或与前端（jimu-web）联调时：
 
 ```bash
-# 1. 起依赖并迁移
-docker compose up -d mariadb redis
-make migrate
+# 1. 启动后端（会完成迁移、种子和启动）
+make up
 
-# 2. 结构种子：必须通过环境变量提供管理员密码，否则没有可用登录
-ADMIN_PASSWORD=admin123 make seed
-#    写入默认租户（code=default）、基础权限（含租户管理）、超级管理员角色与 admin 用户
-
-# 3. 启动后端
-make run
-
-# 4. 另开一个终端启动前端（jimu-web）；其 Vite proxy 把 /api 转发到 http://localhost:8080
+# 2. 另开一个终端启动前端（jimu-web）；其 Vite proxy 把 /api 转发到 http://localhost:8080
 pnpm run dev
 ```
 
@@ -190,17 +155,19 @@ pnpm run dev
 - API: http://localhost:8080
 - Swagger UI: http://localhost:8080/swagger/index.html （非 release 模式）
 - Management: `http://127.0.0.1:9090/livez`、`/readyz`、`/metrics`、`/capabilities`
-- Adminer: `docker compose --profile dev up -d adminer` 后访问 http://127.0.0.1:8081
+- Adminer: `make adminer` 后访问 http://127.0.0.1:8081
 
 ### 可观测性（可选）
 
-OpenObserve 监控栈（日志/指标/追踪/告警/仪表盘，替代原 Prometheus + Grafana + Loki + Promtail + AlertManager 五件套）随 `make compose-up` 按环境变量开启：
+OpenObserve 监控栈（日志/指标/追踪/告警/仪表盘，替代原 Prometheus + Grafana + Loki + Promtail + AlertManager 五件套）只在显式启动观测栈时创建：
 
 ```bash
-make compose-up                       # OTEL_ENABLED 默认开启；OTEL_ENABLED=false make compose-up 关闭
+make up-observability
 ```
 
-- OpenObserve UI/API: http://127.0.0.1:5080 （默认账号 admin@jimu.local / Admin@12345，可用 `ZO_OBSERVE_ROOT_USER_EMAIL` / `ZO_OBSERVE_ROOT_USER_PASSWORD` 覆盖）
+该目标先启动核心栈与观测栈，再执行 `scripts/observability.sh start` 初始化 dashboard。默认告警只在设置 `ZO_ALERT_WEBHOOK_URL` 后同步；未设置时跳过，不影响 dashboard。
+
+- OpenObserve UI/API: http://127.0.0.1:5080 （账号 `admin@jimu.local`；密码由 `secrets/otel_auth_password.txt` 自动生成）
 - OTLP gRPC: `127.0.0.1:5081`（tracing / metrics / logs 统一入口）
 - 默认 dashboard **Jimu Overview**：开启时自动创建（幂等），含 17 面板：stat 卡片（错误日志/日志总量/DB 连接池/Goroutines）、时间序列（DB/运行时/日志/HTTP/依赖熔断/MySQL/Redis）、最近错误日志表格
 - 官方数据库 dashboard **MySQL Metrics Monitoring** / **Redis Metrics Dashboard**：随启动自动创建（数据来自 OTel Collector 采集的 `mysql_*` / `redis_*` 指标流）；可选的 **PostgreSQL**（opentelemetry-contrib 采集）见下文
@@ -208,8 +175,10 @@ make compose-up                       # OTEL_ENABLED 默认开启；OTEL_ENABLED
 **Dashboard 配置与同步（面板进 git）**：dashboard 定义保存在 `deploy/openobserve/dashboards/*.json`（v8 结构，含面板查询与布局），启动时按此文件创建/重建；MySQL/Redis 官方模板取自 [openobserve/dashboards](https://github.com/openobserve/dashboards) 并归一为 v8 结构与 192 列网格布局入库（官方原始文件为旧版小网格，直接导入面板会缩成一条）：
 
 ```bash
-./deploy/openobserve/sync-dashboard.sh                # 应用 dashboards/*.json（幂等：同名重建）
-./deploy/openobserve/sync-dashboard.sh --export 名称  # 线上 dashboard 导出为 json（UI 微调后同步回 git）
+ZO_PASSWORD="$(cat secrets/otel_auth_password.txt)" \
+  ./deploy/openobserve/sync-dashboard.sh              # 应用 dashboards/*.json（幂等：同名重建）
+ZO_PASSWORD="$(cat secrets/otel_auth_password.txt)" \
+  ./deploy/openobserve/sync-dashboard.sh --export 名称 # 线上 dashboard 导出为 json（UI 微调后同步回 git）
 ```
 
 JSON 中维护面板查询（`queries.fields` 流与轴映射、`type` 渲染类型）与布局（`layout` 网格坐标）；在 UI 手工调整后可用 `--export` 拉回并提交（运行时元数据自动剥离）。
@@ -217,19 +186,22 @@ JSON 中维护面板查询（`queries.fields` 流与轴映射、`type` 渲染类
 **默认告警（可选）**：内置 8 条告警规则（`deploy/openobserve/alerts/jimu_*.json`，覆盖错误日志激增、HTTP 5xx 占比、DB 连接池饱和、队列死信、Outbox 发布失败、依赖熔断、MySQL 线程数、Redis key 淘汰），经 OpenObserve v2 告警 API 同步（幂等：存在则更新，否则创建）。创建告警必须绑定已存在的通知目的地，因此同步依赖 `ZO_ALERT_WEBHOOK_URL`：
 
 ```bash
-# .env 设置后 make compose-up 随监控栈启动自动同步；webhook 指向企业微信/钉钉/飞书/Slack 等网关均可
-ZO_ALERT_WEBHOOK_URL=https://example.com/webhook
-./deploy/openobserve/sync-alerts.sh                   # 手工同步（含通知模板 jimu_alert_http + 目的地 jimu_webhook）
+# 启动观测栈时同步；webhook 指向企业微信/钉钉/飞书/Slack 等网关均可
+ZO_ALERT_WEBHOOK_URL=https://example.com/webhook make up-observability
+
+ZO_PASSWORD="$(cat secrets/otel_auth_password.txt)" \
+ZO_ALERT_WEBHOOK_URL=https://example.com/webhook \
+  ./deploy/openobserve/sync-alerts.sh                  # 手工同步（含通知模板 jimu_alert_http + 目的地 jimu_webhook）
 ```
 
 - `ZO_ALERT_WEBHOOK_URL` 留空时跳过同步（不影响其它功能），告警也可在 UI 内手工配置
 - 告警创建要求目标 stream 已有数据入库（按 stream schema 校验）；首次启动数据未就绪的规则会自动重试，超限跳过，稍后重跑补齐
 - 目的地固定 `jimu_webhook`（POST JSON，载荷含 `alert_name` / `stream` / `level` / `fired_count` 等），阈值为保守默认值，在 `alerts/*.json` 或 UI 中按业务调整
 
-**数据库集成（MySQL/Redis 指标）**：`make compose-up`（OTEL_ENABLED 默认开启）会同时启动 OTel Collector（`otel-collector` 服务，配置 `deploy/otel-collector.yaml`），采集 MySQL（performance_schema 指标：连接池/缓冲池/锁/慢查询相关）与 Redis（客户端/内存/命令吞吐）指标，经 OTLP/gRPC 推送到 OpenObserve（约 45 个 `mysql_*` / `redis_*` 指标流）：
+**数据库集成（MySQL/Redis 指标）**：`make up-observability` 会同时启动 OTel Collector（`otel-collector` 服务，配置 `deploy/otel-collector.yaml`），采集 MySQL（performance_schema 指标：连接池/缓冲池/锁/慢查询相关）与 Redis（客户端/内存/命令吞吐）指标，经 OTLP/gRPC 推送到 OpenObserve（约 45 个 `mysql_*` / `redis_*` 指标流）：
 
 ```bash
-docker compose --profile observability up -d otel-collector   # 单独启动采集
+make up-observability
 ```
 
 - 采集凭据：compose 内 MySQL 用 root 密码（secret `db_root_password`）；k8s/helm 生产环境默认用应用用户（`jimu`），需为其授予 `PROCESS, REPLICATION CLIENT` 权限以读取状态变量
@@ -242,7 +214,7 @@ docker compose --profile observability up -d otel-collector   # 单独启动采�
 让应用接入 OpenObserve（`otel.enabled` 开启，tracing + metrics + logs 均经 OTLP gRPC 推送）：
 
 ```bash
-make compose-up   # OTEL_ENABLED 默认开启，server 自动指向 openobserve:5081 推送
+make up-observability
 ```
 
 应用侧：`/metrics` 端点保留 Prometheus 格式供外部工具抓取；指标另按 `metrics_interval_sec` 周期转 OTLP 推送（按指标名分流成独立 stream）；结构化日志异步推送（缓冲满丢弃，不影响主链路）；日志与追踪分别写入 `jimu_logs` / `jimu_traces` stream（可用 `otel.logs_stream_name` / `otel.traces_stream_name` 调整，空值回落 OpenObserve 默认流 `default`）。内置默认告警随监控栈同步（见上文「默认告警」），其余告警在 OpenObserve UI 内配置（VQL 告警规则 + 通知渠道）。
@@ -255,7 +227,7 @@ make compose-up   # OTEL_ENABLED 默认开启，server 自动指向 openobserve:
 - **trace 关联**：请求上下文内用 `logger.WithContext(ctx)` 记录日志，自动携带 `trace_id`/`span_id` 并挂到对应 trace，OpenObserve 日志与链路可互跳。
 - **敏感信息**（密码、token、验证码、手机号原文等）禁止入日志，PII 需脱敏（如 `138****1234`）。
 
-停止：`make compose-down`（统一入口，保留数据卷）。
+停止：`make down`（停止核心栈与观测栈，保留数据卷）。
 
 ## CLI 工具
 
@@ -280,7 +252,7 @@ make cli
 ./bin/jimu migrate adopt-capabilities  # 存量库登记各能力版本表基线（升级到 v0.3.0 后执行一次）
 
 # 数据初始化
-./bin/jimu seed                     # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例；各形态均可执行）
+ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例）
 
 # API Key（命令由 apikey 能力自带：internal/capabilities/apikey/cli）
 ./bin/jimu apikey issue --name=ci --scopes=api:access   # 签发 API Key（明文只显示一次；另有 --expires-days/--created-by）
@@ -332,9 +304,9 @@ make cli
 
 ## 数据种子
 
-`jimu seed` 按当前 profile 的能力集合播种其声明的权限点。默认租户、套餐、管理员角色和管理员账户属于结构性种子；`ADMIN_PASSWORD` 未设置时跳过管理员种子并记录告警。
+`jimu seed` 按当前 profile 的能力集合播种其声明的权限点。默认租户、套餐、管理员角色和管理员账户属于结构性种子；管理员密码优先从 `ADMIN_PASSWORD_FILE` 读取，回退到 `ADMIN_PASSWORD`，两者都未设置时跳过管理员种子并记录告警。Compose 的 `jimu-init` 使用自动生成的 `/run/secrets/admin_password`。
 
-服务启动期也执行同一份结构性种子（各形态共享）：`ADMIN_PASSWORD` 未设置时跳过并告警，且**当数据库中一个账号都没有**（`users` 表已存在）时追加一条 error 级日志与下一步（设置 `ADMIN_PASSWORD` 重启，或开启 `auth.public_registration`）——**启动行为不变，仍成功启动**；`users` 表尚未建立（容器启动早于 CLI 迁移）或查询失败时静默降级，不影响启动。迁移与运行时装配的边界见[能力架构](docs/design/capability-architecture.md)、[身份与租户](docs/design/identity-and-tenancy.md)和[配置与数据生命周期](docs/design/configuration-and-data-lifecycle.md)。
+服务启动期也执行同一份结构性种子（各形态共享）：`ADMIN_PASSWORD_FILE` / `ADMIN_PASSWORD` 都未设置时跳过并告警，且**当数据库中一个账号都没有**（`users` 表已存在）时追加一条 error 级日志与下一步（设置密码后重启，或开启 `auth.public_registration`）——**启动行为不变，仍成功启动**；`users` 表尚未建立（容器启动早于 CLI 迁移）或查询失败时静默降级，不影响启动。迁移与运行时装配的边界见[能力架构](docs/design/capability-architecture.md)、[身份与租户](docs/design/identity-and-tenancy.md)和[配置与数据生命周期](docs/design/configuration-and-data-lifecycle.md)。
 
 ## 形态（profile）
 
@@ -503,8 +475,9 @@ jimu/
 ├── .github/                    # GitHub Actions + Dependabot
 ├── Makefile
 ├── Dockerfile
+├── compose.observability.yml
 ├── docker-compose.yml
-└── .env.example
+└── secrets/                    # 本地生成，已 gitignore
 ```
 
 ## API 示例
@@ -1022,9 +995,11 @@ curl http://127.0.0.1:9090/capabilities
 | 环境 | 配置文件 | 说明 |
 |------|----------|------|
 | 开发 | `app.yaml` | 默认，日志输出到 stdout |
-| 生产 | `app.prod.yaml` | JSON 日志、文件滚动、release 模式 |
+| 生产 | `app.prod.yaml` | 仅覆盖生产差异：release 模式、安全头、连接池与日志等 |
 
 优先级：`环境变量 > app.{env}.yaml > app.yaml`
+
+`configs/app.yaml` 是业务配置事实源；`configs/app.prod.yaml` 不复制基线默认值。正常入口不读取项目根 `.env`，Compose 配置使用 `--env-file /dev/null`。
 
 ### 环境变量
 
@@ -1041,7 +1016,7 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 ```
 
-`ENCRYPTION_KEY` 不注入时字段加密退化为明文模式（功能可用，email/phone 明文落库）。
+`ENCRYPTION_KEY` / `ENCRYPTION_KEY_FILE` 未注入时字段加密退化为明文模式（功能可用，email/phone 明文落库）；非空值必须恰好 32 字节。
 
 ### 配置项
 
@@ -1134,7 +1109,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `sms.api_key` | 阿里云 AccessKey ID（生产建议 `SMS_API_KEY` 环境变量注入） | — |
 | `sms.api_secret` | 阿里云 AccessKey Secret（生产建议 `SMS_API_SECRET` 环境变量注入） | — |
 | `sms.sign_name` | 短信签名 | — |
-| `security.encryption_key` | 字段级加密密钥（≥32 字符，AES-256-GCM）；生产必须 `ENCRYPTION_KEY` 环境变量注入，否则 email/phone 明文存储 | — |
+| `security.encryption_key` | 字段级加密密钥（AES-256-GCM）；非空时必须恰好 32 字节，Compose 通过 `ENCRYPTION_KEY_FILE` 注入；未配置时 email/phone 明文存储 | — |
 | `security.csrf_secret` | CSRF 密钥；非空时启用 CSRF 中间件（Bearer 认证请求自动跳过） | — |
 | `security.content_type_options` / `frame_options` / `xss_protection` | HTTP 安全响应头（`X-Content-Type-Options` 等，留空用默认值） | 见 `DefaultSecurityConfig` |
 | `security.strict_transport` | `Strict-Transport-Security` 头 | `max-age=31536000; includeSubDomains` |
@@ -1148,7 +1123,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `otel.metrics_enabled` | 指标推送：Prometheus 指标转 OTLP 推送到 OpenObserve（`/metrics` 端点仍保留） | `true` |
 | `otel.logs_enabled` | 日志推送：zap 结构化日志异步转 OTLP logs | `true` |
 | `otel.metrics_interval_sec` | 指标推送间隔（秒），0 用默认 | `15` |
-| `otel.auth_email` / `otel.auth_password` | OpenObserve 账号凭据（OTLP/gRPC Basic Auth；生产可用 `OTEL_AUTH_EMAIL` / `OTEL_AUTH_PASSWORD`（或 `OTEL_AUTH_PASSWORD_FILE`）环境变量注入） | 与 OpenObserve 账号一致 |
+| `otel.auth_email` / `otel.auth_password` | OpenObserve 账号凭据（OTLP/gRPC Basic Auth；Compose 观测栈通过 `OTEL_AUTH_EMAIL` / `OTEL_AUTH_PASSWORD_FILE` 注入，密码文件由 `make up-observability` 生成） | `admin@jimu.local` / 自动生成 |
 | `otel.org_id` | OpenObserve 组织（gRPC `organization` header；`OTEL_ORG_ID` 可覆盖） | `default` |
 | `otel.logs_stream_name` / `otel.traces_stream_name` | OpenObserve 日志 / 追踪 stream 名（gRPC `stream-name` header；`OTEL_LOGS_STREAM_NAME` / `OTEL_TRACES_STREAM_NAME` 可覆盖；空则落 OpenObserve 默认流 `default`，非法字符会被 OpenObserve 规范为 `_`） | `jimu_logs` / `jimu_traces` |
 | `http_client.timeout_sec` | 出站 HTTP 单次请求超时（秒），0 用默认 | `10` |
@@ -1242,16 +1217,26 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 
 ## Makefile 命令
 
+`VERSION` 只控制镜像标签，`APP_VERSION` 只控制本机二进制版本；`PROFILE` 同时约束构建、迁移、种子和本地开发所用形态。
+
 | 命令 | 说明 |
 |------|------|
-| `make run` | 运行服务（开发模式） |
-| `make dev` | 开发模式：fmt + vet + 构建 + 运行 |
+| `make init` | 初始化缺失的核心 Secret；旧 `.env` 的唯一公开迁移入口 |
+| `make up` | 补齐 Secret（不迁移旧 `.env`）、构建版本镜像并启动核心栈（含迁移与种子） |
+| `make up-observability` | 启动核心栈与 OpenObserve 观测栈，并初始化 dashboard/默认告警 |
+| `make down` | 停止核心栈与观测栈（保留数据卷） |
+| `make restart` | 重启已有 Compose 容器（不重建镜像） |
+| `make status` | 查看 Compose 服务状态 |
+| `make logs` | 跟踪服务端日志 |
+| `make dev` | 启动本地依赖、迁移/种子并以 Air 热重载后端 |
+| `make image` | 唯一的显式镜像构建入口；生成 `VERSION` 标签与 `latest` |
+| `make adminer` | 显式启动 Adminer 开发工具 |
 | `make build` | 编译 server + cli |
 | `make build-server` | 编译服务端（`PROFILE=<name>` 选形态，默认 full；overlay 叠加 `./cmd/server`，产物 `bin/jimu-server[-<name>]`） |
-| `make migrate` | 执行迁移 |
+| `make migrate` | 高级运维入口：构建当前 `PROFILE` 镜像并通过 `jimu-init` 执行迁移 |
 | `make migrate-down` | 回滚最后一次迁移 |
 | `make migrate-status` | 查看迁移状态 |
-| `make seed` | 插入初始数据 |
+| `make seed` | 高级运维入口：通过 `jimu-init` 插入初始数据 |
 | `make build-backup-image` | 构建备份任务镜像 `jimu-backup`（内置 mariadb-dump + pg_dump + 仓库脚本，供 K8s/Helm CronJob 使用） |
 | `make compose-db-backup` | **推荐**：在数据库容器内备份（脚本已挂载，产物落宿主机 `./backups`，gzip + 保留 7 天） |
 | `make compose-db-restore` | **推荐**：在数据库容器内恢复（`FILE=/backups/xxx.sql.gz`，破坏性，等价 `FORCE=1`） |
@@ -1277,15 +1262,6 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 | `make swagger` | 生成 API 文档（`docs/openapi` 归 `apidocs` 能力：当前形态未编入 apidocs 时打印 `SKIP` 并成功退出；`PROFILE` 非法则失败） |
 | `make swagger-check` | 校验 OpenAPI 文档为最新（CI 的 `Capability Gates` job 复用本目标；同样按形态跳过） |
 | `make cli` | 编译 CLI |
-| `make docker-build` | 构建 Docker 镜像（`PROFILE=<name>` 选形态，经 `--build-arg PROFILE=<name>`，默认 full） |
-| `make docker-run` | 直接运行 Docker 容器 |
-| `make compose-up` | 启动所有容器 |
-| `make compose-down` | 停止所有容器 |
-| `make compose-restart` | 重启所有容器 |
-| `make compose-logs` | 查看应用日志 |
-| `make compose-migrate` | Compose 环境执行迁移 |
-| `make compose-seed` | Compose 环境插入初始数据（需 `.env` 提供 `ADMIN_PASSWORD`，或 `make compose-seed ADMIN_PASSWORD=xxx`） |
-| `make compose-up`（`OTEL_ENABLED=false` 关闭） | 统一开关（默认开）：启动 OpenObserve 监控栈（含数据库指标 Collector、默认 dashboard 与内置告警同步）并让 server 推送遥测 |
 | `make compose-check` | 使用临时项目、Secret 和数据卷进行 Compose 运行时/API 验证，不影响本地服务 |
 | `make release-check` | 发布前检查（fmt-check + vet + check-log-usage + check-capabilities + profiles-check + compose-report-check + test + govulncheck + Compose 运行时/API 验证 + 重型脚手架矩阵） |
 | `make ci` | 本地 CI 检查（无外部依赖：fmt-check + vet + lint + check-log-usage + check-capabilities + profiles-check + compose-report-check + test + 覆盖率（逐包「不低于」下限由 CI 的 `Coverage & Docs` 按 DB 口径执行；本地 `make ci` 无 DB 口径、`*/infrastructure` 测试 SKIP，故以 `SKIP_COVERAGE_FLOORS=1` 跳过该判定；该开关**在 CI 中会被门禁拒绝**（`GITHUB_ACTIONS=true` 时报错非零退出，fail-closed，以免逐包门禁被静默关掉），详见 `docs/releases/v0.3.6.md`）+ race + swagger + smoke + build + govulncheck + 重型脚手架矩阵，完整 CI 见 `.github/workflows/ci.yml`） |
@@ -1313,24 +1289,11 @@ make compose-db-restore FILE=/backups/jimu_20250101_120000.sql.gz   # 恢复（�
 ## Docker 部署
 
 ```bash
-# 1. 构建镜像
-make docker-build
-
-# 2. 创建密码文件
-mkdir -p secrets
-echo "your-root-password" > secrets/db_root_password.txt
-echo "your-db-password" > secrets/db_password.txt
-openssl rand -hex 32 > secrets/jwt_secret.txt
-
-# 3. 启动全部服务
-make compose-up
-
-# 4. 运行迁移和初始化
-docker compose run --rm server ./jimu migrate up
-docker compose run --rm -e ADMIN_PASSWORD=admin123 server ./jimu seed
+make init
+make up VERSION=v0.4.0
 ```
 
-已有数据卷中的 MariaDB 账号密码不会因修改 `secrets/*.txt` 自动轮换。先完成数据库账号轮换，再执行 `make compose-restart`。
+`make up` 构建 `jimu:v0.4.0`（同时更新 `jimu:latest`），启动核心栈并通过 `jimu-init` 完成迁移与种子。已存在 MariaDB 数据卷时，修改 `secrets/*.txt` 不会自动轮换库内账号密码；请先完成数据库账号轮换，再执行 `make restart`。
 
 ## K8s 部署
 
@@ -1346,7 +1309,7 @@ kubectl apply -f deploy/k8s/
 ```
 
 - 数据库迁移由 initContainer 在主容器启动前自动执行（`jimu migrate up`），迁移失败则 Pod 不就绪、不滚动
-- 敏感配置通过 `jimu-secrets` Secret 注入（`change-me-*` 占位值部署前必须替换）
+- `deploy/k8s/secret.yaml` 只保留非 OpenObserve 的占位样例；`jimu-secrets` 必须由部署方在仓库外补入 `ZO_ROOT_USER_EMAIL`、`ZO_ROOT_USER_PASSWORD`、`ZO_AUTH_TOKEN`，且不要提交真实凭据
 - 多副本（`replicas > 1`）需为每个 Pod 配置唯一 `id.worker_id`，避免雪花 ID 冲突（如用 StatefulSet 序号或环境变量注入）
 - Ingress 终止 TLS，应用侧 `http.tls.enabled` 保持 `false`
 

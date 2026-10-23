@@ -12,6 +12,7 @@ TEMP_FILE=""
 
 OBSERVABILITY=0
 ALLOW_NEW_SECURITY_KEYS=0
+ALLOW_LEGACY=1
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -21,14 +22,21 @@ while [ "$#" -gt 0 ]; do
     --allow-new-security-keys)
       ALLOW_NEW_SECURITY_KEYS=1
       ;;
+    --no-legacy)
+      ALLOW_LEGACY=0
+      ;;
     *)
       echo "未知参数：$1" >&2
-      echo "用法：scripts/init-secrets.sh [--observability] [--allow-new-security-keys]" >&2
+      echo "用法：scripts/init-secrets.sh [--observability] [--allow-new-security-keys] [--no-legacy]" >&2
       exit 2
       ;;
   esac
   shift
 done
+
+if [ "$ALLOW_LEGACY" = "0" ]; then
+  LEGACY_ENV_FILE=""
+fi
 
 warn() {
   printf '⚠️  %s\n' "$*" >&2
@@ -294,7 +302,7 @@ validate_encryption_key() {
 
 validate_encryption_key
 
-if [ -n "$LEGACY_ENV_FILE" ] && [ -f "$LEGACY_ENV_FILE" ]; then
+if [ "$ALLOW_LEGACY" = "1" ] && [ -n "$LEGACY_ENV_FILE" ] && [ -f "$LEGACY_ENV_FILE" ]; then
   warn "检测到旧配置文件 ${LEGACY_ENV_FILE}；该文件已停用，仅迁移缺失的 secret，不删除原文件"
   for key in DB_ROOT_PASSWORD DB_PASSWORD JWT_SECRET ADMIN_PASSWORD ZO_OBSERVE_ROOT_USER_PASSWORD; do
     raw_env_value "$LEGACY_ENV_FILE" "$key" "旧 .env 中的 $key" >/dev/null
@@ -379,7 +387,7 @@ if [ "$OBSERVABILITY" = "1" ]; then
       die "openobserve.env 中的密码与 otel_auth_password.txt 不一致；请先人工确认或删除派生文件"
     fi
   fi
-  if [ -n "$LEGACY_ENV_FILE" ] && [ -f "$LEGACY_ENV_FILE" ]; then
+  if [ "$ALLOW_LEGACY" = "1" ] && [ -n "$LEGACY_ENV_FILE" ] && [ -f "$LEGACY_ENV_FILE" ]; then
     LEGACY_OBS_PASSWORD="$(legacy_env_value "ZO_OBSERVE_ROOT_USER_PASSWORD")"
   fi
   if [ -z "$OBS_PASSWORD" ]; then

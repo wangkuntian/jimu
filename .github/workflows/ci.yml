@@ -66,7 +66,7 @@ jobs:
             echo "go=false" >> "$GITHUB_OUTPUT"
           fi
           # docker：镜像可发布性关心的路径（沿用原 ci-docker.yml 的口径）
-          if grep -Eq '^(Dockerfile$|docker-compose\.yml$|deploy/|\.env\.example$|scripts/|Makefile$|cmd/|internal/|tools/|go\.mod$|go\.sum$|configs/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
+          if grep -Eq '^(Dockerfile$|docker-compose\.yml$|compose\.observability\.yml$|deploy/|scripts/|Makefile$|cmd/|internal/|tools/|go\.mod$|go\.sum$|configs/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
             echo "docker=true" >> "$GITHUB_OUTPUT"
           else
             echo "docker=false" >> "$GITHUB_OUTPUT"
@@ -422,15 +422,16 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - name: "📐 Validate docker-compose.yml"
-        run: docker compose config --quiet
-      - name: "⬇️ Check secrets files exist"
+      - name: "🔐 Initialize Compose secrets"
         run: |
+          bash scripts/init-secrets.sh --no-legacy
           for f in secrets/db_root_password.txt secrets/db_password.txt \
-                   secrets/jwt_secret.txt secrets/otel_auth_password.txt \
-                   secrets/zo_auth_token.txt; do
-            [ -f "$f" ] || echo "⚠ $f 缺失（运行 make secrets 生成）"
+                   secrets/jwt_secret.txt secrets/encryption_key.txt \
+                   secrets/audit_hash_secret.txt secrets/admin_password.txt; do
+            [ -s "$f" ] || { echo "❌ $f 缺失或为空"; exit 1; }
           done
+      - name: "📐 Validate docker-compose.yml"
+        run: docker compose --env-file /dev/null config --quiet
       - name: "🐳 Build Docker image"
         run: docker build -t jimu:${{ github.sha }} .
       - name: "💾 Save image artifact"

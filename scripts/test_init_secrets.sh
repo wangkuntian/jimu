@@ -419,6 +419,26 @@ fi
 [ "$(cat "$LEGACY_DIR/audit_hash_secret.txt")" != "conflicting-audit-secret" ] || fail "旧 .env 的 AUDIT_HASH_SECRET 不得迁移"
 [ "$(cat "$LEGACY_DIR/zo_auth_token.txt")" != "conflicting-zo-token" ] || fail "旧 .env 的 ZO_OBSERVE_AUTH_TOKEN 不得迁移"
 
+echo "== --no-legacy 忽略显式旧 .env =="
+NO_LEGACY_DIR="$WORK/no-legacy"
+TEST_LEGACY_ENV_FILE="$LEGACY_FILE"
+run_init "$NO_LEGACY_DIR" --observability --no-legacy </dev/null >"$WORK/no-legacy.out" 2>&1
+TEST_LEGACY_ENV_FILE=""
+if grep -Fq "已停用" "$WORK/no-legacy.out"; then
+  fail "--no-legacy 仍读取旧 .env"
+fi
+for pair in \
+  "db_root_password.txt:quoted-root-password" \
+  "db_password.txt:literal-password" \
+  "jwt_secret.txt:quoted-jwt-secret # literal" \
+  "admin_password.txt:quoted admin password" \
+  "otel_auth_password.txt:LegacyObs@123"; do
+  file="${pair%%:*}"
+  sentinel="${pair#*:}"
+  [ -s "$NO_LEGACY_DIR/$file" ] || fail "--no-legacy 未生成 $file"
+  [ "$(cat "$NO_LEGACY_DIR/$file")" != "$sentinel" ] || fail "--no-legacy 迁移了 $file"
+done
+
 echo "== 旧 .env 重复键拒绝 =="
 DUP_DB_DIR="$WORK/legacy-duplicate-db"
 mkdir -p "$DUP_DB_DIR"

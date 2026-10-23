@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# 端口用专用变量：本地 .env 会设 HTTP_HOST_PORT=8080 并经 make export 泄漏进来，
+# 端口用专用变量：调用方环境可能设置 HTTP_HOST_PORT=8080 并泄漏进来，
 # 沿用同名变量会与本机正在运行的栈抢端口，隔离检查因而失去意义。
 HTTP_HOST_PORT=${CHECK_HTTP_HOST_PORT:-18080}
 MANAGEMENT_HOST_PORT=${CHECK_MANAGEMENT_HOST_PORT:-19090}

@@ -106,7 +106,7 @@ data:
       logs_enabled: {{ .Values.otel.logsEnabled }}
       metrics_interval_sec: {{ .Values.otel.metricsIntervalSec }}
       auth_email: {{ .Values.otel.authEmail | quote }}
-      auth_password: {{ .Values.otel.authPassword | quote }}
+      auth_password: {{ required "otel.authPassword is required" .Values.otel.authPassword | quote }}
       org_id: {{ .Values.otel.orgID | quote }}
       logs_stream_name: {{ .Values.otel.logsStreamName | quote }}
       traces_stream_name: {{ .Values.otel.tracesStreamName | quote }}
