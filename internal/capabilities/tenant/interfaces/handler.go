@@ -92,7 +92,7 @@ func (h *TenantHandler) List(c *gin.Context) {
 // @Tags         租户管理
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id   path      int  true  "租户 ID"
+// @Param        id   path      string  true  "租户 ID"
 // @Success      200  {object}  application.TenantBodyResponse  "成功，返回租户信息"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
 // @Failure      404  {object}  contract.ErrorResponse  "租户不存在"
@@ -119,7 +119,7 @@ func (h *TenantHandler) Get(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id    path      int                            true  "租户 ID"
+// @Param        id    path      string                         true  "租户 ID"
 // @Param        body  body      application.UpdateTenantRequest  true  "要更新的租户信息"
 // @Success      200  {object}  response.Body  "更新成功"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误"
@@ -146,7 +146,7 @@ func (h *TenantHandler) Update(c *gin.Context) {
 // @Tags         租户管理
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id   path      int  true  "租户 ID"
+// @Param        id   path      string  true  "租户 ID"
 // @Success      200  {object}  response.Body  "删除成功"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
 // @Failure      404  {object}  contract.ErrorResponse  "租户不存在"

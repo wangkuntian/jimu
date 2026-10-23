@@ -4,8 +4,8 @@ import (
 	"strconv"
 
 	"jimu/internal/capabilities/access/application"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
-	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
@@ -27,7 +27,7 @@ func NewRoleHandler(service *application.RoleService) *RoleHandler {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        body  body      application.CreateRoleRequest  true  "角色信息（名称和描述）"
-// @Success      201   {object}  response.Body  "创建成功，返回角色信息"
+// @Success      201   {object}  application.RoleBodyResponse  "创建成功，返回角色信息"
 // @Failure      400   {object}  contract.ErrorResponse  "参数错误（如名称为空）"
 // @Failure      409   {object}  contract.ErrorResponse  "角色名称已存在"
 // @Failure      500   {object}  contract.ErrorResponse  "服务器内部错误"
@@ -48,8 +48,8 @@ func (h *RoleHandler) Create(c *gin.Context) {
 // @Tags         角色管理
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id   path      int  true  "角色 ID"
-// @Success      200  {object}  response.Body  "成功，返回角色信息"
+// @Param        id   path      string  true  "角色 ID"
+// @Success      200  {object}  application.RoleBodyResponse  "成功，返回角色信息"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
 // @Failure      404  {object}  contract.ErrorResponse  "角色不存在"
 // @Failure      500  {object}  contract.ErrorResponse  "服务器内部错误"
@@ -78,17 +78,39 @@ func (h *RoleHandler) Get(c *gin.Context) {
 // @Param        page_size  query     int     false  "每页数量（默认 20，最大 100）"
 // @Param        sort       query     string  false  "排序字段（支持 id、name、created_at，默认 id）"
 // @Param        order      query     string  false  "排序方向（asc 或 desc，默认 desc）"
-// @Success      200        {object}  contract.PageResponse  "成功，返回分页角色列表"
+// @Param        tenant_id  query     string  false  "租户 ID（平台级视角可筛选；租户级视角必须与当前租户一致）"
+// @Success      200        {object}  application.RolePageResponse  "成功，返回分页角色列表"
 // @Failure      400        {object}  contract.ErrorResponse  "参数错误（如无效的排序字段）"
 // @Failure      500        {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /roles [get]
 func (h *RoleHandler) List(c *gin.Context) {
-	p, _ := c.MustGet("validated_query").(*pagination.Pagination)
+	q, _ := c.MustGet("validated_query").(*roleListQuery)
+	p := q.Pagination
 	if err := p.Normalize("id", "name", "created_at"); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	roles, total, err := h.service.List(c.Request.Context(), *p)
+	requestedTenantID := uint64(0)
+	if q.TenantID != "" {
+		id, err := strconv.ParseUint(q.TenantID, 10, 64)
+		if err != nil {
+			response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid tenant_id"))
+			return
+		}
+		requestedTenantID = id
+	}
+	ctxTenantID := tenant.FromContext(c.Request.Context())
+	if tenant.IsPlatformScope(c.Request.Context()) {
+		ctxTenantID = 0
+	}
+	if ctxTenantID != 0 && requestedTenantID != 0 && requestedTenantID != ctxTenantID {
+		response.Fail(c, errors.New(errors.CodeForbidden, "tenant scope mismatch"))
+		return
+	}
+	if ctxTenantID != 0 {
+		requestedTenantID = ctxTenantID
+	}
+	roles, total, err := h.service.List(c.Request.Context(), p, requestedTenantID)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -103,7 +125,7 @@ func (h *RoleHandler) List(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id    path      int                            true  "角色 ID"
+// @Param        id    path      string                         true  "角色 ID"
 // @Param        body  body      application.UpdateRoleRequest  true  "要更新的角色信息"
 // @Success      200   {object}  response.Body  "更新成功"
 // @Failure      400   {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
@@ -131,7 +153,7 @@ func (h *RoleHandler) Update(c *gin.Context) {
 // @Tags         角色管理
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id   path  int  true  "角色 ID"
+// @Param        id   path  string  true  "角色 ID"
 // @Success      204     "删除成功，无返回内容"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
 // @Failure      500  {object}  contract.ErrorResponse  "服务器内部错误"
@@ -156,7 +178,7 @@ func (h *RoleHandler) Delete(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id    path      int                                   true  "角色 ID"
+// @Param        id    path      string                                true  "角色 ID"
 // @Param        body  body      application.AssignPermissionsRequest  true  "权限 ID 列表"
 // @Success      200   {object}  response.Body  "分配成功"
 // @Failure      400   {object}  contract.ErrorResponse  "参数错误（ID 格式无效或权限不存在）"

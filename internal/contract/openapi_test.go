@@ -22,6 +22,7 @@ func TestOpenAPIIncludesCRUDContract(t *testing.T) {
 		"/auth/me":                {"get"},
 		"/users":                  {"get", "post"},
 		"/users/{id}":             {"get", "put", "delete"},
+		"/users/{id}/roles":       {"post"},
 		"/roles":                  {"get", "post"},
 		"/roles/{id}":             {"get", "put", "delete"},
 		"/roles/{id}/permissions": {"post"},
@@ -196,6 +197,57 @@ func TestOpenAPIAuthEndpointsCarryTypedData(t *testing.T) {
 	}
 }
 
+// TestOpenAPIUserManagementCarriesTypedData 钉住用户管理页面的契约：
+// 列表/详情返回租户与角色摘要，创建请求携带 tenant_id/role_ids，分配角色使用 role_ids。
+func TestOpenAPIUserManagementCarriesTypedData(t *testing.T) {
+	spec := readOpenAPI(t)
+
+	assertRefResponse(t, spec, "/users", "get", 200, "#/definitions/application.UserPageResponse")
+	assertRefResponse(t, spec, "/users", "post", 201, "#/definitions/application.UserBodyResponse")
+	assertRefResponse(t, spec, "/users/{id}", "get", 200, "#/definitions/application.UserBodyResponse")
+	assertRefResponse(t, spec, "/roles", "get", 200, "#/definitions/application.RolePageResponse")
+	assertRefResponse(t, spec, "/roles", "post", 201, "#/definitions/application.RoleBodyResponse")
+
+	user := definitionProperties(t, spec, "application.UserResponse")
+	for _, field := range []string{"id", "username", "email", "phone", "status", "tenant", "roles", "created_at"} {
+		if _, ok := user[field]; !ok {
+			t.Fatalf("application.UserResponse 缺少字段 %s", field)
+		}
+	}
+	if got := propertyType(user, "id"); got != "string" {
+		t.Fatalf("application.UserResponse.id type = %q, want string", got)
+	}
+	tenant := definitionProperties(t, spec, "application.TenantRef")
+	if got := propertyType(tenant, "id"); got != "string" {
+		t.Fatalf("application.TenantRef.id type = %q, want string", got)
+	}
+	role := definitionProperties(t, spec, "application.RoleRef")
+	if got := propertyType(role, "id"); got != "string" {
+		t.Fatalf("application.RoleRef.id type = %q, want string", got)
+	}
+
+	create := definitionProperties(t, spec, "application.CreateUserRequest")
+	for _, field := range []string{"tenant_id", "username", "password", "role_ids"} {
+		if _, ok := create[field]; !ok {
+			t.Fatalf("application.CreateUserRequest 缺少字段 %s", field)
+		}
+	}
+
+	assign := definitionProperties(t, spec, "application.AssignUserRolesRequest")
+	if _, ok := assign["role_ids"]; !ok {
+		t.Fatal("application.AssignUserRolesRequest 缺少 role_ids")
+	}
+
+	roleResponse := definitionProperties(t, spec, "application.RoleResponse")
+	if got := propertyType(roleResponse, "id"); got != "string" {
+		t.Fatalf("application.RoleResponse.id type = %q, want string", got)
+	}
+	assertPathParamType(t, spec, "/users/{id}", "get", "id", "string")
+	assertPathParamType(t, spec, "/users/{id}/roles", "post", "id", "string")
+	assertPathParamType(t, spec, "/roles/{id}", "get", "id", "string")
+	assertPathParamType(t, spec, "/tenants/{id}", "get", "id", "string")
+}
+
 func assertRefResponse(t *testing.T, spec map[string]any, path, method string, statusCode int, wantRef string) {
 	t.Helper()
 	operation := operationOf(t, spec, path, method)
@@ -216,6 +268,28 @@ func definitionProperties(t *testing.T, spec map[string]any, name string) map[st
 	}
 	props, _ := def["properties"].(map[string]any)
 	return props
+}
+
+func propertyType(props map[string]any, field string) string {
+	entry, _ := props[field].(map[string]any)
+	got, _ := entry["type"].(string)
+	return got
+}
+
+func assertPathParamType(t *testing.T, spec map[string]any, path, method, name, want string) {
+	t.Helper()
+	operation := operationOf(t, spec, path, method)
+	params, _ := operation["parameters"].([]any)
+	for _, param := range params {
+		item, _ := param.(map[string]any)
+		if item["in"] == "path" && item["name"] == name {
+			if got, _ := item["type"].(string); got != want {
+				t.Fatalf("%s %s path 参数 %s type = %q, want %q", method, path, name, got, want)
+			}
+			return
+		}
+	}
+	t.Fatalf("%s %s 缺少 path 参数 %s", method, path, name)
 }
 
 func assertItemsRef(t *testing.T, props map[string]any, field, wantRef string) {

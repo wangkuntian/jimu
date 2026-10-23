@@ -4,9 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"jimu/internal/capabilities/user/application"
 	"jimu/internal/capabilities/user/domain"
-	"jimu/internal/config"
 	"jimu/internal/contract"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +18,7 @@ func newUserModule(t *testing.T) *Module {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	return New(db, config.Config{})
+	return New(db)
 }
 
 func TestModuleNameAndContract(t *testing.T) {
@@ -38,7 +36,7 @@ func TestModuleDescriptor(t *testing.T) {
 	assert.ElementsMatch(t, []string{"users"}, d.Owns)
 }
 
-// TestModuleRegisterHTTP 自助面 + 管理面用户路由（角色分配归 access，不得重复）。
+// TestModuleRegisterHTTP 平台/租户管理员共用的用户资源路由（角色分配归 access）。
 func TestModuleRegisterHTTP(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -50,13 +48,12 @@ func TestModuleRegisterHTTP(t *testing.T) {
 	}
 	for _, want := range []string{
 		"POST /api/v1/users", "GET /api/v1/users", "GET /api/v1/users/:id",
-		"GET /api/v1/admin/users", "POST /api/v1/admin/users",
-		"GET /api/v1/admin/users/:id", "PUT /api/v1/admin/users/:id",
-		"DELETE /api/v1/admin/users/:id",
+		"PUT /api/v1/users/:id", "DELETE /api/v1/users/:id",
+		"POST /api/v1/users/batch-delete", "GET /api/v1/users/export.csv",
 	} {
 		assert.Equal(t, 1, got[want], "路由应恰好注册一次：%s", want)
 	}
-	assert.Zero(t, got["POST /api/v1/admin/users/:id/roles"], "用户角色分配归 access")
+	assert.Zero(t, got["GET /api/v1/admin/users"], "用户管理不得再挂在管理端命名空间")
 }
 
 func TestModulePortInjection(t *testing.T) {
@@ -90,7 +87,7 @@ func (r *fakeUserRepo) FindByID(context.Context, uint64) (*domain.User, error) {
 func (r *fakeUserRepo) FindByUsername(context.Context, string) (*domain.User, error) {
 	return &domain.User{ID: 1, Username: "alice", TenantID: 9, Status: 1}, nil
 }
-func (r *fakeUserRepo) List(context.Context, uint64, int, int, string, string) ([]domain.User, int64, error) {
+func (r *fakeUserRepo) List(context.Context, domain.UserListFilter, int, int, string, string) ([]domain.User, int64, error) {
 	return nil, 0, nil
 }
 func (r *fakeUserRepo) Create(context.Context, *domain.User) error { return nil }
@@ -106,10 +103,14 @@ func (r *fakeUserRepo) UpdatePassword(context.Context, uint64, string) error { r
 
 type fakeAssigner struct{}
 
-func (fakeAssigner) AssignRoles(context.Context, uint64, []string) error { return nil }
+func (fakeAssigner) AssignRoleIDs(context.Context, uint64, []uint64) error { return nil }
+
+func (fakeAssigner) RolesForUsers(context.Context, []uint64) (map[uint64][]contract.UserRole, error) {
+	return nil, nil
+}
 
 type fakeQuota struct{}
 
 func (fakeQuota) CheckUserQuota(context.Context, uint64) error { return nil }
 
-var _ application.UserRoleAssigner = fakeAssigner{}
+var _ contract.UserRoleAssigner = fakeAssigner{}

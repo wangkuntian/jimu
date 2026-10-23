@@ -16,4 +16,7 @@ func TestRoleResponseUsesDTO(t *testing.T) {
 	if !json.Valid(b) || got.Name != "admin" {
 		t.Fatalf("response = %#v json = %s", got, b)
 	}
+	if got.ID != "1" {
+		t.Fatalf("role id = %q, want string id", got.ID)
+	}
 }

@@ -59,8 +59,9 @@ type TenantProvisionerFactory interface {
 }
 
 const (
-	StoragePortName  = "storage"
-	UserinfoPortName = "user.info"
+	StoragePortName    = "storage"
+	TenantInfoPortName = "tenant.info"
+	UserinfoPortName   = "user.info"
 )
 
 type AuthConfig struct {
@@ -101,6 +102,18 @@ type Userinfo struct {
 	Status    int8
 	TenantID  uint64
 	CreatedAt time.Time
+}
+
+// TenantInfo 租户概要视图，供用户等能力的响应回填租户名称。
+type TenantInfo struct {
+	ID   uint64
+	Name string
+}
+
+// TenantInfoSource tenant 能力提供的只读租户概要端口。
+type TenantInfoSource interface {
+	// GetByIDs 批量读取租户；不存在的 ID 不出现在结果中。
+	GetByIDs(ctx context.Context, ids []uint64) (map[uint64]TenantInfo, error)
 }
 
 // UserinfoSource UserInfoService 所需的用户只读数据端口，
@@ -215,9 +228,17 @@ type CaptchaVerifier interface {
 	Verify(ctx context.Context, id, code string) error
 }
 
-// UserRoleAssigner access 提供：替换用户的全部角色（user_roles 表所有者）。
+// UserRole 用户角色概要。
+type UserRole struct {
+	ID   uint64
+	Name string
+}
+
+// UserRoleAssigner access 提供：读写用户角色（user_roles 表所有者）。
 // 供 user 能力的管理面用例经端口调用，避免跨能力写他人的表。
 type UserRoleAssigner interface {
-	// AssignRoles 用 roleNames 替换该用户的全部角色；角色名在用户所属租户内解析。
-	AssignRoles(ctx context.Context, userID uint64, roleNames []string) error
+	// AssignRoleIDs 用 roleIDs 替换该用户的全部角色；角色必须属于用户所属租户。
+	AssignRoleIDs(ctx context.Context, userID uint64, roleIDs []uint64) error
+	// RolesForUsers 批量返回用户当前角色，供列表/详情回填。
+	RolesForUsers(ctx context.Context, userIDs []uint64) (map[uint64][]UserRole, error)
 }

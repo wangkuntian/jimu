@@ -58,7 +58,7 @@ func TestRoleListReturnsOK(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.GET("/roles", func(c *gin.Context) {
-		c.Set("validated_query", &pagination.Pagination{})
+		c.Set("validated_query", &roleListQuery{})
 		NewRoleHandler(application.NewRoleService(&fakeRoleRepository{})).List(c)
 	})
 	w := httptest.NewRecorder()
@@ -73,7 +73,7 @@ func TestRoleListRejectsInvalidSort(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.GET("/roles", func(c *gin.Context) {
-		c.Set("validated_query", &pagination.Pagination{Sort: "password", Order: "desc"})
+		c.Set("validated_query", &roleListQuery{Pagination: pagination.Pagination{Sort: "password", Order: "desc"}})
 		NewRoleHandler(application.NewRoleService(&fakeRoleRepository{})).List(c)
 	})
 	w := httptest.NewRecorder()

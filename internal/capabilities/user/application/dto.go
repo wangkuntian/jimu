@@ -1,20 +1,25 @@
 package application
 
 import (
+	"strconv"
 	"time"
 
 	"jimu/internal/capabilities/user/domain"
 )
 
 type CreateUserRequest struct {
-	Username string `json:"username" binding:"required,min=3,max=64"`
-	Password string `json:"password" binding:"required,min=6,max=32"`
-	Email    string `json:"email" binding:"omitempty,email"`
-	Phone    string `json:"phone" binding:"omitempty"`
+	TenantID string   `json:"tenant_id"`
+	Username string   `json:"username" binding:"required,min=3,max=64"`
+	Password string   `json:"password" binding:"required,min=6,max=32"`
+	Email    string   `json:"email" binding:"omitempty,email"`
+	Phone    string   `json:"phone" binding:"omitempty"`
+	RoleIDs  []string `json:"role_ids"`
 }
 
 type UpdateUserRequest struct {
-	Status *int8 `json:"status" binding:"omitempty,oneof=0 1"`
+	Status *int8   `json:"status" binding:"omitempty,oneof=0 1"`
+	Email  *string `json:"email" binding:"omitempty,email"`
+	Phone  *string `json:"phone" binding:"omitempty"`
 }
 
 // BatchDeleteRequest 批量删除请求
@@ -29,20 +34,36 @@ type BatchResult struct {
 }
 
 type UserResponse struct {
-	ID        uint64    `json:"id"`
+	ID        string    `json:"id"`
 	Username  string    `json:"username"`
+	Email     string    `json:"email"`
+	Phone     string    `json:"phone"`
 	Status    int8      `json:"status"`
-	TenantID  uint64    `json:"tenant_id"`
+	Tenant    TenantRef `json:"tenant"`
+	Roles     []RoleRef `json:"roles"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type TenantRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type RoleRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 func ToUserResponse(user domain.User) UserResponse {
 	return UserResponse{
-		ID:        user.ID,
+		ID:        strconv.FormatUint(user.ID, 10),
 		Username:  user.Username,
+		Email:     user.Email,
+		Phone:     user.Phone,
 		Status:    user.Status,
-		TenantID:  user.TenantID,
+		Tenant:    TenantRef{ID: strconv.FormatUint(user.TenantID, 10)},
+		Roles:     []RoleRef{},
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 	}
@@ -54,4 +75,21 @@ func ToUserResponses(users []domain.User) []UserResponse {
 		out = append(out, ToUserResponse(user))
 	}
 	return out
+}
+
+type UserPageResponse struct {
+	Code      int            `json:"code"`
+	Message   string         `json:"message"`
+	Data      []UserResponse `json:"data"`
+	Total     int64          `json:"total"`
+	Page      int            `json:"page"`
+	PageSize  int            `json:"page_size"`
+	RequestID string         `json:"request_id,omitempty"`
+}
+
+type UserBodyResponse struct {
+	Code      int          `json:"code"`
+	Message   string       `json:"message"`
+	Data      UserResponse `json:"data"`
+	RequestID string       `json:"request_id,omitempty"`
 }

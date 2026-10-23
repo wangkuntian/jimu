@@ -48,7 +48,7 @@ func (a *userinfoAdapter) FindByUsername(ctx context.Context, username string) (
 }
 
 func (a *userinfoAdapter) List(ctx context.Context, page, pageSize int) ([]contract.Userinfo, int64, error) {
-	users, total, err := a.repo.List(ctx, 0, (page-1)*pageSize, pageSize, "id", "desc")
+	users, total, err := a.repo.List(ctx, domain.UserListFilter{}, (page-1)*pageSize, pageSize, "id", "desc")
 	if err != nil {
 		return nil, 0, err
 	}

@@ -28,7 +28,7 @@ func TestRoleServiceListPassesPagination(t *testing.T) {
 	repo := &fakeRoleRepository{roles: []domain.Role{{ID: 1, Name: "admin"}}, total: 12}
 	service := NewRoleService(repo)
 
-	roles, total, err := service.List(context.Background(), pagination.Pagination{Page: 2, PageSize: 5, Sort: "created_at", Order: "asc"})
+	roles, total, err := service.List(context.Background(), pagination.Pagination{Page: 2, PageSize: 5, Sort: "created_at", Order: "asc"}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,6 +37,17 @@ func TestRoleServiceListPassesPagination(t *testing.T) {
 	}
 	if total != 12 || len(roles) != 1 || roles[0].Name != "admin" {
 		t.Fatalf("roles = %#v total = %d", roles, total)
+	}
+}
+
+func TestRoleServiceListPassesTenantFilter(t *testing.T) {
+	repo := &fakeRoleRepository{}
+	_, _, err := NewRoleService(repo).List(context.Background(), pagination.Pagination{Page: 1, PageSize: 20}, 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.tenantID != 9 {
+		t.Fatalf("tenantID = %d, want 9", repo.tenantID)
 	}
 }
 
@@ -80,6 +91,7 @@ type fakeRoleRepository struct {
 	limit     int
 	sort      string
 	order     string
+	tenantID  uint64
 	created   []string
 }
 
@@ -90,7 +102,8 @@ func (r *fakeRoleRepository) FindByID(context.Context, uint64) (*domain.Role, er
 	return &domain.Role{}, r.findErr
 }
 
-func (r *fakeRoleRepository) List(_ context.Context, _ uint64, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
+func (r *fakeRoleRepository) List(_ context.Context, tenantID uint64, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
+	r.tenantID = tenantID
 	r.offset = offset
 	r.limit = limit
 	r.sort = sort

@@ -14,6 +14,13 @@ definitions:
       plan_id:
         type: integer
     type: object
+  application.AssignUserRolesRequest:
+    properties:
+      role_ids:
+        items:
+          type: string
+        type: array
+    type: object
   application.BatchDeleteRequest:
     properties:
       ids:
@@ -95,6 +102,12 @@ definitions:
         minLength: 6
         type: string
       phone:
+        type: string
+      role_ids:
+        items:
+          type: string
+        type: array
+      tenant_id:
         type: string
       username:
         maxLength: 64
@@ -208,6 +221,60 @@ definitions:
       username:
         type: string
     type: object
+  application.RoleBodyResponse:
+    properties:
+      code:
+        type: integer
+      data:
+        $ref: '#/definitions/application.RoleResponse'
+      message:
+        type: string
+      request_id:
+        type: string
+    type: object
+  application.RolePageResponse:
+    properties:
+      code:
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/application.RoleResponse'
+        type: array
+      message:
+        type: string
+      page:
+        type: integer
+      page_size:
+        type: integer
+      request_id:
+        type: string
+      total:
+        type: integer
+    type: object
+  application.RoleRef:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  application.RoleResponse:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      status:
+        type: integer
+      tenant_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
   application.TenantBodyResponse:
     properties:
       code:
@@ -238,6 +305,13 @@ definitions:
       total:
         type: integer
     type: object
+  application.TenantRef:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
   application.TenantResponse:
     properties:
       code:
@@ -245,7 +319,7 @@ definitions:
       created_at:
         type: string
       id:
-        type: integer
+        type: string
       name:
         type: string
       plan_id:
@@ -307,11 +381,68 @@ definitions:
     type: object
   application.UpdateUserRequest:
     properties:
+      email:
+        type: string
+      phone:
+        type: string
       status:
         enum:
         - 0
         - 1
         type: integer
+    type: object
+  application.UserBodyResponse:
+    properties:
+      code:
+        type: integer
+      data:
+        $ref: '#/definitions/application.UserResponse'
+      message:
+        type: string
+      request_id:
+        type: string
+    type: object
+  application.UserPageResponse:
+    properties:
+      code:
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/application.UserResponse'
+        type: array
+      message:
+        type: string
+      page:
+        type: integer
+      page_size:
+        type: integer
+      request_id:
+        type: string
+      total:
+        type: integer
+    type: object
+  application.UserResponse:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      phone:
+        type: string
+      roles:
+        items:
+          $ref: '#/definitions/application.RoleRef'
+        type: array
+      status:
+        type: integer
+      tenant:
+        $ref: '#/definitions/application.TenantRef'
+      updated_at:
+        type: string
+      username:
+        type: string
     type: object
   application.VerifyResult:
     properties:
@@ -572,43 +703,6 @@ paths:
       summary: 查看认证限流状态
       tags:
       - admin/ratelimit
-  /admin/users/{id}/roles:
-    post:
-      consumes:
-      - application/json
-      description: 替换指定用户的全部角色（按角色名）。角色名在用户所属租户内解析，不存在返回 404。
-      parameters:
-      - description: 用户 ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 角色名列表
-        in: body
-        name: body
-        required: true
-        schema:
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功
-          schema:
-            $ref: '#/definitions/response.Body'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/contract.ErrorResponse'
-        "404":
-          description: 用户或角色不存在
-          schema:
-            $ref: '#/definitions/contract.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 分配用户角色
-      tags:
-      - 权限管理
   /audits:
     get:
       description: 分页获取系统审计日志。记录用户的操作行为（如登录、创建、修改、删除等），用于安全审计和行为追踪。支持按 ID、创建时间排序。
@@ -1631,13 +1725,17 @@ paths:
         in: query
         name: order
         type: string
+      - description: 租户 ID（平台级视角可筛选；租户级视角必须与当前租户一致）
+        in: query
+        name: tenant_id
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: 成功，返回分页角色列表
           schema:
-            $ref: '#/definitions/contract.PageResponse'
+            $ref: '#/definitions/application.RolePageResponse'
         "400":
           description: 参数错误（如无效的排序字段）
           schema:
@@ -1668,7 +1766,7 @@ paths:
         "201":
           description: 创建成功，返回角色信息
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/application.RoleBodyResponse'
         "400":
           description: 参数错误（如名称为空）
           schema:
@@ -1694,7 +1792,7 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       produces:
       - application/json
       responses:
@@ -1720,14 +1818,14 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: 成功，返回角色信息
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/application.RoleBodyResponse'
         "400":
           description: 参数错误（ID 格式无效）
           schema:
@@ -1754,7 +1852,7 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       - description: 要更新的角色信息
         in: body
         name: body
@@ -1799,7 +1897,7 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       - description: 权限 ID 列表
         in: body
         name: body
@@ -2041,7 +2139,7 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       produces:
       - application/json
       responses:
@@ -2077,7 +2175,7 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       produces:
       - application/json
       responses:
@@ -2111,7 +2209,7 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       - description: 要更新的租户信息
         in: body
         name: body
@@ -2152,7 +2250,7 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       - description: 套餐 ID（0=取消套餐）
         in: body
         name: body
@@ -2200,7 +2298,7 @@ paths:
       - 租户运营
   /users:
     get:
-      description: 分页获取用户列表。支持按 ID、用户名、创建时间排序，可指定升序或降序。
+      description: 分页获取用户列表。平台管理员可跨租户查询；租户管理员只能看到本租户，范围由后端身份决定。
       parameters:
       - description: 页码（默认 1）
         in: query
@@ -2218,13 +2316,25 @@ paths:
         in: query
         name: order
         type: string
+      - description: 用户名子串
+        in: query
+        name: username
+        type: string
+      - description: 状态（0 停用 / 1 启用）
+        in: query
+        name: status
+        type: integer
+      - description: 所属租户 ID（平台级视角可筛选）
+        in: query
+        name: tenant_id
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: 成功，返回分页用户列表
           schema:
-            $ref: '#/definitions/contract.PageResponse'
+            $ref: '#/definitions/application.UserPageResponse'
         "400":
           description: 参数错误（如无效的排序字段或排序方向）
           schema:
@@ -2241,10 +2351,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: 创建新用户账户。用户名必须唯一，密码需符合强度要求（8-32位，包含字母和数字）。支持幂等性保护（通过 Idempotency-Key
-        请求头）。
+      description: 创建新用户账户。平台管理员必须指定 tenant_id 并可同时分配 role_ids；租户管理员由后端强制使用当前租户。
       parameters:
-      - description: 用户信息（用户名和密码）
+      - description: 用户信息、所属租户与角色
         in: body
         name: body
         required: true
@@ -2256,7 +2365,7 @@ paths:
         "201":
           description: 创建成功，返回用户信息
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/application.UserBodyResponse'
         "400":
           description: 参数错误（如用户名格式不符、密码强度不足）
           schema:
@@ -2276,18 +2385,18 @@ paths:
       - 用户管理
   /users/{id}:
     delete:
-      description: 软删除指定用户。删除后用户数据仍保留在数据库中，但无法登录系统。
+      description: 将指定用户状态置为停用；账号数据保留，可通过更新接口重新启用。
       parameters:
       - description: 用户 ID
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       produces:
       - application/json
       responses:
         "204":
-          description: 删除成功，无返回内容
+          description: 停用成功，无返回内容
         "400":
           description: 参数错误（ID 格式无效）
           schema:
@@ -2298,7 +2407,7 @@ paths:
             $ref: '#/definitions/contract.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: 删除用户
+      summary: 停用用户
       tags:
       - 用户管理
     get:
@@ -2308,14 +2417,14 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: 成功，返回用户信息
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/application.UserBodyResponse'
         "400":
           description: 参数错误（ID 格式无效）
           schema:
@@ -2342,7 +2451,7 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       - description: 要更新的用户信息
         in: body
         name: body
@@ -2373,6 +2482,43 @@ paths:
       summary: 更新用户信息
       tags:
       - 用户管理
+  /users/{id}/roles:
+    post:
+      consumes:
+      - application/json
+      description: 替换指定用户的全部角色（按角色 ID）。角色必须属于用户所属租户，不存在返回 404。
+      parameters:
+      - description: 用户 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 角色 ID 列表
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/application.AssignUserRolesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+        "404":
+          description: 用户或角色不存在
+          schema:
+            $ref: '#/definitions/contract.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 分配用户角色
+      tags:
+      - 权限管理
   /users/batch-delete:
     post:
       consumes:

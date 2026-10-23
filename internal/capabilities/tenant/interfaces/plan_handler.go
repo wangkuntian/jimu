@@ -123,7 +123,7 @@ func (h *PlanHandler) DeletePlan(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id    path      int                            true  "租户 ID"
+// @Param        id    path      string                         true  "租户 ID"
 // @Param        body  body      application.AssignPlanRequest  true  "套餐 ID（0=取消套餐）"
 // @Success      200  {object}  response.Body  "分配成功"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误"

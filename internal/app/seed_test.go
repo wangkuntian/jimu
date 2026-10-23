@@ -472,6 +472,6 @@ func TestRunSeed_SkipsDisabledCapabilityPermissions(t *testing.T) {
 
 	var count int64
 	require.NoError(t, db.Table("permissions").Count(&count).Error)
-	// user 5 + access 11 = 16；audit/tenant/admin 的权限点不在（access 闭包自动带 user）
-	assert.Equal(t, int64(16), count)
+	// user 5 + access 12 = 17；audit/tenant/admin 的权限点不在（access 闭包自动带 user）
+	assert.Equal(t, int64(17), count)
 }

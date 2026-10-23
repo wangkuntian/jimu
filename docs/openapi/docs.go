@@ -106,64 +106,6 @@ const docTemplate = `{
                 ]
             }
         },
-        "/admin/users/{id}/roles": {
-            "post": {
-                "description": "替换指定用户的全部角色（按角色名）。角色名在用户所属租户内解析，不存在返回 404。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "权限管理"
-                ],
-                "summary": "分配用户角色",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "用户 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "角色名列表",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "成功",
-                        "schema": {
-                            "$ref": "#/definitions/response.Body"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/contract.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "用户或角色不存在",
-                        "schema": {
-                            "$ref": "#/definitions/contract.ErrorResponse"
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
-            }
-        },
         "/audits": {
             "get": {
                 "description": "分页获取系统审计日志。记录用户的操作行为（如登录、创建、修改、删除等），用于安全审计和行为追踪。支持按 ID、创建时间排序。",
@@ -1762,13 +1704,19 @@ const docTemplate = `{
                         "description": "排序方向（asc 或 desc，默认 desc）",
                         "name": "order",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "租户 ID（平台级视角可筛选；租户级视角必须与当前租户一致）",
+                        "name": "tenant_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "成功，返回分页角色列表",
                         "schema": {
-                            "$ref": "#/definitions/contract.PageResponse"
+                            "$ref": "#/definitions/application.RolePageResponse"
                         }
                     },
                     "400": {
@@ -1817,7 +1765,7 @@ const docTemplate = `{
                     "201": {
                         "description": "创建成功，返回角色信息",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.RoleBodyResponse"
                         }
                     },
                     "400": {
@@ -1858,7 +1806,7 @@ const docTemplate = `{
                 "summary": "获取角色详情",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "角色 ID",
                         "name": "id",
                         "in": "path",
@@ -1869,7 +1817,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回角色信息",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.RoleBodyResponse"
                         }
                     },
                     "400": {
@@ -1911,7 +1859,7 @@ const docTemplate = `{
                 "summary": "更新角色信息",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "角色 ID",
                         "name": "id",
                         "in": "path",
@@ -1976,7 +1924,7 @@ const docTemplate = `{
                 "summary": "删除角色",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "角色 ID",
                         "name": "id",
                         "in": "path",
@@ -2022,7 +1970,7 @@ const docTemplate = `{
                 "summary": "分配角色权限",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "角色 ID",
                         "name": "id",
                         "in": "path",
@@ -2434,7 +2382,7 @@ const docTemplate = `{
                 "summary": "获取租户详情",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "租户 ID",
                         "name": "id",
                         "in": "path",
@@ -2487,7 +2435,7 @@ const docTemplate = `{
                 "summary": "更新租户信息",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "租户 ID",
                         "name": "id",
                         "in": "path",
@@ -2546,7 +2494,7 @@ const docTemplate = `{
                 "summary": "删除租户",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "租户 ID",
                         "name": "id",
                         "in": "path",
@@ -2607,7 +2555,7 @@ const docTemplate = `{
                 "summary": "为租户分配套餐",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "租户 ID",
                         "name": "id",
                         "in": "path",
@@ -2652,7 +2600,7 @@ const docTemplate = `{
         },
         "/users": {
             "get": {
-                "description": "分页获取用户列表。支持按 ID、用户名、创建时间排序，可指定升序或降序。",
+                "description": "分页获取用户列表。平台管理员可跨租户查询；租户管理员只能看到本租户，范围由后端身份决定。",
                 "produces": [
                     "application/json"
                 ],
@@ -2684,13 +2632,31 @@ const docTemplate = `{
                         "description": "排序方向（asc 或 desc，默认 desc）",
                         "name": "order",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "用户名子串",
+                        "name": "username",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "状态（0 停用 / 1 启用）",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "所属租户 ID（平台级视角可筛选）",
+                        "name": "tenant_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "成功，返回分页用户列表",
                         "schema": {
-                            "$ref": "#/definitions/contract.PageResponse"
+                            "$ref": "#/definitions/application.UserPageResponse"
                         }
                     },
                     "400": {
@@ -2713,7 +2679,7 @@ const docTemplate = `{
                 ]
             },
             "post": {
-                "description": "创建新用户账户。用户名必须唯一，密码需符合强度要求（8-32位，包含字母和数字）。支持幂等性保护（通过 Idempotency-Key 请求头）。",
+                "description": "创建新用户账户。平台管理员必须指定 tenant_id 并可同时分配 role_ids；租户管理员由后端强制使用当前租户。",
                 "consumes": [
                     "application/json"
                 ],
@@ -2726,7 +2692,7 @@ const docTemplate = `{
                 "summary": "创建用户",
                 "parameters": [
                     {
-                        "description": "用户信息（用户名和密码）",
+                        "description": "用户信息、所属租户与角色",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -2739,7 +2705,7 @@ const docTemplate = `{
                     "201": {
                         "description": "创建成功，返回用户信息",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.UserBodyResponse"
                         }
                     },
                     "400": {
@@ -2870,7 +2836,7 @@ const docTemplate = `{
                 "summary": "获取用户详情",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "用户 ID",
                         "name": "id",
                         "in": "path",
@@ -2881,7 +2847,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回用户信息",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.UserBodyResponse"
                         }
                     },
                     "400": {
@@ -2923,7 +2889,7 @@ const docTemplate = `{
                 "summary": "更新用户信息",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "用户 ID",
                         "name": "id",
                         "in": "path",
@@ -2972,17 +2938,17 @@ const docTemplate = `{
                 ]
             },
             "delete": {
-                "description": "软删除指定用户。删除后用户数据仍保留在数据库中，但无法登录系统。",
+                "description": "将指定用户状态置为停用；账号数据保留，可通过更新接口重新启用。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "用户管理"
                 ],
-                "summary": "删除用户",
+                "summary": "停用用户",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "用户 ID",
                         "name": "id",
                         "in": "path",
@@ -2991,7 +2957,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "204": {
-                        "description": "删除成功，无返回内容"
+                        "description": "停用成功，无返回内容"
                     },
                     "400": {
                         "description": "参数错误（ID 格式无效）",
@@ -3001,6 +2967,64 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/users/{id}/roles": {
+            "post": {
+                "description": "替换指定用户的全部角色（按角色 ID）。角色必须属于用户所属租户，不存在返回 404。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "权限管理"
+                ],
+                "summary": "分配用户角色",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "角色 ID 列表",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/application.AssignUserRolesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "用户或角色不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -3034,6 +3058,17 @@ const docTemplate = `{
             "properties": {
                 "plan_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "application.AssignUserRolesRequest": {
+            "type": "object",
+            "properties": {
+                "role_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -3154,6 +3189,15 @@ const docTemplate = `{
                     "minLength": 6
                 },
                 "phone": {
+                    "type": "string"
+                },
+                "role_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tenant_id": {
                     "type": "string"
                 },
                 "username": {
@@ -3323,6 +3367,89 @@ const docTemplate = `{
                 }
             }
         },
+        "application.RoleBodyResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "$ref": "#/definitions/application.RoleResponse"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.RolePageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.RoleResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.RoleRef": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.RoleResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "application.TenantBodyResponse": {
             "type": "object",
             "properties": {
@@ -3369,6 +3496,17 @@ const docTemplate = `{
                 }
             }
         },
+        "application.TenantRef": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "application.TenantResponse": {
             "type": "object",
             "properties": {
@@ -3379,7 +3517,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "name": {
                     "type": "string"
@@ -3470,12 +3608,99 @@ const docTemplate = `{
         "application.UpdateUserRequest": {
             "type": "object",
             "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
                 "status": {
                     "type": "integer",
                     "enum": [
                         0,
                         1
                     ]
+                }
+            }
+        },
+        "application.UserBodyResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "$ref": "#/definitions/application.UserResponse"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.UserPageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.UserResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.UserResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.RoleRef"
+                    }
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "tenant": {
+                    "$ref": "#/definitions/application.TenantRef"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
                 }
             }
         },

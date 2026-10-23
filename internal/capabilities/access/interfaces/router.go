@@ -13,10 +13,15 @@ func RegisterRoleRoutes(r *gin.RouterGroup, service *application.RoleService) {
 	roles := r.Group("/roles")
 	{
 		roles.POST("", middleware.ValidateJSON(&application.CreateRoleRequest{}), handler.Create)
-		roles.GET("", middleware.ValidateQuery(&pagination.Pagination{}), handler.List)
+		roles.GET("", middleware.ValidateQuery(&roleListQuery{}), handler.List)
 		roles.GET("/:id", handler.Get)
 		roles.PUT("/:id", middleware.ValidateJSON(&application.UpdateRoleRequest{}), handler.Update)
 		roles.DELETE("/:id", handler.Delete)
 		roles.POST("/:id/permissions", middleware.ValidateJSON(&application.AssignPermissionsRequest{}), handler.AssignPermissions)
 	}
+}
+
+type roleListQuery struct {
+	pagination.Pagination
+	TenantID string `form:"tenant_id"`
 }

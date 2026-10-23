@@ -139,6 +139,11 @@
           "name": "权限删除",
           "resource": "/api/v1/permissions/*",
           "action": "DELETE"
+        },
+        {
+          "name": "用户分配角色",
+          "resource": "/api/v1/users/*/roles",
+          "action": "POST"
         }
       ],
       "mount": "protected",
@@ -1140,7 +1145,7 @@
       "user",
       "auth"
     ],
-    "routes": 34,
+    "routes": 29,
     "migrations": [
       "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
       "internal/capabilities/access/migrations/mysql/008_role_version.sql",
@@ -1354,8 +1359,6 @@
     "internal/capabilities/tenant/migrations/postgres/014_tenant_plans.sql",
     "internal/capabilities/tenant/module.go",
     "internal/capabilities/user/account_port.go",
-    "internal/capabilities/user/application/admin_service.go",
-    "internal/capabilities/user/application/admin_service_test.go",
     "internal/capabilities/user/application/dto.go",
     "internal/capabilities/user/application/service.go",
     "internal/capabilities/user/application/service_test.go",
@@ -1366,8 +1369,6 @@
     "internal/capabilities/user/infrastructure/mysql_repository_integration_test.go",
     "internal/capabilities/user/infrastructure/mysql_repository_test.go",
     "internal/capabilities/user/infrastructure/user_tenant_invariant_integration_test.go",
-    "internal/capabilities/user/interfaces/admin_users.go",
-    "internal/capabilities/user/interfaces/admin_users_test.go",
     "internal/capabilities/user/interfaces/handler.go",
     "internal/capabilities/user/interfaces/handler_test.go",
     "internal/capabilities/user/interfaces/router.go",
@@ -1602,5 +1603,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:2632f831d71f4149b26be02f79b0d4612628033d3909d2c700d8aa88a99ea82d"
+  "digest": "sha256:7caccd5c2d1179b94ccfb5d3280d59f556d6144a060ab8c3dbd627a540b7477e"
 }

@@ -7,10 +7,7 @@ import (
 	"jimu/internal/capabilities/user/application"
 	"jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/capabilities/user/interfaces"
-	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/cache"
-	"jimu/internal/kernel/http/middleware"
 
 	redistore "jimu/internal/kernel/redis"
 
@@ -19,29 +16,32 @@ import (
 
 type Module struct {
 	service *application.UserService
-	admin   *application.AdminUserService
 	rdb     redistore.Client
-	outbox  contract.EventWriter
 }
 
-func New(db *gorm.DB, cfg config.Config, deps ...interface{}) *Module {
+func New(db *gorm.DB, deps ...interface{}) *Module {
 	repo := infrastructure.NewMysqlRepository(db)
-	var c cache.Cache
 	var ob contract.EventWriter
 	var cipher contract.BlindIndexer
+	var roles contract.UserRoleAssigner
+	var tenants contract.TenantInfoSource
+	var quota application.TenantQuota
 	for _, dep := range deps {
 		switch d := dep.(type) {
-		case redistore.Client:
-			c = cache.NewRedisCache(d, cfg.Cache.Prefix)
 		case contract.EventWriter:
 			ob = d
 		case contract.BlindIndexer:
 			cipher = d
+		case contract.UserRoleAssigner:
+			roles = d
+		case contract.TenantInfoSource:
+			tenants = d
+		case application.TenantQuota:
+			quota = d
 		}
 	}
-	service := application.NewUserService(repo, c, ob, cipher)
-	adminSvc := application.NewAdminUserService(repo, service).WithDB(db)
-	m := &Module{service: service, admin: adminSvc, outbox: ob}
+	service := application.NewUserService(repo, ob, cipher, roles, tenants, quota).WithDB(db)
+	m := &Module{service: service}
 	for _, dep := range deps {
 		if rdb, ok := dep.(redistore.Client); ok {
 			m.rdb = rdb
@@ -56,14 +56,14 @@ func (m *Module) Name() string {
 }
 
 // WithRoles 注入用户角色分配端口（access 能力提供，装配期调用）。
-func (m *Module) WithRoles(roles application.UserRoleAssigner) *Module {
-	m.admin.WithRoles(roles)
+func (m *Module) WithRoles(roles contract.UserRoleAssigner) *Module {
+	m.service.WithRoles(roles)
 	return m
 }
 
 // WithQuota 注入租户配额校验（tenant 能力提供，装配期调用）。
 func (m *Module) WithQuota(quota application.TenantQuota) *Module {
-	m.admin.WithQuota(quota)
+	m.service.WithQuota(quota)
 	return m
 }
 
@@ -94,12 +94,6 @@ func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
 func (m *Module) RegisterHTTP(r contract.Router) {
 	rg := r.Group("/api/v1")
 	interfaces.RegisterUserRoutes(rg, m.service, m.rdb)
-
-	// 管理面用户用例：与管理面同一 repository/配额/租户可见性
-	// （/users/:id/roles 归 access 注册，此处不重复）
-	admin := rg.Group("/admin")
-	admin.Use(middleware.AdminAuth())
-	interfaces.RegisterAdminUserRoutes(admin, m.admin)
 }
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}

@@ -65,8 +65,9 @@ func (s *RoleService) Get(ctx context.Context, id uint64) (*RoleResponse, error)
 	return &resp, nil
 }
 
-func (s *RoleService) List(ctx context.Context, p pagination.Pagination) ([]RoleResponse, int64, error) {
-	roles, total, err := s.repo.List(ctx, tenant.FromContext(ctx), p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
+// List 列出租户角色；tenantID=0 表示平台级视角不过滤。
+func (s *RoleService) List(ctx context.Context, p pagination.Pagination, tenantID uint64) ([]RoleResponse, int64, error) {
+	roles, total, err := s.repo.List(ctx, tenantID, p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
 	if err != nil {
 		return nil, 0, errors.Wrap(errors.CodeInternalError, "failed to list roles", err)
 	}

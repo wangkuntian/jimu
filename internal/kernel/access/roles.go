@@ -59,6 +59,13 @@ func (s *DBAuthorizationStore) Policies(ctx context.Context) ([]Policy, error) {
 // 测试可通过 PolicyCacheTTL 缩短 TTL 验证权限变更生效路径。
 var PolicyCacheTTL = 30 * time.Second
 
+// 平台管理范围由“可读取租户列表”这一权限能力标记；租户管理员不授予该权限时
+// 仍按 JWT tid 收敛。该标记只供显式支持平台范围的能力消费。
+const (
+	platformScopeResource = "/api/v1/tenants"
+	platformScopeAction   = "GET"
+)
+
 func AuthorizationMiddleware(store AuthorizationStore, enforcer *casbin.Enforcer) gin.HandlerFunc {
 	// mu 串行化 enforcer 重建（casbin 非并发安全）
 	var mu sync.Mutex
@@ -134,6 +141,15 @@ func AuthorizationMiddleware(store AuthorizationStore, enforcer *casbin.Enforcer
 			c.Abort()
 			return
 		}
+		platformScope := false
+		for _, role := range roles {
+			ok, err := enforcer.Enforce(role, platformScopeResource, platformScopeAction)
+			if err == nil && ok {
+				platformScope = true
+				break
+			}
+		}
+		c.Set("platform_scope", platformScope)
 		c.Next()
 	}
 }

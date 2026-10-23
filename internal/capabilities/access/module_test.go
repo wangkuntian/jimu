@@ -39,12 +39,12 @@ func TestModuleDescriptor(t *testing.T) {
 	assert.ElementsMatch(t, []string{"user"}, d.Requires)
 	assert.Equal(t, []string{"tenant"}, d.SoftRequires)
 	assert.ElementsMatch(t, []string{"roles", "permissions", "role_permissions", "user_roles"}, d.Owns)
-	// 角色 6 + 权限 5
-	require.Len(t, d.Permissions, 11)
+	// 角色 6 + 权限 5 + 用户角色分配 1
+	require.Len(t, d.Permissions, 12)
 	assert.NotNil(t, d.Migrations)
 }
 
-// TestModuleRegisterHTTP 角色/权限路由 + 管理端「用户分配角色」端点。
+// TestModuleRegisterHTTP 角色/权限路由 + 用户资源上的「用户分配角色」端点。
 func TestModuleRegisterHTTP(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	m := New(newAccessTestDB(t))
@@ -67,10 +67,11 @@ func TestModuleRegisterHTTP(t *testing.T) {
 		"GET /api/v1/permissions/:id",
 		"PUT /api/v1/permissions/:id",
 		"DELETE /api/v1/permissions/:id",
-		"POST /api/v1/admin/users/:id/roles",
+		"POST /api/v1/users/:id/roles",
 	} {
 		assert.Equal(t, 1, got[want], "路由应恰好注册一次：%s", want)
 	}
+	assert.Zero(t, got["POST /api/v1/admin/users/:id/roles"], "用户角色分配不得继续挂在管理端命名空间")
 }
 
 // TestModuleWithQuota 注入配额校验不 panic（deps 为可选）。

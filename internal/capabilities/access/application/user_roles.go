@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 
+	"jimu/internal/contract"
 	dbutil "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
@@ -41,41 +42,39 @@ func (s *UserRoleService) WithUsers(users userTenantReader) *UserRoleService {
 	return s
 }
 
-// AssignRoles 用 roleNames 替换该用户的全部角色（事务内先锁用户行再替换）。
-// 角色名在用户所属租户内解析；目标用户对上下文租户不可见时按不存在处理。
-func (s *UserRoleService) AssignRoles(ctx context.Context, userID uint64, roleNames []string) error {
+// AssignRoleIDs 用 roleIDs 替换该用户的全部角色（事务内先锁用户行再替换）。
+// 角色必须在用户所属租户内；目标用户对上下文租户不可见时按不存在处理。
+func (s *UserRoleService) AssignRoleIDs(ctx context.Context, userID uint64, roleIDs []uint64) error {
 	if s.db == nil {
 		return apperrors.New(apperrors.CodeInternalError, "db not configured for role assignment")
 	}
+	roleIDs = uniqueIDs(roleIDs)
+	db := s.dbFor(ctx)
 	userTenant, err := s.userTenant(ctx, userID)
 	if err != nil {
 		return err
 	}
-	if !tenant.Visible(userTenant, tenant.FromContext(ctx)) {
+	if !tenant.IsPlatformScope(ctx) && !tenant.Visible(userTenant, tenant.FromContext(ctx)) {
 		return apperrors.New(apperrors.CodeNotFound, "user not found")
 	}
 
-	// 解析角色名 -> 角色 ID（角色名租户内唯一，限定在用户所属租户内解析）
-	var roleIDs []uint64
-	if len(roleNames) > 0 {
+	// 校验角色 ID 存在且属于用户所属租户。
+	if len(roleIDs) > 0 {
 		var roles []struct{ ID uint64 }
-		query := s.db.WithContext(ctx).Table("roles").Where("name IN ?", roleNames)
+		query := db.Table("roles").Where("id IN ? AND deleted_at IS NULL", roleIDs)
 		if userTenant != 0 {
 			query = query.Where("tenant_id = ?", userTenant)
 		}
 		if err := query.Find(&roles).Error; err != nil {
 			return apperrors.Wrap(apperrors.CodeInternalError, "failed to load roles", err)
 		}
-		for _, r := range roles {
-			roleIDs = append(roleIDs, r.ID)
-		}
-		if len(roleIDs) != len(roleNames) {
+		if len(roles) != len(roleIDs) {
 			return apperrors.New(apperrors.CodeNotFound, "one or more roles not found")
 		}
 	}
 
 	// 事务：先锁定用户行（串行化并发的角色替换），再清空旧角色、写入新角色
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return s.withTx(ctx, func(tx *gorm.DB) error {
 		if err := dbutil.LockRow(tx, &userLock{}, userID).Error; err != nil {
 			if stderrors.Is(err, gorm.ErrRecordNotFound) {
 				return apperrors.New(apperrors.CodeNotFound, "user not found")
@@ -92,6 +91,33 @@ func (s *UserRoleService) AssignRoles(ctx context.Context, userID uint64, roleNa
 		}
 		return nil
 	})
+}
+
+// RolesForUsers 批量读取用户当前角色。
+func (s *UserRoleService) RolesForUsers(ctx context.Context, userIDs []uint64) (map[uint64][]contract.UserRole, error) {
+	out := make(map[uint64][]contract.UserRole, len(userIDs))
+	if s.db == nil || len(userIDs) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		UserID   uint64
+		RoleID   uint64
+		RoleName string
+	}
+	err := s.dbFor(ctx).
+		Table("user_roles ur").
+		Select("ur.user_id, roles.id AS role_id, roles.name AS role_name").
+		Joins("JOIN roles ON roles.id = ur.role_id AND roles.deleted_at IS NULL").
+		Where("ur.user_id IN ?", userIDs).
+		Order("ur.user_id, roles.id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.UserID] = append(out[row.UserID], contract.UserRole{ID: row.RoleID, Name: row.RoleName})
+	}
+	return out, nil
 }
 
 // userLock 仅用于事务内锁定 users 行（只带主键，不做用户领域逻辑）。
@@ -117,11 +143,38 @@ func (s *UserRoleService) userTenant(ctx context.Context, userID uint64) (uint64
 	var row struct {
 		TenantID uint64 `gorm:"column:tenant_id"`
 	}
-	if err := s.db.WithContext(ctx).Table("users").Select("tenant_id").Where("id = ?", userID).Take(&row).Error; err != nil {
+	if err := s.dbFor(ctx).Table("users").Select("tenant_id").Where("id = ?", userID).Take(&row).Error; err != nil {
 		if stderrors.Is(err, gorm.ErrRecordNotFound) {
 			return 0, apperrors.New(apperrors.CodeNotFound, "user not found")
 		}
 		return 0, apperrors.Wrap(apperrors.CodeInternalError, "failed to get user", err)
 	}
 	return row.TenantID, nil
+}
+
+func (s *UserRoleService) dbFor(ctx context.Context) *gorm.DB {
+	if tx, ok := dbutil.TransactionFromContext(ctx); ok {
+		return tx.WithContext(ctx)
+	}
+	return s.db.WithContext(ctx)
+}
+
+func (s *UserRoleService) withTx(ctx context.Context, fn func(tx *gorm.DB) error) error {
+	if tx, ok := dbutil.TransactionFromContext(ctx); ok {
+		return fn(tx.WithContext(ctx))
+	}
+	return s.db.WithContext(ctx).Transaction(fn)
+}
+
+func uniqueIDs(ids []uint64) []uint64 {
+	seen := make(map[uint64]struct{}, len(ids))
+	out := make([]uint64, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }

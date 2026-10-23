@@ -282,13 +282,14 @@ func TestTenantRequiresUserAndRole(t *testing.T) {
 }
 
 // TestDescriptorPermissionsCoverBusinessRoutes 钉住能力声明的权限点聚合面：
-// 迁移后权限点改由 Descriptor 声明，聚合结果必须逐值等于全部 45 个权限点
-// （user 5 + access 11 + audit 3 + tenant 9 + console 4 + mfa 6 + passkey 7），
+// 迁移后权限点改由 Descriptor 声明，聚合结果必须逐值等于全部 46 个权限点
+// （user 5 + access 12 + audit 3 + tenant 9 + console 4 + mfa 6 + passkey 7），
 // 既不缺失也不多出。
 func TestDescriptorPermissionsCoverBusinessRoutes(t *testing.T) {
 	required := []struct{ resource, action string }{
 		{"/api/v1/users", "GET"}, {"/api/v1/users", "POST"},
 		{"/api/v1/users/*", "GET"}, {"/api/v1/users/*", "PUT"}, {"/api/v1/users/*", "DELETE"},
+		{"/api/v1/users/*/roles", "POST"},
 		{"/api/v1/roles", "GET"}, {"/api/v1/roles", "POST"},
 		{"/api/v1/roles/*", "GET"}, {"/api/v1/roles/*", "PUT"}, {"/api/v1/roles/*", "DELETE"},
 		{"/api/v1/roles/*/permissions", "POST"},

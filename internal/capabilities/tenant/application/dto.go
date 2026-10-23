@@ -1,6 +1,7 @@
 package application
 
 import (
+	"strconv"
 	"time"
 
 	"jimu/internal/capabilities/tenant/domain"
@@ -17,7 +18,7 @@ type UpdateTenantRequest struct {
 }
 
 type TenantResponse struct {
-	ID        uint64    `json:"id"`
+	ID        string    `json:"id"`
 	Code      string    `json:"code"`
 	Name      string    `json:"name"`
 	Status    int8      `json:"status"`
@@ -28,7 +29,7 @@ type TenantResponse struct {
 
 func ToTenantResponse(t domain.Tenant) TenantResponse {
 	return TenantResponse{
-		ID:        t.ID,
+		ID:        strconv.FormatUint(t.ID, 10),
 		Code:      t.Code,
 		Name:      t.Name,
 		Status:    t.Status,

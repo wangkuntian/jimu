@@ -14,6 +14,7 @@ import (
 	"jimu/internal/shared/pagination"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
@@ -35,7 +36,7 @@ func TestUserServiceListPassesPaginationAndReturnsDTO(t *testing.T) {
 	}
 	service := NewUserService(repo, nil)
 
-	users, total, err := service.List(context.Background(), pagination.Pagination{Page: 3, PageSize: 10, Sort: "created_at", Order: "asc"})
+	users, total, err := service.List(context.Background(), pagination.Pagination{Page: 3, PageSize: 10, Sort: "created_at", Order: "asc"}, domain.UserListFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,14 +96,22 @@ func TestUserServiceCreateAssignsTenant(t *testing.T) {
 		t.Fatalf("created tenant = %v, want 7", repo.created)
 	}
 
-	// 上下文无租户：归属默认租户
+	// 上下文无租户：平台管理员必须显式指定目标租户
 	repo2 := &fakeUserRepository{}
-	if _, err := NewUserService(repo2, nil).Create(context.Background(), CreateUserRequest{Username: "bob", Password: "password1"}); err != nil {
+	tenants := fakeTenantInfoSource{infos: map[uint64]contract.TenantInfo{9: {ID: 9, Name: "Acme"}}}
+	if _, err := NewUserService(repo2, tenants).Create(context.Background(), CreateUserRequest{TenantID: "9", Username: "bob", Password: "password1"}); err != nil {
 		t.Fatal(err)
 	}
-	if repo2.created == nil || repo2.created.TenantID != tenant.DefaultTenantID {
-		t.Fatalf("default tenant = %v, want %d", repo2.created, tenant.DefaultTenantID)
+	if repo2.created == nil || repo2.created.TenantID != 9 {
+		t.Fatalf("target tenant = %v, want 9", repo2.created)
 	}
+}
+
+func TestUserServiceCreateRequiresTenantWithoutContext(t *testing.T) {
+	repo := &fakeUserRepository{}
+	_, err := NewUserService(repo).Create(context.Background(), CreateUserRequest{Username: "bob", Password: "password1"})
+	assert.Equal(t, apperrors.CodeInvalidParam, appCode(err))
+	assert.Nil(t, repo.created)
 }
 
 func TestUserServiceGetRejectsCrossTenant(t *testing.T) {
@@ -120,11 +129,11 @@ func TestUserServiceListPassesTenantToRepo(t *testing.T) {
 	service := NewUserService(repo, nil)
 	ctx := tenant.WithTenant(context.Background(), 7)
 
-	if _, _, err := service.List(ctx, pagination.Pagination{Page: 1, PageSize: 10, Sort: "id", Order: "desc"}); err != nil {
+	if _, _, err := service.List(ctx, pagination.Pagination{Page: 1, PageSize: 10, Sort: "id", Order: "desc"}, domain.UserListFilter{}); err != nil {
 		t.Fatal(err)
 	}
-	if repo.tenantID != 7 {
-		t.Fatalf("repo tenantID = %d, want 7", repo.tenantID)
+	if repo.filter.TenantID != 7 {
+		t.Fatalf("repo tenantID = %d, want 7", repo.filter.TenantID)
 	}
 }
 
@@ -136,11 +145,12 @@ type fakeUserRepository struct {
 	listErr   error
 	deleteErr error
 	created   *domain.User
+	updated   *domain.User
 	offset    int
 	limit     int
 	sort      string
 	order     string
-	tenantID  uint64
+	filter    domain.UserListFilter
 	create    func(ctx context.Context, user *domain.User) error
 }
 
@@ -152,8 +162,8 @@ func (r *fakeUserRepository) FindByUsername(context.Context, string) (*domain.Us
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (r *fakeUserRepository) List(_ context.Context, tenantID uint64, offset, limit int, sort, order string) ([]domain.User, int64, error) {
-	r.tenantID = tenantID
+func (r *fakeUserRepository) List(_ context.Context, filter domain.UserListFilter, offset, limit int, sort, order string) ([]domain.User, int64, error) {
+	r.filter = filter
 	r.offset = offset
 	r.limit = limit
 	r.sort = sort
@@ -162,14 +172,17 @@ func (r *fakeUserRepository) List(_ context.Context, tenantID uint64, offset, li
 }
 
 func (r *fakeUserRepository) Create(ctx context.Context, user *domain.User) error {
+	r.created = user
 	if r.create != nil {
 		return r.create(ctx, user)
 	}
-	r.created = user
 	return nil
 }
-func (r *fakeUserRepository) Update(context.Context, *domain.User) error { return nil }
-func (r *fakeUserRepository) Delete(context.Context, uint64) error       { return r.deleteErr }
+func (r *fakeUserRepository) Update(_ context.Context, user *domain.User) error {
+	r.updated = user
+	return nil
+}
+func (r *fakeUserRepository) Delete(context.Context, uint64) error { return r.deleteErr }
 func (r *fakeUserRepository) FindByEmailHash(context.Context, string) (*domain.User, error) {
 	return nil, gorm.ErrRecordNotFound
 }
@@ -196,19 +209,21 @@ func (o *recordingEventWriter) WriteEvent(_ context.Context, _ any, event contra
 // createOutboxUserService 构造带 recording outbox 的 UserService
 func createOutboxUserService() (*UserService, *recordingEventWriter) {
 	store := &recordingEventWriter{}
-	svc := NewUserService(&fakeOutboxUserRepo{}, nil, store)
+	svc := NewUserService(&fakeOutboxUserRepo{}, store, fakeTenantInfoSource{
+		infos: map[uint64]contract.TenantInfo{1: {ID: 1, Name: "默认租户"}},
+	})
 	return svc, store
 }
 
 type fakeOutboxUserRepo struct{}
 
 func (r *fakeOutboxUserRepo) FindByID(context.Context, uint64) (*domain.User, error) {
-	return &domain.User{ID: 1, Username: "alice"}, nil
+	return &domain.User{ID: 1, Username: "alice", Status: 1}, nil
 }
 func (r *fakeOutboxUserRepo) FindByUsername(context.Context, string) (*domain.User, error) {
 	return nil, gorm.ErrRecordNotFound
 }
-func (r *fakeOutboxUserRepo) List(context.Context, uint64, int, int, string, string) ([]domain.User, int64, error) {
+func (r *fakeOutboxUserRepo) List(context.Context, domain.UserListFilter, int, int, string, string) ([]domain.User, int64, error) {
 	return nil, 0, nil
 }
 func (r *fakeOutboxUserRepo) Create(_ context.Context, u *domain.User) error {
@@ -227,7 +242,7 @@ func (r *fakeOutboxUserRepo) UpdatePassword(context.Context, uint64, string) err
 
 func TestCreateWritesOutbox(t *testing.T) {
 	svc, store := createOutboxUserService()
-	_, err := svc.Create(context.Background(), CreateUserRequest{Username: "alice", Password: "password123"})
+	_, err := svc.Create(context.Background(), CreateUserRequest{TenantID: "1", Username: "alice", Password: "password123"})
 	assert.NoError(t, err)
 	assert.Len(t, store.events, 1)
 	assert.Equal(t, contract.EventUserCreated, store.events[0].EventType)
@@ -245,4 +260,135 @@ func TestUpdateAndDeleteWriteOutbox(t *testing.T) {
 	assert.NoError(t, svc.Delete(context.Background(), 1))
 	assert.Len(t, store.events, 2)
 	assert.Equal(t, contract.EventUserDeleted, store.events[1].EventType)
+}
+
+type fakeTenantInfoSource struct {
+	infos map[uint64]contract.TenantInfo
+	err   error
+}
+
+func (f fakeTenantInfoSource) GetByIDs(context.Context, []uint64) (map[uint64]contract.TenantInfo, error) {
+	return f.infos, f.err
+}
+
+type fakeUserRoleManager struct {
+	assigned  map[uint64][]uint64
+	roles     map[uint64][]contract.UserRole
+	assignErr error
+	rolesErr  error
+}
+
+func (f *fakeUserRoleManager) AssignRoleIDs(_ context.Context, userID uint64, roleIDs []uint64) error {
+	if f.assigned == nil {
+		f.assigned = make(map[uint64][]uint64)
+	}
+	f.assigned[userID] = roleIDs
+	return f.assignErr
+}
+
+func (f *fakeUserRoleManager) RolesForUsers(context.Context, []uint64) (map[uint64][]contract.UserRole, error) {
+	return f.roles, f.rolesErr
+}
+
+func TestUserServiceCreateAssignsRoles(t *testing.T) {
+	repo := &fakeUserRepository{create: func(_ context.Context, user *domain.User) error {
+		user.ID = 7
+		return nil
+	}}
+	roles := &fakeUserRoleManager{
+		roles: map[uint64][]contract.UserRole{7: {{ID: 10, Name: "租户管理员"}}},
+	}
+	tenants := fakeTenantInfoSource{infos: map[uint64]contract.TenantInfo{2: {ID: 2, Name: "Acme"}}}
+	svc := NewUserService(repo, roles, tenants)
+
+	got, err := svc.Create(context.Background(), CreateUserRequest{
+		TenantID: "2",
+		Username: "alice",
+		Password: "password1",
+		RoleIDs:  []string{"10"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(2), repo.created.TenantID)
+	assert.Equal(t, []uint64{10}, roles.assigned[7])
+	assert.Equal(t, "7", got.ID)
+	assert.Equal(t, applicationTenantRef("2", "Acme"), got.Tenant)
+	assert.Equal(t, []RoleRef{{ID: "10", Name: "租户管理员"}}, got.Roles)
+}
+
+func TestUserServiceUpdateContactFields(t *testing.T) {
+	repo := &fakeUserRepository{user: &domain.User{ID: 7, TenantID: 1, Status: 1}}
+	svc := NewUserService(repo)
+	email := "alice@example.com"
+	phone := "13800138000"
+
+	require.NoError(t, svc.Update(tenant.WithTenant(context.Background(), 1), 7, UpdateUserRequest{
+		Email: &email,
+		Phone: &phone,
+	}))
+	require.NotNil(t, repo.updated)
+	assert.Equal(t, email, repo.updated.Email)
+	assert.Equal(t, phone, repo.updated.Phone)
+}
+
+func TestUserServiceListHydratesTenantAndRoles(t *testing.T) {
+	repo := &fakeUserRepository{
+		users: []domain.User{{ID: 7, Username: "alice", TenantID: 2, Status: 1}},
+		total: 1,
+	}
+	roles := &fakeUserRoleManager{roles: map[uint64][]contract.UserRole{7: {{ID: 10, Name: "租户管理员"}}}}
+	tenants := fakeTenantInfoSource{infos: map[uint64]contract.TenantInfo{2: {ID: 2, Name: "Acme"}}}
+	svc := NewUserService(repo, roles, tenants)
+
+	users, total, err := svc.List(context.Background(), pagination.Pagination{Page: 1, PageSize: 20, Sort: "id", Order: "desc"}, domain.UserListFilter{})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, users, 1)
+	assert.Equal(t, "7", users[0].ID)
+	assert.Equal(t, TenantRef{ID: "2", Name: "Acme"}, users[0].Tenant)
+	assert.Equal(t, []RoleRef{{ID: "10", Name: "租户管理员"}}, users[0].Roles)
+}
+
+func TestUserServiceCreateRejectsCrossTenant(t *testing.T) {
+	svc := NewUserService(&fakeUserRepository{})
+	_, err := svc.Create(tenant.WithTenant(context.Background(), 1), CreateUserRequest{
+		TenantID: "2",
+		Username: "alice",
+		Password: "password1",
+	})
+	assert.Equal(t, apperrors.CodeForbidden, appCode(err))
+}
+
+func TestUserServicePlatformScopeUsesRequestedTenant(t *testing.T) {
+	repo := &fakeUserRepository{}
+	roles := &fakeUserRoleManager{}
+	tenants := fakeTenantInfoSource{infos: map[uint64]contract.TenantInfo{2: {ID: 2, Name: "Acme"}}}
+	svc := NewUserService(repo, roles, tenants)
+	ctx := tenant.WithPlatformScope(tenant.WithTenant(context.Background(), tenant.DefaultTenantID))
+
+	got, err := svc.Create(ctx, CreateUserRequest{
+		TenantID: "2",
+		Username: "alice",
+		Password: "password1",
+		RoleIDs:  []string{"10"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(2), repo.created.TenantID)
+	assert.Equal(t, "2", got.Tenant.ID)
+}
+
+func TestUserServiceTenantAdminScopeStillUsesContextTenant(t *testing.T) {
+	repo := &fakeUserRepository{users: []domain.User{{ID: 7, Username: "alice", TenantID: 7}}, total: 1}
+	svc := NewUserService(repo)
+	ctx := tenant.WithTenant(context.Background(), 7)
+
+	_, _, err := svc.List(ctx, pagination.Pagination{Page: 1, PageSize: 20}, domain.UserListFilter{TenantID: 8})
+	assert.Equal(t, apperrors.CodeForbidden, appCode(err))
+
+	_, _, err = svc.List(ctx, pagination.Pagination{Page: 1, PageSize: 20}, domain.UserListFilter{})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(7), repo.filter.TenantID)
+}
+
+func applicationTenantRef(id, name string) TenantRef {
+	return TenantRef{ID: id, Name: name}
 }

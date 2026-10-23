@@ -1,6 +1,7 @@
 package application
 
 import (
+	"strconv"
 	"time"
 
 	"jimu/internal/capabilities/access/domain"
@@ -17,26 +18,47 @@ type UpdateRoleRequest struct {
 }
 
 type RoleResponse struct {
-	ID          uint64    `json:"id"`
+	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	Status      int8      `json:"status"`
-	TenantID    uint64    `json:"tenant_id"`
+	TenantID    string    `json:"tenant_id"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type RolePageResponse struct {
+	Code      int            `json:"code"`
+	Message   string         `json:"message"`
+	Data      []RoleResponse `json:"data"`
+	Total     int64          `json:"total"`
+	Page      int            `json:"page"`
+	PageSize  int            `json:"page_size"`
+	RequestID string         `json:"request_id,omitempty"`
+}
+
+type RoleBodyResponse struct {
+	Code      int          `json:"code"`
+	Message   string       `json:"message"`
+	Data      RoleResponse `json:"data"`
+	RequestID string       `json:"request_id,omitempty"`
 }
 
 type AssignPermissionsRequest struct {
 	PermissionIDs []uint64 `json:"permission_ids" binding:"required"`
 }
 
+type AssignUserRolesRequest struct {
+	RoleIDs []string `json:"role_ids"`
+}
+
 func ToRoleResponse(role domain.Role) RoleResponse {
 	return RoleResponse{
-		ID:          role.ID,
+		ID:          strconv.FormatUint(role.ID, 10),
 		Name:        role.Name,
 		Description: role.Description,
 		Status:      role.Status,
-		TenantID:    role.TenantID,
+		TenantID:    strconv.FormatUint(role.TenantID, 10),
 		CreatedAt:   role.CreatedAt,
 		UpdatedAt:   role.UpdatedAt,
 	}
