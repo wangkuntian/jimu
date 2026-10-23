@@ -11,7 +11,7 @@ FORCE="${FORCE:-0}"
 TEMP_FILE=""
 
 OBSERVABILITY=0
-ALLOW_NEW_SECURITY_KEYS=0
+ALLOW_NEW_SECURITY_KEYS="${ALLOW_NEW_SECURITY_KEYS:-0}"
 ALLOW_LEGACY=1
 
 while [ "$#" -gt 0 ]; do
@@ -304,7 +304,7 @@ validate_encryption_key
 
 if [ "$ALLOW_LEGACY" = "1" ] && [ -n "$LEGACY_ENV_FILE" ] && [ -f "$LEGACY_ENV_FILE" ]; then
   warn "检测到旧配置文件 ${LEGACY_ENV_FILE}；该文件已停用，仅迁移缺失的 secret，不删除原文件"
-  for key in DB_ROOT_PASSWORD DB_PASSWORD JWT_SECRET ADMIN_PASSWORD ZO_OBSERVE_ROOT_USER_PASSWORD; do
+  for key in DB_ROOT_PASSWORD DB_PASSWORD JWT_SECRET ADMIN_PASSWORD ZO_OBSERVE_ROOT_USER_EMAIL ZO_OBSERVE_ROOT_USER_PASSWORD; do
     raw_env_value "$LEGACY_ENV_FILE" "$key" "旧 .env 中的 $key" >/dev/null
   done
   import_legacy_secret "db_root_password.txt" "DB_ROOT_PASSWORD"
@@ -356,15 +356,15 @@ if [ "$MARIADB_VOLUME_EXISTS" = "1" ]; then
       die "检测到已有 MariaDB 数据卷，但缺少安全 secret:${missing_security}；请恢复原值，或确认可生成新密钥后传 --allow-new-security-keys"
     fi
     warn "警告：将生成新的安全 secret:${missing_security}；已有 Token、加密字段或审计链可能因此无法继续使用"
-  else
-    PROTECT_SECURITY_SECRETS=1
   fi
+  PROTECT_SECURITY_SECRETS=1
 fi
 
 OBS_EMAIL="${ZO_OBSERVE_ROOT_USER_EMAIL:-}"
 OBS_FILE_EMAIL=""
 OBS_PASSWORD=""
 OBS_FILE_PASSWORD=""
+LEGACY_OBS_EMAIL=""
 LEGACY_OBS_PASSWORD=""
 if [ "$OBSERVABILITY" = "1" ]; then
   if [ -e "$SECRETS_DIR/otel_auth_password.txt" ]; then
@@ -388,7 +388,19 @@ if [ "$OBSERVABILITY" = "1" ]; then
     fi
   fi
   if [ "$ALLOW_LEGACY" = "1" ] && [ -n "$LEGACY_ENV_FILE" ] && [ -f "$LEGACY_ENV_FILE" ]; then
+    LEGACY_OBS_EMAIL="$(legacy_env_value "ZO_OBSERVE_ROOT_USER_EMAIL")"
     LEGACY_OBS_PASSWORD="$(legacy_env_value "ZO_OBSERVE_ROOT_USER_PASSWORD")"
+  fi
+  if [ -n "$OBS_FILE_EMAIL" ]; then
+    if [ -n "$LEGACY_OBS_EMAIL" ] && [ "$LEGACY_OBS_EMAIL" != "$OBS_FILE_EMAIL" ]; then
+      die "旧 .env 中的 OpenObserve 邮箱与 openobserve.env 不一致；请先人工确认，不能静默更换已有管理员"
+    fi
+  else
+    if [ -z "$OBS_EMAIL" ]; then
+      OBS_EMAIL="$LEGACY_OBS_EMAIL"
+    elif [ -n "$LEGACY_OBS_EMAIL" ] && [ "$LEGACY_OBS_EMAIL" != "$OBS_EMAIL" ]; then
+      die "ZO_OBSERVE_ROOT_USER_EMAIL 与旧 .env 中的 OpenObserve 邮箱不一致；拒绝猜测"
+    fi
   fi
   if [ -z "$OBS_PASSWORD" ]; then
     OBS_PASSWORD="$OBS_FILE_PASSWORD"
@@ -450,8 +462,17 @@ else
 fi
 if [ "$PROTECT_SECURITY_SECRETS" = "1" ]; then
   for file in jwt_secret.txt encryption_key.txt audit_hash_secret.txt admin_password.txt; do
-    chmod 0600 "$SECRETS_DIR/$file"
-    printf '   - %s 已有 MariaDB 数据卷且未授权轮换，保留\n' "$file"
+    if [ -s "$SECRETS_DIR/$file" ]; then
+      chmod 0600 "$SECRETS_DIR/$file"
+      printf '   - %s 已有 MariaDB 数据卷，保留且不随 FORCE 轮换\n' "$file"
+      continue
+    fi
+    case "$file" in
+      jwt_secret.txt) create_generated_secret "$file" openssl rand -hex 32 ;;
+      encryption_key.txt) create_generated_secret "$file" generate_encryption_key ;;
+      audit_hash_secret.txt) create_generated_secret "$file" openssl rand -hex 32 ;;
+      admin_password.txt) create_generated_secret "$file" create_admin_password ;;
+    esac
   done
 else
   create_generated_secret "jwt_secret.txt" openssl rand -hex 32

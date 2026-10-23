@@ -37,13 +37,13 @@
 
 `scripts/init-secrets.sh` 是 core/observability Secret 的唯一生成入口。`make init` 是旧 `.env` 的唯一公开迁移入口；`make up` / `make up-observability` 只调用不带 `LEGACY_ENV_FILE` 的内部准备目标：
 
-- `secrets/` 使用 `0700`，文件使用 `0600`；已存在的非空文件默认保留，只有显式 `FORCE=1` 才重建。
+- `secrets/` 使用 `0700`，文件使用 `0600`；已存在的非空文件默认保留，只有显式 `FORCE=1` 才重建。已有 MariaDB 数据卷时，安全 Secret 仍只补缺失项，`FORCE=1` 不得轮换已有 JWT、加密、审计或管理员密码。
 - 写入采用临时文件加原子替换，失败不留下半写入文件；命令输出只列文件名和用途，不打印值。
 - 首次非交互初始化生成随机强管理员密码；TTY 环境允许操作者输入初始密码。`ADMIN_PASSWORD_FILE` 同时供 CLI seed、启动期结构种子和 Compose `jimu-init` 使用。
 - `encryption_key.txt` 恰好 32 字节；非空 `security.encryption_key` 也必须是 32 字节，其他长度启动失败。
 - 旧 `.env` 只通过 `LEGACY_ENV_FILE=/path/to/.env scripts/init-secrets.sh` 导入已知 Secret 键；普通端口、地址和卷名不会迁移。
-- 缺少数据库 Secret 且已有 MariaDB 数据卷时初始化失败，避免生成新密码锁死已有数据；为既有数据卷新增安全密钥必须显式设置 `ALLOW_NEW_SECURITY_KEYS=1`。
-- OpenObserve 凭据只在 `--observability` 路径生成。`otel_auth_password.txt` 是密码源，`openobserve.env` 与 `zo_auth_token.txt` 从它派生；已有 OpenObserve 数据卷但找不到原密码时初始化失败，不覆盖原实例。
+- 缺少数据库 Secret 且已有 MariaDB 数据卷时初始化失败，避免生成新密码锁死已有数据；为既有数据卷新增安全密钥必须显式设置 `ALLOW_NEW_SECURITY_KEYS=1`（公开入口为 `make init ALLOW_NEW_SECURITY_KEYS=1`）。
+- OpenObserve 凭据只在 `--observability` 路径生成。`openobserve.env` 是 server、OpenObserve 容器和管理脚本共用的运行时账号来源；`otel_auth_password.txt` 保留为初始化/迁移校验源，`zo_auth_token.txt` 从最终账号派生。旧 `.env` 的自定义邮箱会迁入 `openobserve.env`；若与既有配置冲突则显式失败。已有 OpenObserve 数据卷但找不到原密码时初始化失败，不覆盖原实例。
 
 ### `make up` 启动流程
 

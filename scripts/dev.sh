@@ -18,8 +18,11 @@ cd "$ROOT"
 docker compose --env-file /dev/null -f docker-compose.yml up -d --wait mariadb redis
 
 export APP_ENV="$ENV"
+DB_HOST_PORT="${JIMU_DB_HOST_PORT:-3306}"
+REDIS_HOST_PORT="${JIMU_REDIS_HOST_PORT:-6379}"
 export DB_HOST=127.0.0.1
-export REDIS_ADDR=127.0.0.1:6379
+export DB_PORT="$DB_HOST_PORT"
+export REDIS_ADDR="127.0.0.1:$REDIS_HOST_PORT"
 export DB_PASSWORD_FILE="$JIMU_SECRETS_DIR/db_password.txt"
 export JWT_SECRET_FILE="$JIMU_SECRETS_DIR/jwt_secret.txt"
 export ENCRYPTION_KEY_FILE="$JIMU_SECRETS_DIR/encryption_key.txt"

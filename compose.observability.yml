@@ -1,12 +1,11 @@
 services:
   server:
+    env_file:
+      - path: ${JIMU_SECRETS_DIR:-./secrets}/openobserve.env
+        required: false
     environment:
       OTEL_ENABLED: "true"
       OTEL_ENDPOINT: openobserve:5081
-      OTEL_AUTH_EMAIL: admin@jimu.local
-      OTEL_AUTH_PASSWORD_FILE: /run/secrets/otel_auth_password
-    secrets:
-      - otel_auth_password
 
   # OpenObserve 统一承载日志/指标/追踪/告警/仪表盘
   openobserve:
@@ -63,7 +62,5 @@ volumes:
     name: ${COMPOSE_OPENOBSERVE_VOLUME:-jimu-openobserve-data}
 
 secrets:
-  otel_auth_password:
-    file: ${JIMU_SECRETS_DIR:-./secrets}/otel_auth_password.txt
   zo_auth_token:
     file: ${JIMU_SECRETS_DIR:-./secrets}/zo_auth_token.txt

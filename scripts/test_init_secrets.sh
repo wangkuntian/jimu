@@ -8,8 +8,10 @@ FAKE_DOCKER_VOLUMES=""
 FAKE_DOCKER_PROBE_EXIT=""
 FAKE_DOCKER_PROBE_ERROR=""
 TEST_ADMIN_PASSWORD=""
+TEST_OBS_EMAIL=""
 TEST_LEGACY_ENV_FILE=""
 TEST_FORCE=""
+TEST_ALLOW_NEW_SECURITY_KEYS=""
 
 cleanup() {
   rm -rf "$WORK"
@@ -46,19 +48,31 @@ base64_decode() {
 }
 
 env_value() {
-  local file="$1" key="$2" line
+  local file="$1" key="$2" line status
   [ -f "$file" ] || return 0
-  line="$(awk -v key="$key" '
+  if line="$(awk -v key="$key" '
     {
       line = $0
       sub(/\r$/, "", line)
       if (line ~ "^[[:space:]]*(export[[:space:]]+)?" key "[[:space:]]*=") {
         sub("^[[:space:]]*(export[[:space:]]+)?" key "[[:space:]]*=", "", line)
-        print line
-        exit
+        count++
+        value = line
       }
     }
-  ' "$file")"
+    END {
+      if (count > 1) exit 42
+      if (count == 1) print value
+    }
+  ' "$file")"; then
+    :
+  else
+    status=$?
+    if [ "$status" = "42" ]; then
+      fail "$file: $key 出现重复赋值"
+    fi
+    fail "$file: 解析 $key 失败"
+  fi
   line="${line#"${line%%[![:space:]]*}"}"
   line="${line%"${line##*[![:space:]]}"}"
   if [ "${#line}" -ge 2 ]; then
@@ -114,7 +128,9 @@ run_init() {
   SECRETS_DIR="$secrets_dir" \
   LEGACY_ENV_FILE="$TEST_LEGACY_ENV_FILE" \
   ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-}" \
+  ZO_OBSERVE_ROOT_USER_EMAIL="${TEST_OBS_EMAIL:-}" \
   FORCE="$TEST_FORCE" \
+  ALLOW_NEW_SECURITY_KEYS="$TEST_ALLOW_NEW_SECURITY_KEYS" \
   PATH="$WORK/bin:$PATH" \
   FAKE_DOCKER_VOLUMES="$FAKE_DOCKER_VOLUMES" \
   FAKE_DOCKER_PROBE_EXIT="$FAKE_DOCKER_PROBE_EXIT" \
@@ -296,6 +312,23 @@ assert_eq "$obs_duplicate_otel_hash" "$(sha256 "$OBS_DUPLICATE_DIR/otel_auth_pas
 assert_eq "$obs_duplicate_token_hash" "$(sha256 "$OBS_DUPLICATE_DIR/zo_auth_token.txt")" "重复 OpenObserve 密码不得改写 token"
 [ ! -f "$OBS_DUPLICATE_DIR/db_root_password.txt" ] || fail "重复 OpenObserve 密码必须在生成核心 secret 前失败"
 
+OBS_DUPLICATE_EMAIL_DIR="$WORK/obs-duplicate-email"
+mkdir -p "$OBS_DUPLICATE_EMAIL_DIR"
+printf '%s' 'CanonicalObs@123' > "$OBS_DUPLICATE_EMAIL_DIR/otel_auth_password.txt"
+printf '%s\n' \
+  'ZO_ROOT_USER_EMAIL=first@jimu.local' \
+  'ZO_ROOT_USER_EMAIL=second@jimu.local' \
+  'ZO_ROOT_USER_PASSWORD=CanonicalObs@123' > "$OBS_DUPLICATE_EMAIL_DIR/openobserve.env"
+chmod 0600 "$OBS_DUPLICATE_EMAIL_DIR"/*.txt "$OBS_DUPLICATE_EMAIL_DIR/openobserve.env"
+obs_duplicate_email_hash="$(sha256 "$OBS_DUPLICATE_EMAIL_DIR/openobserve.env")"
+if run_init "$OBS_DUPLICATE_EMAIL_DIR" --observability </dev/null >"$WORK/obs-duplicate-email.out" 2>&1; then
+  fail "openobserve.env 重复 ZO_ROOT_USER_EMAIL 必须失败"
+fi
+assert_contains "$WORK/obs-duplicate-email.out" "ZO_ROOT_USER_EMAIL" "重复 OpenObserve 邮箱错误提示包含键名"
+assert_contains "$WORK/obs-duplicate-email.out" "重复" "重复 OpenObserve 邮箱错误提示"
+assert_eq "$obs_duplicate_email_hash" "$(sha256 "$OBS_DUPLICATE_EMAIL_DIR/openobserve.env")" "重复 OpenObserve 邮箱不得改写配置"
+[ ! -f "$OBS_DUPLICATE_EMAIL_DIR/db_root_password.txt" ] || fail "重复 OpenObserve 邮箱必须在生成核心 secret 前失败"
+
 echo "== 已有 MariaDB 卷保护 =="
 PROBE_FAIL_DIR="$WORK/probe-fail"
 FAKE_DOCKER_PROBE_EXIT="2"
@@ -364,6 +397,27 @@ assert_eq "$force_encryption_hash" "$(sha256 "$FORCE_DB_DIR/encryption_key.txt")
 assert_eq "$force_audit_hash" "$(sha256 "$FORCE_DB_DIR/audit_hash_secret.txt")" "FORCE 未授权时不得覆盖已有卷的 audit secret"
 assert_eq "$force_admin_hash" "$(sha256 "$FORCE_DB_DIR/admin_password.txt")" "FORCE 未授权时不得覆盖已有卷的 admin password"
 
+FORCE_PARTIAL_DIR="$WORK/force-partial-security"
+mkdir -p "$FORCE_PARTIAL_DIR"
+printf '%s' 'existing-root-password-1234567890' > "$FORCE_PARTIAL_DIR/db_root_password.txt"
+printf '%s' 'existing-app-password-12345678901' > "$FORCE_PARTIAL_DIR/db_password.txt"
+printf '%s' "$(printf 'j%.0s' {1..64})" > "$FORCE_PARTIAL_DIR/jwt_secret.txt"
+printf '%s' 'existing-admin-password' > "$FORCE_PARTIAL_DIR/admin_password.txt"
+chmod 0600 "$FORCE_PARTIAL_DIR"/*.txt
+partial_jwt_hash="$(sha256 "$FORCE_PARTIAL_DIR/jwt_secret.txt")"
+partial_admin_hash="$(sha256 "$FORCE_PARTIAL_DIR/admin_password.txt")"
+TEST_FORCE="1"
+TEST_ALLOW_NEW_SECURITY_KEYS="1"
+FAKE_DOCKER_VOLUMES="jimu-mariadb-data"
+run_init "$FORCE_PARTIAL_DIR" </dev/null >"$WORK/force-partial-security.out" 2>&1
+TEST_FORCE=""
+TEST_ALLOW_NEW_SECURITY_KEYS=""
+assert_eq "$partial_jwt_hash" "$(sha256 "$FORCE_PARTIAL_DIR/jwt_secret.txt")" "FORCE + 授权迁移不得覆盖已有 JWT secret"
+assert_eq "$partial_admin_hash" "$(sha256 "$FORCE_PARTIAL_DIR/admin_password.txt")" "FORCE + 授权迁移不得覆盖已有 admin password"
+assert_file "$FORCE_PARTIAL_DIR/encryption_key.txt"
+assert_file "$FORCE_PARTIAL_DIR/audit_hash_secret.txt"
+assert_contains "$WORK/force-partial-security.out" "加密字段" "授权补齐缺失安全 secret 必须提示影响"
+
 echo "== 已有 OpenObserve 卷保护与旧密码恢复 =="
 OBS_VOLUME_DIR="$WORK/obs-volume-missing"
 FAKE_DOCKER_VOLUMES="jimu-openobserve-data"
@@ -391,6 +445,7 @@ DB_PASSWORD=literal-password # inline-comment
 JWT_SECRET='quoted-jwt-secret # literal'
 ADMIN_PASSWORD="quoted admin password"
 ZO_OBSERVE_ROOT_USER_PASSWORD='LegacyObs@123'
+ZO_OBSERVE_ROOT_USER_EMAIL='legacy-admin@example.com'
 DB_HOST=conflicting-db-host-value
 HTTP_HOST_PORT=19999
 COMPOSE_MARIADB_VOLUME=conflicting-volume-name
@@ -409,6 +464,8 @@ assert_eq "quoted-jwt-secret # literal" "$(cat "$LEGACY_DIR/jwt_secret.txt")" "�
 assert_eq "quoted admin password" "$(cat "$LEGACY_DIR/admin_password.txt")" "迁移带引号的 ADMIN_PASSWORD"
 assert_eq "LegacyObs@123" "$(cat "$LEGACY_DIR/otel_auth_password.txt")" "迁移 ZO_OBSERVE_ROOT_USER_PASSWORD"
 assert_eq "LegacyObs@123" "$(env_value "$LEGACY_DIR/openobserve.env" ZO_ROOT_USER_PASSWORD)" "迁移值写入 openobserve.env"
+assert_eq "legacy-admin@example.com" "$(env_value "$LEGACY_DIR/openobserve.env" ZO_ROOT_USER_EMAIL)" "迁移自定义 OpenObserve 邮箱"
+assert_eq "legacy-admin@example.com:LegacyObs@123" "$(base64_decode < "$LEGACY_DIR/zo_auth_token.txt")" "自定义邮箱参与 token 派生"
 if grep -R -Fq "conflicting-db-host-value" "$LEGACY_DIR"; then
   fail "DB_HOST 值不得迁入任何生成文件"
 fi
@@ -418,6 +475,26 @@ fi
 [ "$(cat "$LEGACY_DIR/encryption_key.txt")" != "conflicting-encryption-key" ] || fail "旧 .env 的 ENCRYPTION_KEY 不得迁移"
 [ "$(cat "$LEGACY_DIR/audit_hash_secret.txt")" != "conflicting-audit-secret" ] || fail "旧 .env 的 AUDIT_HASH_SECRET 不得迁移"
 [ "$(cat "$LEGACY_DIR/zo_auth_token.txt")" != "conflicting-zo-token" ] || fail "旧 .env 的 ZO_OBSERVE_AUTH_TOKEN 不得迁移"
+
+OBS_EMAIL_CONFLICT_DIR="$WORK/obs-email-conflict"
+mkdir -p "$OBS_EMAIL_CONFLICT_DIR"
+printf '%s' 'CanonicalObs@123' > "$OBS_EMAIL_CONFLICT_DIR/otel_auth_password.txt"
+printf '%s\n' \
+  'ZO_ROOT_USER_EMAIL=canonical@example.com' \
+  'ZO_ROOT_USER_PASSWORD=CanonicalObs@123' > "$OBS_EMAIL_CONFLICT_DIR/openobserve.env"
+chmod 0600 "$OBS_EMAIL_CONFLICT_DIR"/*
+OBS_EMAIL_CONFLICT_ENV="$WORK/obs-email-conflict.env"
+cat >"$OBS_EMAIL_CONFLICT_ENV" <<'ENV'
+ZO_OBSERVE_ROOT_USER_EMAIL=different@example.com
+ZO_OBSERVE_ROOT_USER_PASSWORD=CanonicalObs@123
+ENV
+TEST_LEGACY_ENV_FILE="$OBS_EMAIL_CONFLICT_ENV"
+if run_init "$OBS_EMAIL_CONFLICT_DIR" --observability </dev/null >"$WORK/obs-email-conflict.out" 2>&1; then
+  fail "旧 .env 邮箱与 openobserve.env 不一致时必须失败"
+fi
+TEST_LEGACY_ENV_FILE=""
+assert_contains "$WORK/obs-email-conflict.out" "邮箱" "邮箱冲突必须明确报错"
+assert_eq "canonical@example.com" "$(env_value "$OBS_EMAIL_CONFLICT_DIR/openobserve.env" ZO_ROOT_USER_EMAIL)" "邮箱冲突不得改写 openobserve.env"
 
 echo "== --no-legacy 忽略显式旧 .env =="
 NO_LEGACY_DIR="$WORK/no-legacy"

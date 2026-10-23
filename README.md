@@ -132,6 +132,7 @@ make dev
 ```
 
 `make dev` 启动本地 MariaDB/Redis 依赖，使用 `secrets/` 中的凭据执行迁移和种子，然后通过 Air 热重载后端。
+如宿主端口已被占用，可同时设置 `JIMU_DB_HOST_PORT` / `JIMU_REDIS_HOST_PORT`；`make dev` 会把它们同步用于 Compose 端口映射和本机 `DB_PORT` / `REDIS_ADDR`。
 
 ### 首次启动与前端联调
 
@@ -167,7 +168,7 @@ make up-observability
 
 该目标先启动核心栈与观测栈，再执行 `scripts/observability.sh start` 初始化 dashboard。默认告警只在设置 `ZO_ALERT_WEBHOOK_URL` 后同步；未设置时跳过，不影响 dashboard。
 
-- OpenObserve UI/API: http://127.0.0.1:5080 （账号 `admin@jimu.local`；密码由 `secrets/otel_auth_password.txt` 自动生成）
+- OpenObserve UI/API: http://127.0.0.1:5080 （账号与密码保存在 `secrets/openobserve.env`；默认账号 `admin@jimu.local`，迁移旧 `.env` 时保留自定义邮箱）
 - OTLP gRPC: `127.0.0.1:5081`（tracing / metrics / logs 统一入口）
 - 默认 dashboard **Jimu Overview**：开启时自动创建（幂等），含 17 面板：stat 卡片（错误日志/日志总量/DB 连接池/Goroutines）、时间序列（DB/运行时/日志/HTTP/依赖熔断/MySQL/Redis）、最近错误日志表格
 - 官方数据库 dashboard **MySQL Metrics Monitoring** / **Redis Metrics Dashboard**：随启动自动创建（数据来自 OTel Collector 采集的 `mysql_*` / `redis_*` 指标流）；可选的 **PostgreSQL**（opentelemetry-contrib 采集）见下文
@@ -175,9 +176,10 @@ make up-observability
 **Dashboard 配置与同步（面板进 git）**：dashboard 定义保存在 `deploy/openobserve/dashboards/*.json`（v8 结构，含面板查询与布局），启动时按此文件创建/重建；MySQL/Redis 官方模板取自 [openobserve/dashboards](https://github.com/openobserve/dashboards) 并归一为 v8 结构与 192 列网格布局入库（官方原始文件为旧版小网格，直接导入面板会缩成一条）：
 
 ```bash
-ZO_PASSWORD="$(cat secrets/otel_auth_password.txt)" \
+set -a; . secrets/openobserve.env; set +a
+ZO_EMAIL="$ZO_ROOT_USER_EMAIL" ZO_PASSWORD="$ZO_ROOT_USER_PASSWORD" \
   ./deploy/openobserve/sync-dashboard.sh              # 应用 dashboards/*.json（幂等：同名重建）
-ZO_PASSWORD="$(cat secrets/otel_auth_password.txt)" \
+ZO_EMAIL="$ZO_ROOT_USER_EMAIL" ZO_PASSWORD="$ZO_ROOT_USER_PASSWORD" \
   ./deploy/openobserve/sync-dashboard.sh --export 名称 # 线上 dashboard 导出为 json（UI 微调后同步回 git）
 ```
 
@@ -189,7 +191,8 @@ JSON 中维护面板查询（`queries.fields` 流与轴映射、`type` 渲染类
 # 启动观测栈时同步；webhook 指向企业微信/钉钉/飞书/Slack 等网关均可
 ZO_ALERT_WEBHOOK_URL=https://example.com/webhook make up-observability
 
-ZO_PASSWORD="$(cat secrets/otel_auth_password.txt)" \
+set -a; . secrets/openobserve.env; set +a
+ZO_EMAIL="$ZO_ROOT_USER_EMAIL" ZO_PASSWORD="$ZO_ROOT_USER_PASSWORD" \
 ZO_ALERT_WEBHOOK_URL=https://example.com/webhook \
   ./deploy/openobserve/sync-alerts.sh                  # 手工同步（含通知模板 jimu_alert_http + 目的地 jimu_webhook）
 ```
@@ -1123,7 +1126,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `otel.metrics_enabled` | 指标推送：Prometheus 指标转 OTLP 推送到 OpenObserve（`/metrics` 端点仍保留） | `true` |
 | `otel.logs_enabled` | 日志推送：zap 结构化日志异步转 OTLP logs | `true` |
 | `otel.metrics_interval_sec` | 指标推送间隔（秒），0 用默认 | `15` |
-| `otel.auth_email` / `otel.auth_password` | OpenObserve 账号凭据（OTLP/gRPC Basic Auth；Compose 观测栈通过 `OTEL_AUTH_EMAIL` / `OTEL_AUTH_PASSWORD_FILE` 注入，密码文件由 `make up-observability` 生成） | `admin@jimu.local` / 自动生成 |
+| `otel.auth_email` / `otel.auth_password` | OpenObserve 账号凭据（OTLP/gRPC Basic Auth；Compose 观测栈从 `secrets/openobserve.env` 注入 `ZO_ROOT_USER_EMAIL` / `ZO_ROOT_USER_PASSWORD`） | `admin@jimu.local` / 自动生成 |
 | `otel.org_id` | OpenObserve 组织（gRPC `organization` header；`OTEL_ORG_ID` 可覆盖） | `default` |
 | `otel.logs_stream_name` / `otel.traces_stream_name` | OpenObserve 日志 / 追踪 stream 名（gRPC `stream-name` header；`OTEL_LOGS_STREAM_NAME` / `OTEL_TRACES_STREAM_NAME` 可覆盖；空则落 OpenObserve 默认流 `default`，非法字符会被 OpenObserve 规范为 `_`） | `jimu_logs` / `jimu_traces` |
 | `http_client.timeout_sec` | 出站 HTTP 单次请求超时（秒），0 用默认 | `10` |
@@ -1221,7 +1224,7 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 
 | 命令 | 说明 |
 |------|------|
-| `make init` | 初始化缺失的核心 Secret；旧 `.env` 的唯一公开迁移入口 |
+| `make init` | 初始化缺失的核心 Secret；旧 `.env` 的唯一公开迁移入口；已有数据卷补安全密钥时传 `ALLOW_NEW_SECURITY_KEYS=1` |
 | `make up` | 补齐 Secret（不迁移旧 `.env`）、构建版本镜像并启动核心栈（含迁移与种子） |
 | `make up-observability` | 启动核心栈与 OpenObserve 观测栈，并初始化 dashboard/默认告警 |
 | `make down` | 停止核心栈与观测栈（保留数据卷） |

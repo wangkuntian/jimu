@@ -298,3 +298,17 @@ func minimalValidConfig(t *testing.T) Config {
 	}
 	return *cfg
 }
+
+func TestApplyEnvOverridesUsesOpenObserveEnvCredentials(t *testing.T) {
+	t.Setenv("OTEL_AUTH_EMAIL", "")
+	t.Setenv("OTEL_AUTH_PASSWORD_FILE", "")
+	t.Setenv("OTEL_AUTH_PASSWORD", "")
+	t.Setenv("ZO_ROOT_USER_EMAIL", "ops@example.com")
+	t.Setenv("ZO_ROOT_USER_PASSWORD", "compose-observed-password")
+
+	var cfg Config
+	applyEnvOverrides(&cfg)
+
+	assert.Equal(t, "ops@example.com", cfg.OTEL.AuthEmail)
+	assert.Equal(t, "compose-observed-password", cfg.OTEL.AuthPassword)
+}

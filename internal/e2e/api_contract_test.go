@@ -88,6 +88,7 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS role_permissions (role_id INTEGER NOT NULL, permission_id INTEGER NOT NULL)`).Error)
 
 	// 种子：admin 用户 + 超级管理员角色 + 权限（含 /users、/audits 策略）
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "admin123")
 	require.NoError(t, app.RunSeed(gdb, catalog.All()))
 
@@ -532,6 +533,7 @@ func TestAuthRateLimit(t *testing.T) {
 	))
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS user_roles (user_id INTEGER NOT NULL, role_id INTEGER NOT NULL)`).Error)
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS role_permissions (role_id INTEGER NOT NULL, permission_id INTEGER NOT NULL)`).Error)
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "admin123")
 	require.NoError(t, app.RunSeed(gdb, catalog.All()))
 

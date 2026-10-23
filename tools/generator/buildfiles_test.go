@@ -3,6 +3,7 @@ package generator
 import (
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -62,6 +63,23 @@ func TestGeneratedMakefileUsesSharedLifecycleContract(t *testing.T) {
 	for _, gone := range []string{"\nup:", "\ndown:", "\nup-observability:"} {
 		assert.NotContains(t, src, gone)
 	}
+}
+
+func TestGeneratedMakefileHelpIncludesWrappedDescriptions(t *testing.T) {
+	set, err := ParseCapabilitySet("minimal", "", "")
+	require.NoError(t, err)
+	out, err := RenderMakefile(set)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	makefile := filepath.Join(dir, "Makefile")
+	require.NoError(t, os.WriteFile(makefile, out, 0o644))
+	cmd := exec.Command("make", "-f", makefile, "help")
+	cmd.Dir = dir
+	help, err := cmd.CombinedOutput()
+	require.NoError(t, err, "make help failed:\n%s", help)
+	assert.Contains(t, string(help), "禁动态 key R2 / 字段词汇表 R3 / 禁嵌套对象 R4")
+	assert.Contains(t, string(help), "重型依赖 / go.mod 直接依赖数")
 }
 
 func TestGeneratedMakefileKeepsSwaggerWhenApidocsSelected(t *testing.T) {

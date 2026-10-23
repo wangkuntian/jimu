@@ -72,16 +72,24 @@ init: ## 初始化核心 Secret（旧 .env 仅用于显式迁移）
 	@legacy_env="$(LEGACY_ENV_FILE)"; \
 	if [ -z "$$legacy_env" ] && [ -f "$(CURDIR)/.env" ]; then legacy_env="$(CURDIR)/.env"; fi; \
 	if [ -n "$$legacy_env" ]; then \
-		LEGACY_ENV_FILE="$$legacy_env" SECRETS_DIR=$(JIMU_SECRETS_DIR) ./scripts/init-secrets.sh; \
+		LEGACY_ENV_FILE="$$legacy_env" SECRETS_DIR=$(JIMU_SECRETS_DIR) \
+		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
+		./scripts/init-secrets.sh; \
 	else \
-		SECRETS_DIR=$(JIMU_SECRETS_DIR) ./scripts/init-secrets.sh; \
+		SECRETS_DIR=$(JIMU_SECRETS_DIR) \
+		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
+		./scripts/init-secrets.sh; \
 	fi
 
 prepare-secrets:
-	@SECRETS_DIR=$(JIMU_SECRETS_DIR) ./scripts/init-secrets.sh --no-legacy
+	@SECRETS_DIR=$(JIMU_SECRETS_DIR) \
+		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
+		./scripts/init-secrets.sh --no-legacy
 
 prepare-observability-secrets:
-	@SECRETS_DIR=$(JIMU_SECRETS_DIR) ./scripts/init-secrets.sh --observability --no-legacy
+	@SECRETS_DIR=$(JIMU_SECRETS_DIR) \
+		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
+		./scripts/init-secrets.sh --observability --no-legacy
 
 image: ## 构建版本镜像并更新 latest
 	docker build --build-arg PROFILE=$(PROFILE) -t $(IMAGE_TAG) .
@@ -241,7 +249,7 @@ swagger-check: ## 校验 OpenAPI 文档为最新
 	git diff --exit-code docs/openapi || { echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; }; \
 	echo "✅ OpenAPI 文档为最新"
 
-smoke-check: ## 校验自动化脚本语法
+smoke-check: ## 校验自动化脚本语法与部署 manifest 契约
 	@bash -n scripts/dev.sh
 	@bash -n scripts/test_shards.sh
 	@bash -n scripts/check_ci_gate.sh
@@ -252,7 +260,9 @@ smoke-check: ## 校验自动化脚本语法
 	@bash -n scripts/backup.sh
 	@bash -n scripts/restore.sh
 	@bash -n scripts/test_backup_restore.sh
-	@echo "✅ Smoke 脚本语法正确"
+	@bash -n scripts/test_deployment_manifests.sh
+	@./scripts/test_deployment_manifests.sh
+	@echo "✅ Smoke 脚本语法与部署 manifest 契约正确"
 
 compose-check: ## 运行隔离 Compose 与 API 契约验证
 	@./scripts/test_runtime_security.sh

@@ -22,6 +22,7 @@ make up
 ```
 
 `make dev` 与 `make up` 都会通过 `scripts/init-secrets.sh` 补齐 `secrets/`，且不会传入 `LEGACY_ENV_FILE`。旧 `.env` 的唯一公开迁移入口是 `make init`：它会检测项目根 `.env`，也可通过 `LEGACY_ENV_FILE` 指定其它旧文件。
+若已有 MariaDB 数据卷只缺新增的安全密钥，使用 `make init ALLOW_NEW_SECURITY_KEYS=1`；已有安全密钥文件不会被 `FORCE=1` 轮换。
 
 ## 分支策略
 

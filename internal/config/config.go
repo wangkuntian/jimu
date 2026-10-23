@@ -541,8 +541,12 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := GetEnvOrFile("OTEL_AUTH_PASSWORD_FILE", "OTEL_AUTH_PASSWORD"); v != "" {
 		cfg.OTEL.AuthPassword = v
+	} else if v := os.Getenv("ZO_ROOT_USER_PASSWORD"); v != "" {
+		cfg.OTEL.AuthPassword = v
 	}
 	if v := os.Getenv("OTEL_AUTH_EMAIL"); v != "" {
+		cfg.OTEL.AuthEmail = v
+	} else if v := os.Getenv("ZO_ROOT_USER_EMAIL"); v != "" {
 		cfg.OTEL.AuthEmail = v
 	}
 	if v := os.Getenv("OTEL_ORG_ID"); v != "" {

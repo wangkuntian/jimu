@@ -18,7 +18,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 SECRETS_DIR="${JIMU_SECRETS_DIR:-$ROOT_DIR/secrets}"
-ZO_EMAIL="admin@jimu.local"
 
 COMPOSE=(
   docker compose --env-file /dev/null
@@ -30,34 +29,39 @@ ZO_HTTP_PORT="${ZO_OBSERVE_HTTP_PORT:-5080}"
 ZO_HTTP="http://127.0.0.1:$ZO_HTTP_PORT"
 
 start() {
-  local password_file="$SECRETS_DIR/otel_auth_password.txt"
   local env_file="$SECRETS_DIR/openobserve.env"
-  local zo_password
+  local zo_email zo_password
 
-  if [ ! -s "$password_file" ] || [ ! -s "$env_file" ]; then
+  if [ ! -s "$env_file" ]; then
     echo "==> 初始化 observability secret：$SECRETS_DIR"
     SECRETS_DIR="$SECRETS_DIR" \
       "$ROOT_DIR/scripts/init-secrets.sh" --observability --no-legacy
   fi
-  [ -s "$password_file" ] \
-    || { echo "❌ 缺少可用的 $password_file；请通过 make up-observability 重新初始化观测 Secret" >&2; exit 1; }
   [ -s "$env_file" ] \
     || { echo "❌ 缺少可用的 $env_file；请通过 make up-observability 重新初始化观测 Secret" >&2; exit 1; }
-  zo_password="$(cat "$password_file")"
+  # openobserve.env 由初始化脚本以 0600 生成，值为 shell/dotenv 兼容引用。
+  set -a
+  # shellcheck disable=SC1090
+  . "$env_file"
+  set +a
+  zo_email="${ZO_ROOT_USER_EMAIL:-}"
+  zo_password="${ZO_ROOT_USER_PASSWORD:-}"
+  [ -n "$zo_email" ] && [ -n "$zo_password" ] \
+    || { echo "❌ $env_file 缺少 ZO_ROOT_USER_EMAIL 或 ZO_ROOT_USER_PASSWORD" >&2; exit 1; }
 
   echo "==> 启动监控栈服务：${SERVICES[*]}"
   "${COMPOSE[@]}" up -d "${SERVICES[@]}"
   echo "==> 初始化 dashboard（幂等）"
   ZO_HTTP="$ZO_HTTP" \
-    ZO_EMAIL="$ZO_EMAIL" \
+    ZO_EMAIL="$zo_email" \
     ZO_PASSWORD="$zo_password" \
     "$ROOT_DIR/deploy/openobserve/init-dashboard.sh"
   echo "==> 同步默认告警（幂等，需 ZO_ALERT_WEBHOOK_URL）"
   ZO_HTTP="$ZO_HTTP" \
-    ZO_EMAIL="$ZO_EMAIL" \
+    ZO_EMAIL="$zo_email" \
     ZO_PASSWORD="$zo_password" \
     "$ROOT_DIR/deploy/openobserve/sync-alerts.sh"
-  echo "✅ OpenObserve:   $ZO_HTTP （默认账号 ${ZO_EMAIL}）"
+  echo "✅ OpenObserve:   $ZO_HTTP （默认账号 ${zo_email}）"
   echo "   OTLP gRPC:    127.0.0.1:${ZO_OBSERVE_GRPC_PORT:-5081}"
   echo "   启用应用推送：make up-observability"
 }

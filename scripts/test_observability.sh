@@ -31,7 +31,7 @@ printf '%s\n' "$*" >> "$INIT_LOG"
 mkdir -p "$SECRETS_DIR"
 printf '%s' 'test-password' > "$SECRETS_DIR/otel_auth_password.txt"
 printf '%s\n' \
-  "ZO_ROOT_USER_EMAIL='admin@jimu.local'" \
+  "ZO_ROOT_USER_EMAIL='ops@example.com'" \
   "ZO_ROOT_USER_PASSWORD='test-password'" > "$SECRETS_DIR/openobserve.env"
 INIT
 chmod +x "$PROJECT_DIR/scripts/init-secrets.sh"
@@ -76,7 +76,7 @@ run_observability start
 grep -Fq \
   "compose --env-file /dev/null -f $PROJECT_DIR/docker-compose.yml -f $PROJECT_DIR/compose.observability.yml up -d openobserve otel-collector" \
   "$DOCKER_LOG"
-grep -Fq 'dashboard:admin@jimu.local:test-password' "$HOOK_LOG"
-grep -Fq 'alerts:admin@jimu.local:test-password' "$HOOK_LOG"
+grep -Fq 'dashboard:ops@example.com:test-password' "$HOOK_LOG"
+grep -Fq 'alerts:ops@example.com:test-password' "$HOOK_LOG"
 
 echo "observability script contract passed"

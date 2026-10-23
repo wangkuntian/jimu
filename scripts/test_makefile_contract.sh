@@ -15,7 +15,8 @@ fail() {
 }
 
 run_make() {
-  make -C "$ROOT" --no-print-directory -f "$ROOT/Makefile" "$@"
+  # APP_VERSION 来自外部 shell 时不应改变本测试对 Makefile 默认值的断言。
+  env APP_VERSION=dev make -C "$ROOT" --no-print-directory -f "$ROOT/Makefile" "$@"
 }
 
 assert_contains() {
@@ -144,7 +145,8 @@ cp "$ROOT/Makefile" "$WITH_ENV_DIR/Makefile"
 cat >"$NO_ENV_DIR/scripts/init-secrets.sh" <<'FAKE_INIT'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'legacy=%s secrets_dir=%s args=%s\n' "${LEGACY_ENV_FILE-}" "${SECRETS_DIR-}" "$*"
+printf 'legacy=%s secrets_dir=%s allow_new_security_keys=%s force=%s args=%s\n' \
+  "${LEGACY_ENV_FILE-}" "${SECRETS_DIR-}" "${ALLOW_NEW_SECURITY_KEYS-}" "${FORCE-}" "$*"
 FAKE_INIT
 cp "$NO_ENV_DIR/scripts/init-secrets.sh" "$WITH_ENV_DIR/scripts/init-secrets.sh"
 chmod +x "$NO_ENV_DIR/scripts/init-secrets.sh" "$WITH_ENV_DIR/scripts/init-secrets.sh"
@@ -176,6 +178,9 @@ assert_contains "$custom_init_output" "secrets_dir=$CUSTOM_SECRETS_DIR" "init �
 custom_observability_output="$(env -u LEGACY_ENV_FILE -u SECRETS_DIR make -C "$NO_ENV_DIR" --no-print-directory prepare-observability-secrets JIMU_SECRETS_DIR="$CUSTOM_SECRETS_DIR")"
 assert_contains "$custom_observability_output" "secrets_dir=$CUSTOM_SECRETS_DIR" "observability 准备目标未传递自定义 JIMU_SECRETS_DIR"
 assert_contains "$custom_observability_output" "args=--observability --no-legacy" "observability 准备目标未禁用旧 .env 迁移"
+allow_new_output="$(env -u LEGACY_ENV_FILE -u SECRETS_DIR -u ALLOW_NEW_SECURITY_KEYS make -C "$NO_ENV_DIR" --no-print-directory init ALLOW_NEW_SECURITY_KEYS=1 FORCE=1)"
+assert_contains "$allow_new_output" "allow_new_security_keys=1" "make init 未传递 ALLOW_NEW_SECURITY_KEYS"
+assert_contains "$allow_new_output" "force=1" "make init 未传递 FORCE"
 
 echo "== dev 入口 =="
 dev_plan="$(run_make -n dev)"
@@ -232,8 +237,8 @@ FAKE_GO
 cat >"$DEV_BIN/air" <<'FAKE_AIR'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'air-env APP_ENV=%s DB_HOST=%s REDIS_ADDR=%s DB_PASSWORD_FILE=%s JWT_SECRET_FILE=%s ENCRYPTION_KEY_FILE=%s AUDIT_HASH_SECRET_FILE=%s ADMIN_PASSWORD_FILE=%s JIMU_OVERLAY=%s JIMU_SECRETS_DIR=%s\n' \
-  "${APP_ENV-}" "${DB_HOST-}" "${REDIS_ADDR-}" "${DB_PASSWORD_FILE-}" "${JWT_SECRET_FILE-}" \
+printf 'air-env APP_ENV=%s DB_HOST=%s DB_PORT=%s REDIS_ADDR=%s DB_PASSWORD_FILE=%s JWT_SECRET_FILE=%s ENCRYPTION_KEY_FILE=%s AUDIT_HASH_SECRET_FILE=%s ADMIN_PASSWORD_FILE=%s JIMU_OVERLAY=%s JIMU_SECRETS_DIR=%s\n' \
+  "${APP_ENV-}" "${DB_HOST-}" "${DB_PORT-}" "${REDIS_ADDR-}" "${DB_PASSWORD_FILE-}" "${JWT_SECRET_FILE-}" \
   "${ENCRYPTION_KEY_FILE-}" "${AUDIT_HASH_SECRET_FILE-}" "${ADMIN_PASSWORD_FILE-}" \
   "${JIMU_OVERLAY-}" "${JIMU_SECRETS_DIR-}" >>"$JIMU_TEST_LOG"
 FAKE_AIR
@@ -244,6 +249,8 @@ env -u LEGACY_ENV_FILE -u APP_ENV \
   ENV=dev \
   PROFILE=full \
   JIMU_SECRETS_DIR="$DEV_SECRETS" \
+  JIMU_DB_HOST_PORT=13306 \
+  JIMU_REDIS_HOST_PORT=16379 \
   JIMU_TEST_LOG="$DEV_LOG" \
   JIMU_TEST_OVERLAY="$DEV_OVERLAY" \
   "$ROOT/scripts/dev.sh" >"$WORK/dev.out" 2>&1 \
@@ -259,7 +266,7 @@ grep -Fq "go run -overlay=$DEV_OVERLAY ./cmd/cli migrate up" "$DEV_LOG" \
   || fail "dev.sh 未执行 CLI migrate up"
 grep -Fq "go run -overlay=$DEV_OVERLAY ./cmd/cli seed" "$DEV_LOG" \
   || fail "dev.sh 未执行 CLI seed"
-grep -Fq "air-env APP_ENV=dev DB_HOST=127.0.0.1 REDIS_ADDR=127.0.0.1:6379 DB_PASSWORD_FILE=$DEV_SECRETS/db_password.txt JWT_SECRET_FILE=$DEV_SECRETS/jwt_secret.txt ENCRYPTION_KEY_FILE=$DEV_SECRETS/encryption_key.txt AUDIT_HASH_SECRET_FILE=$DEV_SECRETS/audit_hash_secret.txt ADMIN_PASSWORD_FILE=$DEV_SECRETS/admin_password.txt JIMU_OVERLAY=$DEV_OVERLAY JIMU_SECRETS_DIR=$DEV_SECRETS" "$DEV_LOG" \
+grep -Fq "air-env APP_ENV=dev DB_HOST=127.0.0.1 DB_PORT=13306 REDIS_ADDR=127.0.0.1:16379 DB_PASSWORD_FILE=$DEV_SECRETS/db_password.txt JWT_SECRET_FILE=$DEV_SECRETS/jwt_secret.txt ENCRYPTION_KEY_FILE=$DEV_SECRETS/encryption_key.txt AUDIT_HASH_SECRET_FILE=$DEV_SECRETS/audit_hash_secret.txt ADMIN_PASSWORD_FILE=$DEV_SECRETS/admin_password.txt JIMU_OVERLAY=$DEV_OVERLAY JIMU_SECRETS_DIR=$DEV_SECRETS" "$DEV_LOG" \
   || fail "air 未收到完整的本地开发环境"
 
 line_number() {

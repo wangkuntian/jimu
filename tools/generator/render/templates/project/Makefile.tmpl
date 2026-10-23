@@ -35,7 +35,7 @@ CLI_RUN = APP_ENV=$(ENV) go run $(CLI_PKG)
 ##@ 入门
 ## help: 显示帮助信息
 help:
-	@awk 'BEGIN { printf "\n项目 Makefile（单形态，无 PROFILE 分支）\n\nUsage:\n  make <target>\n" } /^##@/ { printf "\n%s\n", substr($$0, 5) } /^## [a-zA-Z0-9_.-]+:/ { line=$$0; sub(/^## /, "", line); sep=index(line, ":"); target=substr(line, 1, sep-1); desc=substr(line, sep+2); printf "  make %-24s %s\n", target, desc }' $(MAKEFILE_LIST)
+	@awk 'function flush() { if (target != "") { printf "  make %-24s %s\n", target, desc; target="" } } BEGIN { printf "\n项目 Makefile（单形态，无 PROFILE 分支）\n\nUsage:\n  make <target>\n" } /^##@/ { flush(); printf "\n%s\n", substr($$0, 5); next } /^## [a-zA-Z0-9_.-]+:/ { flush(); line=$$0; sub(/^## /, "", line); sep=index(line, ":"); target=substr(line, 1, sep-1); desc=substr(line, sep+2); next } /^##[[:space:]]+/ { if (target != "") { extra=$$0; sub(/^##[[:space:]]+/, "", extra); desc=desc " " extra }; next } { flush() } END { flush() }' $(MAKEFILE_LIST)
 
 ##@ 本地开发
 

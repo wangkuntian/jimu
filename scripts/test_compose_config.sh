@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORKDIR="$(mktemp -d)"
+umask 077
 CORE_SECRETS_DIR="$WORKDIR/core-secrets"
 ALL_SECRETS_DIR="$WORKDIR/all-secrets"
 CORE_JSON="$WORKDIR/core.json"
@@ -37,9 +38,9 @@ printf '%s' 'compose-audit-secret-012345678901234567890123456789' > "$CORE_SECRE
 printf '%s' 'compose-admin-password' > "$CORE_SECRETS_DIR/admin_password.txt"
 cp "$CORE_SECRETS_DIR"/*.txt "$ALL_SECRETS_DIR/"
 printf '%s' 'compose-otel-password' > "$ALL_SECRETS_DIR/otel_auth_password.txt"
-printf '%s' 'compose-zo-token' > "$ALL_SECRETS_DIR/zo_auth_token.txt"
+printf '%s' 'b3BzQGV4YW1wbGUuY29tOmNvbXBvc2Utb3RlbC1wYXNzd29yZA==' > "$ALL_SECRETS_DIR/zo_auth_token.txt"
 cat > "$ALL_SECRETS_DIR/openobserve.env" <<'ENV'
-ZO_ROOT_USER_EMAIL='admin@jimu.local'
+ZO_ROOT_USER_EMAIL='ops@example.com'
 ZO_ROOT_USER_PASSWORD='compose-otel-password'
 ENV
 
@@ -105,17 +106,18 @@ PY
 
 compose_all config --quiet
 compose_all config --format json > "$ALL_JSON"
-python3 - "$ALL_JSON" <<'PY'
+python3 - "$ALL_JSON" "$ALL_SECRETS_DIR/zo_auth_token.txt" <<'PY'
 import json
 import sys
+import base64
 
 services = json.load(open(sys.argv[1], encoding="utf-8"))["services"]
 assert "openobserve" in services
 assert "otel-collector" in services
 assert services["server"]["environment"]["OTEL_ENABLED"] == "true"
 assert services["server"]["environment"]["OTEL_ENDPOINT"] == "openobserve:5081"
-assert services["server"]["environment"]["OTEL_AUTH_EMAIL"] == "admin@jimu.local"
-assert services["server"]["environment"]["OTEL_AUTH_PASSWORD_FILE"] == "/run/secrets/otel_auth_password"
+assert services["server"]["environment"]["ZO_ROOT_USER_EMAIL"] == "ops@example.com"
+assert services["server"]["environment"]["ZO_ROOT_USER_PASSWORD"] == "compose-otel-password"
 assert services["openobserve"]["environment"]["ZO_ROOT_USER_PASSWORD"] == "compose-otel-password"
 assert "Admin@12345" not in services["openobserve"]["environment"].values()
 assert services["openobserve"].get("profiles") is None
@@ -130,10 +132,13 @@ assert {
     "encryption_key",
     "audit_hash_secret",
     "admin_password",
-    "otel_auth_password",
 }.issubset(server_secret_sources)
 collector_secret_sources = {item["source"] for item in services["otel-collector"]["secrets"]}
 assert {"db_root_password", "zo_auth_token"}.issubset(collector_secret_sources)
+token = base64.b64decode(
+    open(sys.argv[2], encoding="utf-8").read(), validate=True
+).decode()
+assert token == "ops@example.com:compose-otel-password"
 PY
 
 SECRETS_WITHOUT_OBS_ENV="$WORKDIR/secrets-without-obs-env"

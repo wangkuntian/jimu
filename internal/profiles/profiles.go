@@ -30,7 +30,7 @@ var Version = "dev"
 // 关闭公开注册又没种出 admin 的部署将没有任何可用登录，必须显式告知下一步。
 func StructuralSeed(ctx *assembly.Context) error {
 	if app.AdminPassword() == "" {
-		ctx.Logger().Warnw("structural seed skipped", "missing", "ADMIN_PASSWORD")
+		ctx.Logger().Warnw("structural seed skipped", "missing", "ADMIN_PASSWORD or ADMIN_PASSWORD_FILE")
 		app.WarnIfNoAccounts(ctx.DB(), ctx.Logger())
 		return nil
 	}
