@@ -1,67 +1,50 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # 端口用专用变量：本地 .env 会设 HTTP_HOST_PORT=8080 并经 make export 泄漏进来，
 # 沿用同名变量会与本机正在运行的栈抢端口，隔离检查因而失去意义。
 HTTP_HOST_PORT=${CHECK_HTTP_HOST_PORT:-18080}
 MANAGEMENT_HOST_PORT=${CHECK_MANAGEMENT_HOST_PORT:-19090}
 PROJECT_NAME="jimu-runtime-${RANDOM}${RANDOM}"
+JIMU_IMAGE="${PROJECT_NAME}:latest"
 WORKDIR=$(mktemp -d)
-ENV_FILE="$WORKDIR/.env"
 SECRET_DIR="$WORKDIR/secrets"
 
-# compose 显式覆盖所有被 docker-compose.yml 插值的变量：
-# 通过 make 调用时，Makefile 的 include .env + export 会把本地 .env（含 COMPOSE_*_VOLUME）注入子进程，
-# 而 shell 环境优先级高于 --env-file，会让「隔离」检查挂到本地数据卷/本地配置上。
-# 这里强制指向本项目的临时卷与临时 secret，隔离性不依赖调用方的环境。
+# 显式覆盖所有运行时输入，避免调用方环境把隔离检查接到本地数据卷或镜像上。
 compose() {
   APP_ENV=dev \
+  PROFILE=full \
+  JIMU_SECRETS_DIR="$SECRET_DIR" \
+  JIMU_IMAGE="$JIMU_IMAGE" \
   COMPOSE_MARIADB_VOLUME="${PROJECT_NAME}-mariadb" \
   COMPOSE_REDIS_VOLUME="${PROJECT_NAME}-redis" \
-  COMPOSE_OPENOBSERVE_VOLUME="${PROJECT_NAME}-openobserve" \
-  COMPOSE_DB_ROOT_PASSWORD_FILE="$SECRET_DIR/db_root_password.txt" \
-  COMPOSE_DB_PASSWORD_FILE="$SECRET_DIR/db_password.txt" \
-  COMPOSE_JWT_SECRET_FILE="$SECRET_DIR/jwt_secret.txt" \
-  COMPOSE_OTEL_AUTH_PASSWORD_FILE="$SECRET_DIR/otel_auth_password.txt" \
-  COMPOSE_ZO_AUTH_TOKEN_FILE="$SECRET_DIR/zo_auth_token.txt" \
-  COMPOSE_DB_HOST=mariadb \
-  COMPOSE_DB_PORT=3306 \
-  COMPOSE_DB_USER=jimu \
-  COMPOSE_DB_NAME=jimu \
-  COMPOSE_REDIS_ADDR=redis:6379 \
-  COMPOSE_REDIS_DB=0 \
+  JIMU_DB_HOST_PORT=0 \
+  JIMU_REDIS_HOST_PORT=0 \
   HTTP_HOST_PORT="$HTTP_HOST_PORT" \
   MANAGEMENT_HOST_PORT="$MANAGEMENT_HOST_PORT" \
-  docker compose --project-name "$PROJECT_NAME" --env-file "$ENV_FILE" "$@"
+  docker compose --project-name "$PROJECT_NAME" --env-file /dev/null \
+    -f "$ROOT_DIR/docker-compose.yml" "$@"
 }
 
 cleanup() {
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
+  docker image rm "$JIMU_IMAGE" >/dev/null 2>&1 || true
   rm -rf "$WORKDIR"
 }
 trap cleanup EXIT
 
 mkdir -p "$SECRET_DIR"
-printf '%s\n' 'jimu-runtime-root-password' > "$SECRET_DIR/db_root_password.txt"
-printf '%s\n' 'jimu-runtime-db-password' > "$SECRET_DIR/db_password.txt"
-printf '%s\n' '01234567890123456789012345678901' > "$SECRET_DIR/jwt_secret.txt"
-# compose 声明的其余 secret 也必须存在，否则干净检出（CI）里 server 的 bind mount 会直接失败
-printf '%s\n' 'jimu-runtime-otel-password' > "$SECRET_DIR/otel_auth_password.txt"
-printf '%s\n' 'jimu-runtime-zo-token' > "$SECRET_DIR/zo_auth_token.txt"
-cat > "$ENV_FILE" <<ENV
-APP_ENV=dev
-HTTP_HOST_PORT=$HTTP_HOST_PORT
-MANAGEMENT_HOST_PORT=$MANAGEMENT_HOST_PORT
-COMPOSE_MARIADB_VOLUME=${PROJECT_NAME}-mariadb
-COMPOSE_REDIS_VOLUME=${PROJECT_NAME}-redis
-COMPOSE_DB_ROOT_PASSWORD_FILE=$SECRET_DIR/db_root_password.txt
-COMPOSE_DB_PASSWORD_FILE=$SECRET_DIR/db_password.txt
-COMPOSE_JWT_SECRET_FILE=$SECRET_DIR/jwt_secret.txt
-ENV
+chmod 0700 "$SECRET_DIR"
+printf '%s' 'jimu-runtime-root-password' > "$SECRET_DIR/db_root_password.txt"
+printf '%s' 'jimu-runtime-db-password' > "$SECRET_DIR/db_password.txt"
+printf '%s' 'jimu-runtime-jwt-secret-012345678901234567890123456789' > "$SECRET_DIR/jwt_secret.txt"
+printf '%s' '01234567890123456789012345678901' > "$SECRET_DIR/encryption_key.txt"
+printf '%s' 'jimu-runtime-audit-secret-012345678901234567890123456789' > "$SECRET_DIR/audit_hash_secret.txt"
+printf '%s' 'jimu-runtime-admin-password' > "$SECRET_DIR/admin_password.txt"
 
 compose config --quiet
 compose up -d --build
-compose exec -T server ./jimu migrate up
 
 for endpoint in /livez /readyz; do
   ok=0

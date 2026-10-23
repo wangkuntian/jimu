@@ -1,0 +1,69 @@
+services:
+  server:
+    environment:
+      OTEL_ENABLED: "true"
+      OTEL_ENDPOINT: openobserve:5081
+      OTEL_AUTH_EMAIL: admin@jimu.local
+      OTEL_AUTH_PASSWORD_FILE: /run/secrets/otel_auth_password
+    secrets:
+      - otel_auth_password
+
+  # OpenObserve 统一承载日志/指标/追踪/告警/仪表盘
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:v1.1.1
+    restart: unless-stopped
+    env_file:
+      - path: ${JIMU_SECRETS_DIR:-./secrets}/openobserve.env
+        required: false
+    environment:
+      ZO_DATA_DIR: /data
+      ZO_HTTP_PORT: "5080"
+      ZO_GRPC_PORT: "5081"
+    volumes:
+      - jimu-openobserve-data:/data
+    ports:
+      # HTTP UI / API（日志 JSON、Prometheus remote write 等）
+      - "127.0.0.1:${ZO_OBSERVE_HTTP_PORT:-5080}:5080"
+      # OTLP/gRPC（tracing/metrics/logs 推送）
+      - "127.0.0.1:${ZO_OBSERVE_GRPC_PORT:-5081}:5081"
+
+  # OTel Collector 采集数据库指标（MySQL/Redis）→ OpenObserve
+  otel-collector:
+    # pin 只能用不带架构后缀的 tag：Docker Hub 的 0.162.0-386 是 i386 单架构镜像，dependabot
+    # 会把它当版本升级（PR #167 已误合）。同类后缀还有 -amd64/-arm64/-ppc64le/-s390x/-nightly.*。
+    image: otel/opentelemetry-collector-contrib:0.162.0
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./deploy/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      ZO_ORG: ${OTEL_ORG_ID:-default}
+      ZO_OTLP_ENDPOINT: openobserve:5081
+      MYSQL_ENDPOINT: mariadb:3306
+      MYSQL_USER: root
+      REDIS_ENDPOINT: redis:6379
+      # PostgreSQL 采集：与 deploy/otel-collector.yaml 中注释掉的 postgres receiver 成对启用
+      # PG_PASSWORD 直接走环境变量（receiver 配置即 ${env:PG_PASSWORD}）
+      # PG_ENDPOINT: postgres:5432
+      # PG_USER: postgres
+      # PG_PASSWORD: change-this-pg-password
+    secrets:
+      - db_root_password
+      - zo_auth_token
+    depends_on:
+      openobserve:
+        condition: service_started
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  jimu-openobserve-data:
+    name: ${COMPOSE_OPENOBSERVE_VOLUME:-jimu-openobserve-data}
+
+secrets:
+  otel_auth_password:
+    file: ${JIMU_SECRETS_DIR:-./secrets}/otel_auth_password.txt
+  zo_auth_token:
+    file: ${JIMU_SECRETS_DIR:-./secrets}/zo_auth_token.txt
