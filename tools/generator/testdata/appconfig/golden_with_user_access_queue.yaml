@@ -132,7 +132,7 @@ scheduler:
 # 安全配置
 security:
   csrf_secret: ""          # CSRF 密钥；非空时启用 CSRF 中间件（Bearer 请求自动跳过）。cookie 认证场景必配
-  encryption_key: "dev-encryption-key-change-in-production"  # 字段级加密密钥（AES-256-GCM，≥32 字节；建议 ENCRYPTION_KEY 环境变量注入）；空则明文模式
+  encryption_key: ""       # 字段级加密密钥（AES-256-GCM）；非空时必须恰好 32 字节；Compose 通过 ENCRYPTION_KEY_FILE 注入
   # 安全头（留空则使用默认值）
   content_type_options: "nosniff"
   frame_options: "DENY"

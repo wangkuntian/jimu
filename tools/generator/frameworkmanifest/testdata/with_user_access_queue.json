@@ -1124,6 +1124,8 @@
     "deploy/otel-collector.yaml",
     "go.mod",
     "go.sum",
+    "internal/app/admin_password.go",
+    "internal/app/admin_password_test.go",
     "internal/app/application.go",
     "internal/app/application_test.go",
     "internal/app/authz_bootstrap_test.go",
@@ -1477,5 +1479,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:5252207e6eafbad00a4a744d4db162c93b12c9c9f1e5bd880d7f2000d96d48fd"
+  "digest": "sha256:169557ede7513650d505cc79c68b795721e81552b1ce3a6c0f0a85844acf1684"
 }

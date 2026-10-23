@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os"
 
 	"jimu/internal/capabilities/access/domain"
 	tenantDomain "jimu/internal/capabilities/tenant/domain"
@@ -18,10 +17,10 @@ import (
 )
 
 // RunSeed 插入初始数据
-// 管理员密码从 ADMIN_PASSWORD 环境变量获取
+// 管理员密码优先从 ADMIN_PASSWORD_FILE 读取，回退到 ADMIN_PASSWORD 环境变量
 // 权限点来自启用集各能力的 Descriptor.Permissions（能力自声明，未启用不种）
 func RunSeed(db *gorm.DB, caps []contract.Descriptor) error {
-	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	adminPassword := AdminPassword()
 	if adminPassword == "" {
 		return fmt.Errorf("ADMIN_PASSWORD is required")
 	}

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -135,6 +137,7 @@ func expectRunSeedQueries(mock sqlmock.Sqlmock) {
 }
 
 func TestRunSeed_HappyPath(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "secret123")
 
 	sqlDB, mock, err := sqlmock.New()
@@ -150,13 +153,28 @@ func TestRunSeed_HappyPath(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestRunSeed_UsesAdminPasswordFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "admin_password")
+	require.NoError(t, os.WriteFile(path, []byte("secret-from-file\n"), 0o600))
+	t.Setenv("ADMIN_PASSWORD_FILE", path)
+	t.Setenv("ADMIN_PASSWORD", "")
+
+	db, mock := newMockGormDB(t)
+	expectRunSeedQueries(mock)
+
+	require.NoError(t, app.RunSeed(db, catalog.All()))
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestRunSeed_MissingAdminPassword(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "")
 	err := app.RunSeed(nil, nil)
 	require.ErrorContains(t, err, "ADMIN_PASSWORD is required")
 }
 
 func TestRunSeed_PermissionQueryError(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "secret123")
 
 	db, mock := newMockGormDB(t)
@@ -172,6 +190,7 @@ func TestRunSeed_PermissionQueryError(t *testing.T) {
 }
 
 func TestRunSeed_RoleInsertError(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "secret123")
 
 	db, mock := newMockGormDB(t)
@@ -195,6 +214,7 @@ func TestRunSeed_RoleInsertError(t *testing.T) {
 }
 
 func TestRunSeed_AssignPermissionError(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "secret123")
 
 	db, mock := newMockGormDB(t)
@@ -223,6 +243,7 @@ func TestRunSeed_AssignPermissionError(t *testing.T) {
 }
 
 func TestRunSeed_AdminUserCreateError(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "secret123")
 
 	db, mock := newMockGormDB(t)
@@ -256,6 +277,7 @@ func TestRunSeed_AdminUserCreateError(t *testing.T) {
 }
 
 func TestRunSeed_AssignAdminRoleError(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "secret123")
 
 	db, mock := newMockGormDB(t)
@@ -292,6 +314,7 @@ func TestRunSeed_AssignAdminRoleError(t *testing.T) {
 
 // TestRunSeed_RolePermissionCountError 验证 Count 查询失败时报错回滚（不再静默 count=0 导致重复插入）
 func TestRunSeed_RolePermissionCountError(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "secret123")
 
 	db, mock := newMockGormDB(t)
@@ -325,6 +348,7 @@ func TestSeedCasbinPolicies_CreateEnforcerError(t *testing.T) {
 }
 
 func TestRunSeedWithCasbin_SeedError(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "")
 	err := app.RunSeedWithCasbin(nil, nil)
 	require.ErrorContains(t, err, "ADMIN_PASSWORD is required")
@@ -334,6 +358,7 @@ func TestRunSeedWithCasbin_SeedError(t *testing.T) {
 // 需要 cwd 切到项目根以定位 conf/rbac_model.conf。
 func TestRunSeedWithCasbin(t *testing.T) {
 	t.Chdir(testutil.RepoRoot(t))
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "secret123")
 
 	db := newSeedSqliteDB(t)
@@ -404,6 +429,7 @@ func TestWarnIfNoAccounts(t *testing.T) {
 		db := newSeedSqliteDB(t)
 		migrateSeedTables(t, db)
 		// 走既有种子路径造出 admin，避免依赖模型的 ID 钩子/原始 SQL
+		t.Setenv("ADMIN_PASSWORD_FILE", "")
 		t.Setenv("ADMIN_PASSWORD", "secret123")
 		require.NoError(t, app.RunSeed(db, catalog.All()))
 		log := &captureLogger{}
@@ -460,6 +486,7 @@ func TestWarnIfNoAccounts(t *testing.T) {
 // TestRunSeed_SkipsDisabledCapabilityPermissions 验证权限点来自启用集聚合：
 // 只启用 user+access 时，audit/tenant/admin 的权限点不得落库。
 func TestRunSeed_SkipsDisabledCapabilityPermissions(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "secret123")
 
 	db := newSeedSqliteDB(t)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoad(t *testing.T) {
@@ -137,6 +138,30 @@ func TestValidateProdRejectsInsecureValues(t *testing.T) {
 			}
 			if strings.Contains(err.Error(), cfg.DB.Password) {
 				t.Fatalf("validation error leaked a secret: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateEncryptionKeyRequiresExactAES256Length(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		key     string
+		wantErr bool
+	}{
+		{"31 bytes", strings.Repeat("a", 31), true},
+		{"32 bytes", strings.Repeat("a", 32), false},
+		{"33 bytes", strings.Repeat("a", 33), true},
+		{"dev placeholder", "dev-encryption-key-change-in-production", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := validProdConfig()
+			cfg.Security.EncryptionKey = tc.key
+			err := cfg.Validate("dev")
+			if tc.wantErr {
+				require.ErrorContains(t, err, "security.encryption_key")
+			} else {
+				require.NoError(t, err)
 			}
 		})
 	}
