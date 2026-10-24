@@ -63,8 +63,45 @@ done
 
 echo "== 镜像与启动命令 =="
 image_plan="$(run_make -n image VERSION=v9.9.9)"
-assert_contains "$image_plan" "docker build --build-arg PROFILE=full -t jimu:v9.9.9 ." "image 未构建版本标签"
-assert_contains "$image_plan" "docker tag jimu:v9.9.9 jimu:latest" "image 未更新 latest 标签"
+assert_contains "$image_plan" 'VERSION="v9.9.9"' "image 未使用版本标签"
+assert_contains "$image_plan" "FORCE=1 ./scripts/ensure-image.sh" "image 未强制重建镜像"
+
+echo "== 镜像缓存 =="
+IMAGE_CACHE="$WORK/image-cache"
+FAKE_DOCKER_BIN="$WORK/fake-docker-bin"
+FAKE_IMAGE_STATE="$WORK/image-state"
+FAKE_IMAGE_LOG="$WORK/image.log"
+mkdir -p "$IMAGE_CACHE" "$FAKE_DOCKER_BIN"
+cat >"$FAKE_DOCKER_BIN/docker" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >>"$JIMU_FAKE_DOCKER_LOG"
+case "$1 $2" in
+  "image inspect") [ -f "$JIMU_FAKE_IMAGE_STATE" ] && exit 0 || exit 1 ;;
+esac
+case "$1" in
+  build) : >"$JIMU_FAKE_IMAGE_STATE"; exit 0 ;;
+  tag) exit 0 ;;
+esac
+exit 1
+EOF
+chmod +x "$FAKE_DOCKER_BIN/docker"
+
+run_cached_image() {
+  env APP_VERSION=dev PATH="$FAKE_DOCKER_BIN:$PATH" \
+    IMAGE_STAMP_DIR="$IMAGE_CACHE" \
+    JIMU_FAKE_DOCKER_LOG="$FAKE_IMAGE_LOG" \
+    JIMU_FAKE_IMAGE_STATE="$FAKE_IMAGE_STATE" \
+    make -C "$ROOT" --no-print-directory ensure-image PROFILE=full VERSION=vtest
+}
+
+run_cached_image >/dev/null
+grep -q '^build ' "$FAKE_IMAGE_LOG" || fail "首次 ensure-image 未构建镜像"
+: >"$FAKE_IMAGE_LOG"
+run_cached_image >/dev/null
+if grep -q '^build ' "$FAKE_IMAGE_LOG"; then
+  fail "镜像未变化时 ensure-image 仍重新构建"
+fi
+grep -q '^image inspect ' "$FAKE_IMAGE_LOG" || fail "ensure-image 未检查现有镜像"
 
 build_server_plan="$(run_make -n build-server VERSION=v9.9.9)"
 assert_contains "$build_server_plan" '-X main.version=dev' "VERSION 意外注入本机 server 构建"
@@ -80,7 +117,7 @@ assert_not_contains "$up_plan" "LEGACY_ENV_FILE" "up 不得迁移旧 .env"
 assert_not_contains "$up_plan" "./scripts/observability.sh start" "up 不得启动观测栈"
 printf '%s\n' "$up_plan" >"$WORK/up.plan"
 init_line="$(grep -nF './scripts/init-secrets.sh' "$WORK/up.plan" | head -n 1 | cut -d: -f1)"
-image_line="$(grep -nF 'docker build --build-arg PROFILE=full' "$WORK/up.plan" | head -n 1 | cut -d: -f1)"
+image_line="$(grep -nF './scripts/ensure-image.sh' "$WORK/up.plan" | head -n 1 | cut -d: -f1)"
 up_line="$(grep -nF 'up -d --no-build' "$WORK/up.plan" | head -n 1 | cut -d: -f1)"
 [ -n "$init_line" ] && [ -n "$image_line" ] && [ -n "$up_line" ] || fail "up 计划缺少初始化、镜像或启动步骤"
 [ "$init_line" -lt "$image_line" ] || fail "up 必须先初始化 secret 再构建镜像"
@@ -91,7 +128,7 @@ grep -Fq '.NOTPARALLEL: up up-observability' "$ROOT/Makefile" \
 parallel_up_plan="$(run_make -n -j8 up VERSION=v9.9.9)"
 printf '%s\n' "$parallel_up_plan" >"$WORK/parallel-up.plan"
 parallel_init_line="$(grep -nF './scripts/init-secrets.sh' "$WORK/parallel-up.plan" | head -n 1 | cut -d: -f1)"
-parallel_image_line="$(grep -nF 'docker build --build-arg PROFILE=full' "$WORK/parallel-up.plan" | head -n 1 | cut -d: -f1)"
+parallel_image_line="$(grep -nF './scripts/ensure-image.sh' "$WORK/parallel-up.plan" | head -n 1 | cut -d: -f1)"
 parallel_up_line="$(grep -nF 'up -d --no-build' "$WORK/parallel-up.plan" | head -n 1 | cut -d: -f1)"
 [ "$parallel_init_line" -lt "$parallel_image_line" ] || fail "make -j up 未保证 secret 先于镜像"
 [ "$parallel_image_line" -lt "$parallel_up_line" ] || fail "make -j up 未保证镜像先于 Compose"
@@ -116,29 +153,31 @@ for target in down restart status logs; do
 done
 
 migrate_plan="$(run_make -n migrate PROFILE=minimal VERSION=v9.9.9)"
-assert_contains "$migrate_plan" 'docker build --build-arg PROFILE=minimal -t jimu:v9.9.9 .' "migrate 未构建所选 PROFILE 镜像"
+assert_contains "$migrate_plan" 'FORCE=0 ./scripts/ensure-image.sh' "migrate 未按需准备所选 PROFILE 镜像"
 assert_contains "$migrate_plan" 'run --rm jimu-init ./jimu migrate up' "migrate 未通过 jimu-init 执行"
 assert_contains "$migrate_plan" 'JIMU_IMAGE=jimu:v9.9.9' "migrate 未使用版本镜像"
 printf '%s\n' "$migrate_plan" >"$WORK/migrate.plan"
-migrate_image_line="$(grep -nF 'docker build --build-arg PROFILE=minimal' "$WORK/migrate.plan" | head -n 1 | cut -d: -f1)"
+migrate_image_line="$(grep -nF './scripts/ensure-image.sh' "$WORK/migrate.plan" | head -n 1 | cut -d: -f1)"
 migrate_run_line="$(grep -nF 'run --rm jimu-init ./jimu migrate up' "$WORK/migrate.plan" | head -n 1 | cut -d: -f1)"
 [ "$migrate_image_line" -lt "$migrate_run_line" ] || fail "migrate 必须先构建镜像再执行"
 
 seed_plan="$(run_make -n seed PROFILE=minimal VERSION=v9.9.9)"
-assert_contains "$seed_plan" 'docker build --build-arg PROFILE=minimal -t jimu:v9.9.9 .' "seed 未构建所选 PROFILE 镜像"
+assert_contains "$seed_plan" 'FORCE=0 ./scripts/ensure-image.sh' "seed 未按需准备所选 PROFILE 镜像"
 assert_contains "$seed_plan" 'run --rm jimu-init ./jimu seed' "seed 未通过 jimu-init 执行"
 assert_contains "$seed_plan" 'JIMU_IMAGE=jimu:v9.9.9' "seed 未使用版本镜像"
 printf '%s\n' "$seed_plan" >"$WORK/seed.plan"
-seed_image_line="$(grep -nF 'docker build --build-arg PROFILE=minimal' "$WORK/seed.plan" | head -n 1 | cut -d: -f1)"
+seed_image_line="$(grep -nF './scripts/ensure-image.sh' "$WORK/seed.plan" | head -n 1 | cut -d: -f1)"
 seed_run_line="$(grep -nF 'run --rm jimu-init ./jimu seed' "$WORK/seed.plan" | head -n 1 | cut -d: -f1)"
 [ "$seed_image_line" -lt "$seed_run_line" ] || fail "seed 必须先构建镜像再执行"
 
 migrate_status_plan="$(run_make -n migrate-status PROFILE=minimal VERSION=v9.9.9)"
+assert_contains "$migrate_status_plan" 'FORCE=0 ./scripts/ensure-image.sh' "migrate-status 未按需准备镜像"
 assert_contains "$migrate_status_plan" 'run --rm jimu-init ./jimu migrate status' "migrate-status 未通过 jimu-init 执行"
 assert_contains "$migrate_status_plan" 'JIMU_IMAGE=jimu:v9.9.9' "migrate-status 未使用版本镜像"
 assert_not_contains "$migrate_status_plan" 'go run -overlay=' "migrate-status 不得绕过容器 Secret 使用本机 CLI"
 
 migrate_down_plan="$(run_make -n migrate-down PROFILE=minimal VERSION=v9.9.9)"
+assert_contains "$migrate_down_plan" 'FORCE=0 ./scripts/ensure-image.sh' "migrate-down 未按需准备镜像"
 assert_contains "$migrate_down_plan" 'run --rm jimu-init ./jimu migrate down' "migrate-down 未通过 jimu-init 执行"
 assert_contains "$migrate_down_plan" 'JIMU_IMAGE=jimu:v9.9.9' "migrate-down 未使用版本镜像"
 assert_not_contains "$migrate_down_plan" 'go run -overlay=' "migrate-down 不得绕过容器 Secret 使用本机 CLI"
@@ -263,7 +302,7 @@ env -u LEGACY_ENV_FILE -u APP_ENV \
   JIMU_REDIS_HOST_PORT=16379 \
   JIMU_TEST_LOG="$DEV_LOG" \
   JIMU_TEST_OVERLAY="$DEV_OVERLAY" \
-  "$ROOT/scripts/dev.sh" >"$WORK/dev.out" 2>&1 \
+  "$ROOT/scripts/dev.sh" </dev/null >"$WORK/dev.out" 2>&1 \
   || fail "dev.sh 执行失败：$(tail -n 5 "$WORK/dev.out")"
 
 grep -Fq 'docker volume inspect jimu-mariadb-data' "$DEV_LOG" \

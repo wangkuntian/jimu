@@ -103,7 +103,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 git clone https://github.com/your-org/jimu.git
 cd jimu
 make init       # 仅首次需要，可检查生成的 admin 密码
-make up         # 构建 jimu:dev 并启动核心栈
+make up         # 按需构建 jimu:dev 并启动核心栈
 ```
 
 业务配置只看 `configs/app.yaml`。`secrets/` 由 `make init` 或 `make up` 自动生成，文件权限为 `0600`，不要手工编辑；正常启动不会读取项目根 `.env`。旧 `.env` 只允许通过公开的 `make init` 做一次性迁移：
@@ -113,7 +113,7 @@ make init       # 检测到项目根 .env 时会显式迁移
 LEGACY_ENV_FILE=/path/to/old/.env make init  # 或指定其它旧文件
 ```
 
-`make up` 只补齐缺失 Secret，绝不传入 `LEGACY_ENV_FILE`；随后以 `--env-file /dev/null` 启动 Compose，构建 `jimu:dev`，再由一次性 `jimu-init` 等待 MariaDB/Redis、执行迁移和结构种子，最后启动 `server`。管理员初始密码保存在 `secrets/admin_password.txt`。
+`make up` 只补齐缺失 Secret，绝不传入 `LEGACY_ENV_FILE`；随后以 `--env-file /dev/null` 启动 Compose。镜像仅在缺失或构建输入变化时重建，否则复用现有 `jimu:dev`；再由一次性 `jimu-init` 等待 MariaDB/Redis、执行迁移和结构种子，最后启动 `server`。管理员初始密码保存在 `secrets/admin_password.txt`。
 
 `secrets/*.txt` 与已有 MariaDB 数据卷中的账号密码绑定。改写 Secret 文件不会自动修改库内密码；请先轮换数据库账号密码，再执行 `make restart`，避免因凭据不一致反复重启。
 
@@ -123,6 +123,8 @@ LEGACY_ENV_FILE=/path/to/old/.env make init  # 或指定其它旧文件
 make up VERSION=v0.4.0
 make image VERSION=v0.4.0   # 同时生成 jimu:v0.4.0 与 jimu:latest
 ```
+
+`make up` / `make migrate` / `make migrate-status` 等命令会按源码指纹复用镜像；需要强制重建时运行 `make image`。
 
 ### 本地热重载开发
 
@@ -1225,7 +1227,7 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 | 命令 | 说明 |
 |------|------|
 | `make init` | 初始化缺失的核心 Secret；旧 `.env` 的唯一公开迁移入口；已有数据卷补安全密钥时传 `ALLOW_NEW_SECURITY_KEYS=1` |
-| `make up` | 补齐 Secret（不迁移旧 `.env`）、构建版本镜像并启动核心栈（含迁移与种子） |
+| `make up` | 补齐 Secret（不迁移旧 `.env`）、按需构建版本镜像并启动核心栈（含迁移与种子） |
 | `make up-observability` | 启动核心栈与 OpenObserve 观测栈，并初始化 dashboard/默认告警 |
 | `make down` | 停止核心栈与观测栈（保留数据卷） |
 | `make restart` | 重启已有 Compose 容器（不重建镜像） |
@@ -1236,7 +1238,7 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 | `make adminer` | 显式启动 Adminer 开发工具 |
 | `make build` | 编译 server + cli |
 | `make build-server` | 编译服务端（`PROFILE=<name>` 选形态，默认 full；overlay 叠加 `./cmd/server`，产物 `bin/jimu-server[-<name>]`） |
-| `make migrate` | 高级运维入口：构建当前 `PROFILE` 镜像并通过 `jimu-init` 执行迁移 |
+| `make migrate` | 高级运维入口：按需准备当前 `PROFILE` 镜像并通过 `jimu-init` 执行迁移 |
 | `make migrate-down` | 回滚最后一次迁移 |
 | `make migrate-status` | 查看迁移状态 |
 | `make seed` | 高级运维入口：通过 `jimu-init` 插入初始数据 |
@@ -1296,7 +1298,7 @@ make init
 make up VERSION=v0.4.0
 ```
 
-`make up` 构建 `jimu:v0.4.0`（同时更新 `jimu:latest`），启动核心栈并通过 `jimu-init` 完成迁移与种子。已存在 MariaDB 数据卷时，修改 `secrets/*.txt` 不会自动轮换库内账号密码；请先完成数据库账号轮换，再执行 `make restart`。
+`make up` 按需构建 `jimu:v0.4.0`（首次构建时同时更新 `jimu:latest`），启动核心栈并通过 `jimu-init` 完成迁移与种子。已存在 MariaDB 数据卷时，修改 `secrets/*.txt` 不会自动轮换库内账号密码；请先完成数据库账号轮换，再执行 `make restart`。
 
 ## K8s 部署
 

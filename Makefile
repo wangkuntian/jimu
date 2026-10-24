@@ -1,9 +1,9 @@
 .PHONY: help build build-server build-cli clean dev
-.PHONY: image init prepare-secrets prepare-observability-secrets
+.PHONY: image ensure-image init prepare-secrets prepare-observability-secrets
 .PHONY: up up-observability down restart status logs adminer
 .PHONY: migrate migrate-down migrate-status seed
 .PHONY: backup restore build-backup-image compose-db-backup compose-db-restore test-backup-restore
-.PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race
+.PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race check-makefile
 .PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates test-scaffold-matrix
 .PHONY: profiles-check compose-report compose-report-check check-skills skills-install
 .PHONY: swagger swagger-check smoke-check compose-check govulncheck check ci release-check
@@ -31,6 +31,7 @@ COMPOSE_ALL = $(COMPOSE) -f compose.observability.yml
 IMAGE_REPO ?= jimu
 IMAGE_TAG = $(IMAGE_REPO):$(VERSION)
 LATEST_TAG = $(IMAGE_REPO):latest
+IMAGE_STAMP_DIR ?= .overlay/images
 JIMU_SECRETS_DIR ?= $(CURDIR)/secrets
 COMPOSE_ENV = APP_ENV=$(ENV) JIMU_SECRETS_DIR=$(JIMU_SECRETS_DIR) JIMU_IMAGE=$(IMAGE_TAG)
 
@@ -88,14 +89,18 @@ prepare-observability-secrets:
 		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
 		./scripts/init-secrets.sh --observability --no-legacy
 
-image: ## 构建版本镜像并更新 latest
-	docker build --build-arg PROFILE=$(PROFILE) -t $(IMAGE_TAG) .
-	docker tag $(IMAGE_TAG) $(LATEST_TAG)
+image: ## 无条件构建版本镜像并更新 latest
+	@PROFILE="$(PROFILE)" VERSION="$(VERSION)" IMAGE_REPO="$(IMAGE_REPO)" \
+		IMAGE_STAMP_DIR="$(IMAGE_STAMP_DIR)" FORCE=1 ./scripts/ensure-image.sh
 
-up: prepare-secrets image ## 初始化 Secret、构建镜像并启动核心栈
+ensure-image:
+	@PROFILE="$(PROFILE)" VERSION="$(VERSION)" IMAGE_REPO="$(IMAGE_REPO)" \
+		IMAGE_STAMP_DIR="$(IMAGE_STAMP_DIR)" FORCE=0 ./scripts/ensure-image.sh
+
+up: prepare-secrets ensure-image ## 初始化 Secret、按需构建镜像并启动核心栈
 	$(COMPOSE_ENV) $(COMPOSE) up -d --no-build
 
-up-observability: prepare-observability-secrets image ## 启动观测栈并初始化 dashboard（配置 webhook 时同步告警）
+up-observability: prepare-observability-secrets ensure-image ## 启动观测栈并初始化 dashboard（配置 webhook 时同步告警）
 	$(COMPOSE_ENV) $(COMPOSE_ALL) up -d --no-build
 	JIMU_SECRETS_DIR=$(JIMU_SECRETS_DIR) ./scripts/observability.sh start
 
@@ -114,18 +119,18 @@ logs: ## 跟踪服务端日志
 adminer: ## 显式启动 Adminer 开发工具
 	$(COMPOSE_ENV) $(COMPOSE) --profile dev up -d adminer
 
-migrate: image ## 构建所选 PROFILE 镜像并在当前 Compose 栈执行迁移
+migrate: ensure-image ## 按需构建所选 PROFILE 镜像并在当前 Compose 栈执行迁移
 	$(COMPOSE_ENV) $(COMPOSE) run --rm jimu-init ./jimu migrate up
 
-seed: image ## 构建所选 PROFILE 镜像并在当前 Compose 栈插入初始数据
+seed: ensure-image ## 按需构建所选 PROFILE 镜像并在当前 Compose 栈插入初始数据
 	$(COMPOSE_ENV) $(COMPOSE) run --rm jimu-init ./jimu seed
 
 ##@ 数据库与备份
 
-migrate-down: image ## 构建所选 PROFILE 镜像并在当前 Compose 栈回滚最后一次迁移
+migrate-down: ensure-image ## 按需构建所选 PROFILE 镜像并在当前 Compose 栈回滚最后一次迁移
 	$(COMPOSE_ENV) $(COMPOSE) run --rm jimu-init ./jimu migrate down
 
-migrate-status: image ## 构建所选 PROFILE 镜像并在当前 Compose 栈查看迁移状态
+migrate-status: ensure-image ## 按需构建所选 PROFILE 镜像并在当前 Compose 栈查看迁移状态
 	$(COMPOSE_ENV) $(COMPOSE) run --rm jimu-init ./jimu migrate status
 
 backup: ## 主机侧备份数据库
@@ -248,6 +253,8 @@ swagger-check: ## 校验 OpenAPI 文档为最新
 
 smoke-check: ## 校验自动化脚本语法与部署 manifest 契约
 	@bash -n scripts/dev.sh
+	@bash -n scripts/image-fingerprint.sh
+	@bash -n scripts/ensure-image.sh
 	@bash -n scripts/test_shards.sh
 	@bash -n scripts/check_ci_gate.sh
 	@bash -n scripts/test_runtime_security.sh
@@ -268,13 +275,16 @@ compose-check: ## 运行隔离 Compose 与 API 契约验证
 govulncheck: ## 扫描可达依赖漏洞
 	@go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
-check: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check test ## 运行开发质量门禁
+check-makefile: ## 校验 Makefile 生命周期、镜像缓存与 Secret 接线
+	@./scripts/test_makefile_contract.sh
+
+check: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check check-makefile test ## 运行开发质量门禁
 	@echo "✅ All checks passed"
 
-ci: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check test-cover test-coverage-check-local test-race swagger-check smoke-check build govulncheck test-scaffold-matrix ## 运行完整本地 CI
+ci: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check check-makefile test-cover test-coverage-check-local test-race swagger-check smoke-check build govulncheck test-scaffold-matrix ## 运行完整本地 CI
 	@echo "✅ All local CI checks passed"
 
-release-check: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check test govulncheck compose-check test-scaffold-matrix ## 运行发布前检查
+release-check: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check check-makefile test govulncheck compose-check test-scaffold-matrix ## 运行发布前检查
 	@echo "All checks passed"
 
 ##@ 工具
