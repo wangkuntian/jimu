@@ -21,9 +21,6 @@ CLI_BIN = $(BIN_DIR)/jimu-cli$(if $(filter-out full,$(PROFILE)),-$(PROFILE),)
 SERVER_CMD := cmd/server/main.go
 CLI_PKG := ./cmd/cli
 
-# 先取得 overlay 路径再执行 go 命令；非法形态不能让 -overlay= 退化为无 overlay。
-CLI_RUN = overlay="$$(go run ./tools/profileoverlay "$(PROFILE)")" && APP_ENV=$(ENV) go run -overlay="$$overlay" $(CLI_PKG)
-
 ENV ?= dev
 VERSION ?= dev
 APP_VERSION ?= dev
@@ -125,11 +122,11 @@ seed: image ## 构建所选 PROFILE 镜像并在当前 Compose 栈插入初始�
 
 ##@ 数据库与备份
 
-migrate-down: ## 本机回滚最后一次迁移（PROFILE=<name>）
-	@$(CLI_RUN) migrate down
+migrate-down: image ## 构建所选 PROFILE 镜像并在当前 Compose 栈回滚最后一次迁移
+	$(COMPOSE_ENV) $(COMPOSE) run --rm jimu-init ./jimu migrate down
 
-migrate-status: ## 本机查看迁移状态（PROFILE=<name>）
-	@$(CLI_RUN) migrate status
+migrate-status: image ## 构建所选 PROFILE 镜像并在当前 Compose 栈查看迁移状态
+	$(COMPOSE_ENV) $(COMPOSE) run --rm jimu-init ./jimu migrate status
 
 backup: ## 主机侧备份数据库
 	@./scripts/backup.sh

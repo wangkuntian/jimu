@@ -133,6 +133,16 @@ seed_image_line="$(grep -nF 'docker build --build-arg PROFILE=minimal' "$WORK/se
 seed_run_line="$(grep -nF 'run --rm jimu-init ./jimu seed' "$WORK/seed.plan" | head -n 1 | cut -d: -f1)"
 [ "$seed_image_line" -lt "$seed_run_line" ] || fail "seed 必须先构建镜像再执行"
 
+migrate_status_plan="$(run_make -n migrate-status PROFILE=minimal VERSION=v9.9.9)"
+assert_contains "$migrate_status_plan" 'run --rm jimu-init ./jimu migrate status' "migrate-status 未通过 jimu-init 执行"
+assert_contains "$migrate_status_plan" 'JIMU_IMAGE=jimu:v9.9.9' "migrate-status 未使用版本镜像"
+assert_not_contains "$migrate_status_plan" 'go run -overlay=' "migrate-status 不得绕过容器 Secret 使用本机 CLI"
+
+migrate_down_plan="$(run_make -n migrate-down PROFILE=minimal VERSION=v9.9.9)"
+assert_contains "$migrate_down_plan" 'run --rm jimu-init ./jimu migrate down' "migrate-down 未通过 jimu-init 执行"
+assert_contains "$migrate_down_plan" 'JIMU_IMAGE=jimu:v9.9.9' "migrate-down 未使用版本镜像"
+assert_not_contains "$migrate_down_plan" 'go run -overlay=' "migrate-down 不得绕过容器 Secret 使用本机 CLI"
+
 adminer_plan="$(run_make -n adminer)"
 assert_contains "$adminer_plan" '--profile dev up -d adminer' "adminer 未显式启用 dev profile"
 
