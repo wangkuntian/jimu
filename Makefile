@@ -3,7 +3,7 @@
 .PHONY: up up-observability down restart status logs adminer
 .PHONY: migrate migrate-down migrate-status seed
 .PHONY: backup restore build-backup-image compose-db-backup compose-db-restore test-backup-restore
-.PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race check-makefile
+.PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race check-makefile check-config
 .PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates test-scaffold-matrix
 .PHONY: profiles-check compose-report compose-report-check check-skills skills-install
 .PHONY: swagger swagger-check smoke-check compose-check govulncheck check ci release-check
@@ -251,26 +251,23 @@ swagger-check: ## 校验 OpenAPI 文档为最新
 	git diff --exit-code docs/openapi || { echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; }; \
 	echo "✅ OpenAPI 文档为最新"
 
-smoke-check: ## 校验自动化脚本语法与部署 manifest 契约
+smoke-check: ## 校验自动化脚本语法
 	@bash -n scripts/dev.sh
-	@bash -n scripts/image-fingerprint.sh
 	@bash -n scripts/ensure-image.sh
 	@bash -n scripts/test_shards.sh
 	@bash -n scripts/check_ci_gate.sh
-	@bash -n scripts/test_runtime_security.sh
-	@bash -n scripts/smoke_api_contract.sh
+	@bash -n scripts/test_compose_runtime.sh
 	@bash -n scripts/install_db_clients.sh
 	@bash -n scripts/db_common.sh
 	@bash -n scripts/backup.sh
 	@bash -n scripts/restore.sh
 	@bash -n scripts/test_backup_restore.sh
-	@bash -n scripts/test_deployment_manifests.sh
-	@./scripts/test_deployment_manifests.sh
-	@echo "✅ Smoke 脚本语法与部署 manifest 契约正确"
+	@bash -n scripts/test_config_contracts.sh
+	@bash -n scripts/test_init_secrets.sh
+	@echo "✅ Smoke 脚本语法正确"
 
 compose-check: ## 运行隔离 Compose 与 API 契约验证
-	@./scripts/test_runtime_security.sh
-	@./scripts/smoke_api_contract.sh
+	@./scripts/test_compose_runtime.sh
 
 govulncheck: ## 扫描可达依赖漏洞
 	@go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
@@ -278,13 +275,17 @@ govulncheck: ## 扫描可达依赖漏洞
 check-makefile: ## 校验 Makefile 生命周期、镜像缓存与 Secret 接线
 	@./scripts/test_makefile_contract.sh
 
-check: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check check-makefile test ## 运行开发质量门禁
+check-config: ## 校验 Secret、Compose、observability 与部署 manifest 契约
+	@./scripts/test_init_secrets.sh
+	@./scripts/test_config_contracts.sh all
+
+check: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-config test ## 运行开发质量门禁
 	@echo "✅ All checks passed"
 
-ci: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check check-makefile test-cover test-coverage-check-local test-race swagger-check smoke-check build govulncheck test-scaffold-matrix ## 运行完整本地 CI
+ci: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-config test-cover test-coverage-check-local test-race swagger-check smoke-check build govulncheck test-scaffold-matrix ## 运行完整本地 CI
 	@echo "✅ All local CI checks passed"
 
-release-check: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check check-makefile test govulncheck compose-check test-scaffold-matrix ## 运行发布前检查
+release-check: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-config test govulncheck compose-check test-scaffold-matrix ## 运行发布前检查
 	@echo "All checks passed"
 
 ##@ 工具

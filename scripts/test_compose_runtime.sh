@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 隔离 Compose 运行时验证：先检查管理端与安全边界，再跑认证/租户 API 契约。
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -62,6 +63,25 @@ for endpoint in /livez /readyz; do
   fi
 done
 
+if curl -fsS "http://127.0.0.1:${HTTP_HOST_PORT}/debug/pprof/" >/dev/null 2>&1; then
+  echo "public pprof endpoint is exposed" >&2
+  exit 1
+fi
+
+login() {
+  local username="$1" password="$2" response
+  for _ in $(seq 1 60); do
+    if response="$(curl -fsS "${BASE_URL}/auth/login" -X POST \
+      -H "Content-Type: application/json" \
+      -d "{\"username\":\"${username}\",\"password\":\"${password}\"}" 2>/dev/null)"; then
+      printf '%s' "$response"
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
 registered=0
 for _ in $(seq 1 60); do
   status=$(curl -sS -o /tmp/jimu-register.json -w "%{http_code}" "${BASE_URL}/auth/register" -X POST \
@@ -84,7 +104,10 @@ if [ "$registered" != "1" ]; then
   exit 1
 fi
 
-LOGIN=$(curl -fsS "${BASE_URL}/auth/login" -X POST -H "Content-Type: application/json" -d '{"username":"smoke_user","password":"secret123"}')
+LOGIN="$(login smoke_user secret123)" || {
+  echo "smoke user login failed" >&2
+  exit 1
+}
 ACCESS=$(printf "%s" "$LOGIN" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
 REFRESH=$(printf "%s" "$LOGIN" | sed -n 's/.*"refresh_token":"\([^"]*\)".*/\1/p')
 test -n "$ACCESS"
@@ -104,8 +127,10 @@ grep -q '"code":0' /tmp/jimu-refresh.json
 grep -q '"code":0' /tmp/jimu-logout.json
 
 # ===== 联动链路：认证开关 → 会话引导 → 租户筛选/创建 → 套餐分配 → 用量 =====
-ADMIN=$(curl -fsS "${BASE_URL}/auth/login" -X POST -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"smoke-admin-pass"}')
+ADMIN="$(login admin smoke-admin-pass)" || {
+  echo "admin login failed" >&2
+  exit 1
+}
 ADMIN_ACCESS=$(printf "%s" "$ADMIN" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
 test -n "$ADMIN_ACCESS"
 
@@ -146,7 +171,7 @@ grep -q '"total":0' /tmp/jimu-tenants-none.json
 curl -fsS -H "Authorization: Bearer ${ADMIN_ACCESS}" -H "Content-Type: application/json" \
   -X POST "${BASE_URL}/tenants" -d '{"code":"smoke-tenant","name":"Smoke Tenant"}' >/tmp/jimu-tenant-create.json
 grep -q '"code":0' /tmp/jimu-tenant-create.json
-TENANT_ID=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' /tmp/jimu-tenant-create.json | head -1)
+TENANT_ID=$(sed -n 's/.*"id":"\([^"]*\)".*/\1/p' /tmp/jimu-tenant-create.json | head -1)
 test -n "$TENANT_ID"
 
 curl -fsS -H "Authorization: Bearer ${ADMIN_ACCESS}" "${BASE_URL}/tenant-plans?page_size=1" >/tmp/jimu-plans.json
