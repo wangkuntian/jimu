@@ -24,6 +24,15 @@ make up
 `make dev` 与 `make up` 都会通过 `scripts/init-secrets.sh` 补齐 `secrets/`，且不会传入 `LEGACY_ENV_FILE`。旧 `.env` 的唯一公开迁移入口是 `make init`：它会检测项目根 `.env`，也可通过 `LEGACY_ENV_FILE` 指定其它旧文件。
 若已有 MariaDB 数据卷只缺新增的安全密钥，使用 `make init ALLOW_NEW_SECURITY_KEYS=1`；已有安全密钥文件不会被 `FORCE=1` 轮换。
 
+## 跨仓协作
+
+与 `jimu-web` 的纵向需求按[跨仓协作工作流](design/cross-repo-development.md)执行：
+
+- 后端先完成 API、测试和 Swagger，再固定后端提交供前端同步契约。
+- 前端只消费固定契约和生成的 TypeScript 类型，不复制或猜测后端规则。
+- 任务开始时检查两个仓库的工作区；未经用户明确指令，不执行 commit 或 push。
+- 可复制该文档末尾的任务模板描述跨仓需求，分别汇报两端验证结果。
+
 ## 分支策略
 
 采用简化 GitHub Flow：`master` 为唯一长期分支（禁止直接 push，仅接受 release 分支合并），`release/x.y.z` 为集成与发布分支，日常开发从 release 切出、经 PR 合回。
