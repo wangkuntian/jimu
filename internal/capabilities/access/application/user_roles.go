@@ -61,7 +61,7 @@ func (s *UserRoleService) AssignRoleIDs(ctx context.Context, userID uint64, role
 	// 校验角色 ID 存在且属于用户所属租户。
 	if len(roleIDs) > 0 {
 		var roles []struct{ ID uint64 }
-		query := db.Table("roles").Where("id IN ? AND deleted_at IS NULL", roleIDs)
+		query := db.Table("roles").Where("id IN ? AND deleted_at IS NULL AND status = 1", roleIDs)
 		if userTenant != 0 {
 			query = query.Where("tenant_id = ?", userTenant)
 		}
@@ -107,7 +107,7 @@ func (s *UserRoleService) RolesForUsers(ctx context.Context, userIDs []uint64) (
 	err := s.dbFor(ctx).
 		Table("user_roles ur").
 		Select("ur.user_id, roles.id AS role_id, roles.name AS role_name").
-		Joins("JOIN roles ON roles.id = ur.role_id AND roles.deleted_at IS NULL").
+		Joins("JOIN roles ON roles.id = ur.role_id AND roles.deleted_at IS NULL AND roles.status = 1").
 		Where("ur.user_id IN ?", userIDs).
 		Order("ur.user_id, roles.id").
 		Scan(&rows).Error

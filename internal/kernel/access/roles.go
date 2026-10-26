@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"jimu/internal/shared/errors"
@@ -38,7 +39,7 @@ func (s *DBAuthorizationStore) RolesForUser(ctx context.Context, userID uint64) 
 		Table("roles").
 		Select("roles.name").
 		Joins("JOIN user_roles ur ON ur.role_id = roles.id").
-		Where("ur.user_id = ?", userID).
+		Where("ur.user_id = ? AND roles.deleted_at IS NULL AND roles.status = 1", userID).
 		Pluck("roles.name", &roles).Error
 	return roles, err
 }
@@ -50,6 +51,7 @@ func (s *DBAuthorizationStore) Policies(ctx context.Context) ([]Policy, error) {
 		Select("roles.name AS role, permissions.resource, permissions.action").
 		Joins("JOIN role_permissions rp ON rp.role_id = roles.id").
 		Joins("JOIN permissions ON permissions.id = rp.permission_id").
+		Where("roles.deleted_at IS NULL AND roles.status = 1 AND permissions.deleted_at IS NULL").
 		Scan(&policies).Error
 	return policies, err
 }
@@ -58,6 +60,14 @@ func (s *DBAuthorizationStore) Policies(ctx context.Context) ([]Policy, error) {
 // 权限变更经 TTL 后自动生效；用户角色（roles）每请求实时查询，撤销/分配角色即时反映。
 // 测试可通过 PolicyCacheTTL 缩短 TTL 验证权限变更生效路径。
 var PolicyCacheTTL = 30 * time.Second
+
+var policyGeneration atomic.Uint64
+
+// InvalidatePolicyCache 让下一次鉴权忽略已有策略缓存。
+// 角色名称/状态或角色权限发生变化时调用，确保授权变更立即生效。
+func InvalidatePolicyCache() {
+	policyGeneration.Add(1)
+}
 
 // 平台管理范围由“可读取租户列表”这一权限能力标记；租户管理员不授予该权限时
 // 仍按 JWT tid 收敛。该标记只供显式支持平台范围的能力消费。
@@ -73,11 +83,13 @@ func AuthorizationMiddleware(store AuthorizationStore, enforcer *casbin.Enforcer
 	var cacheMu sync.Mutex
 	var cachedPolicies []Policy
 	var cachedAt time.Time
+	var cachedGeneration uint64
 
 	loadPolicies := func(ctx context.Context) ([]Policy, error) {
 		cacheMu.Lock()
 		defer cacheMu.Unlock()
-		if time.Since(cachedAt) < PolicyCacheTTL && cachedPolicies != nil {
+		generation := policyGeneration.Load()
+		if time.Since(cachedAt) < PolicyCacheTTL && cachedPolicies != nil && cachedGeneration == generation {
 			return cachedPolicies, nil
 		}
 		policies, err := store.Policies(ctx)
@@ -86,6 +98,7 @@ func AuthorizationMiddleware(store AuthorizationStore, enforcer *casbin.Enforcer
 		}
 		cachedPolicies = policies
 		cachedAt = time.Now()
+		cachedGeneration = generation
 		return policies, nil
 	}
 
