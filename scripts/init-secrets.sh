@@ -276,7 +276,42 @@ probe_volume() {
 }
 
 generate_random_password() {
-  openssl rand -hex 24
+  openssl rand -hex 16
+}
+
+admin_password_is_valid() {
+  local password="$1"
+  [ "${#password}" -ge 8 ] && [ "${#password}" -le 32 ] || return 1
+  case "$password" in
+    *[[:space:]]*) return 1 ;;
+  esac
+  [[ "$password" =~ [A-Za-z] ]] || return 1
+  [[ "$password" =~ [0-9] ]] || return 1
+}
+
+validate_admin_password() {
+  local password="$1"
+  admin_password_is_valid "$password" \
+    || die "管理员密码必须为 8-32 位且同时包含字母和数字，不能包含空白字符"
+}
+
+generate_admin_password() {
+  local value
+  while :; do
+    value="$(openssl rand -hex 16)" || return 1
+    if admin_password_is_valid "$value"; then
+      printf '%s' "$value"
+      return 0
+    fi
+  done
+}
+
+validate_admin_password_file() {
+  local file="$SECRETS_DIR/admin_password.txt" value
+  [ -s "$file" ] || die "缺少 admin_password.txt"
+  value="$(cat "$file")"
+  admin_password_is_valid "$value" \
+    || die "管理员密码文件 admin_password.txt 不符合登录策略：必须为 8-32 位且同时包含字母和数字，不能包含空白字符"
 }
 
 generate_encryption_key() {
@@ -313,6 +348,9 @@ if [ "$ALLOW_LEGACY" = "1" ] && [ -n "$LEGACY_ENV_FILE" ] && [ -f "$LEGACY_ENV_F
   if [ -z "${ADMIN_PASSWORD:-}" ]; then
     import_legacy_secret "admin_password.txt" "ADMIN_PASSWORD"
   fi
+fi
+if [ -s "$SECRETS_DIR/admin_password.txt" ]; then
+  validate_admin_password_file
 fi
 
 MARIADB_VOLUME="${COMPOSE_MARIADB_VOLUME:-jimu-mariadb-data}"
@@ -436,19 +474,21 @@ create_generated_secret() {
 
 create_admin_password() {
   if [ -n "${ADMIN_PASSWORD:-}" ]; then
+    validate_admin_password "$ADMIN_PASSWORD"
     printf '%s' "$ADMIN_PASSWORD"
     return 0
   fi
   if [ -t 0 ]; then
     local value
-    read -r -s -p "管理员初始密码（留空自动生成）: " value
+    read -r -s -p "管理员初始密码（8-32 位，含字母和数字；留空自动生成）: " value
     printf '\n' >&2
     if [ -n "$value" ]; then
+      validate_admin_password "$value"
       printf '%s' "$value"
       return 0
     fi
   fi
-  generate_random_password
+  generate_admin_password
 }
 
 if [ "$MARIADB_VOLUME_EXISTS" = "1" ]; then
@@ -480,6 +520,7 @@ else
   create_generated_secret "audit_hash_secret.txt" openssl rand -hex 32
   create_generated_secret "admin_password.txt" create_admin_password
 fi
+validate_admin_password_file
 
 if [ "$OBSERVABILITY" = "1" ]; then
   write_secret "otel_auth_password.txt" "$OBS_PASSWORD"

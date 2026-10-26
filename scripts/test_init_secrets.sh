@@ -242,10 +242,32 @@ admin_a="$(cat "$WORK/admin-random-a/admin_password.txt")"
 admin_b="$(cat "$WORK/admin-random-b/admin_password.txt")"
 [ -n "$admin_a" ] || fail "非 TTY 未生成 admin_password"
 [ "$admin_a" != "$admin_b" ] || fail "非 TTY admin_password 应为随机值"
-TEST_ADMIN_PASSWORD="explicit-admin-password"
+[ "${#admin_a}" -eq 32 ] || fail "默认 admin_password 必须为 32 位，实际 ${#admin_a}"
+[[ "$admin_a" =~ [A-Za-z] ]] || fail "默认 admin_password 缺少字母"
+[[ "$admin_a" =~ [0-9] ]] || fail "默认 admin_password 缺少数字"
+TEST_ADMIN_PASSWORD="explicit-admin1-password"
 run_init "$WORK/admin-explicit" </dev/null
-assert_eq "explicit-admin-password" "$(cat "$WORK/admin-explicit/admin_password.txt")" "ADMIN_PASSWORD 非交互输入"
+assert_eq "explicit-admin1-password" "$(cat "$WORK/admin-explicit/admin_password.txt")" "ADMIN_PASSWORD 非交互输入"
 TEST_ADMIN_PASSWORD=""
+
+for spec in "too-short|Abc1234" "too-long|A1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" "no-letter|12345678" "no-digit|abcdefgh"; do
+  label="${spec%%|*}"
+  password="${spec#*|}"
+  TEST_ADMIN_PASSWORD="$password"
+  if run_init "$WORK/admin-invalid-$label" </dev/null >"$WORK/admin-$label.out" 2>&1; then
+    fail "ADMIN_PASSWORD $label 应被拒绝"
+  fi
+  assert_contains "$WORK/admin-$label.out" "管理员密码" "ADMIN_PASSWORD $label 错误"
+done
+TEST_ADMIN_PASSWORD=""
+
+INVALID_EXISTING_DIR="$WORK/admin-invalid-existing"
+mkdir -p "$INVALID_EXISTING_DIR"
+printf '%s' 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' > "$INVALID_EXISTING_DIR/admin_password.txt"
+if run_init "$INVALID_EXISTING_DIR" </dev/null >"$WORK/admin-invalid-existing.out" 2>&1; then
+  fail "已有的无效 admin_password 应被拒绝"
+fi
+assert_contains "$WORK/admin-invalid-existing.out" "管理员密码" "已有 admin_password 错误"
 
 echo "== OpenObserve 派生文件与一致性校验 =="
 OBS_DIR="$WORK/observability"
@@ -378,7 +400,7 @@ printf '%s' 'keep-this-db-password-12345678901' > "$FORCE_DB_DIR/db_password.txt
 printf '%s' "$(printf 'j%.0s' {1..64})" > "$FORCE_DB_DIR/jwt_secret.txt"
 printf '%s' "$ENCRYPTION_32" > "$FORCE_DB_DIR/encryption_key.txt"
 printf '%s' "$(printf 'a%.0s' {1..64})" > "$FORCE_DB_DIR/audit_hash_secret.txt"
-printf '%s' 'existing-admin-password' > "$FORCE_DB_DIR/admin_password.txt"
+printf '%s' 'existing-admin1-password' > "$FORCE_DB_DIR/admin_password.txt"
 chmod 0600 "$FORCE_DB_DIR"/*.txt
 force_root_hash="$(sha256 "$FORCE_DB_DIR/db_root_password.txt")"
 force_db_hash="$(sha256 "$FORCE_DB_DIR/db_password.txt")"
@@ -402,7 +424,7 @@ mkdir -p "$FORCE_PARTIAL_DIR"
 printf '%s' 'existing-root-password-1234567890' > "$FORCE_PARTIAL_DIR/db_root_password.txt"
 printf '%s' 'existing-app-password-12345678901' > "$FORCE_PARTIAL_DIR/db_password.txt"
 printf '%s' "$(printf 'j%.0s' {1..64})" > "$FORCE_PARTIAL_DIR/jwt_secret.txt"
-printf '%s' 'existing-admin-password' > "$FORCE_PARTIAL_DIR/admin_password.txt"
+printf '%s' 'existing-admin1-password' > "$FORCE_PARTIAL_DIR/admin_password.txt"
 chmod 0600 "$FORCE_PARTIAL_DIR"/*.txt
 partial_jwt_hash="$(sha256 "$FORCE_PARTIAL_DIR/jwt_secret.txt")"
 partial_admin_hash="$(sha256 "$FORCE_PARTIAL_DIR/admin_password.txt")"
@@ -443,7 +465,7 @@ cat > "$LEGACY_FILE" <<'ENV'
 DB_ROOT_PASSWORD="quoted-root-password"
 DB_PASSWORD=literal-password # inline-comment
 JWT_SECRET='quoted-jwt-secret # literal'
-ADMIN_PASSWORD="quoted admin password"
+ADMIN_PASSWORD="quoted-admin1-password"
 ZO_OBSERVE_ROOT_USER_PASSWORD='LegacyObs@123'
 ZO_OBSERVE_ROOT_USER_EMAIL='legacy-admin@example.com'
 DB_HOST=conflicting-db-host-value
@@ -461,7 +483,7 @@ assert_file "$LEGACY_FILE"
 assert_eq "quoted-root-password" "$(cat "$LEGACY_DIR/db_root_password.txt")" "迁移带引号的 DB_ROOT_PASSWORD"
 assert_eq "literal-password" "$(cat "$LEGACY_DIR/db_password.txt")" "迁移带行内注释的 DB_PASSWORD"
 assert_eq "quoted-jwt-secret # literal" "$(cat "$LEGACY_DIR/jwt_secret.txt")" "保留引号内的 #"
-assert_eq "quoted admin password" "$(cat "$LEGACY_DIR/admin_password.txt")" "迁移带引号的 ADMIN_PASSWORD"
+assert_eq "quoted-admin1-password" "$(cat "$LEGACY_DIR/admin_password.txt")" "迁移带引号的 ADMIN_PASSWORD"
 assert_eq "LegacyObs@123" "$(cat "$LEGACY_DIR/otel_auth_password.txt")" "迁移 ZO_OBSERVE_ROOT_USER_PASSWORD"
 assert_eq "LegacyObs@123" "$(env_value "$LEGACY_DIR/openobserve.env" ZO_ROOT_USER_PASSWORD)" "迁移值写入 openobserve.env"
 assert_eq "legacy-admin@example.com" "$(env_value "$LEGACY_DIR/openobserve.env" ZO_ROOT_USER_EMAIL)" "迁移自定义 OpenObserve 邮箱"
@@ -508,7 +530,7 @@ for pair in \
   "db_root_password.txt:quoted-root-password" \
   "db_password.txt:literal-password" \
   "jwt_secret.txt:quoted-jwt-secret # literal" \
-  "admin_password.txt:quoted admin password" \
+  "admin_password.txt:quoted-admin1-password" \
   "otel_auth_password.txt:LegacyObs@123"; do
   file="${pair%%:*}"
   sentinel="${pair#*:}"

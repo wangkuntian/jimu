@@ -113,7 +113,7 @@ make init       # 检测到项目根 .env 时会显式迁移
 LEGACY_ENV_FILE=/path/to/old/.env make init  # 或指定其它旧文件
 ```
 
-`make up` 只补齐缺失 Secret，绝不传入 `LEGACY_ENV_FILE`；随后以 `--env-file /dev/null` 启动 Compose。镜像仅在缺失或构建输入变化时重建，否则复用现有 `jimu:dev`；再由一次性 `jimu-init` 等待 MariaDB/Redis、执行迁移和结构种子，最后启动 `server`。管理员初始密码保存在 `secrets/admin_password.txt`。
+`make up` 只补齐缺失 Secret，绝不传入 `LEGACY_ENV_FILE`；随后以 `--env-file /dev/null` 启动 Compose。镜像仅在缺失或构建输入变化时重建，否则复用现有 `jimu:dev`；再由一次性 `jimu-init` 等待 MariaDB/Redis、执行迁移和结构种子，最后启动 `server`。管理员初始密码保存在 `secrets/admin_password.txt`：必须为 8-32 位、同时包含字母和数字且不能包含空白字符；留空时自动生成 32 位十六进制随机密码。
 
 `secrets/*.txt` 与已有 MariaDB 数据卷中的账号密码绑定。改写 Secret 文件不会自动修改库内密码；请先轮换数据库账号密码，再执行 `make restart`，避免因凭据不一致反复重启。
 
@@ -309,7 +309,7 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 ## 数据种子
 
-`jimu seed` 按当前 profile 的能力集合播种其声明的权限点。默认租户、套餐、管理员角色和管理员账户属于结构性种子；管理员密码优先从 `ADMIN_PASSWORD_FILE` 读取，回退到 `ADMIN_PASSWORD`，两者都未设置时跳过管理员种子并记录告警。Compose 的 `jimu-init` 使用自动生成的 `/run/secrets/admin_password`。
+`jimu seed` 按当前 profile 的能力集合播种其声明的权限点。默认租户、套餐、管理员角色和管理员账户属于结构性种子；管理员密码优先从 `ADMIN_PASSWORD_FILE` 读取，回退到 `ADMIN_PASSWORD`，两者都未设置时跳过管理员种子并记录告警。Compose 的 `jimu-init` 使用自动生成的 `/run/secrets/admin_password`；`init-secrets.sh` 会在使用或复用已有文件前校验管理员密码满足 8-32 位、含字母和数字且无空白字符。
 
 服务启动期也执行同一份结构性种子（各形态共享）：`ADMIN_PASSWORD_FILE` / `ADMIN_PASSWORD` 都未设置时跳过并告警，且**当数据库中一个账号都没有**（`users` 表已存在）时追加一条 error 级日志与下一步（设置密码后重启，或开启 `auth.public_registration`）——**启动行为不变，仍成功启动**；`users` 表尚未建立（容器启动早于 CLI 迁移）或查询失败时静默降级，不影响启动。迁移与运行时装配的边界见[能力架构](docs/design/capability-architecture.md)、[身份与租户](docs/design/identity-and-tenancy.md)和[配置与数据生命周期](docs/design/configuration-and-data-lifecycle.md)。
 

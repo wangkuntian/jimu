@@ -51,7 +51,7 @@ run_compose_contract() {
   printf '%s' 'compose-jwt-secret-012345678901234567890123456789' >"$core_secrets/jwt_secret.txt"
   printf '%s' '01234567890123456789012345678901' >"$core_secrets/encryption_key.txt"
   printf '%s' 'compose-audit-secret-012345678901234567890123456789' >"$core_secrets/audit_hash_secret.txt"
-  printf '%s' 'compose-admin-password' >"$core_secrets/admin_password.txt"
+  printf '%s' 'compose-admin1-password' >"$core_secrets/admin_password.txt"
   cp "$core_secrets"/*.txt "$all_secrets/"
   printf '%s' 'compose-otel-password' >"$all_secrets/otel_auth_password.txt"
   printf '%s' 'b3BzQGV4YW1wbGUuY29tOmNvbXBvc2Utb3RlbC1wYXNzd29yZA==' >"$all_secrets/zo_auth_token.txt"

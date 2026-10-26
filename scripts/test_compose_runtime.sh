@@ -43,7 +43,7 @@ printf '%s' 'jimu-api-db-password' > "$SECRET_DIR/db_password.txt"
 printf '%s' 'jimu-api-jwt-secret-012345678901234567890123456789' > "$SECRET_DIR/jwt_secret.txt"
 printf '%s' '01234567890123456789012345678901' > "$SECRET_DIR/encryption_key.txt"
 printf '%s' 'jimu-api-audit-secret-012345678901234567890123456789' > "$SECRET_DIR/audit_hash_secret.txt"
-printf '%s' 'smoke-admin-pass' > "$SECRET_DIR/admin_password.txt"
+printf '%s' 'smoke-admin1-pass' > "$SECRET_DIR/admin_password.txt"
 
 compose config --quiet
 compose up -d --build
@@ -127,7 +127,7 @@ grep -q '"code":0' /tmp/jimu-refresh.json
 grep -q '"code":0' /tmp/jimu-logout.json
 
 # ===== 联动链路：认证开关 → 会话引导 → 租户筛选/创建 → 套餐分配 → 用量 =====
-ADMIN="$(login admin smoke-admin-pass)" || {
+ADMIN="$(login admin smoke-admin1-pass)" || {
   echo "admin login failed" >&2
   exit 1
 }
