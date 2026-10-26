@@ -169,6 +169,9 @@ func (s *UserService) createTenantID(ctx context.Context, rawTenantID string) (u
 		requestedTenantID = id
 	}
 	if ctxTenantID != 0 {
+		if ctxTenantID == tenant.DefaultTenantID {
+			return 0, errors.New(errors.CodeForbidden, "default tenant is platform-managed")
+		}
 		if requestedTenantID != 0 && requestedTenantID != ctxTenantID {
 			return 0, errors.New(errors.CodeForbidden, "tenant scope mismatch")
 		}
@@ -213,6 +216,9 @@ func (s *UserService) List(ctx context.Context, p pagination.Pagination, filter 
 		ctxTenantID = 0
 	}
 	if ctxTenantID != 0 {
+		if ctxTenantID == tenant.DefaultTenantID {
+			return nil, 0, errors.New(errors.CodeForbidden, "default tenant is platform-managed")
+		}
 		if filter.TenantID != 0 && filter.TenantID != ctxTenantID {
 			return nil, 0, errors.New(errors.CodeForbidden, "tenant scope mismatch")
 		}
@@ -240,6 +246,7 @@ func (s *UserService) Update(ctx context.Context, id uint64, req UpdateUserReque
 	if !canAccessTenant(ctx, user.TenantID) {
 		return errors.New(errors.CodeNotFound, "user not found")
 	}
+	wasActive := user.Status == 1
 	changes := make([]string, 0, 3)
 	if req.Status != nil && user.Status != *req.Status {
 		user.Status = *req.Status
@@ -253,7 +260,26 @@ func (s *UserService) Update(ctx context.Context, id uint64, req UpdateUserReque
 		user.Phone = *req.Phone
 		changes = append(changes, "phone")
 	}
-	if err := s.repo.Update(ctx, user); err != nil {
+	persist := func(txCtx context.Context) error {
+		if wasActive && req.Status != nil && *req.Status == 0 && s.roles != nil {
+			if err := s.roles.EnsureCanDeactivateUser(txCtx, user.ID); err != nil {
+				return err
+			}
+		}
+		return s.repo.Update(txCtx, user)
+	}
+	if s.db != nil && wasActive && req.Status != nil && *req.Status == 0 {
+		err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return persist(dbutil.WithTransaction(ctx, tx))
+		})
+	} else {
+		err = persist(ctx)
+	}
+	if err != nil {
+		var appErr *errors.AppError
+		if stderrors.As(err, &appErr) {
+			return err
+		}
 		if isDuplicateUserError(err) {
 			return errors.Wrap(errors.CodeConflict, "contact already exists", err)
 		}
@@ -280,7 +306,26 @@ func (s *UserService) Delete(ctx context.Context, id uint64) error {
 	if !canAccessTenant(ctx, user.TenantID) {
 		return errors.New(errors.CodeNotFound, "user not found")
 	}
-	if err := s.repo.Delete(ctx, user.ID); err != nil {
+	remove := func(txCtx context.Context) error {
+		if s.roles != nil {
+			if err := s.roles.EnsureCanDeactivateUser(txCtx, user.ID); err != nil {
+				return err
+			}
+		}
+		return s.repo.Delete(txCtx, user.ID)
+	}
+	if s.db != nil {
+		err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return remove(dbutil.WithTransaction(ctx, tx))
+		})
+	} else {
+		err = remove(ctx)
+	}
+	if err != nil {
+		var appErr *errors.AppError
+		if stderrors.As(err, &appErr) {
+			return err
+		}
 		return errors.Wrap(errors.CodeInternalError, "failed to delete user", err)
 	}
 	s.publishUserDeleted(ctx, id)
@@ -296,7 +341,13 @@ func (s *UserService) hydrateOne(ctx context.Context, user domain.User) (*UserRe
 }
 
 func canAccessTenant(ctx context.Context, resourceTenant uint64) bool {
-	return tenant.IsPlatformScope(ctx) || tenantAllowed(resourceTenant, tenant.FromContext(ctx))
+	if tenant.IsPlatformScope(ctx) {
+		return true
+	}
+	if resourceTenant == tenant.DefaultTenantID {
+		return false
+	}
+	return tenantAllowed(resourceTenant, tenant.FromContext(ctx))
 }
 
 func (s *UserService) hydrateMany(ctx context.Context, users []domain.User) ([]UserResponse, error) {
@@ -442,15 +493,19 @@ func (s *UserService) publishUserDeleted(ctx context.Context, id uint64) {
 // BatchDelete 批量软删除用户（逐个执行，返回成功/失败计数）。
 func (s *UserService) BatchDelete(ctx context.Context, ids []uint64) (BatchResult, error) {
 	result := BatchResult{}
+	var firstErr error
 	for _, id := range ids {
 		if err := s.Delete(ctx, id); err != nil {
 			result.Failed++
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
 		result.Success++
 	}
 	if result.Success == 0 && result.Failed > 0 {
-		return result, errors.Wrap(errors.CodeInternalError, "batch delete failed", nil)
+		return result, firstErr
 	}
 	return result, nil
 }

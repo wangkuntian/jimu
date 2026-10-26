@@ -116,8 +116,8 @@ passkey:
 tenant:
   provisioning:
     enabled: false
-    owner_role: ""
-    roles: []
+    owner_role: "" # 空值使用 tenant_admin；不可指向平台角色或 tenant_member
+    roles: []       # tenant_admin/tenant_member 始终创建；这里只追加自定义租户角色
 
 # MFA 配置
 mfa:

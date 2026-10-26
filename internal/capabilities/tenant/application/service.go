@@ -5,6 +5,8 @@ import (
 	stderrors "errors"
 
 	"jimu/internal/capabilities/tenant/domain"
+	"jimu/internal/contract"
+	kernelaccess "jimu/internal/kernel/access"
 	dbutil "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
@@ -14,15 +16,30 @@ import (
 )
 
 type TenantService struct {
-	repo domain.TenantRepository
+	repo  domain.TenantRepository
+	db    *gorm.DB
+	roles contract.ProvisioningRoleStore
 }
 
 func NewTenantService(repo domain.TenantRepository) *TenantService {
 	return &TenantService{repo: repo}
 }
 
+func (s *TenantService) WithDB(db *gorm.DB) *TenantService {
+	s.db = db
+	return s
+}
+
+func (s *TenantService) WithRoles(roles contract.ProvisioningRoleStore) *TenantService {
+	s.roles = roles
+	return s
+}
+
 // Create 创建租户。租户编码全局唯一且不可修改，统一转小写存储。
 func (s *TenantService) Create(ctx context.Context, req CreateTenantRequest) (*TenantResponse, error) {
+	if s.db != nil && s.roles == nil {
+		return nil, errors.New(errors.CodeInternalError, "tenant role provisioning is not configured")
+	}
 	code := tenant.NormalizeCode(req.Code)
 	if !tenant.ValidCode(code) {
 		return nil, errors.New(errors.CodeTenantCodeFormat, "tenant code must match [a-zA-Z0-9_-] (1-64 chars)")
@@ -37,8 +54,37 @@ func (s *TenantService) Create(ctx context.Context, req CreateTenantRequest) (*T
 	}
 
 	t := &domain.Tenant{Code: code, Name: req.Name, Status: 1}
-	if err := s.repo.Create(ctx, t); err != nil {
+	create := func(txCtx context.Context) error {
+		if err := s.repo.Create(txCtx, t); err != nil {
+			return errors.Wrap(errors.CodeInternalError, "failed to create tenant", err)
+		}
+		if s.roles != nil {
+			rolesCfg, err := EffectiveProvisioningRoles(ProvisioningConfig{})
+			if err != nil {
+				return errors.Wrap(errors.CodeInternalError, "build tenant roles", err)
+			}
+			if _, err := s.roles.ProvisionRoles(txCtx, t.ID, rolesCfg); err != nil {
+				return errors.Wrap(errors.CodeInternalError, "provision tenant roles", err)
+			}
+		}
+		return nil
+	}
+	if s.db != nil {
+		err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return create(dbutil.WithTransaction(ctx, tx))
+		})
+	} else {
+		err = create(ctx)
+	}
+	if err != nil {
+		var appErr *errors.AppError
+		if stderrors.As(err, &appErr) {
+			return nil, err
+		}
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to create tenant", err)
+	}
+	if s.roles != nil {
+		kernelaccess.InvalidatePolicyCache()
 	}
 	resp := ToTenantResponse(*t)
 	return &resp, nil

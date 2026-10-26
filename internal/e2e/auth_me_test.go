@@ -45,7 +45,7 @@ func TestAuthMeReportsIdentityAndPermissions(t *testing.T) {
 	require.Equal(t, "admin", me.User.Username)
 	require.NotZero(t, me.User.ID)
 	require.EqualValues(t, 1, me.User.TenantID, "admin 归默认租户")
-	require.Contains(t, me.Roles, "超级管理员")
+	require.Contains(t, me.Roles, "平台超级管理员")
 
 	points := map[string]bool{}
 	for _, p := range me.Permissions {

@@ -21,7 +21,7 @@ func NewMysqlRepository(db *gorm.DB) domain.TenantRepository {
 
 func (r *mysqlRepository) FindByID(ctx context.Context, id uint64) (*domain.Tenant, error) {
 	var t domain.Tenant
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&t).Error
+	err := r.dbFor(ctx).Where("id = ?", id).First(&t).Error
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +30,7 @@ func (r *mysqlRepository) FindByID(ctx context.Context, id uint64) (*domain.Tena
 
 func (r *mysqlRepository) FindByCode(ctx context.Context, code string) (*domain.Tenant, error) {
 	var t domain.Tenant
-	err := r.db.WithContext(ctx).Where("code = ?", code).First(&t).Error
+	err := r.dbFor(ctx).Where("code = ?", code).First(&t).Error
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +40,7 @@ func (r *mysqlRepository) FindByCode(ctx context.Context, code string) (*domain.
 func (r *mysqlRepository) List(ctx context.Context, offset, limit int, sort, order string, filter domain.TenantListFilter) ([]domain.Tenant, int64, error) {
 	var tenants []domain.Tenant
 	var total int64
-	db := r.db.WithContext(ctx).Model(&domain.Tenant{})
+	db := r.dbFor(ctx).Model(&domain.Tenant{})
 	if filter.Keyword != "" {
 		pattern := sqlpattern.LikeContains(filter.Keyword)
 		db = db.Where("code LIKE ? ESCAPE '"+sqlpattern.EscapeChar+"' OR name LIKE ? ESCAPE '"+sqlpattern.EscapeChar+"'", pattern, pattern)
@@ -59,12 +59,12 @@ func (r *mysqlRepository) List(ctx context.Context, offset, limit int, sort, ord
 }
 
 func (r *mysqlRepository) Create(ctx context.Context, t *domain.Tenant) error {
-	return r.db.WithContext(ctx).Create(t).Error
+	return r.dbFor(ctx).Create(t).Error
 }
 
 // Update 乐观锁更新：version 不匹配时返回 db.ErrConcurrentUpdate（调用方映射 409）
 func (r *mysqlRepository) Update(ctx context.Context, t *domain.Tenant) error {
-	if err := dbutil.SaveOptimistic(r.db.WithContext(ctx), &domain.Tenant{}, t.ID, t.Version, map[string]interface{}{
+	if err := dbutil.SaveOptimistic(r.dbFor(ctx), &domain.Tenant{}, t.ID, t.Version, map[string]interface{}{
 		"name":   t.Name,
 		"status": t.Status,
 	}); err != nil {
@@ -75,5 +75,12 @@ func (r *mysqlRepository) Update(ctx context.Context, t *domain.Tenant) error {
 }
 
 func (r *mysqlRepository) Delete(ctx context.Context, id uint64) error {
-	return r.db.WithContext(ctx).Delete(&domain.Tenant{}, id).Error
+	return r.dbFor(ctx).Delete(&domain.Tenant{}, id).Error
+}
+
+func (r *mysqlRepository) dbFor(ctx context.Context) *gorm.DB {
+	if tx, ok := dbutil.TransactionFromContext(ctx); ok {
+		return tx.WithContext(ctx)
+	}
+	return r.db.WithContext(ctx)
 }

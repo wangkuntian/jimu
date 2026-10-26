@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/access/domain"
+	"jimu/internal/contract"
 )
 
 type CreateRoleRequest struct {
@@ -20,13 +21,16 @@ type UpdateRoleRequest struct {
 }
 
 type RoleResponse struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Status      int8      `json:"status"`
-	TenantID    string    `json:"tenant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string             `json:"id"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	Code        string             `json:"code"`
+	Scope       contract.RoleScope `json:"scope"`
+	IsSystem    bool               `json:"is_system"`
+	Status      int8               `json:"status"`
+	TenantID    string             `json:"tenant_id"`
+	CreatedAt   time.Time          `json:"created_at"`
+	UpdatedAt   time.Time          `json:"updated_at"`
 }
 
 type RolePageResponse struct {
@@ -55,10 +59,17 @@ type AssignUserRolesRequest struct {
 }
 
 func ToRoleResponse(role domain.Role) RoleResponse {
+	scope := role.Scope
+	if scope == "" {
+		scope = contract.RoleScopeTenant
+	}
 	return RoleResponse{
 		ID:          strconv.FormatUint(role.ID, 10),
 		Name:        role.Name,
 		Description: role.Description,
+		Code:        role.Code,
+		Scope:       scope,
+		IsSystem:    role.IsSystem,
 		Status:      role.Status,
 		TenantID:    strconv.FormatUint(role.TenantID, 10),
 		CreatedAt:   role.CreatedAt,
@@ -115,4 +126,33 @@ type PermissionListResponse struct {
 	Message   string               `json:"message"`
 	Data      []PermissionResponse `json:"data"`
 	RequestID string               `json:"request_id,omitempty"`
+}
+
+type RoleOptionResponse struct {
+	ID       string             `json:"id"`
+	Code     string             `json:"code"`
+	Name     string             `json:"name"`
+	Scope    contract.RoleScope `json:"scope"`
+	IsSystem bool               `json:"is_system"`
+}
+
+type RoleOptionListResponse struct {
+	Code      int                  `json:"code"`
+	Message   string               `json:"message"`
+	Data      []RoleOptionResponse `json:"data"`
+	RequestID string               `json:"request_id,omitempty"`
+}
+
+func ToRoleOptionResponse(role domain.Role) RoleOptionResponse {
+	scope := role.Scope
+	if scope == "" {
+		scope = contract.RoleScopeTenant
+	}
+	return RoleOptionResponse{
+		ID:       strconv.FormatUint(role.ID, 10),
+		Code:     role.Code,
+		Name:     role.Name,
+		Scope:    scope,
+		IsSystem: role.IsSystem,
+	}
 }

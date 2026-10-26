@@ -44,13 +44,16 @@ func (s *AuthService) Me(ctx context.Context, userID, tenantID uint64) (*MeView,
 
 	// 两个切片都初始化为空切片：响应的 roles/permissions 必须是 [] 而不是 null
 	roles := []string{}
+	roleSubjects := []string{}
 	policies := []access.Policy{}
 	if s.authz != nil {
-		if roles, err = s.authz.RolesForUser(ctx, userID); err != nil {
+		identities, err := s.authz.RolesForUser(ctx, userID)
+		if err != nil {
 			return nil, errors.Wrap(errors.CodeInternalError, "failed to load roles", err)
 		}
-		if roles == nil {
-			roles = []string{}
+		for _, identity := range identities {
+			roles = append(roles, identity.Name)
+			roleSubjects = append(roleSubjects, access.RoleSubject(identity.ID))
 		}
 		if policies, err = s.authz.Policies(ctx); err != nil {
 			return nil, errors.Wrap(errors.CodeInternalError, "failed to load policies", err)
@@ -66,6 +69,6 @@ func (s *AuthService) Me(ctx context.Context, userID, tenantID uint64) (*MeView,
 			CreatedAt: account.CreatedAt,
 		},
 		Roles:       roles,
-		Permissions: EffectivePermissions(roles, policies),
+		Permissions: EffectivePermissions(roleSubjects, policies),
 	}, nil
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"jimu/internal/capabilities/access/domain"
+	"jimu/internal/contract"
 	dbutil "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
@@ -197,6 +198,103 @@ func TestRoleServicePlatformScopeManagesOtherTenant(t *testing.T) {
 	}
 }
 
+func TestRoleServiceOptions(t *testing.T) {
+	repo := &fakeRoleRepository{options: []domain.Role{
+		{
+			ID:       2,
+			TenantID: 9,
+			Name:     "租户管理员",
+			Code:     contract.RoleCodeTenantAdmin,
+			Scope:    contract.RoleScopeTenant,
+			IsSystem: true,
+		},
+	}}
+	service := NewRoleService(repo)
+
+	got, err := service.Options(tenant.WithTenant(context.Background(), 9), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.optionsTenantID != 9 || len(got) != 1 || got[0].Code != contract.RoleCodeTenantAdmin || !got[0].IsSystem {
+		t.Fatalf("options tenant = %d got = %#v", repo.optionsTenantID, got)
+	}
+
+	_, err = service.Options(tenant.WithTenant(context.Background(), 9), 10)
+	if roleAppCode(err) != apperrors.CodeForbidden {
+		t.Fatalf("cross tenant code = %d, want %d", roleAppCode(err), apperrors.CodeForbidden)
+	}
+
+	_, err = service.Options(tenant.WithPlatformScope(tenant.WithTenant(context.Background(), 1)), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.optionsTenantID != 10 {
+		t.Fatalf("platform options tenant = %d, want 10", repo.optionsTenantID)
+	}
+
+	missingService := NewRoleService(repo).WithQuota(&fakeTenantQuota{exists: false})
+	_, err = missingService.Options(tenant.WithPlatformScope(tenant.WithTenant(context.Background(), 1)), 12)
+	if roleAppCode(err) != apperrors.CodeNotFound {
+		t.Fatalf("missing tenant code = %d, want %d", roleAppCode(err), apperrors.CodeNotFound)
+	}
+}
+
+func TestSystemRoleIsImmutable(t *testing.T) {
+	repo := &fakeRoleRepository{role: &domain.Role{
+		ID:       3,
+		TenantID: 1,
+		Name:     "租户管理员",
+		Code:     contract.RoleCodeTenantAdmin,
+		Scope:    contract.RoleScopeTenant,
+		IsSystem: true,
+		Status:   1,
+	}}
+	service := NewRoleService(repo)
+
+	if err := service.Update(context.Background(), 3, UpdateRoleRequest{Name: "changed"}); roleAppCode(err) != apperrors.CodeForbidden {
+		t.Fatalf("update code = %d, want %d", roleAppCode(err), apperrors.CodeForbidden)
+	}
+	if err := service.Delete(context.Background(), 3); roleAppCode(err) != apperrors.CodeForbidden {
+		t.Fatalf("delete code = %d, want %d", roleAppCode(err), apperrors.CodeForbidden)
+	}
+	if err := service.AssignPermissions(context.Background(), 3, []uint64{1}); roleAppCode(err) != apperrors.CodeForbidden {
+		t.Fatalf("assign code = %d, want %d", roleAppCode(err), apperrors.CodeForbidden)
+	}
+	if repo.updatedRole != nil || repo.assigned != nil {
+		t.Fatalf("system role was mutated: updated=%#v assigned=%v", repo.updatedRole, repo.assigned)
+	}
+}
+
+func TestTenantRoleCannotReceivePlatformOnlyPermission(t *testing.T) {
+	repo := &fakeRoleRepository{
+		role: &domain.Role{ID: 3, TenantID: 9, Scope: contract.RoleScopeTenant},
+		permissionsByIDs: map[uint64]domain.Permission{
+			1: {ID: 1, Resource: "/api/v1/tenants", Action: "GET"},
+		},
+	}
+	err := NewRoleService(repo).AssignPermissions(tenant.WithTenant(context.Background(), 9), 3, []uint64{1})
+	if roleAppCode(err) != apperrors.CodeForbidden {
+		t.Fatalf("code = %d, want %d", roleAppCode(err), apperrors.CodeForbidden)
+	}
+	if repo.assigned != nil {
+		t.Fatalf("invalid permission was assigned: %v", repo.assigned)
+	}
+
+	repo = &fakeRoleRepository{
+		role: &domain.Role{ID: 4, TenantID: 1, Scope: contract.RoleScopePlatform},
+		permissionsByIDs: map[uint64]domain.Permission{
+			1: {ID: 1, Resource: "/api/v1/tenants", Action: "GET"},
+		},
+	}
+	ctx := tenant.WithPlatformScope(tenant.WithTenant(context.Background(), 1))
+	if err := NewRoleService(repo).AssignPermissions(ctx, 4, []uint64{1}); err != nil {
+		t.Fatal(err)
+	}
+	if len(repo.assigned) != 1 || repo.assigned[0] != 1 {
+		t.Fatalf("assigned = %v", repo.assigned)
+	}
+}
+
 type fakeRoleRepository struct {
 	role              *domain.Role
 	roles             []domain.Role
@@ -215,6 +313,9 @@ type fakeRoleRepository struct {
 	assigned          []uint64
 	permissions       []domain.Permission
 	getPermissionsErr error
+	options           []domain.Role
+	optionsTenantID   uint64
+	permissionsByIDs  map[uint64]domain.Permission
 }
 
 func (r *fakeRoleRepository) FindByID(context.Context, uint64) (*domain.Role, error) {
@@ -254,6 +355,23 @@ func (r *fakeRoleRepository) AssignPermissions(_ context.Context, _ uint64, perm
 }
 func (r *fakeRoleRepository) GetPermissions(context.Context, uint64) ([]domain.Permission, error) {
 	return r.permissions, r.getPermissionsErr
+}
+
+func (r *fakeRoleRepository) ListOptions(_ context.Context, tenantID uint64) ([]domain.Role, error) {
+	r.optionsTenantID = tenantID
+	return r.options, nil
+}
+
+func (r *fakeRoleRepository) FindPermissionsByIDs(_ context.Context, ids []uint64) ([]domain.Permission, error) {
+	out := make([]domain.Permission, 0, len(ids))
+	for _, id := range ids {
+		if permission, ok := r.permissionsByIDs[id]; ok {
+			out = append(out, permission)
+		} else if r.permissionsByIDs == nil {
+			out = append(out, domain.Permission{ID: id, Resource: "/api/v1/test", Action: "GET"})
+		}
+	}
+	return out, nil
 }
 
 func roleAppCode(err error) int {

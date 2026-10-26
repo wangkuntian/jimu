@@ -21,23 +21,23 @@ func newUserRoleTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.Exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL DEFAULT 0)`).Error)
-	require.NoError(t, db.Exec(`CREATE TABLE roles (id INTEGER PRIMARY KEY, name TEXT NOT NULL, tenant_id INTEGER NOT NULL DEFAULT 0, status INTEGER NOT NULL DEFAULT 1, deleted_at DATETIME)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL DEFAULT 0, status INTEGER NOT NULL DEFAULT 1, deleted_at DATETIME)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE roles (id INTEGER PRIMARY KEY, name TEXT NOT NULL, code TEXT NOT NULL DEFAULT '', scope TEXT NOT NULL DEFAULT 'tenant', is_system INTEGER NOT NULL DEFAULT 0, tenant_id INTEGER NOT NULL DEFAULT 0, status INTEGER NOT NULL DEFAULT 1, deleted_at DATETIME)`).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE user_roles (user_id INTEGER NOT NULL, role_id INTEGER NOT NULL, PRIMARY KEY (user_id, role_id))`).Error)
 	return db
 }
 
 func seedAssigner(t *testing.T, db *gorm.DB) {
 	t.Helper()
-	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id) VALUES (7, 1)`).Error)
-	require.NoError(t, db.Exec(`INSERT INTO roles (id, name, tenant_id) VALUES (1, 'admin', 1), (2, 'viewer', 1)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id) VALUES (7, 7)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO roles (id, name, tenant_id) VALUES (1, 'admin', 7), (2, 'viewer', 7)`).Error)
 }
 
 func TestAssignRoleIDsReplacesRoles(t *testing.T) {
 	db := newUserRoleTestDB(t)
 	seedAssigner(t, db)
 	svc := NewUserRoleService(db)
-	ctx := tenant.WithTenant(context.Background(), 1)
+	ctx := tenant.WithTenant(context.Background(), 7)
 
 	require.NoError(t, svc.AssignRoleIDs(ctx, 7, []uint64{1}))
 	var n int64
@@ -77,12 +77,45 @@ func TestAssignRoleIDsTenantIsolation(t *testing.T) {
 	seedAssigner(t, db)
 	svc := NewUserRoleService(db)
 
-	ctx := tenant.WithTenant(context.Background(), 2) // 目标是租户 1 的用户
+	ctx := tenant.WithTenant(context.Background(), 2) // 目标是租户 7 的用户
 	err := svc.AssignRoleIDs(ctx, 7, []uint64{1})
 	assert.Equal(t, apperrors.CodeNotFound, userRoleAppCode(err))
 	var n int64
 	require.NoError(t, db.Table("user_roles").Where("user_id = ?", 7).Count(&n).Error)
 	assert.Zero(t, n, "越权调用不得写入任何角色")
+}
+
+func TestNonPlatformCannotAssignDefaultTenantUserRoles(t *testing.T) {
+	db := newUserRoleTestDB(t)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id) VALUES (7, 1)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO roles (id, name, tenant_id) VALUES (1, 'admin', 1)`).Error)
+	svc := NewUserRoleService(db)
+
+	err := svc.AssignRoleIDs(tenant.WithTenant(context.Background(), tenant.DefaultTenantID), 7, []uint64{1})
+	require.Equal(t, apperrors.CodeNotFound, userRoleAppCode(err))
+}
+
+func TestLastPlatformSuperAdmin(t *testing.T) {
+	db := newUserRoleTestDB(t)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id) VALUES (7, 1), (8, 1)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO roles (id, name, code, scope, is_system, tenant_id) VALUES
+		(2, 'viewer', '', 'tenant', 0, 1),
+		(3, '平台超级管理员', 'platform_super_admin', 'platform', 1, 1)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO user_roles (user_id, role_id) VALUES (7, 3), (8, 3)`).Error)
+	svc := NewUserRoleService(db)
+	ctx := tenant.WithPlatformScope(tenant.WithTenant(context.Background(), 1))
+
+	require.NoError(t, svc.AssignRoleIDs(ctx, 7, []uint64{2}))
+	err := svc.AssignRoleIDs(ctx, 8, nil)
+	require.Equal(t, apperrors.CodeConflict, userRoleAppCode(err))
+
+	require.NoError(t, db.Exec(`UPDATE users SET status = 0 WHERE id = 8`).Error)
+	require.NoError(t, svc.AssignRoleIDs(ctx, 7, []uint64{3}))
+	err = svc.EnsureCanDeactivateUser(ctx, 7)
+	require.Equal(t, apperrors.CodeConflict, userRoleAppCode(err))
+
+	require.NoError(t, db.Exec(`UPDATE users SET status = 0 WHERE id = 7`).Error)
+	require.NoError(t, svc.EnsureCanDeactivateUser(ctx, 8))
 }
 
 func TestAssignRoleIDsPlatformScopeCanManageOtherTenant(t *testing.T) {

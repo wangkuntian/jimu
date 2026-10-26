@@ -10,6 +10,7 @@ import (
 
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	"jimu/internal/contract"
+	kernelaccess "jimu/internal/kernel/access"
 	dbctx "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
@@ -48,6 +49,75 @@ type GormTenantProvisioner struct {
 
 func NewGormTenantProvisioner(db *gorm.DB, cfg ProvisioningConfig, users contract.AccountRepository, roles contract.ProvisioningRoleStore) *GormTenantProvisioner {
 	return &GormTenantProvisioner{db: db, cfg: cfg, users: users, roles: roles}
+}
+
+// EffectiveProvisioningRoles 合并租户系统角色和用户配置的追加角色。
+func EffectiveProvisioningRoles(cfg ProvisioningConfig) (contract.ProvisioningRoles, error) {
+	roles := make([]contract.ProvisioningRole, 0, len(contract.TenantSystemRoles())+len(cfg.Roles))
+	reservedNames := make(map[string]bool, len(contract.TenantSystemRoles()))
+	for _, spec := range contract.TenantSystemRoles() {
+		roles = append(roles, contract.ProvisioningRole{
+			Code:        spec.Code,
+			Scope:       spec.Scope,
+			System:      true,
+			Name:        spec.Name,
+			Description: spec.Description,
+			Permissions: append([]contract.ProvisioningPermission(nil), spec.Permissions...),
+		})
+		reservedNames[strings.ToLower(spec.Name)] = true
+	}
+
+	customNames := make(map[string]string, len(cfg.Roles))
+	for _, template := range cfg.Roles {
+		if template.Name == "" {
+			return contract.ProvisioningRoles{}, fmt.Errorf("tenant.provisioning.roles[].name is required")
+		}
+		nameKey := strings.ToLower(template.Name)
+		if reservedNames[nameKey] {
+			return contract.ProvisioningRoles{}, fmt.Errorf("tenant.provisioning role name %q conflicts with a system role", template.Name)
+		}
+		if _, ok := customNames[nameKey]; ok {
+			return contract.ProvisioningRoles{}, fmt.Errorf("duplicate tenant.provisioning.roles[].name: %q", template.Name)
+		}
+		customNames[nameKey] = template.Name
+		permissions := make([]contract.ProvisioningPermission, 0, len(template.Permissions))
+		for _, permission := range template.Permissions {
+			if permission.Resource == "" || permission.Action == "" {
+				return contract.ProvisioningRoles{}, fmt.Errorf("tenant.provisioning.roles[%q].permissions entries require resource and action", template.Name)
+			}
+			if contract.IsPlatformOnlyPermission(permission.Resource, permission.Action) {
+				return contract.ProvisioningRoles{}, fmt.Errorf("tenant.provisioning.roles[%q] cannot include platform-only permission %s %s", template.Name, permission.Action, permission.Resource)
+			}
+			permissions = append(permissions, contract.ProvisioningPermission{
+				Resource: permission.Resource,
+				Action:   permission.Action,
+			})
+		}
+		roles = append(roles, contract.ProvisioningRole{
+			Scope:       contract.RoleScopeTenant,
+			Name:        template.Name,
+			Description: template.Description,
+			Permissions: permissions,
+		})
+	}
+
+	ownerRole := cfg.OwnerRole
+	if ownerRole == "" {
+		ownerRole = contract.RoleCodeTenantAdmin
+	}
+	switch ownerRole {
+	case contract.RoleCodePlatformSuperAdmin, contract.RoleCodePlatformAuditor, contract.RoleCodeTenantMember:
+		return contract.ProvisioningRoles{}, fmt.Errorf("tenant.provisioning.owner_role %q is not an administrative tenant role", ownerRole)
+	case contract.RoleCodeTenantAdmin:
+	default:
+		if actualName, ok := customNames[strings.ToLower(ownerRole)]; ok {
+			ownerRole = actualName
+		} else {
+			return contract.ProvisioningRoles{}, fmt.Errorf("tenant.provisioning.owner_role %q not found in tenant roles", ownerRole)
+		}
+	}
+
+	return contract.ProvisioningRoles{OwnerRole: ownerRole, Roles: roles}, nil
 }
 
 // Provision 创建租户 + owner 用户 + 模板角色（单事务，任一步失败整体回滚）。
@@ -101,14 +171,10 @@ func (p *GormTenantProvisioner) Provision(ctx context.Context, params contract.P
 			return err
 		}
 
-		// 3. 按模板初始化角色 + 权限绑定；owner 绑定 owner_role（缺省第一个角色）
-		rolesCfg := contract.ProvisioningRoles{OwnerRole: p.cfg.OwnerRole}
-		for _, role := range p.cfg.Roles {
-			r := contract.ProvisioningRole{Name: role.Name, Description: role.Description}
-			for _, perm := range role.Permissions {
-				r.Permissions = append(r.Permissions, contract.ProvisioningPermission{Resource: perm.Resource, Action: perm.Action})
-			}
-			rolesCfg.Roles = append(rolesCfg.Roles, r)
+		// 3. 按模板初始化角色 + 权限绑定；owner 默认绑定 tenant_admin。
+		rolesCfg, err := EffectiveProvisioningRoles(p.cfg)
+		if err != nil {
+			return errors.New(errors.CodeInvalidParam, err.Error())
 		}
 		ownerRoleID, err := p.roles.ProvisionRoles(txCtx, tenant.ID, rolesCfg)
 		if err != nil {
@@ -146,6 +212,7 @@ func (p *GormTenantProvisioner) Provision(ctx context.Context, params contract.P
 	if err != nil {
 		return nil, err
 	}
+	kernelaccess.InvalidatePolicyCache()
 	return result, nil
 }
 

@@ -59,8 +59,8 @@ func TestUserCreateReturnsCreatedDTO(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.POST("/users", func(c *gin.Context) {
-		c.Set("validated_req", &application.CreateUserRequest{TenantID: "1", Username: "alice", Password: "secret123"})
-		c.Request = c.Request.WithContext(tenant.WithTenant(c.Request.Context(), 1))
+		c.Set("validated_req", &application.CreateUserRequest{TenantID: "2", Username: "alice", Password: "secret123"})
+		c.Request = c.Request.WithContext(tenant.WithTenant(c.Request.Context(), 2))
 		NewUserHandler(application.NewUserService(&fakeUserRepository{}, nil)).Create(c)
 	})
 	w := httptest.NewRecorder()

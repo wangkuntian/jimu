@@ -8,7 +8,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **统一认证** — typed JWT + Redis refresh session + Casbin RBAC v3 权限模型；API Key 认证（服务/机器间调用，`X-API-Key` 头 + `apikey.APIKeyAuthMiddleware` + `apikey.RequireScope` scope 校验，复用 `api_keys` 表并按 `tenant_id` 归属租户，认证后自动注入租户上下文；能力标签与 Scope 约定见 [API Key 与 Scope](#api-key-与-scope)）
 - **租户体系** — 单归属多租户：`tenants` 表 + 租户 CRUD API（`/api/v1/tenants`），`users`/`roles`/`audit_logs`/`api_keys` 携带 `tenant_id` 做行级隔离，任务队列（`jobs`/`job_history`/`dead_letters`）、导入任务（`import_jobs`）与可信设备（`trusted_devices`）同样归属租户；租户身份写入 JWT claim（`tid`）经中间件注入请求上下文，不接受客户端 header 传入；存量数据迁移时归入默认租户（`code=default`），角色名唯一性为租户内唯一，用户名/邮箱保持全局唯一（登录无需传租户标识）；归属关系为**租户 1:N 用户、用户单归属且不可跨租户**（见 [归属模型](#归属模型)）
 - **租户运营（套餐 / 配额 / 用量）** — `tenant_plans` 定义资源上限（`max_users`/`max_roles`/`max_api_keys`，0=不限），`tenants.plan_id=0` 表示未分配套餐（不受限，保持向后兼容）；创建用户（管理端与公开注册）、角色、API Key 前校验上限，超限返回新增错误码 `5005`/403 且不影响既有数据；`GET /api/v1/tenants/usage` 返回当前租户套餐与各项用量，`/api/v1/tenant-plans` 管理套餐定义、`PUT /api/v1/tenants/{id}/plan` 分配套餐（`jimu seed` 会内置一个未分配的 `free` 示例套餐）
-- **开通式注册** — 可选的 SaaS 语义（`tenant.provisioning.enabled`）：注册即单事务开通新租户，注册者成为 owner，按可配置的角色模板自动初始化租户角色与全局权限绑定（模板模式，全部可配置：开关/owner 角色/角色与权限模板）；未启用时注册用户归默认租户
+- **开通式注册** — 可选的 SaaS 语义（`tenant.provisioning.enabled`）：注册即单事务开通新租户，自动创建 `tenant_admin`、`tenant_member` 两个内置角色，注册者默认成为 `tenant_admin` owner；`tenant.provisioning.roles` 用于追加自定义租户角色；未启用时注册用户归默认租户
 - **密码重置** — 邮箱验证码自助重置（`POST /api/v1/auth/forgot-password` + `reset-password`），6 位数字码 Redis 一次性存储，防用户枚举，重置后强制登出全部会话
 - **敏感信息脱敏** — `kernel/mask` 提供手机号/邮箱/身份证/银行卡/姓名/IP 等脱敏函数与按字段名判定（`RedactByKey`/`Map`）；日志链路（文件、stdout、OTLP 导出）统一接入，凭证类字段整体替换为 `***`、PII 部分保留，避免明文落盘
 - **敏感字段加密** — AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引（email/phone，`security.encryption_key` 配置后启用；未配置时明文模式，功能不受影响）
@@ -309,7 +309,7 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 ## 数据种子
 
-`jimu seed` 按当前 profile 的能力集合播种其声明的权限点。默认租户、套餐、管理员角色和管理员账户属于结构性种子；管理员密码优先从 `ADMIN_PASSWORD_FILE` 读取，回退到 `ADMIN_PASSWORD`，两者都未设置时跳过管理员种子并记录告警。Compose 的 `jimu-init` 使用自动生成的 `/run/secrets/admin_password`；`init-secrets.sh` 会在使用或复用已有文件前校验管理员密码满足 8-32 位、含字母和数字且无空白字符。
+`jimu seed` 按当前 profile 的能力集合播种其声明的权限点。默认租户、套餐、平台系统角色和管理员账户属于结构性种子；默认租户只创建 `platform_super_admin`、`platform_auditor` 两个平台角色，不创建租户内置角色。开发阶段不提供旧角色兼容或 adoption，数据库按新系统角色模型初始化。seed 结束前必须存在至少一个有效平台超管，否则失败。管理员密码优先从 `ADMIN_PASSWORD_FILE` 读取，回退到 `ADMIN_PASSWORD`，两者都未设置时跳过管理员种子并记录告警。Compose 的 `jimu-init` 使用自动生成的 `/run/secrets/admin_password`；`init-secrets.sh` 会在使用或复用已有文件前校验管理员密码满足 8-32 位、含字母和数字且无空白字符。
 
 服务启动期也执行同一份结构性种子（各形态共享）：`ADMIN_PASSWORD_FILE` / `ADMIN_PASSWORD` 都未设置时跳过并告警，且**当数据库中一个账号都没有**（`users` 表已存在）时追加一条 error 级日志与下一步（设置密码后重启，或开启 `auth.public_registration`）——**启动行为不变，仍成功启动**；`users` 表尚未建立（容器启动早于 CLI 迁移）或查询失败时静默降级，不影响启动。迁移与运行时装配的边界见[能力架构](docs/design/capability-architecture.md)、[身份与租户](docs/design/identity-and-tenancy.md)和[配置与数据生命周期](docs/design/configuration-and-data-lifecycle.md)。
 
@@ -624,7 +624,7 @@ curl http://localhost:8080/api/v1/auth/me \
   "message": "ok",
   "data": {
     "user": {"id": 1, "username": "admin", "status": 1, "tenant_id": 1, "created_at": "2026-10-13T10:00:00Z"},
-    "roles": ["超级管理员"],
+    "roles": ["平台超级管理员"],
     "permissions": [
       {"resource": "/api/v1/admin/*", "action": "GET"},
       {"resource": "/api/v1/tenants", "action": "GET"}
@@ -651,7 +651,20 @@ curl -X POST http://localhost:8080/api/v1/users \
 
 ### 角色与权限管理
 
-角色管理接口挂在资源路径 `/api/v1/roles`。首版角色管理只允许平台管理员使用；租户管理员即使拥有角色相关权限点也会收到 `403`，不会进入角色管理页。角色、租户和权限 ID 在 HTTP 契约中统一使用字符串，避免雪花 ID 在 JavaScript 中丢失精度。
+角色管理接口挂在资源路径 `/api/v1/roles`。首版角色管理只允许平台管理员使用；租户管理员即使拥有角色管理权限点也会收到 `403`，不会进入角色管理页。角色、租户和权限 ID 在 HTTP 契约中统一使用字符串，避免雪花 ID 在 JavaScript 中丢失精度。
+
+系统角色使用稳定 code 和 scope：
+
+```text
+platform_super_admin  platform  平台超级管理员
+platform_auditor      platform  平台审计员
+tenant_admin          tenant    租户管理员
+tenant_member         tenant    租户成员
+```
+
+系统角色不能通过业务 API 改名、停用或替换权限。默认租户是平台租户，不创建租户内置角色，非平台身份不能管理默认租户用户。最后一个有效平台超管不能被移除、停用或删除。
+
+Casbin 使用 `role:<id>` 作为授权 subject；角色名称仅用于展示。平台范围由角色的 `scope=platform` 决定，不再由是否拥有 `GET /tenants` 权限推断。租户 scope 角色不能授予平台专属权限。
 
 ```bash
 # 角色列表：tenant_id 可选；keyword 按名称子串匹配；status 省略时不过滤
@@ -663,6 +676,10 @@ curl -X POST http://localhost:8080/api/v1/roles \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
   -d '{"tenant_id":"1","name":"运营管理员","description":"负责租户运营"}'
+
+# 租户角色选项：租户管理员读取当前租户；平台管理员可指定 tenant_id
+curl "http://localhost:8080/api/v1/roles/options?tenant_id=1" \
+  -H "Authorization: Bearer <access_token>"
 
 # 权限目录：前端按 page_size=100 循环拉取全部分页
 curl "http://localhost:8080/api/v1/permissions?page=1&page_size=100&sort=id&order=asc" \
@@ -801,7 +818,7 @@ curl -X POST http://localhost:8080/api/v1/auth/register \
   -d '{"username":"founder1","password":"secret123","tenant_name":"Acme Inc","tenant_code":"acme"}'
 ```
 
-两种注册模式的响应同形：`data` 为 `{user, tenant?}` —— 普通注册只有 `user`，开通式注册额外返回 `tenant`（新租户）。owner 登录后自动获得模板中 `owner_role` 指定的角色（缺省为模板第一个角色）。`tenant_code` 统一转小写存储，不传自动生成。模板中引用的权限需先由 `jimu seed` 写入全局权限表，缺失条目跳过。未启用开通式时，注册保持普通语义（用户归默认租户，忽略租户字段）。
+两种注册模式的响应同形：`data` 为 `{user, tenant?}` —— 普通注册只有 `user`，开通式注册额外返回 `tenant`（新租户）。开通事务固定创建 `tenant_admin`、`tenant_member`，owner 默认绑定 `tenant_admin`；`tenant.provisioning.roles` 只追加自定义租户角色，不能使用内置角色名称。`owner_role` 可指向 `tenant_admin` 或自定义租户角色，不能指向平台角色或 `tenant_member`。`tenant_code` 统一转小写存储，不传自动生成。模板中引用的权限需先由 `jimu seed` 写入全局权限表，缺失条目跳过。未启用开通式时，注册保持普通语义（用户归默认租户，忽略租户字段）。
 
 ```json
 {
@@ -827,7 +844,7 @@ curl -X POST http://localhost:8080/api/v1/auth/register \
 - **租户 1:N 用户**：一个租户可有多个用户，一个用户只属于一个租户。结构上是 `users.tenant_id` 单列，没有用户-租户关联表。
 - **身份全局唯一**：`username` 与邮箱/手机号盲索引（`email_hash`/`phone_hash`）为全局唯一索引，同一身份不能存在于多个租户；租户归属创建后不可修改（`UpdateUserRequest` 仅支持 `status`），也没有切换租户接口。
 - **不支持一人多租**：跨租户协作请使用平台级视角（上下文无租户）或按租户归属的 API Key，而不是让同一账号加入多个租户。
-- **用户接口按身份范围隔离**：`/api/v1/users` 的列表、详情、更新、停用与 `/api/v1/users/{id}/roles` 对租户管理员只作用于当前租户（跨租户按不存在或越界处理），平台级视角（上下文无租户）可跨租户查询和筛选。平台级创建必须显式指定 `tenant_id`；租户级创建强制使用当前租户。角色分配按角色 ID 在用户所属租户内校验，用户创建与角色写入在同一事务内完成。`/api/v1/admin/users*` 的通用 CRUD 已移除，用户导入端点仍保留为 `/api/v1/admin/users/import*`。
+- **用户接口按身份范围隔离**：`/api/v1/users` 的列表、详情、更新、停用与 `/api/v1/users/{id}/roles` 对租户管理员只作用于当前租户（跨租户按不存在或越界处理），平台级视角（上下文无租户）可跨租户查询和筛选。默认租户是平台租户，非平台身份不能管理默认租户用户。平台级创建必须显式指定 `tenant_id`；租户级创建强制使用当前租户。角色分配按角色 ID 在用户所属租户内校验，用户创建与角色写入在同一事务内完成。`/api/v1/admin/users*` 的通用 CRUD 已移除，用户导入端点仍保留为 `/api/v1/admin/users/import*`。
 - **任务与导入任务按租户隔离**：`/api/v1/admin/jobs`、`/api/v1/admin/jobs/dead-letters` 的列表/详情/重试/标记解决与 `/api/v1/admin/users/import/:id` 均限定在当前租户；任务消费时会把任务归属租户注入执行上下文（outbox 事件无任务行，租户未知，按平台级处理）。
 - **`tenant_id=0` 表示未归属**：迁移前的存量数据或绕过服务层直接写库会产生该状态，登录时会归一到默认租户（`id=1`、`code=default`）。
 - **套餐与配额**：套餐定义在 `tenant_plans`，租户通过 `tenants.plan_id` 关联；`plan_id=0` 或套餐上限为 0 时不受限制。配额只在创建前校验（创建用户/角色/API Key），已超限的存量数据不会被删除；`users`/`roles` 统计排除软删除记录，`api_keys` 为硬删除直接计数。批量导入用户不逐行校验配额。

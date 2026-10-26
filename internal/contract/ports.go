@@ -53,6 +53,12 @@ type ProvisioningRoleStore interface {
 	AssignRole(ctx context.Context, userID, roleID uint64) error
 }
 
+type ProvisioningRoleStoreBinder interface {
+	BindProvisioningRoleStore(ProvisioningRoleStore)
+}
+
+const TenantRoleStoreBinderPortName = "tenant.role_store_binder"
+
 type TenantProvisionerFactory interface {
 	Enabled() bool
 	Build(users AccountRepository, roles ProvisioningRoleStore) TenantProvisioner
@@ -79,8 +85,12 @@ type ProvisioningRoles struct {
 }
 
 type ProvisioningRole struct {
-	Name, Description string
-	Permissions       []ProvisioningPermission
+	Code        string
+	Scope       RoleScope
+	System      bool
+	Name        string
+	Description string
+	Permissions []ProvisioningPermission
 }
 
 type ProvisioningPermission struct{ Resource, Action string }
@@ -241,4 +251,6 @@ type UserRoleAssigner interface {
 	AssignRoleIDs(ctx context.Context, userID uint64, roleIDs []uint64) error
 	// RolesForUsers 批量返回用户当前角色，供列表/详情回填。
 	RolesForUsers(ctx context.Context, userIDs []uint64) (map[uint64][]UserRole, error)
+	// EnsureCanDeactivateUser 阻止移除最后一个有效平台超级管理员。
+	EnsureCanDeactivateUser(ctx context.Context, userID uint64) error
 }

@@ -33,10 +33,10 @@ func TestProtectedMiddlewareRequiresAccessToken(t *testing.T) {
 
 type fakeAuthzStore struct{}
 
-func (s *fakeAuthzStore) RolesForUser(context.Context, uint64) ([]string, error) {
-	return []string{"admin"}, nil
+func (s *fakeAuthzStore) RolesForUser(context.Context, uint64) ([]access.RoleIdentity, error) {
+	return []access.RoleIdentity{{ID: 1, Name: "admin", Scope: "tenant"}}, nil
 }
 
 func (s *fakeAuthzStore) Policies(context.Context) ([]access.Policy, error) {
-	return []access.Policy{{Role: "admin", Resource: "/api/v1/users", Action: http.MethodGet}}, nil
+	return []access.Policy{{Role: access.RoleSubject(1), Resource: "/api/v1/users", Action: http.MethodGet}}, nil
 }

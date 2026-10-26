@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -279,11 +280,15 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 		access.InvalidatePolicyCache()
 	})
 
-	r := newTestApp(t)
+	app := newTestAppWithDB(t)
+	r := app.router
 	adminToken := login(t, r, "admin", "admin123")
+	tenant := tenantdomain.Tenant{Code: "rbac-tenant", Name: "RBAC Tenant", Status: 1}
+	require.NoError(t, app.db.Create(&tenant).Error)
+	tenantID := strconv.FormatUint(tenant.ID, 10)
 
 	// 1. 创建普通用户
-	w := doJSON(t, r, http.MethodPost, "/api/v1/users", adminToken, `{"tenant_id":"1","username":"rbacuser","password":"rbacpass123"}`)
+	w := doJSON(t, r, http.MethodPost, "/api/v1/users", adminToken, `{"tenant_id":"`+tenantID+`","username":"rbacuser","password":"rbacpass123"}`)
 	require.Equal(t, http.StatusCreated, w.Code)
 	var created struct {
 		ID string `json:"id"`
@@ -292,7 +297,7 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 	require.NotEmpty(t, created.ID)
 
 	// 2. 创建角色
-	w = doJSON(t, r, http.MethodPost, "/api/v1/roles", adminToken, `{"tenant_id":"1","name":"e2e-viewer","description":"e2e"}`)
+	w = doJSON(t, r, http.MethodPost, "/api/v1/roles", adminToken, `{"tenant_id":"`+tenantID+`","name":"e2e-viewer","description":"e2e"}`)
 	require.Equal(t, http.StatusCreated, w.Code)
 	var roleResp struct {
 		ID string `json:"id"`
@@ -358,7 +363,7 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	// 6. 仅凭用户资源权限即可给同租户用户分配角色，不再要求固定管理员角色名
-	w = doJSON(t, r, http.MethodPost, "/api/v1/users", adminToken, `{"tenant_id":"1","username":"rbactarget","password":"rbactarget123"}`)
+	w = doJSON(t, r, http.MethodPost, "/api/v1/users", adminToken, `{"tenant_id":"`+tenantID+`","username":"rbactarget","password":"rbactarget123"}`)
 	require.Equal(t, http.StatusCreated, w.Code)
 	var target struct {
 		ID string `json:"id"`
@@ -366,7 +371,7 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 	require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &target))
 	require.NotEmpty(t, target.ID)
 
-	w = doJSON(t, r, http.MethodPost, "/api/v1/roles", adminToken, `{"tenant_id":"1","name":"e2e-assignee","description":"e2e"}`)
+	w = doJSON(t, r, http.MethodPost, "/api/v1/roles", adminToken, `{"tenant_id":"`+tenantID+`","name":"e2e-assignee","description":"e2e"}`)
 	require.Equal(t, http.StatusCreated, w.Code)
 	var assigneeRole struct {
 		ID string `json:"id"`
@@ -389,7 +394,7 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
 	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
 
-	w = doJSON(t, r, http.MethodGet, "/api/v1/roles?tenant_id=1&keyword=e2e-viewer&status=0", adminToken, "")
+	w = doJSON(t, r, http.MethodGet, "/api/v1/roles?tenant_id="+tenantID+"&keyword=e2e-viewer&status=0", adminToken, "")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var disabledRoles struct {
 		Data []struct {
@@ -444,6 +449,70 @@ func TestPlatformUserManagementSpansTenants(t *testing.T) {
 	require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &tenant))
 	require.NotEmpty(t, tenant.ID)
 
+	var tenantRoles []roledomain.Role
+	require.NoError(t, app.db.Where("code IN ?", []string{
+		contract.RoleCodeTenantAdmin,
+		contract.RoleCodeTenantMember,
+	}).Order("code").Find(&tenantRoles).Error)
+	require.Len(t, tenantRoles, 2)
+	assert.Equal(t, contract.RoleCodeTenantAdmin, tenantRoles[0].Code)
+	assert.Equal(t, contract.RoleCodeTenantMember, tenantRoles[1].Code)
+	assert.Equal(t, tenant.ID, strconv.FormatUint(tenantRoles[0].TenantID, 10))
+	var optionPermissionCount int64
+	require.NoError(t, app.db.Table("role_permissions rp").
+		Joins("JOIN permissions p ON p.id = rp.permission_id").
+		Where("rp.role_id = ? AND p.resource = ? AND p.action = ?", tenantRoles[0].ID, "/api/v1/roles/options", "GET").
+		Count(&optionPermissionCount).Error)
+	require.Equal(t, int64(1), optionPermissionCount)
+
+	w = doJSON(t, app.router, http.MethodPut, "/api/v1/roles/"+strconv.FormatUint(tenantRoles[0].ID, 10),
+		adminToken, `{"name":"changed","description":"","status":0}`)
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	w = doJSON(t, app.router, http.MethodPost, "/api/v1/roles/"+strconv.FormatUint(tenantRoles[0].ID, 10)+"/permissions",
+		adminToken, `{"permission_ids":[]}`)
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+
+	w = doJSON(t, app.router, http.MethodPost, "/api/v1/users", adminToken,
+		`{"tenant_id":"`+tenant.ID+`","username":"tenantadmin","password":"tenantadmin123","role_ids":["`+
+			strconv.FormatUint(tenantRoles[0].ID, 10)+`"]}`)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	tenantAdminToken := login(t, app.router, "tenantadmin", "tenantadmin123")
+
+	w = doJSON(t, app.router, http.MethodGet, "/api/v1/auth/me", tenantAdminToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var tenantMe struct {
+		Roles       []string `json:"roles"`
+		Permissions []struct {
+			Resource string `json:"resource"`
+			Action   string `json:"action"`
+		} `json:"permissions"`
+	}
+	require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &tenantMe))
+	assert.Contains(t, tenantMe.Roles, "租户管理员")
+	foundOptionPermission := false
+	for _, permission := range tenantMe.Permissions {
+		if permission.Resource == "/api/v1/roles/options" && permission.Action == "GET" {
+			foundOptionPermission = true
+			break
+		}
+	}
+	require.True(t, foundOptionPermission, "tenant admin must expose role options permission")
+
+	w = doJSON(t, app.router, http.MethodGet, "/api/v1/roles/options", tenantAdminToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var options struct {
+		Data []struct {
+			Code  string `json:"code"`
+			Scope string `json:"scope"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &options))
+	require.Len(t, options.Data, 2)
+	assert.Equal(t, contract.RoleCodeTenantAdmin, options.Data[0].Code)
+	assert.Equal(t, string(contract.RoleScopeTenant), options.Data[0].Scope)
+	w = doJSON(t, app.router, http.MethodGet, "/api/v1/roles", tenantAdminToken, "")
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+
 	w = doJSON(t, app.router, http.MethodPost, "/api/v1/users", adminToken,
 		`{"tenant_id":"`+tenant.ID+`","username":"platformuser","password":"platform123"}`)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
@@ -460,7 +529,7 @@ func TestPlatformUserManagementSpansTenants(t *testing.T) {
 
 	w = doJSON(t, app.router, http.MethodGet, "/api/v1/users?tenant_id="+tenant.ID, adminToken, "")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	assert.EqualValues(t, 1, parseResp(t, w).Total)
+	assert.EqualValues(t, 2, parseResp(t, w).Total)
 
 	w = doJSON(t, app.router, http.MethodGet, "/api/v1/users/"+created.ID, adminToken, "")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())

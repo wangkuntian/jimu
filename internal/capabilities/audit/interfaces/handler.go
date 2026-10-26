@@ -123,7 +123,7 @@ func exportExtension(format string) string {
 // @Param        page_size  query     int     false  "每页数量（默认 20，最大 100）"
 // @Param        sort       query     string  false  "排序字段（支持 id、created_at，默认 id）"
 // @Param        order      query     string  false  "排序方向（asc 或 desc，默认 desc）"
-// @Success      200        {object}  contract.PageResponse  "成功，返回分页审计日志列表"
+// @Success      200        {object}  application.AuditLogPageResponse  "成功，返回分页审计日志列表"
 // @Failure      400        {object}  contract.ErrorResponse  "参数错误（如无效的排序字段）"
 // @Failure      500        {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /audits [get]
@@ -148,7 +148,7 @@ func (h *AuditHandler) List(c *gin.Context) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        id   path      int  true  "审计日志 ID"
-// @Success      200  {object}  response.Body  "成功，返回审计日志详情"
+// @Success      200  {object}  application.AuditLogBodyResponse  "成功，返回审计日志详情"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
 // @Failure      404  {object}  contract.ErrorResponse  "审计日志不存在"
 // @Failure      500  {object}  contract.ErrorResponse  "服务器内部错误"

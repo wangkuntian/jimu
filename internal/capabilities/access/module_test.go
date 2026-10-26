@@ -39,8 +39,8 @@ func TestModuleDescriptor(t *testing.T) {
 	assert.ElementsMatch(t, []string{"user"}, d.Requires)
 	assert.Equal(t, []string{"tenant"}, d.SoftRequires)
 	assert.ElementsMatch(t, []string{"roles", "permissions", "role_permissions", "user_roles"}, d.Owns)
-	// 角色 7 + 权限 5 + 用户角色分配 1
-	require.Len(t, d.Permissions, 13)
+	// 角色 8 + 权限 5 + 用户角色分配 1
+	require.Len(t, d.Permissions, 14)
 	assert.NotNil(t, d.Migrations)
 }
 
@@ -63,6 +63,7 @@ func TestModuleRegisterHTTP(t *testing.T) {
 		"DELETE /api/v1/roles/:id",
 		"GET /api/v1/roles/:id/permissions",
 		"POST /api/v1/roles/:id/permissions",
+		"GET /api/v1/roles/options",
 		"POST /api/v1/permissions",
 		"GET /api/v1/permissions",
 		"GET /api/v1/permissions/:id",

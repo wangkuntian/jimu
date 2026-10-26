@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"jimu/internal/capabilities/access/domain"
+	"jimu/internal/contract"
 	dbutil "jimu/internal/kernel/db"
 
 	"github.com/glebarez/sqlite"
@@ -117,4 +118,27 @@ func TestRoleRepositoryListFilters(t *testing.T) {
 	require.Equal(t, int64(1), total)
 	require.Len(t, got, 1)
 	assert.Equal(t, "ops-disabled", got[0].Name)
+}
+
+func TestRoleRepositoryListOptions(t *testing.T) {
+	db := newRoleTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+	roles := []domain.Role{
+		{TenantID: 1, Name: "custom-a", Scope: contract.RoleScopeTenant, Status: 1},
+		{TenantID: 1, Name: "system", Code: contract.RoleCodeTenantAdmin, Scope: contract.RoleScopeTenant, IsSystem: true, Status: 1},
+		{TenantID: 1, Name: "disabled", Scope: contract.RoleScopeTenant, Status: 1},
+		{TenantID: 1, Name: "platform", Scope: contract.RoleScopePlatform, Status: 1},
+		{TenantID: 2, Name: "other-tenant", Scope: contract.RoleScopeTenant, Status: 1},
+	}
+	for i := range roles {
+		require.NoError(t, repo.Create(ctx, &roles[i]))
+	}
+	require.NoError(t, db.Model(&domain.Role{}).Where("id = ?", roles[2].ID).Update("status", 0).Error)
+
+	got, err := repo.ListOptions(ctx, 1)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, "system", got[0].Name, "system roles sort first")
+	assert.Equal(t, "custom-a", got[1].Name)
 }

@@ -4,12 +4,14 @@ import (
 	"context"
 	stderrors "errors"
 
+	"jimu/internal/capabilities/access/domain"
 	"jimu/internal/contract"
 	dbutil "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // userRole 用户-角色关联（对应 user_roles 表，本能力为表所有者）。
@@ -54,6 +56,9 @@ func (s *UserRoleService) AssignRoleIDs(ctx context.Context, userID uint64, role
 	if err != nil {
 		return err
 	}
+	if !tenant.IsPlatformScope(ctx) && userTenant == tenant.DefaultTenantID {
+		return apperrors.New(apperrors.CodeNotFound, "user not found")
+	}
 	if !tenant.IsPlatformScope(ctx) && !tenant.Visible(userTenant, tenant.FromContext(ctx)) {
 		return apperrors.New(apperrors.CodeNotFound, "user not found")
 	}
@@ -75,6 +80,9 @@ func (s *UserRoleService) AssignRoleIDs(ctx context.Context, userID uint64, role
 
 	// 事务：先锁定用户行（串行化并发的角色替换），再清空旧角色、写入新角色
 	return s.withTx(ctx, func(tx *gorm.DB) error {
+		if err := s.ensureNotRemovingLastSuperAdmin(tx, userID, roleIDs); err != nil {
+			return err
+		}
 		if err := dbutil.LockRow(tx, &userLock{}, userID).Error; err != nil {
 			if stderrors.Is(err, gorm.ErrRecordNotFound) {
 				return apperrors.New(apperrors.CodeNotFound, "user not found")
@@ -91,6 +99,79 @@ func (s *UserRoleService) AssignRoleIDs(ctx context.Context, userID uint64, role
 		}
 		return nil
 	})
+}
+
+func (s *UserRoleService) EnsureCanDeactivateUser(ctx context.Context, userID uint64) error {
+	if s.db == nil {
+		return apperrors.New(apperrors.CodeInternalError, "db not configured for role assignment")
+	}
+	return s.withTx(ctx, func(tx *gorm.DB) error {
+		return s.ensureNotRemovingLastSuperAdmin(tx, userID, nil)
+	})
+}
+
+func (s *UserRoleService) ensureNotRemovingLastSuperAdmin(tx *gorm.DB, userID uint64, nextRoleIDs []uint64) error {
+	var role domain.Role
+	query := tx.Where(
+		"tenant_id = ? AND scope = ? AND code = ? AND status = 1 AND deleted_at IS NULL",
+		tenant.DefaultTenantID, contract.RoleScopePlatform, contract.RoleCodePlatformSuperAdmin,
+	)
+	if tx.Name() != "sqlite" {
+		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	if err := query.First(&role).Error; err != nil {
+		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return apperrors.Wrap(apperrors.CodeInternalError, "failed to lock platform superadmin role", err)
+	}
+
+	active, err := activePlatformSuperAdmin(tx, userID)
+	if err != nil {
+		return apperrors.Wrap(apperrors.CodeInternalError, "failed to inspect platform superadmin", err)
+	}
+	if !active {
+		return nil
+	}
+	if len(nextRoleIDs) > 0 {
+		var nextCount int64
+		if err := tx.Table("roles").
+			Where("id IN ? AND code = ? AND status = 1 AND deleted_at IS NULL", nextRoleIDs, contract.RoleCodePlatformSuperAdmin).
+			Count(&nextCount).Error; err != nil {
+			return apperrors.Wrap(apperrors.CodeInternalError, "failed to inspect next roles", err)
+		}
+		if nextCount > 0 {
+			return nil
+		}
+	}
+
+	var otherCount int64
+	if err := tx.Table("users").
+		Joins("JOIN user_roles ur ON ur.user_id = users.id").
+		Joins("JOIN roles ON roles.id = ur.role_id").
+		Where("users.id <> ? AND users.status = 1 AND users.deleted_at IS NULL", userID).
+		Where("roles.tenant_id = ? AND roles.scope = ? AND roles.status = 1 AND roles.deleted_at IS NULL AND roles.code = ?",
+			tenant.DefaultTenantID, contract.RoleScopePlatform, contract.RoleCodePlatformSuperAdmin).
+		Distinct("users.id").
+		Count(&otherCount).Error; err != nil {
+		return apperrors.Wrap(apperrors.CodeInternalError, "failed to count platform superadmins", err)
+	}
+	if otherCount == 0 {
+		return apperrors.New(apperrors.CodeConflict, "cannot remove the last active platform superadmin")
+	}
+	return nil
+}
+
+func activePlatformSuperAdmin(tx *gorm.DB, userID uint64) (bool, error) {
+	var count int64
+	err := tx.Table("users").
+		Joins("JOIN user_roles ur ON ur.user_id = users.id").
+		Joins("JOIN roles ON roles.id = ur.role_id").
+		Where("users.id = ? AND users.status = 1 AND users.deleted_at IS NULL", userID).
+		Where("roles.tenant_id = ? AND roles.scope = ? AND roles.status = 1 AND roles.deleted_at IS NULL AND roles.code = ?",
+			tenant.DefaultTenantID, contract.RoleScopePlatform, contract.RoleCodePlatformSuperAdmin).
+		Count(&count).Error
+	return count > 0, err
 }
 
 // RolesForUsers 批量读取用户当前角色。

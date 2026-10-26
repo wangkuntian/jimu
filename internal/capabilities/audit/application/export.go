@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/audit/domain"
-	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
 )
 
@@ -76,7 +75,7 @@ func (s *AuditService) Export(ctx context.Context, opts ExportOptions, w io.Writ
 			fmt.Sprintf("time range must not exceed %d days", exportMaxRangeDays))
 	}
 
-	tenantID := tenant.FromContext(ctx)
+	tenantID := auditTenantID(ctx)
 	total, err := s.repo.CountRange(ctx, tenantID, start, end)
 	if err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to count audit logs for export", err)

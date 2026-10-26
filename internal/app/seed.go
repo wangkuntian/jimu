@@ -1,6 +1,7 @@
 package app
 
 import (
+	stderrors "errors"
 	"fmt"
 
 	"jimu/internal/capabilities/access/domain"
@@ -53,29 +54,42 @@ func RunSeed(db *gorm.DB, caps []contract.Descriptor) error {
 			}
 		}
 
-		// 3. 创建超级管理员角色（归属默认租户）
-		adminRole := domain.Role{Name: "超级管理员", Description: "拥有所有权限", TenantID: tenant.DefaultTenantID}
-		if err := tx.Where("name = ? AND tenant_id = ?", adminRole.Name, tenant.DefaultTenantID).FirstOrCreate(&adminRole).Error; err != nil {
-			return fmt.Errorf("seed admin role failed: %w", err)
+		permissionIDs := make(map[contract.ProvisioningPermission]uint64, len(permissions))
+		for _, perm := range permissions {
+			permissionIDs[contract.ProvisioningPermission{Resource: perm.Resource, Action: perm.Action}] = perm.ID
 		}
 
-		// 4. 为超级管理员分配所有权限
-		for _, perm := range permissions {
-			var count int64
-			if err := tx.Table("role_permissions").Where("role_id = ? AND permission_id = ?", adminRole.ID, perm.ID).Count(&count).Error; err != nil {
-				return fmt.Errorf("check role permission failed: %w", err)
+		// 3. 幂等创建平台系统角色。
+		platformRoles := make(map[string]*domain.Role, len(contract.PlatformSystemRoles()))
+		for _, spec := range contract.PlatformSystemRoles() {
+			role, err := ensureSystemRole(tx, tenant.DefaultTenantID, spec)
+			if err != nil {
+				return fmt.Errorf("seed system role %s failed: %w", spec.Code, err)
 			}
-			if count == 0 {
-				if err := tx.Exec("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)", adminRole.ID, perm.ID).Error; err != nil {
-					return fmt.Errorf("assign permission failed: %w", err)
+			platformRoles[spec.Code] = role
+
+			// 4. 超管授予当前全部权限；其他系统角色只看显式权限集合。
+			ids := make([]uint64, 0, len(permissions))
+			if spec.AllPermissions {
+				for _, perm := range permissions {
+					ids = append(ids, perm.ID)
 				}
+			} else {
+				for _, permission := range spec.Permissions {
+					if id := permissionIDs[permission]; id != 0 {
+						ids = append(ids, id)
+					}
+				}
+			}
+			if err := assignRolePermissions(tx, role.ID, ids); err != nil {
+				return fmt.Errorf("assign permissions for %s failed: %w", spec.Code, err)
 			}
 		}
 
 		// 5. 创建默认管理员用户
 		var adminUser userdomain.User
-		result := tx.Where("username = ?", "admin").First(&adminUser)
-		if result.Error == gorm.ErrRecordNotFound {
+		result := tx.Unscoped().Where("username = ?", "admin").First(&adminUser)
+		if stderrors.Is(result.Error, gorm.ErrRecordNotFound) {
 			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
 			if err != nil {
 				return fmt.Errorf("hash password failed: %w", err)
@@ -89,15 +103,93 @@ func RunSeed(db *gorm.DB, caps []contract.Descriptor) error {
 			if err := tx.Create(&adminUser).Error; err != nil {
 				return fmt.Errorf("seed admin user failed: %w", err)
 			}
+		} else if result.Error != nil {
+			return fmt.Errorf("find admin user failed: %w", result.Error)
+		}
 
-			// 6. 为管理员分配超级管理员角色
-			if err := tx.Exec("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", adminUser.ID, adminRole.ID).Error; err != nil {
-				return fmt.Errorf("assign admin role failed: %w", err)
-			}
+		// 6. 即使 admin 已存在，也确保超管关联存在；不恢复其 status/deleted_at。
+		if err := ensureAdminRole(tx, adminUser.ID, platformRoles[contract.RoleCodePlatformSuperAdmin].ID); err != nil {
+			return fmt.Errorf("assign admin role failed: %w", err)
+		}
+		active, err := hasActivePlatformSuperAdmin(tx)
+		if err != nil {
+			return fmt.Errorf("check active platform superadmin failed: %w", err)
+		}
+		if !active {
+			return fmt.Errorf("no active platform superadmin after seed")
 		}
 
 		return nil
 	})
+}
+
+func ensureSystemRole(tx *gorm.DB, tenantID uint64, spec contract.SystemRoleSpec) (*domain.Role, error) {
+	var role domain.Role
+	err := tx.Where("tenant_id = ? AND code = ?", tenantID, spec.Code).First(&role).Error
+	if err != nil && !stderrors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		role = domain.Role{
+			TenantID: tenantID,
+			Name:     spec.Name,
+			Code:     spec.Code,
+			Scope:    spec.Scope,
+			IsSystem: true,
+			Status:   1,
+		}
+	}
+	role.Name = spec.Name
+	role.Description = spec.Description
+	role.Code = spec.Code
+	role.Scope = spec.Scope
+	role.IsSystem = true
+	role.Status = 1
+	if role.ID == 0 {
+		if err := tx.Create(&role).Error; err != nil {
+			return nil, err
+		}
+	} else if err := tx.Save(&role).Error; err != nil {
+		return nil, err
+	}
+	return &role, nil
+}
+
+func assignRolePermissions(tx *gorm.DB, roleID uint64, permissionIDs []uint64) error {
+	if err := tx.Exec("DELETE FROM role_permissions WHERE role_id = ?", roleID).Error; err != nil {
+		return fmt.Errorf("clear role permissions failed: %w", err)
+	}
+	for _, permissionID := range permissionIDs {
+		if err := tx.Exec("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)", roleID, permissionID).Error; err != nil {
+			return fmt.Errorf("assign permission failed: %w", err)
+		}
+	}
+	return nil
+}
+
+func ensureAdminRole(tx *gorm.DB, userID, roleID uint64) error {
+	var count int64
+	if err := tx.Table("user_roles").Where("user_id = ? AND role_id = ?", userID, roleID).Count(&count).Error; err != nil {
+		return fmt.Errorf("check admin role failed: %w", err)
+	}
+	if count == 0 {
+		if err := tx.Exec("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userID, roleID).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func hasActivePlatformSuperAdmin(tx *gorm.DB) (bool, error) {
+	var count int64
+	err := tx.Table("users").
+		Joins("JOIN user_roles ur ON ur.user_id = users.id").
+		Joins("JOIN roles ON roles.id = ur.role_id").
+		Where("users.status = 1 AND users.deleted_at IS NULL").
+		Where("roles.status = 1 AND roles.deleted_at IS NULL AND roles.code = ?", contract.RoleCodePlatformSuperAdmin).
+		Distinct("users.id").
+		Count(&count).Error
+	return count > 0, err
 }
 
 // SeedCasbinPolicies 同步数据库中的角色-权限关系到 Casbin
@@ -113,13 +205,13 @@ func SeedCasbinPolicies(db *gorm.DB) error {
 
 	// 从数据库加载角色-权限关系
 	var policies []struct {
-		Role     string `gorm:"column:role"`
+		RoleID   uint64 `gorm:"column:role_id"`
 		Resource string `gorm:"column:resource"`
 		Action   string `gorm:"column:action"`
 	}
 
 	err = db.Table("roles").
-		Select("roles.name AS role, permissions.resource, permissions.action").
+		Select("roles.id AS role_id, permissions.resource, permissions.action").
 		Joins("JOIN role_permissions rp ON rp.role_id = roles.id").
 		Joins("JOIN permissions ON permissions.id = rp.permission_id").
 		Scan(&policies).Error
@@ -129,9 +221,9 @@ func SeedCasbinPolicies(db *gorm.DB) error {
 
 	// 批量添加策略
 	for _, p := range policies {
-		_, err := enforcer.AddPolicy(p.Role, p.Resource, p.Action)
+		_, err := enforcer.AddPolicy(access.RoleSubject(p.RoleID), p.Resource, p.Action)
 		if err != nil {
-			return fmt.Errorf("add policy (%s, %s, %s): %w", p.Role, p.Resource, p.Action, err)
+			return fmt.Errorf("add policy (%d, %s, %s): %w", p.RoleID, p.Resource, p.Action, err)
 		}
 	}
 

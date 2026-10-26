@@ -65,7 +65,9 @@ flowchart LR
 
 用户管理统一挂在 `/api/v1/users` 资源下，不按管理员类型拆分 `/admin/users` 路由。平台级身份可以跨租户筛选和创建用户，创建时必须指定 `tenant_id`；租户级身份的范围由上下文租户强制收敛，不能通过请求参数越界。平台管理范围目前由“具备 `GET /api/v1/tenants` 权限”这一授权事实标记，租户管理员不授予该权限时保持租户隔离；该标记不替代具体的用户资源权限。用户创建与 `role_ids` 写入在同一事务内完成；角色 ID 在目标用户所属租户内校验。列表和详情通过 contract 端口回填租户与角色摘要。
 
-角色管理统一挂在 `/api/v1/roles` 资源下。首版仅平台管理员可访问角色与权限目录的管理端点，平台身份通过 `tenant_id` 选择目标租户；角色创建后归属不可修改。`DELETE /api/v1/roles/{id}` 表示停用（`status=0`），`PUT /api/v1/roles/{id}` 可通过 `status=1` 恢复；用户角色分配与 Casbin 策略加载只接受启用且未删除的角色。角色权限整体替换在事务内校验全部权限 ID，角色或授权变更会主动失效当前进程的策略缓存；跨副本一致性仍由各自缓存 TTL 约束。
+角色管理统一挂在 `/api/v1/roles` 资源下。首版仅平台管理员可访问角色与权限目录的管理端点，平台身份通过 `tenant_id` 选择目标租户；角色创建后归属不可修改。内置角色为 `platform_super_admin`、`platform_auditor`、`tenant_admin`、`tenant_member`，使用稳定 code、`platform|tenant` scope 和 system 标记识别；系统角色禁止通过业务 API 改名、停用或替换权限。Casbin subject 使用 `role:<id>`，平台范围由角色 scope 决定而不是权限存在性；tenant scope 角色不能持有平台专属权限。默认租户只持有两个平台角色，非平台身份不得管理默认租户用户。`POST /tenants` 与开通式注册在各自事务内创建 `tenant_admin`、`tenant_member`；`DELETE /api/v1/roles/{id}` 表示停用（`status=0`），`PUT /api/v1/roles/{id}` 可通过 `status=1` 恢复。用户角色分配与 Casbin 策略加载只接受启用且未删除的角色；移除、停用或删除最后一个有效 `platform_super_admin` 用户返回冲突，检查先锁平台角色行再计数。角色权限整体替换在事务内校验全部权限 ID，角色或授权变更会在事务成功后失效当前进程的策略缓存；跨副本一致性仍由各自缓存 TTL 约束。
+
+审计列表、详情和导出按身份范围收敛：平台身份读取全部租户，租户身份只能读取当前租户；详情跨租户按不存在处理。
 
 ### 会话身份与权限点的下发（`/auth/me`）
 

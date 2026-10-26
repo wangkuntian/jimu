@@ -26,6 +26,7 @@ func TestOpenAPIIncludesCRUDContract(t *testing.T) {
 		"/roles":                  {"get", "post"},
 		"/roles/{id}":             {"get", "put", "delete"},
 		"/roles/{id}/permissions": {"get", "post"},
+		"/roles/options":          {"get"},
 		"/permissions":            {"get", "post"},
 		"/permissions/{id}":       {"get", "put", "delete"},
 		"/audits":                 {"get"},
@@ -258,6 +259,7 @@ func TestOpenAPIRoleManagementCarriesTypedData(t *testing.T) {
 
 	assertRefResponse(t, spec, "/permissions", "get", 200, "#/definitions/application.PermissionPageResponse")
 	assertRefResponse(t, spec, "/roles/{id}/permissions", "get", 200, "#/definitions/application.PermissionListResponse")
+	assertRefResponse(t, spec, "/roles/options", "get", 200, "#/definitions/application.RoleOptionListResponse")
 
 	permissions := definitionProperties(t, spec, "application.PermissionPageResponse")
 	assertItemsRef(t, permissions, "data", "#/definitions/application.PermissionResponse")
@@ -286,7 +288,10 @@ func TestOpenAPIRoleManagementCarriesTypedData(t *testing.T) {
 	}
 
 	role := definitionProperties(t, spec, "application.RoleResponse")
-	for _, field := range []string{"id", "tenant_id", "name", "description", "status", "created_at", "updated_at"} {
+	for _, field := range []string{
+		"id", "tenant_id", "name", "description", "code", "scope", "is_system",
+		"status", "created_at", "updated_at",
+	} {
 		if _, ok := role[field]; !ok {
 			t.Fatalf("application.RoleResponse 缺少字段 %s", field)
 		}
@@ -297,9 +302,41 @@ func TestOpenAPIRoleManagementCarriesTypedData(t *testing.T) {
 	if got := propertyType(role, "tenant_id"); got != "string" {
 		t.Fatalf("application.RoleResponse.tenant_id type = %q, want string", got)
 	}
+	if got := propertyType(role, "is_system"); got != "boolean" {
+		t.Fatalf("application.RoleResponse.is_system type = %q, want boolean", got)
+	}
+
+	optionList := definitionProperties(t, spec, "application.RoleOptionListResponse")
+	assertItemsRef(t, optionList, "data", "#/definitions/application.RoleOptionResponse")
+	option := definitionProperties(t, spec, "application.RoleOptionResponse")
+	for _, field := range []string{"id", "code", "name", "scope", "is_system"} {
+		if _, ok := option[field]; !ok {
+			t.Fatalf("application.RoleOptionResponse 缺少字段 %s", field)
+		}
+	}
+	if got := propertyType(option, "id"); got != "string" {
+		t.Fatalf("application.RoleOptionResponse.id type = %q, want string", got)
+	}
 
 	assertPathParamType(t, spec, "/roles/{id}/permissions", "get", "id", "string")
 	assertPathParamType(t, spec, "/roles/{id}/permissions", "post", "id", "string")
+}
+
+func TestOpenAPIAuditCarriesTenantScope(t *testing.T) {
+	spec := readOpenAPI(t)
+	assertRefResponse(t, spec, "/audits", "get", 200, "#/definitions/application.AuditLogPageResponse")
+	assertRefResponse(t, spec, "/audits/{id}", "get", 200, "#/definitions/application.AuditLogBodyResponse")
+
+	page := definitionProperties(t, spec, "application.AuditLogPageResponse")
+	assertItemsRef(t, page, "data", "#/definitions/application.AuditLogResponse")
+	body := definitionProperties(t, spec, "application.AuditLogBodyResponse")
+	if _, ok := body["data"]; !ok {
+		t.Fatal("application.AuditLogBodyResponse missing data")
+	}
+	audit := definitionProperties(t, spec, "application.AuditLogResponse")
+	if got := propertyType(audit, "tenant_id"); got != "string" {
+		t.Fatalf("application.AuditLogResponse.tenant_id type = %q, want string", got)
+	}
 }
 
 func assertRefResponse(t *testing.T, spec map[string]any, path, method string, statusCode int, wantRef string) {

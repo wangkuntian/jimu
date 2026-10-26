@@ -17,13 +17,13 @@ import (
 
 // fakeAuthorizationStore 内存版 access.AuthorizationStore：分别可注入角色/策略错误。
 type fakeAuthorizationStore struct {
-	roles    []string
+	roles    []access.RoleIdentity
 	policies []access.Policy
 	rolesErr error
 	polErr   error
 }
 
-func (s *fakeAuthorizationStore) RolesForUser(context.Context, uint64) ([]string, error) {
+func (s *fakeAuthorizationStore) RolesForUser(context.Context, uint64) ([]access.RoleIdentity, error) {
 	if s.rolesErr != nil {
 		return nil, s.rolesErr
 	}
@@ -108,7 +108,7 @@ func TestMeSerializesNilRolesAsEmptyArray(t *testing.T) {
 	authz := &fakeAuthorizationStore{
 		roles: nil,
 		policies: []access.Policy{
-			{Role: "超级管理员", Resource: "/api/v1/tenants", Action: "GET"},
+			{Role: access.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
 		},
 	}
 	service := newMeService(repo, authz)
@@ -133,11 +133,11 @@ func TestMeReturnsClaimTenantAndEffectivePermissions(t *testing.T) {
 		"alice": {ID: 42, Username: "alice", Status: 1, TenantID: 99, CreatedAt: created},
 	}}
 	authz := &fakeAuthorizationStore{
-		roles: []string{"超级管理员"},
+		roles: []access.RoleIdentity{{ID: 1, Name: "超级管理员", Scope: contract.RoleScopePlatform}},
 		policies: []access.Policy{
-			{Role: "超级管理员", Resource: "/api/v1/tenants", Action: "GET"},
-			{Role: "超级管理员", Resource: "/api/v1/users", Action: "GET"},
-			{Role: "游客", Resource: "/api/v1/audits", Action: "GET"},
+			{Role: access.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
+			{Role: access.RoleSubject(1), Resource: "/api/v1/users", Action: "GET"},
+			{Role: access.RoleSubject(2), Resource: "/api/v1/audits", Action: "GET"},
 		},
 	}
 	service := newMeService(repo, authz)

@@ -129,6 +129,37 @@ func (h *RoleHandler) List(c *gin.Context) {
 	response.Page(c, roles, total, p.Page, p.PageSize)
 }
 
+// Options godoc
+// @Summary      获取可分配角色选项
+// @Description  返回指定租户内启用且可分配给用户的角色摘要。租户身份只能读取当前租户。
+// @Tags         角色管理
+// @Produce      json
+// @Security     BearerAuth
+// @Param        tenant_id  query     string  false  "目标租户 ID（平台管理员可选）"
+// @Success      200        {object}  application.RoleOptionListResponse  "成功，返回角色选项"
+// @Failure      400        {object}  contract.ErrorResponse  "参数错误（tenant_id 格式无效）"
+// @Failure      403        {object}  contract.ErrorResponse  "跨租户访问"
+// @Failure      500        {object}  contract.ErrorResponse  "服务器内部错误"
+// @Router       /roles/options [get]
+func (h *RoleHandler) Options(c *gin.Context) {
+	q, _ := c.MustGet("validated_query").(*roleOptionQuery)
+	var tenantID uint64
+	if q.TenantID != "" {
+		id, err := strconv.ParseUint(q.TenantID, 10, 64)
+		if err != nil || id == 0 {
+			response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid tenant_id"))
+			return
+		}
+		tenantID = id
+	}
+	roles, err := h.service.Options(c.Request.Context(), tenantID)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, roles)
+}
+
 // Update godoc
 // @Summary      更新角色信息
 // @Description  更新指定角色的名称、描述或状态。tenant_id 不可修改。

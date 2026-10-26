@@ -58,17 +58,27 @@ func (s *AuditService) Get(ctx context.Context, id uint64) (*AuditLogResponse, e
 		}
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to get audit log", err)
 	}
+	if tenantID := auditTenantID(ctx); tenantID != 0 && log.TenantID != tenantID {
+		return nil, errors.New(errors.CodeNotFound, "audit log not found")
+	}
 	resp := ToAuditLogResponse(*log)
 	return &resp, nil
 }
 
 // List 查询审计日志。上下文带租户时仅返回该租户的日志（0=平台级视角，不过滤）。
 func (s *AuditService) List(ctx context.Context, p pagination.Pagination) ([]AuditLogResponse, int64, error) {
-	logs, total, err := s.repo.List(ctx, tenant.FromContext(ctx), p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
+	logs, total, err := s.repo.List(ctx, auditTenantID(ctx), p.GetOffset(), p.GetLimit(), p.Sort, p.Order)
 	if err != nil {
 		return nil, 0, errors.Wrap(errors.CodeInternalError, "failed to list audit logs", err)
 	}
 	return ToAuditLogResponses(logs), total, nil
+}
+
+func auditTenantID(ctx context.Context) uint64 {
+	if tenant.IsPlatformScope(ctx) {
+		return 0
+	}
+	return tenant.FromContext(ctx)
 }
 
 // VerifyResult 审计链校验结果

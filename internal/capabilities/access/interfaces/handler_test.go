@@ -11,10 +11,14 @@ import (
 
 	"jimu/internal/capabilities/access/application"
 	"jimu/internal/capabilities/access/domain"
+	"jimu/internal/contract"
 	"jimu/internal/kernel/http/middleware"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRoleCreateReturnsCreated(t *testing.T) {
@@ -247,6 +251,58 @@ func TestRoleGetPermissionsReturnsEmptyArray(t *testing.T) {
 	}
 }
 
+func TestRoleOptionsReturnsTenantRoles(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &fakeRoleRepository{options: []domain.Role{{
+		ID:       8,
+		TenantID: 9,
+		Name:     "租户管理员",
+		Code:     contract.RoleCodeTenantAdmin,
+		Scope:    contract.RoleScopeTenant,
+		IsSystem: true,
+	}}}
+	r := gin.New()
+	r.GET("/roles/options", func(c *gin.Context) {
+		c.Set("validated_query", &roleOptionQuery{})
+		c.Request = c.Request.WithContext(tenant.WithTenant(c.Request.Context(), 9))
+		NewRoleHandler(application.NewRoleService(repo)).Options(c)
+	})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/roles/options", nil))
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var body struct {
+		Data []application.RoleOptionResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Len(t, body.Data, 1)
+	assert.Equal(t, contract.RoleCodeTenantAdmin, body.Data[0].Code)
+	assert.Equal(t, "8", body.Data[0].ID)
+}
+
+func TestRoleOptionsRouteIsNotPlatformGuarded(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &fakeRoleRepository{options: []domain.Role{{
+		ID:       8,
+		TenantID: 9,
+		Name:     "租户管理员",
+		Code:     contract.RoleCodeTenantAdmin,
+		Scope:    contract.RoleScopeTenant,
+		IsSystem: true,
+	}}}
+	r := gin.New()
+	rg := r.Group("/api/v1")
+	rg.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(tenant.WithTenant(c.Request.Context(), 9))
+		c.Next()
+	})
+	RegisterRoleRoutes(rg, application.NewRoleService(repo))
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/roles/options", nil))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
 func TestRoleDeleteReturnsNoContent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -264,6 +320,7 @@ type fakeRoleRepository struct {
 	permissions []domain.Permission
 	listFilter  domain.RoleListFilter
 	assigned    []uint64
+	options     []domain.Role
 }
 
 func (r *fakeRoleRepository) FindByID(context.Context, uint64) (*domain.Role, error) {
@@ -290,6 +347,18 @@ func (r *fakeRoleRepository) AssignPermissions(_ context.Context, _ uint64, perm
 }
 func (r *fakeRoleRepository) GetPermissions(context.Context, uint64) ([]domain.Permission, error) {
 	return r.permissions, nil
+}
+
+func (r *fakeRoleRepository) ListOptions(context.Context, uint64) ([]domain.Role, error) {
+	return r.options, nil
+}
+
+func (r *fakeRoleRepository) FindPermissionsByIDs(_ context.Context, ids []uint64) ([]domain.Permission, error) {
+	out := make([]domain.Permission, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, domain.Permission{ID: id, Resource: "/api/v1/test", Action: "GET"})
+	}
+	return out, nil
 }
 
 type errDeleteRoleRepository struct{ fakeRoleRepository }

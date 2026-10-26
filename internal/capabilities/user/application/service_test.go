@@ -56,8 +56,8 @@ func TestUserServiceBatchDelete(t *testing.T) {
 		user:    &domain.User{ID: 1},
 		findErr: gorm.ErrRecordNotFound,
 	}, nil).BatchDelete(ctx, []uint64{1, 2})
-	if appCode(err) != apperrors.CodeInternalError {
-		t.Fatalf("all-fail code = %d, want %d", appCode(err), apperrors.CodeInternalError)
+	if appCode(err) != apperrors.CodeNotFound {
+		t.Fatalf("all-fail code = %d, want %d", appCode(err), apperrors.CodeNotFound)
 	}
 
 	// 全部失败：找到但删除报错
@@ -276,6 +276,8 @@ type fakeUserRoleManager struct {
 	roles     map[uint64][]contract.UserRole
 	assignErr error
 	rolesErr  error
+	guardErr  error
+	guarded   []uint64
 }
 
 func (f *fakeUserRoleManager) AssignRoleIDs(_ context.Context, userID uint64, roleIDs []uint64) error {
@@ -288,6 +290,40 @@ func (f *fakeUserRoleManager) AssignRoleIDs(_ context.Context, userID uint64, ro
 
 func (f *fakeUserRoleManager) RolesForUsers(context.Context, []uint64) (map[uint64][]contract.UserRole, error) {
 	return f.roles, f.rolesErr
+}
+
+func (f *fakeUserRoleManager) EnsureCanDeactivateUser(_ context.Context, userID uint64) error {
+	f.guarded = append(f.guarded, userID)
+	return f.guardErr
+}
+
+func TestUserServiceDeactivationUsesSuperAdminGuard(t *testing.T) {
+	ctx := tenant.WithPlatformScope(tenant.WithTenant(context.Background(), 1))
+	repo := &fakeUserRepository{user: &domain.User{ID: 7, Username: "admin", TenantID: 1, Status: 1}}
+	roles := &fakeUserRoleManager{guardErr: apperrors.New(apperrors.CodeConflict, "last superadmin")}
+	svc := NewUserService(repo, roles)
+	status := int8(0)
+
+	err := svc.Update(ctx, 7, UpdateUserRequest{Status: &status})
+	assert.Equal(t, apperrors.CodeConflict, appCode(err))
+	assert.Equal(t, []uint64{7}, roles.guarded)
+	assert.Nil(t, repo.updated)
+
+	roles.guarded = nil
+	err = svc.Delete(ctx, 7)
+	assert.Equal(t, apperrors.CodeConflict, appCode(err))
+	assert.Equal(t, []uint64{7}, roles.guarded)
+}
+
+func TestUserServiceBatchDeletePreservesLastSuperAdminConflict(t *testing.T) {
+	ctx := tenant.WithPlatformScope(tenant.WithTenant(context.Background(), 1))
+	repo := &fakeUserRepository{user: &domain.User{ID: 7, TenantID: 1, Status: 1}}
+	roles := &fakeUserRoleManager{guardErr: apperrors.New(apperrors.CodeConflict, "last superadmin")}
+	svc := NewUserService(repo, roles)
+
+	res, err := svc.BatchDelete(ctx, []uint64{7})
+	assert.Equal(t, apperrors.CodeConflict, appCode(err))
+	assert.Equal(t, 1, res.Failed)
 }
 
 func TestUserServiceCreateAssignsRoles(t *testing.T) {
@@ -316,12 +352,12 @@ func TestUserServiceCreateAssignsRoles(t *testing.T) {
 }
 
 func TestUserServiceUpdateContactFields(t *testing.T) {
-	repo := &fakeUserRepository{user: &domain.User{ID: 7, TenantID: 1, Status: 1}}
+	repo := &fakeUserRepository{user: &domain.User{ID: 7, TenantID: 2, Status: 1}}
 	svc := NewUserService(repo)
 	email := "alice@example.com"
 	phone := "13800138000"
 
-	require.NoError(t, svc.Update(tenant.WithTenant(context.Background(), 1), 7, UpdateUserRequest{
+	require.NoError(t, svc.Update(tenant.WithTenant(context.Background(), 2), 7, UpdateUserRequest{
 		Email: &email,
 		Phone: &phone,
 	}))
@@ -387,6 +423,30 @@ func TestUserServiceTenantAdminScopeStillUsesContextTenant(t *testing.T) {
 	_, _, err = svc.List(ctx, pagination.Pagination{Page: 1, PageSize: 20}, domain.UserListFilter{})
 	require.NoError(t, err)
 	assert.Equal(t, uint64(7), repo.filter.TenantID)
+}
+
+func TestNonPlatformCannotManageDefaultTenant(t *testing.T) {
+	ctx := tenant.WithTenant(context.Background(), tenant.DefaultTenantID)
+	admin := &domain.User{ID: 7, Username: "admin", TenantID: tenant.DefaultTenantID, Status: 1}
+
+	repo := &fakeUserRepository{user: admin, users: []domain.User{*admin}, total: 1}
+	svc := NewUserService(repo)
+
+	_, err := svc.Get(ctx, admin.ID)
+	assert.Equal(t, apperrors.CodeNotFound, appCode(err))
+
+	err = svc.Update(ctx, admin.ID, UpdateUserRequest{})
+	assert.Equal(t, apperrors.CodeNotFound, appCode(err))
+
+	err = svc.Delete(ctx, admin.ID)
+	assert.Equal(t, apperrors.CodeNotFound, appCode(err))
+
+	_, _, err = svc.List(ctx, pagination.Pagination{Page: 1, PageSize: 20}, domain.UserListFilter{})
+	assert.Equal(t, apperrors.CodeForbidden, appCode(err))
+
+	_, err = svc.Create(ctx, CreateUserRequest{Username: "tenantuser", Password: "password1"})
+	assert.Equal(t, apperrors.CodeForbidden, appCode(err))
+	assert.Nil(t, repo.created)
 }
 
 func applicationTenantRef(id, name string) TenantRef {

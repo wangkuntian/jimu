@@ -146,7 +146,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回分页审计日志列表",
                         "schema": {
-                            "$ref": "#/definitions/contract.PageResponse"
+                            "$ref": "#/definitions/application.AuditLogPageResponse"
                         }
                     },
                     "400": {
@@ -312,7 +312,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回审计日志详情",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.AuditLogBodyResponse"
                         }
                     },
                     "400": {
@@ -1830,6 +1830,57 @@ const docTemplate = `{
                 ]
             }
         },
+        "/roles/options": {
+            "get": {
+                "description": "返回指定租户内启用且可分配给用户的角色摘要。租户身份只能读取当前租户。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色管理"
+                ],
+                "summary": "获取可分配角色选项",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "目标租户 ID（平台管理员可选）",
+                        "name": "tenant_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回角色选项",
+                        "schema": {
+                            "$ref": "#/definitions/application.RoleOptionListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（tenant_id 格式无效）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "跨租户访问",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
         "/roles/{id}": {
             "get": {
                 "description": "根据角色 ID 获取角色详细信息。权限列表由 GET /roles/{id}/permissions 单独读取。",
@@ -3200,6 +3251,93 @@ const docTemplate = `{
                 }
             }
         },
+        "application.AuditLogBodyResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "$ref": "#/definitions/application.AuditLogResponse"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.AuditLogPageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.AuditLogResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.AuditLogResponse": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "detail": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "resource": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
         "application.BatchDeleteRequest": {
             "type": "object",
             "required": [
@@ -3584,6 +3722,46 @@ const docTemplate = `{
                 }
             }
         },
+        "application.RoleOptionListResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.RoleOptionResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.RoleOptionResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_system": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "scope": {
+                    "$ref": "#/definitions/contract.RoleScope"
+                }
+            }
+        },
         "application.RolePageResponse": {
             "type": "object",
             "properties": {
@@ -3627,6 +3805,9 @@ const docTemplate = `{
         "application.RoleResponse": {
             "type": "object",
             "properties": {
+                "code": {
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -3636,8 +3817,14 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "is_system": {
+                    "type": "boolean"
+                },
                 "name": {
                     "type": "string"
+                },
+                "scope": {
+                    "$ref": "#/definitions/contract.RoleScope"
                 },
                 "status": {
                     "type": "integer"
@@ -3985,6 +4172,17 @@ const docTemplate = `{
                     "type": "integer"
                 }
             }
+        },
+        "contract.RoleScope": {
+            "type": "string",
+            "enum": [
+                "platform",
+                "tenant"
+            ],
+            "x-enum-varnames": [
+                "RoleScopePlatform",
+                "RoleScopeTenant"
+            ]
         },
         "contract.TokenPair": {
             "type": "object",

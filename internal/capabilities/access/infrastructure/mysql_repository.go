@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"jimu/internal/capabilities/access/domain"
+	"jimu/internal/contract"
 	dbutil "jimu/internal/kernel/db"
 	"jimu/internal/shared/sqlpattern"
 
@@ -47,6 +48,24 @@ func (r *mysqlRepository) List(ctx context.Context, filter domain.RoleListFilter
 		Desc:   order == "desc",
 	}).Offset(offset).Limit(limit).Find(&roles).Error
 	return roles, total, err
+}
+
+func (r *mysqlRepository) ListOptions(ctx context.Context, tenantID uint64) ([]domain.Role, error) {
+	var roles []domain.Role
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND status = 1 AND scope = ?", tenantID, contract.RoleScopeTenant).
+		Order("is_system desc, id asc").
+		Find(&roles).Error
+	return roles, err
+}
+
+func (r *mysqlRepository) FindPermissionsByIDs(ctx context.Context, ids []uint64) ([]domain.Permission, error) {
+	if len(ids) == 0 {
+		return []domain.Permission{}, nil
+	}
+	var permissions []domain.Permission
+	err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&permissions).Error
+	return permissions, err
 }
 
 func (r *mysqlRepository) Create(ctx context.Context, role *domain.Role) error {

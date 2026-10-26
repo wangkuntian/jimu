@@ -2,10 +2,12 @@ package access
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"jimu/internal/contract"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
@@ -20,8 +22,18 @@ type Policy struct {
 	Action   string
 }
 
+type RoleIdentity struct {
+	ID    uint64
+	Name  string
+	Scope contract.RoleScope
+}
+
+func RoleSubject(roleID uint64) string {
+	return "role:" + strconv.FormatUint(roleID, 10)
+}
+
 type AuthorizationStore interface {
-	RolesForUser(ctx context.Context, userID uint64) ([]string, error)
+	RolesForUser(ctx context.Context, userID uint64) ([]RoleIdentity, error)
 	Policies(ctx context.Context) ([]Policy, error)
 }
 
@@ -33,27 +45,62 @@ func NewDBAuthorizationStore(db *gorm.DB) *DBAuthorizationStore {
 	return &DBAuthorizationStore{db: db}
 }
 
-func (s *DBAuthorizationStore) RolesForUser(ctx context.Context, userID uint64) ([]string, error) {
-	var roles []string
+func (s *DBAuthorizationStore) RolesForUser(ctx context.Context, userID uint64) ([]RoleIdentity, error) {
+	var rows []struct {
+		ID    uint64
+		Name  string
+		Scope string
+	}
 	err := s.db.WithContext(ctx).
 		Table("roles").
-		Select("roles.name").
+		Select("roles.id, roles.name, roles.scope").
 		Joins("JOIN user_roles ur ON ur.role_id = roles.id").
 		Where("ur.user_id = ? AND roles.deleted_at IS NULL AND roles.status = 1", userID).
-		Pluck("roles.name", &roles).Error
-	return roles, err
+		Order("roles.id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	roles := make([]RoleIdentity, 0, len(rows))
+	for _, row := range rows {
+		scope := contract.RoleScope(row.Scope)
+		if scope == "" {
+			scope = contract.RoleScopeTenant
+		}
+		roles = append(roles, RoleIdentity{
+			ID:    row.ID,
+			Name:  row.Name,
+			Scope: scope,
+		})
+	}
+	return roles, nil
 }
 
 func (s *DBAuthorizationStore) Policies(ctx context.Context) ([]Policy, error) {
-	var policies []Policy
+	var rows []struct {
+		RoleID   uint64
+		Resource string
+		Action   string
+	}
 	err := s.db.WithContext(ctx).
 		Table("roles").
-		Select("roles.name AS role, permissions.resource, permissions.action").
+		Select("roles.id AS role_id, permissions.resource, permissions.action").
 		Joins("JOIN role_permissions rp ON rp.role_id = roles.id").
 		Joins("JOIN permissions ON permissions.id = rp.permission_id").
 		Where("roles.deleted_at IS NULL AND roles.status = 1 AND permissions.deleted_at IS NULL").
-		Scan(&policies).Error
-	return policies, err
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	policies := make([]Policy, 0, len(rows))
+	for _, row := range rows {
+		policies = append(policies, Policy{
+			Role:     RoleSubject(row.RoleID),
+			Resource: row.Resource,
+			Action:   row.Action,
+		})
+	}
+	return policies, nil
 }
 
 // PolicyCacheTTL 策略缓存有效期。
@@ -68,13 +115,6 @@ var policyGeneration atomic.Uint64
 func InvalidatePolicyCache() {
 	policyGeneration.Add(1)
 }
-
-// 平台管理范围由“可读取租户列表”这一权限能力标记；租户管理员不授予该权限时
-// 仍按 JWT tid 收敛。该标记只供显式支持平台范围的能力消费。
-const (
-	platformScopeResource = "/api/v1/tenants"
-	platformScopeAction   = "GET"
-)
 
 func AuthorizationMiddleware(store AuthorizationStore, enforcer *casbin.Enforcer) gin.HandlerFunc {
 	// mu 串行化 enforcer 重建（casbin 非并发安全）
@@ -122,7 +162,17 @@ func AuthorizationMiddleware(store AuthorizationStore, enforcer *casbin.Enforcer
 			c.Abort()
 			return
 		}
-		c.Set("roles", roles)
+		roleNames := make([]string, 0, len(roles))
+		roleSubjects := make([]string, 0, len(roles))
+		platformScope := false
+		for _, role := range roles {
+			roleNames = append(roleNames, role.Name)
+			roleSubjects = append(roleSubjects, RoleSubject(role.ID))
+			if role.Scope == contract.RoleScopePlatform {
+				platformScope = true
+			}
+		}
+		c.Set("roles", roleNames)
 
 		policies, err := loadPolicies(c.Request.Context())
 		if err != nil {
@@ -134,16 +184,16 @@ func AuthorizationMiddleware(store AuthorizationStore, enforcer *casbin.Enforcer
 		mu.Lock()
 		defer mu.Unlock()
 		enforcer.ClearPolicy()
-		for _, role := range roles {
-			_, _ = enforcer.AddGroupingPolicy(role, role)
+		for _, subject := range roleSubjects {
+			_, _ = enforcer.AddGroupingPolicy(subject, subject)
 		}
 		for _, policy := range policies {
 			_, _ = enforcer.AddPolicy(policy.Role, policy.Resource, policy.Action)
 		}
 
 		allowed := false
-		for _, role := range roles {
-			ok, err := enforcer.Enforce(role, c.Request.URL.Path, c.Request.Method)
+		for _, subject := range roleSubjects {
+			ok, err := enforcer.Enforce(subject, c.Request.URL.Path, c.Request.Method)
 			if err == nil && ok {
 				allowed = true
 				break
@@ -153,14 +203,6 @@ func AuthorizationMiddleware(store AuthorizationStore, enforcer *casbin.Enforcer
 			response.Fail(c, errors.New(errors.CodeForbidden, "permission denied"))
 			c.Abort()
 			return
-		}
-		platformScope := false
-		for _, role := range roles {
-			ok, err := enforcer.Enforce(role, platformScopeResource, platformScopeAction)
-			if err == nil && ok {
-				platformScope = true
-				break
-			}
 		}
 		c.Set("platform_scope", platformScope)
 		c.Next()

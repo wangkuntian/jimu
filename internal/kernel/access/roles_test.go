@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"jimu/internal/contract"
+
 	"github.com/casbin/casbin/v3"
 	"github.com/gin-gonic/gin"
 )
@@ -15,8 +17,8 @@ func TestAuthorizationMiddlewareAllowsRolePolicy(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	enforcer := testEnforcer(t)
 	store := &fakeAuthorizationStore{
-		roles:    []string{"admin"},
-		policies: []Policy{{Role: "admin", Resource: "/api/v1/users", Action: http.MethodGet}},
+		roles:    []RoleIdentity{{ID: 1, Name: "admin", Scope: contract.RoleScopeTenant}},
+		policies: []Policy{{Role: RoleSubject(1), Resource: "/api/v1/users", Action: http.MethodGet}},
 	}
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
@@ -42,10 +44,9 @@ func TestAuthorizationMiddlewareMarksTenantManagerAsPlatformScope(t *testing.T) 
 	gin.SetMode(gin.TestMode)
 	enforcer := testEnforcer(t)
 	store := &fakeAuthorizationStore{
-		roles: []string{"admin"},
+		roles: []RoleIdentity{{ID: 1, Name: "admin", Scope: contract.RoleScopePlatform}},
 		policies: []Policy{
-			{Role: "admin", Resource: "/api/v1/users", Action: http.MethodGet},
-			{Role: "admin", Resource: "/api/v1/tenants", Action: http.MethodGet},
+			{Role: RoleSubject(1), Resource: "/api/v1/users", Action: http.MethodGet},
 		},
 	}
 	r := gin.New()
@@ -73,8 +74,11 @@ func TestAuthorizationMiddlewareKeepsTenantAdminScoped(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	enforcer := testEnforcer(t)
 	store := &fakeAuthorizationStore{
-		roles:    []string{"tenant-admin"},
-		policies: []Policy{{Role: "tenant-admin", Resource: "/api/v1/users", Action: http.MethodGet}},
+		roles: []RoleIdentity{{ID: 1, Name: "tenant-admin", Scope: contract.RoleScopeTenant}},
+		policies: []Policy{
+			{Role: RoleSubject(1), Resource: "/api/v1/users", Action: http.MethodGet},
+			{Role: RoleSubject(1), Resource: "/api/v1/tenants", Action: http.MethodGet},
+		},
 	}
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
@@ -94,6 +98,31 @@ func TestAuthorizationMiddlewareKeepsTenantAdminScoped(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/users", nil))
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAuthorizationMiddlewareIsolatesSameNameRolesByID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	enforcer := testEnforcer(t)
+	store := &fakeAuthorizationStore{
+		roles: []RoleIdentity{{ID: 2, Name: "same-name", Scope: contract.RoleScopeTenant}},
+		policies: []Policy{
+			{Role: RoleSubject(1), Resource: "/api/v1/users", Action: http.MethodGet},
+			{Role: RoleSubject(2), Resource: "/api/v1/audits", Action: http.MethodGet},
+		},
+	}
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", uint64(7))
+		c.Next()
+	})
+	r.Use(AuthorizationMiddleware(store, enforcer))
+	r.GET("/api/v1/users", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/users", nil))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
 	}
 }
 
@@ -144,13 +173,13 @@ func testEnforcer(t *testing.T) *casbin.Enforcer {
 }
 
 type fakeAuthorizationStore struct {
-	roles       []string
+	roles       []RoleIdentity
 	policies    []Policy
 	rolesErr    error
 	policiesErr error
 }
 
-func (s *fakeAuthorizationStore) RolesForUser(context.Context, uint64) ([]string, error) {
+func (s *fakeAuthorizationStore) RolesForUser(context.Context, uint64) ([]RoleIdentity, error) {
 	return s.roles, s.rolesErr
 }
 

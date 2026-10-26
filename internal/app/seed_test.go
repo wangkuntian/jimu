@@ -82,6 +82,36 @@ func seededPermissions() []contract.Permission {
 	return out
 }
 
+func seededPermissionSet() map[contract.ProvisioningPermission]bool {
+	out := make(map[contract.ProvisioningPermission]bool)
+	for _, permission := range seededPermissions() {
+		out[contract.ProvisioningPermission{Resource: permission.Resource, Action: permission.Action}] = true
+	}
+	return out
+}
+
+func platformRolePermissionCount(spec contract.SystemRoleSpec) int {
+	if spec.AllPermissions {
+		return len(seededPermissions())
+	}
+	set := seededPermissionSet()
+	count := 0
+	for _, permission := range spec.Permissions {
+		if set[permission] {
+			count++
+		}
+	}
+	return count
+}
+
+func expectedSeedRolePermissionCount() int {
+	total := 0
+	for _, spec := range contract.PlatformSystemRoles() {
+		total += platformRolePermissionCount(spec)
+	}
+	return total
+}
+
 // expectDefaultTenantQuery 编排默认租户 FirstOrCreate 的 SELECT+INSERT 预期
 func expectDefaultTenantQuery(mock sqlmock.Sqlmock) {
 	mock.ExpectQuery("SELECT \\* FROM `tenants`").
@@ -98,9 +128,7 @@ func expectFreePlanQuery(mock sqlmock.Sqlmock) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 }
 
-// expectRunSeedQueries 为 RunSeed 全流程编排 sqlmock 预期：
-// BEGIN → 租户 SELECT+INSERT → 套餐 SELECT+INSERT → N×(权限 SELECT+INSERT) → 角色 SELECT+INSERT →
-// N×(role_permissions count+INSERT) → 管理员 SELECT+INSERT → user_roles INSERT → COMMIT
+// expectRunSeedQueries 为 RunSeed 全流程编排 sqlmock 预期。
 func expectRunSeedQueries(mock sqlmock.Sqlmock) {
 	mock.ExpectBegin()
 
@@ -114,26 +142,35 @@ func expectRunSeedQueries(mock sqlmock.Sqlmock) {
 			WillReturnResult(sqlmock.NewResult(1, 1))
 	}
 
-	mock.ExpectQuery("SELECT \\* FROM `roles`").
-		WillReturnRows(sqlmock.NewRows(nil))
-	mock.ExpectExec("INSERT INTO `roles`").
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	for range seededPermissions() {
-		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `role_permissions`").
-			WillReturnRows(sqlmock.NewRows([]string{"count(*)"}).AddRow(0))
-		mock.ExpectExec("INSERT INTO role_permissions \\(role_id, permission_id\\)").
-			WillReturnResult(sqlmock.NewResult(0, 1))
-	}
+	expectPlatformSystemRoles(mock)
 
 	mock.ExpectQuery("SELECT \\* FROM `users`").
 		WillReturnRows(sqlmock.NewRows(nil))
 	mock.ExpectExec("INSERT INTO `users`").
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_roles`").
+		WillReturnRows(sqlmock.NewRows([]string{"count(*)"}).AddRow(0))
 	mock.ExpectExec("INSERT INTO user_roles \\(user_id, role_id\\)").
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery("SELECT COUNT").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 	mock.ExpectCommit()
+}
+
+func expectPlatformSystemRoles(mock sqlmock.Sqlmock) {
+	for i, spec := range contract.PlatformSystemRoles() {
+		mock.ExpectQuery("SELECT \\* FROM `roles`").
+			WillReturnRows(sqlmock.NewRows(nil))
+		mock.ExpectExec("INSERT INTO `roles`").
+			WillReturnResult(sqlmock.NewResult(int64(i+1), 1))
+		mock.ExpectExec("DELETE FROM role_permissions WHERE role_id").
+			WillReturnResult(sqlmock.NewResult(0, 0))
+		for range platformRolePermissionCount(spec) {
+			mock.ExpectExec("INSERT INTO role_permissions \\(role_id, permission_id\\)").
+				WillReturnResult(sqlmock.NewResult(0, 1))
+		}
+	}
 }
 
 func TestRunSeed_HappyPath(t *testing.T) {
@@ -205,12 +242,14 @@ func TestRunSeed_RoleInsertError(t *testing.T) {
 	}
 	mock.ExpectQuery("SELECT \\* FROM `roles`").
 		WillReturnRows(sqlmock.NewRows(nil))
+	mock.ExpectQuery("SELECT \\* FROM `roles`").
+		WillReturnRows(sqlmock.NewRows(nil))
 	mock.ExpectExec("INSERT INTO `roles`").
 		WillReturnError(errors.New("role boom"))
 	mock.ExpectRollback()
 
 	err := app.RunSeed(db, catalog.All())
-	require.ErrorContains(t, err, "seed admin role failed")
+	require.ErrorContains(t, err, "seed system role platform_super_admin failed")
 }
 
 func TestRunSeed_AssignPermissionError(t *testing.T) {
@@ -231,15 +270,14 @@ func TestRunSeed_AssignPermissionError(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows(nil))
 	mock.ExpectExec("INSERT INTO `roles`").
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	// 第一个 role_permissions 检查：count=0 → insert 失败
-	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `role_permissions`").
-		WillReturnRows(sqlmock.NewRows([]string{"count(*)"}).AddRow(0))
+	mock.ExpectExec("DELETE FROM role_permissions WHERE role_id").
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("INSERT INTO role_permissions \\(role_id, permission_id\\)").
 		WillReturnError(errors.New("assign boom"))
 	mock.ExpectRollback()
 
 	err := app.RunSeed(db, catalog.All())
-	require.ErrorContains(t, err, "assign permission failed")
+	require.ErrorContains(t, err, "assign permissions for platform_super_admin failed")
 }
 
 func TestRunSeed_AdminUserCreateError(t *testing.T) {
@@ -256,16 +294,7 @@ func TestRunSeed_AdminUserCreateError(t *testing.T) {
 		mock.ExpectExec("INSERT INTO `permissions`").
 			WillReturnResult(sqlmock.NewResult(1, 1))
 	}
-	mock.ExpectQuery("SELECT \\* FROM `roles`").
-		WillReturnRows(sqlmock.NewRows(nil))
-	mock.ExpectExec("INSERT INTO `roles`").
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	for range seededPermissions() {
-		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `role_permissions`").
-			WillReturnRows(sqlmock.NewRows([]string{"count(*)"}).AddRow(0))
-		mock.ExpectExec("INSERT INTO role_permissions \\(role_id, permission_id\\)").
-			WillReturnResult(sqlmock.NewResult(0, 1))
-	}
+	expectPlatformSystemRoles(mock)
 	mock.ExpectQuery("SELECT \\* FROM `users`").
 		WillReturnRows(sqlmock.NewRows(nil))
 	mock.ExpectExec("INSERT INTO `users`").
@@ -290,20 +319,13 @@ func TestRunSeed_AssignAdminRoleError(t *testing.T) {
 		mock.ExpectExec("INSERT INTO `permissions`").
 			WillReturnResult(sqlmock.NewResult(1, 1))
 	}
-	mock.ExpectQuery("SELECT \\* FROM `roles`").
-		WillReturnRows(sqlmock.NewRows(nil))
-	mock.ExpectExec("INSERT INTO `roles`").
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	for range seededPermissions() {
-		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `role_permissions`").
-			WillReturnRows(sqlmock.NewRows([]string{"count(*)"}).AddRow(0))
-		mock.ExpectExec("INSERT INTO role_permissions \\(role_id, permission_id\\)").
-			WillReturnResult(sqlmock.NewResult(0, 1))
-	}
+	expectPlatformSystemRoles(mock)
 	mock.ExpectQuery("SELECT \\* FROM `users`").
 		WillReturnRows(sqlmock.NewRows(nil))
 	mock.ExpectExec("INSERT INTO `users`").
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_roles`").
+		WillReturnRows(sqlmock.NewRows([]string{"count(*)"}).AddRow(0))
 	mock.ExpectExec("INSERT INTO user_roles \\(user_id, role_id\\)").
 		WillReturnError(errors.New("userrole boom"))
 	mock.ExpectRollback()
@@ -312,8 +334,8 @@ func TestRunSeed_AssignAdminRoleError(t *testing.T) {
 	require.ErrorContains(t, err, "assign admin role failed")
 }
 
-// TestRunSeed_RolePermissionCountError 验证 Count 查询失败时报错回滚（不再静默 count=0 导致重复插入）
-func TestRunSeed_RolePermissionCountError(t *testing.T) {
+// TestRunSeed_RolePermissionDeleteError 验证清理旧系统角色权限失败时回滚。
+func TestRunSeed_RolePermissionDeleteError(t *testing.T) {
 	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "secret123")
 
@@ -331,13 +353,12 @@ func TestRunSeed_RolePermissionCountError(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows(nil))
 	mock.ExpectExec("INSERT INTO `roles`").
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	// 第一个 role_permissions count 查询失败
-	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `role_permissions`").
-		WillReturnError(errors.New("count boom"))
+	mock.ExpectExec("DELETE FROM role_permissions WHERE role_id").
+		WillReturnError(errors.New("delete boom"))
 	mock.ExpectRollback()
 
 	err := app.RunSeed(db, catalog.All())
-	require.ErrorContains(t, err, "check role permission failed")
+	require.ErrorContains(t, err, "clear role permissions failed")
 }
 
 func TestSeedCasbinPolicies_CreateEnforcerError(t *testing.T) {
@@ -379,7 +400,7 @@ func TestRunSeedWithCasbin(t *testing.T) {
 	// 角色-权限关系已落库
 	var rpCount int64
 	require.NoError(t, db.Table("role_permissions").Count(&rpCount).Error)
-	assert.Equal(t, int64(len(seededPermissions())), rpCount)
+	assert.Equal(t, int64(expectedSeedRolePermissionCount()), rpCount)
 
 	// 幂等：再次执行不报错且数据不重复（row count 不变）
 	var userCountBefore int64
@@ -391,8 +412,143 @@ func TestRunSeedWithCasbin(t *testing.T) {
 	require.NoError(t, db.Table("role_permissions").Count(&rpCount2).Error)
 	require.NoError(t, db.Table("users").Count(&userCount2).Error)
 	assert.Equal(t, int64(len(seededPermissions())), permCount2, "permissions 不应重复插入")
-	assert.Equal(t, int64(len(seededPermissions())), rpCount2, "role_permissions 不应重复插入")
+	assert.Equal(t, int64(expectedSeedRolePermissionCount()), rpCount2, "role_permissions 不应重复插入")
 	assert.Equal(t, userCountBefore, userCount2, "admin 用户不应重复创建")
+}
+
+func TestRunSeedCreatesPlatformSystemRoles(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
+	t.Setenv("ADMIN_PASSWORD", "secret123")
+
+	db := newSeedSqliteDB(t)
+	migrateSeedTables(t, db)
+	require.NoError(t, app.RunSeed(db, catalog.All()))
+
+	var roles []roledomain.Role
+	require.NoError(t, db.Where("tenant_id = ? AND code <> ''", 1).Order("code").Find(&roles).Error)
+	require.Len(t, roles, 2)
+	byCode := map[string]roledomain.Role{}
+	for _, role := range roles {
+		byCode[role.Code] = role
+	}
+	superAdmin := byCode[contract.RoleCodePlatformSuperAdmin]
+	auditor := byCode[contract.RoleCodePlatformAuditor]
+	require.NotZero(t, superAdmin.ID)
+	require.NotZero(t, auditor.ID)
+	assert.Equal(t, contract.RoleScopePlatform, superAdmin.Scope)
+	assert.Equal(t, contract.RoleScopePlatform, auditor.Scope)
+	assert.True(t, superAdmin.IsSystem)
+	assert.True(t, auditor.IsSystem)
+
+	var superPermissionCount int64
+	require.NoError(t, db.Table("role_permissions").Where("role_id = ?", superAdmin.ID).Count(&superPermissionCount).Error)
+	assert.Equal(t, int64(len(seededPermissions())), superPermissionCount)
+
+	var auditorRows []struct {
+		Resource string
+		Action   string
+	}
+	require.NoError(t, db.Table("role_permissions rp").
+		Select("p.resource, p.action").
+		Joins("JOIN permissions p ON p.id = rp.permission_id").
+		Where("rp.role_id = ?", auditor.ID).
+		Order("p.resource, p.action").
+		Scan(&auditorRows).Error)
+	auditorPermissions := make([]string, 0, len(auditorRows))
+	for _, row := range auditorRows {
+		auditorPermissions = append(auditorPermissions, row.Resource+" "+row.Action)
+	}
+	assert.Contains(t, auditorPermissions, "/api/v1/tenants GET")
+	assert.Contains(t, auditorPermissions, "/api/v1/audits GET")
+	assert.NotContains(t, auditorPermissions, "/api/v1/users POST")
+
+	var tenantSystemCount int64
+	require.NoError(t, db.Model(&roledomain.Role{}).
+		Where("tenant_id = ? AND code IN ?", 1, []string{contract.RoleCodeTenantAdmin, contract.RoleCodeTenantMember}).
+		Count(&tenantSystemCount).Error)
+	assert.Zero(t, tenantSystemCount)
+
+	var admin userdomain.User
+	require.NoError(t, db.Where("username = ?", "admin").First(&admin).Error)
+	var adminRoles []string
+	require.NoError(t, db.Table("user_roles ur").
+		Select("roles.code").
+		Joins("JOIN roles ON roles.id = ur.role_id").
+		Where("ur.user_id = ?", admin.ID).
+		Pluck("roles.code", &adminRoles).Error)
+	assert.Equal(t, []string{contract.RoleCodePlatformSuperAdmin}, adminRoles)
+}
+
+func TestRunSeedConvergesSystemRolePermissions(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
+	t.Setenv("ADMIN_PASSWORD", "secret123")
+
+	db := newSeedSqliteDB(t)
+	migrateSeedTables(t, db)
+	require.NoError(t, app.RunSeed(db, catalog.All()))
+
+	var auditor roledomain.Role
+	require.NoError(t, db.Where("code = ?", contract.RoleCodePlatformAuditor).First(&auditor).Error)
+	extra := roledomain.Permission{Name: "额外写权限", Resource: "/api/v1/extra", Action: "POST"}
+	require.NoError(t, db.Create(&extra).Error)
+	require.NoError(t, db.Exec("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)", auditor.ID, extra.ID).Error)
+
+	require.NoError(t, app.RunSeed(db, catalog.All()))
+	var count int64
+	require.NoError(t, db.Table("role_permissions").
+		Where("role_id = ? AND permission_id = ?", auditor.ID, extra.ID).
+		Count(&count).Error)
+	assert.Zero(t, count)
+}
+
+func TestRunSeedRequiresActivePlatformSuperAdmin(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
+	t.Setenv("ADMIN_PASSWORD", "secret123")
+
+	for _, tc := range []struct {
+		name  string
+		setup func(t *testing.T, db *gorm.DB) userdomain.User
+	}{
+		{
+			name: "disabled",
+			setup: func(t *testing.T, db *gorm.DB) userdomain.User {
+				admin := userdomain.User{Username: "admin", Password: "existing-hash", Status: 1, TenantID: 1}
+				require.NoError(t, db.Create(&admin).Error)
+				require.NoError(t, db.Model(&userdomain.User{}).Where("id = ?", admin.ID).Update("status", 0).Error)
+				admin.Status = 0
+				return admin
+			},
+		},
+		{
+			name: "deleted",
+			setup: func(t *testing.T, db *gorm.DB) userdomain.User {
+				admin := userdomain.User{Username: "admin", Password: "existing-hash", Status: 1, TenantID: 1}
+				require.NoError(t, db.Create(&admin).Error)
+				require.NoError(t, db.Delete(&admin).Error)
+				return admin
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db := newSeedSqliteDB(t)
+			migrateSeedTables(t, db)
+			admin := tc.setup(t, db)
+
+			err := app.RunSeed(db, catalog.All())
+			require.ErrorContains(t, err, "no active platform superadmin")
+
+			var count int64
+			require.NoError(t, db.Unscoped().Model(&userdomain.User{}).
+				Where("username = ?", "admin").
+				Count(&count).Error)
+			assert.Equal(t, int64(1), count)
+
+			var old userdomain.User
+			require.NoError(t, db.Unscoped().First(&old, admin.ID).Error)
+			assert.Equal(t, admin.Status, old.Status)
+			assert.Equal(t, admin.DeletedAt.Valid, old.DeletedAt.Valid)
+		})
+	}
 }
 
 // captureLogger 捕获 Errorw 调用，供启动自检断言。
@@ -499,6 +655,6 @@ func TestRunSeed_SkipsDisabledCapabilityPermissions(t *testing.T) {
 
 	var count int64
 	require.NoError(t, db.Table("permissions").Count(&count).Error)
-	// user 5 + access 13 = 18；audit/tenant/admin 的权限点不在（access 闭包自动带 user）
-	assert.Equal(t, int64(18), count)
+	// user 5 + access 14 = 19；audit/tenant/admin 的权限点不在（access 闭包自动带 user）
+	assert.Equal(t, int64(19), count)
 }

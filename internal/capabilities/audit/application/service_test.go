@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/audit/domain"
+	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -47,18 +48,47 @@ func TestAuditServiceListReturnsDTOAndPassesPagination(t *testing.T) {
 	}
 }
 
+func TestAuditScope(t *testing.T) {
+	repo := &fakeAuditRepository{
+		log:  &domain.AuditLog{ID: 9, TenantID: 2, Action: "platform"},
+		logs: []domain.AuditLog{{ID: 9, TenantID: 2}},
+	}
+	service := NewAuditService(repo, "")
+	platformCtx := tenant.WithPlatformScope(tenant.WithTenant(context.Background(), 1))
+
+	_, _, err := service.List(platformCtx, pagination.Pagination{Page: 1, PageSize: 20})
+	require.NoError(t, err)
+	assert.Zero(t, repo.listTenantID)
+
+	got, err := service.Get(platformCtx, 9)
+	require.NoError(t, err)
+	assert.Equal(t, "2", got.TenantID)
+
+	tenantCtx := tenant.WithTenant(context.Background(), 2)
+	_, _, err = service.List(tenantCtx, pagination.Pagination{Page: 1, PageSize: 20})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(2), repo.listTenantID)
+
+	repo.log = &domain.AuditLog{ID: 9, TenantID: 1}
+	_, err = service.Get(tenantCtx, 9)
+	require.Equal(t, apperrors.CodeNotFound, auditAppCode(err))
+}
+
 type fakeAuditRepository struct {
-	log      *domain.AuditLog
-	logs     []domain.AuditLog
-	total    int64
-	findErr  error
-	listErr  error
-	offset   int
-	limit    int
-	sort     string
-	order    string
-	verify   []domain.AuditLog
-	headHash string
+	log           *domain.AuditLog
+	logs          []domain.AuditLog
+	total         int64
+	findErr       error
+	listErr       error
+	offset        int
+	limit         int
+	sort          string
+	order         string
+	verify        []domain.AuditLog
+	headHash      string
+	listTenantID  uint64
+	countTenantID uint64
+	rangeTenantID uint64
 }
 
 func (r *fakeAuditRepository) Create(context.Context, *domain.AuditLog) error { return nil }
@@ -68,7 +98,8 @@ func (r *fakeAuditRepository) CreateBatch(context.Context, []domain.AuditLog) er
 func (r *fakeAuditRepository) FindByID(context.Context, uint64) (*domain.AuditLog, error) {
 	return r.log, r.findErr
 }
-func (r *fakeAuditRepository) List(_ context.Context, _ uint64, offset, limit int, sort, order string) ([]domain.AuditLog, int64, error) {
+func (r *fakeAuditRepository) List(_ context.Context, tenantID uint64, offset, limit int, sort, order string) ([]domain.AuditLog, int64, error) {
+	r.listTenantID = tenantID
 	r.offset = offset
 	r.limit = limit
 	r.sort = sort
@@ -84,11 +115,13 @@ func (r *fakeAuditRepository) ChainHead(context.Context, uint64) (string, error)
 	return r.headHash, nil
 }
 
-func (r *fakeAuditRepository) CountRange(context.Context, uint64, time.Time, time.Time) (int64, error) {
+func (r *fakeAuditRepository) CountRange(_ context.Context, tenantID uint64, _ time.Time, _ time.Time) (int64, error) {
+	r.countTenantID = tenantID
 	return r.total, r.listErr
 }
 
-func (r *fakeAuditRepository) ListRange(_ context.Context, _ uint64, _, _ time.Time, offset, limit int) ([]domain.AuditLog, error) {
+func (r *fakeAuditRepository) ListRange(_ context.Context, tenantID uint64, _, _ time.Time, offset, limit int) ([]domain.AuditLog, error) {
+	r.rangeTenantID = tenantID
 	// 模拟分页：按 offset/limit 切分 logs
 	if offset >= len(r.logs) {
 		return nil, r.listErr
@@ -98,6 +131,24 @@ func (r *fakeAuditRepository) ListRange(_ context.Context, _ uint64, _, _ time.T
 		end = len(r.logs)
 	}
 	return r.logs[offset:end], r.listErr
+}
+
+func TestAuditExportScope(t *testing.T) {
+	repo := &fakeAuditRepository{
+		logs:  []domain.AuditLog{{ID: 1, TenantID: 2, Action: "login", CreatedAt: time.Now()}},
+		total: 1,
+	}
+	service := NewAuditService(repo, "")
+
+	_, err := service.Export(tenant.WithPlatformScope(tenant.WithTenant(context.Background(), 1)), ExportOptions{}, &bytes.Buffer{})
+	require.NoError(t, err)
+	assert.Zero(t, repo.countTenantID)
+	assert.Zero(t, repo.rangeTenantID)
+
+	_, err = service.Export(tenant.WithTenant(context.Background(), 2), ExportOptions{}, &bytes.Buffer{})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(2), repo.countTenantID)
+	assert.Equal(t, uint64(2), repo.rangeTenantID)
 }
 
 func auditAppCode(err error) int {

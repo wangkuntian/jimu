@@ -29,13 +29,24 @@ func New(db *gorm.DB, prov ProvisioningConfig) *Module {
 	repo := infrastructure.NewMysqlRepository(db)
 	quotaRepo := infrastructure.NewMysqlQuotaRepository(db)
 	m := &Module{
-		service: application.NewTenantService(repo),
+		service: application.NewTenantService(repo).WithDB(db),
 		plans:   application.NewPlanService(infrastructure.NewMysqlPlanRepository(db), quotaRepo),
 		quota:   application.NewQuotaService(quotaRepo),
 	}
 	m.db, m.provisioning = db, prov
 	return m
 }
+
+func (m *Module) WithRoles(roles contract.ProvisioningRoleStore) *Module {
+	m.service.WithRoles(roles)
+	return m
+}
+
+func (m *Module) BindProvisioningRoleStore(roles contract.ProvisioningRoleStore) {
+	m.service.WithRoles(roles)
+}
+
+var _ contract.ProvisioningRoleStoreBinder = (*Module)(nil)
 
 // Quota 暴露配额校验服务，供用户/角色/API Key 创建路径注入
 func (m *Module) Quota() *application.QuotaService { return m.quota }

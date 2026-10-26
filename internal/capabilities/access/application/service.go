@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"jimu/internal/capabilities/access/domain"
+	"jimu/internal/contract"
 	kernelaccess "jimu/internal/kernel/access"
 	dbutil "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
@@ -115,6 +116,39 @@ func (s *RoleService) List(ctx context.Context, p pagination.Pagination, filter 
 	return ToRoleResponses(roles), total, nil
 }
 
+// Options 返回租户内可用于用户角色分配的启用角色摘要。
+func (s *RoleService) Options(ctx context.Context, requestedTenantID uint64) ([]RoleOptionResponse, error) {
+	tenantID := tenant.FromContext(ctx)
+	if tenant.IsPlatformScope(ctx) {
+		if requestedTenantID != 0 {
+			if s.quota != nil {
+				exists, err := s.quota.TenantExists(ctx, requestedTenantID)
+				if err != nil {
+					return nil, errors.Wrap(errors.CodeInternalError, "failed to load tenant", err)
+				}
+				if !exists {
+					return nil, errors.New(errors.CodeNotFound, "tenant not found")
+				}
+			}
+			tenantID = requestedTenantID
+		}
+	} else if requestedTenantID != 0 && requestedTenantID != tenantID {
+		return nil, errors.New(errors.CodeForbidden, "tenant scope mismatch")
+	}
+	if tenantID == 0 {
+		return []RoleOptionResponse{}, nil
+	}
+	roles, err := s.repo.ListOptions(ctx, tenantID)
+	if err != nil {
+		return nil, errors.Wrap(errors.CodeInternalError, "failed to list role options", err)
+	}
+	out := make([]RoleOptionResponse, 0, len(roles))
+	for _, role := range roles {
+		out = append(out, ToRoleOptionResponse(role))
+	}
+	return out, nil
+}
+
 func (s *RoleService) Update(ctx context.Context, id uint64, req UpdateRoleRequest) error {
 	role, err := s.repo.FindByID(ctx, id)
 	if err != nil {
@@ -125,6 +159,9 @@ func (s *RoleService) Update(ctx context.Context, id uint64, req UpdateRoleReque
 	}
 	if !roleTenantAllowed(ctx, role.TenantID) {
 		return errors.New(errors.CodeNotFound, "role not found")
+	}
+	if role.IsSystem {
+		return errors.New(errors.CodeForbidden, "system role is immutable")
 	}
 	role.Name = req.Name
 	role.Description = req.Description
@@ -155,6 +192,9 @@ func (s *RoleService) Delete(ctx context.Context, id uint64) error {
 	if !roleTenantAllowed(ctx, role.TenantID) {
 		return errors.New(errors.CodeNotFound, "role not found")
 	}
+	if role.IsSystem {
+		return errors.New(errors.CodeForbidden, "system role is immutable")
+	}
 	role.Status = 0
 	if err := s.repo.Update(ctx, role); err != nil {
 		if stderrors.Is(err, dbutil.ErrConcurrentUpdate) {
@@ -177,7 +217,24 @@ func (s *RoleService) AssignPermissions(ctx context.Context, roleID uint64, perm
 	if !roleTenantAllowed(ctx, role.TenantID) {
 		return errors.New(errors.CodeNotFound, "role not found")
 	}
+	if role.IsSystem {
+		return errors.New(errors.CodeForbidden, "system role is immutable")
+	}
 	permissionIDs = uniqueIDs(permissionIDs)
+	if role.Scope != contract.RoleScopePlatform {
+		permissions, err := s.repo.FindPermissionsByIDs(ctx, permissionIDs)
+		if err != nil {
+			return errors.Wrap(errors.CodeInternalError, "failed to load permissions", err)
+		}
+		if len(permissions) != len(permissionIDs) {
+			return errors.New(errors.CodeInvalidParam, "one or more permissions not found")
+		}
+		for _, permission := range permissions {
+			if contract.IsPlatformOnlyPermission(permission.Resource, permission.Action) {
+				return errors.New(errors.CodeForbidden, "tenant role cannot include platform-only permissions")
+			}
+		}
+	}
 	if err := s.repo.AssignPermissions(ctx, roleID, permissionIDs); err != nil {
 		if stderrors.Is(err, domain.ErrPermissionNotFound) {
 			return errors.New(errors.CodeInvalidParam, "one or more permissions not found")

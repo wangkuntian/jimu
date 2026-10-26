@@ -121,6 +121,11 @@
           "action": "POST"
         },
         {
+          "name": "角色选项",
+          "resource": "/api/v1/roles/options",
+          "action": "GET"
+        },
+        {
           "name": "权限列表",
           "resource": "/api/v1/permissions",
           "action": "GET"
@@ -154,7 +159,8 @@
       "mount": "protected",
       "migrations": [
         "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
-        "internal/capabilities/access/migrations/mysql/008_role_version.sql"
+        "internal/capabilities/access/migrations/mysql/008_role_version.sql",
+        "internal/capabilities/access/migrations/mysql/009_role_system_metadata.sql"
       ],
       "drivers": null,
       "assets": null
@@ -1150,10 +1156,11 @@
       "user",
       "auth"
     ],
-    "routes": 30,
+    "routes": 31,
     "migrations": [
       "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
       "internal/capabilities/access/migrations/mysql/008_role_version.sql",
+      "internal/capabilities/access/migrations/mysql/009_role_system_metadata.sql",
       "internal/capabilities/auth/migrations/mysql/011_login_histories.sql",
       "internal/capabilities/auth/migrations/mysql/012_password_histories.sql",
       "internal/capabilities/tenant/migrations/mysql/005_tenants.sql",
@@ -1257,6 +1264,7 @@
     "internal/capabilities/access/application/dto.go",
     "internal/capabilities/access/application/dto_test.go",
     "internal/capabilities/access/application/errors.go",
+    "internal/capabilities/access/application/last_superadmin_mysql_test.go",
     "internal/capabilities/access/application/permission_dto.go",
     "internal/capabilities/access/application/permission_service.go",
     "internal/capabilities/access/application/permission_service_test.go",
@@ -1285,11 +1293,15 @@
     "internal/capabilities/access/interfaces/user_roles_test.go",
     "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
     "internal/capabilities/access/migrations/mysql/008_role_version.sql",
+    "internal/capabilities/access/migrations/mysql/009_role_system_metadata.sql",
     "internal/capabilities/access/migrations/postgres/001_roles_permissions.sql",
     "internal/capabilities/access/migrations/postgres/008_role_version.sql",
+    "internal/capabilities/access/migrations/postgres/009_role_system_metadata.sql",
     "internal/capabilities/access/module.go",
     "internal/capabilities/access/module_test.go",
     "internal/capabilities/access/provisioning_port.go",
+    "internal/capabilities/access/provisioning_port_test.go",
+    "internal/capabilities/access/system_metadata_migration_test.go",
     "internal/capabilities/access/wire.go",
     "internal/capabilities/auth/application/benchmark_test.go",
     "internal/capabilities/auth/application/breach_test.go",
@@ -1409,6 +1421,8 @@
     "internal/contract/openapi_test.go",
     "internal/contract/outbox_mq_port.go",
     "internal/contract/ports.go",
+    "internal/contract/systemroles.go",
+    "internal/contract/systemroles_test.go",
     "internal/e2e/admin_routes_parity_test.go",
     "internal/e2e/api_contract_test.go",
     "internal/e2e/auth_me_test.go",
@@ -1612,5 +1626,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:a98e7e7a8a0c3062415a1977eb4f60569de1375641d0262b8f77bb11b778e53b"
+  "digest": "sha256:70747442f7c7248762e028d437d3e3a597ad1f64a2711f6838be987ec7c2a566"
 }
