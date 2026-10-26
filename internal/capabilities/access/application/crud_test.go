@@ -59,7 +59,7 @@ func TestRoleServiceDelete(t *testing.T) {
 	svc := NewRoleService(&fakeRoleRepository{})
 	require.NoError(t, svc.Delete(context.Background(), 3))
 
-	svc = NewRoleService(&fakeRoleRepository{deleteErr: gorm.ErrInvalidDB})
+	svc = NewRoleService(&fakeRoleRepository{updateErr: gorm.ErrInvalidDB})
 	assert.Equal(t, apperrors.CodeInternalError, roleAppCode(svc.Delete(context.Background(), 3)))
 }
 

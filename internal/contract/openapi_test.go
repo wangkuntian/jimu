@@ -25,7 +25,7 @@ func TestOpenAPIIncludesCRUDContract(t *testing.T) {
 		"/users/{id}/roles":       {"post"},
 		"/roles":                  {"get", "post"},
 		"/roles/{id}":             {"get", "put", "delete"},
-		"/roles/{id}/permissions": {"post"},
+		"/roles/{id}/permissions": {"get", "post"},
 		"/permissions":            {"get", "post"},
 		"/permissions/{id}":       {"get", "put", "delete"},
 		"/audits":                 {"get"},
@@ -55,6 +55,11 @@ func TestOpenAPIIncludesCRUDContract(t *testing.T) {
 				assertQueryParams(t, operation, path)
 			}
 			if method == "get" && path == "/tenants" {
+				assertHasQueryParam(t, operation, "keyword")
+				assertHasQueryParam(t, operation, "status")
+			}
+			if method == "get" && path == "/roles" {
+				assertHasQueryParam(t, operation, "tenant_id")
 				assertHasQueryParam(t, operation, "keyword")
 				assertHasQueryParam(t, operation, "status")
 			}
@@ -248,6 +253,55 @@ func TestOpenAPIUserManagementCarriesTypedData(t *testing.T) {
 	assertPathParamType(t, spec, "/tenants/{id}", "get", "id", "string")
 }
 
+func TestOpenAPIRoleManagementCarriesTypedData(t *testing.T) {
+	spec := readOpenAPI(t)
+
+	assertRefResponse(t, spec, "/permissions", "get", 200, "#/definitions/application.PermissionPageResponse")
+	assertRefResponse(t, spec, "/roles/{id}/permissions", "get", 200, "#/definitions/application.PermissionListResponse")
+
+	permissions := definitionProperties(t, spec, "application.PermissionPageResponse")
+	assertItemsRef(t, permissions, "data", "#/definitions/application.PermissionResponse")
+	permissionList := definitionProperties(t, spec, "application.PermissionListResponse")
+	assertItemsRef(t, permissionList, "data", "#/definitions/application.PermissionResponse")
+
+	permission := definitionProperties(t, spec, "application.PermissionResponse")
+	for _, field := range []string{"id", "name", "resource", "action", "created_at"} {
+		if _, ok := permission[field]; !ok {
+			t.Fatalf("application.PermissionResponse 缺少字段 %s", field)
+		}
+	}
+	if got := propertyType(permission, "id"); got != "string" {
+		t.Fatalf("application.PermissionResponse.id type = %q, want string", got)
+	}
+
+	assign := definitionProperties(t, spec, "application.AssignPermissionsRequest")
+	assertItemsType(t, assign, "permission_ids", "string")
+	create := definitionProperties(t, spec, "application.CreateRoleRequest")
+	if got := propertyType(create, "tenant_id"); got != "string" {
+		t.Fatalf("application.CreateRoleRequest.tenant_id type = %q, want string", got)
+	}
+	update := definitionProperties(t, spec, "application.UpdateRoleRequest")
+	if got := propertyType(update, "status"); got != "integer" {
+		t.Fatalf("application.UpdateRoleRequest.status type = %q, want integer", got)
+	}
+
+	role := definitionProperties(t, spec, "application.RoleResponse")
+	for _, field := range []string{"id", "tenant_id", "name", "description", "status", "created_at", "updated_at"} {
+		if _, ok := role[field]; !ok {
+			t.Fatalf("application.RoleResponse 缺少字段 %s", field)
+		}
+	}
+	if got := propertyType(role, "id"); got != "string" {
+		t.Fatalf("application.RoleResponse.id type = %q, want string", got)
+	}
+	if got := propertyType(role, "tenant_id"); got != "string" {
+		t.Fatalf("application.RoleResponse.tenant_id type = %q, want string", got)
+	}
+
+	assertPathParamType(t, spec, "/roles/{id}/permissions", "get", "id", "string")
+	assertPathParamType(t, spec, "/roles/{id}/permissions", "post", "id", "string")
+}
+
 func assertRefResponse(t *testing.T, spec map[string]any, path, method string, statusCode int, wantRef string) {
 	t.Helper()
 	operation := operationOf(t, spec, path, method)
@@ -301,6 +355,18 @@ func assertItemsRef(t *testing.T, props map[string]any, field, wantRef string) {
 	items, _ := entry["items"].(map[string]any)
 	if got, _ := items["$ref"].(string); got != wantRef {
 		t.Fatalf("字段 %s 的 items = %q, want %q", field, got, wantRef)
+	}
+}
+
+func assertItemsType(t *testing.T, props map[string]any, field, wantType string) {
+	t.Helper()
+	entry, ok := props[field].(map[string]any)
+	if !ok {
+		t.Fatalf("缺少字段 %s", field)
+	}
+	items, _ := entry["items"].(map[string]any)
+	if got, _ := items["type"].(string); got != wantType {
+		t.Fatalf("字段 %s 的 items type = %q, want %q", field, got, wantType)
 	}
 }
 

@@ -21,12 +21,18 @@ type Role struct {
 
 func (Role) TableName() string { return "roles" }
 
+// RoleListFilter 角色列表筛选条件；零值表示平台级不过滤。
+type RoleListFilter struct {
+	TenantID uint64
+	Keyword  string
+	Status   *int8
+}
+
 type RoleRepository interface {
 	FindByID(ctx context.Context, id uint64) (*Role, error)
-	List(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]Role, int64, error)
+	List(ctx context.Context, filter RoleListFilter, offset, limit int, sort, order string) ([]Role, int64, error)
 	Create(ctx context.Context, role *Role) error
 	Update(ctx context.Context, role *Role) error
-	Delete(ctx context.Context, id uint64) error
 	AssignPermissions(ctx context.Context, roleID uint64, permissionIDs []uint64) error
 	GetPermissions(ctx context.Context, roleID uint64) ([]Permission, error)
 }

@@ -221,6 +221,11 @@ func NewQuotaService(quota domain.QuotaRepository) *QuotaService {
 	return &QuotaService{quota: quota}
 }
 
+// TenantExists 判断租户是否存在。
+func (s *QuotaService) TenantExists(ctx context.Context, tenantID uint64) (bool, error) {
+	return s.quota.TenantExists(ctx, tenantID)
+}
+
 // CheckUserQuota 校验用户数配额（管理端创建用户、开通式注册等调用）
 func (s *QuotaService) CheckUserQuota(ctx context.Context, tenantID uint64) error {
 	return s.check(ctx, tenantID, domain.QuotaResourceUsers, func(p *domain.Plan) int { return p.MaxUsers })

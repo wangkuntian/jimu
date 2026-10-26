@@ -20,3 +20,14 @@ func TestRoleResponseUsesDTO(t *testing.T) {
 		t.Fatalf("role id = %q, want string id", got.ID)
 	}
 }
+
+func TestPermissionResponseUsesStringID(t *testing.T) {
+	got := ToPermissionResponse(domain.Permission{ID: 9007199254740993, Name: "read"})
+	b, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "9007199254740993" || !json.Valid(b) {
+		t.Fatalf("permission response = %#v json = %s", got, b)
+	}
+}

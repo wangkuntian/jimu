@@ -17,7 +17,15 @@ func newRoleTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.Role{}, &rolePermission{}))
+	require.NoError(t, db.AutoMigrate(&domain.Role{}, &domain.Permission{}, &rolePermission{}))
+	permissions := []domain.Permission{
+		{ID: 1, Name: "perm1", Resource: "/test", Action: "GET"},
+		{ID: 2, Name: "perm2", Resource: "/test", Action: "POST"},
+		{ID: 3, Name: "perm3", Resource: "/test", Action: "PUT"},
+	}
+	for i := range permissions {
+		require.NoError(t, db.Create(&permissions[i]).Error)
+	}
 	return db
 }
 
@@ -65,4 +73,48 @@ func TestRoleRepositoryAssignPermissionsReplacesAll(t *testing.T) {
 	require.NoError(t, repo.AssignPermissions(ctx, role.ID, []uint64{3}))
 	require.NoError(t, db.Model(&rolePermission{}).Where("role_id = ?", role.ID).Count(&count).Error)
 	assert.Equal(t, int64(1), count)
+}
+
+func TestRoleRepositoryAssignPermissionsRejectsUnknownAtomically(t *testing.T) {
+	db := newRoleTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+
+	role := &domain.Role{TenantID: 1, Name: "viewer", Status: 1}
+	require.NoError(t, repo.Create(ctx, role))
+	require.NoError(t, repo.AssignPermissions(ctx, role.ID, []uint64{1}))
+
+	assert.ErrorIs(t, repo.AssignPermissions(ctx, role.ID, []uint64{2, 999}), domain.ErrPermissionNotFound)
+
+	var ids []uint64
+	require.NoError(t, db.Model(&rolePermission{}).Where("role_id = ?", role.ID).Pluck("permission_id", &ids).Error)
+	assert.Equal(t, []uint64{1}, ids, "校验失败时不得删除原有权限")
+}
+
+func TestRoleRepositoryListFilters(t *testing.T) {
+	db := newRoleTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+
+	roles := []domain.Role{
+		{TenantID: 1, Name: "ops-admin", Status: 1},
+		{TenantID: 1, Name: "ops-disabled", Status: 1},
+		{TenantID: 2, Name: "ops-other", Status: 1},
+		{TenantID: 2, Name: "viewer", Status: 1},
+	}
+	for i := range roles {
+		require.NoError(t, repo.Create(ctx, &roles[i]))
+	}
+	require.NoError(t, db.Model(&domain.Role{}).Where("id = ?", roles[1].ID).Update("status", 0).Error)
+
+	disabled := int8(0)
+	got, total, err := repo.List(ctx, domain.RoleListFilter{
+		TenantID: 1,
+		Keyword:  "ops",
+		Status:   &disabled,
+	}, 0, 20, "id", "asc")
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, got, 1)
+	assert.Equal(t, "ops-disabled", got[0].Name)
 }

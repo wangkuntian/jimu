@@ -43,6 +43,8 @@ type PlanRepository interface {
 
 // QuotaRepository 配额与用量查询接口
 type QuotaRepository interface {
+	// TenantExists 判断租户是否存在（不包含已删除租户）。
+	TenantExists(ctx context.Context, tenantID uint64) (bool, error)
 	// FindPlanByTenant 返回租户的套餐；未分配套餐时返回 nil
 	FindPlanByTenant(ctx context.Context, tenantID uint64) (*Plan, error)
 	// Count 统计租户在某种资源上的当前用量（已软删除的记录不计入）

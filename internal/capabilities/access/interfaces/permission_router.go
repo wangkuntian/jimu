@@ -11,6 +11,7 @@ import (
 func RegisterPermissionRoutes(r *gin.RouterGroup, service *application.PermissionService) {
 	handler := NewPermissionHandler(service)
 	perms := r.Group("/permissions")
+	perms.Use(RequirePlatformScope())
 	{
 		perms.POST("", middleware.ValidateJSON(&application.CreatePermissionRequest{}), handler.Create)
 		perms.GET("", middleware.ValidateQuery(&pagination.Pagination{}), handler.List)

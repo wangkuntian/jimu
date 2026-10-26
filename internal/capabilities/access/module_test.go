@@ -39,8 +39,8 @@ func TestModuleDescriptor(t *testing.T) {
 	assert.ElementsMatch(t, []string{"user"}, d.Requires)
 	assert.Equal(t, []string{"tenant"}, d.SoftRequires)
 	assert.ElementsMatch(t, []string{"roles", "permissions", "role_permissions", "user_roles"}, d.Owns)
-	// 角色 6 + 权限 5 + 用户角色分配 1
-	require.Len(t, d.Permissions, 12)
+	// 角色 7 + 权限 5 + 用户角色分配 1
+	require.Len(t, d.Permissions, 13)
 	assert.NotNil(t, d.Migrations)
 }
 
@@ -61,6 +61,7 @@ func TestModuleRegisterHTTP(t *testing.T) {
 		"GET /api/v1/roles/:id",
 		"PUT /api/v1/roles/:id",
 		"DELETE /api/v1/roles/:id",
+		"GET /api/v1/roles/:id/permissions",
 		"POST /api/v1/roles/:id/permissions",
 		"POST /api/v1/permissions",
 		"GET /api/v1/permissions",
@@ -82,4 +83,5 @@ func TestModuleWithQuota(t *testing.T) {
 
 type fakeQuota struct{}
 
-func (fakeQuota) CheckRoleQuota(_ context.Context, _ uint64) error { return nil }
+func (fakeQuota) CheckRoleQuota(_ context.Context, _ uint64) error   { return nil }
+func (fakeQuota) TenantExists(context.Context, uint64) (bool, error) { return true, nil }

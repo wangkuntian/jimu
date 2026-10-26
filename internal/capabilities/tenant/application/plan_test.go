@@ -101,6 +101,11 @@ func newFakeQuotaRepo() *fakeQuotaRepo {
 	}
 }
 
+func (r *fakeQuotaRepo) TenantExists(_ context.Context, tenantID uint64) (bool, error) {
+	_, ok := r.planByTenant[tenantID]
+	return ok, nil
+}
+
 func (r *fakeQuotaRepo) FindPlanByTenant(_ context.Context, tenantID uint64) (*domain.Plan, error) {
 	return r.planByTenant[tenantID], nil
 }

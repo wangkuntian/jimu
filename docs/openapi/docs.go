@@ -1431,11 +1431,17 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回分页权限列表",
                         "schema": {
-                            "$ref": "#/definitions/contract.PageResponse"
+                            "$ref": "#/definitions/application.PermissionPageResponse"
                         }
                     },
                     "400": {
                         "description": "参数错误（如无效的排序字段）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅平台管理员可访问",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1521,7 +1527,7 @@ const docTemplate = `{
                 "summary": "获取权限详情",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "权限 ID",
                         "name": "id",
                         "in": "path",
@@ -1574,7 +1580,7 @@ const docTemplate = `{
                 "summary": "更新权限信息",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "权限 ID",
                         "name": "id",
                         "in": "path",
@@ -1639,7 +1645,7 @@ const docTemplate = `{
                 "summary": "删除权限",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "权限 ID",
                         "name": "id",
                         "in": "path",
@@ -1707,8 +1713,20 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "租户 ID（平台级视角可筛选；租户级视角必须与当前租户一致）",
+                        "description": "目标租户 ID；省略时跨租户查询",
                         "name": "tenant_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "角色名称模糊匹配",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "状态（0=停用 1=启用）",
+                        "name": "status",
                         "in": "query"
                     }
                 ],
@@ -1721,6 +1739,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "参数错误（如无效的排序字段）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅平台管理员可访问",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1739,7 +1763,7 @@ const docTemplate = `{
                 ]
             },
             "post": {
-                "description": "创建新角色。角色名称必须唯一，用于权限管理和访问控制。",
+                "description": "创建新角色。平台管理员必须传 tenant_id；首版角色接口仅平台管理员可用。租户内角色名唯一。",
                 "consumes": [
                     "application/json"
                 ],
@@ -1752,7 +1776,7 @@ const docTemplate = `{
                 "summary": "创建角色",
                 "parameters": [
                     {
-                        "description": "角色信息（名称和描述）",
+                        "description": "角色信息（租户、名称和描述）",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1770,6 +1794,18 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "参数错误（如名称为空）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅平台管理员可访问",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "租户不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1796,7 +1832,7 @@ const docTemplate = `{
         },
         "/roles/{id}": {
             "get": {
-                "description": "根据角色 ID 获取角色详细信息，包括关联的权限列表。",
+                "description": "根据角色 ID 获取角色详细信息。权限列表由 GET /roles/{id}/permissions 单独读取。",
                 "produces": [
                     "application/json"
                 ],
@@ -1826,6 +1862,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
+                    "403": {
+                        "description": "仅平台管理员可访问",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "角色不存在",
                         "schema": {
@@ -1846,7 +1888,7 @@ const docTemplate = `{
                 ]
             },
             "put": {
-                "description": "更新指定角色的名称或描述。",
+                "description": "更新指定角色的名称、描述或状态。tenant_id 不可修改。",
                 "consumes": [
                     "application/json"
                 ],
@@ -1888,6 +1930,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
+                    "403": {
+                        "description": "仅平台管理员可访问",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "角色不存在",
                         "schema": {
@@ -1914,7 +1962,7 @@ const docTemplate = `{
                 ]
             },
             "delete": {
-                "description": "软删除指定角色。删除后角色数据仍保留在数据库中，但无法分配给用户。",
+                "description": "停用指定角色（status=0）。可通过更新接口将 status 设为 1 重新启用。",
                 "produces": [
                     "application/json"
                 ],
@@ -1941,6 +1989,18 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
+                    "403": {
+                        "description": "仅平台管理员可访问",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "角色不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "服务器内部错误",
                         "schema": {
@@ -1956,8 +2016,64 @@ const docTemplate = `{
             }
         },
         "/roles/{id}/permissions": {
+            "get": {
+                "description": "返回指定角色当前已分配的权限。没有权限时返回空数组。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色管理"
+                ],
+                "summary": "获取角色当前权限",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "角色 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回角色权限",
+                        "schema": {
+                            "$ref": "#/definitions/application.PermissionListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（ID 格式无效）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅平台管理员可访问",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "角色不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
             "post": {
-                "description": "为指定角色分配权限。传入权限 ID 数组，角色将被赋予这些权限。原有权限会被替换。",
+                "description": "整体替换角色权限。权限 ID 使用字符串；空数组表示清空该角色权限。",
                 "consumes": [
                     "application/json"
                 ],
@@ -1995,6 +2111,18 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "参数错误（ID 格式无效或权限不存在）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅平台管理员可访问或无权授予指定权限",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "角色不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -3048,7 +3176,7 @@ const docTemplate = `{
                 "permission_ids": {
                     "type": "array",
                     "items": {
-                        "type": "integer"
+                        "type": "string"
                     }
                 }
             }
@@ -3152,6 +3280,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3247,10 +3378,79 @@ const docTemplate = `{
                 }
             }
         },
+        "application.PermissionListResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.PermissionResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.PermissionPageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.PermissionResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "application.PermissionPoint": {
             "type": "object",
             "properties": {
                 "action": {
+                    "type": "string"
+                },
+                "resource": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.PermissionResponse": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
                     "type": "string"
                 },
                 "resource": {
@@ -3585,6 +3785,13 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "status": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
                 }
             }
         },

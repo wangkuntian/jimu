@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 
 	"jimu/internal/capabilities/access/application"
 	"jimu/internal/capabilities/access/domain"
+	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"
@@ -84,6 +86,49 @@ func TestRoleListRejectsInvalidSort(t *testing.T) {
 	}
 }
 
+func TestRoleListPassesFilters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	status := int8(0)
+	repo := &fakeRoleRepository{}
+	r := gin.New()
+	r.GET("/roles", func(c *gin.Context) {
+		c.Set("validated_query", &roleListQuery{
+			Pagination: pagination.Pagination{Page: 1, PageSize: 20},
+			TenantID:   "9",
+			Keyword:    "ops",
+			Status:     &status,
+		})
+		NewRoleHandler(application.NewRoleService(repo)).List(c)
+	})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/roles?tenant_id=9&keyword=ops&status=0", nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if repo.listFilter.TenantID != 9 || repo.listFilter.Keyword != "ops" || repo.listFilter.Status == nil || *repo.listFilter.Status != 0 {
+		t.Fatalf("filter = %#v", repo.listFilter)
+	}
+}
+
+func TestRoleListRejectsZeroTenantID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/roles", func(c *gin.Context) {
+		c.Set("validated_query", &roleListQuery{
+			Pagination: pagination.Pagination{Page: 1, PageSize: 20},
+			TenantID:   "0",
+		})
+		NewRoleHandler(application.NewRoleService(&fakeRoleRepository{})).List(c)
+	})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/roles?tenant_id=0", nil))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
 func TestRoleUpdateInvalidID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -129,14 +174,76 @@ func TestRoleAssignPermissionsReturnsOK(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.POST("/roles/:id/permissions", func(c *gin.Context) {
-		c.Set("validated_req", &application.AssignPermissionsRequest{PermissionIDs: []uint64{1, 2}})
+		ids := []string{"1", "2"}
+		c.Set("validated_req", &application.AssignPermissionsRequest{PermissionIDs: &ids})
 		NewRoleHandler(application.NewRoleService(&fakeRoleRepository{})).AssignPermissions(c)
 	})
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/roles/7/permissions", strings.NewReader(`{"permission_ids":[1,2]}`)))
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/roles/7/permissions", strings.NewReader(`{"permission_ids":["1","2"]}`)))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestRoleAssignPermissionsAllowsEmptyArray(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &fakeRoleRepository{}
+	r := gin.New()
+	r.POST("/roles/:id/permissions",
+		middleware.ValidateJSON(&application.AssignPermissionsRequest{}),
+		NewRoleHandler(application.NewRoleService(repo)).AssignPermissions)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/roles/7/permissions", strings.NewReader(`{"permission_ids":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if repo.assigned == nil || len(repo.assigned) != 0 {
+		t.Fatalf("assigned = %#v, want non-nil empty slice", repo.assigned)
+	}
+}
+
+func TestRoleAssignPermissionsDeduplicatesIDs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ids := []string{"2", "1", "2"}
+	repo := &fakeRoleRepository{}
+	r := gin.New()
+	r.POST("/roles/:id/permissions", func(c *gin.Context) {
+		c.Set("validated_req", &application.AssignPermissionsRequest{PermissionIDs: &ids})
+		NewRoleHandler(application.NewRoleService(repo)).AssignPermissions(c)
+	})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/roles/7/permissions", strings.NewReader(`{"permission_ids":["2","1","2"]}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if len(repo.assigned) != 2 || repo.assigned[0] != 2 || repo.assigned[1] != 1 {
+		t.Fatalf("assigned = %v", repo.assigned)
+	}
+}
+
+func TestRoleGetPermissionsReturnsEmptyArray(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/roles/:id/permissions", NewRoleHandler(application.NewRoleService(&fakeRoleRepository{})).GetPermissions)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/roles/7/permissions", nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	var body struct {
+		Data []application.PermissionResponse `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Data == nil || len(body.Data) != 0 {
+		t.Fatalf("data = %#v, want empty array", body.Data)
 	}
 }
 
@@ -152,12 +259,21 @@ func TestRoleDeleteReturnsNoContent(t *testing.T) {
 	}
 }
 
-type fakeRoleRepository struct{}
+type fakeRoleRepository struct {
+	role        *domain.Role
+	permissions []domain.Permission
+	listFilter  domain.RoleListFilter
+	assigned    []uint64
+}
 
 func (r *fakeRoleRepository) FindByID(context.Context, uint64) (*domain.Role, error) {
+	if r.role != nil {
+		return r.role, nil
+	}
 	return &domain.Role{ID: 7, Name: "admin"}, nil
 }
-func (r *fakeRoleRepository) List(context.Context, uint64, int, int, string, string) ([]domain.Role, int64, error) {
+func (r *fakeRoleRepository) List(_ context.Context, filter domain.RoleListFilter, _ int, _ int, _ string, _ string) ([]domain.Role, int64, error) {
+	r.listFilter = filter
 	return nil, 0, nil
 }
 func (r *fakeRoleRepository) Create(_ context.Context, role *domain.Role) error {
@@ -165,17 +281,22 @@ func (r *fakeRoleRepository) Create(_ context.Context, role *domain.Role) error 
 	return nil
 }
 func (r *fakeRoleRepository) Update(context.Context, *domain.Role) error { return nil }
-func (r *fakeRoleRepository) Delete(context.Context, uint64) error       { return nil }
-func (r *fakeRoleRepository) AssignPermissions(context.Context, uint64, []uint64) error {
+func (r *fakeRoleRepository) AssignPermissions(_ context.Context, _ uint64, permissionIDs []uint64) error {
+	r.assigned = append([]uint64(nil), permissionIDs...)
+	if permissionIDs != nil && len(permissionIDs) == 0 {
+		r.assigned = []uint64{}
+	}
 	return nil
 }
 func (r *fakeRoleRepository) GetPermissions(context.Context, uint64) ([]domain.Permission, error) {
-	return nil, nil
+	return r.permissions, nil
 }
 
 type errDeleteRoleRepository struct{ fakeRoleRepository }
 
-func (r *errDeleteRoleRepository) Delete(context.Context, uint64) error { return errors.New("db down") }
+func (r *errDeleteRoleRepository) Update(context.Context, *domain.Role) error {
+	return errors.New("db down")
+}
 
 func TestRoleDeleteServiceError(t *testing.T) {
 	gin.SetMode(gin.TestMode)

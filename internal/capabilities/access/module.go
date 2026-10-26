@@ -66,6 +66,7 @@ var Descriptor = contract.Descriptor{
 		{Name: "角色详情", Resource: "/api/v1/roles/*", Action: "GET"},
 		{Name: "角色修改", Resource: "/api/v1/roles/*", Action: "PUT"},
 		{Name: "角色删除", Resource: "/api/v1/roles/*", Action: "DELETE"},
+		{Name: "角色权限详情", Resource: "/api/v1/roles/*/permissions", Action: "GET"},
 		{Name: "角色分配权限", Resource: "/api/v1/roles/*/permissions", Action: "POST"},
 		// 权限
 		{Name: "权限列表", Resource: "/api/v1/permissions", Action: "GET"},

@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -271,10 +270,14 @@ func TestAuthRefreshLogout(t *testing.T) {
 // TestRoleAssignmentAndRBAC 角色闭环：创建角色 → 分配权限 → 绑定用户 → 权限生效/撤销。
 func TestRoleAssignmentAndRBAC(t *testing.T) {
 	requireCapabilities(t, "auth", "user", "access")
-	// 缩短策略缓存 TTL，验证权限变更在缓存过期后生效
+	// 使用较长缓存 TTL，验证授权写操作会主动让策略缓存失效。
 	oldTTL := access.PolicyCacheTTL
-	access.PolicyCacheTTL = 50 * time.Millisecond
-	t.Cleanup(func() { access.PolicyCacheTTL = oldTTL })
+	access.PolicyCacheTTL = time.Hour
+	access.InvalidatePolicyCache()
+	t.Cleanup(func() {
+		access.PolicyCacheTTL = oldTTL
+		access.InvalidatePolicyCache()
+	})
 
 	r := newTestApp(t)
 	adminToken := login(t, r, "admin", "admin123")
@@ -289,7 +292,7 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 	require.NotEmpty(t, created.ID)
 
 	// 2. 创建角色
-	w = doJSON(t, r, http.MethodPost, "/api/v1/roles", adminToken, `{"name":"e2e-viewer","description":"e2e"}`)
+	w = doJSON(t, r, http.MethodPost, "/api/v1/roles", adminToken, `{"tenant_id":"1","name":"e2e-viewer","description":"e2e"}`)
 	require.Equal(t, http.StatusCreated, w.Code)
 	var roleResp struct {
 		ID string `json:"id"`
@@ -297,40 +300,50 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 	require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &roleResp))
 	require.NotEmpty(t, roleResp.ID)
 
-	// 3. 分配用户读取与用户角色分配权限给角色（page_size=100 拉全量，雪花 ID 用 json.Number 防精度丢失）
+	// 3. 分配用户读取与用户角色分配权限给角色（page_size=100 拉全量，ID 按字符串传输）
 	permList := doJSON(t, r, http.MethodGet, "/api/v1/permissions?page_size=100", adminToken, "")
 	require.Equal(t, http.StatusOK, permList.Code)
 	var perms struct {
 		Data []struct {
-			ID       json.Number `json:"id"`
-			Resource string      `json:"resource"`
-			Action   string      `json:"action"`
+			ID       string `json:"id"`
+			Resource string `json:"resource"`
+			Action   string `json:"action"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(permList.Body.Bytes(), &perms))
-	var userGetPerm, userRoleAssignPerm uint64
+	var userGetPerm, userRoleAssignPerm string
 	for _, p := range perms.Data {
 		if p.Action != "GET" && p.Action != "POST" {
 			continue
 		}
 		if p.Resource == "/api/v1/users" && p.Action == "GET" {
-			id, err := p.ID.Int64()
-			require.NoError(t, err)
-			userGetPerm = uint64(id)
+			userGetPerm = p.ID
 		}
 		if p.Resource == "/api/v1/users/*/roles" && p.Action == "POST" {
-			id, err := p.ID.Int64()
-			require.NoError(t, err)
-			userRoleAssignPerm = uint64(id)
+			userRoleAssignPerm = p.ID
 		}
 	}
-	require.NotZero(t, userGetPerm, "GET /api/v1/users permission should exist")
-	require.NotZero(t, userRoleAssignPerm, "POST /api/v1/users/*/roles permission should exist")
+	require.NotEmpty(t, userGetPerm, "GET /api/v1/users permission should exist")
+	require.NotEmpty(t, userRoleAssignPerm, "POST /api/v1/users/*/roles permission should exist")
 
 	w = doJSON(t, r, http.MethodPost, "/api/v1/roles/"+roleResp.ID+"/permissions",
-		adminToken, `{"permission_ids":[`+strconv.FormatUint(userGetPerm, 10)+`,`+strconv.FormatUint(userRoleAssignPerm, 10)+`]}`)
+		adminToken, `{"permission_ids":["`+userGetPerm+`","`+userRoleAssignPerm+`"]}`)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, 0, parseResp(t, w).Code)
+
+	w = doJSON(t, r, http.MethodGet, "/api/v1/roles/"+roleResp.ID+"/permissions", adminToken, "")
+	require.Equal(t, http.StatusOK, w.Code)
+	var rolePermissions struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &rolePermissions))
+	require.Len(t, rolePermissions.Data, 2)
+	assert.ElementsMatch(t, []string{userGetPerm, userRoleAssignPerm}, []string{
+		rolePermissions.Data[0].ID,
+		rolePermissions.Data[1].ID,
+	})
 
 	// 4. 绑定角色到用户（用户资源接口，按角色 ID）
 	w = doJSON(t, r, http.MethodPost, "/api/v1/users/"+created.ID+"/roles",
@@ -339,12 +352,10 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 	require.Equal(t, 0, parseResp(t, w).Code)
 
 	// 5. 该用户登录后能 GET /users（原 403 → 200）
-	// 策略缓存按 TTL 异步过期，故用有界轮询等待生效，而不是依赖"登录耗时 > TTL"。
+	// 授权写入已主动失效缓存，即使 TTL 为一小时也应立即生效。
 	userToken := login(t, r, "rbacuser", "rbacpass123")
-	require.Eventually(t, func() bool {
-		w := doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
-		return w.Code == http.StatusOK
-	}, 3*time.Second, 25*time.Millisecond, "permission should take effect after the policy cache TTL")
+	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	// 6. 仅凭用户资源权限即可给同租户用户分配角色，不再要求固定管理员角色名
 	w = doJSON(t, r, http.MethodPost, "/api/v1/users", adminToken, `{"tenant_id":"1","username":"rbactarget","password":"rbactarget123"}`)
@@ -355,7 +366,7 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 	require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &target))
 	require.NotEmpty(t, target.ID)
 
-	w = doJSON(t, r, http.MethodPost, "/api/v1/roles", adminToken, `{"name":"e2e-assignee","description":"e2e"}`)
+	w = doJSON(t, r, http.MethodPost, "/api/v1/roles", adminToken, `{"tenant_id":"1","name":"e2e-assignee","description":"e2e"}`)
 	require.Equal(t, http.StatusCreated, w.Code)
 	var assigneeRole struct {
 		ID string `json:"id"`
@@ -371,6 +382,39 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 	// 7. 但不能 POST /users（未分配该权限）→ 403
 	w = doJSON(t, r, http.MethodPost, "/api/v1/users", userToken, `{"username":"nope","password":"nopepass123"}`)
 	require.Equal(t, http.StatusForbidden, w.Code)
+
+	// 8. 停用角色立即撤销授权；角色仍可在停用筛选里查到。
+	w = doJSON(t, r, http.MethodDelete, "/api/v1/roles/"+roleResp.ID, adminToken, "")
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+
+	w = doJSON(t, r, http.MethodGet, "/api/v1/roles?tenant_id=1&keyword=e2e-viewer&status=0", adminToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var disabledRoles struct {
+		Data []struct {
+			ID     string `json:"id"`
+			Status int8   `json:"status"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &disabledRoles))
+	require.Len(t, disabledRoles.Data, 1)
+	assert.Equal(t, roleResp.ID, disabledRoles.Data[0].ID)
+	assert.Zero(t, disabledRoles.Data[0].Status)
+
+	// 9. 通过更新接口重新启用角色，授权随角色状态恢复。
+	w = doJSON(t, r, http.MethodPut, "/api/v1/roles/"+roleResp.ID, adminToken,
+		`{"name":"e2e-viewer","description":"e2e","status":1}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	// 10. 空数组表示清空角色权限。
+	w = doJSON(t, r, http.MethodPost, "/api/v1/roles/"+roleResp.ID+"/permissions",
+		adminToken, `{"permission_ids":[]}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
 }
 
 func TestCreateUserWithInvalidRoleRollsBack(t *testing.T) {
@@ -422,6 +466,19 @@ func TestPlatformUserManagementSpansTenants(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	w = doJSON(t, app.router, http.MethodGet, "/api/v1/roles?tenant_id="+tenant.ID, adminToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	w = doJSON(t, app.router, http.MethodPost, "/api/v1/roles", adminToken,
+		`{"tenant_id":"`+tenant.ID+`","name":"platform-role","description":"cross tenant"}`)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var role struct {
+		ID       string `json:"id"`
+		TenantID string `json:"tenant_id"`
+	}
+	require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &role))
+	assert.Equal(t, tenant.ID, role.TenantID)
+
+	w = doJSON(t, app.router, http.MethodGet, "/api/v1/roles/"+role.ID, adminToken, "")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 }
 

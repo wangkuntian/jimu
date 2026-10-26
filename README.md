@@ -647,7 +647,45 @@ curl -X POST http://localhost:8080/api/v1/users \
 
 `email`/`phone`/`role_ids` 可选，入库前 AES-256-GCM 加密（配置 `security.encryption_key` 时），重复校验走盲索引。平台身份创建用户时必须显式指定 `tenant_id`；租户身份由后端强制使用当前租户，不接受跨租户参数。用户、租户和角色的响应 ID 统一以字符串返回，避免雪花 ID 在 JavaScript 中丢精度。
 
-用户管理统一使用 `/api/v1/users`：列表/创建对应 `/api/v1/users`，详情/修改/删除对应 `/api/v1/users/{id}`，分配角色对应 `POST /api/v1/users/{id}/roles`。列表支持 `username`、`status`、`tenant_id` 筛选，响应包含租户与角色摘要；分配角色按 `role_ids` 替换，角色必须属于用户所属租户。平台管理员与租户管理员共用这套接口，操作授权分别使用 `/api/v1/users`、`/api/v1/users/*`、`/api/v1/users/*/roles` 权限点；不再用固定管理员角色名作为接口准入条件。后端将“具备 `GET /api/v1/tenants` 权限”作为平台管理范围标记，平台身份可跨租户；没有该权限的租户管理员仍由 JWT `tid` 强制收敛。角色下拉使用 `GET /api/v1/roles?tenant_id=<tenant_id>` 读取目标租户角色。
+用户管理统一使用 `/api/v1/users`：列表/创建对应 `/api/v1/users`，详情/修改/删除对应 `/api/v1/users/{id}`，分配角色对应 `POST /api/v1/users/{id}/roles`。列表支持 `username`、`status`、`tenant_id` 筛选，响应包含租户与角色摘要；分配角色按 `role_ids` 替换，角色必须属于用户所属租户。平台管理员与租户管理员共用这套接口，操作授权分别使用 `/api/v1/users`、`/api/v1/users/*`、`/api/v1/users/*/roles` 权限点；不再用固定管理员角色名作为接口准入条件。后端将“具备 `GET /api/v1/tenants` 权限”作为平台管理范围标记，平台身份可跨租户；没有该权限的租户管理员仍由 JWT `tid` 强制收敛。
+
+### 角色与权限管理
+
+角色管理接口挂在资源路径 `/api/v1/roles`。首版角色管理只允许平台管理员使用；租户管理员即使拥有角色相关权限点也会收到 `403`，不会进入角色管理页。角色、租户和权限 ID 在 HTTP 契约中统一使用字符串，避免雪花 ID 在 JavaScript 中丢失精度。
+
+```bash
+# 角色列表：tenant_id 可选；keyword 按名称子串匹配；status 省略时不过滤
+curl "http://localhost:8080/api/v1/roles?tenant_id=1&keyword=ops&status=1&page=1&page_size=20" \
+  -H "Authorization: Bearer <access_token>"
+
+# 创建角色：平台管理员必须显式指定 tenant_id，租户内角色名唯一
+curl -X POST http://localhost:8080/api/v1/roles \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"tenant_id":"1","name":"运营管理员","description":"负责租户运营"}'
+
+# 权限目录：前端按 page_size=100 循环拉取全部分页
+curl "http://localhost:8080/api/v1/permissions?page=1&page_size=100&sort=id&order=asc" \
+  -H "Authorization: Bearer <access_token>"
+
+# 读取角色当前权限；再整体替换，空数组表示清空
+curl http://localhost:8080/api/v1/roles/<role_id>/permissions \
+  -H "Authorization: Bearer <access_token>"
+curl -X POST http://localhost:8080/api/v1/roles/<role_id>/permissions \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"permission_ids":["<permission_id_1>","<permission_id_2>"]}'
+
+# 停用角色；更新接口传 status=1 可重新启用
+curl -X DELETE http://localhost:8080/api/v1/roles/<role_id> \
+  -H "Authorization: Bearer <access_token>"
+curl -X PUT http://localhost:8080/api/v1/roles/<role_id> \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"运营管理员","description":"负责租户运营","status":1}'
+```
+
+`DELETE /api/v1/roles/{id}` 表示停用（`status=0`），不会物理删除或软删除角色；停用会立即撤销授权但保留角色权限和用户绑定，重新启用后原绑定恢复。只有 `status=1` 的角色可被分配给用户并参与授权。权限替换会去重并在单个事务内完成，任一权限 ID 不存在时返回 `400` 且保留原权限。角色、权限或角色状态写成功后，当前进程的策略缓存会主动失效；多副本部署时其他副本仍受最长 30 秒缓存 TTL 约束。
 
 ### 忘记密码（发送验证码）
 

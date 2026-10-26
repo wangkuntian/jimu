@@ -70,6 +70,7 @@ var fullRoutesGolden = []string{
 	"GET /api/v1/permissions/:id",
 	"GET /api/v1/roles",
 	"GET /api/v1/roles/:id",
+	"GET /api/v1/roles/:id/permissions",
 	"GET /api/v1/tenant-plans",
 	"GET /api/v1/tenants",
 	"GET /api/v1/tenants/:id",

@@ -111,6 +111,11 @@
           "action": "DELETE"
         },
         {
+          "name": "角色权限详情",
+          "resource": "/api/v1/roles/*/permissions",
+          "action": "GET"
+        },
+        {
           "name": "角色分配权限",
           "resource": "/api/v1/roles/*/permissions",
           "action": "POST"
@@ -1145,7 +1150,7 @@
       "user",
       "auth"
     ],
-    "routes": 29,
+    "routes": 30,
     "migrations": [
       "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
       "internal/capabilities/access/migrations/mysql/008_role_version.sql",
@@ -1273,6 +1278,8 @@
     "internal/capabilities/access/interfaces/permission_handler.go",
     "internal/capabilities/access/interfaces/permission_handler_test.go",
     "internal/capabilities/access/interfaces/permission_router.go",
+    "internal/capabilities/access/interfaces/platform_guard.go",
+    "internal/capabilities/access/interfaces/platform_guard_test.go",
     "internal/capabilities/access/interfaces/router.go",
     "internal/capabilities/access/interfaces/user_roles.go",
     "internal/capabilities/access/interfaces/user_roles_test.go",
@@ -1605,5 +1612,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:ad41117136868e2508385957fd5f1f717aa2fcb2381e3a770e83de34b53752e5"
+  "digest": "sha256:a98e7e7a8a0c3062415a1977eb4f60569de1375641d0262b8f77bb11b778e53b"
 }

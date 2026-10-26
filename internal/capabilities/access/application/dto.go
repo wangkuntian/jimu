@@ -8,6 +8,7 @@ import (
 )
 
 type CreateRoleRequest struct {
+	TenantID    string `json:"tenant_id"`
 	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
 }
@@ -15,6 +16,7 @@ type CreateRoleRequest struct {
 type UpdateRoleRequest struct {
 	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
+	Status      *int8  `json:"status" binding:"omitempty,oneof=0 1"`
 }
 
 type RoleResponse struct {
@@ -45,7 +47,7 @@ type RoleBodyResponse struct {
 }
 
 type AssignPermissionsRequest struct {
-	PermissionIDs []uint64 `json:"permission_ids" binding:"required"`
+	PermissionIDs *[]string `json:"permission_ids" binding:"required"`
 }
 
 type AssignUserRolesRequest struct {
@@ -73,7 +75,7 @@ func ToRoleResponses(roles []domain.Role) []RoleResponse {
 }
 
 type PermissionResponse struct {
-	ID        uint64    `json:"id"`
+	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Resource  string    `json:"resource"`
 	Action    string    `json:"action"`
@@ -82,7 +84,7 @@ type PermissionResponse struct {
 
 func ToPermissionResponse(permission domain.Permission) PermissionResponse {
 	return PermissionResponse{
-		ID:        permission.ID,
+		ID:        strconv.FormatUint(permission.ID, 10),
 		Name:      permission.Name,
 		Resource:  permission.Resource,
 		Action:    permission.Action,
@@ -96,4 +98,21 @@ func ToPermissionResponses(permissions []domain.Permission) []PermissionResponse
 		out = append(out, ToPermissionResponse(permission))
 	}
 	return out
+}
+
+type PermissionPageResponse struct {
+	Code      int                  `json:"code"`
+	Message   string               `json:"message"`
+	Data      []PermissionResponse `json:"data"`
+	Total     int64                `json:"total"`
+	Page      int                  `json:"page"`
+	PageSize  int                  `json:"page_size"`
+	RequestID string               `json:"request_id,omitempty"`
+}
+
+type PermissionListResponse struct {
+	Code      int                  `json:"code"`
+	Message   string               `json:"message"`
+	Data      []PermissionResponse `json:"data"`
+	RequestID string               `json:"request_id,omitempty"`
 }

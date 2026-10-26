@@ -5,6 +5,7 @@ import (
 
 	"jimu/internal/capabilities/access/domain"
 	dbutil "jimu/internal/kernel/db"
+	"jimu/internal/shared/sqlpattern"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -24,13 +25,19 @@ func (r *mysqlRepository) FindByID(ctx context.Context, id uint64) (*domain.Role
 	return &role, err
 }
 
-// List 分页查询角色。tenantID 非 0 时仅返回该租户下的角色（0=平台级视角，不过滤）。
-func (r *mysqlRepository) List(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
+// List 分页查询角色。filter 的零值表示平台级不过滤。
+func (r *mysqlRepository) List(ctx context.Context, filter domain.RoleListFilter, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
 	var roles []domain.Role
 	var total int64
 	db := r.db.WithContext(ctx).Model(&domain.Role{})
-	if tenantID != 0 {
-		db = db.Where("tenant_id = ?", tenantID)
+	if filter.TenantID != 0 {
+		db = db.Where("tenant_id = ?", filter.TenantID)
+	}
+	if filter.Keyword != "" {
+		db = db.Where("name LIKE ? ESCAPE '"+sqlpattern.EscapeChar+"'", sqlpattern.LikeContains(filter.Keyword))
+	}
+	if filter.Status != nil {
+		db = db.Where("status = ?", *filter.Status)
 	}
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -60,10 +67,6 @@ func (r *mysqlRepository) Update(ctx context.Context, role *domain.Role) error {
 	return nil
 }
 
-func (r *mysqlRepository) Delete(ctx context.Context, id uint64) error {
-	return r.db.WithContext(ctx).Delete(&domain.Role{}, id).Error
-}
-
 // AssignPermissions 整体替换角色权限。事务内先锁定角色行，
 // 避免并发调用交错导致「后写的删掉先写的授权」。
 func (r *mysqlRepository) AssignPermissions(ctx context.Context, roleID uint64, permissionIDs []uint64) error {
@@ -71,6 +74,17 @@ func (r *mysqlRepository) AssignPermissions(ctx context.Context, roleID uint64, 
 		var role domain.Role
 		if err := dbutil.LockRow(tx, &role, roleID).Error; err != nil {
 			return err
+		}
+		if len(permissionIDs) > 0 {
+			var count int64
+			if err := tx.Model(&domain.Permission{}).
+				Where("id IN ? AND deleted_at IS NULL", permissionIDs).
+				Count(&count).Error; err != nil {
+				return err
+			}
+			if count != int64(len(permissionIDs)) {
+				return domain.ErrPermissionNotFound
+			}
 		}
 		if err := tx.Where("role_id = ?", roleID).Delete(&rolePermission{}).Error; err != nil {
 			return err

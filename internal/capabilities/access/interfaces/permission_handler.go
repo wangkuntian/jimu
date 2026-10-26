@@ -48,7 +48,7 @@ func (h *PermissionHandler) Create(c *gin.Context) {
 // @Tags         权限管理
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id   path      int  true  "权限 ID"
+// @Param        id   path      string  true  "权限 ID"
 // @Success      200  {object}  response.Body  "成功，返回权限信息"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
 // @Failure      404  {object}  contract.ErrorResponse  "权限不存在"
@@ -78,8 +78,9 @@ func (h *PermissionHandler) Get(c *gin.Context) {
 // @Param        page_size  query     int     false  "每页数量（默认 20，最大 100）"
 // @Param        sort       query     string  false  "排序字段（支持 id、name、resource、action、created_at，默认 id）"
 // @Param        order      query     string  false  "排序方向（asc 或 desc，默认 desc）"
-// @Success      200        {object}  contract.PageResponse  "成功，返回分页权限列表"
+// @Success      200        {object}  application.PermissionPageResponse  "成功，返回分页权限列表"
 // @Failure      400        {object}  contract.ErrorResponse  "参数错误（如无效的排序字段）"
+// @Failure      403        {object}  contract.ErrorResponse  "仅平台管理员可访问"
 // @Failure      500        {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /permissions [get]
 func (h *PermissionHandler) List(c *gin.Context) {
@@ -103,7 +104,7 @@ func (h *PermissionHandler) List(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id    path      int                                  true  "权限 ID"
+// @Param        id    path      string                               true  "权限 ID"
 // @Param        body  body      application.UpdatePermissionRequest  true  "要更新的权限信息"
 // @Success      200   {object}  response.Body  "更新成功"
 // @Failure      400   {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
@@ -131,7 +132,7 @@ func (h *PermissionHandler) Update(c *gin.Context) {
 // @Tags         权限管理
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id   path  int  true  "权限 ID"
+// @Param        id   path  string  true  "权限 ID"
 // @Success      204     "删除成功，无返回内容"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
 // @Failure      500  {object}  contract.ErrorResponse  "服务器内部错误"

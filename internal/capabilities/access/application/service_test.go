@@ -28,7 +28,7 @@ func TestRoleServiceListPassesPagination(t *testing.T) {
 	repo := &fakeRoleRepository{roles: []domain.Role{{ID: 1, Name: "admin"}}, total: 12}
 	service := NewRoleService(repo)
 
-	roles, total, err := service.List(context.Background(), pagination.Pagination{Page: 2, PageSize: 5, Sort: "created_at", Order: "asc"}, 0)
+	roles, total, err := service.List(context.Background(), pagination.Pagination{Page: 2, PageSize: 5, Sort: "created_at", Order: "asc"}, domain.RoleListFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,12 +42,27 @@ func TestRoleServiceListPassesPagination(t *testing.T) {
 
 func TestRoleServiceListPassesTenantFilter(t *testing.T) {
 	repo := &fakeRoleRepository{}
-	_, _, err := NewRoleService(repo).List(context.Background(), pagination.Pagination{Page: 1, PageSize: 20}, 9)
+	_, _, err := NewRoleService(repo).List(context.Background(), pagination.Pagination{Page: 1, PageSize: 20}, domain.RoleListFilter{TenantID: 9})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if repo.tenantID != 9 {
-		t.Fatalf("tenantID = %d, want 9", repo.tenantID)
+	if repo.filter.TenantID != 9 {
+		t.Fatalf("tenantID = %d, want 9", repo.filter.TenantID)
+	}
+}
+
+func TestRoleServiceListPassesKeywordAndStatus(t *testing.T) {
+	status := int8(0)
+	repo := &fakeRoleRepository{}
+	_, _, err := NewRoleService(repo).List(context.Background(), pagination.Pagination{Page: 1, PageSize: 20}, domain.RoleListFilter{
+		Keyword: "ops",
+		Status:  &status,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.filter.Keyword != "ops" || repo.filter.Status == nil || *repo.filter.Status != 0 {
+		t.Fatalf("filter = %#v", repo.filter)
 	}
 }
 
@@ -71,7 +86,7 @@ func TestRoleServiceUpdateMapsConcurrentUpdateToConflict(t *testing.T) {
 
 func TestRoleServiceDeleteWrapsRepositoryError(t *testing.T) {
 	cause := stderrors.New("sql: connection refused")
-	service := NewRoleService(&fakeRoleRepository{deleteErr: cause})
+	service := NewRoleService(&fakeRoleRepository{updateErr: cause})
 
 	err := service.Delete(context.Background(), 8)
 	if roleAppCode(err) != apperrors.CodeInternalError || !stderrors.Is(err, cause) {
@@ -79,20 +94,127 @@ func TestRoleServiceDeleteWrapsRepositoryError(t *testing.T) {
 	}
 }
 
+func TestRoleServiceCreatePlatformUsesRequestedTenant(t *testing.T) {
+	repo := &fakeRoleRepository{}
+	quota := &fakeTenantQuota{exists: true}
+	service := NewRoleService(repo).WithQuota(quota)
+
+	resp, err := service.Create(tenant.WithPlatformScope(context.Background()), CreateRoleRequest{
+		TenantID: "9",
+		Name:     "operator",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.TenantID != "9" || len(repo.created) != 1 || len(quota.existsChecked) != 1 || quota.existsChecked[0] != 9 {
+		t.Fatalf("resp = %#v created = %v existsChecked = %v", resp, repo.created, quota.existsChecked)
+	}
+}
+
+func TestRoleServiceCreatePlatformRequiresExistingTenant(t *testing.T) {
+	service := NewRoleService(&fakeRoleRepository{}).WithQuota(&fakeTenantQuota{exists: true})
+	_, err := service.Create(tenant.WithPlatformScope(context.Background()), CreateRoleRequest{Name: "operator"})
+	if roleAppCode(err) != apperrors.CodeInvalidParam {
+		t.Fatalf("missing tenant_id code = %d", roleAppCode(err))
+	}
+
+	service = NewRoleService(&fakeRoleRepository{}).WithQuota(&fakeTenantQuota{exists: false})
+	_, err = service.Create(tenant.WithPlatformScope(context.Background()), CreateRoleRequest{TenantID: "9", Name: "operator"})
+	if roleAppCode(err) != apperrors.CodeNotFound {
+		t.Fatalf("missing tenant code = %d", roleAppCode(err))
+	}
+}
+
+func TestRoleServiceCreateRejectsCrossTenant(t *testing.T) {
+	service := NewRoleService(&fakeRoleRepository{})
+	_, err := service.Create(tenant.WithTenant(context.Background(), 7), CreateRoleRequest{TenantID: "9", Name: "operator"})
+	if roleAppCode(err) != apperrors.CodeForbidden {
+		t.Fatalf("code = %d, want %d", roleAppCode(err), apperrors.CodeForbidden)
+	}
+}
+
+func TestRoleServiceUpdateAndDisableStatus(t *testing.T) {
+	status := int8(1)
+	repo := &fakeRoleRepository{role: &domain.Role{ID: 3, Name: "ops", Status: 0}}
+	service := NewRoleService(repo)
+	if err := service.Update(context.Background(), 3, UpdateRoleRequest{Name: "ops", Status: &status}); err != nil {
+		t.Fatal(err)
+	}
+	if repo.updatedRole == nil || repo.updatedRole.Status != 1 {
+		t.Fatalf("updated role = %#v", repo.updatedRole)
+	}
+
+	if err := service.Delete(context.Background(), 3); err != nil {
+		t.Fatal(err)
+	}
+	if repo.updatedRole == nil || repo.updatedRole.Status != 0 {
+		t.Fatalf("disabled role = %#v", repo.updatedRole)
+	}
+}
+
+func TestRoleServiceAssignPermissionsDeduplicatesAndMapsMissing(t *testing.T) {
+	repo := &fakeRoleRepository{role: &domain.Role{ID: 3}}
+	service := NewRoleService(repo)
+	if err := service.AssignPermissions(context.Background(), 3, []uint64{2, 1, 2}); err != nil {
+		t.Fatal(err)
+	}
+	if len(repo.assigned) != 2 || repo.assigned[0] != 2 || repo.assigned[1] != 1 {
+		t.Fatalf("assigned = %v", repo.assigned)
+	}
+
+	repo = &fakeRoleRepository{role: &domain.Role{ID: 3}, assignErr: domain.ErrPermissionNotFound}
+	err := NewRoleService(repo).AssignPermissions(context.Background(), 3, []uint64{99})
+	if roleAppCode(err) != apperrors.CodeInvalidParam {
+		t.Fatalf("code = %d, want %d", roleAppCode(err), apperrors.CodeInvalidParam)
+	}
+}
+
+func TestRoleServicePlatformScopeManagesOtherTenant(t *testing.T) {
+	repo := &fakeRoleRepository{role: &domain.Role{ID: 3, TenantID: 2, Name: "ops", Status: 1}}
+	service := NewRoleService(repo)
+	ctx := tenant.WithPlatformScope(tenant.WithTenant(context.Background(), 1))
+
+	resp, err := service.Get(ctx, 3)
+	if err != nil || resp.TenantID != "2" {
+		t.Fatalf("platform get resp = %#v err = %v", resp, err)
+	}
+	if err := service.Update(ctx, 3, UpdateRoleRequest{Name: "ops2"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AssignPermissions(ctx, 3, []uint64{1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.GetPermissions(ctx, 3); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Delete(ctx, 3); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = service.Get(tenant.WithTenant(context.Background(), 1), 3)
+	if roleAppCode(err) != apperrors.CodeNotFound {
+		t.Fatalf("cross-tenant get code = %d, want %d", roleAppCode(err), apperrors.CodeNotFound)
+	}
+}
+
 type fakeRoleRepository struct {
-	role      *domain.Role
-	roles     []domain.Role
-	total     int64
-	findErr   error
-	createErr error
-	updateErr error
-	deleteErr error
-	offset    int
-	limit     int
-	sort      string
-	order     string
-	tenantID  uint64
-	created   []string
+	role              *domain.Role
+	roles             []domain.Role
+	total             int64
+	findErr           error
+	createErr         error
+	updateErr         error
+	assignErr         error
+	offset            int
+	limit             int
+	sort              string
+	order             string
+	filter            domain.RoleListFilter
+	created           []string
+	updatedRole       *domain.Role
+	assigned          []uint64
+	permissions       []domain.Permission
+	getPermissionsErr error
 }
 
 func (r *fakeRoleRepository) FindByID(context.Context, uint64) (*domain.Role, error) {
@@ -102,8 +224,8 @@ func (r *fakeRoleRepository) FindByID(context.Context, uint64) (*domain.Role, er
 	return &domain.Role{}, r.findErr
 }
 
-func (r *fakeRoleRepository) List(_ context.Context, tenantID uint64, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
-	r.tenantID = tenantID
+func (r *fakeRoleRepository) List(_ context.Context, filter domain.RoleListFilter, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
+	r.filter = filter
 	r.offset = offset
 	r.limit = limit
 	r.sort = sort
@@ -117,13 +239,21 @@ func (r *fakeRoleRepository) Create(_ context.Context, role *domain.Role) error 
 	}
 	return r.createErr
 }
-func (r *fakeRoleRepository) Update(context.Context, *domain.Role) error { return r.updateErr }
-func (r *fakeRoleRepository) Delete(context.Context, uint64) error       { return r.deleteErr }
-func (r *fakeRoleRepository) AssignPermissions(context.Context, uint64, []uint64) error {
-	return nil
+func (r *fakeRoleRepository) Update(_ context.Context, role *domain.Role) error {
+	if r.updateErr == nil {
+		updated := *role
+		r.updatedRole = &updated
+	}
+	return r.updateErr
+}
+func (r *fakeRoleRepository) AssignPermissions(_ context.Context, _ uint64, permissionIDs []uint64) error {
+	if r.assignErr == nil {
+		r.assigned = append([]uint64(nil), permissionIDs...)
+	}
+	return r.assignErr
 }
 func (r *fakeRoleRepository) GetPermissions(context.Context, uint64) ([]domain.Permission, error) {
-	return nil, nil
+	return r.permissions, r.getPermissionsErr
 }
 
 func roleAppCode(err error) int {
@@ -136,13 +266,21 @@ func roleAppCode(err error) int {
 
 // fakeTenantQuota 只返回预设的配额校验结果
 type fakeTenantQuota struct {
-	err     error
-	checked []uint64
+	err           error
+	checked       []uint64
+	exists        bool
+	existsErr     error
+	existsChecked []uint64
 }
 
 func (f *fakeTenantQuota) CheckRoleQuota(_ context.Context, tenantID uint64) error {
 	f.checked = append(f.checked, tenantID)
 	return f.err
+}
+
+func (f *fakeTenantQuota) TenantExists(_ context.Context, tenantID uint64) (bool, error) {
+	f.existsChecked = append(f.existsChecked, tenantID)
+	return f.exists, f.existsErr
 }
 
 func TestRoleServiceCreateRejectsWhenQuotaExceeded(t *testing.T) {
