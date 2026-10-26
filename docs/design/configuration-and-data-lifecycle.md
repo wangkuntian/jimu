@@ -64,6 +64,8 @@ flowchart LR
 
 `jimu-init` 是一次性服务，固定执行 `./jimu migrate up && ./jimu seed`，失败时不会启动 `server`。`server` 通过 `depends_on.condition: service_completed_successfully` 等待它成功退出。`make up-observability` 复用同一流程，再叠加 `compose.observability.yml`，最后调用 `scripts/observability.sh start` 初始化 dashboard 和默认告警；核心 `make up` 不要求 OpenObserve 凭据。
 
+`make migrate-status` 是诊断命令，不构建镜像或启动一次性容器；它直接在当前运行的 `server` 容器内执行 `./jimu migrate status`，因此反映实际运行镜像与其 `PROFILE` 对应的迁移集合。该命令要求核心栈已通过 `make up` 启动。
+
 ### 配置加载流程
 
 ```mermaid

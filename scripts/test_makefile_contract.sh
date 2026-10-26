@@ -171,8 +171,9 @@ seed_run_line="$(grep -nF 'run --rm jimu-init ./jimu seed' "$WORK/seed.plan" | h
 [ "$seed_image_line" -lt "$seed_run_line" ] || fail "seed 必须先构建镜像再执行"
 
 migrate_status_plan="$(run_make -n migrate-status PROFILE=minimal VERSION=v9.9.9)"
-assert_contains "$migrate_status_plan" 'FORCE=0 ./scripts/ensure-image.sh' "migrate-status 未按需准备镜像"
-assert_contains "$migrate_status_plan" 'run --rm jimu-init ./jimu migrate status' "migrate-status 未通过 jimu-init 执行"
+assert_contains "$migrate_status_plan" 'exec -T server ./jimu migrate status' "migrate-status 未在运行中的 server 容器执行"
+assert_not_contains "$migrate_status_plan" './scripts/ensure-image.sh' "migrate-status 不得触发镜像构建"
+assert_not_contains "$migrate_status_plan" 'run --rm jimu-init ./jimu migrate status' "migrate-status 不应启动一次性容器"
 assert_contains "$migrate_status_plan" 'JIMU_IMAGE=jimu:v9.9.9' "migrate-status 未使用版本镜像"
 assert_not_contains "$migrate_status_plan" 'go run -overlay=' "migrate-status 不得绕过容器 Secret 使用本机 CLI"
 

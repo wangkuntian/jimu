@@ -130,8 +130,8 @@ seed: ensure-image ## 按需构建所选 PROFILE 镜像并在当前 Compose 栈�
 migrate-down: ensure-image ## 按需构建所选 PROFILE 镜像并在当前 Compose 栈回滚最后一次迁移
 	$(COMPOSE_ENV) $(COMPOSE) run --rm jimu-init ./jimu migrate down
 
-migrate-status: ensure-image ## 按需构建所选 PROFILE 镜像并在当前 Compose 栈查看迁移状态
-	$(COMPOSE_ENV) $(COMPOSE) run --rm jimu-init ./jimu migrate status
+migrate-status: ## 在运行中的 server 容器查看迁移状态（不构建镜像）
+	$(COMPOSE_ENV) $(COMPOSE) exec -T server ./jimu migrate status
 
 backup: ## 主机侧备份数据库
 	@./scripts/backup.sh

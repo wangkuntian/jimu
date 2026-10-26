@@ -124,7 +124,7 @@ make up VERSION=v0.4.0
 make image VERSION=v0.4.0   # 同时生成 jimu:v0.4.0 与 jimu:latest
 ```
 
-`make up` / `make migrate` / `make migrate-status` 等命令会按源码指纹复用镜像；需要强制重建时运行 `make image`。
+`make up` / `make migrate` 等构建型命令会按源码指纹复用镜像；`make migrate-status` 直接在运行中的 `server` 容器执行，不构建镜像。需要强制重建时运行 `make image`。
 
 ### 本地热重载开发
 
@@ -1295,7 +1295,7 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 | `make build-server` | 编译服务端（`PROFILE=<name>` 选形态，默认 full；overlay 叠加 `./cmd/server`，产物 `bin/jimu-server[-<name>]`） |
 | `make migrate` | 高级运维入口：按需准备当前 `PROFILE` 镜像并通过 `jimu-init` 执行迁移 |
 | `make migrate-down` | 回滚最后一次迁移 |
-| `make migrate-status` | 查看迁移状态 |
+| `make migrate-status` | 在运行中的 `server` 容器查看迁移状态（不构建镜像） |
 | `make seed` | 高级运维入口：通过 `jimu-init` 插入初始数据 |
 | `make build-backup-image` | 构建备份任务镜像 `jimu-backup`（内置 mariadb-dump + pg_dump + 仓库脚本，供 K8s/Helm CronJob 使用） |
 | `make compose-db-backup` | **推荐**：在数据库容器内备份（脚本已挂载，产物落宿主机 `./backups`，gzip + 保留 7 天） |
