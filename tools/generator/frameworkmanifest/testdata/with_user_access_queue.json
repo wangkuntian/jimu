@@ -1319,6 +1319,7 @@
     "internal/kernel/auth/limiter_test.go",
     "internal/kernel/auth/lockout.go",
     "internal/kernel/auth/middleware.go",
+    "internal/kernel/auth/middleware_test.go",
     "internal/kernel/auth/redis_fake_test.go",
     "internal/kernel/auth/session.go",
     "internal/kernel/auth/session_test.go",
@@ -1501,5 +1502,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:673ee52fe917a1a61e89ff1dde08dbd744865f08d5483457834e860f3297f94d"
+  "digest": "sha256:e0e81b2e3afccbc31ce8364306d14e890f8ea2e16fbd9fc0d1e5299c3962d7bd"
 }
