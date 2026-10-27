@@ -13,7 +13,7 @@ type tenantInfoSource struct {
 	db *gorm.DB
 }
 
-func newTenantInfoSource(db *gorm.DB) contract.TenantInfoSource {
+func newTenantInfoSource(db *gorm.DB) *tenantInfoSource {
 	return &tenantInfoSource{db: db}
 }
 
@@ -30,4 +30,19 @@ func (s *tenantInfoSource) GetByIDs(ctx context.Context, ids []uint64) (map[uint
 		out[row.ID] = contract.TenantInfo{ID: row.ID, Name: row.Name}
 	}
 	return out, nil
+}
+
+// TenantActive 只把存在、启用且未软删除的租户视为可用。
+func (s *tenantInfoSource) TenantActive(ctx context.Context, tenantID uint64) (bool, error) {
+	if s.db == nil || tenantID == 0 {
+		return false, nil
+	}
+	var count int64
+	if err := s.db.WithContext(ctx).
+		Model(&domain.Tenant{}).
+		Where("id = ? AND status = ?", tenantID, 1).
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }

@@ -18,5 +18,6 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	if !ok {
 		return nil, fmt.Errorf("oauth requires user.account port")
 	}
-	return New(ctx.DB(), ctx.Redis(), *cfg, ctx.AuthConfig(), ctx.HTTPClient(), users), nil
+	tenants, _ := ctx.Port(contract.TenantInfoPortName).(contract.TenantStateSource)
+	return New(ctx.DB(), ctx.Redis(), *cfg, ctx.AuthConfig(), ctx.HTTPClient(), users, tenants), nil
 }

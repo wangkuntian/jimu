@@ -11,7 +11,7 @@ import (
 
 // RegisterPasskeyRoutes 注册通行密钥路由：
 // login/begin、login/finish 公开（无密码登录）；register/* 与 credentials/* 受 JWT 保护。
-func RegisterPasskeyRoutes(rg *gin.RouterGroup, service *application.PasskeyService, cfg contract.AuthConfig, limiter *auth.Limiter, jwtUtil *auth.JWT) {
+func RegisterPasskeyRoutes(rg *gin.RouterGroup, service *application.PasskeyService, cfg contract.AuthConfig, limiter *auth.Limiter, jwtUtil *auth.JWT, stateCheckers ...auth.StateCheckers) {
 	handler := NewPasskeyHandler(service, cfg, limiter)
 
 	// 公开：无密码登录
@@ -20,7 +20,7 @@ func RegisterPasskeyRoutes(rg *gin.RouterGroup, service *application.PasskeyServ
 
 	// 受保护：凭证注册与管理
 	protected := rg.Group("/auth/webauthn")
-	protected.Use(auth.AuthMiddleware(jwtUtil))
+	protected.Use(auth.AuthMiddleware(jwtUtil, stateCheckers...))
 	protected.POST("/register/begin", handler.BeginWebAuthnRegistration)
 	protected.POST("/register/finish", handler.FinishWebAuthnRegistration)
 	protected.GET("/credentials", handler.ListWebAuthnCredentials)

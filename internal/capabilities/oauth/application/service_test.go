@@ -170,6 +170,20 @@ func newService(t *testing.T, repo oauthdomain.BindingRepository, providers map[
 	return NewOAuthService(repo, auth.New(testJWTSecret, "jimu", 30, 7), sessions, providers, rdb, db, 30, users)
 }
 
+type fakeTenantStateSource struct {
+	active map[uint64]bool
+	err    error
+	calls  []uint64
+}
+
+func (f *fakeTenantStateSource) TenantActive(_ context.Context, tenantID uint64) (bool, error) {
+	f.calls = append(f.calls, tenantID)
+	if f.err != nil {
+		return false, f.err
+	}
+	return f.active[tenantID], nil
+}
+
 func githubProviders() map[string]oauthplatform.Provider {
 	return map[string]oauthplatform.Provider{
 		"github": &fakeProvider{name: "github", authURL: "https://github.com/login/oauth/authorize", info: &oauthplatform.UserInfo{Subject: "sub123", Email: "a@b.c", Name: "Alice"}},
@@ -339,6 +353,28 @@ func TestLoginExistingBinding(t *testing.T) {
 	assert.Equal(t, uint64(42), refreshClaims.UserID)
 	assert.Equal(t, sessions.created[0].sessionID, refreshClaims.SessionID)
 	assert.Equal(t, sessions.created[0].tokenID, refreshClaims.ID)
+}
+
+func TestLoginRejectsDisabledTenant(t *testing.T) {
+	mrs, client := newRedisClient(t)
+	require.NoError(t, mrs.Set(oauthStateKey("state-1"), "github"))
+	db := newTestDB(t)
+	require.NoError(t, db.Create(&testAccount{ID: 42, Username: "alice", Status: 1, TenantID: 7}).Error)
+	sessions := &fakeSessionStore{}
+	repo := &fakeBindingRepo{results: []struct {
+		binding *oauthdomain.OAuthBinding
+		err     error
+	}{
+		newRepoResult(&oauthdomain.OAuthBinding{UserID: 42, Provider: "github", Subject: "sub123"}, nil),
+	}}
+	tenants := &fakeTenantStateSource{active: map[uint64]bool{7: false}}
+	svc := NewOAuthService(repo, auth.New(testJWTSecret, "jimu", 30, 7), sessions, githubProviders(), client, db, 30, testAccounts{db: db}, tenants)
+
+	_, err := svc.Login(context.Background(), "github", "code", "state-1")
+	require.Error(t, err)
+	assert.True(t, apperrors.IsCode(err, apperrors.CodeInvalidCredentials))
+	assert.Equal(t, []uint64{7}, tenants.calls)
+	assert.Empty(t, sessions.created, "停用租户不得建立 OAuth 会话")
 }
 
 func TestLoginCreatesUserAndBinding(t *testing.T) {

@@ -16,6 +16,8 @@ import (
 type Module struct {
 	service *mfaapp.MFAService
 	jwtUtil *auth.JWT
+	tenants contract.TenantStateSource
+	users   contract.UserStateSource
 }
 
 // PortName mfa 能力对外提供的端口名：contract.MFAVerifier。
@@ -23,12 +25,17 @@ const PortName = "mfa"
 
 // New 创建 mfa 模块。trustedDeviceDays<=0 关闭可信设备「记住此设备」；
 // users 用于 otpauth account 兜底（可为 nil）。
-func New(db *gorm.DB, cfg Config, users contract.UserinfoSource) *Module {
+func New(db *gorm.DB, cfg Config, users contract.UserinfoSource, tenants ...contract.TenantStateSource) *Module {
 	repo := mfainfra.NewMysqlMFARepository(db)
 	trustedRepo := mfainfra.NewMysqlTrustedDeviceRepository(db)
 	svc := mfaapp.NewMFAService(repo, users, trustedRepo, cfg.TrustedDeviceDays, cfg.Issuer)
 	jwtUtil := auth.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
-	return &Module{service: svc, jwtUtil: jwtUtil}
+	m := &Module{service: svc, jwtUtil: jwtUtil}
+	if len(tenants) > 0 {
+		m.tenants = tenants[0]
+	}
+	m.users, _ = users.(contract.UserStateSource)
+	return m
 }
 
 // Name 模块名。
@@ -70,7 +77,7 @@ func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
 func (m *Module) RegisterHTTP(r contract.Router) {
 	rg := r.Group("/api/v1")
 	protected := rg.Group("/auth")
-	protected.Use(auth.AuthMiddleware(m.jwtUtil))
+	protected.Use(auth.AuthMiddleware(m.jwtUtil, auth.StateCheckers{Tenant: m.tenants, User: m.users}))
 	interfaces.RegisterMFARoutes(protected, m.service)
 }
 

@@ -15,6 +15,7 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	}
 	finalizer, _ := ctx.Port("auth").(contract.LoginFinalizer)
 	users, _ := ctx.Port(contract.UserinfoPortName).(contract.UserinfoSource)
+	tenants, _ := ctx.Port(contract.TenantInfoPortName).(contract.TenantStateSource)
 	return New(Deps{
 		DB:         ctx.DB(),
 		Redis:      ctx.Redis(),
@@ -22,6 +23,7 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 		Config:     *cfg,
 		Users:      users,
 		Finalizer:  finalizer,
+		Tenants:    tenants,
 		FailClosed: ctx.Config().HTTP.Mode == config.HTTPModeRelease,
 	}), nil
 }

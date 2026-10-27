@@ -77,12 +77,39 @@ func TestUserinfoSource(t *testing.T) {
 	assert.Equal(t, uint64(1), byName.ID)
 }
 
-type fakeUserRepo struct{}
+func TestUserinfoSourceUserActive(t *testing.T) {
+	repo := newFakeUserRepo()
+	src := NewUserinfoSource(repo)
 
-func newFakeUserRepo() *fakeUserRepo { return &fakeUserRepo{} }
+	active, err := src.(contract.UserStateSource).UserActive(context.Background(), 1)
+	require.NoError(t, err)
+	assert.True(t, active)
+
+	repo.user.Status = 0
+	active, err = src.(contract.UserStateSource).UserActive(context.Background(), 1)
+	require.NoError(t, err)
+	assert.False(t, active)
+
+	repo.err = gorm.ErrRecordNotFound
+	active, err = src.(contract.UserStateSource).UserActive(context.Background(), 1)
+	require.NoError(t, err)
+	assert.False(t, active)
+}
+
+type fakeUserRepo struct {
+	user *domain.User
+	err  error
+}
+
+func newFakeUserRepo() *fakeUserRepo {
+	return &fakeUserRepo{user: &domain.User{ID: 1, Username: "alice", TenantID: 9, Status: 1}}
+}
 
 func (r *fakeUserRepo) FindByID(context.Context, uint64) (*domain.User, error) {
-	return &domain.User{ID: 1, Username: "alice", TenantID: 9, Status: 1}, nil
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.user, nil
 }
 func (r *fakeUserRepo) FindByUsername(context.Context, string) (*domain.User, error) {
 	return &domain.User{ID: 1, Username: "alice", TenantID: 9, Status: 1}, nil

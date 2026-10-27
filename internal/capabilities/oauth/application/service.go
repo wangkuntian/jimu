@@ -38,12 +38,13 @@ type OAuthService struct {
 	rdb         redistore.Client
 	db          *gorm.DB
 	users       contract.AccountRepository
+	tenants     contract.TenantStateSource
 	accessMin   int
 }
 
 // NewOAuthService 创建 OAuth 服务
-func NewOAuthService(bindingRepo oauthdomain.BindingRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, providers map[string]oauthplatform.Provider, rdb redistore.Client, db *gorm.DB, accessMin int, users contract.AccountRepository) *OAuthService {
-	return &OAuthService{
+func NewOAuthService(bindingRepo oauthdomain.BindingRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, providers map[string]oauthplatform.Provider, rdb redistore.Client, db *gorm.DB, accessMin int, users contract.AccountRepository, tenants ...contract.TenantStateSource) *OAuthService {
+	s := &OAuthService{
 		bindingRepo: bindingRepo,
 		jwtUtil:     jwtUtil,
 		sessions:    sessions,
@@ -53,6 +54,10 @@ func NewOAuthService(bindingRepo oauthdomain.BindingRepository, jwtUtil *auth.JW
 		users:       users,
 		accessMin:   accessMin,
 	}
+	if len(tenants) > 0 {
+		s.tenants = tenants[0]
+	}
+	return s
 }
 
 // AuthURL 构造授权跳转 URL 并存储 state（防 CSRF）
@@ -133,6 +138,15 @@ func (s *OAuthService) Login(ctx context.Context, providerName, code, state stri
 	// 签发 token（租户取自用户归属；未归属时归默认租户）
 	sessionID := uuid.NewString()
 	tenantID := s.resolveTenantID(ctx, userID)
+	if s.tenants != nil && tenantID != 0 {
+		active, err := s.tenants.TenantActive(ctx, tenantID)
+		if err != nil {
+			return nil, errors.Wrap(errors.CodeInternalError, "tenant state check failed", err)
+		}
+		if !active {
+			return nil, errors.New(errors.CodeInvalidCredentials, "invalid credentials")
+		}
+	}
 	accessToken, err := s.jwtUtil.GenerateAccess(userID, tenantID, sessionID)
 	if err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "generate access token", err)

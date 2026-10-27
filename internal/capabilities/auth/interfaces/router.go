@@ -12,7 +12,7 @@ import (
 
 // RegisterAuthRoutes 注册认证路由：公开（登录/注册/刷新/找回重置）+ 受保护（登出/登录历史）。
 // 验证码路由由 captcha 能力自挂（GET /api/v1/captcha）。
-func RegisterAuthRoutes(r *gin.RouterGroup, service *application.AuthService, jwtUtil *auth.JWT, cfg Config, limiter *auth.Limiter, captchaVerifier contract.CaptchaVerifier) {
+func RegisterAuthRoutes(r *gin.RouterGroup, service *application.AuthService, jwtUtil *auth.JWT, cfg Config, limiter *auth.Limiter, captchaVerifier contract.CaptchaVerifier, stateCheckers ...auth.StateCheckers) {
 	handler := NewAuthHandler(service, cfg, limiter, captchaVerifier)
 	authGroup := r.Group("/auth")
 	{
@@ -26,7 +26,7 @@ func RegisterAuthRoutes(r *gin.RouterGroup, service *application.AuthService, jw
 		authGroup.GET("/config", handler.AuthConfig)
 
 		protected := authGroup.Group("")
-		protected.Use(auth.AuthMiddleware(jwtUtil))
+		protected.Use(auth.AuthMiddleware(jwtUtil, stateCheckers...))
 		protected.POST("/logout", handler.Logout)
 		protected.POST("/logout-all", handler.LogoutAll)
 		protected.GET("/me", handler.Me)

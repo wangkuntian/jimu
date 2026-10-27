@@ -22,6 +22,7 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 		}
 	}
 	users, _ := ctx.Port(contract.UserinfoPortName).(contract.UserinfoSource)
+	tenants, _ := ctx.Port(contract.TenantInfoPortName).(contract.TenantStateSource)
 	mod := New(ctx.DB(), Config{
 		JWTSecret:         authCfg.JWTSecret,
 		JWTPreviousSecret: authCfg.JWTPreviousSecret,
@@ -29,7 +30,7 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 		AccessExpireMin:   authCfg.AccessExpireMin,
 		RefreshExpireDay:  authCfg.RefreshExpireDay,
 		TrustedDeviceDays: settings.TrustedDeviceDays,
-	}, users)
+	}, users, tenants)
 	if err := ctx.Provide(PortName, mod.Service()); err != nil {
 		return nil, fmt.Errorf("provide mfa port: %w", err)
 	}

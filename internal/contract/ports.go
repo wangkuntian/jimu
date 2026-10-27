@@ -66,8 +66,8 @@ type TenantProvisionerFactory interface {
 
 const (
 	StoragePortName    = "storage"
-	TenantInfoPortName = "tenant.info"
-	UserinfoPortName   = "user.info"
+	TenantInfoPortName = "tenant.info" // TenantInfoSource；同一实现同时提供 TenantStateSource
+	UserinfoPortName   = "user.info"   // UserinfoSource；同一实现同时提供 UserStateSource
 )
 
 type AuthConfig struct {
@@ -126,6 +126,12 @@ type TenantInfoSource interface {
 	GetByIDs(ctx context.Context, ids []uint64) (map[uint64]TenantInfo, error)
 }
 
+// TenantStateSource tenant 能力提供的只读租户状态端口。
+// 未找到（含软删除）或已停用均返回 false。
+type TenantStateSource interface {
+	TenantActive(ctx context.Context, tenantID uint64) (bool, error)
+}
+
 // UserinfoSource UserInfoService 所需的用户只读数据端口，
 // 由 user 能力提供实现，替代消费方对 user/domain 的直接引用。
 type UserinfoSource interface {
@@ -135,6 +141,12 @@ type UserinfoSource interface {
 	FindByUsername(ctx context.Context, username string) (*Userinfo, error)
 	// List 分页查用户（page 从 1 起；按 id 降序，平台级视角不过滤租户）。
 	List(ctx context.Context, page, pageSize int) ([]Userinfo, int64, error)
+}
+
+// UserStateSource 用户能力提供的只读用户状态端口。
+// 未找到（含软删除）或已停用均返回 false。
+type UserStateSource interface {
+	UserActive(ctx context.Context, userID uint64) (bool, error)
 }
 
 // TokenPair 登录完成后的令牌视图。

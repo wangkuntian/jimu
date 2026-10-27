@@ -9,9 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func ProtectedMiddleware(jwtUtil *auth.JWT, store access.AuthorizationStore, enforcer *casbin.Enforcer) []gin.HandlerFunc {
+func ProtectedMiddleware(jwtUtil *auth.JWT, store access.AuthorizationStore, enforcer *casbin.Enforcer, stateCheckers ...auth.StateCheckers) []gin.HandlerFunc {
 	return []gin.HandlerFunc{
-		auth.AuthMiddleware(jwtUtil),
+		auth.AuthMiddleware(jwtUtil, stateCheckers...),
 		access.AuthorizationMiddleware(store, enforcer),
 		tenant.Middleware(),
 	}
