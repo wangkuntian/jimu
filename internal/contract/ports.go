@@ -57,6 +57,16 @@ type ProvisioningRoleStoreBinder interface {
 	BindProvisioningRoleStore(ProvisioningRoleStore)
 }
 
+// TenantRoleLifecycle access 提供：清理租户生命周期结束后的角色及关联数据。
+// 供 tenant 能力经端口调用，避免跨能力直接操作 roles/user_roles/role_permissions。
+type TenantRoleLifecycle interface {
+	DeleteTenantRoles(ctx context.Context, tenantID uint64) error
+}
+
+type TenantRoleLifecycleBinder interface {
+	BindTenantRoleLifecycle(TenantRoleLifecycle)
+}
+
 const TenantRoleStoreBinderPortName = "tenant.role_store_binder"
 
 type TenantProvisionerFactory interface {
@@ -265,4 +275,6 @@ type UserRoleAssigner interface {
 	RolesForUsers(ctx context.Context, userIDs []uint64) (map[uint64][]UserRole, error)
 	// EnsureCanDeactivateUser 阻止移除最后一个有效平台超级管理员。
 	EnsureCanDeactivateUser(ctx context.Context, userID uint64) error
+	// RemoveUserRoles 清理用户生命周期结束后的全部角色关联。
+	RemoveUserRoles(ctx context.Context, userID uint64) error
 }

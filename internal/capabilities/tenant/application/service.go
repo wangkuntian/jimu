@@ -16,9 +16,10 @@ import (
 )
 
 type TenantService struct {
-	repo  domain.TenantRepository
-	db    *gorm.DB
-	roles contract.ProvisioningRoleStore
+	repo          domain.TenantRepository
+	db            *gorm.DB
+	roles         contract.ProvisioningRoleStore
+	roleLifecycle contract.TenantRoleLifecycle
 }
 
 func NewTenantService(repo domain.TenantRepository) *TenantService {
@@ -32,6 +33,11 @@ func (s *TenantService) WithDB(db *gorm.DB) *TenantService {
 
 func (s *TenantService) WithRoles(roles contract.ProvisioningRoleStore) *TenantService {
 	s.roles = roles
+	return s
+}
+
+func (s *TenantService) WithRoleLifecycle(lifecycle contract.TenantRoleLifecycle) *TenantService {
+	s.roleLifecycle = lifecycle
 	return s
 }
 
@@ -155,8 +161,27 @@ func (s *TenantService) Delete(ctx context.Context, id uint64) error {
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to get tenant", err)
 	}
-	if err := s.repo.Delete(ctx, id); err != nil {
+	remove := func(txCtx context.Context) error {
+		if s.roleLifecycle != nil {
+			if err := s.roleLifecycle.DeleteTenantRoles(txCtx, id); err != nil {
+				return err
+			}
+		}
+		return s.repo.Delete(txCtx, id)
+	}
+	var err error
+	if s.db != nil {
+		err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return remove(dbutil.WithTransaction(ctx, tx))
+		})
+	} else {
+		err = remove(ctx)
+	}
+	if err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to delete tenant", err)
+	}
+	if s.roleLifecycle != nil {
+		kernelaccess.InvalidatePolicyCache()
 	}
 	return nil
 }

@@ -30,21 +30,23 @@ func (r *mysqlRepository) FindByID(ctx context.Context, id uint64) (*domain.Role
 func (r *mysqlRepository) List(ctx context.Context, filter domain.RoleListFilter, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
 	var roles []domain.Role
 	var total int64
-	db := r.db.WithContext(ctx).Model(&domain.Role{})
+	db := r.db.WithContext(ctx).
+		Model(&domain.Role{}).
+		Joins("JOIN tenants tenant_scope ON tenant_scope.id = roles.tenant_id AND tenant_scope.deleted_at IS NULL")
 	if filter.TenantID != 0 {
-		db = db.Where("tenant_id = ?", filter.TenantID)
+		db = db.Where("roles.tenant_id = ?", filter.TenantID)
 	}
 	if filter.Keyword != "" {
-		db = db.Where("name LIKE ? ESCAPE '"+sqlpattern.EscapeChar+"'", sqlpattern.LikeContains(filter.Keyword))
+		db = db.Where("roles.name LIKE ? ESCAPE '"+sqlpattern.EscapeChar+"'", sqlpattern.LikeContains(filter.Keyword))
 	}
 	if filter.Status != nil {
-		db = db.Where("status = ?", *filter.Status)
+		db = db.Where("roles.status = ?", *filter.Status)
 	}
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	err := db.Order(clause.OrderByColumn{
-		Column: clause.Column{Name: sort},
+		Column: clause.Column{Table: "roles", Name: sort},
 		Desc:   order == "desc",
 	}).Offset(offset).Limit(limit).Find(&roles).Error
 	return roles, total, err

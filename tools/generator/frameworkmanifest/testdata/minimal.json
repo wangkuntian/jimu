@@ -1272,6 +1272,7 @@
     "internal/capabilities/access/application/role_delete_mysql_test.go",
     "internal/capabilities/access/application/service.go",
     "internal/capabilities/access/application/service_test.go",
+    "internal/capabilities/access/application/tenant_roles.go",
     "internal/capabilities/access/application/user_roles.go",
     "internal/capabilities/access/application/user_roles_test.go",
     "internal/capabilities/access/domain/domain_test.go",
@@ -1430,7 +1431,9 @@
     "internal/e2e/auth_routes_parity_test.go",
     "internal/e2e/grpc_contract_test.go",
     "internal/e2e/helpers_test.go",
+    "internal/e2e/tenant_delete_roles_test.go",
     "internal/e2e/tenant_provisioning_test.go",
+    "internal/e2e/user_delete_roles_test.go",
     "internal/kernel/access/casbin.go",
     "internal/kernel/access/permission_middleware.go",
     "internal/kernel/access/roles.go",
@@ -1628,5 +1631,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:ddfbfccd3b97a20cb07709daaeacdd9a3b851cc77480aa97f7184396c8b6a6bd"
+  "digest": "sha256:598596b2f88af22938d788254d94681e38000b442b462737547fe50dc5858c79"
 }

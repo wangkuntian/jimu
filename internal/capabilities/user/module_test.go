@@ -138,6 +138,8 @@ func (fakeAssigner) RolesForUsers(context.Context, []uint64) (map[uint64][]contr
 
 func (fakeAssigner) EnsureCanDeactivateUser(context.Context, uint64) error { return nil }
 
+func (fakeAssigner) RemoveUserRoles(context.Context, uint64) error { return nil }
+
 type fakeQuota struct{}
 
 func (fakeQuota) CheckUserQuota(context.Context, uint64) error { return nil }

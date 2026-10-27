@@ -19,6 +19,11 @@ func newRoleTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&domain.Role{}, &domain.Permission{}, &rolePermission{}))
+	require.NoError(t, db.Exec(`CREATE TABLE tenants (
+		id INTEGER PRIMARY KEY,
+		deleted_at DATETIME
+	)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO tenants (id) VALUES (1), (2)`).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE user_roles (
 		user_id INTEGER NOT NULL,
 		role_id INTEGER NOT NULL,
@@ -123,6 +128,24 @@ func TestRoleRepositoryListFilters(t *testing.T) {
 	require.Equal(t, int64(1), total)
 	require.Len(t, got, 1)
 	assert.Equal(t, "ops-disabled", got[0].Name)
+}
+
+func TestRoleRepositoryListExcludesDeletedTenants(t *testing.T) {
+	db := newRoleTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+
+	validRole := domain.Role{TenantID: 1, Name: "valid", Status: 1}
+	orphanRole := domain.Role{TenantID: 2, Name: "orphan", Status: 1}
+	require.NoError(t, repo.Create(ctx, &validRole))
+	require.NoError(t, repo.Create(ctx, &orphanRole))
+	require.NoError(t, db.Exec("UPDATE tenants SET deleted_at = CURRENT_TIMESTAMP WHERE id = 2").Error)
+
+	got, total, err := repo.List(ctx, domain.RoleListFilter{}, 0, 20, "id", "asc")
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, got, 1)
+	assert.Equal(t, validRole.ID, got[0].ID)
 }
 
 func TestRoleRepositoryListOptions(t *testing.T) {

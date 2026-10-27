@@ -287,6 +287,8 @@ type fakeUserRoleManager struct {
 	rolesErr  error
 	guardErr  error
 	guarded   []uint64
+	removed   []uint64
+	removeErr error
 }
 
 func (f *fakeUserRoleManager) AssignRoleIDs(_ context.Context, userID uint64, roleIDs []uint64) error {
@@ -304,6 +306,11 @@ func (f *fakeUserRoleManager) RolesForUsers(context.Context, []uint64) (map[uint
 func (f *fakeUserRoleManager) EnsureCanDeactivateUser(_ context.Context, userID uint64) error {
 	f.guarded = append(f.guarded, userID)
 	return f.guardErr
+}
+
+func (f *fakeUserRoleManager) RemoveUserRoles(_ context.Context, userID uint64) error {
+	f.removed = append(f.removed, userID)
+	return f.removeErr
 }
 
 type fakeSessionRevoker struct {
@@ -329,10 +336,12 @@ func TestUserServiceDisableRevokesSessions(t *testing.T) {
 func TestUserServiceDeleteRevokesSessions(t *testing.T) {
 	repo := &fakeUserRepository{user: &domain.User{ID: 7, TenantID: 2, Status: 1}}
 	sessions := &fakeSessionRevoker{}
-	svc := NewUserService(repo).WithSessionRevoker(sessions)
+	roles := &fakeUserRoleManager{}
+	svc := NewUserService(repo, roles).WithSessionRevoker(sessions)
 
 	require.NoError(t, svc.Delete(tenant.WithTenant(context.Background(), 2), 7))
 	assert.Equal(t, []uint64{7}, sessions.revoked)
+	assert.Equal(t, []uint64{7}, roles.removed)
 }
 
 func TestUserServiceSessionRevokeFailureIsReported(t *testing.T) {

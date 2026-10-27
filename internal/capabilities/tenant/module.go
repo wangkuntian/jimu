@@ -48,6 +48,12 @@ func (m *Module) BindProvisioningRoleStore(roles contract.ProvisioningRoleStore)
 
 var _ contract.ProvisioningRoleStoreBinder = (*Module)(nil)
 
+func (m *Module) BindTenantRoleLifecycle(lifecycle contract.TenantRoleLifecycle) {
+	m.service.WithRoleLifecycle(lifecycle)
+}
+
+var _ contract.TenantRoleLifecycleBinder = (*Module)(nil)
+
 // Quota 暴露配额校验服务，供用户/角色/API Key 创建路径注入
 func (m *Module) Quota() *application.QuotaService { return m.quota }
 

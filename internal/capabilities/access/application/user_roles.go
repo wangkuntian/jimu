@@ -7,6 +7,7 @@ import (
 
 	"jimu/internal/capabilities/access/domain"
 	"jimu/internal/contract"
+	kernelaccess "jimu/internal/kernel/access"
 	dbutil "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
 	apperrors "jimu/internal/shared/errors"
@@ -130,6 +131,25 @@ func (s *UserRoleService) EnsureCanDeactivateUser(ctx context.Context, userID ui
 	return s.withTx(ctx, func(tx *gorm.DB) error {
 		return s.ensureNotRemovingLastSuperAdmin(tx, userID, nil)
 	})
+}
+
+// RemoveUserRoles 清理用户生命周期结束后的全部角色关联。
+// 调用方传入事务上下文时复用同一事务；无外部事务时自建事务并在提交后失效策略缓存。
+func (s *UserRoleService) RemoveUserRoles(ctx context.Context, userID uint64) error {
+	if s.db == nil {
+		return apperrors.New(apperrors.CodeInternalError, "db not configured for role assignment")
+	}
+	_, externalTx := dbutil.TransactionFromContext(ctx)
+	err := s.withTx(ctx, func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Delete(&userRole{}).Error; err != nil {
+			return apperrors.Wrap(apperrors.CodeInternalError, "failed to remove user roles", err)
+		}
+		return nil
+	})
+	if err == nil && !externalTx {
+		kernelaccess.InvalidatePolicyCache()
+	}
+	return err
 }
 
 func (s *UserRoleService) ensureNotRemovingLastSuperAdmin(tx *gorm.DB, userID uint64, nextRoleIDs []uint64) error {

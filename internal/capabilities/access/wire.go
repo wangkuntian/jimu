@@ -24,5 +24,8 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	if binder, ok := ctx.Port(contract.TenantRoleStoreBinderPortName).(contract.ProvisioningRoleStoreBinder); ok {
 		binder.BindProvisioningRoleStore(roles)
 	}
+	if binder, ok := ctx.Port(contract.TenantRoleStoreBinderPortName).(contract.TenantRoleLifecycleBinder); ok {
+		binder.BindTenantRoleLifecycle(mod.TenantRoleLifecycle())
+	}
 	return mod, nil
 }

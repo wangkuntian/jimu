@@ -11,6 +11,7 @@ import (
 
 	"jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
+	kernelaccess "jimu/internal/kernel/access"
 	dbutil "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
@@ -341,7 +342,13 @@ func (s *UserService) Delete(ctx context.Context, id uint64) error {
 				return err
 			}
 		}
-		return s.repo.Delete(txCtx, user.ID)
+		if err := s.repo.Delete(txCtx, user.ID); err != nil {
+			return err
+		}
+		if s.roles != nil {
+			return s.roles.RemoveUserRoles(txCtx, user.ID)
+		}
+		return nil
 	}
 	if s.db != nil {
 		err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -356,6 +363,9 @@ func (s *UserService) Delete(ctx context.Context, id uint64) error {
 			return err
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to delete user", err)
+	}
+	if s.roles != nil {
+		kernelaccess.InvalidatePolicyCache()
 	}
 	if err := s.revokeSessions(ctx, id); err != nil {
 		return err

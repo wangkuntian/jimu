@@ -18,6 +18,7 @@ type Module struct {
 	roles       *application.RoleService
 	permissions *application.PermissionService
 	userRoles   *application.UserRoleService
+	tenantRoles *application.TenantRoleService
 }
 
 // PortName access 能力对外提供的端口名：contract.UserRoleAssigner（UserRoleService）。
@@ -40,6 +41,7 @@ func New(db *gorm.DB, deps ...interface{}) *Module {
 		roles:       roleSvc,
 		permissions: application.NewPermissionService(permRepo),
 		userRoles:   application.NewUserRoleService(db),
+		tenantRoles: application.NewTenantRoleService(db),
 	}
 }
 
@@ -48,6 +50,9 @@ func (m *Module) Name() string { return "access" }
 
 // UserRoleAssigner 实现 contract.UserRoleAssigner，供 user 管理面复用。
 func (m *Module) UserRoleAssigner() contract.UserRoleAssigner { return m.userRoles }
+
+// TenantRoleLifecycle 实现 contract.TenantRoleLifecycle，供 tenant 删除时清理角色数据。
+func (m *Module) TenantRoleLifecycle() contract.TenantRoleLifecycle { return m.tenantRoles }
 
 // migrationsFS 能力自带迁移（roles/permissions/user_roles 表）。
 //
