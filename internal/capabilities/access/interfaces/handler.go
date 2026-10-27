@@ -192,15 +192,16 @@ func (h *RoleHandler) Update(c *gin.Context) {
 
 // Delete godoc
 // @Summary      删除角色
-// @Description  停用指定角色（status=0）。可通过更新接口将 status 设为 1 重新启用。
+// @Description  永久删除未分配给用户的自定义角色，同时清理其权限关联。系统角色返回 403；角色已分配给用户时返回 409。停用角色请使用更新接口并将 status 设为 0。
 // @Tags         角色管理
 // @Produce      json
 // @Security     BearerAuth
 // @Param        id   path  string  true  "角色 ID"
 // @Success      204     "删除成功，无返回内容"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
-// @Failure      403  {object}  contract.ErrorResponse  "仅平台管理员可访问"
+// @Failure      403  {object}  contract.ErrorResponse  "仅平台管理员可访问或系统角色不可删除"
 // @Failure      404  {object}  contract.ErrorResponse  "角色不存在"
+// @Failure      409  {object}  contract.ErrorResponse  "角色已分配给用户"
 // @Failure      500  {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /roles/{id} [delete]
 func (h *RoleHandler) Delete(c *gin.Context) {

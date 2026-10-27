@@ -2013,7 +2013,7 @@ const docTemplate = `{
                 ]
             },
             "delete": {
-                "description": "停用指定角色（status=0）。可通过更新接口将 status 设为 1 重新启用。",
+                "description": "永久删除未分配给用户的自定义角色，同时清理其权限关联。系统角色返回 403；角色已分配给用户时返回 409。停用角色请使用更新接口并将 status 设为 0。",
                 "produces": [
                     "application/json"
                 ],
@@ -2041,13 +2041,19 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "仅平台管理员可访问",
+                        "description": "仅平台管理员可访问或系统角色不可删除",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "角色不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "角色已分配给用户",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -3117,14 +3123,14 @@ const docTemplate = `{
                 ]
             },
             "delete": {
-                "description": "将指定用户状态置为停用；账号数据保留，可通过更新接口重新启用。",
+                "description": "删除指定用户（软删除，账号从常规查询中消失）。最后一个有效平台超级管理员返回 409；如需保留账号并禁止登录，请使用更新接口将 status 设为 0。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "用户管理"
                 ],
-                "summary": "停用用户",
+                "summary": "删除用户",
                 "parameters": [
                     {
                         "type": "string",
@@ -3136,10 +3142,22 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "204": {
-                        "description": "停用成功，无返回内容"
+                        "description": "删除成功，无返回内容"
                     },
                     "400": {
                         "description": "参数错误（ID 格式无效）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "用户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "不能删除最后一个有效平台超级管理员",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }

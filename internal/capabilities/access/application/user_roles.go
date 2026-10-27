@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	stderrors "errors"
+	"sort"
 
 	"jimu/internal/capabilities/access/domain"
 	"jimu/internal/contract"
@@ -89,6 +90,9 @@ func (s *UserRoleService) AssignRoleIDs(ctx context.Context, userID uint64, role
 			}
 			return apperrors.Wrap(apperrors.CodeInternalError, "failed to lock user", err)
 		}
+		if err := s.lockAssignableRoles(tx, userTenant, roleIDs); err != nil {
+			return err
+		}
 		if err := tx.Where("user_id = ?", userID).Delete(&userRole{}).Error; err != nil {
 			return err
 		}
@@ -99,6 +103,24 @@ func (s *UserRoleService) AssignRoleIDs(ctx context.Context, userID uint64, role
 		}
 		return nil
 	})
+}
+
+func (s *UserRoleService) lockAssignableRoles(tx *gorm.DB, userTenant uint64, roleIDs []uint64) error {
+	ordered := append([]uint64(nil), roleIDs...)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i] < ordered[j] })
+	for _, roleID := range ordered {
+		var role domain.Role
+		if err := dbutil.LockRow(tx, &role, roleID).Error; err != nil {
+			if stderrors.Is(err, gorm.ErrRecordNotFound) {
+				return apperrors.New(apperrors.CodeNotFound, "one or more roles not found")
+			}
+			return apperrors.Wrap(apperrors.CodeInternalError, "failed to lock role", err)
+		}
+		if role.Status != 1 || (userTenant != 0 && role.TenantID != userTenant) {
+			return apperrors.New(apperrors.CodeNotFound, "one or more roles not found")
+		}
+	}
+	return nil
 }
 
 func (s *UserRoleService) EnsureCanDeactivateUser(ctx context.Context, userID uint64) error {

@@ -216,6 +216,8 @@ GET /api/v1/roles/options?tenant_id=<id>
 
 `PUT /roles/{id}`、`DELETE /roles/{id}`、`POST /roles/{id}/permissions` 遇到 `is_system=true` 返回 `403`。
 
+停止角色使用 `PUT /roles/{id}` 并传 `status=0`，可通过 `status=1` 恢复。`DELETE /roles/{id}` 是永久删除：只允许未分配给用户的自定义角色，事务内删除 `role_permissions` 和角色行；存在 `user_roles` 引用时返回 `409`，避免产生悬空授权。
+
 角色列表、详情、选项均返回 code/scope/is_system，前端无需再按名称猜测系统角色。
 
 租户身份即使伪造角色 ID 或用户 ID：

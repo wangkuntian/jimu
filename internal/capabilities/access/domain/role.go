@@ -2,12 +2,15 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"jimu/internal/contract"
 
 	"gorm.io/gorm"
 )
+
+var ErrRoleInUse = errors.New("role is assigned to users")
 
 type Role struct {
 	ID          uint64             `gorm:"primaryKey" json:"id"`
@@ -40,6 +43,7 @@ type RoleRepository interface {
 	FindPermissionsByIDs(ctx context.Context, ids []uint64) ([]Permission, error)
 	Create(ctx context.Context, role *Role) error
 	Update(ctx context.Context, role *Role) error
+	Delete(ctx context.Context, id uint64) error
 	AssignPermissions(ctx context.Context, roleID uint64, permissionIDs []uint64) error
 	GetPermissions(ctx context.Context, roleID uint64) ([]Permission, error)
 }

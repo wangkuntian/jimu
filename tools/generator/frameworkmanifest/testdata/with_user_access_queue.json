@@ -1164,6 +1164,7 @@
     "internal/capabilities/access/application/permission_service.go",
     "internal/capabilities/access/application/permission_service_test.go",
     "internal/capabilities/access/application/quota.go",
+    "internal/capabilities/access/application/role_delete_mysql_test.go",
     "internal/capabilities/access/application/service.go",
     "internal/capabilities/access/application/service_test.go",
     "internal/capabilities/access/application/user_roles.go",
@@ -1500,5 +1501,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:d5d7bc8342f4d47ee6e43761f6b3c7c32f0dae1b2bb961d9ed22f3922692170d"
+  "digest": "sha256:673ee52fe917a1a61e89ff1dde08dbd744865f08d5483457834e860f3297f94d"
 }

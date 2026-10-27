@@ -388,9 +388,14 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 	w = doJSON(t, r, http.MethodPost, "/api/v1/users", userToken, `{"username":"nope","password":"nopepass123"}`)
 	require.Equal(t, http.StatusForbidden, w.Code)
 
-	// 8. 停用角色立即撤销授权；角色仍可在停用筛选里查到。
+	// 8. 已分配给用户的角色不能永久删除。
 	w = doJSON(t, r, http.MethodDelete, "/api/v1/roles/"+roleResp.ID, adminToken, "")
-	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	require.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+
+	// 9. 停用角色立即撤销授权；角色仍可在停用筛选里查到。
+	w = doJSON(t, r, http.MethodPut, "/api/v1/roles/"+roleResp.ID, adminToken,
+		`{"name":"e2e-viewer","description":"e2e","status":0}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
 	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
 
@@ -407,19 +412,28 @@ func TestRoleAssignmentAndRBAC(t *testing.T) {
 	assert.Equal(t, roleResp.ID, disabledRoles.Data[0].ID)
 	assert.Zero(t, disabledRoles.Data[0].Status)
 
-	// 9. 通过更新接口重新启用角色，授权随角色状态恢复。
+	// 10. 通过更新接口重新启用角色，授权随角色状态恢复。
 	w = doJSON(t, r, http.MethodPut, "/api/v1/roles/"+roleResp.ID, adminToken,
 		`{"name":"e2e-viewer","description":"e2e","status":1}`)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	// 10. 空数组表示清空角色权限。
+	// 11. 空数组表示清空角色权限。
 	w = doJSON(t, r, http.MethodPost, "/api/v1/roles/"+roleResp.ID+"/permissions",
 		adminToken, `{"permission_ids":[]}`)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
 	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+
+	// 12. 解除用户绑定后可永久删除角色，权限关联一并清理。
+	w = doJSON(t, r, http.MethodPost, "/api/v1/users/"+created.ID+"/roles",
+		adminToken, `{"role_ids":[]}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	w = doJSON(t, r, http.MethodDelete, "/api/v1/roles/"+roleResp.ID, adminToken, "")
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	w = doJSON(t, r, http.MethodGet, "/api/v1/roles/"+roleResp.ID, adminToken, "")
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 }
 
 func TestCreateUserWithInvalidRoleRollsBack(t *testing.T) {

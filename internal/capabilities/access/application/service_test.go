@@ -87,7 +87,7 @@ func TestRoleServiceUpdateMapsConcurrentUpdateToConflict(t *testing.T) {
 
 func TestRoleServiceDeleteWrapsRepositoryError(t *testing.T) {
 	cause := stderrors.New("sql: connection refused")
-	service := NewRoleService(&fakeRoleRepository{updateErr: cause})
+	service := NewRoleService(&fakeRoleRepository{deleteErr: cause})
 
 	err := service.Delete(context.Background(), 8)
 	if roleAppCode(err) != apperrors.CodeInternalError || !stderrors.Is(err, cause) {
@@ -134,18 +134,19 @@ func TestRoleServiceCreateRejectsCrossTenant(t *testing.T) {
 	}
 }
 
-func TestRoleServiceUpdateAndDisableStatus(t *testing.T) {
-	status := int8(1)
+func TestRoleServiceUpdateStatus(t *testing.T) {
+	enabled := int8(1)
 	repo := &fakeRoleRepository{role: &domain.Role{ID: 3, Name: "ops", Status: 0}}
 	service := NewRoleService(repo)
-	if err := service.Update(context.Background(), 3, UpdateRoleRequest{Name: "ops", Status: &status}); err != nil {
+	if err := service.Update(context.Background(), 3, UpdateRoleRequest{Name: "ops", Status: &enabled}); err != nil {
 		t.Fatal(err)
 	}
 	if repo.updatedRole == nil || repo.updatedRole.Status != 1 {
 		t.Fatalf("updated role = %#v", repo.updatedRole)
 	}
 
-	if err := service.Delete(context.Background(), 3); err != nil {
+	disabled := int8(0)
+	if err := service.Update(context.Background(), 3, UpdateRoleRequest{Name: "ops", Status: &disabled}); err != nil {
 		t.Fatal(err)
 	}
 	if repo.updatedRole == nil || repo.updatedRole.Status != 0 {
@@ -263,6 +264,9 @@ func TestSystemRoleIsImmutable(t *testing.T) {
 	if repo.updatedRole != nil || repo.assigned != nil {
 		t.Fatalf("system role was mutated: updated=%#v assigned=%v", repo.updatedRole, repo.assigned)
 	}
+	if repo.deleted {
+		t.Fatal("system role was deleted")
+	}
 }
 
 func TestTenantRoleCannotReceivePlatformOnlyPermission(t *testing.T) {
@@ -302,6 +306,7 @@ type fakeRoleRepository struct {
 	findErr           error
 	createErr         error
 	updateErr         error
+	deleteErr         error
 	assignErr         error
 	offset            int
 	limit             int
@@ -310,6 +315,7 @@ type fakeRoleRepository struct {
 	filter            domain.RoleListFilter
 	created           []string
 	updatedRole       *domain.Role
+	deleted           bool
 	assigned          []uint64
 	permissions       []domain.Permission
 	getPermissionsErr error
@@ -346,6 +352,12 @@ func (r *fakeRoleRepository) Update(_ context.Context, role *domain.Role) error 
 		r.updatedRole = &updated
 	}
 	return r.updateErr
+}
+func (r *fakeRoleRepository) Delete(_ context.Context, _ uint64) error {
+	if r.deleteErr == nil {
+		r.deleted = true
+	}
+	return r.deleteErr
 }
 func (r *fakeRoleRepository) AssignPermissions(_ context.Context, _ uint64, permissionIDs []uint64) error {
 	if r.assignErr == nil {

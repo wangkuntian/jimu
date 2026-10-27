@@ -647,7 +647,7 @@ curl -X POST http://localhost:8080/api/v1/users \
 
 `email`/`phone`/`role_ids` 可选，入库前 AES-256-GCM 加密（配置 `security.encryption_key` 时），重复校验走盲索引。平台身份创建用户时必须显式指定 `tenant_id`；租户身份由后端强制使用当前租户，不接受跨租户参数。用户、租户和角色的响应 ID 统一以字符串返回，避免雪花 ID 在 JavaScript 中丢精度。
 
-用户管理统一使用 `/api/v1/users`：列表/创建对应 `/api/v1/users`，详情/修改/删除对应 `/api/v1/users/{id}`，分配角色对应 `POST /api/v1/users/{id}/roles`。列表支持 `username`、`status`、`tenant_id` 筛选，响应包含租户与角色摘要；分配角色按 `role_ids` 替换，角色必须属于用户所属租户。平台管理员与租户管理员共用这套接口，操作授权分别使用 `/api/v1/users`、`/api/v1/users/*`、`/api/v1/users/*/roles` 权限点；不再用固定管理员角色名作为接口准入条件。后端将“具备 `GET /api/v1/tenants` 权限”作为平台管理范围标记，平台身份可跨租户；没有该权限的租户管理员仍由 JWT `tid` 强制收敛。
+用户管理统一使用 `/api/v1/users`：列表/创建对应 `/api/v1/users`，详情/修改/删除对应 `/api/v1/users/{id}`，分配角色对应 `POST /api/v1/users/{id}/roles`。`PUT /users/{id}` 传 `status=0` 表示停用；`DELETE /users/{id}` 执行软删除，账号从常规查询中消失，最后一个有效平台超级管理员返回 `409`。列表支持 `username`、`status`、`tenant_id` 筛选，响应包含租户与角色摘要；分配角色按 `role_ids` 替换，角色必须属于用户所属租户。平台管理员与租户管理员共用这套接口，操作授权分别使用 `/api/v1/users`、`/api/v1/users/*`、`/api/v1/users/*/roles` 权限点；不再用固定管理员角色名作为接口准入条件。后端将“具备 `GET /api/v1/tenants` 权限”作为平台管理范围标记，平台身份可跨租户；没有该权限的租户管理员仍由 JWT `tid` 强制收敛。
 
 ### 角色与权限管理
 
@@ -694,15 +694,17 @@ curl -X POST http://localhost:8080/api/v1/roles/<role_id>/permissions \
   -d '{"permission_ids":["<permission_id_1>","<permission_id_2>"]}'
 
 # 停用角色；更新接口传 status=1 可重新启用
-curl -X DELETE http://localhost:8080/api/v1/roles/<role_id> \
-  -H "Authorization: Bearer <access_token>"
 curl -X PUT http://localhost:8080/api/v1/roles/<role_id> \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
-  -d '{"name":"运营管理员","description":"负责租户运营","status":1}'
+  -d '{"name":"运营管理员","description":"负责租户运营","status":0}'
+
+# 永久删除未分配给用户的自定义角色
+curl -X DELETE http://localhost:8080/api/v1/roles/<role_id> \
+  -H "Authorization: Bearer <access_token>"
 ```
 
-`DELETE /api/v1/roles/{id}` 表示停用（`status=0`），不会物理删除或软删除角色；停用会立即撤销授权但保留角色权限和用户绑定，重新启用后原绑定恢复。只有 `status=1` 的角色可被分配给用户并参与授权。权限替换会去重并在单个事务内完成，任一权限 ID 不存在时返回 `400` 且保留原权限。角色、权限或角色状态写成功后，当前进程的策略缓存会主动失效；多副本部署时其他副本仍受最长 30 秒缓存 TTL 约束。
+`PUT /api/v1/roles/{id}` 传 `status=0` 表示停用，停用会立即撤销授权但保留角色权限和用户绑定，重新启用后原绑定恢复。`DELETE /api/v1/roles/{id}` 表示永久删除自定义角色，并在同一事务内清理 `role_permissions`；角色已分配给用户时返回 `409`，系统角色返回 `403`。只有 `status=1` 的角色可被分配给用户并参与授权。权限替换会去重并在单个事务内完成，任一权限 ID 不存在时返回 `400` 且保留原权限。角色、权限或角色状态写成功后，当前进程的策略缓存会主动失效；多副本部署时其他副本仍受最长 30 秒缓存 TTL 约束。
 
 ### 忘记密码（发送验证码）
 
@@ -844,7 +846,7 @@ curl -X POST http://localhost:8080/api/v1/auth/register \
 - **租户 1:N 用户**：一个租户可有多个用户，一个用户只属于一个租户。结构上是 `users.tenant_id` 单列，没有用户-租户关联表。
 - **身份全局唯一**：`username` 与邮箱/手机号盲索引（`email_hash`/`phone_hash`）为全局唯一索引，同一身份不能存在于多个租户；租户归属创建后不可修改（`UpdateUserRequest` 仅支持 `status`），也没有切换租户接口。
 - **不支持一人多租**：跨租户协作请使用平台级视角（上下文无租户）或按租户归属的 API Key，而不是让同一账号加入多个租户。
-- **用户接口按身份范围隔离**：`/api/v1/users` 的列表、详情、更新、停用与 `/api/v1/users/{id}/roles` 对租户管理员只作用于当前租户（跨租户按不存在或越界处理），平台级视角（上下文无租户）可跨租户查询和筛选。默认租户是平台租户，非平台身份不能管理默认租户用户。平台级创建必须显式指定 `tenant_id`；租户级创建强制使用当前租户。角色分配按角色 ID 在用户所属租户内校验，用户创建与角色写入在同一事务内完成。`/api/v1/admin/users*` 的通用 CRUD 已移除，用户导入端点仍保留为 `/api/v1/admin/users/import*`。
+- **用户接口按身份范围隔离**：`/api/v1/users` 的列表、详情、更新、停用、删除与 `/api/v1/users/{id}/roles` 对租户管理员只作用于当前租户（跨租户按不存在或越界处理），平台级视角（上下文无租户）可跨租户查询和筛选。停用使用 `PUT status=0`；删除使用 `DELETE` 软删除。默认租户是平台租户，非平台身份不能管理默认租户用户。平台级创建必须显式指定 `tenant_id`；租户级创建强制使用当前租户。角色分配按角色 ID 在用户所属租户内校验，用户创建与角色写入在同一事务内完成。`/api/v1/admin/users*` 的通用 CRUD 已移除，用户导入端点仍保留为 `/api/v1/admin/users/import*`。
 - **任务与导入任务按租户隔离**：`/api/v1/admin/jobs`、`/api/v1/admin/jobs/dead-letters` 的列表/详情/重试/标记解决与 `/api/v1/admin/users/import/:id` 均限定在当前租户；任务消费时会把任务归属租户注入执行上下文（outbox 事件无任务行，租户未知，按平台级处理）。
 - **`tenant_id=0` 表示未归属**：迁移前的存量数据或绕过服务层直接写库会产生该状态，登录时会归一到默认租户（`id=1`、`code=default`）。
 - **套餐与配额**：套餐定义在 `tenant_plans`，租户通过 `tenants.plan_id` 关联；`plan_id=0` 或套餐上限为 0 时不受限制。配额只在创建前校验（创建用户/角色/API Key），已超限的存量数据不会被删除；`users`/`roles` 统计排除软删除记录，`api_keys` 为硬删除直接计数。批量导入用户不逐行校验配额。

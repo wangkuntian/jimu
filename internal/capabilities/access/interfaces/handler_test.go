@@ -321,6 +321,7 @@ type fakeRoleRepository struct {
 	listFilter  domain.RoleListFilter
 	assigned    []uint64
 	options     []domain.Role
+	deleted     bool
 }
 
 func (r *fakeRoleRepository) FindByID(context.Context, uint64) (*domain.Role, error) {
@@ -338,6 +339,10 @@ func (r *fakeRoleRepository) Create(_ context.Context, role *domain.Role) error 
 	return nil
 }
 func (r *fakeRoleRepository) Update(context.Context, *domain.Role) error { return nil }
+func (r *fakeRoleRepository) Delete(context.Context, uint64) error {
+	r.deleted = true
+	return nil
+}
 func (r *fakeRoleRepository) AssignPermissions(_ context.Context, _ uint64, permissionIDs []uint64) error {
 	r.assigned = append([]uint64(nil), permissionIDs...)
 	if permissionIDs != nil && len(permissionIDs) == 0 {
@@ -363,7 +368,7 @@ func (r *fakeRoleRepository) FindPermissionsByIDs(_ context.Context, ids []uint6
 
 type errDeleteRoleRepository struct{ fakeRoleRepository }
 
-func (r *errDeleteRoleRepository) Update(context.Context, *domain.Role) error {
+func (r *errDeleteRoleRepository) Delete(context.Context, uint64) error {
 	return errors.New("db down")
 }
 

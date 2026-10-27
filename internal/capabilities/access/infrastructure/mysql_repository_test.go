@@ -19,6 +19,11 @@ func newRoleTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&domain.Role{}, &domain.Permission{}, &rolePermission{}))
+	require.NoError(t, db.Exec(`CREATE TABLE user_roles (
+		user_id INTEGER NOT NULL,
+		role_id INTEGER NOT NULL,
+		PRIMARY KEY (user_id, role_id)
+	)`).Error)
 	permissions := []domain.Permission{
 		{ID: 1, Name: "perm1", Resource: "/test", Action: "GET"},
 		{ID: 2, Name: "perm2", Resource: "/test", Action: "POST"},
@@ -141,4 +146,41 @@ func TestRoleRepositoryListOptions(t *testing.T) {
 	require.Len(t, got, 2)
 	assert.Equal(t, "system", got[0].Name, "system roles sort first")
 	assert.Equal(t, "custom-a", got[1].Name)
+}
+
+func TestRoleRepositoryDeleteRemovesRoleAndPermissions(t *testing.T) {
+	db := newRoleTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+
+	role := &domain.Role{TenantID: 1, Name: "temporary", Status: 1}
+	require.NoError(t, repo.Create(ctx, role))
+	require.NoError(t, repo.AssignPermissions(ctx, role.ID, []uint64{1, 2}))
+
+	require.NoError(t, repo.Delete(ctx, role.ID))
+
+	_, err := repo.FindByID(ctx, role.ID)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	var count int64
+	require.NoError(t, db.Model(&rolePermission{}).Where("role_id = ?", role.ID).Count(&count).Error)
+	assert.Zero(t, count)
+}
+
+func TestRoleRepositoryDeleteRejectsAssignedRole(t *testing.T) {
+	db := newRoleTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+
+	role := &domain.Role{TenantID: 1, Name: "assigned", Status: 1}
+	require.NoError(t, repo.Create(ctx, role))
+	require.NoError(t, repo.AssignPermissions(ctx, role.ID, []uint64{1}))
+	require.NoError(t, db.Exec("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", 7, role.ID).Error)
+
+	require.ErrorIs(t, repo.Delete(ctx, role.ID), domain.ErrRoleInUse)
+	got, err := repo.FindByID(ctx, role.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "assigned", got.Name)
+	var permissionCount int64
+	require.NoError(t, db.Model(&rolePermission{}).Where("role_id = ?", role.ID).Count(&permissionCount).Error)
+	assert.Equal(t, int64(1), permissionCount)
 }

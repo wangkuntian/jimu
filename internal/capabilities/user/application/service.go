@@ -289,12 +289,6 @@ func (s *UserService) Update(ctx context.Context, id uint64, req UpdateUserReque
 	return nil
 }
 
-// Disable 将用户状态置为停用；DELETE /users/{id} 使用该语义，保留账号供后续重新启用。
-func (s *UserService) Disable(ctx context.Context, id uint64) error {
-	status := int8(0)
-	return s.Update(ctx, id, UpdateUserRequest{Status: &status})
-}
-
 func (s *UserService) Delete(ctx context.Context, id uint64) error {
 	user, err := s.repo.FindByID(ctx, id)
 	if err != nil {

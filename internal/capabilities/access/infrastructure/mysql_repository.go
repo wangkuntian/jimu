@@ -86,6 +86,28 @@ func (r *mysqlRepository) Update(ctx context.Context, role *domain.Role) error {
 	return nil
 }
 
+func (r *mysqlRepository) Delete(ctx context.Context, id uint64) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var role domain.Role
+		if err := dbutil.LockRow(tx, &role, id).Error; err != nil {
+			return err
+		}
+
+		var userCount int64
+		if err := tx.Table("user_roles").Where("role_id = ?", id).Count(&userCount).Error; err != nil {
+			return err
+		}
+		if userCount > 0 {
+			return domain.ErrRoleInUse
+		}
+
+		if err := tx.Where("role_id = ?", id).Delete(&rolePermission{}).Error; err != nil {
+			return err
+		}
+		return tx.Unscoped().Delete(&domain.Role{}, id).Error
+	})
+}
+
 // AssignPermissions 整体替换角色权限。事务内先锁定角色行，
 // 避免并发调用交错导致「后写的删掉先写的授权」。
 func (r *mysqlRepository) AssignPermissions(ctx context.Context, roleID uint64, permissionIDs []uint64) error {

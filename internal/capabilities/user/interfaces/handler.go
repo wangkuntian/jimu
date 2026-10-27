@@ -146,14 +146,16 @@ func (h *UserHandler) Update(c *gin.Context) {
 }
 
 // Delete godoc
-// @Summary      停用用户
-// @Description  将指定用户状态置为停用；账号数据保留，可通过更新接口重新启用。
+// @Summary      删除用户
+// @Description  删除指定用户（软删除，账号从常规查询中消失）。最后一个有效平台超级管理员返回 409；如需保留账号并禁止登录，请使用更新接口将 status 设为 0。
 // @Tags         用户管理
 // @Produce      json
 // @Security     BearerAuth
 // @Param        id   path  string  true  "用户 ID"
-// @Success      204     "停用成功，无返回内容"
+// @Success      204     "删除成功，无返回内容"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
+// @Failure      404  {object}  contract.ErrorResponse  "用户不存在"
+// @Failure      409  {object}  contract.ErrorResponse  "不能删除最后一个有效平台超级管理员"
 // @Failure      500  {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /users/{id} [delete]
 func (h *UserHandler) Delete(c *gin.Context) {
@@ -162,7 +164,7 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid id"))
 		return
 	}
-	if err := h.service.Disable(c.Request.Context(), id); err != nil {
+	if err := h.service.Delete(c.Request.Context(), id); err != nil {
 		response.Fail(c, err)
 		return
 	}

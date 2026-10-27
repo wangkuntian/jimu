@@ -195,12 +195,14 @@ func (s *RoleService) Delete(ctx context.Context, id uint64) error {
 	if role.IsSystem {
 		return errors.New(errors.CodeForbidden, "system role is immutable")
 	}
-	role.Status = 0
-	if err := s.repo.Update(ctx, role); err != nil {
-		if stderrors.Is(err, dbutil.ErrConcurrentUpdate) {
-			return errors.Wrap(errors.CodeConflict, "role was modified concurrently, please retry", err)
+	if err := s.repo.Delete(ctx, id); err != nil {
+		if stderrors.Is(err, domain.ErrRoleInUse) {
+			return errors.New(errors.CodeConflict, "role is assigned to users")
 		}
-		return errors.Wrap(errors.CodeInternalError, "failed to disable role", err)
+		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.Wrap(errors.CodeNotFound, "role not found", err)
+		}
+		return errors.Wrap(errors.CodeInternalError, "failed to delete role", err)
 	}
 	kernelaccess.InvalidatePolicyCache()
 	return nil
