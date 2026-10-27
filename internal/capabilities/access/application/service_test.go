@@ -98,7 +98,8 @@ func TestRoleServiceDeleteWrapsRepositoryError(t *testing.T) {
 func TestRoleServiceCreatePlatformUsesRequestedTenant(t *testing.T) {
 	repo := &fakeRoleRepository{}
 	quota := &fakeTenantQuota{exists: true}
-	service := NewRoleService(repo).WithQuota(quota)
+	states := fakeTenantStateSource{active: true}
+	service := NewRoleService(repo).WithQuota(quota).WithTenantState(states)
 
 	resp, err := service.Create(tenant.WithPlatformScope(context.Background()), CreateRoleRequest{
 		TenantID: "9",
@@ -124,6 +125,54 @@ func TestRoleServiceCreatePlatformRequiresExistingTenant(t *testing.T) {
 	if roleAppCode(err) != apperrors.CodeNotFound {
 		t.Fatalf("missing tenant code = %d", roleAppCode(err))
 	}
+}
+
+func TestRoleServicePlatformCreateRequiresActiveTenant(t *testing.T) {
+	t.Run("启用租户允许创建", func(t *testing.T) {
+		repo := &fakeRoleRepository{}
+		service := NewRoleService(repo).
+			WithQuota(&fakeTenantQuota{exists: true}).
+			WithTenantState(fakeTenantStateSource{active: true})
+
+		_, err := service.Create(tenant.WithPlatformScope(context.Background()), CreateRoleRequest{
+			TenantID: "9",
+			Name:     "operator",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(repo.created) != 1 {
+			t.Fatalf("created = %v", repo.created)
+		}
+	})
+
+	t.Run("停用租户拒绝创建", func(t *testing.T) {
+		service := NewRoleService(&fakeRoleRepository{}).
+			WithQuota(&fakeTenantQuota{exists: true}).
+			WithTenantState(fakeTenantStateSource{active: false})
+
+		_, err := service.Create(tenant.WithPlatformScope(context.Background()), CreateRoleRequest{
+			TenantID: "9",
+			Name:     "operator",
+		})
+		if roleAppCode(err) != apperrors.CodeForbidden {
+			t.Fatalf("code = %d, want %d", roleAppCode(err), apperrors.CodeForbidden)
+		}
+	})
+
+	t.Run("删除租户拒绝创建", func(t *testing.T) {
+		service := NewRoleService(&fakeRoleRepository{}).
+			WithQuota(&fakeTenantQuota{exists: false}).
+			WithTenantState(fakeTenantStateSource{active: false})
+
+		_, err := service.Create(tenant.WithPlatformScope(context.Background()), CreateRoleRequest{
+			TenantID: "9",
+			Name:     "operator",
+		})
+		if roleAppCode(err) != apperrors.CodeNotFound {
+			t.Fatalf("code = %d, want %d", roleAppCode(err), apperrors.CodeNotFound)
+		}
+	})
 }
 
 func TestRoleServiceCreateRejectsCrossTenant(t *testing.T) {
@@ -436,6 +485,15 @@ func (f *fakeTenantQuota) CheckRoleQuota(_ context.Context, tenantID uint64) err
 func (f *fakeTenantQuota) TenantExists(_ context.Context, tenantID uint64) (bool, error) {
 	f.existsChecked = append(f.existsChecked, tenantID)
 	return f.exists, f.existsErr
+}
+
+type fakeTenantStateSource struct {
+	active bool
+	err    error
+}
+
+func (f fakeTenantStateSource) TenantActive(context.Context, uint64) (bool, error) {
+	return f.active, f.err
 }
 
 func TestRoleServiceCreateRejectsWhenQuotaExceeded(t *testing.T) {

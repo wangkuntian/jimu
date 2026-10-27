@@ -31,6 +31,10 @@ type wsFixture struct {
 }
 
 func newWSFixture(t *testing.T) *wsFixture {
+	return newWSFixtureWithCheckers(t)
+}
+
+func newWSFixtureWithCheckers(t *testing.T, stateCheckers ...auth.StateCheckers) *wsFixture {
 	t.Helper()
 	jwt := auth.New("test-secret", "test-issuer", 60, 7)
 	pm := NewPresenceManager()
@@ -40,7 +44,7 @@ func newWSFixture(t *testing.T) *wsFixture {
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 
-	srv := httptest.NewServer(WSHandler(hub, jwt, pm, cm))
+	srv := httptest.NewServer(WSHandler(hub, jwt, pm, cm, stateCheckers...))
 	t.Cleanup(func() {
 		cancel()
 		srv.Close()
@@ -239,6 +243,73 @@ func TestWSHandlerInvalidToken(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+type fakeUserStateChecker struct {
+	active bool
+	err    error
+}
+
+func (f fakeUserStateChecker) UserActive(context.Context, uint64) (bool, error) {
+	return f.active, f.err
+}
+
+type fakeTenantStateChecker struct {
+	active bool
+	err    error
+}
+
+func (f fakeTenantStateChecker) TenantActive(context.Context, uint64) (bool, error) {
+	return f.active, f.err
+}
+
+func (f *wsFixture) handshakeStatus(t *testing.T, userID, tenantID uint64) int {
+	t.Helper()
+	token, err := f.jwt.GenerateAccess(userID, tenantID, "sess-"+strconv.FormatUint(userID, 10))
+	require.NoError(t, err)
+	resp, err := http.Get(f.server.URL + "?token=" + token)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+func TestWSHandlerChecksIdentityStateBeforeUpgrade(t *testing.T) {
+	t.Run("启用用户和租户允许握手", func(t *testing.T) {
+		f := newWSFixtureWithCheckers(t, auth.StateCheckers{
+			User:   fakeUserStateChecker{active: true},
+			Tenant: fakeTenantStateChecker{active: true},
+		})
+		token, err := f.jwt.GenerateAccess(42, 7, "sess-42")
+		require.NoError(t, err)
+		conn, resp, err := websocket.DefaultDialer.Dial(
+			"ws"+strings.TrimPrefix(f.server.URL, "http")+"?token="+token, nil)
+		require.NoError(t, err)
+		defer conn.Close()
+		assert.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
+	})
+
+	t.Run("停用用户拒绝握手", func(t *testing.T) {
+		f := newWSFixtureWithCheckers(t, auth.StateCheckers{
+			User: fakeUserStateChecker{active: false},
+		})
+		assert.Equal(t, http.StatusUnauthorized, f.handshakeStatus(t, 42, 0))
+	})
+
+	t.Run("停用租户拒绝握手", func(t *testing.T) {
+		f := newWSFixtureWithCheckers(t, auth.StateCheckers{
+			User:   fakeUserStateChecker{active: true},
+			Tenant: fakeTenantStateChecker{active: false},
+		})
+		assert.Equal(t, http.StatusUnauthorized, f.handshakeStatus(t, 42, 7))
+	})
+
+	t.Run("删除租户拒绝握手", func(t *testing.T) {
+		f := newWSFixtureWithCheckers(t, auth.StateCheckers{
+			User:   fakeUserStateChecker{active: true},
+			Tenant: fakeTenantStateChecker{active: false},
+		})
+		assert.Equal(t, http.StatusUnauthorized, f.handshakeStatus(t, 42, 8))
+	})
 }
 
 func TestWSConnectRegisters(t *testing.T) {

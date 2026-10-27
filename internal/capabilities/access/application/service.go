@@ -17,8 +17,9 @@ import (
 )
 
 type RoleService struct {
-	repo  domain.RoleRepository
-	quota TenantQuota // nil = 未启用租户配额
+	repo   domain.RoleRepository
+	quota  TenantQuota                // nil = 未启用租户配额
+	states contract.TenantStateSource // nil = 未装配 tenant 能力
 }
 
 func NewRoleService(repo domain.RoleRepository) *RoleService {
@@ -28,6 +29,11 @@ func NewRoleService(repo domain.RoleRepository) *RoleService {
 // WithQuota 注入租户配额校验（未注入时不做配额检查）
 func (s *RoleService) WithQuota(quota TenantQuota) *RoleService {
 	s.quota = quota
+	return s
+}
+
+func (s *RoleService) WithTenantState(states contract.TenantStateSource) *RoleService {
+	s.states = states
 	return s
 }
 
@@ -71,6 +77,15 @@ func (s *RoleService) createTenantID(ctx context.Context, rawTenantID string) (u
 		}
 		if !exists {
 			return 0, errors.New(errors.CodeNotFound, "tenant not found")
+		}
+		if s.states != nil {
+			active, err := s.states.TenantActive(ctx, id)
+			if err != nil {
+				return 0, errors.Wrap(errors.CodeInternalError, "failed to load tenant state", err)
+			}
+			if !active {
+				return 0, errors.New(errors.CodeForbidden, "tenant is not active")
+			}
 		}
 		return id, nil
 	}

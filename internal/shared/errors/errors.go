@@ -69,7 +69,7 @@ const (
 	// 租户模块 (5xxx)
 	CodeTenantNotFound   = 5001 // 租户不存在
 	CodeTenantExists     = 5002 // 租户已存在
-	CodeTenantProtected  = 5003 // 默认租户受保护，不可删除
+	CodeTenantProtected  = 5003 // 默认租户受保护，不可停用或删除
 	CodeTenantCodeFormat = 5004 // 租户编码格式无效
 	CodeQuotaExceeded    = 5005 // 租户资源配额已用尽
 )
@@ -202,7 +202,7 @@ func AllErrorCodes() []ErrorInfo {
 		{CodeCaptchaInvalid, "验证码无效", 400, "验证码"},
 		{CodeTenantNotFound, "租户不存在", 404, "租户"},
 		{CodeTenantExists, "租户已存在", 409, "租户"},
-		{CodeTenantProtected, "默认租户受保护，不可删除", 409, "租户"},
+		{CodeTenantProtected, "默认租户受保护，不可停用或删除", 409, "租户"},
 		{CodeTenantCodeFormat, "租户编码格式无效", 400, "租户"},
 		{CodeQuotaExceeded, "租户资源配额已用尽", 403, "租户"},
 		{CodeWebAuthnNoCredential, "该用户未注册通行密钥", 404, "用户"},

@@ -32,6 +32,9 @@ func New(db *gorm.DB, deps ...interface{}) *Module {
 		if quota, ok := dep.(application.TenantQuota); ok {
 			roleSvc.WithQuota(quota)
 		}
+		if states, ok := dep.(contract.TenantStateSource); ok {
+			roleSvc.WithTenantState(states)
+		}
 	}
 	return &Module{
 		roles:       roleSvc,

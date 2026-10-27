@@ -121,6 +121,14 @@ func (s *TenantService) Update(ctx context.Context, id uint64, req UpdateTenantR
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to get tenant", err)
 	}
+	if req.Status != nil && *req.Status == 0 {
+		if id == tenant.DefaultTenantID {
+			return errors.New(errors.CodeTenantProtected, "default tenant cannot be disabled")
+		}
+		if currentTenantID := tenant.FromContext(ctx); currentTenantID != 0 && currentTenantID == id {
+			return errors.New(errors.CodeForbidden, "current tenant cannot be disabled")
+		}
+	}
 	if req.Name != nil {
 		t.Name = *req.Name
 	}

@@ -16,9 +16,10 @@ import (
 func Wire(ctx *assembly.Context) (contract.Module, error) {
 	roles, _ := ctx.Port("access").(contract.UserRoleAssigner)
 	tenants, _ := ctx.Port(contract.TenantInfoPortName).(contract.TenantInfoSource)
+	tenantStates, _ := ctx.Port(contract.TenantInfoPortName).(contract.TenantStateSource)
 	quota, _ := ctx.Port("tenant").(application.TenantQuota)
 	ob, _ := ctx.Port("outbox").(contract.EventWriter)
-	mod := New(ctx.DB(), ctx.Redis(), ob, roles, tenants, quota)
+	mod := New(ctx.DB(), ctx.Redis(), ob, roles, tenants, quota).WithTenantState(tenantStates)
 	repo := infrastructure.NewMysqlRepository(ctx.DB())
 	if err := ctx.Provide(UserinfoPortName, NewUserinfoSource(repo)); err != nil {
 		return nil, fmt.Errorf("provide user info port: %w", err)

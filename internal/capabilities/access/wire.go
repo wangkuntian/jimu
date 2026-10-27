@@ -12,7 +12,8 @@ import (
 //
 // tenant 端口名用字面量：tenant 能力 import 本包（迁移依赖），本包反向 import 会成环。
 func Wire(ctx *assembly.Context) (contract.Module, error) {
-	mod := New(ctx.DB(), ctx.Port("tenant"))
+	tenantStates, _ := ctx.Port(contract.TenantInfoPortName).(contract.TenantStateSource)
+	mod := New(ctx.DB(), ctx.Port("tenant"), tenantStates)
 	if err := ctx.Provide(PortName, mod.UserRoleAssigner()); err != nil {
 		return nil, fmt.Errorf("provide access port: %w", err)
 	}

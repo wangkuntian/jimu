@@ -27,6 +27,7 @@ type UserService struct {
 	db       *gorm.DB
 	roles    contract.UserRoleAssigner
 	tenants  contract.TenantInfoSource
+	states   contract.TenantStateSource
 	quota    TenantQuota
 	sessions SessionRevoker
 }
@@ -53,6 +54,8 @@ func NewUserService(repo domain.UserRepository, deps ...interface{}) *UserServic
 			s.roles = d
 		case contract.TenantInfoSource:
 			s.tenants = d
+		case contract.TenantStateSource:
+			s.states = d
 		case TenantQuota:
 			s.quota = d
 		case SessionRevoker:
@@ -74,6 +77,11 @@ func (s *UserService) WithRoles(roles contract.UserRoleAssigner) *UserService {
 
 func (s *UserService) WithQuota(quota TenantQuota) *UserService {
 	s.quota = quota
+	return s
+}
+
+func (s *UserService) WithTenantState(states contract.TenantStateSource) *UserService {
+	s.states = states
 	return s
 }
 
@@ -202,6 +210,15 @@ func (s *UserService) createTenantID(ctx context.Context, rawTenantID string) (u
 	}
 	if _, ok := tenants[requestedTenantID]; !ok {
 		return 0, errors.New(errors.CodeNotFound, "tenant not found")
+	}
+	if s.states != nil {
+		active, err := s.states.TenantActive(ctx, requestedTenantID)
+		if err != nil {
+			return 0, errors.Wrap(errors.CodeInternalError, "failed to load tenant state", err)
+		}
+		if !active {
+			return 0, errors.New(errors.CodeForbidden, "tenant is not active")
+		}
 	}
 	return requestedTenantID, nil
 }

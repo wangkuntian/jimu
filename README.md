@@ -647,7 +647,7 @@ curl -X POST http://localhost:8080/api/v1/users \
   -d '{"tenant_id": "1", "username": "newuser", "password": "pass1234", "email": "newuser@example.com", "phone": "13800138000", "role_ids": ["<role_id>"]}'
 ```
 
-`email`/`phone`/`role_ids` 可选，入库前 AES-256-GCM 加密（配置 `security.encryption_key` 时），重复校验走盲索引。平台身份创建用户时必须显式指定 `tenant_id`；租户身份由后端强制使用当前租户，不接受跨租户参数。用户、租户和角色的响应 ID 统一以字符串返回，避免雪花 ID 在 JavaScript 中丢精度。
+`email`/`phone`/`role_ids` 可选，入库前 AES-256-GCM 加密（配置 `security.encryption_key` 时），重复校验走盲索引。平台身份创建用户时必须显式指定 `tenant_id`，且目标租户必须存在、启用且未删除；停用或删除的租户返回 `403`/`404`，不会落库。租户身份由后端强制使用当前租户，不接受跨租户参数，当前租户状态由认证链实时校验。用户、租户和角色的响应 ID 统一以字符串返回，避免雪花 ID 在 JavaScript 中丢精度。
 
 用户管理统一使用 `/api/v1/users`：列表/创建对应 `/api/v1/users`，详情/修改/删除对应 `/api/v1/users/{id}`，分配角色对应 `POST /api/v1/users/{id}/roles`。`PUT /users/{id}` 传 `status=0` 表示停用；`DELETE /users/{id}` 执行软删除，账号从常规查询中消失，最后一个有效平台超级管理员返回 `409`。列表支持 `username`、`status`、`tenant_id` 筛选，响应包含租户与角色摘要；分配角色按 `role_ids` 替换，角色必须属于用户所属租户。平台管理员查看默认租户时，`GET /roles/options` 会同时返回该租户的平台角色，因此可直接委派 `platform_super_admin`、`platform_auditor`；其他租户仍只返回租户角色。平台管理员与租户管理员共用这套接口，操作授权分别使用 `/api/v1/users`、`/api/v1/users/*`、`/api/v1/users/*/roles` 权限点；不再用固定管理员角色名作为接口准入条件。后端将“具备 `GET /api/v1/tenants` 权限”作为平台管理范围标记，平台身份可跨租户；没有该权限的租户管理员仍由 JWT `tid` 强制收敛。
 
@@ -706,7 +706,7 @@ curl -X DELETE http://localhost:8080/api/v1/roles/<role_id> \
   -H "Authorization: Bearer <access_token>"
 ```
 
-`PUT /api/v1/roles/{id}` 传 `status=0` 表示停用，停用会立即撤销授权但保留角色权限和用户绑定，重新启用后原绑定恢复。`DELETE /api/v1/roles/{id}` 表示永久删除自定义角色，并在同一事务内清理 `role_permissions`；角色已分配给用户时返回 `409`，系统角色返回 `403`。只有 `status=1` 的角色可被分配给用户并参与授权。权限替换会去重并在单个事务内完成，任一权限 ID 不存在时返回 `400` 且保留原权限。角色、权限或角色状态写成功后，当前进程的策略缓存会主动失效；多副本部署时其他副本仍受最长 30 秒缓存 TTL 约束。
+`POST /api/v1/roles` 的平台管理员请求必须指向存在、启用且未删除的租户；停用租户返回 `403`，删除或不存在返回 `404`，租户级创建继续由 JWT `tid` 强制收敛到当前租户。`PUT /api/v1/roles/{id}` 传 `status=0` 表示停用，停用会立即撤销授权但保留角色权限和用户绑定，重新启用后原绑定恢复。`DELETE /api/v1/roles/{id}` 表示永久删除自定义角色，并在同一事务内清理 `role_permissions`；角色已分配给用户时返回 `409`，系统角色返回 `403`。只有 `status=1` 的角色可被分配给用户并参与授权。权限替换会去重并在单个事务内完成，任一权限 ID 不存在时返回 `400` 且保留原权限。角色、权限或角色状态写成功后，当前进程的策略缓存会主动失效；多副本部署时其他副本仍受最长 30 秒缓存 TTL 约束。
 
 ### 忘记密码（发送验证码）
 
@@ -881,6 +881,8 @@ curl -X DELETE http://localhost:8080/api/v1/tenants/<tenant_id> \
 
 `keyword` 里的 `%`/`_`/`!` 会被转义（`!` 是转义字符本身），按字面子串匹配（不会退化成通配）；`status` 只在**传参**时过滤，要「不过滤」必须省略该参数（`?status=` 这样的空值会绑定为 `0`，即只查停用）。
 
+默认租户（`id=1`、`code=default`）不可停用，返回 `5003`；当前身份所属租户也不能停用，返回 `403`（`1003`），避免管理员自锁。平台管理员仍可停用其他租户。已有 access token 在租户停用后由认证链实时校验并拒绝，不需要等待 token 过期。
+
 相关错误码：`5001` 租户不存在、`5002` 租户编码已存在、`5003` 默认租户受保护、`5004` 租户编码格式无效。
 
 ### 租户运营（套餐 / 配额 / 用量）
@@ -996,6 +998,10 @@ curl http://localhost:8080/api/v1/admin/monitoring/status \
 curl "http://localhost:8080/api/v1/admin/ratelimit/auth?scope=login&key=ip:1.2.3.4" \
   -H "Authorization: Bearer <access_token>"
 ```
+
+### WebSocket 管理端握手
+
+`GET /api/v1/admin/ws?token=<access_token>` 在升级连接前除了验签 JWT，还会通过装配期注入的用户/租户状态端口校验账号与 `tid` 对应用户、租户仍存在且启用。用户或租户停用/删除时返回 `401` 且不升级；状态查询故障 fail-closed。`tid=0` 的平台级上下文没有具体租户可校验。该校验只覆盖**新握手**，已经建立的 WebSocket 连接不会因后续停用/删除被主动断开。
 
 响应：
 

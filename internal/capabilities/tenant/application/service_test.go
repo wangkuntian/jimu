@@ -168,6 +168,52 @@ func TestTenantServiceUpdate(t *testing.T) {
 	})
 }
 
+func TestTenantServiceUpdateRejectsDisablingProtectedTenants(t *testing.T) {
+	t.Run("默认租户不可停用", func(t *testing.T) {
+		disabled := int8(0)
+		repo := &fakeTenantRepository{
+			tenant: &domain.Tenant{ID: tenant.DefaultTenantID, Code: "default", Name: "默认租户", Status: 1},
+		}
+		err := NewTenantService(repo).Update(context.Background(), tenant.DefaultTenantID,
+			UpdateTenantRequest{Status: &disabled})
+		if tenantAppCode(err) != apperrors.CodeTenantProtected {
+			t.Fatalf("code = %d, want %d", tenantAppCode(err), apperrors.CodeTenantProtected)
+		}
+		if repo.updated != nil {
+			t.Fatalf("protected tenant must not be updated: %#v", repo.updated)
+		}
+	})
+
+	t.Run("当前租户不可停用", func(t *testing.T) {
+		disabled := int8(0)
+		repo := &fakeTenantRepository{
+			tenant: &domain.Tenant{ID: 2, Code: "acme", Name: "Acme", Status: 1},
+		}
+		ctx := tenant.WithTenant(context.Background(), 2)
+		err := NewTenantService(repo).Update(ctx, 2, UpdateTenantRequest{Status: &disabled})
+		if tenantAppCode(err) != apperrors.CodeForbidden {
+			t.Fatalf("code = %d, want %d", tenantAppCode(err), apperrors.CodeForbidden)
+		}
+		if repo.updated != nil {
+			t.Fatalf("current tenant must not be updated: %#v", repo.updated)
+		}
+	})
+
+	t.Run("允许停用其他租户", func(t *testing.T) {
+		disabled := int8(0)
+		repo := &fakeTenantRepository{
+			tenant: &domain.Tenant{ID: 3, Code: "beta", Name: "Beta", Status: 1},
+		}
+		ctx := tenant.WithTenant(context.Background(), 2)
+		if err := NewTenantService(repo).Update(ctx, 3, UpdateTenantRequest{Status: &disabled}); err != nil {
+			t.Fatal(err)
+		}
+		if repo.updated == nil || repo.updated.ID != 3 || repo.updated.Status != 0 {
+			t.Fatalf("updated = %#v", repo.updated)
+		}
+	})
+}
+
 func TestTenantServiceDeleteProtectsDefaultTenant(t *testing.T) {
 	// 默认租户（id=1）不可删除
 	err := NewTenantService(&fakeTenantRepository{}).Delete(context.Background(), tenant.DefaultTenantID)

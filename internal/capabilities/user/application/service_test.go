@@ -267,6 +267,15 @@ type fakeTenantInfoSource struct {
 	err   error
 }
 
+type fakeTenantStateSource struct {
+	active bool
+	err    error
+}
+
+func (f fakeTenantStateSource) TenantActive(context.Context, uint64) (bool, error) {
+	return f.active, f.err
+}
+
 func (f fakeTenantInfoSource) GetByIDs(context.Context, []uint64) (map[uint64]contract.TenantInfo, error) {
 	return f.infos, f.err
 }
@@ -437,7 +446,8 @@ func TestUserServicePlatformScopeUsesRequestedTenant(t *testing.T) {
 	repo := &fakeUserRepository{}
 	roles := &fakeUserRoleManager{}
 	tenants := fakeTenantInfoSource{infos: map[uint64]contract.TenantInfo{2: {ID: 2, Name: "Acme"}}}
-	svc := NewUserService(repo, roles, tenants)
+	states := fakeTenantStateSource{active: true}
+	svc := NewUserService(repo, roles, tenants, states)
 	ctx := tenant.WithPlatformScope(tenant.WithTenant(context.Background(), tenant.DefaultTenantID))
 
 	got, err := svc.Create(ctx, CreateUserRequest{
@@ -449,6 +459,56 @@ func TestUserServicePlatformScopeUsesRequestedTenant(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint64(2), repo.created.TenantID)
 	assert.Equal(t, "2", got.Tenant.ID)
+}
+
+func TestUserServicePlatformCreateRequiresActiveTenant(t *testing.T) {
+	const targetTenantID uint64 = 2
+
+	t.Run("启用租户允许创建", func(t *testing.T) {
+		repo := &fakeUserRepository{}
+		tenants := fakeTenantInfoSource{
+			infos: map[uint64]contract.TenantInfo{targetTenantID: {ID: targetTenantID, Name: "Acme"}},
+		}
+		svc := NewUserService(repo, tenants, fakeTenantStateSource{active: true})
+
+		_, err := svc.Create(tenant.WithPlatformScope(context.Background()), CreateUserRequest{
+			TenantID: "2",
+			Username: "alice",
+			Password: "password1",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, repo.created)
+		assert.Equal(t, targetTenantID, repo.created.TenantID)
+	})
+
+	t.Run("停用租户拒绝创建", func(t *testing.T) {
+		repo := &fakeUserRepository{}
+		tenants := fakeTenantInfoSource{
+			infos: map[uint64]contract.TenantInfo{targetTenantID: {ID: targetTenantID, Name: "Acme"}},
+		}
+		svc := NewUserService(repo, tenants, fakeTenantStateSource{active: false})
+
+		_, err := svc.Create(tenant.WithPlatformScope(context.Background()), CreateUserRequest{
+			TenantID: "2",
+			Username: "alice",
+			Password: "password1",
+		})
+		assert.Equal(t, apperrors.CodeForbidden, appCode(err))
+		assert.Nil(t, repo.created)
+	})
+
+	t.Run("删除租户拒绝创建", func(t *testing.T) {
+		repo := &fakeUserRepository{}
+		svc := NewUserService(repo, fakeTenantInfoSource{}, fakeTenantStateSource{active: false})
+
+		_, err := svc.Create(tenant.WithPlatformScope(context.Background()), CreateUserRequest{
+			TenantID: "2",
+			Username: "alice",
+			Password: "password1",
+		})
+		assert.Equal(t, apperrors.CodeNotFound, appCode(err))
+		assert.Nil(t, repo.created)
+	})
 }
 
 func TestUserServiceTenantAdminScopeStillUsesContextTenant(t *testing.T) {
