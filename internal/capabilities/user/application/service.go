@@ -21,18 +21,24 @@ import (
 )
 
 type UserService struct {
-	repo    domain.UserRepository
-	outbox  contract.EventWriter
-	cipher  contract.BlindIndexer
-	db      *gorm.DB
-	roles   contract.UserRoleAssigner
-	tenants contract.TenantInfoSource
-	quota   TenantQuota
+	repo     domain.UserRepository
+	outbox   contract.EventWriter
+	cipher   contract.BlindIndexer
+	db       *gorm.DB
+	roles    contract.UserRoleAssigner
+	tenants  contract.TenantInfoSource
+	quota    TenantQuota
+	sessions SessionRevoker
 }
 
 // TenantQuota 租户配额校验（由 tenant 能力实现；nil = 未启用配额）。
 type TenantQuota interface {
 	CheckUserQuota(ctx context.Context, tenantID uint64) error
+}
+
+// SessionRevoker 吊销用户全部登录会话（由 kernel/auth 的 SessionStore 实现）。
+type SessionRevoker interface {
+	RevokeAll(ctx context.Context, userID uint64) error
 }
 
 func NewUserService(repo domain.UserRepository, deps ...interface{}) *UserService {
@@ -49,6 +55,8 @@ func NewUserService(repo domain.UserRepository, deps ...interface{}) *UserServic
 			s.tenants = d
 		case TenantQuota:
 			s.quota = d
+		case SessionRevoker:
+			s.sessions = d
 		}
 	}
 	return s
@@ -66,6 +74,11 @@ func (s *UserService) WithRoles(roles contract.UserRoleAssigner) *UserService {
 
 func (s *UserService) WithQuota(quota TenantQuota) *UserService {
 	s.quota = quota
+	return s
+}
+
+func (s *UserService) WithSessionRevoker(revoker SessionRevoker) *UserService {
+	s.sessions = revoker
 	return s
 }
 
@@ -285,6 +298,11 @@ func (s *UserService) Update(ctx context.Context, id uint64, req UpdateUserReque
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to update user", err)
 	}
+	if req.Status != nil && *req.Status == 0 {
+		if err := s.revokeSessions(ctx, id); err != nil {
+			return err
+		}
+	}
 	s.publishUserUpdated(ctx, id, changes)
 	return nil
 }
@@ -322,7 +340,20 @@ func (s *UserService) Delete(ctx context.Context, id uint64) error {
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to delete user", err)
 	}
+	if err := s.revokeSessions(ctx, id); err != nil {
+		return err
+	}
 	s.publishUserDeleted(ctx, id)
+	return nil
+}
+
+func (s *UserService) revokeSessions(ctx context.Context, userID uint64) error {
+	if s.sessions == nil {
+		return nil
+	}
+	if err := s.sessions.RevokeAll(ctx, userID); err != nil {
+		return errors.Wrap(errors.CodeInternalError, "failed to revoke user sessions", err)
+	}
 	return nil
 }
 

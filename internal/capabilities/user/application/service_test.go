@@ -297,6 +297,45 @@ func (f *fakeUserRoleManager) EnsureCanDeactivateUser(_ context.Context, userID 
 	return f.guardErr
 }
 
+type fakeSessionRevoker struct {
+	revoked []uint64
+	err     error
+}
+
+func (f *fakeSessionRevoker) RevokeAll(_ context.Context, userID uint64) error {
+	f.revoked = append(f.revoked, userID)
+	return f.err
+}
+
+func TestUserServiceDisableRevokesSessions(t *testing.T) {
+	repo := &fakeUserRepository{user: &domain.User{ID: 7, TenantID: 2, Status: 1}}
+	sessions := &fakeSessionRevoker{}
+	svc := NewUserService(repo).WithSessionRevoker(sessions)
+	status := int8(0)
+
+	require.NoError(t, svc.Update(tenant.WithTenant(context.Background(), 2), 7, UpdateUserRequest{Status: &status}))
+	assert.Equal(t, []uint64{7}, sessions.revoked)
+}
+
+func TestUserServiceDeleteRevokesSessions(t *testing.T) {
+	repo := &fakeUserRepository{user: &domain.User{ID: 7, TenantID: 2, Status: 1}}
+	sessions := &fakeSessionRevoker{}
+	svc := NewUserService(repo).WithSessionRevoker(sessions)
+
+	require.NoError(t, svc.Delete(tenant.WithTenant(context.Background(), 2), 7))
+	assert.Equal(t, []uint64{7}, sessions.revoked)
+}
+
+func TestUserServiceSessionRevokeFailureIsReported(t *testing.T) {
+	repo := &fakeUserRepository{user: &domain.User{ID: 7, TenantID: 2, Status: 1}}
+	sessions := &fakeSessionRevoker{err: stderrors.New("redis unavailable")}
+	svc := NewUserService(repo).WithSessionRevoker(sessions)
+	status := int8(0)
+
+	err := svc.Update(tenant.WithTenant(context.Background(), 2), 7, UpdateUserRequest{Status: &status})
+	assert.Equal(t, apperrors.CodeInternalError, appCode(err))
+}
+
 func TestUserServiceDeactivationUsesSuperAdminGuard(t *testing.T) {
 	ctx := tenant.WithPlatformScope(tenant.WithTenant(context.Background(), 1))
 	repo := &fakeUserRepository{user: &domain.User{ID: 7, Username: "admin", TenantID: 1, Status: 1}}
