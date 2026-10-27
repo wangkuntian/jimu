@@ -50,10 +50,15 @@ func (r *mysqlRepository) List(ctx context.Context, filter domain.RoleListFilter
 	return roles, total, err
 }
 
-func (r *mysqlRepository) ListOptions(ctx context.Context, tenantID uint64) ([]domain.Role, error) {
+func (r *mysqlRepository) ListOptions(ctx context.Context, tenantID uint64, includePlatform bool) ([]domain.Role, error) {
 	var roles []domain.Role
-	err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND status = 1 AND scope = ?", tenantID, contract.RoleScopeTenant).
+	db := r.db.WithContext(ctx).Where("tenant_id = ? AND status = 1", tenantID)
+	if includePlatform {
+		db = db.Where("scope IN ?", []contract.RoleScope{contract.RoleScopeTenant, contract.RoleScopePlatform})
+	} else {
+		db = db.Where("scope = ?", contract.RoleScopeTenant)
+	}
+	err := db.
 		Order("is_system desc, id asc").
 		Find(&roles).Error
 	return roles, err

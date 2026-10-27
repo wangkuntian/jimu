@@ -131,7 +131,7 @@ func (h *RoleHandler) List(c *gin.Context) {
 
 // Options godoc
 // @Summary      获取可分配角色选项
-// @Description  返回指定租户内启用且可分配给用户的角色摘要。租户身份只能读取当前租户。
+// @Description  返回指定租户内启用且可分配给用户的角色摘要。平台管理员查看默认租户时同时返回平台角色；租户身份只能读取当前租户。
 // @Tags         角色管理
 // @Produce      json
 // @Security     BearerAuth

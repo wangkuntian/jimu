@@ -219,6 +219,9 @@ func TestRoleServiceOptions(t *testing.T) {
 	if repo.optionsTenantID != 9 || len(got) != 1 || got[0].Code != contract.RoleCodeTenantAdmin || !got[0].IsSystem {
 		t.Fatalf("options tenant = %d got = %#v", repo.optionsTenantID, got)
 	}
+	if repo.optionsIncludePlatform {
+		t.Fatal("tenant-scoped options must not include platform roles")
+	}
 
 	_, err = service.Options(tenant.WithTenant(context.Background(), 9), 10)
 	if roleAppCode(err) != apperrors.CodeForbidden {
@@ -231,6 +234,26 @@ func TestRoleServiceOptions(t *testing.T) {
 	}
 	if repo.optionsTenantID != 10 {
 		t.Fatalf("platform options tenant = %d, want 10", repo.optionsTenantID)
+	}
+	if repo.optionsIncludePlatform {
+		t.Fatal("non-default tenant options must not include platform roles")
+	}
+
+	_, err = service.Options(tenant.WithPlatformScope(tenant.WithTenant(context.Background(), tenant.DefaultTenantID)), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.optionsTenantID != tenant.DefaultTenantID || !repo.optionsIncludePlatform {
+		t.Fatalf("default tenant options = tenant:%d includePlatform:%v", repo.optionsTenantID, repo.optionsIncludePlatform)
+	}
+
+	repo.optionsIncludePlatform = false
+	_, err = service.Options(tenant.WithTenant(context.Background(), tenant.DefaultTenantID), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.optionsIncludePlatform {
+		t.Fatal("non-platform identities must not receive platform role options")
 	}
 
 	missingService := NewRoleService(repo).WithQuota(&fakeTenantQuota{exists: false})
@@ -300,28 +323,29 @@ func TestTenantRoleCannotReceivePlatformOnlyPermission(t *testing.T) {
 }
 
 type fakeRoleRepository struct {
-	role              *domain.Role
-	roles             []domain.Role
-	total             int64
-	findErr           error
-	createErr         error
-	updateErr         error
-	deleteErr         error
-	assignErr         error
-	offset            int
-	limit             int
-	sort              string
-	order             string
-	filter            domain.RoleListFilter
-	created           []string
-	updatedRole       *domain.Role
-	deleted           bool
-	assigned          []uint64
-	permissions       []domain.Permission
-	getPermissionsErr error
-	options           []domain.Role
-	optionsTenantID   uint64
-	permissionsByIDs  map[uint64]domain.Permission
+	role                   *domain.Role
+	roles                  []domain.Role
+	total                  int64
+	findErr                error
+	createErr              error
+	updateErr              error
+	deleteErr              error
+	assignErr              error
+	offset                 int
+	limit                  int
+	sort                   string
+	order                  string
+	filter                 domain.RoleListFilter
+	created                []string
+	updatedRole            *domain.Role
+	deleted                bool
+	assigned               []uint64
+	permissions            []domain.Permission
+	getPermissionsErr      error
+	options                []domain.Role
+	optionsTenantID        uint64
+	optionsIncludePlatform bool
+	permissionsByIDs       map[uint64]domain.Permission
 }
 
 func (r *fakeRoleRepository) FindByID(context.Context, uint64) (*domain.Role, error) {
@@ -369,8 +393,9 @@ func (r *fakeRoleRepository) GetPermissions(context.Context, uint64) ([]domain.P
 	return r.permissions, r.getPermissionsErr
 }
 
-func (r *fakeRoleRepository) ListOptions(_ context.Context, tenantID uint64) ([]domain.Role, error) {
+func (r *fakeRoleRepository) ListOptions(_ context.Context, tenantID uint64, includePlatform bool) ([]domain.Role, error) {
 	r.optionsTenantID = tenantID
+	r.optionsIncludePlatform = includePlatform
 	return r.options, nil
 }
 

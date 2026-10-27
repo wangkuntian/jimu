@@ -116,7 +116,8 @@ func (s *RoleService) List(ctx context.Context, p pagination.Pagination, filter 
 	return ToRoleResponses(roles), total, nil
 }
 
-// Options 返回租户内可用于用户角色分配的启用角色摘要。
+// Options 返回目标租户内可用于用户角色分配的启用角色摘要。
+// 平台管理员查看默认租户时同时返回平台角色。
 func (s *RoleService) Options(ctx context.Context, requestedTenantID uint64) ([]RoleOptionResponse, error) {
 	tenantID := tenant.FromContext(ctx)
 	if tenant.IsPlatformScope(ctx) {
@@ -138,7 +139,8 @@ func (s *RoleService) Options(ctx context.Context, requestedTenantID uint64) ([]
 	if tenantID == 0 {
 		return []RoleOptionResponse{}, nil
 	}
-	roles, err := s.repo.ListOptions(ctx, tenantID)
+	includePlatform := tenant.IsPlatformScope(ctx) && tenantID == tenant.DefaultTenantID
+	roles, err := s.repo.ListOptions(ctx, tenantID, includePlatform)
 	if err != nil {
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to list role options", err)
 	}

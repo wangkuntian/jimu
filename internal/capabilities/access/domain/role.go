@@ -39,7 +39,7 @@ type RoleListFilter struct {
 type RoleRepository interface {
 	FindByID(ctx context.Context, id uint64) (*Role, error)
 	List(ctx context.Context, filter RoleListFilter, offset, limit int, sort, order string) ([]Role, int64, error)
-	ListOptions(ctx context.Context, tenantID uint64) ([]Role, error)
+	ListOptions(ctx context.Context, tenantID uint64, includePlatform bool) ([]Role, error)
 	FindPermissionsByIDs(ctx context.Context, ids []uint64) ([]Permission, error)
 	Create(ctx context.Context, role *Role) error
 	Update(ctx context.Context, role *Role) error

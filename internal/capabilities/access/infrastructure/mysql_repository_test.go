@@ -141,11 +141,18 @@ func TestRoleRepositoryListOptions(t *testing.T) {
 	}
 	require.NoError(t, db.Model(&domain.Role{}).Where("id = ?", roles[2].ID).Update("status", 0).Error)
 
-	got, err := repo.ListOptions(ctx, 1)
+	got, err := repo.ListOptions(ctx, 1, true)
 	require.NoError(t, err)
-	require.Len(t, got, 2)
+	require.Len(t, got, 3)
 	assert.Equal(t, "system", got[0].Name, "system roles sort first")
-	assert.Equal(t, "custom-a", got[1].Name)
+	names := []string{got[0].Name, got[1].Name, got[2].Name}
+	assert.Contains(t, names, "platform", "default tenant options include platform roles for platform admins")
+	assert.Contains(t, names, "custom-a")
+
+	got, err = repo.ListOptions(ctx, 2, false)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "other-tenant", got[0].Name)
 }
 
 func TestRoleRepositoryDeleteRemovesRoleAndPermissions(t *testing.T) {

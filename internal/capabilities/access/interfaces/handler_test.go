@@ -354,7 +354,7 @@ func (r *fakeRoleRepository) GetPermissions(context.Context, uint64) ([]domain.P
 	return r.permissions, nil
 }
 
-func (r *fakeRoleRepository) ListOptions(context.Context, uint64) ([]domain.Role, error) {
+func (r *fakeRoleRepository) ListOptions(context.Context, uint64, bool) ([]domain.Role, error) {
 	return r.options, nil
 }
 
