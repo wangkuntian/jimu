@@ -649,7 +649,7 @@ curl -X POST http://localhost:8080/api/v1/users \
 
 `email`/`phone`/`role_ids` 可选，入库前 AES-256-GCM 加密（配置 `security.encryption_key` 时），重复校验走盲索引。平台身份创建用户时必须显式指定 `tenant_id`；租户身份由后端强制使用当前租户，不接受跨租户参数。用户、租户和角色的响应 ID 统一以字符串返回，避免雪花 ID 在 JavaScript 中丢精度。
 
-用户管理统一使用 `/api/v1/users`：列表/创建对应 `/api/v1/users`，详情/修改/删除对应 `/api/v1/users/{id}`，分配角色对应 `POST /api/v1/users/{id}/roles`。`PUT /users/{id}` 传 `status=0` 表示停用；`DELETE /users/{id}` 执行软删除，账号从常规查询中消失，最后一个有效平台超级管理员返回 `409`。列表支持 `username`、`status`、`tenant_id` 筛选，响应包含租户与角色摘要；分配角色按 `role_ids` 替换，角色必须属于用户所属租户。平台管理员与租户管理员共用这套接口，操作授权分别使用 `/api/v1/users`、`/api/v1/users/*`、`/api/v1/users/*/roles` 权限点；不再用固定管理员角色名作为接口准入条件。后端将“具备 `GET /api/v1/tenants` 权限”作为平台管理范围标记，平台身份可跨租户；没有该权限的租户管理员仍由 JWT `tid` 强制收敛。
+用户管理统一使用 `/api/v1/users`：列表/创建对应 `/api/v1/users`，详情/修改/删除对应 `/api/v1/users/{id}`，分配角色对应 `POST /api/v1/users/{id}/roles`。`PUT /users/{id}` 传 `status=0` 表示停用；`DELETE /users/{id}` 执行软删除，账号从常规查询中消失，最后一个有效平台超级管理员返回 `409`。列表支持 `username`、`status`、`tenant_id` 筛选，响应包含租户与角色摘要；分配角色按 `role_ids` 替换，角色必须属于用户所属租户。平台管理员查看默认租户时，`GET /roles/options` 会同时返回该租户的平台角色，因此可直接委派 `platform_super_admin`、`platform_auditor`；其他租户仍只返回租户角色。平台管理员与租户管理员共用这套接口，操作授权分别使用 `/api/v1/users`、`/api/v1/users/*`、`/api/v1/users/*/roles` 权限点；不再用固定管理员角色名作为接口准入条件。后端将“具备 `GET /api/v1/tenants` 权限”作为平台管理范围标记，平台身份可跨租户；没有该权限的租户管理员仍由 JWT `tid` 强制收敛。
 
 ### 角色与权限管理
 
@@ -679,7 +679,7 @@ curl -X POST http://localhost:8080/api/v1/roles \
   -H "Content-Type: application/json" \
   -d '{"tenant_id":"1","name":"运营管理员","description":"负责租户运营"}'
 
-# 租户角色选项：租户管理员读取当前租户；平台管理员可指定 tenant_id
+# 可分配角色选项：平台管理员指定默认租户时同时返回平台角色
 curl "http://localhost:8080/api/v1/roles/options?tenant_id=1" \
   -H "Authorization: Bearer <access_token>"
 
