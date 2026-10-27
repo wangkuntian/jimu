@@ -2164,7 +2164,7 @@ paths:
       - 角色管理
   /roles/options:
     get:
-      description: 返回指定租户内启用且可分配给用户的角色摘要。租户身份只能读取当前租户。
+      description: 返回指定租户内启用且可分配给用户的角色摘要。平台管理员查看默认租户时同时返回平台角色；租户身份只能读取当前租户。
       parameters:
       - description: 目标租户 ID（平台管理员可选）
         in: query
