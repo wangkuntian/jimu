@@ -173,21 +173,6 @@ func TestPlanRoutesRequireValidID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-// itoa 避免为测试引入 strconv 之外的依赖分支
-func itoa(v uint64) string {
-	if v == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	for v > 0 {
-		i--
-		buf[i] = byte('0' + v%10)
-		v /= 10
-	}
-	return string(buf[i:])
-}
-
 func stripResponseMetadata(body string) string {
 	var out map[string]any
 	if err := json.Unmarshal([]byte(body), &out); err != nil {
