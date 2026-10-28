@@ -15,65 +15,7 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/admin/users/{id}/roles": {
-            "post": {
-                "description": "替换指定用户的全部角色（按角色名）。角色名在用户所属租户内解析，不存在返回 404。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "权限管理"
-                ],
-                "summary": "分配用户角色",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "用户 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "角色名列表",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "成功",
-                        "schema": {
-                            "$ref": "#/definitions/response.Body"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/contract.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "用户或角色不存在",
-                        "schema": {
-                            "$ref": "#/definitions/contract.ErrorResponse"
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
-            }
-        },
-        "/api/v1/admin/error-codes": {
+        "/admin/error-codes": {
             "get": {
                 "description": "获取所有业务错误码及其对应的 HTTP 状态码映射。用于前端和第三方系统集成时参考。包含错误码、错误消息、HTTP 状态码和分类信息。",
                 "produces": [
@@ -89,11 +31,22 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
             }
         },
-        "/api/v1/admin/ratelimit/auth": {
+        "/admin/ratelimit/auth": {
             "get": {
                 "description": "不消费令牌地返回某 scope（如 login）+ key（如 ip:1.2.3.4）当前的计数与剩余窗口",
                 "tags": [
@@ -133,13 +86,24 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.Body"
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/response.Body"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
             }
         },
         "/audits": {
@@ -182,7 +146,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回分页审计日志列表",
                         "schema": {
-                            "$ref": "#/definitions/contract.PageResponse"
+                            "$ref": "#/definitions/application.AuditLogPageResponse"
                         }
                     },
                     "400": {
@@ -348,7 +312,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回审计日志详情",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.AuditLogBodyResponse"
                         }
                     },
                     "400": {
@@ -375,6 +339,26 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ]
+            }
+        },
+        "/auth/config": {
+            "get": {
+                "description": "返回客户端渲染登录/注册入口所需的公开开关。无论是否开放公开注册，本端点都存在。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "获取认证能力开关",
+                "responses": {
+                    "200": {
+                        "description": "成功，返回注册相关开关",
+                        "schema": {
+                            "$ref": "#/definitions/interfaces.AuthConfigResponse"
+                        }
+                    }
+                }
             }
         },
         "/auth/devices": {
@@ -557,7 +541,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回 accessToken 和 refreshToken",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/contract.TokenPair"
                         }
                     },
                     "400": {
@@ -682,6 +666,43 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "未认证或会话无效",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/auth/me": {
+            "get": {
+                "description": "返回当前用户的身份、角色与有效权限点（resource + action，与 Casbin 策略同形，resource 支持通配）。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "获取当前会话身份与权限点",
+                "responses": {
+                    "200": {
+                        "description": "成功，返回身份与权限点",
+                        "schema": {
+                            "$ref": "#/definitions/application.MeView"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "用户不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -855,7 +876,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回新的 token 对",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/contract.TokenPair"
                         }
                     },
                     "400": {
@@ -901,7 +922,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回用户信息（开通式注册额外返回 tenant）",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.RegisterResponse"
                         }
                     },
                     "400": {
@@ -1410,11 +1431,17 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回分页权限列表",
                         "schema": {
-                            "$ref": "#/definitions/contract.PageResponse"
+                            "$ref": "#/definitions/application.PermissionPageResponse"
                         }
                     },
                     "400": {
                         "description": "参数错误（如无效的排序字段）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅平台管理员可访问",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1500,7 +1527,7 @@ const docTemplate = `{
                 "summary": "获取权限详情",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "权限 ID",
                         "name": "id",
                         "in": "path",
@@ -1553,7 +1580,7 @@ const docTemplate = `{
                 "summary": "更新权限信息",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "权限 ID",
                         "name": "id",
                         "in": "path",
@@ -1618,7 +1645,7 @@ const docTemplate = `{
                 "summary": "删除权限",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "权限 ID",
                         "name": "id",
                         "in": "path",
@@ -1683,17 +1710,41 @@ const docTemplate = `{
                         "description": "排序方向（asc 或 desc，默认 desc）",
                         "name": "order",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "目标租户 ID；省略时跨租户查询",
+                        "name": "tenant_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "角色名称模糊匹配",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "状态（0=停用 1=启用）",
+                        "name": "status",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "成功，返回分页角色列表",
                         "schema": {
-                            "$ref": "#/definitions/contract.PageResponse"
+                            "$ref": "#/definitions/application.RolePageResponse"
                         }
                     },
                     "400": {
                         "description": "参数错误（如无效的排序字段）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅平台管理员可访问",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1712,7 +1763,7 @@ const docTemplate = `{
                 ]
             },
             "post": {
-                "description": "创建新角色。角色名称必须唯一，用于权限管理和访问控制。",
+                "description": "创建新角色。平台管理员必须传 tenant_id；首版角色接口仅平台管理员可用。租户内角色名唯一。",
                 "consumes": [
                     "application/json"
                 ],
@@ -1725,7 +1776,7 @@ const docTemplate = `{
                 "summary": "创建角色",
                 "parameters": [
                     {
-                        "description": "角色信息（名称和描述）",
+                        "description": "角色信息（租户、名称和描述）",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1738,11 +1789,23 @@ const docTemplate = `{
                     "201": {
                         "description": "创建成功，返回角色信息",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.RoleBodyResponse"
                         }
                     },
                     "400": {
                         "description": "参数错误（如名称为空）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅平台管理员可访问",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "租户不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1767,9 +1830,60 @@ const docTemplate = `{
                 ]
             }
         },
+        "/roles/options": {
+            "get": {
+                "description": "返回指定租户内启用且可分配给用户的角色摘要。平台管理员查看默认租户时同时返回平台角色；租户身份只能读取当前租户。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色管理"
+                ],
+                "summary": "获取可分配角色选项",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "目标租户 ID（平台管理员可选）",
+                        "name": "tenant_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回角色选项",
+                        "schema": {
+                            "$ref": "#/definitions/application.RoleOptionListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（tenant_id 格式无效）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "跨租户访问",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
         "/roles/{id}": {
             "get": {
-                "description": "根据角色 ID 获取角色详细信息，包括关联的权限列表。",
+                "description": "根据角色 ID 获取角色详细信息。权限列表由 GET /roles/{id}/permissions 单独读取。",
                 "produces": [
                     "application/json"
                 ],
@@ -1779,7 +1893,7 @@ const docTemplate = `{
                 "summary": "获取角色详情",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "角色 ID",
                         "name": "id",
                         "in": "path",
@@ -1790,11 +1904,17 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回角色信息",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.RoleBodyResponse"
                         }
                     },
                     "400": {
                         "description": "参数错误（ID 格式无效）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅平台管理员可访问",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1819,7 +1939,7 @@ const docTemplate = `{
                 ]
             },
             "put": {
-                "description": "更新指定角色的名称或描述。",
+                "description": "更新指定角色的名称、描述或状态。tenant_id 不可修改。",
                 "consumes": [
                     "application/json"
                 ],
@@ -1832,7 +1952,7 @@ const docTemplate = `{
                 "summary": "更新角色信息",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "角色 ID",
                         "name": "id",
                         "in": "path",
@@ -1857,6 +1977,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "参数错误（ID 格式无效）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅平台管理员可访问",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1887,7 +2013,7 @@ const docTemplate = `{
                 ]
             },
             "delete": {
-                "description": "软删除指定角色。删除后角色数据仍保留在数据库中，但无法分配给用户。",
+                "description": "永久删除未分配给用户的自定义角色，同时清理其权限关联。系统角色返回 403；角色已分配给用户时返回 409。停用角色请使用更新接口并将 status 设为 0。",
                 "produces": [
                     "application/json"
                 ],
@@ -1897,7 +2023,7 @@ const docTemplate = `{
                 "summary": "删除角色",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "角色 ID",
                         "name": "id",
                         "in": "path",
@@ -1910,6 +2036,24 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "参数错误（ID 格式无效）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅平台管理员可访问或系统角色不可删除",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "角色不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "角色已分配给用户",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -1929,8 +2073,64 @@ const docTemplate = `{
             }
         },
         "/roles/{id}/permissions": {
+            "get": {
+                "description": "返回指定角色当前已分配的权限。没有权限时返回空数组。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色管理"
+                ],
+                "summary": "获取角色当前权限",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "角色 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功，返回角色权限",
+                        "schema": {
+                            "$ref": "#/definitions/application.PermissionListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（ID 格式无效）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅平台管理员可访问",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "角色不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
             "post": {
-                "description": "为指定角色分配权限。传入权限 ID 数组，角色将被赋予这些权限。原有权限会被替换。",
+                "description": "整体替换角色权限。权限 ID 使用字符串；空数组表示清空该角色权限。",
                 "consumes": [
                     "application/json"
                 ],
@@ -1943,7 +2143,7 @@ const docTemplate = `{
                 "summary": "分配角色权限",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "角色 ID",
                         "name": "id",
                         "in": "path",
@@ -1968,6 +2168,18 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "参数错误（ID 格式无效或权限不存在）",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅平台管理员可访问或无权授予指定权限",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "角色不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -2014,7 +2226,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回分页套餐列表",
                         "schema": {
-                            "$ref": "#/definitions/contract.PageResponse"
+                            "$ref": "#/definitions/application.PlanPageResponse"
                         }
                     },
                     "400": {
@@ -2095,7 +2307,7 @@ const docTemplate = `{
                 "summary": "更新套餐",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "套餐 ID",
                         "name": "id",
                         "in": "path",
@@ -2148,7 +2360,7 @@ const docTemplate = `{
                 "summary": "删除套餐",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "套餐 ID",
                         "name": "id",
                         "in": "path",
@@ -2216,13 +2428,25 @@ const docTemplate = `{
                         "description": "排序方向（asc 或 desc，默认 desc）",
                         "name": "order",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "编码或名称模糊匹配",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "状态（0=停用 1=启用）",
+                        "name": "status",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "成功，返回分页租户列表",
                         "schema": {
-                            "$ref": "#/definitions/contract.PageResponse"
+                            "$ref": "#/definitions/application.TenantPageResponse"
                         }
                     },
                     "400": {
@@ -2271,7 +2495,7 @@ const docTemplate = `{
                     "201": {
                         "description": "创建成功，返回租户信息",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.TenantBodyResponse"
                         }
                     },
                     "400": {
@@ -2343,7 +2567,7 @@ const docTemplate = `{
                 "summary": "获取租户详情",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "租户 ID",
                         "name": "id",
                         "in": "path",
@@ -2354,7 +2578,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回租户信息",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.TenantBodyResponse"
                         }
                     },
                     "400": {
@@ -2396,7 +2620,7 @@ const docTemplate = `{
                 "summary": "更新租户信息",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "租户 ID",
                         "name": "id",
                         "in": "path",
@@ -2455,7 +2679,7 @@ const docTemplate = `{
                 "summary": "删除租户",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "租户 ID",
                         "name": "id",
                         "in": "path",
@@ -2503,7 +2727,7 @@ const docTemplate = `{
         },
         "/tenants/{id}/plan": {
             "put": {
-                "description": "为指定租户分配套餐；plan_id=0 表示取消套餐（取消后不再受配额限制）。超限时不影响既有数据，只阻止继续创建。",
+                "description": "为指定租户分配套餐；plan_id=\"0\" 表示取消套餐（取消后不再受配额限制）。超限时不影响既有数据，只阻止继续创建。",
                 "consumes": [
                     "application/json"
                 ],
@@ -2516,7 +2740,7 @@ const docTemplate = `{
                 "summary": "为租户分配套餐",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "租户 ID",
                         "name": "id",
                         "in": "path",
@@ -2561,7 +2785,7 @@ const docTemplate = `{
         },
         "/users": {
             "get": {
-                "description": "分页获取用户列表。支持按 ID、用户名、创建时间排序，可指定升序或降序。",
+                "description": "分页获取用户列表。平台管理员可跨租户查询；租户管理员只能看到本租户，范围由后端身份决定。",
                 "produces": [
                     "application/json"
                 ],
@@ -2593,13 +2817,31 @@ const docTemplate = `{
                         "description": "排序方向（asc 或 desc，默认 desc）",
                         "name": "order",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "用户名子串",
+                        "name": "username",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "状态（0 停用 / 1 启用）",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "所属租户 ID（平台级视角可筛选）",
+                        "name": "tenant_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "成功，返回分页用户列表",
                         "schema": {
-                            "$ref": "#/definitions/contract.PageResponse"
+                            "$ref": "#/definitions/application.UserPageResponse"
                         }
                     },
                     "400": {
@@ -2622,7 +2864,7 @@ const docTemplate = `{
                 ]
             },
             "post": {
-                "description": "创建新用户账户。用户名必须唯一，密码需符合强度要求（8-32位，包含字母和数字）。支持幂等性保护（通过 Idempotency-Key 请求头）。",
+                "description": "创建新用户账户。平台管理员必须指定 tenant_id 并可同时分配 role_ids；租户管理员由后端强制使用当前租户。",
                 "consumes": [
                     "application/json"
                 ],
@@ -2635,7 +2877,7 @@ const docTemplate = `{
                 "summary": "创建用户",
                 "parameters": [
                     {
-                        "description": "用户信息（用户名和密码）",
+                        "description": "用户信息、所属租户与角色",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -2648,7 +2890,7 @@ const docTemplate = `{
                     "201": {
                         "description": "创建成功，返回用户信息",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.UserBodyResponse"
                         }
                     },
                     "400": {
@@ -2779,7 +3021,7 @@ const docTemplate = `{
                 "summary": "获取用户详情",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "用户 ID",
                         "name": "id",
                         "in": "path",
@@ -2790,7 +3032,7 @@ const docTemplate = `{
                     "200": {
                         "description": "成功，返回用户信息",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/application.UserBodyResponse"
                         }
                     },
                     "400": {
@@ -2832,7 +3074,7 @@ const docTemplate = `{
                 "summary": "更新用户信息",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "用户 ID",
                         "name": "id",
                         "in": "path",
@@ -2881,7 +3123,7 @@ const docTemplate = `{
                 ]
             },
             "delete": {
-                "description": "软删除指定用户。删除后用户数据仍保留在数据库中，但无法登录系统。",
+                "description": "删除指定用户（软删除，账号从常规查询中消失）。最后一个有效平台超级管理员返回 409；如需保留账号并禁止登录，请使用更新接口将 status 设为 0。",
                 "produces": [
                     "application/json"
                 ],
@@ -2891,7 +3133,7 @@ const docTemplate = `{
                 "summary": "删除用户",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "用户 ID",
                         "name": "id",
                         "in": "path",
@@ -2908,8 +3150,78 @@ const docTemplate = `{
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
                     },
+                    "404": {
+                        "description": "用户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "不能删除最后一个有效平台超级管理员",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/users/{id}/roles": {
+            "post": {
+                "description": "替换指定用户的全部角色（按角色 ID）。角色必须属于用户所属租户，不存在返回 404。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "权限管理"
+                ],
+                "summary": "分配用户角色",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "角色 ID 列表",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/application.AssignUserRolesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/response.Body"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/contract.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "用户或角色不存在",
                         "schema": {
                             "$ref": "#/definitions/contract.ErrorResponse"
                         }
@@ -2933,7 +3245,7 @@ const docTemplate = `{
                 "permission_ids": {
                     "type": "array",
                     "items": {
-                        "type": "integer"
+                        "type": "string"
                     }
                 }
             }
@@ -2942,7 +3254,105 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "plan_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.AssignUserRolesRequest": {
+            "type": "object",
+            "properties": {
+                "role_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "application.AuditLogBodyResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
                     "type": "integer"
+                },
+                "data": {
+                    "$ref": "#/definitions/application.AuditLogResponse"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.AuditLogPageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.AuditLogResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.AuditLogResponse": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "detail": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "resource": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                },
+                "username": {
+                    "type": "string"
                 }
             }
         },
@@ -3026,6 +3436,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
                 }
             }
         },
@@ -3065,10 +3478,463 @@ const docTemplate = `{
                 "phone": {
                     "type": "string"
                 },
+                "role_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
                 "username": {
                     "type": "string",
                     "maxLength": 64,
                     "minLength": 3
+                }
+            }
+        },
+        "application.MeUser": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "tenant_id": {
+                    "type": "integer"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.MeView": {
+            "type": "object",
+            "properties": {
+                "permissions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.PermissionPoint"
+                    }
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "user": {
+                    "$ref": "#/definitions/application.MeUser"
+                }
+            }
+        },
+        "application.PermissionListResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.PermissionResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.PermissionPageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.PermissionResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.PermissionPoint": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "resource": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.PermissionResponse": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "resource": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.PlanPageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.PlanResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.PlanResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "max_api_keys": {
+                    "type": "integer"
+                },
+                "max_roles": {
+                    "type": "integer"
+                },
+                "max_users": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.RegisterResponse": {
+            "type": "object",
+            "properties": {
+                "tenant": {
+                    "$ref": "#/definitions/application.RegisterTenantView"
+                },
+                "user": {
+                    "$ref": "#/definitions/application.RegisterUserView"
+                }
+            }
+        },
+        "application.RegisterTenantView": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.RegisterUserView": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "tenant_id": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.RoleBodyResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "$ref": "#/definitions/application.RoleResponse"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.RoleOptionListResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.RoleOptionResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.RoleOptionResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_system": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "scope": {
+                    "$ref": "#/definitions/contract.RoleScope"
+                }
+            }
+        },
+        "application.RolePageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.RoleResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.RoleRef": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.RoleResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_system": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "scope": {
+                    "$ref": "#/definitions/contract.RoleScope"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.TenantBodyResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "$ref": "#/definitions/application.TenantResponse"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.TenantPageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.TenantResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.TenantRef": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.TenantResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "plan_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         },
@@ -3124,6 +3990,13 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "status": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
                 }
             }
         },
@@ -3147,12 +4020,99 @@ const docTemplate = `{
         "application.UpdateUserRequest": {
             "type": "object",
             "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
                 "status": {
                     "type": "integer",
                     "enum": [
                         0,
                         1
                     ]
+                }
+            }
+        },
+        "application.UserBodyResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "$ref": "#/definitions/application.UserResponse"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "application.UserPageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.UserResponse"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "application.UserResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/application.RoleRef"
+                    }
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "tenant": {
+                    "$ref": "#/definitions/application.TenantRef"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
                 }
             }
         },
@@ -3228,6 +4188,48 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "contract.RoleScope": {
+            "type": "string",
+            "enum": [
+                "platform",
+                "tenant"
+            ],
+            "x-enum-varnames": [
+                "RoleScopePlatform",
+                "RoleScopeTenant"
+            ]
+        },
+        "contract.TokenPair": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "device_token": {
+                    "description": "DeviceToken 仅在「记住此设备」成功签发时返回，客户端需安全保存。",
+                    "type": "string"
+                },
+                "expires_in": {
+                    "type": "integer"
+                },
+                "refresh_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "interfaces.AuthConfigResponse": {
+            "type": "object",
+            "properties": {
+                "provisioning_enabled": {
+                    "description": "ProvisioningEnabled 开通式注册：注册 = 开通新租户，tenant_name 必填",
+                    "type": "boolean"
+                },
+                "public_registration": {
+                    "description": "PublicRegistration 是否开放公开注册（false 时 /auth/register 路由不注册）",
+                    "type": "boolean"
                 }
             }
         },

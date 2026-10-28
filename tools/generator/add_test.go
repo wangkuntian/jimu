@@ -267,8 +267,8 @@ func TestAddCapabilityPreservesEditedConfigSectionsAndIsIdempotent(t *testing.T)
 	writeProjectFile(t, dir, appRel, app)
 
 	prod := readProjectFile(t, dir, prodRel)
-	require.Contains(t, prod, "  timeout_sec: 30          # 请求超时秒数")
-	writeProjectFile(t, dir, prodRel, strings.Replace(prod, "  timeout_sec: 30          # 请求超时秒数", "  timeout_sec: 12345", 1))
+	require.Contains(t, prod, "  timeout_sec: 30")
+	writeProjectFile(t, dir, prodRel, strings.Replace(prod, "  timeout_sec: 30", "  timeout_sec: 12345", 1))
 
 	values := readProjectFile(t, dir, valuesRel)
 	require.Contains(t, values, "replicaCount: 2")
@@ -714,10 +714,9 @@ func serverEnvForTest(cache string) []string {
 // serverEnvBaseForTest 返回运行生成项目二进制的最小显式 env：只含 go 工具链自身变量与 PATH/HOME，
 // **不含任何应用配置键**（APP_ENV/DB_*/JWT_SECRET/REDIS_* 由调用方决定）。
 //
-// 绝不 `append(os.Environ(), …)`：`make` 经 `include .env` + `export` 把标准本地 checkout 的 .env
-// （README 要求 `cp .env.example .env`）整套注入子进程；APP_ENV/DB_*/JWT_SECRET/REDIS_* 齐备时 prod
-// 配置校验会通过，服务器真的去连 127.0.0.1:3306 并重试（10×5s），断言随之变慢/失败 —— 这是正常本地
-// 开发态，必须与测试无关。CI 的 tag 发布 job 同理（它注入了指向真实 MariaDB 的 DB_*）。
+// 绝不 `append(os.Environ(), …)`：调用方环境可能已设置 APP_ENV/DB_*/JWT_SECRET/REDIS_*（例如
+// `make dev`、部署脚本或 CI）；prod 配置校验会通过，服务器真的去连 127.0.0.1:3306 并重试
+// （10×5s），断言随之变慢/失败 —— 这些运行时输入必须与测试无关。
 //
 // 只透传 go 工具链自身的变量（自定义 GOPATH/GOMODCACHE/GOROOT/GOPROXY 的机器照样能跑）；
 // GOFLAGS 由本函数固定为带 -trimpath（见 trimpathGoflags），不继承外部的 GOFLAGS。

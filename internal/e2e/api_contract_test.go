@@ -3,12 +3,14 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -38,9 +40,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+var e2eDBSeq atomic.Uint64
 
 // newTestApp 组装一个真实的应用路由：auth + user + role + permission + audit 模块，
 // 底层用 sqlite（内存共享缓存）+ miniredis，无需外部 MySQL/Redis。
@@ -60,7 +65,9 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 	// casbin 用相对路径加载 conf/rbac_model.conf，需 cwd 位于项目根
 	t.Chdir(repoRoot(t))
 
-	gdb, err := gorm.Open(sqlite.Open("file:e2e_contract?mode=memory&cache=shared"), &gorm.Config{})
+	// 每个 app 使用独立的内存库；同名 DSN 会让同包测试互相看到残留的 seed/用户/角色。
+	dsn := fmt.Sprintf("file:e2e_contract_%d?mode=memory&cache=shared", e2eDBSeq.Add(1))
+	gdb, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
 	// 内存库单连接，避免多连接看到不同实例
 	if sqlDB, err := gdb.DB(); err == nil {
@@ -87,6 +94,7 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS role_permissions (role_id INTEGER NOT NULL, permission_id INTEGER NOT NULL)`).Error)
 
 	// 种子：admin 用户 + 超级管理员角色 + 权限（含 /users、/audits 策略）
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "admin123")
 	require.NoError(t, app.RunSeed(gdb, catalog.All()))
 
@@ -269,76 +277,298 @@ func TestAuthRefreshLogout(t *testing.T) {
 // TestRoleAssignmentAndRBAC 角色闭环：创建角色 → 分配权限 → 绑定用户 → 权限生效/撤销。
 func TestRoleAssignmentAndRBAC(t *testing.T) {
 	requireCapabilities(t, "auth", "user", "access")
-	// 缩短策略缓存 TTL，验证权限变更在缓存过期后生效
+	// 使用较长缓存 TTL，验证授权写操作会主动让策略缓存失效。
 	oldTTL := access.PolicyCacheTTL
-	access.PolicyCacheTTL = 50 * time.Millisecond
-	t.Cleanup(func() { access.PolicyCacheTTL = oldTTL })
+	access.PolicyCacheTTL = time.Hour
+	access.InvalidatePolicyCache()
+	t.Cleanup(func() {
+		access.PolicyCacheTTL = oldTTL
+		access.InvalidatePolicyCache()
+	})
 
-	r := newTestApp(t)
+	app := newTestAppWithDB(t)
+	r := app.router
 	adminToken := login(t, r, "admin", "admin123")
+	tenant := tenantdomain.Tenant{Code: "rbac-tenant", Name: "RBAC Tenant", Status: 1}
+	require.NoError(t, app.db.Create(&tenant).Error)
+	tenantID := strconv.FormatUint(tenant.ID, 10)
 
 	// 1. 创建普通用户
-	w := doJSON(t, r, http.MethodPost, "/api/v1/users", adminToken, `{"username":"rbacuser","password":"rbacpass123"}`)
+	w := doJSON(t, r, http.MethodPost, "/api/v1/users", adminToken, `{"tenant_id":"`+tenantID+`","username":"rbacuser","password":"rbacpass123"}`)
 	require.Equal(t, http.StatusCreated, w.Code)
 	var created struct {
-		ID uint64 `json:"id"`
+		ID string `json:"id"`
 	}
 	require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &created))
-	require.NotZero(t, created.ID)
+	require.NotEmpty(t, created.ID)
 
 	// 2. 创建角色
-	w = doJSON(t, r, http.MethodPost, "/api/v1/roles", adminToken, `{"name":"e2e-viewer","description":"e2e"}`)
+	w = doJSON(t, r, http.MethodPost, "/api/v1/roles", adminToken, `{"tenant_id":"`+tenantID+`","name":"e2e-viewer","description":"e2e"}`)
 	require.Equal(t, http.StatusCreated, w.Code)
 	var roleResp struct {
-		ID uint64 `json:"id"`
+		ID string `json:"id"`
 	}
 	require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &roleResp))
-	require.NotZero(t, roleResp.ID)
+	require.NotEmpty(t, roleResp.ID)
 
-	// 3. 分配 GET /api/v1/users 权限给角色（page_size=100 拉全量，雪花 ID 用 json.Number 防精度丢失）
+	// 3. 分配用户读取与用户角色分配权限给角色（page_size=100 拉全量，ID 按字符串传输）
 	permList := doJSON(t, r, http.MethodGet, "/api/v1/permissions?page_size=100", adminToken, "")
 	require.Equal(t, http.StatusOK, permList.Code)
 	var perms struct {
 		Data []struct {
-			ID       json.Number `json:"id"`
-			Resource string      `json:"resource"`
-			Action   string      `json:"action"`
+			ID       string `json:"id"`
+			Resource string `json:"resource"`
+			Action   string `json:"action"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(permList.Body.Bytes(), &perms))
-	var userGetPerm uint64
+	var userGetPerm, userRoleAssignPerm string
 	for _, p := range perms.Data {
+		if p.Action != "GET" && p.Action != "POST" {
+			continue
+		}
 		if p.Resource == "/api/v1/users" && p.Action == "GET" {
-			id, err := p.ID.Int64()
-			require.NoError(t, err)
-			userGetPerm = uint64(id)
-			break
+			userGetPerm = p.ID
+		}
+		if p.Resource == "/api/v1/users/*/roles" && p.Action == "POST" {
+			userRoleAssignPerm = p.ID
 		}
 	}
-	require.NotZero(t, userGetPerm, "GET /api/v1/users permission should exist")
+	require.NotEmpty(t, userGetPerm, "GET /api/v1/users permission should exist")
+	require.NotEmpty(t, userRoleAssignPerm, "POST /api/v1/users/*/roles permission should exist")
 
-	w = doJSON(t, r, http.MethodPost, "/api/v1/roles/"+strconv.FormatUint(roleResp.ID, 10)+"/permissions",
-		adminToken, `{"permission_ids":[`+strconv.FormatUint(userGetPerm, 10)+`]}`)
+	w = doJSON(t, r, http.MethodPost, "/api/v1/roles/"+roleResp.ID+"/permissions",
+		adminToken, `{"permission_ids":["`+userGetPerm+`","`+userRoleAssignPerm+`"]}`)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, 0, parseResp(t, w).Code)
 
-	// 4. 绑定角色到用户（admin 接口，按角色名）
-	w = doJSON(t, r, http.MethodPost, "/api/v1/admin/users/"+strconv.FormatUint(created.ID, 10)+"/roles",
-		adminToken, `{"roles":["e2e-viewer"]}`)
+	w = doJSON(t, r, http.MethodGet, "/api/v1/roles/"+roleResp.ID+"/permissions", adminToken, "")
+	require.Equal(t, http.StatusOK, w.Code)
+	var rolePermissions struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &rolePermissions))
+	require.Len(t, rolePermissions.Data, 2)
+	assert.ElementsMatch(t, []string{userGetPerm, userRoleAssignPerm}, []string{
+		rolePermissions.Data[0].ID,
+		rolePermissions.Data[1].ID,
+	})
+
+	// 4. 绑定角色到用户（用户资源接口，按角色 ID）
+	w = doJSON(t, r, http.MethodPost, "/api/v1/users/"+created.ID+"/roles",
+		adminToken, `{"role_ids":["`+roleResp.ID+`"]}`)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, 0, parseResp(t, w).Code)
 
 	// 5. 该用户登录后能 GET /users（原 403 → 200）
-	// 策略缓存按 TTL 异步过期，故用有界轮询等待生效，而不是依赖"登录耗时 > TTL"。
+	// 授权写入已主动失效缓存，即使 TTL 为一小时也应立即生效。
 	userToken := login(t, r, "rbacuser", "rbacpass123")
-	require.Eventually(t, func() bool {
-		w := doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
-		return w.Code == http.StatusOK
-	}, 3*time.Second, 25*time.Millisecond, "permission should take effect after the policy cache TTL")
+	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	// 6. 但不能 POST /users（未分配该权限）→ 403
+	// 6. 仅凭用户资源权限即可给同租户用户分配角色，不再要求固定管理员角色名
+	w = doJSON(t, r, http.MethodPost, "/api/v1/users", adminToken, `{"tenant_id":"`+tenantID+`","username":"rbactarget","password":"rbactarget123"}`)
+	require.Equal(t, http.StatusCreated, w.Code)
+	var target struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &target))
+	require.NotEmpty(t, target.ID)
+
+	w = doJSON(t, r, http.MethodPost, "/api/v1/roles", adminToken, `{"tenant_id":"`+tenantID+`","name":"e2e-assignee","description":"e2e"}`)
+	require.Equal(t, http.StatusCreated, w.Code)
+	var assigneeRole struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &assigneeRole))
+	require.NotEmpty(t, assigneeRole.ID)
+
+	w = doJSON(t, r, http.MethodPost, "/api/v1/users/"+target.ID+"/roles",
+		userToken, `{"role_ids":["`+assigneeRole.ID+`"]}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Equal(t, 0, parseResp(t, w).Code)
+
+	// 7. 但不能 POST /users（未分配该权限）→ 403
 	w = doJSON(t, r, http.MethodPost, "/api/v1/users", userToken, `{"username":"nope","password":"nopepass123"}`)
 	require.Equal(t, http.StatusForbidden, w.Code)
+
+	// 8. 已分配给用户的角色不能永久删除。
+	w = doJSON(t, r, http.MethodDelete, "/api/v1/roles/"+roleResp.ID, adminToken, "")
+	require.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+
+	// 9. 停用角色立即撤销授权；角色仍可在停用筛选里查到。
+	w = doJSON(t, r, http.MethodPut, "/api/v1/roles/"+roleResp.ID, adminToken,
+		`{"name":"e2e-viewer","description":"e2e","status":0}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+
+	w = doJSON(t, r, http.MethodGet, "/api/v1/roles?tenant_id="+tenantID+"&keyword=e2e-viewer&status=0", adminToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var disabledRoles struct {
+		Data []struct {
+			ID     string `json:"id"`
+			Status int8   `json:"status"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &disabledRoles))
+	require.Len(t, disabledRoles.Data, 1)
+	assert.Equal(t, roleResp.ID, disabledRoles.Data[0].ID)
+	assert.Zero(t, disabledRoles.Data[0].Status)
+
+	// 10. 通过更新接口重新启用角色，授权随角色状态恢复。
+	w = doJSON(t, r, http.MethodPut, "/api/v1/roles/"+roleResp.ID, adminToken,
+		`{"name":"e2e-viewer","description":"e2e","status":1}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	// 11. 空数组表示清空角色权限。
+	w = doJSON(t, r, http.MethodPost, "/api/v1/roles/"+roleResp.ID+"/permissions",
+		adminToken, `{"permission_ids":[]}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	w = doJSON(t, r, http.MethodGet, "/api/v1/users", userToken, "")
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+
+	// 12. 解除用户绑定后可永久删除角色，权限关联一并清理。
+	w = doJSON(t, r, http.MethodPost, "/api/v1/users/"+created.ID+"/roles",
+		adminToken, `{"role_ids":[]}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	w = doJSON(t, r, http.MethodDelete, "/api/v1/roles/"+roleResp.ID, adminToken, "")
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	w = doJSON(t, r, http.MethodGet, "/api/v1/roles/"+roleResp.ID, adminToken, "")
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+}
+
+func TestCreateUserWithInvalidRoleRollsBack(t *testing.T) {
+	requireCapabilities(t, "auth", "user", "access", "tenant")
+	app := newTestAppWithDB(t)
+	adminToken := login(t, app.router, "admin", "admin123")
+
+	w := doJSON(t, app.router, http.MethodPost, "/api/v1/users", adminToken,
+		`{"tenant_id":"1","username":"rollbackuser","password":"rollback123","role_ids":["999999999999999999"]}`)
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+
+	var count int64
+	require.NoError(t, app.db.Table("users").Where("username = ?", "rollbackuser").Count(&count).Error)
+	assert.Zero(t, count, "角色分配失败时不得留下半成品用户")
+}
+
+func TestPlatformUserManagementSpansTenants(t *testing.T) {
+	requireCapabilities(t, "auth", "user", "access", "tenant")
+	app := newTestAppWithDB(t)
+	adminToken := login(t, app.router, "admin", "admin123")
+
+	w := doJSON(t, app.router, http.MethodPost, "/api/v1/tenants", adminToken, `{"code":"platform-users","name":"Platform Users"}`)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var tenant struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &tenant))
+	require.NotEmpty(t, tenant.ID)
+
+	var tenantRoles []roledomain.Role
+	require.NoError(t, app.db.Where("code IN ?", []string{
+		contract.RoleCodeTenantAdmin,
+		contract.RoleCodeTenantMember,
+	}).Order("code").Find(&tenantRoles).Error)
+	require.Len(t, tenantRoles, 2)
+	assert.Equal(t, contract.RoleCodeTenantAdmin, tenantRoles[0].Code)
+	assert.Equal(t, contract.RoleCodeTenantMember, tenantRoles[1].Code)
+	assert.Equal(t, tenant.ID, strconv.FormatUint(tenantRoles[0].TenantID, 10))
+	var optionPermissionCount int64
+	require.NoError(t, app.db.Table("role_permissions rp").
+		Joins("JOIN permissions p ON p.id = rp.permission_id").
+		Where("rp.role_id = ? AND p.resource = ? AND p.action = ?", tenantRoles[0].ID, "/api/v1/roles/options", "GET").
+		Count(&optionPermissionCount).Error)
+	require.Equal(t, int64(1), optionPermissionCount)
+
+	w = doJSON(t, app.router, http.MethodPut, "/api/v1/roles/"+strconv.FormatUint(tenantRoles[0].ID, 10),
+		adminToken, `{"name":"changed","description":"","status":0}`)
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	w = doJSON(t, app.router, http.MethodPost, "/api/v1/roles/"+strconv.FormatUint(tenantRoles[0].ID, 10)+"/permissions",
+		adminToken, `{"permission_ids":[]}`)
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+
+	w = doJSON(t, app.router, http.MethodPost, "/api/v1/users", adminToken,
+		`{"tenant_id":"`+tenant.ID+`","username":"tenantadmin","password":"tenantadmin123","role_ids":["`+
+			strconv.FormatUint(tenantRoles[0].ID, 10)+`"]}`)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	tenantAdminToken := login(t, app.router, "tenantadmin", "tenantadmin123")
+
+	w = doJSON(t, app.router, http.MethodGet, "/api/v1/auth/me", tenantAdminToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var tenantMe struct {
+		Roles       []string `json:"roles"`
+		Permissions []struct {
+			Resource string `json:"resource"`
+			Action   string `json:"action"`
+		} `json:"permissions"`
+	}
+	require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &tenantMe))
+	assert.Contains(t, tenantMe.Roles, "租户管理员")
+	foundOptionPermission := false
+	for _, permission := range tenantMe.Permissions {
+		if permission.Resource == "/api/v1/roles/options" && permission.Action == "GET" {
+			foundOptionPermission = true
+			break
+		}
+	}
+	require.True(t, foundOptionPermission, "tenant admin must expose role options permission")
+
+	w = doJSON(t, app.router, http.MethodGet, "/api/v1/roles/options", tenantAdminToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var options struct {
+		Data []struct {
+			Code  string `json:"code"`
+			Scope string `json:"scope"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &options))
+	require.Len(t, options.Data, 2)
+	assert.Equal(t, contract.RoleCodeTenantAdmin, options.Data[0].Code)
+	assert.Equal(t, string(contract.RoleScopeTenant), options.Data[0].Scope)
+	w = doJSON(t, app.router, http.MethodGet, "/api/v1/roles", tenantAdminToken, "")
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+
+	w = doJSON(t, app.router, http.MethodPost, "/api/v1/users", adminToken,
+		`{"tenant_id":"`+tenant.ID+`","username":"platformuser","password":"platform123"}`)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var created struct {
+		ID     string `json:"id"`
+		Tenant struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"tenant"`
+	}
+	require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &created))
+	assert.Equal(t, tenant.ID, created.Tenant.ID)
+	assert.Equal(t, "Platform Users", created.Tenant.Name)
+
+	w = doJSON(t, app.router, http.MethodGet, "/api/v1/users?tenant_id="+tenant.ID, adminToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.EqualValues(t, 2, parseResp(t, w).Total)
+
+	w = doJSON(t, app.router, http.MethodGet, "/api/v1/users/"+created.ID, adminToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	w = doJSON(t, app.router, http.MethodGet, "/api/v1/roles?tenant_id="+tenant.ID, adminToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	w = doJSON(t, app.router, http.MethodPost, "/api/v1/roles", adminToken,
+		`{"tenant_id":"`+tenant.ID+`","name":"platform-role","description":"cross tenant"}`)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var role struct {
+		ID       string `json:"id"`
+		TenantID string `json:"tenant_id"`
+	}
+	require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &role))
+	assert.Equal(t, tenant.ID, role.TenantID)
+
+	w = doJSON(t, app.router, http.MethodGet, "/api/v1/roles/"+role.ID, adminToken, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 }
 
 // TestExportImportRoundTrip 导出→导入回读闭环（CSV）。
@@ -369,7 +599,26 @@ func TestAPIContract(t *testing.T) {
 	// 1. 注册新用户
 	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/register", "", `{"username":"e2euser","password":"e2epass123"}`)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, 0, parseResp(t, w).Code)
+	registeredResp := parseResp(t, w)
+	require.Equal(t, 0, registeredResp.Code)
+
+	// 注册响应的线上形状统一为 {user, tenant?}：普通注册只有 user，
+	// 不得再退回裸账号对象（data 顶层带 id/username），也不得含密码。
+	var registered struct {
+		User struct {
+			ID       uint64 `json:"id"`
+			Username string `json:"username"`
+			Password string `json:"password"`
+		} `json:"user"`
+		Tenant     any    `json:"tenant"`
+		TopLevelID uint64 `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(registeredResp.Data, &registered))
+	require.NotZero(t, registered.User.ID, "注册响应必须是 {user} 形状")
+	require.Equal(t, "e2euser", registered.User.Username)
+	require.Empty(t, registered.User.Password, "注册响应不得含密码字段")
+	require.Zero(t, registered.TopLevelID, "data 顶层不得再是裸账号对象")
+	require.Nil(t, registered.Tenant, "普通注册不得返回 tenant")
 
 	// 2. 管理员登录
 	adminToken := login(t, r, "admin", "admin123")
@@ -384,7 +633,7 @@ func TestAPIContract(t *testing.T) {
 	require.Equal(t, 0, parseResp(t, w).Code)
 
 	// 5. 管理员创建用户 → 201
-	w = doJSON(t, r, http.MethodPost, "/api/v1/users", adminToken, `{"username":"alice","password":"alice1234"}`)
+	w = doJSON(t, r, http.MethodPost, "/api/v1/users", adminToken, `{"tenant_id":"1","username":"alice","password":"alice1234"}`)
 	require.Equal(t, http.StatusCreated, w.Code)
 	require.Equal(t, 0, parseResp(t, w).Code)
 
@@ -430,6 +679,7 @@ func TestAuthRateLimit(t *testing.T) {
 	))
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS user_roles (user_id INTEGER NOT NULL, role_id INTEGER NOT NULL)`).Error)
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS role_permissions (role_id INTEGER NOT NULL, permission_id INTEGER NOT NULL)`).Error)
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "admin123")
 	require.NoError(t, app.RunSeed(gdb, catalog.All()))
 
@@ -484,4 +734,75 @@ func repoRoot(t *testing.T) string {
 		}
 		dir = parent
 	}
+}
+
+// TestAuthConfigEndpoint 断言真实装配下 /auth/config 的取值来自 dev 配置
+// （configs/app.yaml：public_registration=true、tenant.provisioning.enabled=false）。
+func TestAuthConfigEndpoint(t *testing.T) {
+	requireCapabilities(t, "auth")
+	r := newTestApp(t)
+
+	w := doJSON(t, r, http.MethodGet, "/api/v1/auth/config", "", "")
+	require.Equal(t, http.StatusOK, w.Code)
+	resp := parseResp(t, w)
+	require.Equal(t, 0, resp.Code)
+
+	var data struct {
+		PublicRegistration  bool `json:"public_registration"`
+		ProvisioningEnabled bool `json:"provisioning_enabled"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Data, &data))
+	require.True(t, data.PublicRegistration)
+	require.False(t, data.ProvisioningEnabled)
+}
+
+// TestTenantListFilters 断言租户列表的 keyword/status 筛选在 HTTP 层生效，
+// 且 LIKE 通配符被转义（keyword="%" 不得退化为「匹配全部」）。
+func TestTenantListFilters(t *testing.T) {
+	requireCapabilities(t, "auth", "user", "access", "tenant")
+	r := newTestApp(t)
+	admin := login(t, r, "admin", "admin123")
+
+	create := func(code, name string) string {
+		w := doJSON(t, r, http.MethodPost, "/api/v1/tenants", admin, `{"code":"`+code+`","name":"`+name+`"}`)
+		require.Equal(t, http.StatusCreated, w.Code)
+		var data struct {
+			ID string `json:"id"`
+		}
+		require.NoError(t, json.Unmarshal(parseResp(t, w).Data, &data))
+		return data.ID
+	}
+
+	acmeID := create("acme", "Acme Inc")
+	create("bravo", "Bravo Ltd")
+
+	// keyword 命中 code
+	w := doJSON(t, r, http.MethodGet, "/api/v1/tenants?keyword=acme", admin, "")
+	require.Equal(t, http.StatusOK, w.Code)
+	resp := parseResp(t, w)
+	require.EqualValues(t, 1, resp.Total)
+
+	// keyword 命中 name（大小写不敏感由数据库排序规则决定，此处用精确子串）
+	w = doJSON(t, r, http.MethodGet, "/api/v1/tenants?keyword=Bravo", admin, "")
+	require.EqualValues(t, 1, parseResp(t, w).Total)
+
+	// LIKE 通配符必须被转义：'%' 不应匹配到任何租户
+	w = doJSON(t, r, http.MethodGet, "/api/v1/tenants?keyword=%25", admin, "")
+	require.EqualValues(t, 0, parseResp(t, w).Total, "keyword=%% 被当成通配符了：LIKE 未转义")
+
+	// status 筛选：把 acme 停用后，status=0 只应命中它
+	w = doJSON(t, r, http.MethodPut, "/api/v1/tenants/"+acmeID, admin, `{"status":0}`)
+	require.Equal(t, http.StatusOK, w.Code)
+	w = doJSON(t, r, http.MethodGet, "/api/v1/tenants?status=0", admin, "")
+	paused := parseResp(t, w)
+	require.EqualValues(t, 1, paused.Total)
+	var pausedIDs []struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(paused.Data, &pausedIDs))
+	require.Equal(t, acmeID, pausedIDs[0].ID)
+
+	// keyword + status 组合
+	w = doJSON(t, r, http.MethodGet, "/api/v1/tenants?keyword=acme&status=1", admin, "")
+	require.EqualValues(t, 0, parseResp(t, w).Total)
 }

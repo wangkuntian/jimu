@@ -20,6 +20,8 @@ type fakeTenantRepository struct {
 	findErr error
 	listErr error
 
+	lastFilter domain.TenantListFilter
+
 	created *domain.Tenant
 	updated *domain.Tenant
 	deleted uint64
@@ -33,7 +35,8 @@ func (r *fakeTenantRepository) FindByCode(context.Context, string) (*domain.Tena
 	return r.tenant, r.findErr
 }
 
-func (r *fakeTenantRepository) List(_ context.Context, offset, limit int, sort, order string) ([]domain.Tenant, int64, error) {
+func (r *fakeTenantRepository) List(_ context.Context, offset, limit int, sort, order string, filter domain.TenantListFilter) ([]domain.Tenant, int64, error) {
+	r.lastFilter = filter
 	return r.tenants, r.total, r.listErr
 }
 
@@ -118,12 +121,29 @@ func TestTenantServiceListPassesPagination(t *testing.T) {
 	repo := &fakeTenantRepository{tenants: []domain.Tenant{{ID: 1, Code: "default", Name: "默认租户"}}, total: 1}
 	service := NewTenantService(repo)
 
-	tenants, total, err := service.List(context.Background(), pagination.Pagination{Page: 1, PageSize: 10, Sort: "code", Order: "asc"})
+	tenants, total, err := service.List(context.Background(), pagination.Pagination{Page: 1, PageSize: 10, Sort: "code", Order: "asc"}, domain.TenantListFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if total != 1 || len(tenants) != 1 || tenants[0].Code != "default" {
 		t.Fatalf("tenants = %#v total = %d", tenants, total)
+	}
+}
+
+func TestTenantServiceListPassesFilter(t *testing.T) {
+	repo := &fakeTenantRepository{}
+	status := int8(0)
+
+	_, _, err := NewTenantService(repo).List(context.Background(),
+		pagination.Pagination{Page: 1, PageSize: 20}, domain.TenantListFilter{Keyword: "acme", Status: &status})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.lastFilter.Keyword != "acme" {
+		t.Fatalf("keyword = %q, want acme", repo.lastFilter.Keyword)
+	}
+	if repo.lastFilter.Status == nil || *repo.lastFilter.Status != 0 {
+		t.Fatalf("status = %v, want 0", repo.lastFilter.Status)
 	}
 }
 
@@ -144,6 +164,52 @@ func TestTenantServiceUpdate(t *testing.T) {
 		err := NewTenantService(&fakeTenantRepository{findErr: gorm.ErrRecordNotFound}).Update(context.Background(), 9, UpdateTenantRequest{})
 		if tenantAppCode(err) != apperrors.CodeTenantNotFound {
 			t.Fatalf("code = %d, want %d", tenantAppCode(err), apperrors.CodeTenantNotFound)
+		}
+	})
+}
+
+func TestTenantServiceUpdateRejectsDisablingProtectedTenants(t *testing.T) {
+	t.Run("默认租户不可停用", func(t *testing.T) {
+		disabled := int8(0)
+		repo := &fakeTenantRepository{
+			tenant: &domain.Tenant{ID: tenant.DefaultTenantID, Code: "default", Name: "默认租户", Status: 1},
+		}
+		err := NewTenantService(repo).Update(context.Background(), tenant.DefaultTenantID,
+			UpdateTenantRequest{Status: &disabled})
+		if tenantAppCode(err) != apperrors.CodeTenantProtected {
+			t.Fatalf("code = %d, want %d", tenantAppCode(err), apperrors.CodeTenantProtected)
+		}
+		if repo.updated != nil {
+			t.Fatalf("protected tenant must not be updated: %#v", repo.updated)
+		}
+	})
+
+	t.Run("当前租户不可停用", func(t *testing.T) {
+		disabled := int8(0)
+		repo := &fakeTenantRepository{
+			tenant: &domain.Tenant{ID: 2, Code: "acme", Name: "Acme", Status: 1},
+		}
+		ctx := tenant.WithTenant(context.Background(), 2)
+		err := NewTenantService(repo).Update(ctx, 2, UpdateTenantRequest{Status: &disabled})
+		if tenantAppCode(err) != apperrors.CodeForbidden {
+			t.Fatalf("code = %d, want %d", tenantAppCode(err), apperrors.CodeForbidden)
+		}
+		if repo.updated != nil {
+			t.Fatalf("current tenant must not be updated: %#v", repo.updated)
+		}
+	})
+
+	t.Run("允许停用其他租户", func(t *testing.T) {
+		disabled := int8(0)
+		repo := &fakeTenantRepository{
+			tenant: &domain.Tenant{ID: 3, Code: "beta", Name: "Beta", Status: 1},
+		}
+		ctx := tenant.WithTenant(context.Background(), 2)
+		if err := NewTenantService(repo).Update(ctx, 3, UpdateTenantRequest{Status: &disabled}); err != nil {
+			t.Fatal(err)
+		}
+		if repo.updated == nil || repo.updated.ID != 3 || repo.updated.Status != 0 {
+			t.Fatalf("updated = %#v", repo.updated)
 		}
 	})
 }

@@ -231,13 +231,14 @@ func valuesSections(root string, selected selection) []string {
 }
 
 func shapeCapabilities(selected selection) []map[string]any {
-	capabilities := make([]map[string]any, 0, len(selected.declared))
-	for _, name := range selected.declared {
+	capabilities := make([]map[string]any, 0, len(selected.assemblies))
+	for _, item := range selected.assemblies {
+		name := item.Descriptor.Name
 		drivers := slices.Clone(selected.drivers[name])
 		capabilities = append(capabilities, map[string]any{
 			"Alias":      name + "module",
 			"Path":       "jimu/internal/capabilities/" + name,
-			"Ungated":    selected.ungated[name],
+			"Ungated":    item.Ungated || selected.ungated[name],
 			"Drivers":    drivers,
 			"HasDrivers": len(drivers) > 0,
 			"Capability": name,

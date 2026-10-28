@@ -22,6 +22,8 @@ type Module struct {
 	jwtUtil *auth.JWT
 	limiter *auth.Limiter
 	cfg     contract.AuthConfig
+	tenants contract.TenantStateSource
+	users   contract.UserStateSource
 }
 
 // Deps passkey 模块的装配依赖。
@@ -32,6 +34,7 @@ type Deps struct {
 	Config    Config
 	Users     contract.UserinfoSource
 	Finalizer contract.LoginFinalizer
+	Tenants   contract.TenantStateSource
 	// FailClosed 限流器在 Redis 故障时是否拒绝（与 auth 一致）
 	FailClosed bool
 }
@@ -63,7 +66,8 @@ func New(deps Deps) *Module {
 	if deps.Redis != nil {
 		limiter = auth.NewLimiter(deps.Redis, deps.FailClosed)
 	}
-	return &Module{service: svc, jwtUtil: jwtUtil, limiter: limiter, cfg: deps.AuthCfg}
+	users, _ := deps.Users.(contract.UserStateSource)
+	return &Module{service: svc, jwtUtil: jwtUtil, limiter: limiter, cfg: deps.AuthCfg, tenants: deps.Tenants, users: users}
 }
 
 // Name 模块名。
@@ -99,7 +103,8 @@ func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
 // RegisterHTTP 注册通行密钥路由：login/begin、login/finish 公开；其余受 JWT 保护。
 func (m *Module) RegisterHTTP(r contract.Router) {
 	rg := r.Group("/api/v1")
-	interfaces.RegisterPasskeyRoutes(rg, m.service, m.cfg, m.limiter, m.jwtUtil)
+	interfaces.RegisterPasskeyRoutes(rg, m.service, m.cfg, m.limiter, m.jwtUtil,
+		auth.StateCheckers{Tenant: m.tenants, User: m.users})
 }
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}

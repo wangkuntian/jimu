@@ -30,7 +30,18 @@ func (s provisioningRoleStore) ProvisionRoles(ctx context.Context, tenantID uint
 	tx := s.transaction(ctx)
 	var ownerRoleID uint64
 	for _, template := range cfg.Roles {
-		role := domain.Role{Name: template.Name, Description: template.Description, Status: 1, TenantID: tenantID}
+		role := domain.Role{
+			Name:        template.Name,
+			Description: template.Description,
+			Code:        template.Code,
+			Scope:       template.Scope,
+			IsSystem:    template.System,
+			Status:      1,
+			TenantID:    tenantID,
+		}
+		if role.Scope == "" {
+			role.Scope = contract.RoleScopeTenant
+		}
 		if err := tx.Create(&role).Error; err != nil {
 			return 0, err
 		}
@@ -46,7 +57,7 @@ func (s provisioningRoleStore) ProvisionRoles(ctx context.Context, tenantID uint
 				return 0, err
 			}
 		}
-		if template.Name == cfg.OwnerRole {
+		if template.Code == cfg.OwnerRole || (template.Code == "" && template.Name == cfg.OwnerRole) {
 			ownerRoleID = role.ID
 		} else if ownerRoleID == 0 {
 			ownerRoleID = role.ID

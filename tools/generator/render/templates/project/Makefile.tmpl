@@ -1,4 +1,4 @@
-.PHONY: help build build-server build-cli run test vet fmt fmt-check lint clean ci
+.PHONY: help build build-server build-cli dev image test vet fmt fmt-check lint clean ci
 .PHONY: check-log-usage check-capabilities profiles-check compose-report
 .PHONY: migrate migrate-down migrate-status seed
 {{if .HasAPIdocs}}.PHONY: swagger swagger-check
@@ -16,10 +16,14 @@ CLI_PKG := ./cmd/cli
 SERVER_CMD := cmd/server/main.go
 SERVER_BIN = $(BIN_DIR)/jimu-server
 CLI_BIN = $(BIN_DIR)/jimu-cli
-VERSION ?= dev
 ENV ?= dev
-# 注入版本号到两个 main 包
-LDFLAGS := -X main.version=$(VERSION)
+# VERSION 只用于镜像标签；本机二进制版本由 APP_VERSION 注入。
+VERSION ?= dev
+APP_VERSION ?= dev
+LDFLAGS := -X main.version=$(APP_VERSION)
+IMAGE_REPO ?= jimu
+IMAGE_TAG = $(IMAGE_REPO):$(VERSION)
+LATEST_TAG = $(IMAGE_REPO):latest
 # golangci-lint 版本：与框架 .github/workflows/ci.yml 的 GOLANGCI_LINT_VERSION 一致，
 # 使本地 make lint 与 CI 的 lint 结论含义相同。
 LINT_VERSION ?= v2.7.2
@@ -28,49 +32,16 @@ LINT_VERSION ?= v2.7.2
 # CLI 运行：本项目只有一个形态，直接 go run。
 CLI_RUN = APP_ENV=$(ENV) go run $(CLI_PKG)
 
-# 加载 .env 文件（如果存在），导出敏感变量供本文件中的命令使用
-ifneq (,$(wildcard .env))
-    include .env
-    export
-endif
-
+##@ 入门
 ## help: 显示帮助信息
 help:
-	@echo "项目 Makefile（单形态，无 PROFILE 分支）"
-	@echo ""
-	@echo "Usage: make <target>"
-	@echo ""
-	@echo "本地运行:"
-	@echo "  make run                  编译并运行服务端"
-	@echo "  make build                编译服务端和 CLI"
-	@echo "  make build-server         编译服务端（$(SERVER_BIN)）"
-	@echo "  make test                 运行测试"
-	@echo "  make vet                  静态分析"
-	@echo "  make fmt                  格式化代码"
-	@echo "  make lint                 静态检查"
-	@echo "  make check-log-usage      检查日志调用均为 *w 系列（防 k/v 粘连）"
-	@echo "  make check-capabilities   校验能力自描述（Owns）与驱动可用集/选中集一致"
-	@echo "  make profiles-check       构建本项目唯一形态 + golden 依赖闭包门禁"
-	@echo "                            （JIMU_PROFILES_SMOKE=1 时额外启动并检查 /readyz）"
-	@echo "  make compose-report       生成编译面报告 docs/profiles/compose-report.md"
-	@echo ""
-	@echo "数据库:"
-	@echo "  make migrate              本地执行迁移"
-	@echo "  make migrate-down         本地回滚迁移"
-	@echo "  make migrate-status       查看迁移状态"
-	@echo "  make seed                 本地插入初始数据"
-	@echo ""
-	@echo "工具:"
-	@echo "  make clean                清理构建产物"
-{{if .HasAPIdocs}}	@echo "  make swagger              生成 API 文档（docs/openapi）"
-	@echo "  make swagger-check        校验 API 文档为最新"
-{{end}}	@echo "  make ci                   本地 CI 检查（fmt/vet/lint/test/check-capabilities/build）"
+	@awk 'function flush() { if (target != "") { printf "  make %-24s %s\n", target, desc; target="" } } BEGIN { printf "\n项目 Makefile（单形态，无 PROFILE 分支）\n\nUsage:\n  make <target>\n" } /^##@/ { flush(); printf "\n%s\n", substr($$0, 5); next } /^## [a-zA-Z0-9_.-]+:/ { flush(); line=$$0; sub(/^## /, "", line); sep=index(line, ":"); target=substr(line, 1, sep-1); desc=substr(line, sep+2); next } /^##[[:space:]]+/ { if (target != "") { extra=$$0; sub(/^##[[:space:]]+/, "", extra); desc=desc " " extra }; next } { flush() } END { flush() }' $(MAKEFILE_LIST)
 
-# ========== 本地运行 ==========
+##@ 本地开发
 
-## run: 编译并运行服务端
-run: build-server
-	APP_ENV=$(ENV) ./$(SERVER_BIN)
+## dev: 直接运行服务端
+dev:
+	APP_ENV=$(ENV) go run ./cmd/server
 
 ## build: 编译服务端和 CLI
 build: build-server build-cli
@@ -85,7 +56,12 @@ build-cli:
 	@mkdir -p $(BIN_DIR)
 	go build -ldflags "$(LDFLAGS)" -o $(CLI_BIN) $(CLI_PKG)
 
-# ========== 数据库 ==========
+## image: 构建版本镜像并标记 latest
+image:
+	docker build -t $(IMAGE_TAG) .
+	docker tag $(IMAGE_TAG) $(LATEST_TAG)
+
+##@ 数据库
 
 ## migrate: 本地执行迁移
 migrate:
@@ -103,7 +79,7 @@ migrate-status:
 seed:
 	@$(CLI_RUN) seed
 
-# ========== 工具 ==========
+##@ 质量与工具
 
 ## test: 运行测试
 test:
@@ -167,7 +143,12 @@ clean:
 	rm -rf $(BIN_DIR)
 	rm -f coverage.out coverage.html
 
-{{if .HasAPIdocs}}## swagger: 生成 API 文档（本项目已编入 apidocs）
+## ci: 本地 CI 检查（无外部依赖部分）
+ci: fmt-check vet lint check-log-usage test check-capabilities{{if .HasAPIdocs}} swagger-check{{end}} build
+	@echo "✅ All local CI checks passed"
+
+{{if .HasAPIdocs}}##@ API 文档
+## swagger: 生成 API 文档（本项目已编入 apidocs）
 swagger:
 	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi
 
@@ -176,7 +157,4 @@ swagger-check:
 	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi >/dev/null || exit 1; \
 	git diff --exit-code docs/openapi || { echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; }; \
 	echo "✅ OpenAPI 文档为最新"
-
-{{end}}## ci: 本地 CI 检查（无外部依赖部分）
-ci: fmt-check vet lint check-log-usage test check-capabilities{{if .HasAPIdocs}} swagger-check{{end}} build
-	@echo "✅ All local CI checks passed"
+{{end}}

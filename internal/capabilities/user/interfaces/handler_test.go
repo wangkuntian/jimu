@@ -11,6 +11,7 @@ import (
 
 	"jimu/internal/capabilities/user/application"
 	"jimu/internal/capabilities/user/domain"
+	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"
@@ -22,7 +23,7 @@ func TestUserListRejectsInvalidPaginationContract(t *testing.T) {
 	r := gin.New()
 	r.GET("/users", func(c *gin.Context) {
 		// 传入无效 sort 字段，触发 Normalize 失败
-		c.Set("validated_query", &pagination.Pagination{Sort: "password", Order: "desc"})
+		c.Set("validated_query", &userListQuery{Pagination: pagination.Pagination{Sort: "password", Order: "desc"}})
 		NewUserHandler(nil).List(c)
 	})
 	w := httptest.NewRecorder()
@@ -37,7 +38,7 @@ func TestUserListUsesDefaultPaginationBeforeService(t *testing.T) {
 	r := gin.New()
 	r.GET("/users", func(c *gin.Context) {
 		c.Set("request_id", "rid-list")
-		c.Set("validated_query", &pagination.Pagination{})
+		c.Set("validated_query", &userListQuery{})
 		NewUserHandler(application.NewUserService(&fakeUserRepository{}, nil)).List(c)
 	})
 	w := httptest.NewRecorder()
@@ -58,7 +59,8 @@ func TestUserCreateReturnsCreatedDTO(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.POST("/users", func(c *gin.Context) {
-		c.Set("validated_req", &application.CreateUserRequest{Username: "alice", Password: "secret123"})
+		c.Set("validated_req", &application.CreateUserRequest{TenantID: "2", Username: "alice", Password: "secret123"})
+		c.Request = c.Request.WithContext(tenant.WithTenant(c.Request.Context(), 2))
 		NewUserHandler(application.NewUserService(&fakeUserRepository{}, nil)).Create(c)
 	})
 	w := httptest.NewRecorder()
@@ -75,12 +77,16 @@ func TestUserCreateReturnsCreatedDTO(t *testing.T) {
 func TestUserDeleteReturnsNoContent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.DELETE("/users/:id", NewUserHandler(application.NewUserService(&fakeUserRepository{}, nil)).Delete)
+	repo := &fakeUserRepository{}
+	r.DELETE("/users/:id", NewUserHandler(application.NewUserService(repo, nil)).Delete)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/users/7", nil))
 
 	if w.Code != http.StatusNoContent || w.Body.Len() != 0 {
 		t.Fatalf("status = %d body = %q", w.Code, w.Body.String())
+	}
+	if !repo.deleted {
+		t.Fatal("DELETE /users/{id} did not delete the user")
 	}
 }
 
@@ -184,7 +190,9 @@ func TestUserExportCSVRejectsInvalidSort(t *testing.T) {
 	}
 }
 
-type fakeUserRepository struct{}
+type fakeUserRepository struct {
+	deleted bool
+}
 
 func (r *fakeUserRepository) FindByID(context.Context, uint64) (*domain.User, error) {
 	return &domain.User{ID: 7, Username: "alice", Status: 1}, nil
@@ -194,7 +202,7 @@ func (r *fakeUserRepository) FindByUsername(context.Context, string) (*domain.Us
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (r *fakeUserRepository) List(context.Context, uint64, int, int, string, string) ([]domain.User, int64, error) {
+func (r *fakeUserRepository) List(context.Context, domain.UserListFilter, int, int, string, string) ([]domain.User, int64, error) {
 	return nil, 0, nil
 }
 
@@ -204,7 +212,10 @@ func (r *fakeUserRepository) Create(_ context.Context, user *domain.User) error 
 }
 
 func (r *fakeUserRepository) Update(context.Context, *domain.User) error { return nil }
-func (r *fakeUserRepository) Delete(context.Context, uint64) error       { return nil }
+func (r *fakeUserRepository) Delete(context.Context, uint64) error {
+	r.deleted = true
+	return nil
+}
 func (r *fakeUserRepository) FindByEmailHash(context.Context, string) (*domain.User, error) {
 	return nil, gorm.ErrRecordNotFound
 }
@@ -213,12 +224,14 @@ func (r *fakeUserRepository) FindByPhoneHash(context.Context, string) (*domain.U
 }
 func (r *fakeUserRepository) UpdatePassword(context.Context, uint64, string) error { return nil }
 
-// errDeleteRepository 覆盖 service.Delete 的 repo.Delete 错误分支
+// errDeleteRepository 覆盖 DELETE 的 repo.Delete 错误分支
 type errDeleteRepository struct {
 	fakeUserRepository
 }
 
-func (r *errDeleteRepository) Delete(context.Context, uint64) error { return errors.New("db down") }
+func (r *errDeleteRepository) Delete(context.Context, uint64) error {
+	return errors.New("db down")
+}
 
 func TestUserDeleteServiceError(t *testing.T) {
 	gin.SetMode(gin.TestMode)

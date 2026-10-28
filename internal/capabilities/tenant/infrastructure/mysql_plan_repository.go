@@ -76,6 +76,14 @@ func NewMysqlQuotaRepository(db *gorm.DB) domain.QuotaRepository {
 	return &mysqlQuotaRepository{db: db}
 }
 
+func (r *mysqlQuotaRepository) TenantExists(ctx context.Context, tenantID uint64) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&domain.Tenant{}).
+		Where("id = ? AND deleted_at IS NULL", tenantID).
+		Count(&count).Error
+	return count > 0, err
+}
+
 // FindPlanByTenant 返回租户套餐；未分配（plan_id=0）或套餐已被删除时返回 nil（视为不限）
 func (r *mysqlQuotaRepository) FindPlanByTenant(ctx context.Context, tenantID uint64) (*domain.Plan, error) {
 	var tenant domain.Tenant

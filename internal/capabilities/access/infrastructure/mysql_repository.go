@@ -4,7 +4,9 @@ import (
 	"context"
 
 	"jimu/internal/capabilities/access/domain"
+	"jimu/internal/contract"
 	dbutil "jimu/internal/kernel/db"
+	"jimu/internal/shared/sqlpattern"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -24,22 +26,53 @@ func (r *mysqlRepository) FindByID(ctx context.Context, id uint64) (*domain.Role
 	return &role, err
 }
 
-// List 分页查询角色。tenantID 非 0 时仅返回该租户下的角色（0=平台级视角，不过滤）。
-func (r *mysqlRepository) List(ctx context.Context, tenantID uint64, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
+// List 分页查询角色。filter 的零值表示平台级不过滤。
+func (r *mysqlRepository) List(ctx context.Context, filter domain.RoleListFilter, offset, limit int, sort, order string) ([]domain.Role, int64, error) {
 	var roles []domain.Role
 	var total int64
-	db := r.db.WithContext(ctx).Model(&domain.Role{})
-	if tenantID != 0 {
-		db = db.Where("tenant_id = ?", tenantID)
+	db := r.db.WithContext(ctx).
+		Model(&domain.Role{}).
+		Joins("JOIN tenants tenant_scope ON tenant_scope.id = roles.tenant_id AND tenant_scope.deleted_at IS NULL")
+	if filter.TenantID != 0 {
+		db = db.Where("roles.tenant_id = ?", filter.TenantID)
+	}
+	if filter.Keyword != "" {
+		db = db.Where("roles.name LIKE ? ESCAPE '"+sqlpattern.EscapeChar+"'", sqlpattern.LikeContains(filter.Keyword))
+	}
+	if filter.Status != nil {
+		db = db.Where("roles.status = ?", *filter.Status)
 	}
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	err := db.Order(clause.OrderByColumn{
-		Column: clause.Column{Name: sort},
+		Column: clause.Column{Table: "roles", Name: sort},
 		Desc:   order == "desc",
 	}).Offset(offset).Limit(limit).Find(&roles).Error
 	return roles, total, err
+}
+
+func (r *mysqlRepository) ListOptions(ctx context.Context, tenantID uint64, includePlatform bool) ([]domain.Role, error) {
+	var roles []domain.Role
+	db := r.db.WithContext(ctx).Where("tenant_id = ? AND status = 1", tenantID)
+	if includePlatform {
+		db = db.Where("scope IN ?", []contract.RoleScope{contract.RoleScopeTenant, contract.RoleScopePlatform})
+	} else {
+		db = db.Where("scope = ?", contract.RoleScopeTenant)
+	}
+	err := db.
+		Order("is_system desc, id asc").
+		Find(&roles).Error
+	return roles, err
+}
+
+func (r *mysqlRepository) FindPermissionsByIDs(ctx context.Context, ids []uint64) ([]domain.Permission, error) {
+	if len(ids) == 0 {
+		return []domain.Permission{}, nil
+	}
+	var permissions []domain.Permission
+	err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&permissions).Error
+	return permissions, err
 }
 
 func (r *mysqlRepository) Create(ctx context.Context, role *domain.Role) error {
@@ -61,7 +94,25 @@ func (r *mysqlRepository) Update(ctx context.Context, role *domain.Role) error {
 }
 
 func (r *mysqlRepository) Delete(ctx context.Context, id uint64) error {
-	return r.db.WithContext(ctx).Delete(&domain.Role{}, id).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var role domain.Role
+		if err := dbutil.LockRow(tx, &role, id).Error; err != nil {
+			return err
+		}
+
+		var userCount int64
+		if err := tx.Table("user_roles").Where("role_id = ?", id).Count(&userCount).Error; err != nil {
+			return err
+		}
+		if userCount > 0 {
+			return domain.ErrRoleInUse
+		}
+
+		if err := tx.Where("role_id = ?", id).Delete(&rolePermission{}).Error; err != nil {
+			return err
+		}
+		return tx.Unscoped().Delete(&domain.Role{}, id).Error
+	})
 }
 
 // AssignPermissions 整体替换角色权限。事务内先锁定角色行，
@@ -71,6 +122,17 @@ func (r *mysqlRepository) AssignPermissions(ctx context.Context, roleID uint64, 
 		var role domain.Role
 		if err := dbutil.LockRow(tx, &role, roleID).Error; err != nil {
 			return err
+		}
+		if len(permissionIDs) > 0 {
+			var count int64
+			if err := tx.Model(&domain.Permission{}).
+				Where("id IN ? AND deleted_at IS NULL", permissionIDs).
+				Count(&count).Error; err != nil {
+				return err
+			}
+			if count != int64(len(permissionIDs)) {
+				return domain.ErrPermissionNotFound
+			}
 		}
 		if err := tx.Where("role_id = ?", roleID).Delete(&rolePermission{}).Error; err != nil {
 			return err

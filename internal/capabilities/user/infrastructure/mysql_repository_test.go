@@ -69,12 +69,35 @@ func TestMysqlRepositoryListCountAndPagination(t *testing.T) {
 		require.NoError(t, repo.Create(ctx, newTestUser()))
 	}
 
-	users, total, err := repo.List(ctx, 0, 0, 2, "id", "desc")
+	users, total, err := repo.List(ctx, domain.UserListFilter{}, 0, 2, "id", "desc")
 	assert.NoError(t, err)
 	assert.Equal(t, int64(3), total)
 	assert.Len(t, users, 2)
 	// desc 排序：最新创建的 ID 最大，应排第一
 	assert.True(t, users[0].ID > users[1].ID)
+}
+
+func TestMysqlRepositoryListFilters(t *testing.T) {
+	db := newUserTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+	statusDisabled := int8(0)
+
+	require.NoError(t, repo.Create(ctx, &domain.User{Username: "alice_admin", Password: "x", Status: 1, TenantID: 1}))
+	disabled := &domain.User{Username: "alice_disabled", Password: "x", Status: 1, TenantID: 1}
+	require.NoError(t, repo.Create(ctx, disabled))
+	require.NoError(t, db.Model(disabled).Update("status", 0).Error)
+	require.NoError(t, repo.Create(ctx, &domain.User{Username: "bob", Password: "x", Status: 1, TenantID: 2}))
+
+	users, total, err := repo.List(ctx, domain.UserListFilter{
+		TenantID: 1,
+		Username: "alice",
+		Status:   &statusDisabled,
+	}, 0, 20, "id", "desc")
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, total)
+	require.Len(t, users, 1)
+	assert.Equal(t, "alice_disabled", users[0].Username)
 }
 
 func TestMysqlRepositoryFindByEmailHash(t *testing.T) {

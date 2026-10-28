@@ -496,7 +496,11 @@ func mustEncode(msg *WSMessage) []byte {
 }
 
 // WSHandler 创建 WebSocket HTTP 处理函数
-func WSHandler(hub *ClientHub, jwtUtil *auth.JWT, presence *PresenceManager, channels *ChannelManager) http.HandlerFunc {
+func WSHandler(hub *ClientHub, jwtUtil *auth.JWT, presence *PresenceManager, channels *ChannelManager, stateCheckers ...auth.StateCheckers) http.HandlerFunc {
+	var states auth.StateCheckers
+	if len(stateCheckers) > 0 {
+		states = stateCheckers[0]
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 1. 从查询参数获取 JWT token
 		token := r.URL.Query().Get("token")
@@ -512,14 +516,38 @@ func WSHandler(hub *ClientHub, jwtUtil *auth.JWT, presence *PresenceManager, cha
 			return
 		}
 
-		// 3. 升级到 WebSocket
+		// 3. 在升级前校验实时身份状态，避免已停用/删除的用户或租户建立新连接。
+		if states.User != nil {
+			active, err := states.User.UserActive(r.Context(), claims.UserID)
+			if err != nil {
+				http.Error(w, "failed to check user state", http.StatusInternalServerError)
+				return
+			}
+			if !active {
+				http.Error(w, "user is disabled or deleted", http.StatusUnauthorized)
+				return
+			}
+		}
+		if states.Tenant != nil && claims.TenantID != 0 {
+			active, err := states.Tenant.TenantActive(r.Context(), claims.TenantID)
+			if err != nil {
+				http.Error(w, "failed to check tenant state", http.StatusInternalServerError)
+				return
+			}
+			if !active {
+				http.Error(w, "tenant is disabled or deleted", http.StatusUnauthorized)
+				return
+			}
+		}
+
+		// 4. 升级到 WebSocket
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			http.Error(w, "upgrade failed", http.StatusBadRequest)
 			return
 		}
 
-		// 4. 创建客户端
+		// 5. 创建客户端
 		client := &Client{
 			hub:        hub,
 			conn:       conn,
@@ -530,7 +558,7 @@ func WSHandler(hub *ClientHub, jwtUtil *auth.JWT, presence *PresenceManager, cha
 			lastActive: time.Now(),
 		}
 
-		// 5. 注册到 hub（非阻塞，hub 未启动或通道满时直接关闭连接，避免 HTTP handler 挂死）
+		// 6. 注册到 hub（非阻塞，hub 未启动或通道满时直接关闭连接，避免 HTTP handler 挂死）
 		select {
 		case hub.register <- client:
 		default:
@@ -538,7 +566,7 @@ func WSHandler(hub *ClientHub, jwtUtil *auth.JWT, presence *PresenceManager, cha
 			return
 		}
 
-		// 6. 启动读写 goroutine
+		// 7. 启动读写 goroutine
 		ctx := r.Context()
 		go client.WritePump()
 		go client.ReadPump(ctx, jwtUtil, presence, channels, nil)

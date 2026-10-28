@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -115,6 +116,41 @@ func TestRegisterRateLimitUsesIPScope(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusTooManyRequests)
+	}
+}
+
+// TestAuthConfigRouteIgnoresPublicRegistration 注册开关关掉时 /auth/config 仍必须存在：
+// 客户端要能区分「未开放注册」与「端点不存在」，否则只能靠 404 猜测。
+func TestAuthConfigRouteIgnoresPublicRegistration(t *testing.T) {
+	r := testRouter(false)
+	cfg := testAuthConfig()
+	cfg.PublicRegistration = false
+	cfg.ProvisioningEnabled = true
+	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, nil, nil)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/auth/config", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	var body struct {
+		Code int `json:"code"`
+		Data struct {
+			PublicRegistration  bool `json:"public_registration"`
+			ProvisioningEnabled bool `json:"provisioning_enabled"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Code != 0 {
+		t.Fatalf("code = %d, want 0", body.Code)
+	}
+	if body.Data.PublicRegistration {
+		t.Fatal("public_registration = true, want false")
+	}
+	if !body.Data.ProvisioningEnabled {
+		t.Fatal("provisioning_enabled = false, want true")
 	}
 }
 

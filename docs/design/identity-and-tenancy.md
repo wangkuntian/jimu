@@ -53,7 +53,7 @@ flowchart LR
 
 ### 租户上下文流转
 
-1. JWT 路径先验证 token，再从已验签的 `tid` claim 读取租户身份。
+1. JWT 路径先验证 token，再从已验签的 `tid` claim 读取租户身份；装配 `tenant` 能力时还必须确认该租户存在且启用。
 2. API Key 路径先校验 Key，再从 Key 记录读取其租户归属。
 3. 对应中间件将租户身份写入请求上下文；业务代码通过 `tenant.FromContext` 读取，不自行解析客户端输入。
 
@@ -62,6 +62,22 @@ flowchart LR
 ### 用户与认证用例协作
 
 `user` 持有用户主体、自助账户操作和管理操作。`auth` 持有凭证认证与会话用例，登录流程按需消费 MFA、tenant provisioning、breach 与 captcha 端口；`passkey` 持有 WebAuthn 凭证并通过 `LoginFinalizer` 复用 auth 登录收尾。`apikey` 持有 API Key 数据和验证入口。管理用例需要分配角色时，经 contract 委托 `access`，不会直接访问其 repository。
+
+用户停用或软删除由 `user` 更新 `users` 记录并吊销该用户全部 `auth` 会话；`auth` 的 refresh 与受保护 JWT 请求还会经 `contract.UserStateSource` 复核用户仍存在且启用。这样 Redis 会话吊销立即生效，同时即使吊销失败或状态由其他写路径改变，已有 access token 也会在下一次请求被拒绝。
+
+用户管理统一挂在 `/api/v1/users` 资源下，不按管理员类型拆分 `/admin/users` 路由。平台级身份可以跨租户筛选和创建用户，创建时必须指定 `tenant_id`；租户级身份的范围由上下文租户强制收敛，不能通过请求参数越界。停用使用 `PUT /users/{id}` + `status=0`；删除使用 `DELETE /users/{id}` 软删除并从常规查询中隐藏，最后一个有效平台超管删除返回冲突。平台管理范围目前由“具备 `GET /api/v1/tenants` 权限”这一授权事实标记，租户管理员不授予该权限时保持租户隔离；该标记不替代具体的用户资源权限。用户创建与 `role_ids` 写入在同一事务内完成；删除用户与清理其 `user_roles` 也在同一事务内完成，角色 ID 在目标用户所属租户内校验。列表和详情通过 contract 端口回填租户与角色摘要。
+
+角色管理统一挂在 `/api/v1/roles` 资源下。首版仅平台管理员可访问角色与权限目录的管理端点，平台身份通过 `tenant_id` 选择目标租户，目标租户必须存在、启用且未删除；租户级创建仍由上下文租户强制收敛。角色创建后归属不可修改。内置角色为 `platform_super_admin`、`platform_auditor`、`tenant_admin`、`tenant_member`，使用稳定 code、`platform|tenant` scope 和 system 标记识别；系统角色禁止通过业务 API 改名、停用、删除或替换权限。Casbin subject 使用 `role:<id>`，平台范围由角色 scope 决定而不是权限存在性；tenant scope 角色不能持有平台专属权限。默认租户只持有两个平台角色，非平台身份不得管理默认租户用户。`GET /api/v1/roles/options` 在平台管理员查看默认租户时同时返回平台角色，其他租户只返回租户角色，保证用户管理页可完成平台管理员委派且不跨租户泄漏角色。`POST /tenants` 与开通式注册在各自事务内创建 `tenant_admin`、`tenant_member`；删除租户时经 contract 端口在同一事务内清理其全部角色、`role_permissions` 和相关 `user_roles`，角色列表只返回所属租户仍有效的记录。`PUT /api/v1/roles/{id}` 传 `status=0|1` 停用或恢复，`DELETE /api/v1/roles/{id}` 永久删除未分配给用户的自定义角色并清理其权限关联，已分配给用户返回 `409`。用户角色分配与 Casbin 策略加载只接受启用且未删除的角色；移除、停用或删除最后一个有效 `platform_super_admin` 用户返回冲突，检查先锁平台角色行再计数。角色权限整体替换在事务内校验全部权限 ID，角色或授权变更会在事务成功后失效当前进程的策略缓存；跨副本一致性仍由各自缓存 TTL 约束。
+
+审计列表、详情和导出按身份范围收敛：平台身份读取全部租户，租户身份只能读取当前租户；详情跨租户按不存在处理。
+
+### 会话身份与权限点的下发（`/auth/me`）
+
+`GET /api/v1/auth/me` 是自助端点，挂在 auth 的**认证-only 子组**（只有 `auth.AuthMiddleware`，不套授权与租户中间件），它的身份与权限来源有明确口径：
+
+- **身份取自已验签的凭证，不取数据库、也不取请求参数。** `user_id` 与 `tenant_id` 均读 `auth.AuthMiddleware` 写入 gin context 的值（`c.Set("user_id", …)`/`c.Set("tenant_id", …)`），其中 `tenant_id` 就是已验签 token 的 `tid` claim，与审计中间件读同一处。**不读账号行的 `tenant_id`** —— 数据库里的归属可能滞后于签发时的凭证归属；也**不能用 `tenant.FromContext`** —— 该子组不套 `tenant.Middleware()`，`FromContext` 在这里恒返回 `0`。
+- **权限点由 `kernel/access` 的角色与策略查询派生、原样透出。** `roles` 来自 `DBAuthorizationStore.RolesForUser`；`permissions` 由同一 store 的 `Policies` 取到「角色 × (resource, action)」全量后，在 auth 的 application 层**按用户角色过滤、去重、按 `(resource, action)` 排序**再下发，不翻译成额外权限码。判定语义与 `conf/rbac_model.conf` 的 matcher 完全一致，因此客户端复刻 `keyMatch(请求路径, resource)` 与 `action == "*"` 即可得到与后端相同的结论。
+- **零角色不是错误。** 无任何角色的用户（如公开注册的账号）返回 `200` 与两个空数组；`roles` 仅供展示，授权判定一律用 `permissions`。
 
 ### 租户数据规则
 
@@ -82,6 +98,14 @@ flowchart LR
 ## 约束与不变量
 
 JWT 认证路径从已验签 token 的 `tid` claim 取得租户身份；API Key 路径从已校验 Key 的归属取得租户身份。对应中间件将其写入请求上下文，业务代码通过 [`internal/kernel/tenant`](../../internal/kernel/tenant) 读取。客户端不能通过 header 或 query 参数指定租户身份。
+
+装配 `tenant` 能力时，密码登录、Passkey/OAuth 登录收尾、refresh 和受保护 JWT 请求都经 `contract.TenantStateSource` 校验 `tid` 对应租户存在、启用且未软删除。租户停用或删除后，新登录与 refresh 失败，已有 access token 也在下一次请求被拒绝；租户状态查询失败按内部错误 fail-closed。`tid=0` 是已验签的平台级上下文，没有具体租户可校验，保持原有语义；未装配 `tenant` 能力的形态不启用该校验。
+
+用户会话同样不以签发时的账号状态为准：停用或软删除用户后，refresh 与受保护 JWT 请求经 `contract.UserStateSource` 复核账号仍存在且启用，已有 access token 在下一次请求被拒绝；用户停用/删除用例同时调用 `SessionStore.RevokeAll` 清理 Redis 会话。用户状态查询失败按内部错误 fail-closed。
+
+平台管理员跨租户创建用户或角色时，目标租户也必须存在、启用且未删除；状态查询故障 fail-closed。租户级创建不额外信任请求字段，继续由认证链校验当前租户并收敛归属。默认租户不可停用；当前身份所属租户也不可停用，以免管理员在保存状态后立即失去访问能力。用户与租户删除必须由父能力在同一事务内通过 contract 端口清理角色关联；任一步失败都回滚软删除。该保护以服务层最终校验为准，客户端只负责危险操作确认。
+
+管理端 WebSocket 的**新握手**复用同一组用户/租户状态端口：验签 JWT 后、升级连接前检查账号与租户仍 active，失败返回 `401` 且不升级。已经建立的连接不会因后续停用/删除自动断开；如需实时踢下线，需要另外定义连接关闭事件与各副本广播机制。
 
 上下文中缺少租户时，`FromContext` 返回 `0`，该值表示平台级视角；默认租户则是独立的固定租户 ID 与编码。默认租户常量和迁移共同定义其身份。租户编码校验与小写归一化集中在内核 tenant 包。
 

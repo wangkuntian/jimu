@@ -1,7 +1,5 @@
 package search
 
-import "strings"
-
 // cjkFallbackScore 命中标题时的相关度分值（标题命中优先于正文命中）
 const cjkFallbackScore = 2
 
@@ -35,23 +33,4 @@ func isCJKRune(r rune) bool {
 	default:
 		return false
 	}
-}
-
-// likeEscapeChar LIKE 的转义字符。用 '!' 而不是反斜杠：MySQL 字符串字面量里
-// 反斜杠本身是转义字符，跨方言写起来易错；'!' 在两种数据库中都无需额外转义。
-const likeEscapeChar = "!"
-
-// escapeLike 转义 LIKE 通配符，配合 ESCAPE '!' 使用
-func escapeLike(s string) string {
-	replacer := strings.NewReplacer(
-		likeEscapeChar, likeEscapeChar+likeEscapeChar,
-		"%", likeEscapeChar+"%",
-		"_", likeEscapeChar+"_",
-	)
-	return replacer.Replace(s)
-}
-
-// likePattern 生成 LIKE 模式（子串匹配）
-func likePattern(query string) string {
-	return "%" + escapeLike(query) + "%"
 }

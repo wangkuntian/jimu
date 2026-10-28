@@ -6,4 +6,6 @@ import "context"
 type TenantQuota interface {
 	// CheckRoleQuota 角色数达到套餐上限时返回 CodeQuotaExceeded
 	CheckRoleQuota(ctx context.Context, tenantID uint64) error
+	// TenantExists 用于平台管理员创建角色时校验目标租户。
+	TenantExists(ctx context.Context, tenantID uint64) (bool, error)
 }

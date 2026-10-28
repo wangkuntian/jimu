@@ -9,7 +9,6 @@ import (
 	"jimu/internal/capabilities/access/infrastructure"
 	"jimu/internal/capabilities/access/interfaces"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/http/middleware"
 
 	"gorm.io/gorm"
 )
@@ -19,6 +18,7 @@ type Module struct {
 	roles       *application.RoleService
 	permissions *application.PermissionService
 	userRoles   *application.UserRoleService
+	tenantRoles *application.TenantRoleService
 }
 
 // PortName access 能力对外提供的端口名：contract.UserRoleAssigner（UserRoleService）。
@@ -33,11 +33,15 @@ func New(db *gorm.DB, deps ...interface{}) *Module {
 		if quota, ok := dep.(application.TenantQuota); ok {
 			roleSvc.WithQuota(quota)
 		}
+		if states, ok := dep.(contract.TenantStateSource); ok {
+			roleSvc.WithTenantState(states)
+		}
 	}
 	return &Module{
 		roles:       roleSvc,
 		permissions: application.NewPermissionService(permRepo),
 		userRoles:   application.NewUserRoleService(db),
+		tenantRoles: application.NewTenantRoleService(db),
 	}
 }
 
@@ -46,6 +50,9 @@ func (m *Module) Name() string { return "access" }
 
 // UserRoleAssigner 实现 contract.UserRoleAssigner，供 user 管理面复用。
 func (m *Module) UserRoleAssigner() contract.UserRoleAssigner { return m.userRoles }
+
+// TenantRoleLifecycle 实现 contract.TenantRoleLifecycle，供 tenant 删除时清理角色数据。
+func (m *Module) TenantRoleLifecycle() contract.TenantRoleLifecycle { return m.tenantRoles }
 
 // migrationsFS 能力自带迁移（roles/permissions/user_roles 表）。
 //
@@ -67,31 +74,32 @@ var Descriptor = contract.Descriptor{
 		{Name: "角色详情", Resource: "/api/v1/roles/*", Action: "GET"},
 		{Name: "角色修改", Resource: "/api/v1/roles/*", Action: "PUT"},
 		{Name: "角色删除", Resource: "/api/v1/roles/*", Action: "DELETE"},
+		{Name: "角色权限详情", Resource: "/api/v1/roles/*/permissions", Action: "GET"},
 		{Name: "角色分配权限", Resource: "/api/v1/roles/*/permissions", Action: "POST"},
+		{Name: "角色选项", Resource: "/api/v1/roles/options", Action: "GET"},
 		// 权限
 		{Name: "权限列表", Resource: "/api/v1/permissions", Action: "GET"},
 		{Name: "权限创建", Resource: "/api/v1/permissions", Action: "POST"},
 		{Name: "权限详情", Resource: "/api/v1/permissions/*", Action: "GET"},
 		{Name: "权限修改", Resource: "/api/v1/permissions/*", Action: "PUT"},
 		{Name: "权限删除", Resource: "/api/v1/permissions/*", Action: "DELETE"},
-		// 用户分配角色 /api/v1/admin/users/:id/roles 由 console 的 /api/v1/admin/* 通配权限点覆盖，
-		// 此处不重复声明（保持拆分前的权限点集合不变）。
+		// 用户分配角色
+		{Name: "用户分配角色", Resource: "/api/v1/users/*/roles", Action: "POST"},
 	},
 }
 
 // Descriptor 实现 contract.Describable。
 func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
 
-// RegisterHTTP 注册角色/权限路由与管理端「用户分配角色」端点。
+// RegisterHTTP 注册角色/权限路由与用户资源上的「用户分配角色」端点。
 func (m *Module) RegisterHTTP(r contract.Router) {
 	rg := r.Group("/api/v1")
 	interfaces.RegisterRoleRoutes(rg, m.roles)
 	interfaces.RegisterPermissionRoutes(rg, m.permissions)
 
-	// 管理端「用户分配角色」：写 user_roles，由本能力（表所有者）注册
-	admin := rg.Group("/admin")
-	admin.Use(middleware.AdminAuth())
-	admin.POST("/users/:id/roles", interfaces.NewUserRoleHandler(m.userRoles).AssignRole)
+	// 用户「分配角色」：写 user_roles，由本能力（表所有者）注册。
+	// 平台管理员与租户管理员共用该资源，范围与授权分别由租户上下文和 Casbin 判定。
+	rg.POST("/users/:id/roles", interfaces.NewUserRoleHandler(m.userRoles).AssignRole)
 }
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}

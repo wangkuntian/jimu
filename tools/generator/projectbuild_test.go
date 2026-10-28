@@ -49,14 +49,11 @@ const scaffoldShardEnv = "JIMU_SCAFFOLD_SHARD"
 // （见 trimpathGoflags）：否则路径相关条目会无界增长，缓存既不收敛也换不来时间。
 const testGoCacheEnv = "JIMU_TEST_GOCACHE"
 
-// heavyBuildConcurrency 是重型矩阵里「同时跑几个真实生成项目的 go build/vet/test/run」的上限：
-// 取值 = CI runner 的 vCPU 数（ubuntu-latest 标准 runner 为 4 核）。
-//
-// 定死在 2 会把 4 核用掉一半：历史全量选区构建网的子用例耗时之和约 1088s，`sem=2` 下墙钟约 560s，
-// 而这段墙钟占了整个 Scaffold Gate job（861s）的 65%。并发链接/编译对 CPU、内存与磁盘压力都大
-// （历史事故：共享构建缓存涨到 25G 把磁盘写满，故构建测试一律用 newTestGoCache 的专用缓存），
-// 所以这个数是**显式的上限**而不是无限并发；如果重型 job 出现内存/磁盘压力，先降它。
-const heavyBuildConcurrency = 4
+// heavyBuildConcurrency 是重型矩阵里「同时跑几个真实生成项目的 go build/vet/test/run」的上限。
+// 4 路并发能占满标准 runner 的 4 vCPU，但 Go 1.26.10 下多个大型链接同时写临时产物会把
+// ubuntu-latest 的工作目录磁盘配额打满，链接触发 `mapping output file failed: disk quota exceeded`。
+// 2 路仍可利用双核流水线，同时显著降低临时对象峰值；如果后续 runner 磁盘配额提高，可再评估上调。
+const heavyBuildConcurrency = 2
 
 // scaffoldShardIndices 按选区在原始清单中的位置分片，确保每个选区恰好由一个 shard 执行。
 func scaffoldShardIndices(spec string, count int) ([]int, error) {

@@ -33,6 +33,7 @@ func ValidCode(code string) bool {
 }
 
 type ctxKey struct{}
+type platformScopeKey struct{}
 
 // WithTenant 将租户 ID 注入 context。
 func WithTenant(ctx context.Context, tenantID uint64) context.Context {
@@ -47,6 +48,18 @@ func FromContext(ctx context.Context) uint64 {
 	return 0
 }
 
+// WithPlatformScope 标记调用者具备跨租户的平台管理范围。
+// 该标记只用于显式声明支持平台范围的能力，不改变可信租户 ID 本身。
+func WithPlatformScope(ctx context.Context) context.Context {
+	return context.WithValue(ctx, platformScopeKey{}, true)
+}
+
+// IsPlatformScope 返回调用者是否具备平台管理范围。
+func IsPlatformScope(ctx context.Context) bool {
+	platform, _ := ctx.Value(platformScopeKey{}).(bool)
+	return platform
+}
+
 // Visible 判断资源归属租户对上下文租户是否可见：
 // 上下文租户为 0（平台级视角）或资源未归属（0）时可见，否则须为同一租户。
 func Visible(resourceTenant, ctxTenant uint64) bool {
@@ -57,11 +70,18 @@ func Visible(resourceTenant, ctxTenant uint64) bool {
 // 写入 request context，供业务层通过 FromContext 读取。
 func Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if v, ok := c.Get("tenant_id"); ok {
-			if id, ok := v.(uint64); ok && id != 0 {
-				c.Request = c.Request.WithContext(WithTenant(c.Request.Context(), id))
+		ctx := c.Request.Context()
+		if platform, ok := c.Get("platform_scope"); ok {
+			if enabled, _ := platform.(bool); enabled {
+				ctx = WithPlatformScope(ctx)
 			}
 		}
+		if v, ok := c.Get("tenant_id"); ok {
+			if id, ok := v.(uint64); ok && id != 0 {
+				ctx = WithTenant(ctx, id)
+			}
+		}
+		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	}
 }

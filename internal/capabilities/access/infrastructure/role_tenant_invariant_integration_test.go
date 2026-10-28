@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"jimu/internal/capabilities/access/application"
@@ -62,9 +63,11 @@ func TestT3_3_RoleWithoutTenantContextFallsBackToDefault(t *testing.T) {
 	repo := NewMysqlRepository(tdb.DB)
 	created, err := application.NewRoleService(repo).Create(context.Background(), application.CreateRoleRequest{Name: "def_" + testutil.RandomString(8)})
 	require.NoError(t, err)
-	assert.Equal(t, tenant.DefaultTenantID, created.TenantID, "T3.3 tid=0 时角色必须归属默认租户")
+	assert.Equal(t, strconv.FormatUint(tenant.DefaultTenantID, 10), created.TenantID, "T3.3 tid=0 时角色必须归属默认租户")
 
-	row, err := repo.FindByID(context.Background(), created.ID)
+	createdID, err := strconv.ParseUint(created.ID, 10, 64)
+	require.NoError(t, err)
+	row, err := repo.FindByID(context.Background(), createdID)
 	require.NoError(t, err)
 	assert.Equal(t, tenant.DefaultTenantID, row.TenantID, "T3.3 落库 tenant_id 必须为默认租户")
 }

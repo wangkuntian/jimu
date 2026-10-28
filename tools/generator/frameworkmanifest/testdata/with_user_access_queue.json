@@ -113,9 +113,19 @@
           "action": "DELETE"
         },
         {
+          "name": "角色权限详情",
+          "resource": "/api/v1/roles/*/permissions",
+          "action": "GET"
+        },
+        {
           "name": "角色分配权限",
           "resource": "/api/v1/roles/*/permissions",
           "action": "POST"
+        },
+        {
+          "name": "角色选项",
+          "resource": "/api/v1/roles/options",
+          "action": "GET"
         },
         {
           "name": "权限列表",
@@ -141,12 +151,18 @@
           "name": "权限删除",
           "resource": "/api/v1/permissions/*",
           "action": "DELETE"
+        },
+        {
+          "name": "用户分配角色",
+          "resource": "/api/v1/users/*/roles",
+          "action": "POST"
         }
       ],
       "mount": "protected",
       "migrations": [
         "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
-        "internal/capabilities/access/migrations/mysql/008_role_version.sql"
+        "internal/capabilities/access/migrations/mysql/008_role_version.sql",
+        "internal/capabilities/access/migrations/mysql/009_role_system_metadata.sql"
       ],
       "drivers": null,
       "assets": null
@@ -1033,10 +1049,11 @@
       "access",
       "queue"
     ],
-    "routes": 34,
+    "routes": 31,
     "migrations": [
       "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
       "internal/capabilities/access/migrations/mysql/008_role_version.sql",
+      "internal/capabilities/access/migrations/mysql/009_role_system_metadata.sql",
       "internal/capabilities/queue/migrations/mysql/001_jobs.sql",
       "internal/capabilities/queue/migrations/mysql/007_jobs_tenant.sql",
       "internal/capabilities/tenant/migrations/mysql/005_tenants.sql",
@@ -1119,6 +1136,8 @@
     "deploy/otel-collector.yaml",
     "go.mod",
     "go.sum",
+    "internal/app/admin_password.go",
+    "internal/app/admin_password_test.go",
     "internal/app/application.go",
     "internal/app/application_test.go",
     "internal/app/authz_bootstrap_test.go",
@@ -1140,12 +1159,15 @@
     "internal/capabilities/access/application/dto.go",
     "internal/capabilities/access/application/dto_test.go",
     "internal/capabilities/access/application/errors.go",
+    "internal/capabilities/access/application/last_superadmin_mysql_test.go",
     "internal/capabilities/access/application/permission_dto.go",
     "internal/capabilities/access/application/permission_service.go",
     "internal/capabilities/access/application/permission_service_test.go",
     "internal/capabilities/access/application/quota.go",
+    "internal/capabilities/access/application/role_delete_mysql_test.go",
     "internal/capabilities/access/application/service.go",
     "internal/capabilities/access/application/service_test.go",
+    "internal/capabilities/access/application/tenant_roles.go",
     "internal/capabilities/access/application/user_roles.go",
     "internal/capabilities/access/application/user_roles_test.go",
     "internal/capabilities/access/domain/domain_test.go",
@@ -1161,16 +1183,22 @@
     "internal/capabilities/access/interfaces/permission_handler.go",
     "internal/capabilities/access/interfaces/permission_handler_test.go",
     "internal/capabilities/access/interfaces/permission_router.go",
+    "internal/capabilities/access/interfaces/platform_guard.go",
+    "internal/capabilities/access/interfaces/platform_guard_test.go",
     "internal/capabilities/access/interfaces/router.go",
     "internal/capabilities/access/interfaces/user_roles.go",
     "internal/capabilities/access/interfaces/user_roles_test.go",
     "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
     "internal/capabilities/access/migrations/mysql/008_role_version.sql",
+    "internal/capabilities/access/migrations/mysql/009_role_system_metadata.sql",
     "internal/capabilities/access/migrations/postgres/001_roles_permissions.sql",
     "internal/capabilities/access/migrations/postgres/008_role_version.sql",
+    "internal/capabilities/access/migrations/postgres/009_role_system_metadata.sql",
     "internal/capabilities/access/module.go",
     "internal/capabilities/access/module_test.go",
     "internal/capabilities/access/provisioning_port.go",
+    "internal/capabilities/access/provisioning_port_test.go",
+    "internal/capabilities/access/system_metadata_migration_test.go",
     "internal/capabilities/access/wire.go",
     "internal/capabilities/catalog/catalog.go",
     "internal/capabilities/catalog/migration.go",
@@ -1228,8 +1256,6 @@
     "internal/capabilities/tenant/migrations/postgres/014_tenant_plans.sql",
     "internal/capabilities/tenant/module.go",
     "internal/capabilities/user/account_port.go",
-    "internal/capabilities/user/application/admin_service.go",
-    "internal/capabilities/user/application/admin_service_test.go",
     "internal/capabilities/user/application/dto.go",
     "internal/capabilities/user/application/service.go",
     "internal/capabilities/user/application/service_test.go",
@@ -1240,8 +1266,6 @@
     "internal/capabilities/user/infrastructure/mysql_repository_integration_test.go",
     "internal/capabilities/user/infrastructure/mysql_repository_test.go",
     "internal/capabilities/user/infrastructure/user_tenant_invariant_integration_test.go",
-    "internal/capabilities/user/interfaces/admin_users.go",
-    "internal/capabilities/user/interfaces/admin_users_test.go",
     "internal/capabilities/user/interfaces/handler.go",
     "internal/capabilities/user/interfaces/handler_test.go",
     "internal/capabilities/user/interfaces/router.go",
@@ -1273,12 +1297,17 @@
     "internal/contract/openapi_test.go",
     "internal/contract/outbox_mq_port.go",
     "internal/contract/ports.go",
+    "internal/contract/systemroles.go",
+    "internal/contract/systemroles_test.go",
     "internal/e2e/admin_routes_parity_test.go",
     "internal/e2e/api_contract_test.go",
+    "internal/e2e/auth_me_test.go",
     "internal/e2e/auth_routes_parity_test.go",
     "internal/e2e/grpc_contract_test.go",
     "internal/e2e/helpers_test.go",
+    "internal/e2e/tenant_delete_roles_test.go",
     "internal/e2e/tenant_provisioning_test.go",
+    "internal/e2e/user_delete_roles_test.go",
     "internal/kernel/access/casbin.go",
     "internal/kernel/access/permission_middleware.go",
     "internal/kernel/access/roles.go",
@@ -1293,6 +1322,7 @@
     "internal/kernel/auth/limiter_test.go",
     "internal/kernel/auth/lockout.go",
     "internal/kernel/auth/middleware.go",
+    "internal/kernel/auth/middleware_test.go",
     "internal/kernel/auth/redis_fake_test.go",
     "internal/kernel/auth/session.go",
     "internal/kernel/auth/session_test.go",
@@ -1445,6 +1475,8 @@
     "internal/shared/response/response.go",
     "internal/shared/response/response_contract_test.go",
     "internal/shared/response/response_test.go",
+    "internal/shared/sqlpattern/like.go",
+    "internal/shared/sqlpattern/like_test.go",
     "internal/shared/testutil/assert.go",
     "internal/shared/testutil/reporoot.go",
     "internal/shared/testutil/reporoot_test.go",
@@ -1473,5 +1505,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:292c51cdef3e5a925091d2d6b069ca7d4ca07302c2e54bd823370b5e7fb8d5af"
+  "digest": "sha256:7e382dce6d5b2f96c40c779ceec45c0016011fa258ad572a5edf9ee3ac16acfd"
 }

@@ -15,8 +15,14 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 		cfg = &Config{}
 	}
 	mod := New(ctx.DB(), cfg.Provisioning)
+	if err := ctx.Provide(contract.TenantRoleStoreBinderPortName, mod); err != nil {
+		return nil, fmt.Errorf("provide tenant role store binder: %w", err)
+	}
 	if err := ctx.Provide(PortName, mod.Quota()); err != nil {
 		return nil, fmt.Errorf("provide tenant port: %w", err)
+	}
+	if err := ctx.Provide(contract.TenantInfoPortName, newTenantInfoSource(ctx.DB())); err != nil {
+		return nil, fmt.Errorf("provide tenant info port: %w", err)
 	}
 	if err := ctx.Provide(ProvisionerPortName, contract.TenantProvisionerFactory(mod)); err != nil {
 		return nil, fmt.Errorf("provide tenant provisioner port: %w", err)

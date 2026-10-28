@@ -25,7 +25,7 @@ spec:
             - name: ZO_ROOT_USER_EMAIL
               value: {{ .Values.openobserve.rootEmail | quote }}
             - name: ZO_ROOT_USER_PASSWORD
-              value: {{ .Values.openobserve.rootPassword | quote }}
+              value: {{ required "openobserve.rootPassword is required" .Values.openobserve.rootPassword | quote }}
             - name: ZO_DATA_DIR
               value: /data
             - name: ZO_HTTP_PORT

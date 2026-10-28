@@ -154,11 +154,10 @@ otel:
   metricsEnabled: true
   logsEnabled: true
   metricsIntervalSec: 15
-  # OpenObserve 认证凭据（与 openobserve.rootEmail/rootPassword 保持一致；生产建议覆盖）
+  # OpenObserve 认证凭据（与 openobserve.rootEmail/rootPassword 保持一致）
+  # 无默认密码；安装时必须通过 values override 或 --set 显式提供。
   authEmail: "admin@jimu.local"
-  authPassword: "Admin@12345"
-  # Basic token = base64(email:password)；Otel Collector 等外部端使用
-  authToken: "YWRtaW5AamltdS5sb2NhbDpBZG1pbkAxMjM0NQ=="
+  authPassword: ""
   orgID: "default"
   # 日志 / 追踪 stream 名（OpenObserve 会把非法字符规范为 _；空则落默认流 default）
   logsStreamName: "jimu_logs"
@@ -231,9 +230,9 @@ openobserve:
     repository: public.ecr.aws/zinclabs/openobserve
     tag: "v0.92.2"
     pullPolicy: IfNotPresent
-  # 生产环境请通过 --set 覆盖或 Secret 注入
+  # 生产环境请通过 --set 覆盖或 Secret 注入；无默认密码
   rootEmail: "admin@jimu.local"
-  rootPassword: "Admin@12345"
+  rootPassword: ""
   storage: 20Gi
   resources:
     requests:

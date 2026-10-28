@@ -48,7 +48,7 @@ func (a *userinfoAdapter) FindByUsername(ctx context.Context, username string) (
 }
 
 func (a *userinfoAdapter) List(ctx context.Context, page, pageSize int) ([]contract.Userinfo, int64, error) {
-	users, total, err := a.repo.List(ctx, 0, (page-1)*pageSize, pageSize, "id", "desc")
+	users, total, err := a.repo.List(ctx, domain.UserListFilter{}, (page-1)*pageSize, pageSize, "id", "desc")
 	if err != nil {
 		return nil, 0, err
 	}
@@ -57,6 +57,18 @@ func (a *userinfoAdapter) List(ctx context.Context, page, pageSize int) ([]contr
 		out = append(out, *toUserinfo(&users[i]))
 	}
 	return out, total, nil
+}
+
+// UserActive 只把存在、启用且未软删除的用户视为可用。
+func (a *userinfoAdapter) UserActive(ctx context.Context, userID uint64) (bool, error) {
+	u, err := a.repo.FindByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return u.Status == 1, nil
 }
 
 func toUserinfo(u *domain.User) *contract.Userinfo {

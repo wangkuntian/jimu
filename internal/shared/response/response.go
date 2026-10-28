@@ -91,6 +91,7 @@ var codeToKey = map[int]string{
 	appErrs.CodeTenantProtected:            "tenant_protected",
 	appErrs.CodeTenantCodeFormat:           "tenant_code_format",
 	appErrs.CodeQuotaExceeded:              "quota_exceeded",
+	appErrs.CodePlanNotFound:               "plan_not_found",
 }
 
 // localeFrom 从 gin context 读取语言，缺省 zh

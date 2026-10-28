@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"jimu/internal/capabilities/access/domain"
+	"jimu/internal/contract"
 	dbutil "jimu/internal/kernel/db"
 
 	"github.com/glebarez/sqlite"
@@ -17,7 +18,25 @@ func newRoleTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.Role{}, &rolePermission{}))
+	require.NoError(t, db.AutoMigrate(&domain.Role{}, &domain.Permission{}, &rolePermission{}))
+	require.NoError(t, db.Exec(`CREATE TABLE tenants (
+		id INTEGER PRIMARY KEY,
+		deleted_at DATETIME
+	)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO tenants (id) VALUES (1), (2)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE user_roles (
+		user_id INTEGER NOT NULL,
+		role_id INTEGER NOT NULL,
+		PRIMARY KEY (user_id, role_id)
+	)`).Error)
+	permissions := []domain.Permission{
+		{ID: 1, Name: "perm1", Resource: "/test", Action: "GET"},
+		{ID: 2, Name: "perm2", Resource: "/test", Action: "POST"},
+		{ID: 3, Name: "perm3", Resource: "/test", Action: "PUT"},
+	}
+	for i := range permissions {
+		require.NoError(t, db.Create(&permissions[i]).Error)
+	}
 	return db
 }
 
@@ -65,4 +84,133 @@ func TestRoleRepositoryAssignPermissionsReplacesAll(t *testing.T) {
 	require.NoError(t, repo.AssignPermissions(ctx, role.ID, []uint64{3}))
 	require.NoError(t, db.Model(&rolePermission{}).Where("role_id = ?", role.ID).Count(&count).Error)
 	assert.Equal(t, int64(1), count)
+}
+
+func TestRoleRepositoryAssignPermissionsRejectsUnknownAtomically(t *testing.T) {
+	db := newRoleTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+
+	role := &domain.Role{TenantID: 1, Name: "viewer", Status: 1}
+	require.NoError(t, repo.Create(ctx, role))
+	require.NoError(t, repo.AssignPermissions(ctx, role.ID, []uint64{1}))
+
+	assert.ErrorIs(t, repo.AssignPermissions(ctx, role.ID, []uint64{2, 999}), domain.ErrPermissionNotFound)
+
+	var ids []uint64
+	require.NoError(t, db.Model(&rolePermission{}).Where("role_id = ?", role.ID).Pluck("permission_id", &ids).Error)
+	assert.Equal(t, []uint64{1}, ids, "校验失败时不得删除原有权限")
+}
+
+func TestRoleRepositoryListFilters(t *testing.T) {
+	db := newRoleTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+
+	roles := []domain.Role{
+		{TenantID: 1, Name: "ops-admin", Status: 1},
+		{TenantID: 1, Name: "ops-disabled", Status: 1},
+		{TenantID: 2, Name: "ops-other", Status: 1},
+		{TenantID: 2, Name: "viewer", Status: 1},
+	}
+	for i := range roles {
+		require.NoError(t, repo.Create(ctx, &roles[i]))
+	}
+	require.NoError(t, db.Model(&domain.Role{}).Where("id = ?", roles[1].ID).Update("status", 0).Error)
+
+	disabled := int8(0)
+	got, total, err := repo.List(ctx, domain.RoleListFilter{
+		TenantID: 1,
+		Keyword:  "ops",
+		Status:   &disabled,
+	}, 0, 20, "id", "asc")
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, got, 1)
+	assert.Equal(t, "ops-disabled", got[0].Name)
+}
+
+func TestRoleRepositoryListExcludesDeletedTenants(t *testing.T) {
+	db := newRoleTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+
+	validRole := domain.Role{TenantID: 1, Name: "valid", Status: 1}
+	orphanRole := domain.Role{TenantID: 2, Name: "orphan", Status: 1}
+	require.NoError(t, repo.Create(ctx, &validRole))
+	require.NoError(t, repo.Create(ctx, &orphanRole))
+	require.NoError(t, db.Exec("UPDATE tenants SET deleted_at = CURRENT_TIMESTAMP WHERE id = 2").Error)
+
+	got, total, err := repo.List(ctx, domain.RoleListFilter{}, 0, 20, "id", "asc")
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, got, 1)
+	assert.Equal(t, validRole.ID, got[0].ID)
+}
+
+func TestRoleRepositoryListOptions(t *testing.T) {
+	db := newRoleTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+	roles := []domain.Role{
+		{TenantID: 1, Name: "custom-a", Scope: contract.RoleScopeTenant, Status: 1},
+		{TenantID: 1, Name: "system", Code: contract.RoleCodeTenantAdmin, Scope: contract.RoleScopeTenant, IsSystem: true, Status: 1},
+		{TenantID: 1, Name: "disabled", Scope: contract.RoleScopeTenant, Status: 1},
+		{TenantID: 1, Name: "platform", Scope: contract.RoleScopePlatform, Status: 1},
+		{TenantID: 2, Name: "other-tenant", Scope: contract.RoleScopeTenant, Status: 1},
+	}
+	for i := range roles {
+		require.NoError(t, repo.Create(ctx, &roles[i]))
+	}
+	require.NoError(t, db.Model(&domain.Role{}).Where("id = ?", roles[2].ID).Update("status", 0).Error)
+
+	got, err := repo.ListOptions(ctx, 1, true)
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+	assert.Equal(t, "system", got[0].Name, "system roles sort first")
+	names := []string{got[0].Name, got[1].Name, got[2].Name}
+	assert.Contains(t, names, "platform", "default tenant options include platform roles for platform admins")
+	assert.Contains(t, names, "custom-a")
+
+	got, err = repo.ListOptions(ctx, 2, false)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "other-tenant", got[0].Name)
+}
+
+func TestRoleRepositoryDeleteRemovesRoleAndPermissions(t *testing.T) {
+	db := newRoleTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+
+	role := &domain.Role{TenantID: 1, Name: "temporary", Status: 1}
+	require.NoError(t, repo.Create(ctx, role))
+	require.NoError(t, repo.AssignPermissions(ctx, role.ID, []uint64{1, 2}))
+
+	require.NoError(t, repo.Delete(ctx, role.ID))
+
+	_, err := repo.FindByID(ctx, role.ID)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	var count int64
+	require.NoError(t, db.Model(&rolePermission{}).Where("role_id = ?", role.ID).Count(&count).Error)
+	assert.Zero(t, count)
+}
+
+func TestRoleRepositoryDeleteRejectsAssignedRole(t *testing.T) {
+	db := newRoleTestDB(t)
+	repo := NewMysqlRepository(db)
+	ctx := context.Background()
+
+	role := &domain.Role{TenantID: 1, Name: "assigned", Status: 1}
+	require.NoError(t, repo.Create(ctx, role))
+	require.NoError(t, repo.AssignPermissions(ctx, role.ID, []uint64{1}))
+	require.NoError(t, db.Exec("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", 7, role.ID).Error)
+
+	require.ErrorIs(t, repo.Delete(ctx, role.ID), domain.ErrRoleInUse)
+	got, err := repo.FindByID(ctx, role.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "assigned", got.Name)
+	var permissionCount int64
+	require.NoError(t, db.Model(&rolePermission{}).Where("role_id = ?", role.ID).Count(&permissionCount).Error)
+	assert.Equal(t, int64(1), permissionCount)
 }

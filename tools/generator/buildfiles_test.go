@@ -3,6 +3,7 @@ package generator
 import (
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -40,6 +41,45 @@ func TestGeneratedMakefileHasNoProfileBranch(t *testing.T) {
 		"\ngovulncheck:", "\nproto:", "\nbench:", "\nloadtest:", "\nsecrets:", "\ndocker-build:"} {
 		assert.NotContains(t, src, gone, "生成版 Makefile 不应保留 %q", gone)
 	}
+}
+
+func TestGeneratedMakefileUsesSharedLifecycleContract(t *testing.T) {
+	set, err := ParseCapabilitySet("minimal", "", "")
+	require.NoError(t, err)
+	out, err := RenderMakefile(set)
+	require.NoError(t, err)
+	src := string(out)
+	assert.NotContains(t, src, "include .env")
+	assert.NotContains(t, src, "\nrun:")
+	assert.Contains(t, src, "\ndev:")
+	assert.Contains(t, src, "\nimage:")
+	assert.Contains(t, src, "IMAGE_REPO ?= jimu")
+	assert.Contains(t, src, "IMAGE_TAG = $(IMAGE_REPO):$(VERSION)")
+	assert.Contains(t, src, "docker tag $(IMAGE_TAG) $(LATEST_TAG)")
+	assert.Contains(t, src, "## help:")
+	assert.Contains(t, src, "VERSION ?= dev")
+	assert.Contains(t, src, "APP_VERSION ?= dev")
+	assert.Contains(t, src, "LDFLAGS := -X main.version=$(APP_VERSION)")
+	for _, gone := range []string{"\nup:", "\ndown:", "\nup-observability:"} {
+		assert.NotContains(t, src, gone)
+	}
+}
+
+func TestGeneratedMakefileHelpIncludesWrappedDescriptions(t *testing.T) {
+	set, err := ParseCapabilitySet("minimal", "", "")
+	require.NoError(t, err)
+	out, err := RenderMakefile(set)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	makefile := filepath.Join(dir, "Makefile")
+	require.NoError(t, os.WriteFile(makefile, out, 0o644))
+	cmd := exec.Command("make", "-f", makefile, "help")
+	cmd.Dir = dir
+	help, err := cmd.CombinedOutput()
+	require.NoError(t, err, "make help failed:\n%s", help)
+	assert.Contains(t, string(help), "禁动态 key R2 / 字段词汇表 R3 / 禁嵌套对象 R4")
+	assert.Contains(t, string(help), "重型依赖 / go.mod 直接依赖数")
 }
 
 func TestGeneratedMakefileKeepsSwaggerWhenApidocsSelected(t *testing.T) {

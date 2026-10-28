@@ -53,14 +53,31 @@ type ProvisioningRoleStore interface {
 	AssignRole(ctx context.Context, userID, roleID uint64) error
 }
 
+type ProvisioningRoleStoreBinder interface {
+	BindProvisioningRoleStore(ProvisioningRoleStore)
+}
+
+// TenantRoleLifecycle access 提供：清理租户生命周期结束后的角色及关联数据。
+// 供 tenant 能力经端口调用，避免跨能力直接操作 roles/user_roles/role_permissions。
+type TenantRoleLifecycle interface {
+	DeleteTenantRoles(ctx context.Context, tenantID uint64) error
+}
+
+type TenantRoleLifecycleBinder interface {
+	BindTenantRoleLifecycle(TenantRoleLifecycle)
+}
+
+const TenantRoleStoreBinderPortName = "tenant.role_store_binder"
+
 type TenantProvisionerFactory interface {
 	Enabled() bool
 	Build(users AccountRepository, roles ProvisioningRoleStore) TenantProvisioner
 }
 
 const (
-	StoragePortName  = "storage"
-	UserinfoPortName = "user.info"
+	StoragePortName    = "storage"
+	TenantInfoPortName = "tenant.info" // TenantInfoSource；同一实现同时提供 TenantStateSource
+	UserinfoPortName   = "user.info"   // UserinfoSource；同一实现同时提供 UserStateSource
 )
 
 type AuthConfig struct {
@@ -78,8 +95,12 @@ type ProvisioningRoles struct {
 }
 
 type ProvisioningRole struct {
-	Name, Description string
-	Permissions       []ProvisioningPermission
+	Code        string
+	Scope       RoleScope
+	System      bool
+	Name        string
+	Description string
+	Permissions []ProvisioningPermission
 }
 
 type ProvisioningPermission struct{ Resource, Action string }
@@ -103,6 +124,24 @@ type Userinfo struct {
 	CreatedAt time.Time
 }
 
+// TenantInfo 租户概要视图，供用户等能力的响应回填租户名称。
+type TenantInfo struct {
+	ID   uint64
+	Name string
+}
+
+// TenantInfoSource tenant 能力提供的只读租户概要端口。
+type TenantInfoSource interface {
+	// GetByIDs 批量读取租户；不存在的 ID 不出现在结果中。
+	GetByIDs(ctx context.Context, ids []uint64) (map[uint64]TenantInfo, error)
+}
+
+// TenantStateSource tenant 能力提供的只读租户状态端口。
+// 未找到（含软删除）或已停用均返回 false。
+type TenantStateSource interface {
+	TenantActive(ctx context.Context, tenantID uint64) (bool, error)
+}
+
 // UserinfoSource UserInfoService 所需的用户只读数据端口，
 // 由 user 能力提供实现，替代消费方对 user/domain 的直接引用。
 type UserinfoSource interface {
@@ -112,6 +151,12 @@ type UserinfoSource interface {
 	FindByUsername(ctx context.Context, username string) (*Userinfo, error)
 	// List 分页查用户（page 从 1 起；按 id 降序，平台级视角不过滤租户）。
 	List(ctx context.Context, page, pageSize int) ([]Userinfo, int64, error)
+}
+
+// UserStateSource 用户能力提供的只读用户状态端口。
+// 未找到（含软删除）或已停用均返回 false。
+type UserStateSource interface {
+	UserActive(ctx context.Context, userID uint64) (bool, error)
 }
 
 // TokenPair 登录完成后的令牌视图。
@@ -215,9 +260,21 @@ type CaptchaVerifier interface {
 	Verify(ctx context.Context, id, code string) error
 }
 
-// UserRoleAssigner access 提供：替换用户的全部角色（user_roles 表所有者）。
+// UserRole 用户角色概要。
+type UserRole struct {
+	ID   uint64
+	Name string
+}
+
+// UserRoleAssigner access 提供：读写用户角色（user_roles 表所有者）。
 // 供 user 能力的管理面用例经端口调用，避免跨能力写他人的表。
 type UserRoleAssigner interface {
-	// AssignRoles 用 roleNames 替换该用户的全部角色；角色名在用户所属租户内解析。
-	AssignRoles(ctx context.Context, userID uint64, roleNames []string) error
+	// AssignRoleIDs 用 roleIDs 替换该用户的全部角色；角色必须属于用户所属租户。
+	AssignRoleIDs(ctx context.Context, userID uint64, roleIDs []uint64) error
+	// RolesForUsers 批量返回用户当前角色，供列表/详情回填。
+	RolesForUsers(ctx context.Context, userIDs []uint64) (map[uint64][]UserRole, error)
+	// EnsureCanDeactivateUser 阻止移除最后一个有效平台超级管理员。
+	EnsureCanDeactivateUser(ctx context.Context, userID uint64) error
+	// RemoveUserRoles 清理用户生命周期结束后的全部角色关联。
+	RemoveUserRoles(ctx context.Context, userID uint64) error
 }

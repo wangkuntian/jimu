@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"jimu/internal/capabilities/user/application"
@@ -37,7 +38,7 @@ func TestT1_1_T1_2_UserTenantAssignment(t *testing.T) {
 	require.NoError(t, tdb.Truncate("users"), "清空 users 表")
 
 	repo := NewMysqlRepository(tdb.DB)
-	svc := application.NewUserService(repo, nil)
+	svc := application.NewUserService(repo, staticTenantInfoSource{})
 
 	tenantID := uint64(testutil.RandomInt(100000, 400000))
 	ctx := tenant.WithTenant(context.Background(), tenantID)
@@ -46,18 +47,33 @@ func TestT1_1_T1_2_UserTenantAssignment(t *testing.T) {
 		Password: "password1",
 	})
 	require.NoError(t, err)
-	row, err := repo.FindByID(context.Background(), created.ID)
+	createdID, err := strconv.ParseUint(created.ID, 10, 64)
+	require.NoError(t, err)
+	row, err := repo.FindByID(context.Background(), createdID)
 	require.NoError(t, err)
 	assert.Equal(t, tenantID, row.TenantID, "T1.1 有租户上下文时必须落该租户")
 
 	fallback, err := svc.Create(context.Background(), application.CreateUserRequest{
+		TenantID: strconv.FormatUint(tenant.DefaultTenantID, 10),
 		Username: "t1_2_" + testutil.RandomString(8),
 		Password: "password1",
 	})
 	require.NoError(t, err)
-	row, err = repo.FindByID(context.Background(), fallback.ID)
+	fallbackID, err := strconv.ParseUint(fallback.ID, 10, 64)
 	require.NoError(t, err)
-	assert.Equal(t, tenant.DefaultTenantID, row.TenantID, "T1.2 tid=0 时必须落默认租户")
+	row, err = repo.FindByID(context.Background(), fallbackID)
+	require.NoError(t, err)
+	assert.Equal(t, tenant.DefaultTenantID, row.TenantID, "平台视角显式指定默认租户时必须落该租户")
+}
+
+type staticTenantInfoSource struct{}
+
+func (staticTenantInfoSource) GetByIDs(_ context.Context, ids []uint64) (map[uint64]contract.TenantInfo, error) {
+	out := make(map[uint64]contract.TenantInfo, len(ids))
+	for _, id := range ids {
+		out[id] = contract.TenantInfo{ID: id}
+	}
+	return out, nil
 }
 
 // T1.5 用户名与邮箱盲索引必须**跨租户全局唯一**（服务层预检之外的 DB 兜底）。
@@ -110,14 +126,14 @@ func TestT1_6_T3_4_UserListIsTenantScopedUnlessPlatformView(t *testing.T) {
 	require.NoError(t, repo.Create(context.Background(), &domain.User{Username: "b_" + testutil.RandomString(8), Password: "x", Status: 1, TenantID: tenantB}))
 
 	ctxA := tenant.WithTenant(context.Background(), tenantA)
-	scoped, _, err := repo.List(ctxA, tenant.FromContext(ctxA), 0, 500, "id", "desc")
+	scoped, _, err := repo.List(ctxA, domain.UserListFilter{TenantID: tenant.FromContext(ctxA)}, 0, 500, "id", "desc")
 	require.NoError(t, err)
 	assert.True(t, containsTenant(scoped, tenantA), "T1.6 必须能看到本租户记录")
 	for _, u := range scoped {
 		assert.NotEqual(t, tenantB, u.TenantID, "T1.6 不得看到其他租户的记录")
 	}
 
-	platform, _, err := repo.List(context.Background(), tenant.FromContext(context.Background()), 0, 500, "id", "desc")
+	platform, _, err := repo.List(context.Background(), domain.UserListFilter{TenantID: tenant.FromContext(context.Background())}, 0, 500, "id", "desc")
 	require.NoError(t, err)
 	assert.True(t, containsTenant(platform, tenantA) && containsTenant(platform, tenantB), "T3.4 平台级视角必须不过滤")
 }

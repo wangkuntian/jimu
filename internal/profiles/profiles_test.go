@@ -1,19 +1,34 @@
 package profiles_test
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"testing"
+	"time"
 
+	"jimu/internal/app"
 	"jimu/internal/assembly"
+	roledomain "jimu/internal/capabilities/access/domain"
 	"jimu/internal/capabilities/catalog"
+	tenantdomain "jimu/internal/capabilities/tenant/domain"
+	userdomain "jimu/internal/capabilities/user/domain"
+	"jimu/internal/config"
 	"jimu/internal/contract"
+	"jimu/internal/kernel/logger"
+	"jimu/internal/profiles"
 	"jimu/internal/profiles/enterprise"
 	"jimu/internal/profiles/full"
 	"jimu/internal/profiles/machine"
 	"jimu/internal/profiles/minimal"
 	"jimu/internal/profiles/saas"
+	"jimu/internal/shared/testutil"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // profileAssemblies 是设计 §2 的 5 个形态入口。
@@ -123,4 +138,96 @@ func providedPorts(t *testing.T, a assembly.Assembly) map[string]bool {
 		}
 	}
 	return out
+}
+
+// newProfilesSqliteDB 打开独立的内存 sqlite（命名共享缓存的理由同 internal/app/seed_test.go：
+// 普通 :memory: 每连接一个库，事务与查询可能落在不同连接上看不到表）。
+func newProfilesSqliteDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	dsn := fmt.Sprintf("file:profiles_seed_%d?mode=memory&cache=shared", time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	return db
+}
+
+// TestStructuralSeedSkipsWithNoAdminPassword 钉住启动行为不变：ADMIN_PASSWORD 与
+// ADMIN_PASSWORD_FILE 都未设置时
+// StructuralSeed 必须正常返回 nil（容器启动早于 CLI 迁移，表可能还不存在），且只有库中
+// 确实一个账号都没有时才补 error 级自检提示（app.WarnIfNoAccounts）。
+func TestStructuralSeedSkipsWithNoAdminPassword(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD_FILE", "")
+	t.Setenv("ADMIN_PASSWORD", "")
+
+	cases := []struct {
+		name       string
+		migrate    bool
+		wantNoAcct bool
+	}{
+		{name: "empty database warns and returns nil", migrate: true, wantNoAcct: true},
+		{name: "unmigrated database stays quiet and returns nil", migrate: false, wantNoAcct: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := newProfilesSqliteDB(t)
+			if tc.migrate {
+				require.NoError(t, db.AutoMigrate(&userdomain.User{}))
+			}
+
+			logPath := filepath.Join(t.TempDir(), "server.log")
+			log := logger.New(config.LogConfig{Output: logPath})
+			ctx, _, err := assembly.WireFor(
+				&app.Container{Config: &config.Config{}, DB: db, Logger: log},
+				nil, nil, assembly.Assembly{Name: "structural-seed-test"}, nil,
+			)
+			require.NoError(t, err)
+
+			require.NoError(t, profiles.StructuralSeed(ctx), "跳过路径必须返回 nil，服务启动不得失败")
+
+			out, err := os.ReadFile(logPath)
+			require.NoError(t, err)
+			require.Contains(t, string(out), "ADMIN_PASSWORD_FILE")
+			if tc.wantNoAcct {
+				require.Contains(t, string(out), "no account exists")
+			} else {
+				require.NotContains(t, string(out), "no account exists")
+			}
+		})
+	}
+}
+
+func TestStructuralSeedUsesAdminPasswordFile(t *testing.T) {
+	t.Chdir(testutil.RepoRoot(t))
+	passwordFile := filepath.Join(t.TempDir(), "admin_password")
+	require.NoError(t, os.WriteFile(passwordFile, []byte("secret-from-file\n"), 0o600))
+	t.Setenv("ADMIN_PASSWORD_FILE", passwordFile)
+	t.Setenv("ADMIN_PASSWORD", "")
+
+	db := newProfilesSqliteDB(t)
+	require.NoError(t, db.AutoMigrate(
+		&roledomain.Permission{},
+		&roledomain.Role{},
+		&userdomain.User{},
+		&tenantdomain.Tenant{},
+		&tenantdomain.Plan{},
+	))
+	require.NoError(t, db.Exec("CREATE TABLE role_permissions (role_id INTEGER, permission_id INTEGER)").Error)
+	require.NoError(t, db.Exec("CREATE TABLE user_roles (user_id INTEGER, role_id INTEGER)").Error)
+
+	log := logger.New(config.LogConfig{Output: filepath.Join(t.TempDir(), "server.log")})
+	ctx, _, err := assembly.WireFor(
+		&app.Container{Config: &config.Config{}, DB: db, Logger: log},
+		nil, nil, assembly.Assembly{Name: "structural-seed-admin-file-test"}, nil,
+	)
+	require.NoError(t, err)
+	require.NoError(t, profiles.StructuralSeed(ctx))
+
+	var admin userdomain.User
+	require.NoError(t, db.Where("username = ?", "admin").First(&admin).Error)
+	require.NoError(t, bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte("secret-from-file")))
 }

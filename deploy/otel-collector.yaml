@@ -30,7 +30,8 @@ exporters:
     tls:
       insecure: true
     headers:
-      # token 从 secret 文件读取（make secrets 生成；值 = base64(email:password)）
+      # token 从 secret 文件读取；本地 Compose 由 make up-observability 生成，
+      # 值为 base64(email:password)
       authorization: "Basic ${file:/run/secrets/zo_auth_token}"
       organization: ${env:ZO_ORG}
 

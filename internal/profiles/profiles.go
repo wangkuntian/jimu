@@ -6,8 +6,6 @@
 package profiles
 
 import (
-	"os"
-
 	"jimu/internal/app"
 	"jimu/internal/assembly"
 )
@@ -26,11 +24,14 @@ var Version = "dev"
 // 迁移自 P2.6 起跟随形态裁剪，但**带上 schema 依赖**（见 catalog.MigrationSchemaDeps）：
 // 含 user/access 的形态会一并迁移 tenant 的建表/加列，因此 tenants/tenant_plans 表与
 // users/roles.tenant_id 列在各形态都存在，种子照常可执行。
-// 种子需要部署期凭据 ADMIN_PASSWORD（RunSeed 的前置条件），未提供时跳过并告警：
+// 种子需要部署期凭据 ADMIN_PASSWORD_FILE（回退 ADMIN_PASSWORD；RunSeed 的前置条件），未提供时跳过并告警：
 // 容器启动早于 CLI 迁移、compose 也不向 server 注入该变量，服务启动不应因缺少该变量而失败。
+// 跳过时还会在**库中无任何账号**的情况下补一条 error 级提示（app.WarnIfNoAccounts）：
+// 关闭公开注册又没种出 admin 的部署将没有任何可用登录，必须显式告知下一步。
 func StructuralSeed(ctx *assembly.Context) error {
-	if os.Getenv("ADMIN_PASSWORD") == "" {
-		ctx.Logger().Warnw("structural seed skipped", "missing", "ADMIN_PASSWORD")
+	if app.AdminPassword() == "" {
+		ctx.Logger().Warnw("structural seed skipped", "missing", "ADMIN_PASSWORD or ADMIN_PASSWORD_FILE")
+		app.WarnIfNoAccounts(ctx.DB(), ctx.Logger())
 		return nil
 	}
 	return app.RunSeedWithCasbin(ctx.DB(), ctx.Capabilities())

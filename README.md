@@ -6,9 +6,11 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 
 - **模块化架构** — Clean Architecture 分层，业务逻辑依赖接口不依赖实现
 - **统一认证** — typed JWT + Redis refresh session + Casbin RBAC v3 权限模型；API Key 认证（服务/机器间调用，`X-API-Key` 头 + `apikey.APIKeyAuthMiddleware` + `apikey.RequireScope` scope 校验，复用 `api_keys` 表并按 `tenant_id` 归属租户，认证后自动注入租户上下文；能力标签与 Scope 约定见 [API Key 与 Scope](#api-key-与-scope)）
-- **租户体系** — 单归属多租户：`tenants` 表 + 租户 CRUD API（`/api/v1/tenants`），`users`/`roles`/`audit_logs`/`api_keys` 携带 `tenant_id` 做行级隔离，任务队列（`jobs`/`job_history`/`dead_letters`）、导入任务（`import_jobs`）与可信设备（`trusted_devices`）同样归属租户；租户身份写入 JWT claim（`tid`）经中间件注入请求上下文，不接受客户端 header 传入；存量数据迁移时归入默认租户（`code=default`），角色名唯一性为租户内唯一，用户名/邮箱保持全局唯一（登录无需传租户标识）；归属关系为**租户 1:N 用户、用户单归属且不可跨租户**（见 [归属模型](#归属模型)）
+- **租户体系** — 单归属多租户：`tenants` 表 + 租户 CRUD API（`/api/v1/tenants`），`users`/`roles`/`audit_logs`/`api_keys` 携带 `tenant_id` 做行级隔离，任务队列（`jobs`/`job_history`/`dead_letters`）、导入任务（`import_jobs`）与可信设备（`trusted_devices`）同样归属租户；租户身份写入 JWT claim（`tid`）经中间件注入请求上下文，不接受客户端 header 传入；存量数据迁移时归入默认租户（`code=default`），角色名唯一性为租户内唯一，用户名/邮箱保持全局唯一（登录无需传租户标识）；归属关系为**租户 1:N 用户、用户单归属且不可跨租户**（见 [归属模型](#归属模型)）。删除租户时在同一事务内清理其角色、`role_permissions` 与相关 `user_roles`；角色列表只返回所属租户仍有效的角色
+- **租户状态阻断** — `full`/`saas` 等装配 `tenant` 能力的形态会在密码登录、Passkey/OAuth 登录收尾、refresh 和每次受保护 JWT 请求中校验 `tid` 对应租户存在且 `status=1`；租户停用或软删除后，新登录与 refresh 被拒绝，已签发的 access token 也在下一次请求返回 401，不再依赖 token 自然过期
+- **用户状态阻断** — 停用或删除用户时同步吊销该用户全部 Redis 会话；删除还会在同一事务内清理 `user_roles`，避免角色因残留关联无法删除。refresh 与每次受保护 JWT 请求还会经 `contract.UserStateSource` 复核用户仍存在且 `status=1`。因此用户被停用或软删除后，已有 refresh token 无法继续轮换，未过期的 access token 也在下一次请求返回 401
 - **租户运营（套餐 / 配额 / 用量）** — `tenant_plans` 定义资源上限（`max_users`/`max_roles`/`max_api_keys`，0=不限），`tenants.plan_id=0` 表示未分配套餐（不受限，保持向后兼容）；创建用户（管理端与公开注册）、角色、API Key 前校验上限，超限返回新增错误码 `5005`/403 且不影响既有数据；`GET /api/v1/tenants/usage` 返回当前租户套餐与各项用量，`/api/v1/tenant-plans` 管理套餐定义、`PUT /api/v1/tenants/{id}/plan` 分配套餐（`jimu seed` 会内置一个未分配的 `free` 示例套餐）
-- **开通式注册** — 可选的 SaaS 语义（`tenant.provisioning.enabled`）：注册即单事务开通新租户，注册者成为 owner，按可配置的角色模板自动初始化租户角色与全局权限绑定（模板模式，全部可配置：开关/owner 角色/角色与权限模板）；未启用时注册用户归默认租户
+- **开通式注册** — 可选的 SaaS 语义（`tenant.provisioning.enabled`）：注册即单事务开通新租户，自动创建 `tenant_admin`、`tenant_member` 两个内置角色，注册者默认成为 `tenant_admin` owner；`tenant.provisioning.roles` 用于追加自定义租户角色；未启用时注册用户归默认租户
 - **密码重置** — 邮箱验证码自助重置（`POST /api/v1/auth/forgot-password` + `reset-password`），6 位数字码 Redis 一次性存储，防用户枚举，重置后强制登出全部会话
 - **敏感信息脱敏** — `kernel/mask` 提供手机号/邮箱/身份证/银行卡/姓名/IP 等脱敏函数与按字段名判定（`RedactByKey`/`Map`）；日志链路（文件、stdout、OTLP 导出）统一接入，凭证类字段整体替换为 `***`、PII 部分保留，避免明文落盘
 - **敏感字段加密** — AES-256-GCM 字段级加密 + HMAC-SHA256 盲索引（email/phone，`security.encryption_key` 配置后启用；未配置时明文模式，功能不受影响）
@@ -94,87 +96,83 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 
 ### 前置条件
 
+- Docker 24+（含 Compose v2）
 - Go 1.26+
-- MariaDB 10.5+
-- Redis 6+
 
-### 安装
+### 首次启动
 
 ```bash
 git clone https://github.com/your-org/jimu.git
 cd jimu
-go mod download
+make init       # 仅首次需要，可检查生成的 admin 密码
+make up         # 按需构建 jimu:dev 并启动核心栈
 ```
 
-### 配置
+业务配置只看 `configs/app.yaml`。`secrets/` 由 `make init` 或 `make up` 自动生成，文件权限为 `0600`，不要手工编辑；正常启动不会读取项目根 `.env`。旧 `.env` 只允许通过公开的 `make init` 做一次性迁移：
 
 ```bash
-cp .env.example .env
-# 编辑 .env 修改数据库、Redis、OpenObserve、OTEL 推送等连接信息
+make init       # 检测到项目根 .env 时会显式迁移
+LEGACY_ENV_FILE=/path/to/old/.env make init  # 或指定其它旧文件
 ```
 
-`.env.example` 覆盖全部可调环境变量（镜像/端口/数据卷、OpenObserve 账号与端口、OTEL 开关与端点）：
-- **docker compose** 自动读取项目根 `.env` 做变量插值（也可用 `--env-file` 指定）
-- **make** 通过 `include .env + export` 将变量注入子进程（deploy 脚本、compose 命令）
-- docker-compose.yml 内的 `${VAR:-默认}` 均可在 `.env` 覆盖，缺省用 yml 内默认值
+`make up` 只补齐缺失 Secret，绝不传入 `LEGACY_ENV_FILE`；随后以 `--env-file /dev/null` 启动 Compose。镜像仅在缺失或构建输入变化时重建，否则复用现有 `jimu:dev`；再由一次性 `jimu-init` 等待 MariaDB/Redis、执行迁移和结构种子，最后启动 `server`。管理员初始密码保存在 `secrets/admin_password.txt`：必须为 8-32 位、同时包含字母和数字且不能包含空白字符；留空时自动生成 32 位十六进制随机密码。
 
-### 方式一：本地运行
+`secrets/*.txt` 与已有 MariaDB 数据卷中的账号密码绑定。改写 Secret 文件不会自动修改库内密码；请先轮换数据库账号密码，再执行 `make restart`，避免因凭据不一致反复重启。
+
+镜像标签由 `VERSION` 控制；本地二进制版本由 `APP_VERSION` 控制：
 
 ```bash
-# 1. 启动依赖
-docker compose up -d mariadb redis
-
-# 2. 运行迁移
-make migrate
-
-# 3. 初始化数据（管理员密码通过环境变量提供）
-ADMIN_PASSWORD=admin123 make seed
-
-# seed 写入：默认租户（code=default）、基础权限（含租户管理）、超级管理员角色、admin 用户
-
-# 4. 启动服务
-make run
+make up VERSION=v0.4.0
+make image VERSION=v0.4.0   # 同时生成 jimu:v0.4.0 与 jimu:latest
 ```
 
-### 方式二：Docker Compose 一键启动
+`make up` / `make migrate` 等构建型命令会按源码指纹复用镜像；`make migrate-status` 直接在运行中的 `server` 容器执行，不构建镜像。需要强制重建时运行 `make image`。
+
+### 本地热重载开发
 
 ```bash
-# 1. 构建镜像
-make docker-build
-
-# 2. 创建密码文件
-mkdir -p secrets
-echo "your-root-password" > secrets/db_root_password.txt
-echo "your-db-password" > secrets/db_password.txt
-openssl rand -hex 32 > secrets/jwt_secret.txt
-
-# 3. 启动全部服务
-make compose-up
-
-# 4. 运行迁移
-docker compose run --rm server ./jimu migrate up
-
-# 5. 初始化数据
-docker compose run --rm -e ADMIN_PASSWORD=admin123 server ./jimu seed
+go install github.com/air-verse/air@latest
+make dev
 ```
 
-`secrets/*.txt` 仅在 MariaDB 数据卷首次初始化时创建数据库账号。已存在数据卷时，改写 Secret 文件不会自动修改库内密码；请先轮换数据库账号密码，再重启 `server`，避免因凭据不一致反复重启。
+`make dev` 启动本地 MariaDB/Redis 依赖，使用 `secrets/` 中的凭据执行迁移和种子，然后通过 Air 热重载后端。
+如宿主端口已被占用，可同时设置 `JIMU_DB_HOST_PORT` / `JIMU_REDIS_HOST_PORT`；`make dev` 会把它们同步用于 Compose 端口映射和本机 `DB_PORT` / `REDIS_ADDR`。
+
+### 首次启动与前端联调
+
+首次拉起环境、或与前端（jimu-web）联调时：
+
+```bash
+# 1. 启动后端（会完成迁移、种子和启动）
+make up
+
+# 2. 另开一个终端启动前端（jimu-web）；其 Vite proxy 把 /api 转发到 http://localhost:8080
+pnpm run dev
+```
+
+联调要点：
+
+- **管理端点要用 `admin`**：`POST /auth/login` 拿到 token 后即可调 `/api/v1/tenants` 等管理接口。
+- **公开注册的用户没有角色**：`GET /api/v1/auth/me` 会返回 `200` 加空的 `roles`/`permissions`（这是会话引导的正常结果），但同一 token 调管理端点会得到 `403`。前端要把 `403` 渲染成无权限页，不要当成会话失效。
+- 注册入口是否显示、`tenant_name` 是否必填，由公开端点 `GET /api/v1/auth/config` 决定，不要靠试 `POST /auth/register` 是否 `404` 来判断。
 
 服务启动后访问：
 - API: http://localhost:8080
 - Swagger UI: http://localhost:8080/swagger/index.html （非 release 模式）
 - Management: `http://127.0.0.1:9090/livez`、`/readyz`、`/metrics`、`/capabilities`
-- Adminer: `docker compose --profile dev up -d adminer` 后访问 http://127.0.0.1:8081
+- Adminer: `make adminer` 后访问 http://127.0.0.1:8081
 
 ### 可观测性（可选）
 
-OpenObserve 监控栈（日志/指标/追踪/告警/仪表盘，替代原 Prometheus + Grafana + Loki + Promtail + AlertManager 五件套）随 `make compose-up` 按环境变量开启：
+OpenObserve 监控栈（日志/指标/追踪/告警/仪表盘，替代原 Prometheus + Grafana + Loki + Promtail + AlertManager 五件套）只在显式启动观测栈时创建：
 
 ```bash
-make compose-up                       # OTEL_ENABLED 默认开启；OTEL_ENABLED=false make compose-up 关闭
+make up-observability
 ```
 
-- OpenObserve UI/API: http://127.0.0.1:5080 （默认账号 admin@jimu.local / Admin@12345，可用 `ZO_OBSERVE_ROOT_USER_EMAIL` / `ZO_OBSERVE_ROOT_USER_PASSWORD` 覆盖）
+该目标先启动核心栈与观测栈，再执行 `scripts/observability.sh start` 初始化 dashboard。默认告警只在设置 `ZO_ALERT_WEBHOOK_URL` 后同步；未设置时跳过，不影响 dashboard。
+
+- OpenObserve UI/API: http://127.0.0.1:5080 （账号与密码保存在 `secrets/openobserve.env`；默认账号 `admin@jimu.local`，迁移旧 `.env` 时保留自定义邮箱）
 - OTLP gRPC: `127.0.0.1:5081`（tracing / metrics / logs 统一入口）
 - 默认 dashboard **Jimu Overview**：开启时自动创建（幂等），含 17 面板：stat 卡片（错误日志/日志总量/DB 连接池/Goroutines）、时间序列（DB/运行时/日志/HTTP/依赖熔断/MySQL/Redis）、最近错误日志表格
 - 官方数据库 dashboard **MySQL Metrics Monitoring** / **Redis Metrics Dashboard**：随启动自动创建（数据来自 OTel Collector 采集的 `mysql_*` / `redis_*` 指标流）；可选的 **PostgreSQL**（opentelemetry-contrib 采集）见下文
@@ -182,8 +180,11 @@ make compose-up                       # OTEL_ENABLED 默认开启；OTEL_ENABLED
 **Dashboard 配置与同步（面板进 git）**：dashboard 定义保存在 `deploy/openobserve/dashboards/*.json`（v8 结构，含面板查询与布局），启动时按此文件创建/重建；MySQL/Redis 官方模板取自 [openobserve/dashboards](https://github.com/openobserve/dashboards) 并归一为 v8 结构与 192 列网格布局入库（官方原始文件为旧版小网格，直接导入面板会缩成一条）：
 
 ```bash
-./deploy/openobserve/sync-dashboard.sh                # 应用 dashboards/*.json（幂等：同名重建）
-./deploy/openobserve/sync-dashboard.sh --export 名称  # 线上 dashboard 导出为 json（UI 微调后同步回 git）
+set -a; . secrets/openobserve.env; set +a
+ZO_EMAIL="$ZO_ROOT_USER_EMAIL" ZO_PASSWORD="$ZO_ROOT_USER_PASSWORD" \
+  ./deploy/openobserve/sync-dashboard.sh              # 应用 dashboards/*.json（幂等：同名重建）
+ZO_EMAIL="$ZO_ROOT_USER_EMAIL" ZO_PASSWORD="$ZO_ROOT_USER_PASSWORD" \
+  ./deploy/openobserve/sync-dashboard.sh --export 名称 # 线上 dashboard 导出为 json（UI 微调后同步回 git）
 ```
 
 JSON 中维护面板查询（`queries.fields` 流与轴映射、`type` 渲染类型）与布局（`layout` 网格坐标）；在 UI 手工调整后可用 `--export` 拉回并提交（运行时元数据自动剥离）。
@@ -191,19 +192,23 @@ JSON 中维护面板查询（`queries.fields` 流与轴映射、`type` 渲染类
 **默认告警（可选）**：内置 8 条告警规则（`deploy/openobserve/alerts/jimu_*.json`，覆盖错误日志激增、HTTP 5xx 占比、DB 连接池饱和、队列死信、Outbox 发布失败、依赖熔断、MySQL 线程数、Redis key 淘汰），经 OpenObserve v2 告警 API 同步（幂等：存在则更新，否则创建）。创建告警必须绑定已存在的通知目的地，因此同步依赖 `ZO_ALERT_WEBHOOK_URL`：
 
 ```bash
-# .env 设置后 make compose-up 随监控栈启动自动同步；webhook 指向企业微信/钉钉/飞书/Slack 等网关均可
-ZO_ALERT_WEBHOOK_URL=https://example.com/webhook
-./deploy/openobserve/sync-alerts.sh                   # 手工同步（含通知模板 jimu_alert_http + 目的地 jimu_webhook）
+# 启动观测栈时同步；webhook 指向企业微信/钉钉/飞书/Slack 等网关均可
+ZO_ALERT_WEBHOOK_URL=https://example.com/webhook make up-observability
+
+set -a; . secrets/openobserve.env; set +a
+ZO_EMAIL="$ZO_ROOT_USER_EMAIL" ZO_PASSWORD="$ZO_ROOT_USER_PASSWORD" \
+ZO_ALERT_WEBHOOK_URL=https://example.com/webhook \
+  ./deploy/openobserve/sync-alerts.sh                  # 手工同步（含通知模板 jimu_alert_http + 目的地 jimu_webhook）
 ```
 
 - `ZO_ALERT_WEBHOOK_URL` 留空时跳过同步（不影响其它功能），告警也可在 UI 内手工配置
 - 告警创建要求目标 stream 已有数据入库（按 stream schema 校验）；首次启动数据未就绪的规则会自动重试，超限跳过，稍后重跑补齐
 - 目的地固定 `jimu_webhook`（POST JSON，载荷含 `alert_name` / `stream` / `level` / `fired_count` 等），阈值为保守默认值，在 `alerts/*.json` 或 UI 中按业务调整
 
-**数据库集成（MySQL/Redis 指标）**：`make compose-up`（OTEL_ENABLED 默认开启）会同时启动 OTel Collector（`otel-collector` 服务，配置 `deploy/otel-collector.yaml`），采集 MySQL（performance_schema 指标：连接池/缓冲池/锁/慢查询相关）与 Redis（客户端/内存/命令吞吐）指标，经 OTLP/gRPC 推送到 OpenObserve（约 45 个 `mysql_*` / `redis_*` 指标流）：
+**数据库集成（MySQL/Redis 指标）**：`make up-observability` 会同时启动 OTel Collector（`otel-collector` 服务，配置 `deploy/otel-collector.yaml`），采集 MySQL（performance_schema 指标：连接池/缓冲池/锁/慢查询相关）与 Redis（客户端/内存/命令吞吐）指标，经 OTLP/gRPC 推送到 OpenObserve（约 45 个 `mysql_*` / `redis_*` 指标流）：
 
 ```bash
-docker compose --profile observability up -d otel-collector   # 单独启动采集
+make up-observability
 ```
 
 - 采集凭据：compose 内 MySQL 用 root 密码（secret `db_root_password`）；k8s/helm 生产环境默认用应用用户（`jimu`），需为其授予 `PROCESS, REPLICATION CLIENT` 权限以读取状态变量
@@ -216,7 +221,7 @@ docker compose --profile observability up -d otel-collector   # 单独启动采�
 让应用接入 OpenObserve（`otel.enabled` 开启，tracing + metrics + logs 均经 OTLP gRPC 推送）：
 
 ```bash
-make compose-up   # OTEL_ENABLED 默认开启，server 自动指向 openobserve:5081 推送
+make up-observability
 ```
 
 应用侧：`/metrics` 端点保留 Prometheus 格式供外部工具抓取；指标另按 `metrics_interval_sec` 周期转 OTLP 推送（按指标名分流成独立 stream）；结构化日志异步推送（缓冲满丢弃，不影响主链路）；日志与追踪分别写入 `jimu_logs` / `jimu_traces` stream（可用 `otel.logs_stream_name` / `otel.traces_stream_name` 调整，空值回落 OpenObserve 默认流 `default`）。内置默认告警随监控栈同步（见上文「默认告警」），其余告警在 OpenObserve UI 内配置（VQL 告警规则 + 通知渠道）。
@@ -229,7 +234,7 @@ make compose-up   # OTEL_ENABLED 默认开启，server 自动指向 openobserve:
 - **trace 关联**：请求上下文内用 `logger.WithContext(ctx)` 记录日志，自动携带 `trace_id`/`span_id` 并挂到对应 trace，OpenObserve 日志与链路可互跳。
 - **敏感信息**（密码、token、验证码、手机号原文等）禁止入日志，PII 需脱敏（如 `138****1234`）。
 
-停止：`make compose-down`（统一入口，保留数据卷）。
+停止：`make down`（停止核心栈与观测栈，保留数据卷）。
 
 ## CLI 工具
 
@@ -254,7 +259,7 @@ make cli
 ./bin/jimu migrate adopt-capabilities  # 存量库登记各能力版本表基线（升级到 v0.3.0 后执行一次）
 
 # 数据初始化
-./bin/jimu seed                     # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例；各形态均可执行）
+ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例）
 
 # API Key（命令由 apikey 能力自带：internal/capabilities/apikey/cli）
 ./bin/jimu apikey issue --name=ci --scopes=api:access   # 签发 API Key（明文只显示一次；另有 --expires-days/--created-by）
@@ -306,7 +311,9 @@ make cli
 
 ## 数据种子
 
-`jimu seed` 按当前 profile 的能力集合播种其声明的权限点。默认租户、套餐、管理员角色和管理员账户属于结构性种子；`ADMIN_PASSWORD` 未设置时跳过管理员种子并记录告警。迁移与运行时装配的边界见[能力架构](docs/design/capability-architecture.md)、[身份与租户](docs/design/identity-and-tenancy.md)和[配置与数据生命周期](docs/design/configuration-and-data-lifecycle.md)。
+`jimu seed` 按当前 profile 的能力集合播种其声明的权限点。默认租户、套餐、平台系统角色和管理员账户属于结构性种子；默认租户只创建 `platform_super_admin`、`platform_auditor` 两个平台角色，不创建租户内置角色。开发阶段不提供旧角色兼容或 adoption，数据库按新系统角色模型初始化。seed 结束前必须存在至少一个有效平台超管，否则失败。管理员密码优先从 `ADMIN_PASSWORD_FILE` 读取，回退到 `ADMIN_PASSWORD`，两者都未设置时跳过管理员种子并记录告警。Compose 的 `jimu-init` 使用自动生成的 `/run/secrets/admin_password`；`init-secrets.sh` 会在使用或复用已有文件前校验管理员密码满足 8-32 位、含字母和数字且无空白字符。
+
+服务启动期也执行同一份结构性种子（各形态共享）：`ADMIN_PASSWORD_FILE` / `ADMIN_PASSWORD` 都未设置时跳过并告警，且**当数据库中一个账号都没有**（`users` 表已存在）时追加一条 error 级日志与下一步（设置密码后重启，或开启 `auth.public_registration`）——**启动行为不变，仍成功启动**；`users` 表尚未建立（容器启动早于 CLI 迁移）或查询失败时静默降级，不影响启动。迁移与运行时装配的边界见[能力架构](docs/design/capability-architecture.md)、[身份与租户](docs/design/identity-and-tenancy.md)和[配置与数据生命周期](docs/design/configuration-and-data-lifecycle.md)。
 
 ## 形态（profile）
 
@@ -475,8 +482,9 @@ jimu/
 ├── .github/                    # GitHub Actions + Dependabot
 ├── Makefile
 ├── Dockerfile
+├── compose.observability.yml
 ├── docker-compose.yml
-└── .env.example
+└── secrets/                    # 本地生成，已 gitignore
 ```
 
 ## API 示例
@@ -586,6 +594,49 @@ curl -X POST http://localhost:8080/api/v1/auth/refresh \
   -d '{"refresh_token": "<refresh_token>"}'
 ```
 
+### 会话身份与注册开关
+
+注册开关是公开端点（无需鉴权），无论是否开放公开注册都存在：关闭时 `public_registration` 为 `false`，供前端决定是否渲染注册入口、`tenant_name` 是否必填。
+
+```bash
+curl http://localhost:8080/api/v1/auth/config
+```
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "public_registration": true,
+    "provisioning_enabled": false
+  }
+}
+```
+
+会话引导返回当前用户身份、角色与**有效权限点**（需 access token）。该端点只做认证、不做权限校验，因此零角色用户返回 `200` + 两个空数组：
+
+```bash
+curl http://localhost:8080/api/v1/auth/me \
+  -H "Authorization: Bearer <access_token>"
+```
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "user": {"id": 1, "username": "admin", "status": 1, "tenant_id": 1, "created_at": "2026-10-13T10:00:00Z"},
+    "roles": ["平台超级管理员"],
+    "permissions": [
+      {"resource": "/api/v1/admin/*", "action": "GET"},
+      {"resource": "/api/v1/tenants", "action": "GET"}
+    ]
+  }
+}
+```
+
+`roles` 仅供展示；授权判定一律用 `permissions`：`resource` 支持 `keyMatch` 通配（首个 `*` 之前的前缀相等），`action` 为 `*` 表示任意 action，客户端按 Casbin 同一语义自行匹配。`tenant_id` 取自已验签 token 的 `tid` claim，不取账号行。
+
 ### 创建用户
 
 ```bash
@@ -593,10 +644,69 @@ curl -X POST http://localhost:8080/api/v1/users \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: <uuid>" \
-  -d '{"username": "newuser", "password": "pass1234", "email": "newuser@example.com", "phone": "13800138000"}'
+  -d '{"tenant_id": "1", "username": "newuser", "password": "pass1234", "email": "newuser@example.com", "phone": "13800138000", "role_ids": ["<role_id>"]}'
 ```
 
-`email`/`phone` 可选，入库前 AES-256-GCM 加密（配置 `security.encryption_key` 时），重复校验走盲索引。
+`email`/`phone`/`role_ids` 可选，入库前 AES-256-GCM 加密（配置 `security.encryption_key` 时），重复校验走盲索引。平台身份创建用户时必须显式指定 `tenant_id`，且目标租户必须存在、启用且未删除；停用或删除的租户返回 `403`/`404`，不会落库。租户身份由后端强制使用当前租户，不接受跨租户参数，当前租户状态由认证链实时校验。用户、租户和角色的响应 ID 统一以字符串返回，避免雪花 ID 在 JavaScript 中丢精度。
+
+用户管理统一使用 `/api/v1/users`：列表/创建对应 `/api/v1/users`，详情/修改/删除对应 `/api/v1/users/{id}`，分配角色对应 `POST /api/v1/users/{id}/roles`。`PUT /users/{id}` 传 `status=0` 表示停用；`DELETE /users/{id}` 执行软删除，账号从常规查询中消失，最后一个有效平台超级管理员返回 `409`。列表支持 `username`、`status`、`tenant_id` 筛选，响应包含租户与角色摘要；分配角色按 `role_ids` 替换，角色必须属于用户所属租户。平台管理员查看默认租户时，`GET /roles/options` 会同时返回该租户的平台角色，因此可直接委派 `platform_super_admin`、`platform_auditor`；其他租户仍只返回租户角色。平台管理员与租户管理员共用这套接口，操作授权分别使用 `/api/v1/users`、`/api/v1/users/*`、`/api/v1/users/*/roles` 权限点；不再用固定管理员角色名作为接口准入条件。后端将“具备 `GET /api/v1/tenants` 权限”作为平台管理范围标记，平台身份可跨租户；没有该权限的租户管理员仍由 JWT `tid` 强制收敛。
+
+### 角色与权限管理
+
+角色管理接口挂在资源路径 `/api/v1/roles`。首版角色管理只允许平台管理员使用；租户管理员即使拥有角色管理权限点也会收到 `403`，不会进入角色管理页。角色、租户和权限 ID 在 HTTP 契约中统一使用字符串，避免雪花 ID 在 JavaScript 中丢失精度。
+
+系统角色使用稳定 code 和 scope：
+
+```text
+platform_super_admin  platform  平台超级管理员
+platform_auditor      platform  平台审计员
+tenant_admin          tenant    租户管理员
+tenant_member         tenant    租户成员
+```
+
+系统角色不能通过业务 API 改名、停用或替换权限。默认租户是平台租户，不创建租户内置角色，非平台身份不能管理默认租户用户。最后一个有效平台超管不能被移除、停用或删除。
+
+Casbin 使用 `role:<id>` 作为授权 subject；角色名称仅用于展示。平台范围由角色的 `scope=platform` 决定，不再由是否拥有 `GET /tenants` 权限推断。租户 scope 角色不能授予平台专属权限。
+
+```bash
+# 角色列表：tenant_id 可选；keyword 按名称子串匹配；status 省略时不过滤
+curl "http://localhost:8080/api/v1/roles?tenant_id=1&keyword=ops&status=1&page=1&page_size=20" \
+  -H "Authorization: Bearer <access_token>"
+
+# 创建角色：平台管理员必须显式指定 tenant_id，租户内角色名唯一
+curl -X POST http://localhost:8080/api/v1/roles \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"tenant_id":"1","name":"运营管理员","description":"负责租户运营"}'
+
+# 可分配角色选项：平台管理员指定默认租户时同时返回平台角色
+curl "http://localhost:8080/api/v1/roles/options?tenant_id=1" \
+  -H "Authorization: Bearer <access_token>"
+
+# 权限目录：前端按 page_size=100 循环拉取全部分页
+curl "http://localhost:8080/api/v1/permissions?page=1&page_size=100&sort=id&order=asc" \
+  -H "Authorization: Bearer <access_token>"
+
+# 读取角色当前权限；再整体替换，空数组表示清空
+curl http://localhost:8080/api/v1/roles/<role_id>/permissions \
+  -H "Authorization: Bearer <access_token>"
+curl -X POST http://localhost:8080/api/v1/roles/<role_id>/permissions \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"permission_ids":["<permission_id_1>","<permission_id_2>"]}'
+
+# 停用角色；更新接口传 status=1 可重新启用
+curl -X PUT http://localhost:8080/api/v1/roles/<role_id> \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"运营管理员","description":"负责租户运营","status":0}'
+
+# 永久删除未分配给用户的自定义角色
+curl -X DELETE http://localhost:8080/api/v1/roles/<role_id> \
+  -H "Authorization: Bearer <access_token>"
+```
+
+`POST /api/v1/roles` 的平台管理员请求必须指向存在、启用且未删除的租户；停用租户返回 `403`，删除或不存在返回 `404`，租户级创建继续由 JWT `tid` 强制收敛到当前租户。`PUT /api/v1/roles/{id}` 传 `status=0` 表示停用，停用会立即撤销授权但保留角色权限和用户绑定，重新启用后原绑定恢复。`DELETE /api/v1/roles/{id}` 表示永久删除自定义角色，并在同一事务内清理 `role_permissions`；角色已分配给用户时返回 `409`，系统角色返回 `403`。只有 `status=1` 的角色可被分配给用户并参与授权。权限替换会去重并在单个事务内完成，任一权限 ID 不存在时返回 `400` 且保留原权限。角色、权限或角色状态写成功后，当前进程的策略缓存会主动失效；多副本部署时其他副本仍受最长 30 秒缓存 TTL 约束。
 
 ### 忘记密码（发送验证码）
 
@@ -712,7 +822,20 @@ curl -X POST http://localhost:8080/api/v1/auth/register \
   -d '{"username":"founder1","password":"secret123","tenant_name":"Acme Inc","tenant_code":"acme"}'
 ```
 
-响应包含 `user`（owner）与 `tenant`（新租户）。owner 登录后自动获得模板中 `owner_role` 指定的角色（缺省为模板第一个角色）。`tenant_code` 统一转小写存储，不传自动生成。模板中引用的权限需先由 `jimu seed` 写入全局权限表，缺失条目跳过。未启用开通式时，注册保持普通语义（用户归默认租户，忽略租户字段）。
+两种注册模式的响应同形：`data` 为 `{user, tenant?}` —— 普通注册只有 `user`，开通式注册额外返回 `tenant`（新租户）。开通事务固定创建 `tenant_admin`、`tenant_member`，owner 默认绑定 `tenant_admin`；`tenant.provisioning.roles` 只追加自定义租户角色，不能使用内置角色名称。`owner_role` 可指向 `tenant_admin` 或自定义租户角色，不能指向平台角色或 `tenant_member`。`tenant_code` 统一转小写存储，不传自动生成。模板中引用的权限需先由 `jimu seed` 写入全局权限表，缺失条目跳过。未启用开通式时，注册保持普通语义（用户归默认租户，忽略租户字段）。
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "user": {"id": 12, "username": "founder1", "status": 1, "tenant_id": 5, "created_at": "2026-10-13T10:00:00Z"},
+    "tenant": {"id": 5, "code": "acme", "name": "Acme Inc", "status": 1}
+  }
+}
+```
+
+注册不签发 token（前端注册成功后跳登录页）。`GET /api/v1/auth/config` 的 `provisioning_enabled` 决定 `tenant_name` 是否必填。
 
 相关错误码：`2002` 用户名/邮箱已存在、`5002` 租户编码已存在、`5004` 租户编码格式无效。
 
@@ -725,7 +848,7 @@ curl -X POST http://localhost:8080/api/v1/auth/register \
 - **租户 1:N 用户**：一个租户可有多个用户，一个用户只属于一个租户。结构上是 `users.tenant_id` 单列，没有用户-租户关联表。
 - **身份全局唯一**：`username` 与邮箱/手机号盲索引（`email_hash`/`phone_hash`）为全局唯一索引，同一身份不能存在于多个租户；租户归属创建后不可修改（`UpdateUserRequest` 仅支持 `status`），也没有切换租户接口。
 - **不支持一人多租**：跨租户协作请使用平台级视角（上下文无租户）或按租户归属的 API Key，而不是让同一账号加入多个租户。
-- **管理端用户接口按租户隔离**：`/api/v1/admin/users` 的列表、详情、更新、禁用、分配角色均限定在当前租户（跨租户按不存在处理），分配角色时角色名只在用户所属租户内解析。
+- **用户接口按身份范围隔离**：`/api/v1/users` 的列表、详情、更新、停用、删除与 `/api/v1/users/{id}/roles` 对租户管理员只作用于当前租户（跨租户按不存在或越界处理），平台级视角（上下文无租户）可跨租户查询和筛选。停用使用 `PUT status=0`；删除使用 `DELETE` 软删除。默认租户是平台租户，非平台身份不能管理默认租户用户。平台级创建必须显式指定 `tenant_id`；租户级创建强制使用当前租户。角色分配按角色 ID 在用户所属租户内校验，用户创建与角色写入在同一事务内完成。`/api/v1/admin/users*` 的通用 CRUD 已移除，用户导入端点仍保留为 `/api/v1/admin/users/import*`。
 - **任务与导入任务按租户隔离**：`/api/v1/admin/jobs`、`/api/v1/admin/jobs/dead-letters` 的列表/详情/重试/标记解决与 `/api/v1/admin/users/import/:id` 均限定在当前租户；任务消费时会把任务归属租户注入执行上下文（outbox 事件无任务行，租户未知，按平台级处理）。
 - **`tenant_id=0` 表示未归属**：迁移前的存量数据或绕过服务层直接写库会产生该状态，登录时会归一到默认租户（`id=1`、`code=default`）。
 - **套餐与配额**：套餐定义在 `tenant_plans`，租户通过 `tenants.plan_id` 关联；`plan_id=0` 或套餐上限为 0 时不受限制。配额只在创建前校验（创建用户/角色/API Key），已超限的存量数据不会被删除；`users`/`roles` 统计排除软删除记录，`api_keys` 为硬删除直接计数。批量导入用户不逐行校验配额。
@@ -737,8 +860,8 @@ curl -X POST http://localhost:8080/api/v1/tenants \
   -H "Content-Type: application/json" \
   -d '{"code": "acme", "name": "Acme Inc"}'
 
-# 租户列表（分页）
-curl "http://localhost:8080/api/v1/tenants?page=1&page_size=20" \
+# 租户列表（分页 + 可选筛选：keyword 模糊匹配 code/name，status 0-停用 1-启用）
+curl "http://localhost:8080/api/v1/tenants?page=1&page_size=20&keyword=acme&status=1" \
   -H "Authorization: Bearer <access_token>"
 
 # 租户详情
@@ -756,7 +879,11 @@ curl -X DELETE http://localhost:8080/api/v1/tenants/<tenant_id> \
   -H "Authorization: Bearer <access_token>"
 ```
 
-相关错误码：`5001` 租户不存在、`5002` 租户编码已存在、`5003` 默认租户受保护、`5004` 租户编码格式无效。
+`keyword` 里的 `%`/`_`/`!` 会被转义（`!` 是转义字符本身），按字面子串匹配（不会退化成通配）；`status` 只在**传参**时过滤，要「不过滤」必须省略该参数（`?status=` 这样的空值会绑定为 `0`，即只查停用）。
+
+默认租户（`id=1`、`code=default`）不可停用，返回 `5003`；当前身份所属租户也不能停用，返回 `403`（`1003`），避免管理员自锁。平台管理员仍可停用其他租户。已有 access token 在租户停用后由认证链实时校验并拒绝，不需要等待 token 过期。
+
+相关错误码：`5001` 租户不存在、`5002` 租户编码已存在、`5003` 默认租户受保护、`5004` 租户编码格式无效、`5006` 套餐不存在。
 
 ### 租户运营（套餐 / 配额 / 用量）
 
@@ -773,7 +900,7 @@ curl -X POST http://localhost:8080/api/v1/tenant-plans \
 curl -X PUT http://localhost:8080/api/v1/tenants/2/plan \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
-  -d '{"plan_id":1}'
+  -d '{"plan_id":"1"}'
 
 # 3. 查看当前租户用量与上限
 curl http://localhost:8080/api/v1/tenants/usage \
@@ -788,7 +915,7 @@ curl http://localhost:8080/api/v1/tenants/usage \
   "message": "ok",
   "data": {
     "tenant_id": 2,
-    "plan": {"id": 1, "code": "free", "name": "免费版", "max_users": 10, "max_roles": 5, "max_api_keys": 2},
+    "plan": {"id": "1", "code": "free", "name": "免费版", "max_users": 10, "max_roles": 5, "max_api_keys": 2},
     "users": {"used": 3, "limit": 10},
     "roles": {"used": 2, "limit": 5},
     "api_keys": {"used": 0, "limit": 2}
@@ -796,7 +923,7 @@ curl http://localhost:8080/api/v1/tenants/usage \
 }
 ```
 
-创建资源超限时返回 `5005`/403（`{"code":5005,"message":"users quota exceeded"}`）。套餐仍被租户使用时不可删除（`409`），避免租户静默失去约束；`PUT /api/v1/tenant-plans/{id}` 更新上限、`DELETE /api/v1/tenant-plans/{id}` 下线套餐。
+套餐与租户响应中的 `id`/`plan_id` 均按十进制字符串输出，避免雪花 ID 超出 JavaScript 安全整数范围后被舍入；分配请求的 `plan_id` 同样以字符串传递，同时兼容旧客户端的 JSON number。创建资源超限时返回 `5005`/403（`{"code":5005,"message":"users quota exceeded"}`）。套餐仍被租户使用时不可删除（`409`），避免租户静默失去约束；`PUT /api/v1/tenant-plans/{id}` 更新上限、`DELETE /api/v1/tenant-plans/{id}` 下线套餐。
 
 ### API Key 与 Scope
 
@@ -865,10 +992,16 @@ curl http://localhost:8080/api/v1/admin/monitoring/status \
 
 只读端点，不消费令牌地查看某 `scope` + `key` 的当前计数与剩余窗口（如登录爆破防护）：
 
+> **⚠️ 已知限制**：该端点目前**运行时不可用** —— `console` 能力声明 `MountSelfManaged`，其 `/api/v1/admin/*` 挂在未套认证链的根路由上，组内又用 `AdminAuth()` 读 gin context 的 `user_id`/`roles`（无人写入），因此**即使带合法的管理员 token 也会返回 401**。契约地址与鉴权声明已修正（见 `docs/releases/v0.4.0.md`），接线修复列为本仓后续项。下面的示例展示的是修复接线后应有的行为。
+
 ```bash
 curl "http://localhost:8080/api/v1/admin/ratelimit/auth?scope=login&key=ip:1.2.3.4" \
   -H "Authorization: Bearer <access_token>"
 ```
+
+### WebSocket 管理端握手
+
+`GET /api/v1/admin/ws?token=<access_token>` 在升级连接前除了验签 JWT，还会通过装配期注入的用户/租户状态端口校验账号与 `tid` 对应用户、租户仍存在且启用。用户或租户停用/删除时返回 `401` 且不升级；状态查询故障 fail-closed。`tid=0` 的平台级上下文没有具体租户可校验。该校验只覆盖**新握手**，已经建立的 WebSocket 连接不会因后续停用/删除被主动断开。
 
 响应：
 
@@ -932,9 +1065,11 @@ curl http://127.0.0.1:9090/capabilities
 | 环境 | 配置文件 | 说明 |
 |------|----------|------|
 | 开发 | `app.yaml` | 默认，日志输出到 stdout |
-| 生产 | `app.prod.yaml` | JSON 日志、文件滚动、release 模式 |
+| 生产 | `app.prod.yaml` | 仅覆盖生产差异：release 模式、安全头、连接池与日志等 |
 
 优先级：`环境变量 > app.{env}.yaml > app.yaml`
+
+`configs/app.yaml` 是业务配置事实源；`configs/app.prod.yaml` 不复制基线默认值。正常入口不读取项目根 `.env`，Compose 配置使用 `--env-file /dev/null`。
 
 ### 环境变量
 
@@ -951,7 +1086,7 @@ JWT_SECRET_FILE=/run/secrets/jwt_secret
 ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 ```
 
-`ENCRYPTION_KEY` 不注入时字段加密退化为明文模式（功能可用，email/phone 明文落库）。
+`ENCRYPTION_KEY` / `ENCRYPTION_KEY_FILE` 未注入时字段加密退化为明文模式（功能可用，email/phone 明文落库）；非空值必须恰好 32 字节。
 
 ### 配置项
 
@@ -1044,7 +1179,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `sms.api_key` | 阿里云 AccessKey ID（生产建议 `SMS_API_KEY` 环境变量注入） | — |
 | `sms.api_secret` | 阿里云 AccessKey Secret（生产建议 `SMS_API_SECRET` 环境变量注入） | — |
 | `sms.sign_name` | 短信签名 | — |
-| `security.encryption_key` | 字段级加密密钥（≥32 字符，AES-256-GCM）；生产必须 `ENCRYPTION_KEY` 环境变量注入，否则 email/phone 明文存储 | — |
+| `security.encryption_key` | 字段级加密密钥（AES-256-GCM）；非空时必须恰好 32 字节，Compose 通过 `ENCRYPTION_KEY_FILE` 注入；未配置时 email/phone 明文存储 | — |
 | `security.csrf_secret` | CSRF 密钥；非空时启用 CSRF 中间件（Bearer 认证请求自动跳过） | — |
 | `security.content_type_options` / `frame_options` / `xss_protection` | HTTP 安全响应头（`X-Content-Type-Options` 等，留空用默认值） | 见 `DefaultSecurityConfig` |
 | `security.strict_transport` | `Strict-Transport-Security` 头 | `max-age=31536000; includeSubDomains` |
@@ -1058,7 +1193,7 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 | `otel.metrics_enabled` | 指标推送：Prometheus 指标转 OTLP 推送到 OpenObserve（`/metrics` 端点仍保留） | `true` |
 | `otel.logs_enabled` | 日志推送：zap 结构化日志异步转 OTLP logs | `true` |
 | `otel.metrics_interval_sec` | 指标推送间隔（秒），0 用默认 | `15` |
-| `otel.auth_email` / `otel.auth_password` | OpenObserve 账号凭据（OTLP/gRPC Basic Auth；生产可用 `OTEL_AUTH_EMAIL` / `OTEL_AUTH_PASSWORD`（或 `OTEL_AUTH_PASSWORD_FILE`）环境变量注入） | 与 OpenObserve 账号一致 |
+| `otel.auth_email` / `otel.auth_password` | OpenObserve 账号凭据（OTLP/gRPC Basic Auth；Compose 观测栈从 `secrets/openobserve.env` 注入 `ZO_ROOT_USER_EMAIL` / `ZO_ROOT_USER_PASSWORD`） | `admin@jimu.local` / 自动生成 |
 | `otel.org_id` | OpenObserve 组织（gRPC `organization` header；`OTEL_ORG_ID` 可覆盖） | `default` |
 | `otel.logs_stream_name` / `otel.traces_stream_name` | OpenObserve 日志 / 追踪 stream 名（gRPC `stream-name` header；`OTEL_LOGS_STREAM_NAME` / `OTEL_TRACES_STREAM_NAME` 可覆盖；空则落 OpenObserve 默认流 `default`，非法字符会被 OpenObserve 规范为 `_`） | `jimu_logs` / `jimu_traces` |
 | `http_client.timeout_sec` | 出站 HTTP 单次请求超时（秒），0 用默认 | `10` |
@@ -1152,16 +1287,26 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 
 ## Makefile 命令
 
+`VERSION` 只控制镜像标签，`APP_VERSION` 只控制本机二进制版本；`PROFILE` 同时约束构建、迁移、种子和本地开发所用形态。
+
 | 命令 | 说明 |
 |------|------|
-| `make run` | 运行服务（开发模式） |
-| `make dev` | 开发模式：fmt + vet + 构建 + 运行 |
+| `make init` | 初始化缺失的核心 Secret；旧 `.env` 的唯一公开迁移入口；已有数据卷补安全密钥时传 `ALLOW_NEW_SECURITY_KEYS=1` |
+| `make up` | 补齐 Secret（不迁移旧 `.env`）、按需构建版本镜像并启动核心栈（含迁移与种子） |
+| `make up-observability` | 启动核心栈与 OpenObserve 观测栈，并初始化 dashboard/默认告警 |
+| `make down` | 停止核心栈与观测栈（保留数据卷） |
+| `make restart` | 重启已有 Compose 容器（不重建镜像） |
+| `make status` | 查看 Compose 服务状态 |
+| `make logs` | 跟踪服务端日志 |
+| `make dev` | 启动本地依赖、迁移/种子并以 Air 热重载后端 |
+| `make image` | 唯一的显式镜像构建入口；生成 `VERSION` 标签与 `latest` |
+| `make adminer` | 显式启动 Adminer 开发工具 |
 | `make build` | 编译 server + cli |
 | `make build-server` | 编译服务端（`PROFILE=<name>` 选形态，默认 full；overlay 叠加 `./cmd/server`，产物 `bin/jimu-server[-<name>]`） |
-| `make migrate` | 执行迁移 |
+| `make migrate` | 高级运维入口：按需准备当前 `PROFILE` 镜像并通过 `jimu-init` 执行迁移 |
 | `make migrate-down` | 回滚最后一次迁移 |
-| `make migrate-status` | 查看迁移状态 |
-| `make seed` | 插入初始数据 |
+| `make migrate-status` | 在运行中的 `server` 容器查看迁移状态（不构建镜像） |
+| `make seed` | 高级运维入口：通过 `jimu-init` 插入初始数据 |
 | `make build-backup-image` | 构建备份任务镜像 `jimu-backup`（内置 mariadb-dump + pg_dump + 仓库脚本，供 K8s/Helm CronJob 使用） |
 | `make compose-db-backup` | **推荐**：在数据库容器内备份（脚本已挂载，产物落宿主机 `./backups`，gzip + 保留 7 天） |
 | `make compose-db-restore` | **推荐**：在数据库容器内恢复（`FILE=/backups/xxx.sql.gz`，破坏性，等价 `FORCE=1`） |
@@ -1179,6 +1324,7 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 | `make fmt-check` | 检查代码格式 |
 | `make lint` | golangci-lint |
 | `make check-capabilities` | 校验能力声明与迁移/驱动关系、形态生产 import 边界、非代码资产归属及生成器依赖边界；已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job |
+| `make check-config` | 校验 Secret、Compose、observability 与 Helm/K8s 部署 manifest 契约 |
 | `make check-templates` | 模板漂移门禁：用生成器在临时目录生成最小项目（`--profile=minimal`）并真构建 + 跑生成项目自己的 `check-capabilities`；用例被 `JIMU_HEAVY_MATRIX` 门控，目标内显式置 1；CI 的脚手架矩阵会覆盖这条用例 |
 | `make test-scaffold-matrix` | 本地完整运行重型脚手架矩阵（`JIMU_HEAVY_MATRIX=1`：真实生成项目 + `go build/vet/test/run`，耗时数分钟起）；CI 在发布候选 PR、手动触发或定时任务中并行运行，并聚合检查结果；`JIMU_TEST_GOCACHE=<dir>` 可指定跨运行复用的 GOCACHE |
 | `make profiles-check` | 用 overlay 构建已注册 profile 并检查依赖闭包（golden）；`JIMU_PROFILES_SMOKE=1` 时额外启动各 profile 并轮询管理端 `/readyz`（需 DB+Redis）；已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job |
@@ -1187,15 +1333,6 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 | `make swagger` | 生成 API 文档（`docs/openapi` 归 `apidocs` 能力：当前形态未编入 apidocs 时打印 `SKIP` 并成功退出；`PROFILE` 非法则失败） |
 | `make swagger-check` | 校验 OpenAPI 文档为最新（CI 的 `Capability Gates` job 复用本目标；同样按形态跳过） |
 | `make cli` | 编译 CLI |
-| `make docker-build` | 构建 Docker 镜像（`PROFILE=<name>` 选形态，经 `--build-arg PROFILE=<name>`，默认 full） |
-| `make docker-run` | 直接运行 Docker 容器 |
-| `make compose-up` | 启动所有容器 |
-| `make compose-down` | 停止所有容器 |
-| `make compose-restart` | 重启所有容器 |
-| `make compose-logs` | 查看应用日志 |
-| `make compose-migrate` | Compose 环境执行迁移 |
-| `make compose-seed` | Compose 环境插入初始数据（需 `.env` 提供 `ADMIN_PASSWORD`，或 `make compose-seed ADMIN_PASSWORD=xxx`） |
-| `make compose-up`（`OTEL_ENABLED=false` 关闭） | 统一开关（默认开）：启动 OpenObserve 监控栈（含数据库指标 Collector、默认 dashboard 与内置告警同步）并让 server 推送遥测 |
 | `make compose-check` | 使用临时项目、Secret 和数据卷进行 Compose 运行时/API 验证，不影响本地服务 |
 | `make release-check` | 发布前检查（fmt-check + vet + check-log-usage + check-capabilities + profiles-check + compose-report-check + test + govulncheck + Compose 运行时/API 验证 + 重型脚手架矩阵） |
 | `make ci` | 本地 CI 检查（无外部依赖：fmt-check + vet + lint + check-log-usage + check-capabilities + profiles-check + compose-report-check + test + 覆盖率（逐包「不低于」下限由 CI 的 `Coverage & Docs` 按 DB 口径执行；本地 `make ci` 无 DB 口径、`*/infrastructure` 测试 SKIP，故以 `SKIP_COVERAGE_FLOORS=1` 跳过该判定；该开关**在 CI 中会被门禁拒绝**（`GITHUB_ACTIONS=true` 时报错非零退出，fail-closed，以免逐包门禁被静默关掉），详见 `docs/releases/v0.3.6.md`）+ race + swagger + smoke + build + govulncheck + 重型脚手架矩阵，完整 CI 见 `.github/workflows/ci.yml`） |
@@ -1223,24 +1360,11 @@ make compose-db-restore FILE=/backups/jimu_20250101_120000.sql.gz   # 恢复（�
 ## Docker 部署
 
 ```bash
-# 1. 构建镜像
-make docker-build
-
-# 2. 创建密码文件
-mkdir -p secrets
-echo "your-root-password" > secrets/db_root_password.txt
-echo "your-db-password" > secrets/db_password.txt
-openssl rand -hex 32 > secrets/jwt_secret.txt
-
-# 3. 启动全部服务
-make compose-up
-
-# 4. 运行迁移和初始化
-docker compose run --rm server ./jimu migrate up
-docker compose run --rm -e ADMIN_PASSWORD=admin123 server ./jimu seed
+make init
+make up VERSION=v0.4.0
 ```
 
-已有数据卷中的 MariaDB 账号密码不会因修改 `secrets/*.txt` 自动轮换。先完成数据库账号轮换，再执行 `make compose-restart`。
+`make up` 按需构建 `jimu:v0.4.0`（首次构建时同时更新 `jimu:latest`），启动核心栈并通过 `jimu-init` 完成迁移与种子。已存在 MariaDB 数据卷时，修改 `secrets/*.txt` 不会自动轮换库内账号密码；请先完成数据库账号轮换，再执行 `make restart`。
 
 ## K8s 部署
 
@@ -1256,7 +1380,7 @@ kubectl apply -f deploy/k8s/
 ```
 
 - 数据库迁移由 initContainer 在主容器启动前自动执行（`jimu migrate up`），迁移失败则 Pod 不就绪、不滚动
-- 敏感配置通过 `jimu-secrets` Secret 注入（`change-me-*` 占位值部署前必须替换）
+- `deploy/k8s/secret.yaml` 只保留非 OpenObserve 的占位样例；`jimu-secrets` 必须由部署方在仓库外补入 `ZO_ROOT_USER_EMAIL`、`ZO_ROOT_USER_PASSWORD`、`ZO_AUTH_TOKEN`，且不要提交真实凭据
 - 多副本（`replicas > 1`）需为每个 Pod 配置唯一 `id.worker_id`，避免雪花 ID 冲突（如用 StatefulSet 序号或环境变量注入）
 - Ingress 终止 TLS，应用侧 `http.tls.enabled` 保持 `false`
 

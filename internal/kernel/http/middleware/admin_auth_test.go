@@ -9,13 +9,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func adminAuthRouter(roles []string, setRoles bool) *gin.Engine {
+func adminAuthRouter(platform bool, setPlatform bool) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Set("user_id", uint64(1))
-		if setRoles {
-			c.Set("roles", roles)
+		if setPlatform {
+			c.Set("platform_scope", platform)
 		}
 		c.Next()
 	})
@@ -25,7 +25,15 @@ func adminAuthRouter(roles []string, setRoles bool) *gin.Engine {
 }
 
 func TestAdminAuthAllowsAdminRole(t *testing.T) {
-	r := adminAuthRouter([]string{"超级管理员"}, true)
+	r := adminAuthRouter(true, true)
+	req := httptest.NewRequest(http.MethodGet, "/admin/status", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestAdminAuthAllowsPlatformSuperAdminRole(t *testing.T) {
+	r := adminAuthRouter(true, true)
 	req := httptest.NewRequest(http.MethodGet, "/admin/status", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -33,7 +41,7 @@ func TestAdminAuthAllowsAdminRole(t *testing.T) {
 }
 
 func TestAdminAuthAllowsEnglishAdminRole(t *testing.T) {
-	r := adminAuthRouter([]string{"admin"}, true)
+	r := adminAuthRouter(true, true)
 	req := httptest.NewRequest(http.MethodGet, "/admin/status", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -41,7 +49,7 @@ func TestAdminAuthAllowsEnglishAdminRole(t *testing.T) {
 }
 
 func TestAdminAuthRejectsNonAdminRole(t *testing.T) {
-	r := adminAuthRouter([]string{"普通用户"}, true)
+	r := adminAuthRouter(false, true)
 	req := httptest.NewRequest(http.MethodGet, "/admin/status", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -60,7 +68,7 @@ func TestAdminAuthRequiresAuthentication(t *testing.T) {
 }
 
 func TestAdminAuthRequiresRoles(t *testing.T) {
-	r := adminAuthRouter(nil, false)
+	r := adminAuthRouter(false, false)
 	req := httptest.NewRequest(http.MethodGet, "/admin/status", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

@@ -51,7 +51,7 @@ permissions:
 env:
   # 与 .github/actions/go-setup 的 go-version 默认值保持一致（本文件用自己的 setup-go，
   # 因为它的缓存是 scaffold-gocache、与 CI 分片的滚动缓存不共用）
-  GO_VERSION: "1.26.9"
+  GO_VERSION: "1.26.10"
 
 jobs:
   changes:

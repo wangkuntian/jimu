@@ -29,6 +29,8 @@ type Module struct {
 	captcha             contract.CaptchaVerifier
 	outbox              contract.EventWriter
 	provisioningEnabled bool
+	tenants             contract.TenantStateSource
+	users               contract.UserStateSource
 }
 
 // New 创建 auth 模块。
@@ -56,13 +58,19 @@ func New(db *gorm.DB, rdb redistore.Client, cfg Config, failClosed bool, captcha
 	passwordHistoryRepo := authinfra.NewMysqlPasswordHistoryRepository(db)
 	allDeps := append([]interface{}{}, deps...)
 	allDeps = append(allDeps, resetStore, application.WithPasswordHistory(cfg.PasswordHistoryCount),
-		loginHistoryRepo, passwordHistoryRepo)
+		loginHistoryRepo, passwordHistoryRepo, access.NewDBAuthorizationStore(db))
 	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin, allDeps...)
 	m := &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaVerifier,
 		provisioningEnabled: provisioningEnabled}
 	for _, dep := range deps {
 		if ob, ok := dep.(contract.EventWriter); ok {
 			m.outbox = ob
+		}
+		if tenants, ok := dep.(contract.TenantStateSource); ok {
+			m.tenants = tenants
+		}
+		if users, ok := dep.(contract.UserStateSource); ok {
+			m.users = users
 		}
 	}
 	return m
@@ -106,7 +114,7 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 		LoginRateWindowSec:    m.cfg.LoginRateWindowSec,
 		RegisterRateLimit:     m.cfg.RegisterRateLimit,
 		RegisterRateWindowSec: m.cfg.RegisterRateWindowSec,
-	}, m.limiter, m.captcha)
+	}, m.limiter, m.captcha, auth.StateCheckers{Tenant: m.tenants, User: m.users})
 }
 
 func (m *Module) ProtectedHTTPMiddleware() ([]gin.HandlerFunc, error) {
@@ -114,7 +122,8 @@ func (m *Module) ProtectedHTTPMiddleware() ([]gin.HandlerFunc, error) {
 	if err != nil {
 		return nil, err
 	}
-	return interfaces.ProtectedMiddleware(m.jwtUtil, access.NewDBAuthorizationStore(m.db), enforcer), nil
+	return interfaces.ProtectedMiddleware(m.jwtUtil, access.NewDBAuthorizationStore(m.db), enforcer,
+		auth.StateCheckers{Tenant: m.tenants, User: m.users}), nil
 }
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}

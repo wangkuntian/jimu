@@ -16,21 +16,26 @@ type adminWebSocket struct {
 	hub      *ClientHub
 	presence *PresenceManager
 	channels *ChannelManager
+	states   auth.StateCheckers
 	cancel   context.CancelFunc
 }
 
-func newAdminWebSocket() *adminWebSocket {
+func newAdminWebSocket(stateCheckers ...auth.StateCheckers) *adminWebSocket {
 	presence := NewPresenceManager()
 	channels := NewChannelManager()
-	return &adminWebSocket{
+	port := &adminWebSocket{
 		hub:      NewClientHub(presence, channels),
 		presence: presence,
 		channels: channels,
 	}
+	if len(stateCheckers) > 0 {
+		port.states = stateCheckers[0]
+	}
+	return port
 }
 
 func (w *adminWebSocket) Handler(jwt *auth.JWT) http.HandlerFunc {
-	return WSHandler(w.hub, jwt, w.presence, w.channels)
+	return WSHandler(w.hub, jwt, w.presence, w.channels, w.states)
 }
 
 func (w *adminWebSocket) SendToUser(userID uint64, message contract.AdminWebSocketMessage) error {

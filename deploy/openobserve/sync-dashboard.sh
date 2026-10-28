@@ -17,10 +17,15 @@ set -euo pipefail
 ZO_HTTP="${ZO_HTTP:-http://localhost:5080}"
 ZO_ORG="${ZO_ORG:-default}"
 ZO_EMAIL="${ZO_EMAIL:-admin@jimu.local}"
-ZO_PASSWORD="${ZO_PASSWORD:-Admin@12345}"
+ZO_PASSWORD="${ZO_PASSWORD:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DASH_DIR="${DASH_DIR:-$SCRIPT_DIR/dashboards}"
 API="$ZO_HTTP/api/$ZO_ORG"
+
+if [ -z "$ZO_PASSWORD" ]; then
+  echo "❌ 缺少 ZO_PASSWORD；请从 secrets/otel_auth_password.txt 读取后显式传入" >&2
+  exit 1
+fi
 
 if [ "${1:-}" = "--export" ]; then
   EXPORT_NAME="${2:?usage: sync-dashboard.sh --export 名称}"

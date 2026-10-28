@@ -9,15 +9,17 @@ import (
 	"jimu/internal/contract"
 )
 
-// Wire 装配用户能力：以软依赖端口（access 的角色分配、tenant 的配额、outbox 的事件
+// Wire 装配用户能力：以软依赖端口（access 的角色读写、tenant 的配额/租户概要、outbox 的事件
 // 落库）构造用户模块，并把 contract.UserinfoSource 暴露为端口供 mfa/passkey/grpc 消费。
 //
 // access/tenant 端口名用字面量：tenant 能力 import 本包（迁移依赖），反向 import 会成环。
 func Wire(ctx *assembly.Context) (contract.Module, error) {
-	roles, _ := ctx.Port("access").(application.UserRoleAssigner)
+	roles, _ := ctx.Port("access").(contract.UserRoleAssigner)
+	tenants, _ := ctx.Port(contract.TenantInfoPortName).(contract.TenantInfoSource)
+	tenantStates, _ := ctx.Port(contract.TenantInfoPortName).(contract.TenantStateSource)
 	quota, _ := ctx.Port("tenant").(application.TenantQuota)
 	ob, _ := ctx.Port("outbox").(contract.EventWriter)
-	mod := New(ctx.DB(), *ctx.Config(), ctx.Redis(), ob).WithRoles(roles).WithQuota(quota)
+	mod := New(ctx.DB(), ctx.Redis(), ob, roles, tenants, quota).WithTenantState(tenantStates)
 	repo := infrastructure.NewMysqlRepository(ctx.DB())
 	if err := ctx.Provide(UserinfoPortName, NewUserinfoSource(repo)); err != nil {
 		return nil, fmt.Errorf("provide user info port: %w", err)

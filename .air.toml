@@ -7,7 +7,7 @@ tmp_dir = "tmp"
 
 [build]
   # 构建命令
-  cmd = "go build -o ./tmp/server ./cmd/server"
+  cmd = "go build -overlay=\"$JIMU_OVERLAY\" -o ./tmp/server ./cmd/server"
   # 二进制文件路径
   bin = "./tmp/server"
   # 传递参数

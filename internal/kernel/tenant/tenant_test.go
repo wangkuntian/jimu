@@ -46,6 +46,16 @@ func TestWithTenantRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPlatformScopeRoundTrip(t *testing.T) {
+	ctx := WithPlatformScope(context.Background())
+	if !IsPlatformScope(ctx) {
+		t.Fatal("IsPlatformScope = false, want true")
+	}
+	if IsPlatformScope(context.Background()) {
+		t.Fatal("IsPlatformScope(empty) = true, want false")
+	}
+}
+
 func TestMiddlewareInjectsRequestContext(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -80,6 +90,29 @@ func TestMiddlewareSkipsZeroTenant(t *testing.T) {
 	r.GET("/probe", func(c *gin.Context) {
 		if got := FromContext(c.Request.Context()); got != 0 {
 			t.Fatalf("FromContext = %d, want 0", got)
+		}
+	})
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", "/probe", nil))
+}
+
+func TestMiddlewarePropagatesPlatformScope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("tenant_id", uint64(7))
+		c.Set("platform_scope", true)
+		c.Next()
+	})
+	r.Use(Middleware())
+
+	r.GET("/probe", func(c *gin.Context) {
+		if got := FromContext(c.Request.Context()); got != 7 {
+			t.Fatalf("FromContext = %d, want 7", got)
+		}
+		if !IsPlatformScope(c.Request.Context()) {
+			t.Fatal("IsPlatformScope = false, want true")
 		}
 	})
 

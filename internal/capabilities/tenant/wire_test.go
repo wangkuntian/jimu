@@ -30,17 +30,25 @@ func TestProvisioningConfigurationValidation(t *testing.T) {
 		Name: "owner", Permissions: []ProvisionPermission{{Resource: "/api/v1/users", Action: "GET"}},
 	}}}
 	assert.NoError(t, (&Config{Provisioning: valid}).Validate())
+	assert.NoError(t, (&Config{Provisioning: ProvisioningConfig{Enabled: true}}).Validate())
+	assert.NoError(t, (&Config{Provisioning: ProvisioningConfig{Enabled: true, OwnerRole: contract.RoleCodeTenantAdmin}}).Validate())
 
 	for _, tc := range []struct {
 		name string
 		cfg  ProvisioningConfig
 		want string
 	}{
-		{name: "missing roles", cfg: ProvisioningConfig{Enabled: true}, want: "tenant.provisioning.roles"},
 		{name: "empty role name", cfg: ProvisioningConfig{Enabled: true, Roles: []ProvisionRoleTemplate{{}}}, want: "roles[].name"},
 		{name: "duplicate role", cfg: ProvisioningConfig{Enabled: true, Roles: []ProvisionRoleTemplate{{Name: "owner"}, {Name: "owner"}}}, want: "duplicate"},
+		{name: "duplicate role case insensitive", cfg: ProvisioningConfig{Enabled: true, Roles: []ProvisionRoleTemplate{{Name: "owner"}, {Name: "Owner"}}}, want: "duplicate"},
+		{name: "system role name", cfg: ProvisioningConfig{Enabled: true, Roles: []ProvisionRoleTemplate{{Name: "租户管理员"}}}, want: "system role"},
 		{name: "unknown owner role", cfg: ProvisioningConfig{Enabled: true, OwnerRole: "missing", Roles: []ProvisionRoleTemplate{{Name: "owner"}}}, want: "owner_role"},
+		{name: "member owner role", cfg: ProvisioningConfig{Enabled: true, OwnerRole: contract.RoleCodeTenantMember}, want: "owner_role"},
+		{name: "platform owner role", cfg: ProvisioningConfig{Enabled: true, OwnerRole: contract.RoleCodePlatformSuperAdmin}, want: "owner_role"},
 		{name: "incomplete permission", cfg: ProvisioningConfig{Enabled: true, Roles: []ProvisionRoleTemplate{{Name: "owner", Permissions: []ProvisionPermission{{Resource: "/api/v1/users"}}}}}, want: "resource and action"},
+		{name: "tenant role platform permission", cfg: ProvisioningConfig{Enabled: true, Roles: []ProvisionRoleTemplate{{
+			Name: "owner", Permissions: []ProvisionPermission{{Resource: "/api/v1/tenants", Action: "GET"}},
+		}}}, want: "platform-only"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := (&Config{Provisioning: tc.cfg}).Validate()

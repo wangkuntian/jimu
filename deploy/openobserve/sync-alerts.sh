@@ -24,7 +24,7 @@ set -euo pipefail
 ZO_HTTP="${ZO_HTTP:-http://localhost:5080}"
 ZO_ORG="${ZO_ORG:-default}"
 ZO_EMAIL="${ZO_EMAIL:-admin@jimu.local}"
-ZO_PASSWORD="${ZO_PASSWORD:-Admin@12345}"
+ZO_PASSWORD="${ZO_PASSWORD:-}"
 ZO_ALERT_WEBHOOK_URL="${ZO_ALERT_WEBHOOK_URL:-}"
 ALERTS_RETRIES="${ALERTS_RETRIES:-3}"
 ALERTS_RETRY_INTERVAL="${ALERTS_RETRY_INTERVAL:-15}"
@@ -35,6 +35,11 @@ API="$ZO_HTTP/api/$ZO_ORG"
 if [ -z "$ZO_ALERT_WEBHOOK_URL" ]; then
   echo "==> 跳过默认告警同步：未设置 ZO_ALERT_WEBHOOK_URL（告警需 webhook 通知目的地，可在 UI 手工配置）"
   exit 0
+fi
+
+if [ -z "$ZO_PASSWORD" ]; then
+  echo "❌ 缺少 ZO_PASSWORD；请从 secrets/otel_auth_password.txt 读取后显式传入" >&2
+  exit 1
 fi
 
 echo "==> 等待 OpenObserve 就绪 ($ZO_HTTP)"

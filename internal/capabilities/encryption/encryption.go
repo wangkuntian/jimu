@@ -30,7 +30,7 @@ type Cipher struct {
 var _ contract.BlindIndexer = (*Cipher)(nil)
 
 // New 创建加密器。key 为空时返回明文模式的 Cipher（Encrypt 透传）。
-// 生产环境校验见 config.validate（encryption_key 非空需 ≥32 字节）。
+// 配置校验见 config.validate（encryption_key 非空时必须恰好 32 字节）。
 func New(key string) *Cipher {
 	return &Cipher{key: []byte(key)}
 }

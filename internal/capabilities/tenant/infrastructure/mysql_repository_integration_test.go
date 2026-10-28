@@ -58,7 +58,7 @@ func TestTenantMysqlRepositoryMySQLIntegration(t *testing.T) {
 	assert.Equal(t, t1.ID, byCode.ID)
 
 	// List
-	_, total, err := repo.List(ctx, 0, 10, "id", "desc")
+	_, total, err := repo.List(ctx, 0, 10, "id", "desc", domain.TenantListFilter{})
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, total, int64(1))
 
@@ -73,4 +73,54 @@ func TestTenantMysqlRepositoryMySQLIntegration(t *testing.T) {
 	require.NoError(t, repo.Delete(ctx, t1.ID))
 	_, err = repo.FindByID(ctx, t1.ID)
 	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+// TestTenantMysqlRepositoryListFilters 真实库上的筛选与 LIKE 转义。
+func TestTenantMysqlRepositoryListFilters(t *testing.T) {
+	tdb := testutil.SkipUnlessMysql(t)
+	defer tdb.Close()
+
+	require.NoError(t, tdb.Migrate())
+	require.NoError(t, tdb.Truncate("tenants"))
+
+	repo := NewMysqlRepository(tdb.DB)
+	ctx := context.Background()
+	require.NoError(t, repo.Create(ctx, &domain.Tenant{Code: "acme", Name: "Acme Inc", Status: 1}))
+	require.NoError(t, repo.Create(ctx, &domain.Tenant{Code: "bravo", Name: "Bravo Ltd", Status: 1}))
+	// status 列带 `default:1`，GORM 不会把零值字段写进 INSERT（落库仍是 1），
+	// 因此停用态必须像 HTTP 更新路径那样经 Update 显式写回。
+	paused := &domain.Tenant{Code: "paused", Name: "100% Paused", Status: 1}
+	require.NoError(t, repo.Create(ctx, paused))
+	paused.Status = 0
+	require.NoError(t, repo.Update(ctx, paused))
+
+	list := func(filter domain.TenantListFilter) ([]domain.Tenant, int64) {
+		t.Helper()
+		got, total, err := repo.List(ctx, 0, 20, "id", "asc", filter)
+		require.NoError(t, err)
+		return got, total
+	}
+
+	if _, total := list(domain.TenantListFilter{}); total != 3 {
+		t.Fatalf("no filter total = %d, want 3", total)
+	}
+	if _, total := list(domain.TenantListFilter{Keyword: "acme"}); total != 1 {
+		t.Fatalf("keyword=acme total = %d, want 1", total)
+	}
+	if _, total := list(domain.TenantListFilter{Keyword: "Bravo"}); total != 1 {
+		t.Fatalf("keyword=Bravo total = %d, want 1", total)
+	}
+	if _, total := list(domain.TenantListFilter{Keyword: "%"}); total != 1 {
+		t.Fatalf("keyword=%% total = %d, want 1（只命中名字里真的有 %% 的 paused）", total)
+	}
+	if _, total := list(domain.TenantListFilter{Keyword: "_"}); total != 0 {
+		t.Fatalf("keyword=_ total = %d, want 0（下划线必须被转义）", total)
+	}
+	zero := int8(0)
+	if _, total := list(domain.TenantListFilter{Status: &zero}); total != 1 {
+		t.Fatalf("status=0 total = %d, want 1", total)
+	}
+	if _, total := list(domain.TenantListFilter{Keyword: "acme", Status: &zero}); total != 0 {
+		t.Fatalf("keyword+status total = %d, want 0", total)
+	}
 }

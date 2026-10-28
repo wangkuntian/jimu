@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/csv"
 	"strconv"
+	"strings"
 	"time"
 
 	"jimu/internal/capabilities/user/application"
+	"jimu/internal/capabilities/user/domain"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"
@@ -24,13 +26,13 @@ func NewUserHandler(service *application.UserService) *UserHandler {
 
 // Create godoc
 // @Summary      创建用户
-// @Description  创建新用户账户。用户名必须唯一，密码需符合强度要求（8-32位，包含字母和数字）。支持幂等性保护（通过 Idempotency-Key 请求头）。
+// @Description  创建新用户账户。平台管理员必须指定 tenant_id 并可同时分配 role_ids；租户管理员由后端强制使用当前租户。
 // @Tags         用户管理
 // @Accept       json
 // @Produce      json
-// @Param        body  body      application.CreateUserRequest  true  "用户信息（用户名和密码）"
+// @Param        body  body      application.CreateUserRequest  true  "用户信息、所属租户与角色"
 // @Security     BearerAuth
-// @Success      201  {object}  response.Body  "创建成功，返回用户信息"
+// @Success      201  {object}  application.UserBodyResponse  "创建成功，返回用户信息"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误（如用户名格式不符、密码强度不足）"
 // @Failure      409  {object}  contract.ErrorResponse  "用户名已存在"
 // @Failure      500  {object}  contract.ErrorResponse  "服务器内部错误"
@@ -51,8 +53,8 @@ func (h *UserHandler) Create(c *gin.Context) {
 // @Tags         用户管理
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id   path      int  true  "用户 ID"
-// @Success      200  {object}  response.Body  "成功，返回用户信息"
+// @Param        id   path      string  true  "用户 ID"
+// @Success      200  {object}  application.UserBodyResponse  "成功，返回用户信息"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
 // @Failure      404  {object}  contract.ErrorResponse  "用户不存在"
 // @Failure      500  {object}  contract.ErrorResponse  "服务器内部错误"
@@ -73,7 +75,7 @@ func (h *UserHandler) Get(c *gin.Context) {
 
 // List godoc
 // @Summary      获取用户列表
-// @Description  分页获取用户列表。支持按 ID、用户名、创建时间排序，可指定升序或降序。
+// @Description  分页获取用户列表。平台管理员可跨租户查询；租户管理员只能看到本租户，范围由后端身份决定。
 // @Tags         用户管理
 // @Produce      json
 // @Security     BearerAuth
@@ -81,17 +83,33 @@ func (h *UserHandler) Get(c *gin.Context) {
 // @Param        page_size  query     int     false  "每页数量（默认 20，最大 100）"
 // @Param        sort       query     string  false  "排序字段（支持 id、username、created_at，默认 id）"
 // @Param        order      query     string  false  "排序方向（asc 或 desc，默认 desc）"
-// @Success      200        {object}  contract.PageResponse  "成功，返回分页用户列表"
+// @Param        username   query     string  false  "用户名子串"
+// @Param        status     query     int     false  "状态（0 停用 / 1 启用）"
+// @Param        tenant_id  query     string  false  "所属租户 ID（平台级视角可筛选）"
+// @Success      200        {object}  application.UserPageResponse  "成功，返回分页用户列表"
 // @Failure      400        {object}  contract.ErrorResponse  "参数错误（如无效的排序字段或排序方向）"
 // @Failure      500        {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /users [get]
 func (h *UserHandler) List(c *gin.Context) {
-	p, _ := c.MustGet("validated_query").(*pagination.Pagination)
+	q, _ := c.MustGet("validated_query").(*userListQuery)
+	p := q.Pagination
 	if err := p.Normalize("id", "username", "created_at"); err != nil {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	users, total, err := h.service.List(c.Request.Context(), *p)
+	filter := domain.UserListFilter{
+		Username: strings.TrimSpace(q.Username),
+		Status:   q.Status,
+	}
+	if q.TenantID != "" {
+		tenantID, err := strconv.ParseUint(q.TenantID, 10, 64)
+		if err != nil {
+			response.Fail(c, errors.New(errors.CodeInvalidParam, "invalid tenant_id"))
+			return
+		}
+		filter.TenantID = tenantID
+	}
+	users, total, err := h.service.List(c.Request.Context(), p, filter)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -106,7 +124,7 @@ func (h *UserHandler) List(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id    path      int                            true  "用户 ID"
+// @Param        id    path      string                         true  "用户 ID"
 // @Param        body  body      application.UpdateUserRequest  true  "要更新的用户信息"
 // @Success      200   {object}  response.Body  "更新成功"
 // @Failure      400   {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
@@ -129,13 +147,15 @@ func (h *UserHandler) Update(c *gin.Context) {
 
 // Delete godoc
 // @Summary      删除用户
-// @Description  软删除指定用户。删除后用户数据仍保留在数据库中，但无法登录系统。
+// @Description  删除指定用户（软删除，账号从常规查询中消失）。最后一个有效平台超级管理员返回 409；如需保留账号并禁止登录，请使用更新接口将 status 设为 0。
 // @Tags         用户管理
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id   path  int  true  "用户 ID"
+// @Param        id   path  string  true  "用户 ID"
 // @Success      204     "删除成功，无返回内容"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误（ID 格式无效）"
+// @Failure      404  {object}  contract.ErrorResponse  "用户不存在"
+// @Failure      409  {object}  contract.ErrorResponse  "不能删除最后一个有效平台超级管理员"
 // @Failure      500  {object}  contract.ErrorResponse  "服务器内部错误"
 // @Router       /users/{id} [delete]
 func (h *UserHandler) Delete(c *gin.Context) {
@@ -189,7 +209,7 @@ func (h *UserHandler) ExportCSV(c *gin.Context) {
 		response.Fail(c, errors.New(errors.CodeInvalidParam, err.Error()))
 		return
 	}
-	users, _, err := h.service.List(c.Request.Context(), *p)
+	users, _, err := h.service.List(c.Request.Context(), *p, domain.UserListFilter{})
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -202,7 +222,7 @@ func (h *UserHandler) ExportCSV(c *gin.Context) {
 	_ = w.Write([]string{"ID", "Username", "Status", "Created At"})
 	for _, u := range users {
 		_ = w.Write([]string{
-			strconv.FormatUint(u.ID, 10),
+			u.ID,
 			u.Username,
 			strconv.FormatInt(int64(u.Status), 10),
 			u.CreatedAt.Format(time.RFC3339),
@@ -210,4 +230,11 @@ func (h *UserHandler) ExportCSV(c *gin.Context) {
 	}
 	w.Flush()
 	c.String(200, buf.String())
+}
+
+type userListQuery struct {
+	pagination.Pagination
+	Username string `form:"username"`
+	Status   *int8  `form:"status" binding:"omitempty,oneof=0 1"`
+	TenantID string `form:"tenant_id"`
 }

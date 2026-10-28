@@ -12,6 +12,7 @@ import (
 
 	authdomain "jimu/internal/capabilities/auth/domain"
 	"jimu/internal/contract"
+	"jimu/internal/kernel/access"
 	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/tenant"
 	"jimu/internal/shared/errors"
@@ -22,6 +23,7 @@ import (
 
 type AuthService struct {
 	userRepo             contract.AccountRepository
+	authz                access.AuthorizationStore
 	jwtUtil              *auth.JWT
 	sessions             auth.SessionStore
 	lockout              *auth.LoginFailureTracker
@@ -38,6 +40,7 @@ type AuthService struct {
 	breachChecker        contract.BreachChecker     // 泄露口令检查（nil = 未启用）
 	quota                TenantQuota                // 租户配额（nil = 未启用）
 	mfa                  contract.MFAVerifier       // 二次验证 + 可信设备（nil = 未启用）
+	tenants              contract.TenantStateSource // 租户状态（nil = 未装配租户能力）
 }
 
 func NewAuthService(userRepo contract.AccountRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int, deps ...interface{}) *AuthService {
@@ -66,12 +69,16 @@ func NewAuthService(userRepo contract.AccountRepository, jwtUtil *auth.JWT, sess
 			s.quota = d
 		case contract.MFAVerifier:
 			s.mfa = d
+		case contract.TenantStateSource:
+			s.tenants = d
 		case authdomain.LoginHistoryRepository:
 			s.loginHistory = d
 		case authdomain.PasswordHistoryRepository:
 			s.passwordHistory = d
 		case passwordHistoryCount:
 			s.passwordHistoryCount = int(d)
+		case access.AuthorizationStore:
+			s.authz = d
 		}
 	}
 	return s
@@ -114,6 +121,14 @@ func (s *AuthService) LoginWithTOTP(ctx context.Context, username, password, tot
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		s.recordFailure(ctx, normalized)
 		s.recordLoginHistory(ctx, user.ID, user.TenantID, normalized, authdomain.LoginStatusFailed, "invalid password")
+		return nil, invalidCredentials()
+	}
+	active, err := s.tenantActive(ctx, effectiveTenantID(user.TenantID))
+	if err != nil {
+		return nil, errors.Wrap(errors.CodeInternalError, "tenant state check failed", err)
+	}
+	if !active {
+		s.recordLoginHistory(ctx, user.ID, user.TenantID, normalized, authdomain.LoginStatusFailed, "tenant disabled or deleted")
 		return nil, invalidCredentials()
 	}
 
@@ -448,6 +463,23 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*authdo
 	if err != nil {
 		return nil, errors.New(errors.CodeUnauthorized, "invalid refresh token")
 	}
+	user, err := s.userRepo.FindByID(ctx, claims.UserID)
+	if err != nil {
+		if stderrors.Is(err, contract.ErrNotFound) {
+			return nil, errors.New(errors.CodeUnauthorized, "invalid refresh token")
+		}
+		return nil, errors.Wrap(errors.CodeInternalError, "failed to check user state", err)
+	}
+	if user.Status != 1 {
+		return nil, errors.New(errors.CodeUnauthorized, "invalid refresh token")
+	}
+	active, err := s.tenantActive(ctx, claims.TenantID)
+	if err != nil {
+		return nil, errors.Wrap(errors.CodeInternalError, "tenant state check failed", err)
+	}
+	if !active {
+		return nil, errors.New(errors.CodeUnauthorized, "invalid refresh token")
+	}
 
 	accessToken, newRefreshToken, newRefreshClaims, err := s.issueTokenPair(claims.UserID, claims.TenantID, claims.SessionID)
 	if err != nil {
@@ -509,6 +541,14 @@ func effectiveTenantID(userTenant uint64) uint64 {
 	return userTenant
 }
 
+// tenantActive 在装配了 tenant 能力时校验租户存在且启用；tid=0 为平台级上下文。
+func (s *AuthService) tenantActive(ctx context.Context, tenantID uint64) (bool, error) {
+	if s.tenants == nil || tenantID == 0 {
+		return true, nil
+	}
+	return s.tenants.TenantActive(ctx, tenantID)
+}
+
 func refreshTTL(claims auth.Claims) time.Duration {
 	if claims.ExpiresAt == nil {
 		return 0
@@ -531,6 +571,13 @@ func invalidCredentials() error {
 func (s *AuthService) FinalizeLogin(ctx context.Context, userID uint64) (*contract.TokenPair, error) {
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil || user.Status != 1 {
+		return nil, invalidCredentials()
+	}
+	active, err := s.tenantActive(ctx, effectiveTenantID(user.TenantID))
+	if err != nil {
+		return nil, errors.Wrap(errors.CodeInternalError, "tenant state check failed", err)
+	}
+	if !active {
 		return nil, invalidCredentials()
 	}
 	pair, err := s.finishLogin(ctx, user)

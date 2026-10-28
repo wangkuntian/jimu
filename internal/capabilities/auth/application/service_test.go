@@ -49,6 +49,32 @@ func TestLoginRejectsDisabledUser(t *testing.T) {
 	}
 }
 
+func TestLoginRejectsDisabledTenant(t *testing.T) {
+	store := newFakeSessionStore()
+	tenants := &fakeTenantStateSource{active: map[uint64]bool{7: false}}
+	alice := userWithPassword(t, 42, "alice", "correct", 1)
+	alice.TenantID = 7
+	service := newTestService(t, map[string]*contract.Account{"alice": alice}, store, tenants)
+
+	_, err := service.Login(context.Background(), "alice", "correct")
+	if appCode(err) != apperrors.CodeInvalidCredentials {
+		t.Fatalf("code = %d, want %d", appCode(err), apperrors.CodeInvalidCredentials)
+	}
+	assert.Empty(t, store.created, "停用租户不得建立会话")
+	assert.Equal(t, []uint64{7}, tenants.calls)
+}
+
+func TestLoginChecksEffectiveDefaultTenant(t *testing.T) {
+	tenants := &fakeTenantStateSource{active: map[uint64]bool{1: true}}
+	service := newTestService(t, map[string]*contract.Account{
+		"alice": userWithPassword(t, 42, "alice", "correct", 1),
+	}, newFakeSessionStore(), tenants)
+
+	_, err := service.Login(context.Background(), "alice", "correct")
+	require.NoError(t, err)
+	assert.Equal(t, []uint64{1}, tenants.calls, "未归属用户按默认租户校验")
+}
+
 func TestLoginCreatesRefreshSession(t *testing.T) {
 	store := newFakeSessionStore()
 	service := newTestService(t, map[string]*contract.Account{
@@ -131,6 +157,76 @@ func TestRefreshRotatesOnlyRefreshTokens(t *testing.T) {
 	if _, err := service.Refresh(context.Background(), pair.RefreshToken); appCode(err) != apperrors.CodeUnauthorized {
 		t.Fatalf("reuse code = %d, want %d", appCode(err), apperrors.CodeUnauthorized)
 	}
+}
+
+func TestRefreshRejectsDisabledTenantBeforeRotation(t *testing.T) {
+	store := newFakeSessionStore()
+	tenants := &fakeTenantStateSource{active: map[uint64]bool{7: true}}
+	alice := userWithPassword(t, 42, "alice", "correct", 1)
+	alice.TenantID = 7
+	service := newTestService(t, map[string]*contract.Account{"alice": alice}, store, tenants)
+
+	pair, err := service.Login(context.Background(), "alice", "correct")
+	require.NoError(t, err)
+	tenants.active[7] = false
+
+	_, err = service.Refresh(context.Background(), pair.RefreshToken)
+	if appCode(err) != apperrors.CodeUnauthorized {
+		t.Fatalf("code = %d, want %d", appCode(err), apperrors.CodeUnauthorized)
+	}
+	assert.Empty(t, store.rotated, "停用租户不得轮换 refresh token")
+}
+
+func TestRefreshRejectsInactiveUserBeforeRotation(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*fakeUserRepo)
+	}{
+		{
+			name: "disabled",
+			mutate: func(repo *fakeUserRepo) {
+				repo.users["alice"].Status = 0
+			},
+		},
+		{
+			name: "deleted",
+			mutate: func(repo *fakeUserRepo) {
+				repo.findByIDErr = contract.ErrNotFound
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeSessionStore()
+			repo := &fakeUserRepo{users: map[string]*contract.Account{
+				"alice": userWithPassword(t, 42, "alice", "correct", 1),
+			}}
+			service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), store, nil, 30)
+			pair, err := service.Login(context.Background(), "alice", "correct")
+			require.NoError(t, err)
+
+			tc.mutate(repo)
+			_, err = service.Refresh(context.Background(), pair.RefreshToken)
+			if appCode(err) != apperrors.CodeUnauthorized {
+				t.Fatalf("code = %d, want %d", appCode(err), apperrors.CodeUnauthorized)
+			}
+			assert.Empty(t, store.rotated, "停用或删除用户不得轮换 refresh token")
+		})
+	}
+}
+
+func TestFinalizeLoginRejectsDisabledTenant(t *testing.T) {
+	store := newFakeSessionStore()
+	tenants := &fakeTenantStateSource{active: map[uint64]bool{7: false}}
+	alice := userWithPassword(t, 42, "alice", "correct", 1)
+	alice.TenantID = 7
+	service := newTestService(t, map[string]*contract.Account{"alice": alice}, store, tenants)
+
+	_, err := service.FinalizeLogin(context.Background(), 42)
+	if appCode(err) != apperrors.CodeInvalidCredentials {
+		t.Fatalf("code = %d, want %d", appCode(err), apperrors.CodeInvalidCredentials)
+	}
+	assert.Empty(t, store.created, "停用租户不得通过 passkey 登录收尾签发会话")
 }
 
 func TestLogoutRevokesSessions(t *testing.T) {
@@ -260,9 +356,28 @@ type fakeUserRepo struct {
 	created         []string
 	findByEmailHash func(ctx context.Context, hash string) (*contract.Account, error)
 	updatePassword  func(ctx context.Context, id uint64, hashed string) error
+	// findByIDErr 注入 FindByID 的错误（非 contract.ErrNotFound 时用于验证错误映射）
+	findByIDErr error
+}
+
+type fakeTenantStateSource struct {
+	active map[uint64]bool
+	err    error
+	calls  []uint64
+}
+
+func (f *fakeTenantStateSource) TenantActive(_ context.Context, tenantID uint64) (bool, error) {
+	f.calls = append(f.calls, tenantID)
+	if f.err != nil {
+		return false, f.err
+	}
+	return f.active[tenantID], nil
 }
 
 func (r *fakeUserRepo) FindByID(_ context.Context, id uint64) (*contract.Account, error) {
+	if r.findByIDErr != nil {
+		return nil, r.findByIDErr
+	}
 	for _, user := range r.users {
 		if user.ID == id {
 			return user, nil

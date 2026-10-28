@@ -46,7 +46,8 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 		ctx.Config().HTTP.Mode == config.HTTPModeRelease,
 		captchaVerifier,
 		ctx.Port("outbox"), ctx.Port("notification"), ctx.Port("encryption"),
-		ctx.Port("tenant"), ctx.Port("mfa"), provisioner, ctx.Port("breach"), users)
+		ctx.Port("tenant"), ctx.Port("mfa"), provisioner, ctx.Port("breach"), users,
+		ctx.Port(contract.TenantInfoPortName), ctx.Port(contract.UserinfoPortName))
 	if err := ctx.Provide(PortName, mod.Finalizer()); err != nil {
 		return nil, fmt.Errorf("provide auth port: %w", err)
 	}

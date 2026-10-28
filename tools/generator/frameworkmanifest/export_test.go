@@ -9,8 +9,30 @@ import (
 	"strings"
 	"testing"
 
+	"jimu/internal/profiles/minimal"
 	"jimu/tools/generator/manifest"
 )
+
+func TestShapeCapabilitiesFollowProfileAssemblyOrder(t *testing.T) {
+	root := repositoryRoot(t)
+	selected, err := resolveSelection(root, Request{Root: root, Profile: "minimal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got []string
+	for _, capability := range shapeCapabilities(selected) {
+		got = append(got, capability["Capability"].(string))
+	}
+
+	want := make([]string, 0, len(minimal.Assembly().Capabilities))
+	for _, capability := range minimal.Assembly().Capabilities {
+		want = append(want, capability.Descriptor.Name)
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("shape capability order = %v, want profile assembly order %v", got, want)
+	}
+}
 
 func TestExportMinimalIsDeterministic(t *testing.T) {
 	root := repositoryRoot(t)

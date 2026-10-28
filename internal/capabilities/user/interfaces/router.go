@@ -30,7 +30,7 @@ func RegisterUserRoutes(r *gin.RouterGroup, service *application.UserService, rd
 		} else {
 			users.POST("", middleware.ValidateJSON(&application.CreateUserRequest{}), handler.Create)
 		}
-		users.GET("", middleware.ValidateQuery(&pagination.Pagination{}), handler.List)
+		users.GET("", middleware.ValidateQuery(&userListQuery{}), handler.List)
 		// CSV 导出（必须在 /:id 之前注册，避免路径冲突）
 		users.GET("/export.csv", middleware.ValidateQuery(&pagination.Pagination{}), handler.ExportCSV)
 		// 写操作用户维度限流（key 取 AuthMiddleware 注入的 user_id，默认 60 次/分钟）

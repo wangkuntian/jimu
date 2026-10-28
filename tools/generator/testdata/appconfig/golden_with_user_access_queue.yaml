@@ -132,7 +132,7 @@ scheduler:
 # 安全配置
 security:
   csrf_secret: ""          # CSRF 密钥；非空时启用 CSRF 中间件（Bearer 请求自动跳过）。cookie 认证场景必配
-  encryption_key: "dev-encryption-key-change-in-production"  # 字段级加密密钥（AES-256-GCM，≥32 字节；建议 ENCRYPTION_KEY 环境变量注入）；空则明文模式
+  encryption_key: ""       # 字段级加密密钥（AES-256-GCM）；非空时必须恰好 32 字节；Compose 通过 ENCRYPTION_KEY_FILE 注入
   # 安全头（留空则使用默认值）
   content_type_options: "nosniff"
   frame_options: "DENY"
@@ -151,7 +151,7 @@ security:
   idempotency_ttl_sec: 86400     # 幂等记录保留时长（秒），默认 24 小时
 # OpenTelemetry 可观测性（OpenObserve：统一 日志/指标/追踪）
 # 启用后 tracing + metrics + logs 均经 OTLP gRPC 推送到 endpoint。
-# 本地起 openobserve（make compose-observability）后置 enabled: true 即可。
+# 本地运行 make up-observability 时由观测栈叠加文件注入连接参数与凭据。
 otel:
   enabled: false              # 开发环境默认关闭（零开销）
   endpoint: "localhost:5081"  # OpenObserve OTLP gRPC 端点（compose 内为 openobserve:5081）
@@ -162,9 +162,9 @@ otel:
   logs_enabled: true          # 日志推送（zap 转 OTLP logs）
   metrics_interval_sec: 15    # 指标推送间隔（秒）
   # OpenObserve 认证（OTLP/gRPC 要求 Basic Auth + organization header）
-  # 与 compose 内 openobserve 服务的 ZO_ROOT_USER_EMAIL/ZO_ROOT_USER_PASSWORD 对应
+  # 密码由 secrets/otel_auth_password.txt 生成，Compose 通过 OTEL_AUTH_PASSWORD_FILE 注入。
   auth_email: "admin@jimu.local"
-  auth_password: "Admin@12345"
+  auth_password: ""
   org_id: "default"           # OpenObserve 组织（默认 default）
   logs_stream_name: "jimu_logs"     # 日志 stream（gRPC stream-name header；OpenObserve 会把非法字符规范为 _；空落默认流 default）
   traces_stream_name: "jimu_traces" # 追踪 stream（空落默认流 default）

@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoad(t *testing.T) {
@@ -142,6 +143,30 @@ func TestValidateProdRejectsInsecureValues(t *testing.T) {
 	}
 }
 
+func TestValidateEncryptionKeyRequiresExactAES256Length(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		key     string
+		wantErr bool
+	}{
+		{"31 bytes", strings.Repeat("a", 31), true},
+		{"32 bytes", strings.Repeat("a", 32), false},
+		{"33 bytes", strings.Repeat("a", 33), true},
+		{"dev placeholder", "dev-encryption-key-change-in-production", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := validProdConfig()
+			cfg.Security.EncryptionKey = tc.key
+			err := cfg.Validate("dev")
+			if tc.wantErr {
+				require.ErrorContains(t, err, "security.encryption_key")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestValidateRedisMode(t *testing.T) {
 	cfg := validProdConfig()
 	cfg.Redis.Mode = "unknown"
@@ -272,4 +297,18 @@ func minimalValidConfig(t *testing.T) Config {
 		t.Fatalf("Load() error: %v", err)
 	}
 	return *cfg
+}
+
+func TestApplyEnvOverridesUsesOpenObserveEnvCredentials(t *testing.T) {
+	t.Setenv("OTEL_AUTH_EMAIL", "")
+	t.Setenv("OTEL_AUTH_PASSWORD_FILE", "")
+	t.Setenv("OTEL_AUTH_PASSWORD", "")
+	t.Setenv("ZO_ROOT_USER_EMAIL", "ops@example.com")
+	t.Setenv("ZO_ROOT_USER_PASSWORD", "compose-observed-password")
+
+	var cfg Config
+	applyEnvOverrides(&cfg)
+
+	assert.Equal(t, "ops@example.com", cfg.OTEL.AuthEmail)
+	assert.Equal(t, "compose-observed-password", cfg.OTEL.AuthPassword)
 }

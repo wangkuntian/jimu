@@ -5,8 +5,8 @@
 ## 开发环境
 
 - Go 1.26+
-- MariaDB 10.5+ / Redis 6+
-- (可选) Docker Compose 一键起依赖
+- Docker 24+（含 Compose v2）
+- Air（`go install github.com/air-verse/air@latest`，仅 `make dev` 需要）
 
 ```bash
 # 克隆
@@ -14,15 +14,25 @@ git clone https://github.com/your-org/jimu.git
 cd jimu
 go mod download
 
-# 启动依赖
-docker-compose up -d mariadb redis
+# 启动依赖、迁移/种子并以 Air 热重载
+make dev
 
-# 迁移 + 种子
-make migrate && make seed
-
-# 启动
-make run
+# 或启动容器化核心栈
+make up
 ```
+
+`make dev` 与 `make up` 都会通过 `scripts/init-secrets.sh` 补齐 `secrets/`，且不会传入 `LEGACY_ENV_FILE`。旧 `.env` 的唯一公开迁移入口是 `make init`：它会检测项目根 `.env`，也可通过 `LEGACY_ENV_FILE` 指定其它旧文件。
+若已有 MariaDB 数据卷只缺新增的安全密钥，使用 `make init ALLOW_NEW_SECURITY_KEYS=1`；已有安全密钥文件不会被 `FORCE=1` 轮换。
+
+## 跨仓协作
+
+与 `jimu-web` 的纵向需求按[跨仓协作工作流](design/cross-repo-development.md)执行：
+
+- 契约冻结是唯一串行点；后端形成可获取的契约提交后，业务实现与前端开发并行。
+- 后端不能用口头约定替代 Swagger；契约变更必须形成新的提交并让前端重新同步。
+- 前端只消费固定契约和生成的 TypeScript 类型，不复制或猜测后端规则。
+- 任务开始时检查两个仓库的工作区；未经用户明确指令，不执行 commit 或 push。
+- 可复制该文档末尾的任务模板描述跨仓需求，分别汇报两端验证结果。
 
 ## 分支策略
 
@@ -72,7 +82,7 @@ fix(auth): reject expired refresh token
 
 - 发布当日从 release 分支合并到 master 后，在 master tip 打 `vMAJOR.MINOR.PATCH` tag（SemVer，无预发布标签）
 - 发布候选 PR 合并后，在当前 `master` tip 打 `vMAJOR.MINOR.PATCH` tag；tag workflow 会校验 tag 必须指向当前 `master` tip，然后并行构建 `full` 与 `minimal` 两个形态 × 4 平台的 8 个二进制（`jimu-<profile>-<os>-<arch>`，产物内注入该 tag 作为版本号）并创建 GitHub Release，不重复运行完整 CI 或 `Scaffold Gate`
-- 依赖更新：dependabot 的 PR **直接面向 `master`**（默认分支），minor/patch 由 `.github/workflows/dependabot-auto-merge.yml` 自动合并（major 留人工评估）。依赖 PR 与发布候选 PR 走同一套 master 门禁 —— `PR Gate`/`Image Gate`/`Scaffold Gate` 三道都要过，因此升级会被**脚手架矩阵当场验证**，而不是攒到发布候选 PR 才第一次跑
+- 依赖更新：dependabot 的 PR **直接面向 `master`**（默认分支），minor/patch 由 `.github/workflows/dependabot-auto-merge.yml` 自动合并（major 留人工评估）。依赖 PR 与发布候选 PR 走同一套 master 门禁 —— `PR Gate`/`Image Gate`/`Scaffold Gate` 三道都要过，因此升级会被**脚手架矩阵当场验证**，而不是攒到发布候选 PR 才第一次跑。自动合并前还有两道守卫（都在该 workflow 内，只调 GitHub API、不 checkout）：①**实测** master 的 ruleset 仍 require 那三道门，读不到或少了任何一门都不启用（并撤销已挂上的 auto-merge），防止 ruleset 被改动后 `--auto` 在零检查下抢跑；②**镜像 tag 形状断言** —— 拒绝裸数字后缀（`-386`）、平台名后缀（`-amd64`/`-arm64`/`-ppc64le`…）、`nightly`/`dev`/`snapshot` 等前缀与完全没有数字的 tag（`latest`），只放行常规版本号（含 `-alpine`/`-noble` 这类发行版后缀）与 `@sha256:` 摘要 pin。②是 PR #167 的产物：它把 otel collector 从 `0.162.0` 换成**同一版本的 i386 单架构 tag** `0.162.0-386`，dependabot 按 tag 字符串当成升级、三道门禁全绿，于是被自动合并
 - 发布流程：`Start Release Branch` workflow（手动触发）**只需输入版本号**，总是从 `master` 切出 `release/<version>`；依赖升级平时已经直接进 master，发布分支天然包含它们，不再有「吸收」步骤
 - 来源白名单：`Scaffold Gate` 的来源白名单维护在 `.github/workflows/ci-scaffold.yml`（shards job 的 `head_ref` 守卫与聚合 job 的来源判定），**已同时放行 `release/*`（发布候选）与 `dependabot/*`（依赖升级）**；其余来源一律 fail-closed。`dependabot-auto-merge.yml` 的 `branches`/`base.ref` 亦已改为 `master`。注意这两处是**配套**的：若只改 `dependabot.yml` 的 `target-branch` 而不放行白名单，依赖 PR 会在 `Scaffold Gate` 上红且无法合并（master ruleset 没有 bypass actor）
 - 历史说明：v0.3.5 曾引入常驻分支 `dependency-updates` 攒批依赖升级；v0.3.6 先移除了它的同步自动化（`sync-dependency-branch.yml`），并在本版本重切时连同该分支与其 ruleset 一并删除。移除原因：该分支必须 require `PR Gate`（否则 `--auto` 会抢跑），而 required check **同时拦截直推** ⇒ 同步只能走 PR；`GITHUB_TOKEN` 默认不允许创建 PR，即使允许，用它创建的 PR 也不会触发工作流 ⇒ 自动化无解；且 `Start Release Branch` 从它切出会漏掉 master 的提交。现在只有 `master` 一条长期分支
@@ -122,7 +132,7 @@ fix(auth): reject expired refresh token
 - 版本号使用 SemVer：`vMAJOR.MINOR.PATCH`
 - 条目使用中文，面向使用者说明结果，不写内部流水账
 - 没有内容的分类可以省略，但 `亮点`、`验证`、`说明` 必须保留
-- `验证` 必须包含 `make release-check COMPOSE_ENV=.env.example` 的结果，除非明确说明无法运行
+- `验证` 必须包含 `make release-check` 的结果，除非明确说明无法运行
 
 ## 代码规范
 

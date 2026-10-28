@@ -89,6 +89,10 @@ spec:
               mountPath: /run/secrets/db_password
               subPath: db_password
               readOnly: true
+            - name: db-secret
+              mountPath: /run/secrets/zo_auth_token
+              subPath: zo_auth_token
+              readOnly: true
           resources:
             requests:
               cpu: 50m

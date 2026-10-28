@@ -53,7 +53,7 @@ func provisionTestConfig() tenantapp.ProvisioningConfig {
 				Permissions: []tenantapp.ProvisionPermission{
 					{Resource: "/api/v1/users", Action: "GET"},
 					{Resource: "/api/v1/users", Action: "POST"},
-					{Resource: "/api/v1/roles", Action: "GET"},
+					{Resource: "/api/v1/roles/options", Action: "GET"},
 					{Resource: "/api/v1/missing", Action: "GET"}, // 未 seed，应跳过
 				},
 			},
@@ -78,7 +78,7 @@ func seedProvisionPermissions(t *testing.T, gdb *gorm.DB) {
 	perms := []roledomain.Permission{
 		{Name: "用户列表", Resource: "/api/v1/users", Action: "GET"},
 		{Name: "用户创建", Resource: "/api/v1/users", Action: "POST"},
-		{Name: "角色列表", Resource: "/api/v1/roles", Action: "GET"},
+		{Name: "角色选项", Resource: "/api/v1/roles/options", Action: "GET"},
 		{Name: "审计列表", Resource: "/api/v1/audits", Action: "GET"},
 	}
 	for i := range perms {
@@ -112,24 +112,93 @@ func TestGormTenantProvisionerProvision(t *testing.T) {
 	// 模板角色已创建且归属新租户
 	var roles []roledomain.Role
 	require.NoError(t, gdb.Where("tenant_id = ?", res.Tenant.ID).Order("id").Find(&roles).Error)
-	require.Len(t, roles, 2)
-	assert.Equal(t, "管理员", roles[0].Name)
-	assert.Equal(t, "成员", roles[1].Name)
+	require.Len(t, roles, 4)
+	assert.Equal(t, contract.RoleCodeTenantAdmin, roles[0].Code)
+	assert.Equal(t, contract.RoleCodeTenantMember, roles[1].Code)
+	assert.Equal(t, "管理员", roles[2].Name)
+	assert.Equal(t, "成员", roles[3].Name)
 
 	// 权限绑定：管理员 3 条（缺失权限跳过）、成员 1 条
 	var adminPermCount, memberPermCount int64
-	require.NoError(t, gdb.Table("role_permissions").Where("role_id = ?", roles[0].ID).Count(&adminPermCount).Error)
-	require.NoError(t, gdb.Table("role_permissions").Where("role_id = ?", roles[1].ID).Count(&memberPermCount).Error)
+	require.NoError(t, gdb.Table("role_permissions").Where("role_id = ?", roles[2].ID).Count(&adminPermCount).Error)
+	require.NoError(t, gdb.Table("role_permissions").Where("role_id = ?", roles[3].ID).Count(&memberPermCount).Error)
 	assert.Equal(t, int64(3), adminPermCount)
 	assert.Equal(t, int64(1), memberPermCount)
 
 	// owner 绑定“管理员”角色（owner_role 指定）
 	var userRoleCount int64
-	require.NoError(t, gdb.Table("user_roles").Where("user_id = ? AND role_id = ?", res.User.ID, roles[0].ID).Count(&userRoleCount).Error)
+	require.NoError(t, gdb.Table("user_roles").Where("user_id = ? AND role_id = ?", res.User.ID, roles[2].ID).Count(&userRoleCount).Error)
 	assert.Equal(t, int64(1), userRoleCount)
 }
 
-func TestGormTenantProvisionerOwnerRoleDefaultsToFirst(t *testing.T) {
+func TestGormTenantProvisionerCreatesTenantSystemRoles(t *testing.T) {
+	gdb := newProvisionTestDB(t)
+	seedProvisionPermissions(t, gdb)
+	provisioner := newProvisioner(gdb, tenantapp.ProvisioningConfig{Enabled: true})
+
+	res, err := provisioner.Provision(context.Background(), contract.ProvisionRequest{
+		Username:     "systemroles",
+		PasswordHash: "hashed",
+		TenantName:   "System Roles Inc",
+	})
+	require.NoError(t, err)
+
+	var roles []roledomain.Role
+	require.NoError(t, gdb.Where("tenant_id = ?", res.Tenant.ID).Order("id").Find(&roles).Error)
+	require.Len(t, roles, 2)
+	assert.Equal(t, contract.RoleCodeTenantAdmin, roles[0].Code)
+	assert.Equal(t, contract.RoleCodeTenantMember, roles[1].Code)
+	assert.True(t, roles[0].IsSystem)
+	assert.True(t, roles[1].IsSystem)
+
+	var linkCount int64
+	require.NoError(t, gdb.Table("user_roles").
+		Where("user_id = ? AND role_id = ?", res.User.ID, roles[0].ID).
+		Count(&linkCount).Error)
+	assert.Equal(t, int64(1), linkCount)
+
+	var memberPermissionCount int64
+	require.NoError(t, gdb.Table("role_permissions").Where("role_id = ?", roles[1].ID).Count(&memberPermissionCount).Error)
+	assert.Zero(t, memberPermissionCount)
+}
+
+func TestGormTenantProvisionerAppendsCustomRole(t *testing.T) {
+	gdb := newProvisionTestDB(t)
+	seedProvisionPermissions(t, gdb)
+	cfg := tenantapp.ProvisioningConfig{
+		Enabled:   true,
+		OwnerRole: "auditor",
+		Roles: []tenantapp.ProvisionRoleTemplate{{
+			Name:        "auditor",
+			Description: "自定义审计角色",
+			Permissions: []tenantapp.ProvisionPermission{{Resource: "/api/v1/audits", Action: "GET"}},
+		}},
+	}
+	provisioner := newProvisioner(gdb, cfg)
+
+	res, err := provisioner.Provision(context.Background(), contract.ProvisionRequest{
+		Username:     "customrole",
+		PasswordHash: "hashed",
+		TenantName:   "Custom Role Inc",
+	})
+	require.NoError(t, err)
+
+	var roles []roledomain.Role
+	require.NoError(t, gdb.Where("tenant_id = ?", res.Tenant.ID).Order("id").Find(&roles).Error)
+	require.Len(t, roles, 3)
+	assert.Equal(t, contract.RoleCodeTenantAdmin, roles[0].Code)
+	assert.Equal(t, contract.RoleCodeTenantMember, roles[1].Code)
+	assert.Equal(t, "auditor", roles[2].Name)
+	assert.Empty(t, roles[2].Code)
+
+	var linkCount int64
+	require.NoError(t, gdb.Table("user_roles").
+		Where("user_id = ? AND role_id = ?", res.User.ID, roles[2].ID).
+		Count(&linkCount).Error)
+	assert.Equal(t, int64(1), linkCount)
+}
+
+func TestGormTenantProvisionerOwnerRoleDefaultsToTenantAdmin(t *testing.T) {
 	gdb := newProvisionTestDB(t)
 	seedProvisionPermissions(t, gdb)
 	cfg := provisionTestConfig()
@@ -145,7 +214,8 @@ func TestGormTenantProvisionerOwnerRoleDefaultsToFirst(t *testing.T) {
 
 	var roles []roledomain.Role
 	require.NoError(t, gdb.Where("tenant_id = ?", res.Tenant.ID).Order("id").Find(&roles).Error)
-	require.Len(t, roles, 2)
+	require.Len(t, roles, 4)
+	require.Equal(t, contract.RoleCodeTenantAdmin, roles[0].Code)
 	var userRoleCount int64
 	require.NoError(t, gdb.Table("user_roles").Where("user_id = ? AND role_id = ?", res.User.ID, roles[0].ID).Count(&userRoleCount).Error)
 	assert.Equal(t, int64(1), userRoleCount)
