@@ -184,7 +184,7 @@ func TestPlanServiceDeleteRejectsAssignedPlan(t *testing.T) {
 	assert.NoError(t, svc.Delete(ctx, 1))
 
 	err = svc.Delete(ctx, 999)
-	assert.Equal(t, errors.CodeTenantNotFound, tenantAppCode(err))
+	assert.Equal(t, errors.CodePlanNotFound, tenantAppCode(err))
 }
 
 func TestPlanServiceAssignValidatesPlan(t *testing.T) {
@@ -199,7 +199,7 @@ func TestPlanServiceAssignValidatesPlan(t *testing.T) {
 	assert.Equal(t, uint64(0), quotaRepo.assigned[7])
 
 	err := svc.Assign(ctx, 7, 999)
-	assert.Equal(t, errors.CodeTenantNotFound, tenantAppCode(err))
+	assert.Equal(t, errors.CodePlanNotFound, tenantAppCode(err), "套餐不存在不能复用租户不存在错误码")
 }
 
 func TestPlanServiceUpdateAndUsage(t *testing.T) {

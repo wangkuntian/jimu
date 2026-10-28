@@ -160,6 +160,29 @@ func TestOpenAPIListEndpointsCarryTypedData(t *testing.T) {
 			t.Fatalf("application.TenantResponse 缺少字段 %s", field)
 		}
 	}
+	assertDefinitionPropertyType(t, spec, "application.TenantResponse", "plan_id", "string")
+
+	plan := definitionProperties(t, spec, "application.PlanResponse")
+	assertDefinitionPropertyType(t, spec, "application.PlanResponse", "id", "string")
+	if _, ok := plan["id"]; !ok {
+		t.Fatal("application.PlanResponse 缺少字段 id")
+	}
+
+	assertDefinitionPropertyType(t, spec, "application.AssignPlanRequest", "plan_id", "string")
+	assertPathParamType(t, spec, "/tenant-plans/{id}", "put", "id", "string")
+	assertPathParamType(t, spec, "/tenant-plans/{id}", "delete", "id", "string")
+}
+
+func assertDefinitionPropertyType(t *testing.T, spec map[string]any, definition, property, want string) {
+	t.Helper()
+	properties := definitionProperties(t, spec, definition)
+	field, ok := properties[property].(map[string]any)
+	if !ok {
+		t.Fatalf("%s.%s 不是对象", definition, property)
+	}
+	if got := field["type"]; got != want {
+		t.Fatalf("%s.%s type = %v, want %s", definition, property, got, want)
+	}
 }
 
 // TestOpenAPIAuthEndpointsCarryTypedData 登录/刷新/注册/me/config 的成功响应必须是具体类型：

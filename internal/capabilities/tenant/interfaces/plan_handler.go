@@ -72,7 +72,7 @@ func (h *PlanHandler) ListPlans(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id    path      int                            true  "套餐 ID"
+// @Param        id    path      string                         true  "套餐 ID"
 // @Param        body  body      application.UpdatePlanRequest  true  "要更新的字段（为空表示不修改）"
 // @Success      200  {object}  response.Body  "更新成功"
 // @Failure      400  {object}  contract.ErrorResponse  "参数错误"
@@ -98,7 +98,7 @@ func (h *PlanHandler) UpdatePlan(c *gin.Context) {
 // @Tags         租户运营
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id   path      int  true  "套餐 ID"
+// @Param        id   path      string  true  "套餐 ID"
 // @Success      200  {object}  response.Body  "删除成功"
 // @Failure      404  {object}  contract.ErrorResponse  "套餐不存在"
 // @Failure      409  {object}  contract.ErrorResponse  "套餐仍被租户使用"
@@ -118,7 +118,7 @@ func (h *PlanHandler) DeletePlan(c *gin.Context) {
 
 // AssignPlan godoc
 // @Summary      为租户分配套餐
-// @Description  为指定租户分配套餐；plan_id=0 表示取消套餐（取消后不再受配额限制）。超限时不影响既有数据，只阻止继续创建。
+// @Description  为指定租户分配套餐；plan_id="0" 表示取消套餐（取消后不再受配额限制）。超限时不影响既有数据，只阻止继续创建。
 // @Tags         租户运营
 // @Accept       json
 // @Produce      json
@@ -136,7 +136,12 @@ func (h *PlanHandler) AssignPlan(c *gin.Context) {
 		return
 	}
 	req, _ := c.MustGet("validated_req").(*application.AssignPlanRequest)
-	if err := h.service.Assign(c.Request.Context(), id, req.PlanID); err != nil {
+	planID, err := parseAssignPlanID(req.PlanID)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	if err := h.service.Assign(c.Request.Context(), id, planID); err != nil {
 		response.Fail(c, err)
 		return
 	}
@@ -168,6 +173,17 @@ func (h *PlanHandler) Usage(c *gin.Context) {
 func parsePlanID(c *gin.Context) (uint64, error) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
+		return 0, errors.New(errors.CodeInvalidParam, "invalid plan id")
+	}
+	return id, nil
+}
+
+func parseAssignPlanID(value string) (uint64, error) {
+	if value == "" {
+		return 0, nil
+	}
+	id, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
 		return 0, errors.New(errors.CodeInvalidParam, "invalid plan id")
 	}
 	return id, nil

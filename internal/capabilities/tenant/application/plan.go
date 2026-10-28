@@ -1,7 +1,11 @@
 package application
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"jimu/internal/capabilities/tenant/domain"
@@ -26,14 +30,37 @@ type UpdatePlanRequest struct {
 	MaxAPIKeys *int    `json:"max_api_keys" binding:"omitempty,min=0"`
 }
 
-// AssignPlanRequest 为租户分配套餐请求（plan_id=0 表示取消套餐）
+// AssignPlanRequest 为租户分配套餐请求（plan_id="0" 表示取消套餐）
 type AssignPlanRequest struct {
-	PlanID uint64 `json:"plan_id"`
+	PlanID string `json:"plan_id" swaggertype:"string"`
+}
+
+// UnmarshalJSON accepts both the string contract and legacy numeric clients.
+func (r *AssignPlanRequest) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		PlanID json.RawMessage `json:"plan_id"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if len(raw.PlanID) == 0 || bytes.Equal(raw.PlanID, []byte("null")) {
+		r.PlanID = "0"
+		return nil
+	}
+	if raw.PlanID[0] == '"' {
+		return json.Unmarshal(raw.PlanID, &r.PlanID)
+	}
+	var number json.Number
+	if err := json.Unmarshal(raw.PlanID, &number); err != nil {
+		return fmt.Errorf("plan_id must be a decimal string: %w", err)
+	}
+	r.PlanID = number.String()
+	return nil
 }
 
 // PlanResponse 套餐信息
 type PlanResponse struct {
-	ID         uint64 `json:"id"`
+	ID         string `json:"id"`
 	Code       string `json:"code"`
 	Name       string `json:"name"`
 	MaxUsers   int    `json:"max_users"`
@@ -52,7 +79,7 @@ type UsageResponse struct {
 
 func ToPlanResponse(p domain.Plan) PlanResponse {
 	return PlanResponse{
-		ID:         p.ID,
+		ID:         strconv.FormatUint(p.ID, 10),
 		Code:       p.Code,
 		Name:       p.Name,
 		MaxUsers:   p.MaxUsers,
@@ -114,7 +141,7 @@ func (s *PlanService) Update(ctx context.Context, id uint64, req UpdatePlanReque
 	plan, err := s.plans.FindByID(ctx, id)
 	if err != nil {
 		if isNotFound(err) {
-			return errors.Wrap(errors.CodeTenantNotFound, "plan not found", err)
+			return errors.Wrap(errors.CodePlanNotFound, "plan not found", err)
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to get plan", err)
 	}
@@ -140,7 +167,7 @@ func (s *PlanService) Update(ctx context.Context, id uint64, req UpdatePlanReque
 func (s *PlanService) Delete(ctx context.Context, id uint64) error {
 	if _, err := s.plans.FindByID(ctx, id); err != nil {
 		if isNotFound(err) {
-			return errors.Wrap(errors.CodeTenantNotFound, "plan not found", err)
+			return errors.Wrap(errors.CodePlanNotFound, "plan not found", err)
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to get plan", err)
 	}
@@ -162,7 +189,7 @@ func (s *PlanService) Assign(ctx context.Context, tenantID, planID uint64) error
 	if planID != 0 {
 		if _, err := s.plans.FindByID(ctx, planID); err != nil {
 			if isNotFound(err) {
-				return errors.Wrap(errors.CodeTenantNotFound, "plan not found", err)
+				return errors.Wrap(errors.CodePlanNotFound, "plan not found", err)
 			}
 			return errors.Wrap(errors.CodeInternalError, "failed to get plan", err)
 		}

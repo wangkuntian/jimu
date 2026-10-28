@@ -883,7 +883,7 @@ curl -X DELETE http://localhost:8080/api/v1/tenants/<tenant_id> \
 
 默认租户（`id=1`、`code=default`）不可停用，返回 `5003`；当前身份所属租户也不能停用，返回 `403`（`1003`），避免管理员自锁。平台管理员仍可停用其他租户。已有 access token 在租户停用后由认证链实时校验并拒绝，不需要等待 token 过期。
 
-相关错误码：`5001` 租户不存在、`5002` 租户编码已存在、`5003` 默认租户受保护、`5004` 租户编码格式无效。
+相关错误码：`5001` 租户不存在、`5002` 租户编码已存在、`5003` 默认租户受保护、`5004` 租户编码格式无效、`5006` 套餐不存在。
 
 ### 租户运营（套餐 / 配额 / 用量）
 
@@ -900,7 +900,7 @@ curl -X POST http://localhost:8080/api/v1/tenant-plans \
 curl -X PUT http://localhost:8080/api/v1/tenants/2/plan \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
-  -d '{"plan_id":1}'
+  -d '{"plan_id":"1"}'
 
 # 3. 查看当前租户用量与上限
 curl http://localhost:8080/api/v1/tenants/usage \
@@ -915,7 +915,7 @@ curl http://localhost:8080/api/v1/tenants/usage \
   "message": "ok",
   "data": {
     "tenant_id": 2,
-    "plan": {"id": 1, "code": "free", "name": "免费版", "max_users": 10, "max_roles": 5, "max_api_keys": 2},
+    "plan": {"id": "1", "code": "free", "name": "免费版", "max_users": 10, "max_roles": 5, "max_api_keys": 2},
     "users": {"used": 3, "limit": 10},
     "roles": {"used": 2, "limit": 5},
     "api_keys": {"used": 0, "limit": 2}
@@ -923,7 +923,7 @@ curl http://localhost:8080/api/v1/tenants/usage \
 }
 ```
 
-创建资源超限时返回 `5005`/403（`{"code":5005,"message":"users quota exceeded"}`）。套餐仍被租户使用时不可删除（`409`），避免租户静默失去约束；`PUT /api/v1/tenant-plans/{id}` 更新上限、`DELETE /api/v1/tenant-plans/{id}` 下线套餐。
+套餐与租户响应中的 `id`/`plan_id` 均按十进制字符串输出，避免雪花 ID 超出 JavaScript 安全整数范围后被舍入；分配请求的 `plan_id` 同样以字符串传递，同时兼容旧客户端的 JSON number。创建资源超限时返回 `5005`/403（`{"code":5005,"message":"users quota exceeded"}`）。套餐仍被租户使用时不可删除（`409`），避免租户静默失去约束；`PUT /api/v1/tenant-plans/{id}` 更新上限、`DELETE /api/v1/tenant-plans/{id}` 下线套餐。
 
 ### API Key 与 Scope
 

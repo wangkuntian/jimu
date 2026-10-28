@@ -12,7 +12,7 @@ definitions:
   application.AssignPlanRequest:
     properties:
       plan_id:
-        type: integer
+        type: string
     type: object
   application.AssignUserRolesRequest:
     properties:
@@ -278,7 +278,7 @@ definitions:
       code:
         type: string
       id:
-        type: integer
+        type: string
       max_api_keys:
         type: integer
       max_roles:
@@ -459,7 +459,7 @@ definitions:
       name:
         type: string
       plan_id:
-        type: integer
+        type: string
       status:
         type: integer
       updated_at:
@@ -2261,7 +2261,7 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       produces:
       - application/json
       responses:
@@ -2291,7 +2291,7 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       - description: 要更新的字段（为空表示不修改）
         in: body
         name: body
@@ -2514,7 +2514,7 @@ paths:
     put:
       consumes:
       - application/json
-      description: 为指定租户分配套餐；plan_id=0 表示取消套餐（取消后不再受配额限制）。超限时不影响既有数据，只阻止继续创建。
+      description: 为指定租户分配套餐；plan_id="0" 表示取消套餐（取消后不再受配额限制）。超限时不影响既有数据，只阻止继续创建。
       parameters:
       - description: 租户 ID
         in: path

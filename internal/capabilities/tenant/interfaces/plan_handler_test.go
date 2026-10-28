@@ -89,12 +89,12 @@ func TestPlanRoutesCreateAssignAndUsage(t *testing.T) {
 		`{"code":"FREE","name":"免费版","max_users":2,"max_roles":1,"max_api_keys":0}`)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 	data := decodeData(t, w)
-	planID, ok := data["id"].(float64)
-	require.True(t, ok, "响应缺少套餐 ID: %s", w.Body.String())
+	planID, ok := data["id"].(string)
+	require.True(t, ok, "套餐 ID 必须是字符串: %s", w.Body.String())
 	assert.Equal(t, "free", data["code"], "编码统一小写")
 
 	// 分配给默认租户
-	w = doJSON(t, r, http.MethodPut, "/api/v1/tenants/1/plan", `{"plan_id":`+itoa(uint64(planID))+`}`)
+	w = doJSON(t, r, http.MethodPut, "/api/v1/tenants/1/plan", `{"plan_id":"`+planID+`"}`)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	// 用量：静态路由 /tenants/usage 必须优先于 /tenants/:id 命中
@@ -110,19 +110,61 @@ func TestPlanRoutesCreateAssignAndUsage(t *testing.T) {
 	assert.Equal(t, float64(2), users["limit"])
 }
 
+func TestPlanRoutesPreserveSnowflakeIDsAndRejectRoundedValueAsPlanNotFound(t *testing.T) {
+	r, db := newPlanTestRouter(t)
+	require.NoError(t, db.Create(&domain.Tenant{ID: tenant.DefaultTenantID, Code: "default", Name: "默认租户", Status: 1}).Error)
+
+	const planID uint64 = 373398409660334080
+	require.NoError(t, db.Create(&domain.Plan{ID: planID, Code: "free", Name: "免费版"}).Error)
+
+	w := doJSON(t, r, http.MethodGet, "/api/v1/tenant-plans?page=1&page_size=100", "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var list struct {
+		Data []application.PlanResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &list))
+	require.Len(t, list.Data, 1)
+	assert.Equal(t, "373398409660334080", list.Data[0].ID)
+
+	// 该值是浏览器把上述雪花 ID 当 float64 解析后回传的错误 ID。
+	w = doJSON(t, r, http.MethodPut, "/api/v1/tenants/1/plan", `{"plan_id":"373398409660334100"}`)
+	assert.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+	assert.JSONEq(t, `{"code":5006,"message":"套餐不存在"}`, stripResponseMetadata(w.Body.String()))
+
+	w = doJSON(t, r, http.MethodPut, "/api/v1/tenants/1/plan", `{"plan_id":"373398409660334080"}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var tenantRow domain.Tenant
+	require.NoError(t, db.First(&tenantRow, tenant.DefaultTenantID).Error)
+	assert.Equal(t, planID, tenantRow.PlanID)
+}
+
 func TestPlanRoutesRejectDeleteWhenAssigned(t *testing.T) {
 	r, db := newPlanTestRouter(t)
 	require.NoError(t, db.Create(&domain.Tenant{ID: tenant.DefaultTenantID, Code: "default", Name: "默认租户", Status: 1}).Error)
 
 	w := doJSON(t, r, http.MethodPost, "/api/v1/tenant-plans", `{"code":"pro","name":"专业版"}`)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
-	planID := uint64(decodeData(t, w)["id"].(float64))
+	planID := decodeData(t, w)["id"].(string)
 
-	w = doJSON(t, r, http.MethodPut, "/api/v1/tenants/1/plan", `{"plan_id":`+itoa(planID)+`}`)
+	w = doJSON(t, r, http.MethodPut, "/api/v1/tenants/1/plan", `{"plan_id":"`+planID+`"}`)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	w = doJSON(t, r, http.MethodDelete, "/api/v1/tenant-plans/"+itoa(planID), "")
+	w = doJSON(t, r, http.MethodDelete, "/api/v1/tenant-plans/"+planID, "")
 	assert.Equal(t, http.StatusConflict, w.Code, "仍被租户使用的套餐不可删除: %s", w.Body.String())
+}
+
+func TestPlanRoutesAcceptLegacyNumericPlanID(t *testing.T) {
+	r, db := newPlanTestRouter(t)
+	require.NoError(t, db.Create(&domain.Tenant{ID: tenant.DefaultTenantID, Code: "default", Name: "默认租户", Status: 1}).Error)
+	require.NoError(t, db.Create(&domain.Plan{ID: 7, Code: "legacy", Name: "旧客户端套餐"}).Error)
+
+	w := doJSON(t, r, http.MethodPut, "/api/v1/tenants/1/plan", `{"plan_id":7}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var tenantRow domain.Tenant
+	require.NoError(t, db.First(&tenantRow, tenant.DefaultTenantID).Error)
+	assert.Equal(t, uint64(7), tenantRow.PlanID)
 }
 
 func TestPlanRoutesRequireValidID(t *testing.T) {
@@ -144,4 +186,14 @@ func itoa(v uint64) string {
 		v /= 10
 	}
 	return string(buf[i:])
+}
+
+func stripResponseMetadata(body string) string {
+	var out map[string]any
+	if err := json.Unmarshal([]byte(body), &out); err != nil {
+		return body
+	}
+	delete(out, "request_id")
+	b, _ := json.Marshal(out)
+	return string(b)
 }

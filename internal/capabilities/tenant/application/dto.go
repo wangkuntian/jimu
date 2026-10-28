@@ -22,7 +22,7 @@ type TenantResponse struct {
 	Code      string    `json:"code"`
 	Name      string    `json:"name"`
 	Status    int8      `json:"status"`
-	PlanID    uint64    `json:"plan_id"`
+	PlanID    string    `json:"plan_id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -33,7 +33,7 @@ func ToTenantResponse(t domain.Tenant) TenantResponse {
 		Code:      t.Code,
 		Name:      t.Name,
 		Status:    t.Status,
-		PlanID:    t.PlanID,
+		PlanID:    strconv.FormatUint(t.PlanID, 10),
 		CreatedAt: t.CreatedAt,
 		UpdatedAt: t.UpdatedAt,
 	}

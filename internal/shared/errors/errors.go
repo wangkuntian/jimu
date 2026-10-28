@@ -72,6 +72,7 @@ const (
 	CodeTenantProtected  = 5003 // 默认租户受保护，不可停用或删除
 	CodeTenantCodeFormat = 5004 // 租户编码格式无效
 	CodeQuotaExceeded    = 5005 // 租户资源配额已用尽
+	CodePlanNotFound     = 5006 // 套餐不存在
 )
 
 type AppError struct {
@@ -119,7 +120,7 @@ func HTTPStatus(code int) int {
 		return 401
 	case CodeForbidden:
 		return 403
-	case CodeNotFound, CodeUserNotFound, CodeRoleNotFound, CodeOAuthProviderNotFound, CodeTenantNotFound, CodeWebAuthnNoCredential:
+	case CodeNotFound, CodeUserNotFound, CodeRoleNotFound, CodeOAuthProviderNotFound, CodeTenantNotFound, CodePlanNotFound, CodeWebAuthnNoCredential:
 		return 404
 	case CodeConflict, CodeUserExists, CodeTenantExists, CodeTenantProtected:
 		return 409
@@ -205,6 +206,7 @@ func AllErrorCodes() []ErrorInfo {
 		{CodeTenantProtected, "默认租户受保护，不可停用或删除", 409, "租户"},
 		{CodeTenantCodeFormat, "租户编码格式无效", 400, "租户"},
 		{CodeQuotaExceeded, "租户资源配额已用尽", 403, "租户"},
+		{CodePlanNotFound, "套餐不存在", 404, "租户"},
 		{CodeWebAuthnNoCredential, "该用户未注册通行密钥", 404, "用户"},
 		{CodeWebAuthnVerificationFailed, "通行密钥校验失败", 400, "用户"},
 	}

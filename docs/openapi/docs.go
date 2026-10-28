@@ -2307,7 +2307,7 @@ const docTemplate = `{
                 "summary": "更新套餐",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "套餐 ID",
                         "name": "id",
                         "in": "path",
@@ -2360,7 +2360,7 @@ const docTemplate = `{
                 "summary": "删除套餐",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "套餐 ID",
                         "name": "id",
                         "in": "path",
@@ -2727,7 +2727,7 @@ const docTemplate = `{
         },
         "/tenants/{id}/plan": {
             "put": {
-                "description": "为指定租户分配套餐；plan_id=0 表示取消套餐（取消后不再受配额限制）。超限时不影响既有数据，只阻止继续创建。",
+                "description": "为指定租户分配套餐；plan_id=\"0\" 表示取消套餐（取消后不再受配额限制）。超限时不影响既有数据，只阻止继续创建。",
                 "consumes": [
                     "application/json"
                 ],
@@ -3254,7 +3254,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "plan_id": {
-                    "type": "integer"
+                    "type": "string"
                 }
             }
         },
@@ -3650,7 +3650,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "max_api_keys": {
                     "type": "integer"
@@ -3928,7 +3928,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "plan_id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "status": {
                     "type": "integer"
