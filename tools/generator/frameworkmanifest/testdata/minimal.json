@@ -586,30 +586,6 @@
       "data": {
         "Capabilities": [
           {
-            "Alias": "usermodule",
-            "Capability": "user",
-            "Drivers": null,
-            "HasDrivers": false,
-            "Path": "jimu/internal/capabilities/user",
-            "Ungated": false
-          },
-          {
-            "Alias": "accessmodule",
-            "Capability": "access",
-            "Drivers": null,
-            "HasDrivers": false,
-            "Path": "jimu/internal/capabilities/access",
-            "Ungated": false
-          },
-          {
-            "Alias": "authmodule",
-            "Capability": "auth",
-            "Drivers": null,
-            "HasDrivers": false,
-            "Path": "jimu/internal/capabilities/auth",
-            "Ungated": false
-          },
-          {
             "Alias": "encryptionmodule",
             "Capability": "encryption",
             "Drivers": null,
@@ -624,6 +600,30 @@
             "HasDrivers": false,
             "Path": "jimu/internal/capabilities/notification",
             "Ungated": true
+          },
+          {
+            "Alias": "accessmodule",
+            "Capability": "access",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/access",
+            "Ungated": false
+          },
+          {
+            "Alias": "usermodule",
+            "Capability": "user",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/user",
+            "Ungated": false
+          },
+          {
+            "Alias": "authmodule",
+            "Capability": "auth",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/auth",
+            "Ungated": false
           }
         ],
         "Shape": "minimal"
@@ -636,30 +636,6 @@
       "data": {
         "Capabilities": [
           {
-            "Alias": "usermodule",
-            "Capability": "user",
-            "Drivers": null,
-            "HasDrivers": false,
-            "Path": "jimu/internal/capabilities/user",
-            "Ungated": false
-          },
-          {
-            "Alias": "accessmodule",
-            "Capability": "access",
-            "Drivers": null,
-            "HasDrivers": false,
-            "Path": "jimu/internal/capabilities/access",
-            "Ungated": false
-          },
-          {
-            "Alias": "authmodule",
-            "Capability": "auth",
-            "Drivers": null,
-            "HasDrivers": false,
-            "Path": "jimu/internal/capabilities/auth",
-            "Ungated": false
-          },
-          {
             "Alias": "encryptionmodule",
             "Capability": "encryption",
             "Drivers": null,
@@ -674,6 +650,30 @@
             "HasDrivers": false,
             "Path": "jimu/internal/capabilities/notification",
             "Ungated": true
+          },
+          {
+            "Alias": "accessmodule",
+            "Capability": "access",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/access",
+            "Ungated": false
+          },
+          {
+            "Alias": "usermodule",
+            "Capability": "user",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/user",
+            "Ungated": false
+          },
+          {
+            "Alias": "authmodule",
+            "Capability": "auth",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/auth",
+            "Ungated": false
           }
         ],
         "Shape": "minimal"
@@ -686,30 +686,6 @@
       "data": {
         "Capabilities": [
           {
-            "Alias": "usermodule",
-            "Capability": "user",
-            "Drivers": null,
-            "HasDrivers": false,
-            "Path": "jimu/internal/capabilities/user",
-            "Ungated": false
-          },
-          {
-            "Alias": "accessmodule",
-            "Capability": "access",
-            "Drivers": null,
-            "HasDrivers": false,
-            "Path": "jimu/internal/capabilities/access",
-            "Ungated": false
-          },
-          {
-            "Alias": "authmodule",
-            "Capability": "auth",
-            "Drivers": null,
-            "HasDrivers": false,
-            "Path": "jimu/internal/capabilities/auth",
-            "Ungated": false
-          },
-          {
             "Alias": "encryptionmodule",
             "Capability": "encryption",
             "Drivers": null,
@@ -724,6 +700,30 @@
             "HasDrivers": false,
             "Path": "jimu/internal/capabilities/notification",
             "Ungated": true
+          },
+          {
+            "Alias": "accessmodule",
+            "Capability": "access",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/access",
+            "Ungated": false
+          },
+          {
+            "Alias": "usermodule",
+            "Capability": "user",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/user",
+            "Ungated": false
+          },
+          {
+            "Alias": "authmodule",
+            "Capability": "auth",
+            "Drivers": null,
+            "HasDrivers": false,
+            "Path": "jimu/internal/capabilities/auth",
+            "Ungated": false
           }
         ],
         "Shape": "minimal"
@@ -1631,5 +1631,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:598596b2f88af22938d788254d94681e38000b442b462737547fe50dc5858c79"
+  "digest": "sha256:dc10712c34ba11e2437dba49d194885b9aee8e018ea010da998f11927a21fc0a"
 }
