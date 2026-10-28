@@ -3,12 +3,14 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -43,6 +45,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var e2eDBSeq atomic.Uint64
+
 // newTestApp 组装一个真实的应用路由：auth + user + role + permission + audit 模块，
 // 底层用 sqlite（内存共享缓存）+ miniredis，无需外部 MySQL/Redis。
 func newTestApp(t *testing.T) *gin.Engine {
@@ -61,7 +65,9 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 	// casbin 用相对路径加载 conf/rbac_model.conf，需 cwd 位于项目根
 	t.Chdir(repoRoot(t))
 
-	gdb, err := gorm.Open(sqlite.Open("file:e2e_contract?mode=memory&cache=shared"), &gorm.Config{})
+	// 每个 app 使用独立的内存库；同名 DSN 会让同包测试互相看到残留的 seed/用户/角色。
+	dsn := fmt.Sprintf("file:e2e_contract_%d?mode=memory&cache=shared", e2eDBSeq.Add(1))
+	gdb, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
 	// 内存库单连接，避免多连接看到不同实例
 	if sqlDB, err := gdb.DB(); err == nil {
