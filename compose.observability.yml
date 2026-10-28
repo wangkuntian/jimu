@@ -9,7 +9,7 @@ services:
 
   # OpenObserve 统一承载日志/指标/追踪/告警/仪表盘
   openobserve:
-    image: public.ecr.aws/zinclabs/openobserve:v1.1.1
+    image: public.ecr.aws/zinclabs/openobserve:v1.1.2
     restart: unless-stopped
     env_file:
       - path: ${JIMU_SECRETS_DIR:-./secrets}/openobserve.env
@@ -30,7 +30,7 @@ services:
   otel-collector:
     # pin 只能用不带架构后缀的 tag：Docker Hub 的 0.162.0-386 是 i386 单架构镜像，dependabot
     # 会把它当版本升级（PR #167 已误合）。同类后缀还有 -amd64/-arm64/-ppc64le/-s390x/-nightly.*。
-    image: otel/opentelemetry-collector-contrib:0.162.0
+    image: otel/opentelemetry-collector-contrib:0.163.2-386
     restart: unless-stopped
     command: ["--config=/etc/otelcol/config.yaml"]
     volumes:
