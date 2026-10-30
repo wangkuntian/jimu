@@ -1285,6 +1285,7 @@
     "internal/app/capconfig.go",
     "internal/app/capconfig_test.go",
     "internal/app/container.go",
+    "internal/app/container_http_only_test.go",
     "internal/app/seed.go",
     "internal/app/seed_test.go",
     "internal/assembly/assembly.go",
@@ -1664,5 +1665,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:16e4673f131e8259a9e3ee2cec6d2dfb010682f74aed6ae0434cfd1f23efcf92"
+  "digest": "sha256:ab696db9d11a42d19ee519eb9d3b1c9294b6641707d3b69e8615695e3d538653"
 }

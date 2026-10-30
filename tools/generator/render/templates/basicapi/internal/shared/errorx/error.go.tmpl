@@ -1,0 +1,20 @@
+package errorx
+
+type Error struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func (e Error) Error() string { return e.Message }
+
+func NotFound(message string) Error {
+	return Error{Code: 1004, Message: message}
+}
+
+func MethodNotAllowed(message string) Error {
+	return Error{Code: 1005, Message: message}
+}
+
+func Internal(message string) Error {
+	return Error{Code: 1000, Message: message}
+}

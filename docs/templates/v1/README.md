@@ -146,7 +146,6 @@ jimu new <dir> --with=user,access,auth # 专家模式，标记 experimental
 ├── internal/shared/errorx/error.go
 ├── internal/shared/response/response.go
 ├── configs/app.yaml
-├── .env.example
 ├── README.md
 ├── Makefile
 ├── Dockerfile
@@ -231,7 +230,6 @@ v0.5.0 不包含公开注册、MFA/passkey、OAuth、验证码、通知、字段
 ├── QUICKSTART.md
 ├── Makefile
 ├── Dockerfile
-├── .env.example
 ├── .gitignore
 ├── go.mod
 ├── go.sum

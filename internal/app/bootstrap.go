@@ -58,11 +58,15 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 	// 必须在 InitTracing 之后：插件创建时固化全局 TracerProvider，
 	// 提前实例化会绑定 NoOp provider 导致 span 永不产生。
 	if cfg.OTEL.Enabled {
-		if err := container.DB.Use(gormotel.NewPlugin()); err != nil {
-			return nil, fmt.Errorf("init gorm otel plugin: %w", err)
+		if container.DB != nil {
+			if err := container.DB.Use(gormotel.NewPlugin()); err != nil {
+				return nil, fmt.Errorf("init gorm otel plugin: %w", err)
+			}
 		}
-		if err := redisotel.InstrumentTracing(container.Redis); err != nil {
-			return nil, fmt.Errorf("init redis otel tracing: %w", err)
+		if container.Redis != nil {
+			if err := redisotel.InstrumentTracing(container.Redis); err != nil {
+				return nil, fmt.Errorf("init redis otel tracing: %w", err)
+			}
 		}
 	}
 
@@ -109,14 +113,20 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 		container.Logger.Warnw("capability degraded", "name", d.Capability, "missing", strings.Join(d.Missing, ","))
 	}
 
-	sqlDB, err := container.DB.DB()
-	if err != nil {
-		return nil, fmt.Errorf("get database pool: %w", err)
+	checkers := make([]observability.Checker, 0, 2)
+	if container.DB != nil {
+		sqlDB, err := container.DB.DB()
+		if err != nil {
+			return nil, fmt.Errorf("get database pool: %w", err)
+		}
+		checkers = append(checkers, observability.NewSQLChecker(sqlDB))
+	}
+	if container.Redis != nil {
+		checkers = append(checkers, observability.NewRedisChecker(container.Redis))
 	}
 	readiness := observability.NewReadiness(
 		time.Duration(cfg.Management.ProbeTimeoutSec)*time.Second,
-		observability.NewSQLChecker(sqlDB),
-		observability.NewRedisChecker(container.Redis),
+		checkers...,
 	)
 	management := platformhttp.NewManagementServer(
 		cfg.Management,

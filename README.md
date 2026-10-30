@@ -275,6 +275,8 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 > **v0.5.0 模板契约（实施中）**：正式产品入口将收敛为 `--template=basic-api|auth-api`，默认 `basic-api`；`--with` 只作为 experimental 专家模式，`--profile=minimal` 在 v0.5.x 映射为 `auth-api` 并在 v0.6.0 移除。模板、支持矩阵、兼容窗口和发布阻断预算见[模板契约 v0.1](docs/templates/v1/README.md)。当前命令行为仍以本节参数表为准，待对应实现合并后切换。
 
+`basic-api` 的生成产物已按零外部服务基线落地：不含数据库/Redis 配置、Compose、Kubernetes/Helm 或 OpenAPI 资产，启动时只创建 HTTP 与管理端口；`/livez`、`/readyz` 和 `/api/v1/ping` 不检查外部依赖。按 v0.4.0 的既定决定，生成项目不恢复受跟踪的 `.env.example`，环境变量与配置入口写在项目 README。
+
 `jimu capability add <name>` 在已生成项目中追加框架已有的能力。`jimu capability create <name>` 只在框架仓库中创建能力骨架，不自动修改 catalog 或 profile。旧 `jimu module create` 已移除。
 
 ```bash
@@ -480,7 +482,7 @@ jimu/
 │   │   ├── frameworkmanifest/    # catalog/profile/Descriptor 到 manifest 的唯一适配层
 │   │   ├── preflight/            # 写目标目录前的受保护链、迁移与外部服务预检
 │   │   ├── plan/                 # manifest 到确定性执行计划
-│   │   ├── render/               # 计划执行、模板 embed 与文本渲染
+│   │   ├── render/               # 计划执行、模板 embed 与文本渲染（basicapi/ 为最小模板产物）
 │   │   ├── workspace/            # 暂存、原子换入与增量更新
 │   │   ├── report/               # 框架无关的生成项目度量
 │   │   ├── module/               # capability create 模块骨架与专属模板

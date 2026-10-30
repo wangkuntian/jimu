@@ -103,6 +103,8 @@ func TestExportRejectsInvalidSelection(t *testing.T) {
 	for name, req := range map[string]Request{
 		"both profile and with":    {Root: root, Profile: "minimal", With: "user", Module: "example.com/x"},
 		"neither profile nor with": {Root: root, Module: "example.com/x"},
+		"template and profile":     {Root: root, Template: "basic-api", Profile: "minimal", Module: "example.com/x"},
+		"unknown template":         {Root: root, Template: "ghost", Module: "example.com/x"},
 		"invalid shape":            {Root: root, With: "user", Shape: "../bad", Module: "example.com/x"},
 	} {
 		t.Run(name, func(t *testing.T) {

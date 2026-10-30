@@ -45,6 +45,8 @@ v0.5.0 起，对外产品入口收敛为模板：`--template=basic-api|auth-api`
 
 官方模板是可再生成一次的起始基线，不是持续管理的投影。生成后的工程归用户所有；`.jimu/manifest.json` 只记录来源、选择集和摘要，不授予 Jimu 覆盖用户文件的权利。v0.5.0 不提供隐式升级，`jimu upgrade` 是 v0.6.0 的显式 opt-in 能力。
 
+`basic-api` 使用独立的零外部服务生成路径：只渲染 HTTP、配置、日志、统一错误、健康检查和示例路由所需文件，不复制能力目录或完整框架内核。生成项目没有数据库/Redis 客户端、Compose、Kubernetes/Helm 与 OpenAPI 资产，`go build`、`go test`、`go run` 均不需要外部服务。框架运行时的容器构造也已按 `Descriptor.RuntimeServices` 决定是否连接 MySQL/Redis，未声明服务的装配不会创建对应客户端。
+
 生成器从框架读取能力、profile、contract 和资产信息的唯一适配层是 [`tools/generator/frameworkmanifest`](../../tools/generator/frameworkmanifest)。适配层导出校验后的 manifest；计划、渲染、文件工作区和报告逻辑消费 manifest，不直接依赖框架内部包。这样框架内部结构变化集中在适配层与明确的生成模板中。
 
 manifest 记录项目选择、复制与模板动作、合并和重写规则、资产、测试裁剪、生成文件及摘要；它也是识别生成产物和 `jimu capability add` 增量更新的依据。更新能力时，生成器根据新的选择重算产物，并保留受支持的用户配置合并规则。

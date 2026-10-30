@@ -1,0 +1,84 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"{{.Module}}/internal/config"
+	platformhttp "{{.Module}}/internal/platform/http"
+	"{{.Module}}/internal/platform/health"
+	"{{.Module}}/internal/platform/logging"
+)
+
+func Run(version string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	log, err := logging.New(cfg.Log)
+	if err != nil {
+		return fmt.Errorf("init logger: %w", err)
+	}
+	defer func() { _ = log.Sync() }()
+
+	public, err := platformhttp.NewPublic(cfg.HTTP, NewRouter(log, cfg.HTTP.Mode, cfg.HTTP.MaxBodyBytes))
+	if err != nil {
+		return fmt.Errorf("create public server: %w", err)
+	}
+	management, err := platformhttp.NewManagement(cfg.Management, health.Handler())
+	if err != nil {
+		return fmt.Errorf("create management server: %w", err)
+	}
+
+	ctx, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stopSignals()
+
+	started := make([]*platformhttp.Server, 0, 2)
+	for _, server := range []*platformhttp.Server{public, management} {
+		if err := server.Start(ctx); err != nil {
+			_ = stopServers(started, cfg.HTTP.ShutdownTimeoutSec)
+			return fmt.Errorf("start %s server: %w", server.Name(), err)
+		}
+		started = append(started, server)
+		log.Infow("server started", "name", server.Name(), "address", server.Address())
+	}
+	log.Infow("application ready", "version", version)
+
+	errCh := make(chan error, len(started))
+	for _, server := range started {
+		go func(server *platformhttp.Server) {
+			select {
+			case err := <-server.Errors():
+				if err != nil {
+					errCh <- fmt.Errorf("%s server: %w", server.Name(), err)
+				}
+			case <-ctx.Done():
+			}
+		}(server)
+	}
+
+	var runErr error
+	select {
+	case <-ctx.Done():
+	case runErr = <-errCh:
+	}
+	return errors.Join(runErr, stopServers(started, cfg.HTTP.ShutdownTimeoutSec))
+}
+
+func stopServers(servers []*platformhttp.Server, timeoutSec int) error {
+	timeout := time.Duration(timeoutSec) * time.Second
+	if timeout <= 0 {
+		timeout = 15 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	var result error
+	for i := len(servers) - 1; i >= 0; i-- {
+		result = errors.Join(result, servers[i].Stop(ctx))
+	}
+	return result
+}

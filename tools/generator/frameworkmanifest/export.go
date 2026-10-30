@@ -20,11 +20,12 @@ import (
 )
 
 type Request struct {
-	Root    string
-	Profile string
-	With    string
-	Shape   string
-	Module  string
+	Root     string
+	Template string
+	Profile  string
+	With     string
+	Shape    string
+	Module   string
 }
 
 type selection struct {
@@ -50,11 +51,19 @@ func Export(req Request) (manifest.Document, error) {
 	if req.Module == "" {
 		return manifest.Document{}, fmt.Errorf("module is required")
 	}
-	selected, err := resolveSelection(root, req)
-	if err != nil {
-		return manifest.Document{}, err
+	if req.Template != "" && (req.Profile != "" || req.With != "") {
+		return manifest.Document{}, fmt.Errorf("--template must not be combined with --profile or --with")
 	}
-	doc, err := buildDocument(root, req.Module, selected)
+	var doc manifest.Document
+	if req.Template != "" {
+		doc, err = basicAPIDocument(root, req.Module, req.Template)
+	} else {
+		var selected selection
+		selected, err = resolveSelection(root, req)
+		if err == nil {
+			doc, err = buildDocument(root, req.Module, selected)
+		}
+	}
 	if err != nil {
 		return manifest.Document{}, err
 	}

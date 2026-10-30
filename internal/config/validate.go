@@ -14,7 +14,7 @@ func (c *Config) Validate(env string) error {
 	if env != "prod" {
 		return nil
 	}
-	if c.DB.Password == "" || c.DB.Password == "root" || strings.Contains(c.DB.Password, "${") {
+	if c.DB.configured() && (c.DB.Password == "" || c.DB.Password == "root" || strings.Contains(c.DB.Password, "${")) {
 		return errors.New("invalid db.password")
 	}
 	if c.Management.Port < 1 || c.Management.Port > 65535 {
@@ -74,35 +74,52 @@ func (c *Config) validateCommon() error {
 	if c.Security.IdempotencyEnabled && c.Security.IdempotencyTTLSec <= 0 {
 		return errors.New("security.idempotency_ttl_sec must be positive when idempotency is enabled")
 	}
-	if c.DB.MaxOpen <= 0 || c.DB.MaxIdle <= 0 || c.DB.MaxIdle > c.DB.MaxOpen {
-		return errors.New("invalid db pool configuration")
-	}
-	if c.DB.MaxRetries <= 0 || c.DB.RetryIntervalSec <= 0 {
-		return errors.New("invalid db retry configuration")
-	}
-	if c.Redis.MaxRetries <= 0 || c.Redis.RetryIntervalSec <= 0 {
-		return errors.New("invalid redis retry configuration")
-	}
-	if c.Redis.Mode == "" {
-		c.Redis.Mode = RedisModeSingle
-	}
-	if !contains(validRedisModes, c.Redis.Mode) {
-		return fmt.Errorf("invalid redis.mode: %q, must be one of %v", c.Redis.Mode, validRedisModes)
-	}
-	switch c.Redis.Mode {
-	case RedisModeSentinel:
-		if c.Redis.MasterName == "" || len(c.Redis.SentinelAddrs) == 0 {
-			return errors.New("invalid redis sentinel config: master_name and sentinel_addrs are required")
+	if c.DB.configured() {
+		if c.DB.MaxOpen <= 0 || c.DB.MaxIdle <= 0 || c.DB.MaxIdle > c.DB.MaxOpen {
+			return errors.New("invalid db pool configuration")
 		}
-	case RedisModeCluster:
-		if len(c.Redis.ClusterAddrs) == 0 {
-			return errors.New("invalid redis cluster config: cluster_addrs is required")
+		if c.DB.MaxRetries <= 0 || c.DB.RetryIntervalSec <= 0 {
+			return errors.New("invalid db retry configuration")
+		}
+	}
+	if c.Redis.configured() {
+		if c.Redis.MaxRetries <= 0 || c.Redis.RetryIntervalSec <= 0 {
+			return errors.New("invalid redis retry configuration")
+		}
+		if c.Redis.Mode == "" {
+			c.Redis.Mode = RedisModeSingle
+		}
+		if !contains(validRedisModes, c.Redis.Mode) {
+			return fmt.Errorf("invalid redis.mode: %q, must be one of %v", c.Redis.Mode, validRedisModes)
+		}
+		switch c.Redis.Mode {
+		case RedisModeSentinel:
+			if c.Redis.MasterName == "" || len(c.Redis.SentinelAddrs) == 0 {
+				return errors.New("invalid redis sentinel config: master_name and sentinel_addrs are required")
+			}
+		case RedisModeCluster:
+			if len(c.Redis.ClusterAddrs) == 0 {
+				return errors.New("invalid redis cluster config: cluster_addrs is required")
+			}
 		}
 	}
 	if err := validateCapabilities(&c.Capabilities); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (c DBConfig) configured() bool {
+	return c.Driver != "" || c.Host != "" || c.Port != 0 || c.User != "" || c.Password != "" ||
+		c.Database != "" || c.MaxOpen != 0 || c.MaxIdle != 0 || c.MaxRetries != 0 ||
+		c.RetryIntervalSec != 0 || len(c.ReadHosts) > 0 || c.Breaker.Enabled
+}
+
+func (c RedisConfig) configured() bool {
+	return c.Mode != "" || c.Addr != "" || c.Password != "" || c.PoolSize != 0 ||
+		c.MinIdleConns != 0 || c.ReadTimeoutSec != 0 || c.WriteTimeoutSec != 0 ||
+		c.MaxRetries != 0 || c.RetryIntervalSec != 0 || c.MasterName != "" ||
+		len(c.SentinelAddrs) > 0 || len(c.ClusterAddrs) > 0 || c.Breaker.Enabled
 }
 
 // validateCIDRs 校验 IP 白名单条目（CIDR 或单个 IP），非法值启动即报错

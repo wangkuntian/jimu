@@ -143,6 +143,25 @@ func TestValidateProdRejectsInsecureValues(t *testing.T) {
 	}
 }
 
+func TestValidateAllowsHTTPOnlyConfigWithoutDatabaseOrRedis(t *testing.T) {
+	cfg := Config{
+		HTTP: HTTPConfig{
+			Host:                 "127.0.0.1",
+			Port:                 8080,
+			Mode:                 HTTPModeDebug,
+			ReadHeaderTimeoutSec: 5,
+			ReadTimeoutSec:       15,
+			WriteTimeoutSec:      30,
+			IdleTimeoutSec:       60,
+			ShutdownTimeoutSec:   15,
+			MaxBodyBytes:         1 << 20,
+		},
+		Management: ManagementConfig{Host: "127.0.0.1", Port: 9090, ProbeTimeoutSec: 1},
+		Log:        LogConfig{Level: LogLevelInfo, Format: LogFormatConsole, Output: "stdout"},
+	}
+	require.NoError(t, cfg.Validate("dev"))
+}
+
 func TestValidateEncryptionKeyRequiresExactAES256Length(t *testing.T) {
 	for _, tc := range []struct {
 		name    string

@@ -30,6 +30,45 @@ func TestNewProjectRejectsSelectionWithoutProtectedMiddlewareProviderBeforeWriti
 	assert.True(t, os.IsNotExist(statErr), "preflight failure must not write the target")
 }
 
+func TestNewProjectBasicAPIHasNoExternalRuntimeDependencies(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "basic")
+	result, err := NewProject(NewOptions{
+		Dir: dir, Template: "basic-api", Module: "example.com/basic",
+	})
+	require.NoError(t, err)
+	assert.LessOrEqual(t, result.FileCount-1, 40, "basic-api 生成文件预算不含 manifest")
+
+	for _, rel := range []string{
+		"cmd/server/main.go",
+		"internal/app/app.go",
+		"internal/config/config.go",
+		"internal/api/v1/ping.go",
+		"internal/platform/health/health.go",
+		"configs/app.yaml",
+		"README.md",
+		"Makefile",
+		"Dockerfile",
+		"go.mod",
+		".jimu/manifest.json",
+	} {
+		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "缺少 basic-api 产物 %s", rel)
+	}
+	for _, rel := range []string{
+		"internal/capabilities",
+		"docker-compose.yml",
+		"deploy",
+		"docs/openapi",
+		".env.example",
+	} {
+		_, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
+		assert.True(t, os.IsNotExist(statErr), "basic-api 不应包含 %s", rel)
+	}
+	config, err := os.ReadFile(filepath.Join(dir, "configs", "app.yaml"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(config), "\ndb:")
+	assert.NotContains(t, string(config), "\nredis:")
+}
+
 func TestNewProjectLeavesNoPartialTreeOnFailure(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	// 目标目录已存在且非空 → 报错，且不得留下 proj.tmp-* 残留。

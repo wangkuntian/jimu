@@ -33,6 +33,8 @@
 
 **生成物是子集**：内核目录原样复制；能力按复制集（声明集 ∪ 编译闭包 ∪ schema 依赖的迁移携带目录 ∪ 内核 domain 依赖）落地；`internal/profiles/{registry,<shape>,active}`、`internal/capabilities/catalog/*`、`configs/*.yaml`、`Makefile`/`Dockerfile`/`scripts/check_profiles.sh` 按能力集**渲染**（单形态，无 `PROFILE=`、无 overlay）；测试树按「逐文件 import 可满足性 + 资产依赖」裁剪（规则写入 `.jimu/manifest.json` 的 `prune` 段，文件清单写入 `generated_files`）。manifest 只支持 JSON，路径必须为相对路径。
 
+`basic-api` 是独立的零外部服务模板：只生成 HTTP/配置/日志/健康检查/示例路由，不包含能力目录、Compose 或数据库/Redis 配置。v0.4.0 已移除受跟踪的 `.env.example`，basic-api 不重新引入它；配置与 `HTTP_*`/`MANAGEMENT_*`/`LOG_LEVEL` 环境变量写在生成项目 README。
+
 ## `jimu capability add <name>`
 
 在**已生成项目**上增量追加能力：确定性重渲染、幂等（同一集合重跑逐字节等价）；`configs/*.yaml` 与 `deploy/helm/values.yaml` 以项目现有文件为底补齐新增段，**不覆盖**用户手改的值。若项目里已有 `--report` 产物，成功后同批重算刷新（本来没有则不创建）。
