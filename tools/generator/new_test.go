@@ -37,6 +37,8 @@ func TestNewProjectBasicAPIHasNoExternalRuntimeDependencies(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.LessOrEqual(t, result.FileCount-1, 40, "basic-api 生成文件预算不含 manifest")
+	assert.Equal(t, "basic-api", result.Template)
+	assert.Equal(t, "official", result.Support)
 
 	for _, rel := range []string{
 		"cmd/server/main.go",

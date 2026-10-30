@@ -39,7 +39,10 @@ func basicAPIDocument(root, module, template string) (manifest.Document, error) 
 		Framework: manifest.Framework{
 			Module: "jimu", Version: profiles.Version, Commit: frameworkCommit(root),
 		},
-		Selection:    manifest.Selection{Shape: "basic-api", Capabilities: []string{}, Drivers: map[string][]string{}},
+		Selection: manifest.Selection{
+			Shape: "basic-api", Template: "basic-api", Support: "official",
+			Capabilities: []string{}, Drivers: map[string][]string{},
+		},
 		Capabilities: []manifest.Capability{},
 		Copy: []manifest.CopyAction{
 			{Source: "go.sum", Destination: "go.sum", Include: []string{}, Exclude: []string{}},
@@ -52,6 +55,16 @@ func basicAPIDocument(root, module, template string) (manifest.Document, error) 
 		Report:         manifest.ReportSpec{Name: "basic-api", Capabilities: []string{}, Routes: 1},
 		GeneratedFiles: files,
 	}, nil
+}
+
+func authAPICompatibilityDocument(root, module string) (manifest.Document, error) {
+	selected, err := resolveSelection(root, Request{Profile: "minimal"})
+	if err != nil {
+		return manifest.Document{}, err
+	}
+	selected.template = "auth-api"
+	selected.support = "official"
+	return buildDocument(root, module, selected)
 }
 
 func loadBasicAPITemplateData(root, module string) (basicAPITemplateData, error) {

@@ -28,7 +28,9 @@ type Framework struct {
 
 type Selection struct {
 	Shape        string              `json:"shape"`
+	Template     string              `json:"template"`
 	Profile      string              `json:"profile"`
+	Support      string              `json:"support"`
 	Capabilities []string            `json:"capabilities"`
 	Drivers      map[string][]string `json:"drivers"`
 }

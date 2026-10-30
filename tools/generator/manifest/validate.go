@@ -22,6 +22,11 @@ func Validate(doc Document) error {
 	if strings.TrimSpace(doc.Selection.Shape) == "" {
 		return fmt.Errorf("selection.shape is required")
 	}
+	switch doc.Selection.Support {
+	case "", "official", "experimental", "internal":
+	default:
+		return fmt.Errorf("selection.support has unknown value %q", doc.Selection.Support)
+	}
 	if err := validateNames("selection.capabilities", doc.Selection.Capabilities); err != nil {
 		return err
 	}

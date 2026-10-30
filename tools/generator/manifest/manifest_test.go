@@ -88,6 +88,13 @@ func TestValidateRejectsInvalidDocuments(t *testing.T) {
 			},
 			want: "duplicate",
 		},
+		{
+			name: "invalid support level",
+			edit: func(doc *Document) {
+				doc.Selection.Support = "preview"
+			},
+			want: "support",
+		},
 	}
 
 	for _, tt := range tests {

@@ -47,6 +47,8 @@ type NewOptions struct {
 type Result struct {
 	Dir          string
 	Module       string
+	Template     string
+	Support      string
 	Shape        string
 	Capabilities []string
 	CopySet      []string
@@ -94,7 +96,8 @@ func NewProject(opts NewOptions) (*Result, error) {
 		return nil, err
 	}
 	return &Result{
-		Dir: created.Target, Module: created.Module, Shape: doc.Selection.Shape,
+		Dir: created.Target, Module: created.Module, Template: doc.Selection.Template,
+		Support: doc.Selection.Support, Shape: doc.Selection.Shape,
 		Capabilities: slices.Clone(doc.Selection.Capabilities),
 		CopySet:      manifestCapabilityNames(doc), Drivers: flattenDrivers(doc.Selection.Drivers),
 		Assets: manifestAssetNames(doc), Files: slices.Clone(created.Files), FileCount: created.FileCount,

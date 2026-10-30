@@ -7,7 +7,9 @@
   },
   "selection": {
     "shape": "minimal",
+    "template": "",
     "profile": "minimal",
+    "support": "internal",
     "capabilities": [
       "user",
       "access",
@@ -1665,5 +1667,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:ab696db9d11a42d19ee519eb9d3b1c9294b6641707d3b69e8615695e3d538653"
+  "digest": "sha256:52d50310cf615adda50e25a7f5f659cb6886507304157a6e1468a44a19c0983b"
 }

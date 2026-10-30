@@ -101,11 +101,10 @@ func TestExportWithUsesHardDependencyClosureAndDriverSelection(t *testing.T) {
 func TestExportRejectsInvalidSelection(t *testing.T) {
 	root := repositoryRoot(t)
 	for name, req := range map[string]Request{
-		"both profile and with":    {Root: root, Profile: "minimal", With: "user", Module: "example.com/x"},
-		"neither profile nor with": {Root: root, Module: "example.com/x"},
-		"template and profile":     {Root: root, Template: "basic-api", Profile: "minimal", Module: "example.com/x"},
-		"unknown template":         {Root: root, Template: "ghost", Module: "example.com/x"},
-		"invalid shape":            {Root: root, With: "user", Shape: "../bad", Module: "example.com/x"},
+		"both profile and with": {Root: root, Profile: "minimal", With: "user", Module: "example.com/x"},
+		"template and profile":  {Root: root, Template: "basic-api", Profile: "minimal", Module: "example.com/x"},
+		"unknown template":      {Root: root, Template: "ghost", Module: "example.com/x"},
+		"invalid shape":         {Root: root, With: "user", Shape: "../bad", Module: "example.com/x"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := Export(req); err == nil {
@@ -147,6 +146,29 @@ func TestExportCarriesPreflightFacts(t *testing.T) {
 	user := byName["user"]
 	if got := user.MigrationSchemaDeps; len(got) != 1 || got[0] != "tenant" {
 		t.Fatalf("user migration schema deps = %v, want [tenant]", got)
+	}
+}
+
+func TestExportDefaultsToOfficialBasicAPI(t *testing.T) {
+	doc, err := Export(Request{Root: repositoryRoot(t), Module: "example.com/basic"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Selection.Template != "basic-api" || doc.Selection.Support != "official" {
+		t.Fatalf("selection = %#v, want official basic-api", doc.Selection)
+	}
+}
+
+func TestExportAuthAPITemplateIsOfficialCompatibilityPath(t *testing.T) {
+	doc, err := Export(Request{Root: repositoryRoot(t), Template: "auth-api", Module: "example.com/auth"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Selection.Template != "auth-api" || doc.Selection.Support != "official" {
+		t.Fatalf("selection = %#v, want official auth-api", doc.Selection)
+	}
+	if doc.Selection.Profile != "minimal" {
+		t.Fatalf("profile = %q, want interim minimal compatibility selection", doc.Selection.Profile)
 	}
 }
 

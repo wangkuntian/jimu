@@ -30,7 +30,9 @@ type Request struct {
 
 type selection struct {
 	shape      string
+	template   string
 	profile    string
+	support    string
 	declared   []string
 	known      []string
 	copy       []string
@@ -51,11 +53,19 @@ func Export(req Request) (manifest.Document, error) {
 	if req.Module == "" {
 		return manifest.Document{}, fmt.Errorf("module is required")
 	}
+	if req.Template == "" && req.Profile == "" && req.With == "" {
+		req.Template = "basic-api"
+	}
 	if req.Template != "" && (req.Profile != "" || req.With != "") {
 		return manifest.Document{}, fmt.Errorf("--template must not be combined with --profile or --with")
 	}
+	if req.Template != "" && req.Shape != "" {
+		return manifest.Document{}, fmt.Errorf("--shape is only valid with --with")
+	}
 	var doc manifest.Document
-	if req.Template != "" {
+	if req.Template == "auth-api" {
+		doc, err = authAPICompatibilityDocument(root, req.Module)
+	} else if req.Template != "" {
 		doc, err = basicAPIDocument(root, req.Module, req.Template)
 	} else {
 		var selected selection
@@ -130,9 +140,12 @@ func buildDocument(root, module string, selected selection) (manifest.Document, 
 		pruneReason = "catalog-complete"
 	}
 	doc := manifest.Document{
-		SchemaVersion:  manifest.CurrentSchemaVersion,
-		Framework:      manifest.Framework{Module: "jimu", Version: profiles.Version, Commit: frameworkCommit(root)},
-		Selection:      manifest.Selection{Shape: selected.shape, Profile: selected.profile, Capabilities: slices.Clone(selected.declared), Drivers: cloneDrivers(selected.drivers)},
+		SchemaVersion: manifest.CurrentSchemaVersion,
+		Framework:     manifest.Framework{Module: "jimu", Version: profiles.Version, Commit: frameworkCommit(root)},
+		Selection: manifest.Selection{
+			Shape: selected.shape, Template: selected.template, Profile: selected.profile, Support: selected.support,
+			Capabilities: slices.Clone(selected.declared), Drivers: cloneDrivers(selected.drivers),
+		},
 		Capabilities:   capabilityFacts(root, selected),
 		Copy:           copyActions(root, selected),
 		Templates:      templateActions(root, selected),

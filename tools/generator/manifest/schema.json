@@ -34,10 +34,12 @@
     "selection": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["shape", "capabilities", "drivers"],
+      "required": ["shape", "template", "profile", "support", "capabilities", "drivers"],
       "properties": {
         "shape": {"type": "string", "minLength": 1},
-        "profile": {"type": "string", "minLength": 1},
+        "template": {"type": "string"},
+        "profile": {"type": "string"},
+        "support": {"enum": ["", "official", "experimental", "internal"]},
         "capabilities": {"type": "array", "items": {"type": "string", "minLength": 1}},
         "drivers": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}}
       }

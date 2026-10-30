@@ -27,13 +27,13 @@ func TestNewCmdWiresEveryFlag(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	var out bytes.Buffer
 	c := newCommandForTest(&out)
-	c.SetArgs([]string{"new", dir, "--profile=minimal", "--module=example.com/proj", "--dry-run"})
+	c.SetArgs([]string{"new", dir, "--template=basic-api", "--module=example.com/proj", "--dry-run"})
 	require.NoError(t, c.Execute())
 
 	_, statErr := os.Stat(dir)
 	assert.True(t, os.IsNotExist(statErr), "--dry-run 绝不落盘")
 	assert.Contains(t, out.String(), "example.com/proj")
-	assert.Contains(t, out.String(), "minimal")
+	assert.Contains(t, out.String(), "basic-api")
 }
 
 // TestNewCmdDryRunDistinguishesAssemblyFromCopySet ④：`--dry-run` 的两个能力集口径不同且必须各自
@@ -73,13 +73,71 @@ func planLine(t *testing.T, plan, label string) string {
 	return ""
 }
 
-// TestNewCmdRejectsMissingCapabilitySelection 两个选择都不给 → 报错（要求二选一）。
-func TestNewCmdRejectsMissingCapabilitySelection(t *testing.T) {
-	c := newCommandForTest(&bytes.Buffer{})
+func TestNewCmdDefaultsToBasicAPI(t *testing.T) {
+	var out bytes.Buffer
+	c := newCommandForTest(&out)
 	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--dry-run"})
+	require.NoError(t, c.Execute())
+	assert.Contains(t, out.String(), "template     basic-api")
+	assert.Contains(t, out.String(), "support      official")
+}
+
+func TestNewCmdMapsLegacyMinimalToAuthAPI(t *testing.T) {
+	var out bytes.Buffer
+	c := newCommandForTest(&out)
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=minimal", "--dry-run"})
+	require.NoError(t, c.Execute())
+	assert.Contains(t, out.String(), "warning: --profile=minimal")
+	assert.Contains(t, out.String(), "template     auth-api")
+	assert.Contains(t, out.String(), "support      official")
+}
+
+func TestNewCmdAcceptsAuthAPITemplate(t *testing.T) {
+	var out bytes.Buffer
+	c := newCommandForTest(&out)
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--template=auth-api", "--dry-run"})
+	require.NoError(t, c.Execute())
+	assert.Contains(t, out.String(), "template     auth-api")
+	assert.Contains(t, out.String(), "support      official")
+}
+
+func TestNewCmdRejectsUnknownTemplate(t *testing.T) {
+	c := newCommandForTest(&bytes.Buffer{})
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--template=ghost", "--dry-run"})
+	require.ErrorContains(t, c.Execute(), "unknown template")
+}
+
+func TestNewCmdRejectsInternalProfile(t *testing.T) {
+	c := newCommandForTest(&bytes.Buffer{})
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=full", "--dry-run"})
 	err := c.Execute()
-	require.ErrorContains(t, err, "--profile")
-	require.ErrorContains(t, err, "--with")
+	require.ErrorContains(t, err, "framework-internal")
+	require.ErrorContains(t, err, "--template")
+}
+
+func TestNewCmdMarksWithAsExperimental(t *testing.T) {
+	var out bytes.Buffer
+	c := newCommandForTest(&out)
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--with=apidocs", "--dry-run"})
+	require.NoError(t, c.Execute())
+	assert.Contains(t, out.String(), "support      experimental")
+}
+
+func TestNewCmdRejectsTemplateSelectorsTogether(t *testing.T) {
+	for _, args := range [][]string{
+		{"--template=basic-api", "--profile=minimal"},
+		{"--template=basic-api", "--with=apidocs"},
+	} {
+		c := newCommandForTest(&bytes.Buffer{})
+		c.SetArgs(append([]string{"new", filepath.Join(t.TempDir(), "proj"), "--dry-run"}, args...))
+		require.ErrorContains(t, c.Execute(), "mutually exclusive")
+	}
+}
+
+func TestNewCmdRejectsShapeWithoutWith(t *testing.T) {
+	c := newCommandForTest(&bytes.Buffer{})
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--template=basic-api", "--shape=app", "--dry-run"})
+	require.ErrorContains(t, c.Execute(), "--shape is only valid with --with")
 }
 
 // newCommandForTest 复制一份只含 new 子命令的根命令，避免测试间共享 cobra flag 状态。

@@ -7,7 +7,9 @@
   },
   "selection": {
     "shape": "app",
+    "template": "",
     "profile": "",
+    "support": "experimental",
     "capabilities": [
       "user",
       "access",
@@ -1530,5 +1532,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:c33ceb9e551bffc2bd924b1fcab9ef564b1e57c8ca02386d1c1f41f4a6aa1801"
+  "digest": "sha256:147a00e0b979fe0ddc453090bddf1b7e0fc76087a72cec89a316296a89c2b59a"
 }

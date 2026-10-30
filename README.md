@@ -243,7 +243,7 @@ make up-observability
 make cli
 
 # 生成新项目（能力可插拔的出货口：只复制选中能力的代码/迁移/配置段/资产）
-./bin/jimu new ./myapp --profile=minimal --module=example.com/myapp --report  # 默认跑 go mod tidy + 自检
+./bin/jimu new ./myapp --template=basic-api --module=example.com/myapp --report  # 默认跑 go mod tidy + 自检
 ./bin/jimu new ./myapp --with=user,access,queue                              # 按能力名解析（硬依赖闭包 + 拓扑序）
 ./bin/jimu new ./myapp --with=queue:kafka,storage:local,user                 # 冒号后缀逐项指定驱动
 ./bin/jimu capability add dataops                                            # 在已生成项目里增量追加能力（见「生成项目」）
@@ -271,26 +271,30 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 ## 生成项目（`jimu new` / `jimu capability add`）
 
-`jimu new <dir>` 生成只包含所选能力的独立 Go 项目；`--profile` 从一个已有 profile 选择，`--with` 则直接指定能力集。生成项目有自己的 module 并运行 `go mod tidy`，因此可以减少项目依赖；profile 只裁剪框架二进制的编译闭包，不改变框架 `go.mod`。
+`jimu new <dir>` 默认生成 `basic-api` 模板；`--template` 选择官方模板，`--with` 直接指定 experimental 能力集。生成项目有自己的 module 并运行 `go mod tidy`，因此可以减少项目依赖；profile 只裁剪框架二进制的编译闭包，不改变框架 `go.mod`。
 
-> **v0.5.0 模板契约（实施中）**：正式产品入口将收敛为 `--template=basic-api|auth-api`，默认 `basic-api`；`--with` 只作为 experimental 专家模式，`--profile=minimal` 在 v0.5.x 映射为 `auth-api` 并在 v0.6.0 移除。模板、支持矩阵、兼容窗口和发布阻断预算见[模板契约 v0.1](docs/templates/v1/README.md)。当前命令行为仍以本节参数表为准，待对应实现合并后切换。
+> **v0.5.0 模板入口**：`--template=basic-api|auth-api`，默认 `basic-api`；`--with` 只作为 experimental 专家模式；`--profile=minimal` 映射为 `auth-api` 并打印弃用警告，v0.6.0 移除。其他 profile 仅供框架自身构建，CLI 会拒绝。`auth-api` 当前复用 `minimal` 兼容选区，完整模板裁剪与一键启动在下一实施项收口。模板、支持矩阵、兼容窗口和发布阻断预算见[模板契约 v0.1](docs/templates/v1/README.md)。
 
 `basic-api` 的生成产物已按零外部服务基线落地：不含数据库/Redis 配置、Compose、Kubernetes/Helm 或 OpenAPI 资产，启动时只创建 HTTP 与管理端口；`/livez`、`/readyz` 和 `/api/v1/ping` 不检查外部依赖。按 v0.4.0 的既定决定，生成项目不恢复受跟踪的 `.env.example`，环境变量与配置入口写在项目 README。
 
 `jimu capability add <name>` 在已生成项目中追加框架已有的能力。`jimu capability create <name>` 只在框架仓库中创建能力骨架，不自动修改 catalog 或 profile。旧 `jimu module create` 已移除。
 
 ```bash
-./bin/jimu new ./myapp --profile=minimal --module=example.com/myapp
+./bin/jimu new ./myapp --module=example.com/myapp
+./bin/jimu new ./myapp --template=basic-api --module=example.com/myapp
+./bin/jimu new ./myapp --template=auth-api --module=example.com/myapp
 ./bin/jimu new ./myapp --with=user,access,queue --shape=app
 ./bin/jimu new ./myapp --with=queue:kafka --dry-run
 ```
 
 | 参数 | 说明 |
 |---|---|
-| `--profile=<name>` / `--with=<cap>[:<drv>][,…]` | 能力集二选一（互斥）；`--with` 可指定驱动 |
-| `--shape=<name>` | `--with` 时的形态名（默认 `app`）；`--profile` 时形态名恒等于 profile 名 |
+| `--template=basic-api\|auth-api` | 官方模板；不传选择器时默认 `basic-api` |
+| `--profile=minimal` | 弃用兼容别名，映射为 `auth-api` 并打印警告；v0.6.0 移除 |
+| `--with=<cap>[:<drv>][,…]` | experimental 专家模式；manifest 标记为 `support: experimental`，可指定驱动 |
+| `--shape=<name>` | 仅用于 `--with`（默认 `app`）；模板/兼容 profile 不允许覆盖 |
 | `--module=<path>` | 生成项目的 module 路径，默认由 `<dir>` 推导 |
-| `--dry-run` | 只打印计划，不落盘 |
+| `--dry-run` | 只打印模板、支持级别、能力、驱动、文件与资产计划，不落盘 |
 | `--force` | 只替换生成清单标记的生成器产物 |
 | `--no-tidy` | 跳过默认执行的 `go mod tidy` |
 | `--report` | 在生成项目中写入 `docs/profiles/generated-report.md` 并打印报告 |
