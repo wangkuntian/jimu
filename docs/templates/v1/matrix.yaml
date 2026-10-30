@@ -146,6 +146,15 @@ lifecycle:
   model: user-owned-fork
   implicit_upgrade: false
   capability_add: experimental
+  compatibility_decisions:
+    manifest_schema_v1:
+      read_compatibility: false
+      policy: fail-closed
+    existing_projects:
+      upgrade_model: regenerate-and-manual-migrate
+      automated_project_migration: false
+      manifest_rewrite: false
+      existing_database_migration: false
   generated_manifest: .jimu/manifest.json
   manifest_support_fields:
     - selection.template

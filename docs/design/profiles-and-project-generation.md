@@ -43,7 +43,7 @@ flowchart LR
 
 v0.5.0 起，对外产品入口收敛为模板：`--template=basic-api|auth-api` 是正式选择器，不传选择器时默认 `basic-api`；`--with` 只提供 experimental 专家组合，manifest 记录 `support: experimental`；`--profile=minimal` 在 v0.5.x 作为映射到 `auth-api` 的弃用别名。其他内部 profile（`full`/`minimal`/`saas`/`enterprise`/`machine`）继续服务 Jimu 自身构建，但不等于官方模板矩阵。模板、预算、支持级别和兼容窗口的机器可读事实源是 [`docs/templates/v1`](../templates/v1/README.md)，实现门禁和生成器不得另建第二份选择集定义。
 
-官方模板是可再生成一次的起始基线，不是持续管理的投影。生成后的工程归用户所有；`.jimu/manifest.json` 只记录来源、选择集和摘要，不授予 Jimu 覆盖用户文件的权利。v0.5.0 不提供隐式升级，`jimu upgrade` 是 v0.6.0 的显式 opt-in 能力。
+官方模板是可再生成一次的起始基线，不是持续管理的投影。生成后的工程归用户所有；`.jimu/manifest.json` 只记录来源、选择集和摘要，不授予 Jimu 覆盖用户文件的权利。v0.5.0 不提供隐式升级；已锁定不读取 schema v1 manifest，也不提供自动项目/存量数据库迁移，旧工程只支持“重新生成 + 人工迁移”。`jimu upgrade` 是 v0.6.0 的显式 opt-in 能力。
 
 `basic-api` 使用独立的零外部服务生成路径：只渲染 HTTP、配置、日志、统一错误、健康检查和示例路由所需文件，不复制能力目录或完整框架内核。生成项目没有数据库/Redis 客户端、Compose、Kubernetes/Helm 与 OpenAPI 资产，`go build`、`go test`、`go run` 均不需要外部服务。框架运行时的容器构造也已按 `Descriptor.RuntimeServices` 决定是否连接 MySQL/Redis，未声明服务的装配不会创建对应客户端。
 
