@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -8,6 +9,12 @@ import (
 	"jimu/tools/generator"
 
 	"github.com/spf13/cobra"
+)
+
+var (
+	errScaffoldSelectors        = errors.New("--template, --profile and --with are mutually exclusive")
+	errFrameworkInternalProfile = errors.New("is framework-internal; use --template or --with")
+	errShapeRequiresWith        = errors.New("--shape is only valid with --with")
 )
 
 // printScaffoldPlan 打印 --dry-run 的计划（不落盘）。先拼成一段再写：只用一个写调用，
@@ -53,21 +60,21 @@ func newScaffoldCmd() *cobra.Command {
 			opts.Force, _ = cmd.Flags().GetBool("force")
 			opts.Report, _ = cmd.Flags().GetBool("report")
 			if opts.Template != "" && (opts.Profile != "" || opts.With != "") {
-				return fmt.Errorf("--template, --profile and --with are mutually exclusive")
+				return errScaffoldSelectors
 			}
 			if opts.Profile != "" {
 				if opts.With != "" {
-					return fmt.Errorf("--template, --profile and --with are mutually exclusive")
+					return errScaffoldSelectors
 				}
 				if opts.Profile != "minimal" {
-					return fmt.Errorf("profile %q is framework-internal; use --template or --with", opts.Profile)
+					return fmt.Errorf("profile %q %w", opts.Profile, errFrameworkInternalProfile)
 				}
 				opts.Template = "auth-api"
 				opts.Profile = ""
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "warning: --profile=minimal is deprecated; use --template=auth-api (removed in v0.6.0)")
 			}
 			if cmd.Flags().Changed("shape") && opts.Template != "" {
-				return fmt.Errorf("--shape is only valid with --with")
+				return errShapeRequiresWith
 			}
 			res, err := generator.NewProject(opts)
 			if err != nil {
