@@ -50,7 +50,7 @@
 ## 生成项目与本仓的门禁关系
 
 - 生成项目的 `Makefile`/`Dockerfile`/`scripts/check_profiles.sh` 由 `templates/project/*.tmpl` 渲染，**不受框架 Makefile 改动影响**
-- 本仓的模板漂移门禁是 `make check-templates`（生成最小项目并真构建 + 跑生成项目门禁），真实生成项目的重型用例由 `JIMU_HEAVY_MATRIX=1` 门控（本地 `make test-scaffold-matrix`）
+- 本仓的模板漂移门禁是 `make check-templates`（生成最小项目并真构建 + 跑生成项目门禁），真实生成项目的重型用例由 `JIMU_HEAVY_MATRIX=1` 门控（本地 `make test-scaffold-matrix`）；重型入口同时执行 `budgets.json` 预算检查、`basic-api` smoke 和 `auth-api` 新空库 Compose 端到端（需 Docker Compose）
 
 ## 验收命令与期望输出
 
@@ -60,6 +60,7 @@
 cd /tmp/sk-demo && go build ./... && go run ./tools/checkcapabilities && go test ./... -count=1
 grep -rn '"jimu/' /tmp/sk-demo --include='*.go'      # 期望 0 命中（module 已重写）
 make check-templates                                 # 本仓模板漂移门禁
+make test-scaffold-matrix                            # 官方模板预算 + basic smoke + auth 空库 E2E
 ```
 
 ## 常见红与定位

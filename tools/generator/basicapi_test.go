@@ -2,6 +2,7 @@ package generator
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -9,35 +10,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"golang.org/x/mod/modfile"
 )
 
-func TestBasicAPIBudgetAndDirectDependencies(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "basic")
-	result, err := newProjectForTest(t, NewOptions{
-		Dir: dir, Template: "basic-api", Module: "example.com/basic",
-	})
-	require.NoError(t, err)
-	require.LessOrEqual(t, result.FileCount-1, 40, "generated files excluding manifest")
-
-	content, err := os.ReadFile(filepath.Join(dir, "go.mod"))
-	require.NoError(t, err)
-	file, err := modfile.Parse("go.mod", content, nil)
-	require.NoError(t, err)
-	direct := 0
-	for _, requirement := range file.Require {
-		if !requirement.Indirect {
-			direct++
-		}
-	}
-	require.LessOrEqual(t, direct, 8)
-}
-
 func TestBasicAPIStartsWithoutExternalServices(t *testing.T) {
+	started := time.Now()
 	dir := filepath.Join(t.TempDir(), "basic")
 	_, err := newProjectForTest(t, NewOptions{
 		Dir: dir, Template: "basic-api", Module: "example.com/basic",
@@ -45,7 +26,11 @@ func TestBasicAPIStartsWithoutExternalServices(t *testing.T) {
 	require.NoError(t, err)
 
 	binary := filepath.Join(dir, "bin", "server")
-	env := serverEnvBaseForTest(newTestGoCache(t))
+	cache := newTestGoCache(t)
+	env := serverEnvBaseForTest(cache)
+	assertProjectBuilds(t, dir, cache)
+	assertProjectVets(t, dir, cache)
+	runGoInProject(t, dir, cache, "test", "./...")
 	build := exec.Command("go", "build", "-o", binary, "./cmd/server")
 	build.Dir = dir
 	build.Env = env
@@ -78,11 +63,23 @@ func TestBasicAPIStartsWithoutExternalServices(t *testing.T) {
 	client := &http.Client{Timeout: time.Second}
 	publicURL := fmt.Sprintf("http://127.0.0.1:%d/api/v1/ping", publicPort)
 	readyURL := fmt.Sprintf("http://127.0.0.1:%d/readyz", managementPort)
+	liveURL := fmt.Sprintf("http://127.0.0.1:%d/livez", managementPort)
 	require.Eventually(t, func() bool {
-		return statusOK(client, readyURL) && statusOK(client, publicURL)
+		return statusOK(client, liveURL) && statusOK(client, readyURL) && statusOK(client, publicURL)
 	}, 15*time.Second, 100*time.Millisecond, "basic-api did not become ready:\n%s", &logs)
+	limit := loadTemplateBudgets(t).Templates["basic-api"].ReadinessSeconds["cold_generate_and_start"]
+	require.Positive(t, limit)
+	require.LessOrEqual(t, time.Since(started), time.Duration(limit)*time.Second,
+		"basic-api cold generate/start exceeded the %ds contract budget", limit)
 
-	require.NoError(t, command.Process.Signal(os.Interrupt))
+	status, body := requestJSON(t, client, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/api/v1/missing", publicPort))
+	require.Equal(t, http.StatusNotFound, status)
+	require.Equal(t, 1004, body.Code)
+	status, body = requestJSON(t, client, http.MethodPost, publicURL)
+	require.Equal(t, http.StatusMethodNotAllowed, status)
+	require.Equal(t, 1005, body.Code)
+
+	require.NoError(t, command.Process.Signal(syscall.SIGTERM))
 	select {
 	case err := <-waitCh:
 		require.NoError(t, err, "basic-api logs:\n%s", &logs)
@@ -104,30 +101,35 @@ func TestAuthAPIComposeConfigIsValid(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "secrets", "admin_password.txt"), []byte("admin12345678"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "secrets", "jwt_secret.txt"), []byte("compose-config-secret"), 0o600))
 
-	command := exec.Command("docker", "compose", "config", "--quiet")
+	command := exec.Command("docker", "compose", "config", "--format", "json")
 	command.Dir = dir
-	command.Env = serverEnvBaseForTest(newTestGoCache(t))
+	command.Env = append(serverEnvBaseForTest(newTestGoCache(t)),
+		"AUTH_API_PORT=18080",
+		"AUTH_API_MANAGEMENT_PORT=19090",
+	)
 	output, err := command.CombinedOutput()
 	require.NoError(t, err, "docker compose config:\n%s", output)
-}
 
-func TestAuthAPIDirectDependencyBudget(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "auth")
-	_, err := newProjectForTest(t, NewOptions{
-		Dir: dir, Template: "auth-api", Module: "example.com/auth",
-	})
-	require.NoError(t, err)
-	content, err := os.ReadFile(filepath.Join(dir, "go.mod"))
-	require.NoError(t, err)
-	file, err := modfile.Parse("go.mod", content, nil)
-	require.NoError(t, err)
-	direct := 0
-	for _, requirement := range file.Require {
-		if !requirement.Indirect {
-			direct++
-		}
+	var config struct {
+		Services map[string]struct {
+			Ports []struct {
+				Target    int    `json:"target"`
+				Published string `json:"published"`
+			} `json:"ports"`
+		} `json:"services"`
 	}
-	require.LessOrEqual(t, direct, 20)
+	require.NoError(t, json.Unmarshal(output, &config), "docker compose config JSON:\n%s", output)
+	published := map[int]string{}
+	for _, port := range config.Services["app"].Ports {
+		published[port.Target] = port.Published
+	}
+	require.Equal(t, "18080", published[8080], "public API host port must be overridable")
+	require.Equal(t, "19090", published[9090], "management host port must be overridable")
+
+	dockerfile, err := os.ReadFile(filepath.Join(dir, "Dockerfile"))
+	require.NoError(t, err)
+	require.Contains(t, string(dockerfile), "http://127.0.0.1:9090/readyz",
+		"make up --wait must wait for readiness, not only process liveness")
 }
 
 func freePort(t *testing.T) int {
@@ -146,4 +148,23 @@ func statusOK(client *http.Client, url string) bool {
 	defer response.Body.Close()
 	_, _ = io.Copy(io.Discard, response.Body)
 	return response.StatusCode == http.StatusOK
+}
+
+func requestJSON(t *testing.T, client *http.Client, method, url string) (int, struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}) {
+	t.Helper()
+	request, err := http.NewRequest(method, url, nil)
+	require.NoError(t, err)
+	response, err := client.Do(request)
+	require.NoError(t, err)
+	defer response.Body.Close()
+	var body struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&body))
+	require.NotEmpty(t, body.Message)
+	return response.StatusCode, body
 }

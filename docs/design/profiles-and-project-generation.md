@@ -49,6 +49,8 @@ v0.5.0 起，对外产品入口收敛为模板：`--template=basic-api|auth-api`
 
 `auth-api` 使用独立单租户模板：只渲染用户、JWT 会话、RBAC、MySQL 持久化、Redis 会话、8 张业务表和 10 个迁移，并生成项目自己的 Compose、初始化与验证脚本。管理员密码首次由 `make up` 生成到 gitignored 本地 secret，迁移和 seed 幂等；生成树不携带未启用的数据库之外能力或观测资产。
 
+官方模板的发布门禁由 `make test-scaffold-matrix` 承载：预算测试读取 `docs/templates/v1/budgets.json` 并实测生成树，`basic-api` smoke 不依赖容器，`auth-api` 使用独立 Compose 项目和新数据卷执行两次 `make up` / `make verify`、数据库计数及缺失服务快速失败检查。生成项目的端口可用 `AUTH_API_PORT` / `AUTH_API_MANAGEMENT_PORT` 隔离，Compose 就绪检查使用 `/readyz` 而非仅进程存活。
+
 生成器从框架读取能力、profile、contract 和资产信息的唯一适配层是 [`tools/generator/frameworkmanifest`](../../tools/generator/frameworkmanifest)。适配层导出校验后的 manifest；计划、渲染、文件工作区和报告逻辑消费 manifest，不直接依赖框架内部包。这样框架内部结构变化集中在适配层与明确的生成模板中。
 
 manifest 记录项目选择、复制与模板动作、合并和重写规则、资产、测试裁剪、生成文件及摘要；它也是识别生成产物和 `jimu capability add` 增量更新的依据。更新能力时，生成器根据新的选择重算产物，并保留受支持的用户配置合并规则。

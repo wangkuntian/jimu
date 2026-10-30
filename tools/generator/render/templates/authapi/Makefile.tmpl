@@ -41,7 +41,9 @@ up:
 
 ## verify: readyz + login + me + protected request
 verify:
-	@sh scripts/verify.sh
+	@AUTH_API_BASE_URL="$${AUTH_API_BASE_URL:-http://127.0.0.1:$${AUTH_API_PORT:-8080}}" \
+	AUTH_API_MANAGEMENT_URL="$${AUTH_API_MANAGEMENT_URL:-http://127.0.0.1:$${AUTH_API_MANAGEMENT_PORT:-9090}}" \
+	sh scripts/verify.sh
 
 ## down: stop the stack
 down:

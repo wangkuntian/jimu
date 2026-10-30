@@ -285,6 +285,12 @@ make down
 
 生成文件数排除 `.jimu/manifest.json` 和 `docs/profiles/generated-report.md`；依赖与闭包按生成项目的 `go list` / `go/packages` 口径统计。
 
+自动门禁由 `make test-scaffold-matrix` 执行，并纳入 CI `Scaffold Gate`（`auth-api` 用例需要可用的 Docker Compose）：
+
+- `TestOfficialTemplateBudgets` 直接读取 `budgets.json`，生成两个官方模板后实测文件数、直接依赖、Go 闭包、外部服务、路由、表、迁移和非代码资产，任一指标超限即失败。
+- `TestBasicAPIStartsWithoutExternalServices` 不启动容器，先跑生成项目的 build/vet/test，再验证 `/livez`、`/readyz`、示例路由、统一 404/405 响应、SIGTERM 优雅退出和冷生成至就绪预算。
+- `TestAuthAPIEmptyDatabaseEndToEnd` 先跑生成项目的 test/vet，再为每次运行创建独立 Compose 项目和宿主机端口，在全新数据卷上连续执行两次 `make up` / `make verify`，校验管理员密码只在首次输出、10 个迁移、8 张业务表、2 个用户，并验证缺失 MySQL 或 Redis 时快速失败和 `make down`。
+
 `basic-api` 验收：
 
 - `go test ./...`、`go vet ./...`、`go build ./...` 全部通过；

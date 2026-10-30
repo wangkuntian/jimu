@@ -55,8 +55,8 @@ services:
       init:
         condition: service_completed_successfully
     ports:
-      - "8080:8080"
-      - "9090:9090"
+      - "${AUTH_API_PORT:-8080}:8080"
+      - "${AUTH_API_MANAGEMENT_PORT:-9090}:9090"
     volumes:
       - ./secrets/admin_password.txt:/run/secrets/admin_password:ro
       - ./secrets/jwt_secret.txt:/run/secrets/jwt_secret:ro

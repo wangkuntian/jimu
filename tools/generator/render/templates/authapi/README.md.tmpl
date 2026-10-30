@@ -12,6 +12,8 @@ make down
 
 `make up` creates local secrets on first run, builds the stack, runs migrations and seed, and starts the API. The generated administrator password is printed once.
 
+Set `AUTH_API_PORT` and `AUTH_API_MANAGEMENT_PORT` to change the host ports; `make verify` follows the same values.
+
 ## Stack
 
 - API: `http://localhost:8080`

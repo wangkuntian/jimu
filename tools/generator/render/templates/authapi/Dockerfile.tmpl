@@ -21,5 +21,5 @@ RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app
 USER app
 EXPOSE 8080 9090
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://127.0.0.1:9090/livez || exit 1
+    CMD curl -f http://127.0.0.1:9090/readyz || exit 1
 CMD ["./server"]

@@ -37,7 +37,6 @@ func TestNewProjectBasicAPIHasNoExternalRuntimeDependencies(t *testing.T) {
 		Dir: dir, Template: "basic-api", Module: "example.com/basic",
 	})
 	require.NoError(t, err)
-	assert.LessOrEqual(t, result.FileCount-1, 40, "basic-api 生成文件预算不含 manifest")
 	assert.Equal(t, "basic-api", result.Template)
 	assert.Equal(t, "official", result.Support)
 
@@ -78,7 +77,6 @@ func TestNewProjectAuthAPIIsCompactSingleTenantTemplate(t *testing.T) {
 		Dir: dir, Template: "auth-api", Module: "example.com/auth",
 	})
 	require.NoError(t, err)
-	assert.LessOrEqual(t, result.FileCount-1, 160, "auth-api 生成文件预算不含 manifest")
 	assert.Equal(t, "auth-api", result.Template)
 	assert.Equal(t, "official", result.Support)
 

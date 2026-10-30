@@ -4,31 +4,33 @@ set -eu
 password_file="${ADMIN_PASSWORD_FILE:-secrets/admin_password.txt}"
 [ -s "$password_file" ] || { echo "missing $password_file; run make up first" >&2; exit 1; }
 password="$(cat "$password_file")"
+api_url="${AUTH_API_BASE_URL:-http://127.0.0.1:8080}"
+management_url="${AUTH_API_MANAGEMENT_URL:-http://127.0.0.1:9090}"
 
-curl -fsS http://127.0.0.1:9090/readyz >/dev/null
-unauthorized="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/v1/users)"
+curl -fsS "$management_url/readyz" >/dev/null
+unauthorized="$(curl -sS -o /dev/null -w '%{http_code}' "$api_url/api/v1/users")"
 [ "$unauthorized" = 401 ] || { echo "expected 401 without token, got $unauthorized" >&2; exit 1; }
 
-login="$(curl -fsS -X POST http://127.0.0.1:8080/api/v1/auth/login \
+login="$(curl -fsS -X POST "$api_url/api/v1/auth/login" \
   -H 'Content-Type: application/json' \
   --data "{\"username\":\"admin\",\"password\":\"$password\"}")"
 token="$(printf '%s' "$login" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')"
 [ -n "$token" ] || { echo "login did not return an access token" >&2; exit 1; }
-curl -fsS http://127.0.0.1:8080/api/v1/auth/me -H "Authorization: Bearer $token" >/dev/null
-curl -fsS http://127.0.0.1:8080/api/v1/users -H "Authorization: Bearer $token" >/dev/null
+curl -fsS "$api_url/api/v1/auth/me" -H "Authorization: Bearer $token" >/dev/null
+curl -fsS "$api_url/api/v1/users" -H "Authorization: Bearer $token" >/dev/null
 
-create_status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/v1/users \
+create_status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$api_url/api/v1/users" \
   -H "Authorization: Bearer $token" \
   -H 'Content-Type: application/json' \
   --data '{"username":"verify_user","password":"VerifyPass12345","role_ids":[]}')"
 [ "$create_status" = 201 ] || [ "$create_status" = 409 ] || { echo "create verifier failed: $create_status" >&2; exit 1; }
 
-user_login="$(curl -fsS -X POST http://127.0.0.1:8080/api/v1/auth/login \
+user_login="$(curl -fsS -X POST "$api_url/api/v1/auth/login" \
   -H 'Content-Type: application/json' \
   --data '{"username":"verify_user","password":"VerifyPass12345"}')"
 user_token="$(printf '%s' "$user_login" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')"
 [ -n "$user_token" ] || { echo "verifier login did not return an access token" >&2; exit 1; }
-forbidden="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/v1/users \
+forbidden="$(curl -sS -o /dev/null -w '%{http_code}' "$api_url/api/v1/users" \
   -H "Authorization: Bearer $user_token")"
 [ "$forbidden" = 403 ] || { echo "expected 403 without permission, got $forbidden" >&2; exit 1; }
 echo "auth-api verification passed"
