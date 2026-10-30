@@ -4,7 +4,7 @@ package frameworkmanifest
 
 import (
 	"fmt"
-	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -139,11 +139,16 @@ func buildDocument(root, module string, selected selection) (manifest.Document, 
 	if catalogCoversAll(selected) {
 		pruneReason = "catalog-complete"
 	}
+	framework, err := frameworkProvenance(root)
+	if err != nil {
+		return manifest.Document{}, err
+	}
 	doc := manifest.Document{
 		SchemaVersion: manifest.CurrentSchemaVersion,
-		Framework:     manifest.Framework{Module: "jimu", Version: profiles.Version, Commit: frameworkCommit(root)},
+		Framework:     framework,
 		Selection: manifest.Selection{
-			Shape: selected.shape, Template: selected.template, Profile: selected.profile, Support: selected.support,
+			Shape: selected.shape, Template: selected.template, TemplateVersion: templateVersion(selected.template),
+			Profile: selected.profile, Support: selected.support,
 			Capabilities: slices.Clone(selected.declared), Drivers: cloneDrivers(selected.drivers),
 		},
 		Capabilities:   capabilityFacts(root, selected),
@@ -182,20 +187,39 @@ func catalogCoversAll(selected selection) bool {
 	return true
 }
 
-func frameworkCommit(root string) string {
-	head, err := os.ReadFile(filepath.Join(root, ".git", "HEAD"))
+// frameworkProvenance resolves Git metadata through the CLI so normal clones and linked worktrees behave identically.
+func frameworkProvenance(root string) (manifest.Framework, error) {
+	commit, err := gitOutput(root, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
+		return manifest.Framework{}, fmt.Errorf("resolve framework commit: %w", err)
+	}
+	if commit == "" {
+		return manifest.Framework{}, fmt.Errorf("resolve framework commit: git returned an empty commit")
+	}
+	status, err := gitOutput(root, "status", "--porcelain=v1", "--untracked-files=normal")
+	if err != nil {
+		return manifest.Framework{}, fmt.Errorf("read framework worktree status: %w", err)
+	}
+	dirty := strings.TrimSpace(status) != "" || profiles.Version == "dev" || strings.Contains(profiles.Version, "-dev")
+	return manifest.Framework{
+		Module: "jimu", Version: profiles.Version, Commit: commit, Dirty: dirty,
+	}, nil
+}
+
+func gitOutput(root string, args ...string) (string, error) {
+	commandArgs := append([]string{"-C", root}, args...)
+	output, err := exec.Command("git", commandArgs...).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git %s: %w: %s", strings.Join(commandArgs, " "), err, strings.TrimSpace(string(output)))
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func templateVersion(template string) string {
+	if template == "" {
 		return ""
 	}
-	value := strings.TrimSpace(string(head))
-	if strings.HasPrefix(value, "ref: ") {
-		ref, err := os.ReadFile(filepath.Join(root, ".git", filepath.FromSlash(strings.TrimPrefix(value, "ref: "))))
-		if err != nil {
-			return ""
-		}
-		return strings.TrimSpace(string(ref))
-	}
-	return value
+	return manifest.TemplateContractVersion
 }
 
 func capabilityFacts(root string, selected selection) []manifest.Capability {

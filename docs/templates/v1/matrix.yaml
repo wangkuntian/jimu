@@ -148,12 +148,12 @@ lifecycle:
   capability_add: experimental
   generated_manifest: .jimu/manifest.json
   manifest_support_fields:
-    - template
-    - template_version
-    - support_level
-    - framework_version
-    - framework_commit
-    - dirty
+    - selection.template
+    - selection.template_version
+    - selection.support
+    - framework.version
+    - framework.commit
+    - framework.dirty
     - generated_file_sha256
   user_owned_after_generation: true
   upgrade_command:

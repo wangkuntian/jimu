@@ -1,13 +1,15 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "framework": {
     "module": "jimu",
     "version": "dev",
-    "commit": "\u003ccommit\u003e"
+    "commit": "\u003ccommit\u003e",
+    "dirty": true
   },
   "selection": {
     "shape": "minimal",
     "template": "",
+    "template_version": "",
     "profile": "minimal",
     "support": "internal",
     "capabilities": [
@@ -1667,5 +1669,6 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:52d50310cf615adda50e25a7f5f659cb6886507304157a6e1468a44a19c0983b"
+  "generated_file_sha256": {},
+  "digest": "sha256:fbc0cff232e46398df37347339c59d1c4306424780ca51fb9a339c8bb4b26cb9"
 }

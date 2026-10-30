@@ -63,6 +63,9 @@ func TestExportMinimalIsDeterministic(t *testing.T) {
 	if got := first.Selection.Profile; got != "minimal" {
 		t.Fatalf("profile = %q, want minimal", got)
 	}
+	if first.Selection.Template != "" || first.Selection.TemplateVersion != "" {
+		t.Fatalf("internal profile selection unexpectedly records a template: %#v", first.Selection)
+	}
 	if len(first.Selection.Capabilities) == 0 {
 		t.Fatal("minimal export has no selected capabilities")
 	}
@@ -75,6 +78,9 @@ func TestExportWithUsesHardDependencyClosureAndDriverSelection(t *testing.T) {
 	}
 	if doc.Selection.Profile != "" || doc.Selection.Shape != "app" {
 		t.Fatalf("selection = %#v, want app shape without profile", doc.Selection)
+	}
+	if doc.Selection.Support != "experimental" || doc.Selection.Template != "" || doc.Selection.TemplateVersion != "" {
+		t.Fatalf("selection support/template = %#v, want experimental without template", doc.Selection)
 	}
 	for _, name := range []string{"user", "access", "queue"} {
 		if !contains(doc.Selection.Capabilities, name) {
@@ -154,8 +160,11 @@ func TestExportDefaultsToOfficialBasicAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.Selection.Template != "basic-api" || doc.Selection.Support != "official" {
+	if doc.Selection.Template != "basic-api" || doc.Selection.TemplateVersion != manifest.TemplateContractVersion || doc.Selection.Support != "official" {
 		t.Fatalf("selection = %#v, want official basic-api", doc.Selection)
+	}
+	if doc.Framework.Commit == "" {
+		t.Fatal("basic-api manifest has an empty framework commit")
 	}
 }
 
@@ -164,8 +173,11 @@ func TestExportAuthAPITemplateIsOfficialStandaloneSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.Selection.Template != "auth-api" || doc.Selection.Support != "official" {
+	if doc.Selection.Template != "auth-api" || doc.Selection.TemplateVersion != manifest.TemplateContractVersion || doc.Selection.Support != "official" {
 		t.Fatalf("selection = %#v, want official auth-api", doc.Selection)
+	}
+	if doc.Framework.Commit == "" {
+		t.Fatal("auth-api manifest has an empty framework commit")
 	}
 	if doc.Selection.Profile != "" {
 		t.Fatalf("profile = %q, want standalone auth-api selection", doc.Selection.Profile)
@@ -245,6 +257,10 @@ func goldenPath(name string) string {
 
 func goldenDocument(doc manifest.Document) manifest.Document {
 	doc.Framework.Commit = "<commit>"
+	doc.Framework.Dirty = true
+	if doc.GeneratedFileSHA256 == nil {
+		doc.GeneratedFileSHA256 = map[string]string{}
+	}
 	doc.Digest = ""
 	digest, err := manifest.Digest(doc)
 	if err != nil {

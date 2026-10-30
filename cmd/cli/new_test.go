@@ -7,10 +7,22 @@ import (
 	"strings"
 	"testing"
 
+	"jimu/internal/profiles"
+
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCLIVersionIsSharedWithGenerator(t *testing.T) {
+	oldVersion, oldProfileVersion := version, profiles.Version
+	t.Cleanup(func() {
+		version, profiles.Version = oldVersion, oldProfileVersion
+	})
+	version = "v0.5.0-test"
+	applyVersion()
+	assert.Equal(t, version, profiles.Version)
+}
 
 // TestNewCmdRejectsBothProfileAndWith 参数互斥校验只在 ParseCapabilitySet 一处：
 // 命令层不重复实现，但必须把同一错误透出来（--dry-run 也走同一校验）。

@@ -8,7 +8,6 @@ import (
 
 	"golang.org/x/mod/modfile"
 
-	"jimu/internal/profiles"
 	"jimu/tools/generator/manifest"
 )
 
@@ -26,6 +25,10 @@ func basicAPIDocument(root, module, template string) (manifest.Document, error) 
 	if template != "basic-api" {
 		return manifest.Document{}, fmt.Errorf("unknown template %q (available: basic-api)", template)
 	}
+	framework, err := frameworkProvenance(root)
+	if err != nil {
+		return manifest.Document{}, err
+	}
 	data, err := loadBasicAPITemplateData(root, module)
 	if err != nil {
 		return manifest.Document{}, err
@@ -41,11 +44,9 @@ func basicAPIDocument(root, module, template string) (manifest.Document, error) 
 	}
 	return manifest.Document{
 		SchemaVersion: manifest.CurrentSchemaVersion,
-		Framework: manifest.Framework{
-			Module: "jimu", Version: profiles.Version, Commit: frameworkCommit(root),
-		},
+		Framework:     framework,
 		Selection: manifest.Selection{
-			Shape: "basic-api", Template: "basic-api", Support: "official",
+			Shape: "basic-api", Template: "basic-api", TemplateVersion: manifest.TemplateContractVersion, Support: "official",
 			Capabilities: []string{}, Drivers: map[string][]string{},
 		},
 		Capabilities: []manifest.Capability{},

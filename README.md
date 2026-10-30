@@ -305,6 +305,8 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 生成前预检会读取 Descriptor 导出的 manifest 事实并 fail-closed：受保护路由必须恰好有一个有效中间件提供者（`auth` 为 primary、`apikey` 为 fallback）；迁移 schema 依赖必须随选择集带入；表所有权和迁移文件不得重复；声明的 runtime service 必须能在生成配置中找到对应段。预检失败发生在目标目录写入之前。
 
+`.jimu/manifest.json` 使用 schema v2 记录 provenance：`framework.version`、`framework.commit`、`framework.dirty`、官方模板的 `selection.template_version`，以及 `generated_files` 对应的 `generated_file_sha256`。commit 由 `git rev-parse --verify HEAD^{commit}` 解析，普通 clone 和 linked worktree 都必须成功；文件哈希在 tidy、自检和配置合并完成后计算，manifest 与可选报告自身不计入哈希表。
+
 生成闭包、模板和 manifest 的详细规则见[形态与项目生成设计](docs/design/profiles-and-project-generation.md)；稳定设计文档的范围和阅读入口见[设计文档索引](docs/design/README.md)。
 
 ## 数据库迁移

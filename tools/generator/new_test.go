@@ -69,6 +69,7 @@ func TestNewProjectBasicAPIHasNoExternalRuntimeDependencies(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(config), "\ndb:")
 	assert.NotContains(t, string(config), "\nredis:")
+	assertManifestProvenance(t, dir, "basic-api")
 }
 
 func TestNewProjectAuthAPIIsCompactSingleTenantTemplate(t *testing.T) {
@@ -117,6 +118,7 @@ func TestNewProjectAuthAPIIsCompactSingleTenantTemplate(t *testing.T) {
 	document, err := workspace.LoadProjectManifest(dir)
 	require.NoError(t, err)
 	assert.Equal(t, "auth-api", document.Selection.Template)
+	assert.Equal(t, manifest.TemplateContractVersion, document.Selection.TemplateVersion)
 	assert.Equal(t, 24, document.Report.Routes)
 	assert.Len(t, document.Report.Migrations, 10)
 	assert.Len(t, document.Report.Tables, 8)
@@ -134,6 +136,23 @@ func TestNewProjectAuthAPIIsCompactSingleTenantTemplate(t *testing.T) {
 	}
 	assert.Equal(t, 8, createTables)
 	assert.Equal(t, 2, alterTables)
+	assertManifestProvenance(t, dir, "auth-api")
+}
+
+func assertManifestProvenance(t *testing.T, dir, template string) {
+	t.Helper()
+	document, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	require.NoError(t, manifest.ValidateComplete(document))
+	assert.Equal(t, template, document.Selection.Template)
+	assert.Equal(t, manifest.TemplateContractVersion, document.Selection.TemplateVersion)
+	assert.NotEmpty(t, document.Framework.Version)
+	assert.NotEmpty(t, document.Framework.Commit)
+	assert.True(t, document.Framework.Dirty, "development manifests must be marked dirty")
+	assert.Len(t, document.GeneratedFileSHA256, len(document.GeneratedFiles))
+	hashes, err := manifest.HashFiles(dir, document.GeneratedFiles)
+	require.NoError(t, err)
+	assert.Equal(t, hashes, document.GeneratedFileSHA256)
 }
 
 func TestNewProjectLeavesNoPartialTreeOnFailure(t *testing.T) {

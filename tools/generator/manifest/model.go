@@ -1,38 +1,44 @@
 package manifest
 
 // CurrentSchemaVersion 是当前生成器支持的 manifest schema 版本。
-const CurrentSchemaVersion = 1
+const CurrentSchemaVersion = 2
+
+// TemplateContractVersion is the official template contract implemented by this generator.
+const TemplateContractVersion = "v0.1"
 
 // Document 是生成器使用的完整 JSON manifest。
 type Document struct {
-	SchemaVersion  int              `json:"schema_version"`
-	Framework      Framework        `json:"framework"`
-	Selection      Selection        `json:"selection"`
-	Capabilities   []Capability     `json:"capabilities"`
-	Copy           []CopyAction     `json:"copy"`
-	Templates      []TemplateAction `json:"templates"`
-	Merges         []MergeAction    `json:"merges"`
-	Rewrites       []RewriteAction  `json:"rewrites"`
-	Assets         []AssetAction    `json:"assets"`
-	Prune          []PruneRule      `json:"prune"`
-	Report         ReportSpec       `json:"report"`
-	GeneratedFiles []string         `json:"generated_files"`
-	Digest         string           `json:"digest"`
+	SchemaVersion       int               `json:"schema_version"`
+	Framework           Framework         `json:"framework"`
+	Selection           Selection         `json:"selection"`
+	Capabilities        []Capability      `json:"capabilities"`
+	Copy                []CopyAction      `json:"copy"`
+	Templates           []TemplateAction  `json:"templates"`
+	Merges              []MergeAction     `json:"merges"`
+	Rewrites            []RewriteAction   `json:"rewrites"`
+	Assets              []AssetAction     `json:"assets"`
+	Prune               []PruneRule       `json:"prune"`
+	Report              ReportSpec        `json:"report"`
+	GeneratedFiles      []string          `json:"generated_files"`
+	GeneratedFileSHA256 map[string]string `json:"generated_file_sha256"`
+	Digest              string            `json:"digest"`
 }
 
 type Framework struct {
 	Module  string `json:"module"`
 	Version string `json:"version"`
 	Commit  string `json:"commit"`
+	Dirty   bool   `json:"dirty"`
 }
 
 type Selection struct {
-	Shape        string              `json:"shape"`
-	Template     string              `json:"template"`
-	Profile      string              `json:"profile"`
-	Support      string              `json:"support"`
-	Capabilities []string            `json:"capabilities"`
-	Drivers      map[string][]string `json:"drivers"`
+	Shape           string              `json:"shape"`
+	Template        string              `json:"template"`
+	TemplateVersion string              `json:"template_version"`
+	Profile         string              `json:"profile"`
+	Support         string              `json:"support"`
+	Capabilities    []string            `json:"capabilities"`
+	Drivers         map[string][]string `json:"drivers"`
 }
 
 type Capability struct {

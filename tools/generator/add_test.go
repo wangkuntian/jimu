@@ -489,18 +489,19 @@ func TestAddCapabilityRejectsUnknownCapability(t *testing.T) {
 func TestManifestSaveLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	want := manifest.Document{
-		SchemaVersion:  manifest.CurrentSchemaVersion,
-		Framework:      manifest.Framework{Module: "jimu", Version: "v0.3.3", Commit: "deadbeef"},
-		Selection:      manifest.Selection{Shape: "minimal", Profile: "minimal", Capabilities: []string{"user", "access"}, Drivers: map[string][]string{"queue": {"redis"}}},
-		Capabilities:   []manifest.Capability{},
-		Copy:           []manifest.CopyAction{},
-		Templates:      []manifest.TemplateAction{},
-		Merges:         []manifest.MergeAction{},
-		Assets:         []manifest.AssetAction{},
-		Prune:          []manifest.PruneRule{},
-		Report:         manifest.ReportSpec{Capabilities: []string{}, Migrations: []string{}, Tables: []string{}, HeavyDeps: []string{}},
-		GeneratedFiles: []string{"go.mod"},
-		Rewrites:       []manifest.RewriteAction{{Kind: "module", From: "jimu", To: "example.com/proj", Files: []string{}}},
+		SchemaVersion:       manifest.CurrentSchemaVersion,
+		Framework:           manifest.Framework{Module: "jimu", Version: "v0.3.3", Commit: "deadbeef", Dirty: true},
+		Selection:           manifest.Selection{Shape: "minimal", Profile: "minimal", Capabilities: []string{"user", "access"}, Drivers: map[string][]string{"queue": {"redis"}}},
+		Capabilities:        []manifest.Capability{},
+		Copy:                []manifest.CopyAction{},
+		Templates:           []manifest.TemplateAction{},
+		Merges:              []manifest.MergeAction{},
+		Assets:              []manifest.AssetAction{},
+		Prune:               []manifest.PruneRule{},
+		Report:              manifest.ReportSpec{Capabilities: []string{}, Migrations: []string{}, Tables: []string{}, HeavyDeps: []string{}},
+		GeneratedFiles:      []string{"go.mod"},
+		GeneratedFileSHA256: map[string]string{"go.mod": "sha256:" + strings.Repeat("a", 64)},
+		Rewrites:            []manifest.RewriteAction{{Kind: "module", From: "jimu", To: "example.com/proj", Files: []string{}}},
 	}
 	digest, err := manifest.Digest(want)
 	require.NoError(t, err)

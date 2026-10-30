@@ -35,6 +35,8 @@
 
 **默认自检**：生成后跑 `go build ./...` 与生成项目自己的 `check-capabilities`，任一失败**整体回滚**。
 
+**Provenance**：`.jimu/manifest.json` 为 schema v2，`framework.commit` 来自 `git rev-parse --verify HEAD^{commit}`（支持普通 clone 与 worktree），同时记录 `framework.dirty`、官方模板的 `selection.template_version` 和覆盖全部 `generated_files` 的 `generated_file_sha256`。
+
 **生成物是子集**：内核目录原样复制；能力按复制集（声明集 ∪ 编译闭包 ∪ schema 依赖的迁移携带目录 ∪ 内核 domain 依赖）落地；`internal/profiles/{registry,<shape>,active}`、`internal/capabilities/catalog/*`、`configs/*.yaml`、`Makefile`/`Dockerfile`/`scripts/check_profiles.sh` 按能力集**渲染**（单形态，无 `PROFILE=`、无 overlay）；测试树按「逐文件 import 可满足性 + 资产依赖」裁剪（规则写入 `.jimu/manifest.json` 的 `prune` 段，文件清单写入 `generated_files`）。manifest 只支持 JSON，路径必须为相对路径。
 
 `basic-api` 是独立的零外部服务模板：只生成 HTTP/配置/日志/健康检查/示例路由，不包含能力目录、Compose 或数据库/Redis 配置。v0.4.0 已移除受跟踪的 `.env.example`，basic-api 不重新引入它；配置与 `HTTP_*`/`MANAGEMENT_*`/`LOG_LEVEL` 环境变量写在生成项目 README。

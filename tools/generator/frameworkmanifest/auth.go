@@ -8,7 +8,6 @@ import (
 
 	"golang.org/x/mod/modfile"
 
-	"jimu/internal/profiles"
 	"jimu/tools/generator/manifest"
 )
 
@@ -28,6 +27,10 @@ type authAPITemplateData struct {
 }
 
 func authAPIDocument(root, module string) (manifest.Document, error) {
+	framework, err := frameworkProvenance(root)
+	if err != nil {
+		return manifest.Document{}, err
+	}
 	data, err := loadAuthAPITemplateData(root, module)
 	if err != nil {
 		return manifest.Document{}, err
@@ -78,11 +81,9 @@ func authAPIDocument(root, module string) (manifest.Document, error) {
 	}
 	return manifest.Document{
 		SchemaVersion: manifest.CurrentSchemaVersion,
-		Framework: manifest.Framework{
-			Module: "jimu", Version: profiles.Version, Commit: frameworkCommit(root),
-		},
+		Framework:     framework,
 		Selection: manifest.Selection{
-			Shape: "auth-api", Template: "auth-api", Support: "official",
+			Shape: "auth-api", Template: "auth-api", TemplateVersion: manifest.TemplateContractVersion, Support: "official",
 			Capabilities: []string{"user", "access", "auth"}, Drivers: map[string][]string{},
 		},
 		Capabilities: facts,

@@ -79,9 +79,10 @@ jimu new <dir> --with=user,access,auth # 专家模式，标记 experimental
 
 - 本文件是模板契约 `v0.1`，目标产品版本为 Jimu `v0.5.0`；
 - 模板契约的修订不自动代表 Jimu 主版本变化；
-- `v0.5.0` 生成的 manifest 必须记录 `template`、`template_version`、`support_level`、`framework_version`、`framework_commit`、`dirty` 和生成文件 SHA-256；
+- `v0.5.0` 生成的 manifest 使用 schema v2，必须记录 `selection.template`、`selection.template_version`、`selection.support`、`framework.version`、`framework.commit`、`framework.dirty` 和 `generated_file_sha256`；
 - framework commit 必须通过 `git rev-parse --verify HEAD^{commit}` 解析，普通 clone 与 git worktree 都必须得到非空 commit；解析失败时拒绝生成；
-- 开发态允许 `version=v0.5.0-dev`，但必须记录真实 commit 和 `dirty=true`。
+- `generated_file_sha256` 必须覆盖 `generated_files` 的全部文件，值格式为 `sha256:<64 hex>`；manifest 和可选生成报告自身不进入该映射；
+- 开发态允许 `version=v0.5.0-dev`，但必须记录真实 commit，且 `dirty` 必须为 `true`。
 
 ## 支持模型
 
