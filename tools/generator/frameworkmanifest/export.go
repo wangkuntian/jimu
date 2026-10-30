@@ -3,6 +3,7 @@
 package frameworkmanifest
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -208,7 +209,7 @@ func frameworkProvenance(root string) (manifest.Framework, error) {
 
 func gitOutput(root string, args ...string) (string, error) {
 	commandArgs := append([]string{"-C", root}, args...)
-	output, err := exec.Command("git", commandArgs...).CombinedOutput()
+	output, err := exec.CommandContext(context.Background(), "git", commandArgs...).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git %s: %w: %s", strings.Join(commandArgs, " "), err, strings.TrimSpace(string(output)))
 	}
