@@ -273,6 +273,8 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 `jimu new <dir>` 生成只包含所选能力的独立 Go 项目；`--profile` 从一个已有 profile 选择，`--with` 则直接指定能力集。生成项目有自己的 module 并运行 `go mod tidy`，因此可以减少项目依赖；profile 只裁剪框架二进制的编译闭包，不改变框架 `go.mod`。
 
+> **v0.5.0 模板契约（实施中）**：正式产品入口将收敛为 `--template=basic-api|auth-api`，默认 `basic-api`；`--with` 只作为 experimental 专家模式，`--profile=minimal` 在 v0.5.x 映射为 `auth-api` 并在 v0.6.0 移除。模板、支持矩阵、兼容窗口和发布阻断预算见[模板契约 v0.1](docs/templates/v1/README.md)。当前命令行为仍以本节参数表为准，待对应实现合并后切换。
+
 `jimu capability add <name>` 在已生成项目中追加框架已有的能力。`jimu capability create <name>` 只在框架仓库中创建能力骨架，不自动修改 catalog 或 profile。旧 `jimu module create` 已移除。
 
 ```bash
@@ -386,9 +388,11 @@ jimu/
 │   │   └── alerts/              # 默认告警规则 JSON（模板/目的地/jimu_*.json，git 管理）
 │   └── helm/                    # Helm Chart（含 openobserve / otel-collector 配置）
 ├── docs/                         # 文档
+│   ├── design/                   # 稳定设计事实与架构边界
 │   ├── openapi/                  # Swagger 生成的 API 文档
 │   ├── profiles/                 # 形态编译面报告（make compose-report 生成）
 │   ├── releases/                 # 版本 changelog / GitHub Release body（每版本一个文件）
+│   ├── templates/v1/             # 对外模板契约、支持矩阵和发布阻断预算
 │   ├── CONTRIBUTING.md           # 贡献指南（分支/PR/发布/集成测试手册）
 │   └── SECURITY.md               # 安全政策（漏洞报告流程）
 ├── secrets/                    # Docker Secrets（gitignore）

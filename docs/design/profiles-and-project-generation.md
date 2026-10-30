@@ -41,6 +41,10 @@ flowchart LR
 
 `jimu new <dir>` 按 `--profile` 或 `--with` 选择能力并生成独立 Go module。生成器会根据声明闭包和必要的 schema/编译依赖，复制或渲染源码、配置、驱动与资产，随后整理生成项目的 module 依赖。profile 只改变框架二进制组成；生成项目拥有自己的 `go.mod`，因此可以随选择收缩依赖。
 
+v0.5.0 起，对外产品入口收敛为模板：`--template=basic-api|auth-api` 是正式选择器，`--with` 只提供实验性的专家组合，`--profile=minimal` 在 v0.5.x 作为映射到 `auth-api` 的兼容别名。内部 profile（`full`/`minimal`/`saas`/`enterprise`/`machine`）继续服务 Jimu 自身构建，但不等于官方模板矩阵。模板、预算、支持级别和兼容窗口的机器可读事实源是 [`docs/templates/v1`](../templates/v1/README.md)，实现门禁和生成器不得另建第二份选择集定义。
+
+官方模板是可再生成一次的起始基线，不是持续管理的投影。生成后的工程归用户所有；`.jimu/manifest.json` 只记录来源、选择集和摘要，不授予 Jimu 覆盖用户文件的权利。v0.5.0 不提供隐式升级，`jimu upgrade` 是 v0.6.0 的显式 opt-in 能力。
+
 生成器从框架读取能力、profile、contract 和资产信息的唯一适配层是 [`tools/generator/frameworkmanifest`](../../tools/generator/frameworkmanifest)。适配层导出校验后的 manifest；计划、渲染、文件工作区和报告逻辑消费 manifest，不直接依赖框架内部包。这样框架内部结构变化集中在适配层与明确的生成模板中。
 
 manifest 记录项目选择、复制与模板动作、合并和重写规则、资产、测试裁剪、生成文件及摘要；它也是识别生成产物和 `jimu capability add` 增量更新的依据。更新能力时，生成器根据新的选择重算产物，并保留受支持的用户配置合并规则。
@@ -86,6 +90,7 @@ flowchart TD
 - **生成结果先验证再发布。** 暂存目录承载依赖整理、构建和能力门禁自检；验证通过后才写入目标路径。
 - **Manifest 是生成计划和更新识别的共同契约。** 计划不直接探测框架包；manifest 校验动作有效性后，渲染层执行它描述的操作。这样读取框架内部事实与写文件事务能分别测试。
 - **增量更新只管理已生成文件。** manifest 保存生成文件集合、摘要与合并规则，更新对受管理产物计算变更；这保留受支持的配置合并，同时为覆盖风险提供显式 `--force`。
+- **官方模板与内部 profile 是两套产品契约。** 模板定义对外承诺、硬预算和端到端验收；profile 仍只描述 Jimu 服务二进制的编译期组成。两者可共享能力声明，但不能互相替代。
 
 ## 约束与不变量
 

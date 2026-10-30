@@ -1,0 +1,162 @@
+schema_version: 1
+contract_version: v0.1
+target_product_version: v0.5.0
+default_template: basic-api
+
+selection:
+  official_flag: --template
+  expert_flag: --with
+  selectors_mutually_exclusive:
+    - --template
+    - --profile
+    - --with
+  dry_run_flag: --dry-run
+  compatibility:
+    - flag: --profile=minimal
+      maps_to: auth-api
+      status: deprecated
+      available_through: v0.5.x
+      removed_in: v0.6.0
+      warning_required: true
+  other_profiles:
+    public: false
+    purpose: framework-internal-build-only
+
+support_levels:
+  official:
+    contract: stable
+    budgets: release-blocking
+    end_to_end_acceptance: required
+    upgrade_commitment: none-until-v0.6.0
+  experimental:
+    contract: none
+    budgets: report-only
+    end_to_end_acceptance: preflight-and-generated-self-check
+    upgrade_commitment: none
+  internal:
+    contract: none
+    budgets: none
+    end_to_end_acceptance: framework-gates-only
+    upgrade_commitment: none
+
+templates:
+  basic-api:
+    support_level: official
+    extends: null
+    selection:
+      declared_capabilities: []
+      core_modules:
+        - http
+        - config
+        - logging
+        - error-response
+        - health
+        - graceful-shutdown
+    runtime_services: []
+    routes:
+      business: 1
+      health: 2
+    tables: 0
+    migrations: 0
+    assets:
+      compose: false
+      kubernetes: false
+      helm: false
+      openobserve: false
+      swagger: false
+    budget_file: budgets.json
+    acceptance:
+      - go-test
+      - go-vet
+      - go-build
+      - run-without-containers
+      - readyz-without-external-services
+
+  auth-api:
+    support_level: official
+    extends: basic-api
+    selection:
+      declared_capabilities:
+        - user
+        - access
+        - auth
+      migration_schema_carriers:
+        - name: tenant
+          mode: migration-domain-only
+          exposed: false
+          migrations:
+            - internal/capabilities/tenant/migrations/mysql/005_tenants.sql
+            - internal/capabilities/tenant/migrations/mysql/008_tenant_version.sql
+    runtime_services:
+      - name: mysql
+        version: "8.4 LTS"
+        required: true
+      - name: redis
+        version: "7.x"
+        required: true
+    routes:
+      business: 24
+      health: 2
+    tables: 8
+    migrations: 10
+    assets:
+      compose: true
+      kubernetes: false
+      helm: false
+      openobserve: false
+      swagger: false
+    budget_file: budgets.json
+    acceptance:
+      - empty-database-migrate
+      - seed-idempotent
+      - one-command-start
+      - readyz
+      - login-me-protected-request
+      - missing-service-fails-fast
+
+preflight:
+  before_target_write: true
+  atomic_publish: true
+  protected_http_middleware:
+    require_exactly_one_provider: true
+    mutually_exclusive_providers:
+      - auth
+      - apikey
+    recheck_after_generation: true
+  migrations:
+    include_schema_dependency_closure: true
+    reject_missing_dependency: true
+    reject_duplicate_table_owner: true
+    require_up_down_pairs_for_mysql: true
+  runtime_services:
+    reject_missing_declaration: true
+    reject_config_compose_mismatch: true
+    basic_api_must_have_zero_services: true
+  framework_commit:
+    command: git rev-parse --verify HEAD^{commit}
+    reject_empty: true
+    normal_clone_and_worktree: required
+  generated_project_checks:
+    - tidy
+    - build
+    - test
+    - capability-self-check
+
+lifecycle:
+  model: user-owned-fork
+  implicit_upgrade: false
+  capability_add: experimental
+  generated_manifest: .jimu/manifest.json
+  manifest_support_fields:
+    - template
+    - template_version
+    - support_level
+    - framework_version
+    - framework_commit
+    - dirty
+    - generated_file_sha256
+  user_owned_after_generation: true
+  upgrade_command:
+    available_in: v0.6.0
+    explicit_only: true
+    strategy: three-way-diff
