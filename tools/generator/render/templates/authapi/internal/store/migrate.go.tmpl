@@ -1,0 +1,42 @@
+package store
+
+import (
+	"sort"
+
+	"{{.Module}}/internal/migrations"
+
+	"gorm.io/gorm"
+)
+
+func Migrate(db *gorm.DB) error {
+	if err := db.Exec("CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)").Error; err != nil {
+		return err
+	}
+	files, err := migrations.Files()
+	if err != nil {
+		return err
+	}
+	sort.Strings(files)
+	for _, file := range files {
+		var count int64
+		if err := db.Table("schema_migrations").Where("version = ?", file).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			continue
+		}
+		sql, err := migrations.Read(file)
+		if err != nil {
+			return err
+		}
+		if err := db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Exec(sql).Error; err != nil {
+				return err
+			}
+			return tx.Exec("INSERT INTO schema_migrations (version) VALUES (?)", file).Error
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}

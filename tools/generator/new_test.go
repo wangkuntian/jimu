@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"jimu/tools/generator/manifest"
@@ -69,6 +70,72 @@ func TestNewProjectBasicAPIHasNoExternalRuntimeDependencies(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(config), "\ndb:")
 	assert.NotContains(t, string(config), "\nredis:")
+}
+
+func TestNewProjectAuthAPIIsCompactSingleTenantTemplate(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "auth")
+	result, err := NewProject(NewOptions{
+		Dir: dir, Template: "auth-api", Module: "example.com/auth",
+	})
+	require.NoError(t, err)
+	assert.LessOrEqual(t, result.FileCount-1, 160, "auth-api 生成文件预算不含 manifest")
+	assert.Equal(t, "auth-api", result.Template)
+	assert.Equal(t, "official", result.Support)
+
+	for _, rel := range []string{
+		"cmd/server/main.go",
+		"cmd/cli/main.go",
+		"docker-compose.yml",
+		"scripts/init.sh",
+		"scripts/verify.sh",
+		"internal/migrations/mysql/001_tenants.sql",
+		"internal/migrations/mysql/010_permissions_updated_at.sql",
+		"internal/api/v1/auth.go",
+		"internal/api/v1/users.go",
+		"internal/api/v1/access.go",
+		"QUICKSTART.md",
+	} {
+		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "缺少 auth-api 产物 %s", rel)
+	}
+	for _, rel := range []string{
+		"internal/capabilities",
+		"deploy",
+		"docs/openapi",
+		".env.example",
+	} {
+		_, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
+		assert.True(t, os.IsNotExist(statErr), "auth-api 不应包含 %s", rel)
+	}
+	config, err := os.ReadFile(filepath.Join(dir, "configs", "app.yaml"))
+	require.NoError(t, err)
+	configText := "\n" + string(config)
+	for _, section := range []string{"http:", "management:", "log:", "db:", "redis:", "id:", "auth:"} {
+		assert.Contains(t, configText, "\n"+section)
+	}
+	for _, section := range []string{"\notel:", "\ngrpc:", "\nqueue:", "\nstorage:", "\ntenant:", "\nnotification:"} {
+		assert.NotContains(t, configText, section)
+	}
+
+	document, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "auth-api", document.Selection.Template)
+	assert.Equal(t, 24, document.Report.Routes)
+	assert.Len(t, document.Report.Migrations, 10)
+	assert.Len(t, document.Report.Tables, 8)
+
+	sqlFiles, err := filepath.Glob(filepath.Join(dir, "internal", "migrations", "mysql", "*.sql"))
+	require.NoError(t, err)
+	assert.Len(t, sqlFiles, 10)
+	createTables := 0
+	alterTables := 0
+	for _, file := range sqlFiles {
+		content, err := os.ReadFile(file)
+		require.NoError(t, err)
+		createTables += strings.Count(string(content), "CREATE TABLE")
+		alterTables += strings.Count(string(content), "ALTER TABLE")
+	}
+	assert.Equal(t, 8, createTables)
+	assert.Equal(t, 2, alterTables)
 }
 
 func TestNewProjectLeavesNoPartialTreeOnFailure(t *testing.T) {

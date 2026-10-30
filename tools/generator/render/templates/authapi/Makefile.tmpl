@@ -1,0 +1,52 @@
+.PHONY: help build test vet fmt fmt-check up verify down clean
+
+.DEFAULT_GOAL := help
+
+## help: show available commands
+help:
+	@awk 'BEGIN { printf "\nUsage:\n  make <target>\n\n" } /^## [a-zA-Z0-9_.-]+:/ { line=$$0; sub(/^## /, "", line); sep=index(line, ":"); printf "  make %-18s %s\n", substr(line, 1, sep-1), substr(line, sep+2) }' $(MAKEFILE_LIST)
+
+## build: build server and CLI
+build:
+	@mkdir -p bin
+	go build -o bin/server ./cmd/server
+	go build -o bin/jimu ./cmd/cli
+
+## test: run tests
+test:
+	go test ./...
+
+## vet: run go vet
+vet:
+	go vet ./...
+
+## fmt: format Go code
+fmt:
+	go fmt ./...
+
+## fmt-check: check Go formatting
+fmt-check:
+	@test -z "$$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+## up: build, migrate, seed and start the stack
+up:
+	@set -eu; \
+	mkdir -p secrets; \
+	created=0; \
+	if [ ! -s secrets/admin_password.txt ]; then openssl rand -hex 16 > secrets/admin_password.txt; created=1; fi; \
+	if [ ! -s secrets/jwt_secret.txt ]; then openssl rand -hex 32 > secrets/jwt_secret.txt; fi; \
+	chmod 600 secrets/admin_password.txt secrets/jwt_secret.txt; \
+	docker compose up -d --build --wait app; \
+	if [ "$${created}" = 1 ]; then printf '\nAdministrator password: %s\n' "$$(cat secrets/admin_password.txt)"; fi
+
+## verify: readyz + login + me + protected request
+verify:
+	@sh scripts/verify.sh
+
+## down: stop the stack
+down:
+	docker compose down
+
+## clean: stop the stack and remove data volumes
+clean:
+	docker compose down -v

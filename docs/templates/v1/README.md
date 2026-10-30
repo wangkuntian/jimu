@@ -215,17 +215,19 @@ v0.5.0 不包含公开注册、MFA/passkey、OAuth、验证码、通知、字段
 ├── cmd/server/main.go
 ├── cmd/cli/main.go
 ├── internal/app/
-├── internal/capabilities/user/
-├── internal/capabilities/access/
-├── internal/capabilities/auth/
-├── internal/capabilities/tenant/{domain,migrations}/  # schema carrier，不装配模块
 ├── internal/config/
+├── internal/domain/models.go
+├── internal/store/{db,migrate,redis,seed}.go
+├── internal/auth/{jwt,middleware,password}.go
+├── internal/api/v1/{routes,helpers,auth,users,access}.go
+├── internal/migrations/migrate.go
+├── internal/migrations/mysql/*.sql
 ├── internal/platform/
 ├── internal/shared/
 ├── configs/app.yaml
 ├── conf/rbac_model.conf
 ├── docker-compose.yml
-├── scripts/init.sh
+├── scripts/{init.sh,verify.sh}
 ├── README.md
 ├── QUICKSTART.md
 ├── Makefile
@@ -240,7 +242,7 @@ v0.5.0 不包含公开注册、MFA/passkey、OAuth、验证码、通知、字段
 
 | 分组 | 路由 |
 |---|---|
-| 认证 | `POST /api/v1/auth/login`、`POST /api/v1/auth/refresh`、`POST /api/v1/auth/logout`、`POST /api/v1/auth/logout-all`、`GET /api/v1/auth/me`、`GET /api/v1/auth/login-history` |
+| 认证 | `POST /api/v1/auth/login`、`POST /api/v1/auth/refresh`、`POST /api/v1/auth/logout`、`GET /api/v1/auth/me`、`GET /api/v1/auth/login-history` |
 | 用户 | `POST/GET /api/v1/users`、`GET/PUT/DELETE /api/v1/users/:id` |
 | 角色 | `GET /api/v1/roles/options`、`POST/GET /api/v1/roles`、`GET/PUT/DELETE /api/v1/roles/:id`、`GET/POST /api/v1/roles/:id/permissions` |
 | 权限 | `POST/GET /api/v1/permissions`、`GET/PUT/DELETE /api/v1/permissions/:id` |

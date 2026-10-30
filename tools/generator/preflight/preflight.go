@@ -135,7 +135,11 @@ func validateMigrations(caps []manifest.Capability) error {
 
 func validateRuntimeServices(caps []manifest.Capability, merges []manifest.MergeAction) error {
 	requiredSections := map[string]string{}
+	declaredSections := map[string]bool{}
 	for _, capability := range caps {
+		for _, section := range capability.Configs {
+			declaredSections[section] = true
+		}
 		for _, service := range capability.RuntimeServices {
 			section, ok := runtimeServiceSection[service]
 			if !ok {
@@ -150,10 +154,13 @@ func validateRuntimeServices(caps []manifest.Capability, merges []manifest.Merge
 
 	for _, destination := range []string{"configs/app.yaml", "configs/app.prod.yaml"} {
 		sections, ok := mergeSections(merges, destination)
-		if !ok {
-			return fmt.Errorf("runtime services require config %s but no merge action exists", destination)
-		}
 		for _, section := range slices.Sorted(maps.Keys(requiredSections)) {
+			if declaredSections[section] {
+				continue
+			}
+			if !ok {
+				return fmt.Errorf("runtime service %q requires config %s but no merge action exists", requiredSections[section], destination)
+			}
 			if !sections[section] {
 				service := requiredSections[section]
 				return fmt.Errorf("runtime service %q requires config section %q in %s", service, section, destination)

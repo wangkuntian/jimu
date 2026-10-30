@@ -273,9 +273,11 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 `jimu new <dir>` 默认生成 `basic-api` 模板；`--template` 选择官方模板，`--with` 直接指定 experimental 能力集。生成项目有自己的 module 并运行 `go mod tidy`，因此可以减少项目依赖；profile 只裁剪框架二进制的编译闭包，不改变框架 `go.mod`。
 
-> **v0.5.0 模板入口**：`--template=basic-api|auth-api`，默认 `basic-api`；`--with` 只作为 experimental 专家模式；`--profile=minimal` 映射为 `auth-api` 并打印弃用警告，v0.6.0 移除。其他 profile 仅供框架自身构建，CLI 会拒绝。`auth-api` 当前复用 `minimal` 兼容选区，完整模板裁剪与一键启动在下一实施项收口。模板、支持矩阵、兼容窗口和发布阻断预算见[模板契约 v0.1](docs/templates/v1/README.md)。
+> **v0.5.0 模板入口**：`--template=basic-api|auth-api`，默认 `basic-api`；`--with` 只作为 experimental 专家模式；`--profile=minimal` 映射为 `auth-api` 并打印弃用警告，v0.6.0 移除。其他 profile 仅供框架自身构建，CLI 会拒绝。模板、支持矩阵、兼容窗口和发布阻断预算见[模板契约 v0.1](docs/templates/v1/README.md)。
 
 `basic-api` 的生成产物已按零外部服务基线落地：不含数据库/Redis 配置、Compose、Kubernetes/Helm 或 OpenAPI 资产，启动时只创建 HTTP 与管理端口；`/livez`、`/readyz` 和 `/api/v1/ping` 不检查外部依赖。按 v0.4.0 的既定决定，生成项目不恢复受跟踪的 `.env.example`，环境变量与配置入口写在项目 README。
+
+`auth-api` 生成单租户 Go 工程，包含用户、JWT 会话、RBAC、MySQL 8.4、Redis 7、8 张业务表、10 个迁移和 24 条业务路由；项目自己的 `make up` 完成构建、迁移、seed 和启动，`make verify` 验证 readyz、login、me 和受保护请求。
 
 `jimu capability add <name>` 在已生成项目中追加框架已有的能力。`jimu capability create <name>` 只在框架仓库中创建能力骨架，不自动修改 catalog 或 profile。旧 `jimu module create` 已移除。
 

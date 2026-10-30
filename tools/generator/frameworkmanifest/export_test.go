@@ -159,7 +159,7 @@ func TestExportDefaultsToOfficialBasicAPI(t *testing.T) {
 	}
 }
 
-func TestExportAuthAPITemplateIsOfficialCompatibilityPath(t *testing.T) {
+func TestExportAuthAPITemplateIsOfficialStandaloneSelection(t *testing.T) {
 	doc, err := Export(Request{Root: repositoryRoot(t), Template: "auth-api", Module: "example.com/auth"})
 	if err != nil {
 		t.Fatal(err)
@@ -167,8 +167,8 @@ func TestExportAuthAPITemplateIsOfficialCompatibilityPath(t *testing.T) {
 	if doc.Selection.Template != "auth-api" || doc.Selection.Support != "official" {
 		t.Fatalf("selection = %#v, want official auth-api", doc.Selection)
 	}
-	if doc.Selection.Profile != "minimal" {
-		t.Fatalf("profile = %q, want interim minimal compatibility selection", doc.Selection.Profile)
+	if doc.Selection.Profile != "" {
+		t.Fatalf("profile = %q, want standalone auth-api selection", doc.Selection.Profile)
 	}
 }
 

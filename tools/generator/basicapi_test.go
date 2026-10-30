@@ -91,6 +91,45 @@ func TestBasicAPIStartsWithoutExternalServices(t *testing.T) {
 	}
 }
 
+func TestAuthAPIComposeConfigIsValid(t *testing.T) {
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skip("docker CLI is not installed")
+	}
+	dir := filepath.Join(t.TempDir(), "auth")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: "auth-api", Module: "example.com/auth",
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "secrets"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secrets", "admin_password.txt"), []byte("admin12345678"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secrets", "jwt_secret.txt"), []byte("compose-config-secret"), 0o600))
+
+	command := exec.Command("docker", "compose", "config", "--quiet")
+	command.Dir = dir
+	command.Env = serverEnvBaseForTest(newTestGoCache(t))
+	output, err := command.CombinedOutput()
+	require.NoError(t, err, "docker compose config:\n%s", output)
+}
+
+func TestAuthAPIDirectDependencyBudget(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "auth")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: "auth-api", Module: "example.com/auth",
+	})
+	require.NoError(t, err)
+	content, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	require.NoError(t, err)
+	file, err := modfile.Parse("go.mod", content, nil)
+	require.NoError(t, err)
+	direct := 0
+	for _, requirement := range file.Require {
+		if !requirement.Indirect {
+			direct++
+		}
+	}
+	require.LessOrEqual(t, direct, 20)
+}
+
 func freePort(t *testing.T) int {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

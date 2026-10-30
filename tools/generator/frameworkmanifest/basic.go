@@ -1,6 +1,7 @@
 package frameworkmanifest
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,7 +30,11 @@ func basicAPIDocument(root, module, template string) (manifest.Document, error) 
 	if err != nil {
 		return manifest.Document{}, err
 	}
-	templates := basicAPITemplates(data)
+	templateData, err := templateDataMap(data)
+	if err != nil {
+		return manifest.Document{}, err
+	}
+	templates := basicAPITemplates(templateData)
 	files := []string{"go.sum"}
 	for _, action := range templates {
 		files = append(files, action.Destination)
@@ -55,16 +60,6 @@ func basicAPIDocument(root, module, template string) (manifest.Document, error) 
 		Report:         manifest.ReportSpec{Name: "basic-api", Capabilities: []string{}, Routes: 1},
 		GeneratedFiles: files,
 	}, nil
-}
-
-func authAPICompatibilityDocument(root, module string) (manifest.Document, error) {
-	selected, err := resolveSelection(root, Request{Profile: "minimal"})
-	if err != nil {
-		return manifest.Document{}, err
-	}
-	selected.template = "auth-api"
-	selected.support = "official"
-	return buildDocument(root, module, selected)
 }
 
 func loadBasicAPITemplateData(root, module string) (basicAPITemplateData, error) {
@@ -111,7 +106,7 @@ func loadBasicAPITemplateData(root, module string) (basicAPITemplateData, error)
 	return data, nil
 }
 
-func basicAPITemplates(data basicAPITemplateData) []manifest.TemplateAction {
+func basicAPITemplates(data map[string]any) []manifest.TemplateAction {
 	files := []struct {
 		source      string
 		destination string
@@ -148,4 +143,16 @@ func basicAPITemplates(data basicAPITemplateData) []manifest.TemplateAction {
 		})
 	}
 	return actions
+}
+
+func templateDataMap(value any) (map[string]any, error) {
+	content, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("encode template data: %w", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(content, &out); err != nil {
+		return nil, fmt.Errorf("decode template data: %w", err)
+	}
+	return out, nil
 }

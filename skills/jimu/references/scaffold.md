@@ -16,7 +16,7 @@
 ```bash
 ./bin/jimu new ./myapp --module=example.com/myapp --report                   # 默认 basic-api
 ./bin/jimu new ./myapp --template=basic-api --module=example.com/myapp       # 官方模板
-./bin/jimu new ./myapp --template=auth-api --module=example.com/myapp        # auth 兼容路径
+./bin/jimu new ./myapp --template=auth-api --module=example.com/myapp        # 单租户认证模板
 ./bin/jimu new ./myapp --with=user,access,queue --shape=app                   # 能力名（硬依赖闭包 + 拓扑序）
 ./bin/jimu new ./myapp --with=queue:kafka --dry-run                           # 只打印计划，不落盘
 ```
@@ -56,7 +56,7 @@
 
 ```bash
 ./bin/jimu new /tmp/sk-demo --template=basic-api --module=example.com/demo --dry-run   # 只打印计划
-./bin/jimu new /tmp/sk-demo --template=auth-api --module=example.com/demo --report     # auth 兼容路径
+./bin/jimu new /tmp/sk-demo --template=auth-api --module=example.com/demo --report     # 单租户认证模板
 cd /tmp/sk-demo && go build ./... && go run ./tools/checkcapabilities && go test ./... -count=1
 grep -rn '"jimu/' /tmp/sk-demo --include='*.go'      # 期望 0 命中（module 已重写）
 make check-templates                                 # 本仓模板漂移门禁

@@ -64,7 +64,7 @@ func Export(req Request) (manifest.Document, error) {
 	}
 	var doc manifest.Document
 	if req.Template == "auth-api" {
-		doc, err = authAPICompatibilityDocument(root, req.Module)
+		doc, err = authAPIDocument(root, req.Module)
 	} else if req.Template != "" {
 		doc, err = basicAPIDocument(root, req.Module, req.Template)
 	} else {
