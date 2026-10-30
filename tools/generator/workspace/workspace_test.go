@@ -1,8 +1,11 @@
 package workspace
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -28,6 +31,39 @@ func TestCreateWritesManifestAndRejectsNonEmptyTarget(t *testing.T) {
 	writeFile(t, target, "user.txt", "keep\n")
 	if _, err := Create(doc, CreateOptions{Target: target, SourceRoot: source, Module: "example.com/app", NoTidy: true, NoSelfCheck: true}); err == nil || !strings.Contains(err.Error(), "not empty") {
 		t.Fatalf("Create() error = %v, want non-empty target rejection", err)
+	}
+}
+
+func TestCreateManifestRecordsActualGeneratedFileHashes(t *testing.T) {
+	source := t.TempDir()
+	writeFile(t, source, "input.txt", "generated\n")
+	writeFile(t, source, "config.yaml", "base:\n  enabled: true\n")
+	doc := fixtureDocument("generated.txt", "config.yaml")
+	target := filepath.Join(t.TempDir(), "project")
+	if _, err := Create(doc, CreateOptions{Target: target, SourceRoot: source, Module: "example.com/app", NoTidy: true, NoSelfCheck: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := LoadProjectManifest(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manifest.ValidateComplete(loaded); err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.GeneratedFileSHA256) != len(loaded.GeneratedFiles) {
+		t.Fatalf("hashes=%d generated files=%d", len(loaded.GeneratedFileSHA256), len(loaded.GeneratedFiles))
+	}
+	for _, rel := range loaded.GeneratedFiles {
+		content, err := os.ReadFile(filepath.Join(target, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(content)
+		want := "sha256:" + hex.EncodeToString(sum[:])
+		if got := loaded.GeneratedFileSHA256[rel]; got != want {
+			t.Fatalf("hash for %s = %q, want %q", rel, got, want)
+		}
 	}
 }
 
@@ -92,6 +128,17 @@ func TestUpdatePreservesUserFilesEditedConfigAndIsIdempotent(t *testing.T) {
 	if got := readFile(t, target, "config.yaml"); got != "base:\n  enabled: false\nuser:\n  value: custom\nnew:\n  value: source\n" {
 		t.Fatalf("merged config = %q", got)
 	}
+	loaded, err := LoadProjectManifest(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashes, err := manifest.HashFiles(target, loaded.GeneratedFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(hashes, loaded.GeneratedFileSHA256) {
+		t.Fatalf("update did not hash final generated content: got=%v want=%v", loaded.GeneratedFileSHA256, hashes)
+	}
 	first := readFile(t, target, manifestRel)
 	result, err := Update(next, next, UpdateOptions{ProjectRoot: target, SourceRoot: source})
 	if err != nil {
@@ -111,6 +158,10 @@ func TestLoadProjectManifestRejectsMissingAndBadDigest(t *testing.T) {
 		t.Fatalf("missing manifest error = %v", err)
 	}
 	doc := fixtureDocument("generated.txt", "config.yaml")
+	doc.GeneratedFileSHA256 = map[string]string{
+		"generated.txt": "sha256:" + strings.Repeat("a", 64),
+		"config.yaml":   "sha256:" + strings.Repeat("b", 64),
+	}
 	if err := manifest.Write(filepath.Join(root, manifestRel), doc); err != nil {
 		t.Fatal(err)
 	}
@@ -130,8 +181,8 @@ func TestLoadProjectManifestRejectsMissingAndBadDigest(t *testing.T) {
 
 func fixtureDocument(generated, config string) manifest.Document {
 	return manifest.Document{
-		SchemaVersion:  1,
-		Framework:      manifest.Framework{Module: "jimu"},
+		SchemaVersion:  manifest.CurrentSchemaVersion,
+		Framework:      manifest.Framework{Module: "jimu", Version: "v0.5.0-dev", Commit: strings.Repeat("a", 40)},
 		Selection:      manifest.Selection{Shape: "app"},
 		Copy:           []manifest.CopyAction{{Source: "input.txt", Destination: generated}},
 		Merges:         []manifest.MergeAction{{Source: config, Destination: config, Strategy: "sections"}},

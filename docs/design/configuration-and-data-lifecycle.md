@@ -89,9 +89,9 @@ flowchart TD
 
 ### 表与迁移
 
-能力在 `Descriptor.Owns` 声明自己负责创建的表，迁移文件由 `Descriptor.Migrations` 提供并嵌入二进制。`Owns` 约束 `CREATE TABLE` 的唯一归属，不表示该能力的所有迁移只能修改自己拥有的表。迁移按 catalog 依赖顺序执行，版本状态按能力分别记录。
+能力在 `Descriptor.Owns` 声明自己负责创建的表，迁移文件由 `Descriptor.Migrations` 提供并嵌入二进制，跨能力 schema 前置关系由 `Descriptor.MigrationSchemaDeps` 声明。`Owns` 约束 `CREATE TABLE` 的唯一归属，不表示该能力的所有迁移只能修改自己拥有的表。迁移按 catalog 依赖顺序执行，版本状态按能力分别记录。
 
-迁移集合与运行时装配集合分开解析。profile 的迁移集合可以包含为 schema 完整性所需的额外迁移；这不会把对应业务能力加入运行时装配。迁移边界变化时，同时检查各能力迁移、catalog 的 schema 依赖及 `jimu migrate` 使用的集合。存量库从旧全局版本表迁移到能力版本表时，由 `adopt-capabilities` 登记已有迁移基线，不执行迁移 SQL。
+迁移集合与运行时装配集合分开解析。profile 的迁移集合可以包含为 schema 完整性所需的额外迁移；这不会把对应业务能力加入运行时装配。迁移边界变化时，同时检查各能力迁移、Descriptor 的 schema 依赖及 `jimu migrate` 使用的集合。存量库从旧全局版本表迁移到能力版本表时，由 `adopt-capabilities` 登记已有迁移基线，不执行迁移 SQL。
 
 `jimu migrate` 根据选定 profile 构造迁移集合，补上 schema 依赖后按能力拓扑顺序执行；每个能力使用自己的 goose version table。向前迁移按拓扑顺序，回滚按相反顺序。迁移错误带能力名返回；`MigrateWithRetry` 达到配置的重试上限后仍返回错误。
 
@@ -141,7 +141,7 @@ flowchart LR
 
 - 配置加载：[internal/config](../../internal/config)、[internal/app.LoadCapabilityConfigs](../../internal/app/capconfig.go)
 - 表与迁移：[internal/contract.Descriptor](../../internal/contract/capability.go)、[internal/capabilities/catalog](../../internal/capabilities/catalog)
-- 种子与迁移执行：[internal/app/seed.go](../../internal/app/seed.go)、[internal/kernel/db/migrate.go](../../internal/kernel/db/migrate.go)、[catalog.MigrationSchemaDeps](../../internal/capabilities/catalog/migration.go)
+- 种子与迁移执行：[internal/app/seed.go](../../internal/app/seed.go)、[internal/kernel/db/migrate.go](../../internal/kernel/db/migrate.go)、[catalog.MigrationSchemaDeps](../../internal/capabilities/catalog/migration.go)（由各能力 Descriptor 派生）
 - 清理与加密：[internal/shared/dbpurge](../../internal/shared/dbpurge)、[internal/capabilities/encryption](../../internal/capabilities/encryption)
 - 验证：配置段单测、迁移集/迁移集成测试、各数据所有者清理测试，以及 `make check-capabilities`
 - 相关设计：[能力架构](capability-architecture.md)、[身份与租户](identity-and-tenancy.md)

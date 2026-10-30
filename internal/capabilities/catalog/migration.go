@@ -7,14 +7,10 @@ import (
 // MigrationSchemaDeps 是「迁移集必须一并带上」的 schema 依赖：某些能力的迁移会修改**其他**
 // 能力拥有的表，只按形态声明集过滤会让裁剪形态建出**自己写不进去**的 schema。
 //
-// 当前唯一一条：tenant 的迁移 005 给 user/access 拥有的 users/roles 加 tenant_id 列，
-// 而这两个能力的 ORM 模型（user/domain.User、access/domain.Role）始终写该列 ——
-// 因此迁移集里只要有 user 或 access，就必须带上 tenant 的迁移。
-// 只影响建表：装配集（形态清单）不受影响，不挂 tenant 路由、不额外 seed 数据。
-var MigrationSchemaDeps = map[string][]string{
-	"user":   {"tenant"},
-	"access": {"tenant"},
-}
+// 事实源是各能力的 Descriptor.MigrationSchemaDeps；本表只是按能力名索引的派生视图，
+// 保留给迁移集计算与生成模板使用。当前 user/access 依赖 tenant 的 005 迁移添加
+// tenant_id 列。只影响建表：装配集（形态清单）不受影响，不挂 tenant 路由、不额外 seed 数据。
+var MigrationSchemaDeps = collectMigrationSchemaDeps(entries)
 
 // MigrationSet 返回某形态的**迁移集**（按 catalog 拓扑序）：声明的能力名集合 ∪ schema 依赖。
 //
@@ -45,6 +41,17 @@ func filterAll(declared map[string]bool) []contract.Descriptor {
 		if declared[d.Name] {
 			out = append(out, d)
 		}
+	}
+	return out
+}
+
+func collectMigrationSchemaDeps(descriptors []contract.Descriptor) map[string][]string {
+	out := map[string][]string{}
+	for _, descriptor := range descriptors {
+		if len(descriptor.MigrationSchemaDeps) == 0 {
+			continue
+		}
+		out[descriptor.Name] = append([]string(nil), descriptor.MigrationSchemaDeps...)
 	}
 	return out
 }

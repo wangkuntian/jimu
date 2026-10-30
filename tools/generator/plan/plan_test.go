@@ -9,7 +9,7 @@ import (
 
 func validDocument() manifest.Document {
 	return manifest.Document{
-		SchemaVersion: 1,
+		SchemaVersion: manifest.CurrentSchemaVersion,
 		Framework:     manifest.Framework{Module: "jimu", Version: "v0.3.3"},
 		Selection:     manifest.Selection{Shape: "app", Capabilities: []string{"user"}, Drivers: map[string][]string{}},
 		Copy: []manifest.CopyAction{

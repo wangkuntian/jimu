@@ -1,0 +1,72 @@
+x-app-env: &app-env
+  APP_ENV: prod
+  DB_HOST: mysql
+  DB_PORT: 3306
+  DB_USER: jimu
+  DB_PASSWORD: jimu
+  DB_NAME: jimu
+  REDIS_ADDR: redis:6379
+  JWT_SECRET_FILE: /run/secrets/jwt_secret
+  ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: jimu
+      MYSQL_USER: jimu
+      MYSQL_PASSWORD: jimu
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+    volumes:
+      - redis_data:/data
+
+  init:
+    build: .
+    command: ["sh", "scripts/init.sh"]
+    environment: *app-env
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    secrets:
+      - admin_password
+      - jwt_secret
+
+  app:
+    build: .
+    environment: *app-env
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    ports:
+      - "${AUTH_API_PORT:-8080}:8080"
+      - "${AUTH_API_MANAGEMENT_PORT:-9090}:9090"
+    secrets:
+      - admin_password
+      - jwt_secret
+
+volumes:
+  mysql_data:
+  redis_data:
+
+secrets:
+  admin_password:
+    file: ./secrets/admin_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt

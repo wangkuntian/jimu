@@ -1,0 +1,95 @@
+package http
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"time"
+
+	"{{.Module}}/internal/config"
+)
+
+type Server struct {
+	name   string
+	server *http.Server
+	errors chan error
+}
+
+func NewPublic(cfg config.HTTPConfig, handler http.Handler) (*Server, error) {
+	return newServer(ServerConfig{
+		Name:              "public",
+		Address:           net.JoinHostPort(cfg.Host, fmt.Sprint(cfg.Port)),
+		Handler:           handler,
+		ReadHeaderTimeout: time.Duration(cfg.ReadHeaderTimeoutSec) * time.Second,
+		ReadTimeout:       time.Duration(cfg.ReadTimeoutSec) * time.Second,
+		WriteTimeout:      time.Duration(cfg.WriteTimeoutSec) * time.Second,
+		IdleTimeout:       time.Duration(cfg.IdleTimeoutSec) * time.Second,
+	})
+}
+
+func NewManagement(cfg config.ManagementConfig, handler http.Handler) (*Server, error) {
+	return newServer(ServerConfig{
+		Name:              "management",
+		Address:           net.JoinHostPort(cfg.Host, fmt.Sprint(cfg.Port)),
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       30 * time.Second,
+	})
+}
+
+type ServerConfig struct {
+	Name              string
+	Address           string
+	Handler           http.Handler
+	ReadHeaderTimeout time.Duration
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+}
+
+func newServer(cfg ServerConfig) (*Server, error) {
+	if cfg.Handler == nil {
+		return nil, errors.New("http handler is required")
+	}
+	return &Server{
+		name: cfg.Name,
+		server: &http.Server{
+			Addr:              cfg.Address,
+			Handler:           cfg.Handler,
+			ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+			ReadTimeout:       cfg.ReadTimeout,
+			WriteTimeout:      cfg.WriteTimeout,
+			IdleTimeout:       cfg.IdleTimeout,
+		},
+		errors: make(chan error, 1),
+	}, nil
+}
+
+func (s *Server) Name() string    { return s.name }
+func (s *Server) Address() string { return s.server.Addr }
+func (s *Server) Errors() <-chan error {
+	return s.errors
+}
+
+func (s *Server) Start(ctx context.Context) error {
+	var listen net.ListenConfig
+	listener, err := listen.Listen(ctx, "tcp", s.server.Addr)
+	if err != nil {
+		return err
+	}
+	go func() {
+		err := s.server.Serve(listener)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.errors <- err
+		}
+	}()
+	return nil
+}
+
+func (s *Server) Stop(ctx context.Context) error {
+	return s.server.Shutdown(ctx)
+}

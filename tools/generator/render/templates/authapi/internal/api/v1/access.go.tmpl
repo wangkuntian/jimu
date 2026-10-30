@@ -1,0 +1,265 @@
+package v1
+
+import (
+	"net/http"
+	"strconv"
+
+	"{{.Module}}/internal/domain"
+	"{{.Module}}/internal/shared/errorx"
+	"{{.Module}}/internal/shared/response"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+)
+
+type roleRequest struct {
+	Name   string `json:"name" binding:"required"`
+	Code   string `json:"code" binding:"required"`
+	Scope  string `json:"scope"`
+	Status int    `json:"status"`
+}
+
+type permissionRequest struct {
+	Name     string `json:"name" binding:"required"`
+	Resource string `json:"resource" binding:"required"`
+	Action   string `json:"action" binding:"required"`
+}
+
+type permissionIDsRequest struct {
+	PermissionIDs []string `json:"permission_ids" binding:"required"`
+}
+
+func (h *Handler) ListRoles(c *gin.Context) {
+	var roles []domain.Role
+	if err := h.db.Order("id").Find(&roles).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, roles)
+}
+
+func (h *Handler) RoleOptions(c *gin.Context) {
+	var roles []domain.Role
+	if err := h.db.Where("status = 1").Order("id").Find(&roles).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	out := make([]roleView, 0, len(roles))
+	for _, role := range roles {
+		out = append(out, roleView{ID: strconv.FormatUint(role.ID, 10), Name: role.Name, Code: role.Code})
+	}
+	response.OK(c, http.StatusOK, out)
+}
+
+func (h *Handler) CreateRole(c *gin.Context) {
+	req, ok := bindJSON[roleRequest](c)
+	if !ok {
+		return
+	}
+	if req.Scope == "" {
+		req.Scope = "tenant"
+	}
+	role := domain.Role{TenantID: 1, Name: req.Name, Code: req.Code, Scope: req.Scope, Status: 1}
+	if err := h.db.Create(&role).Error; err != nil {
+		response.Fail(c, http.StatusConflict, errorx.Conflict("role already exists"))
+		return
+	}
+	response.OK(c, http.StatusCreated, role)
+}
+
+func (h *Handler) GetRole(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	var role domain.Role
+	if err := h.db.First(&role, id).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, role)
+}
+
+func (h *Handler) UpdateRole(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	req, ok := bindJSON[roleRequest](c)
+	if !ok {
+		return
+	}
+	var role domain.Role
+	if err := h.db.First(&role, id).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	if role.IsSystem {
+		response.Fail(c, http.StatusForbidden, errorx.Forbidden("system roles are read-only"))
+		return
+	}
+	if err := h.db.Model(&role).Updates(map[string]any{"name": req.Name, "code": req.Code, "scope": req.Scope, "status": req.Status}).Error; err != nil {
+		response.Fail(c, http.StatusConflict, errorx.Conflict("role update conflicts with an existing role"))
+		return
+	}
+	response.OK(c, http.StatusOK, role)
+}
+
+func (h *Handler) DeleteRole(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	var role domain.Role
+	if err := h.db.First(&role, id).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	if role.IsSystem {
+		response.Fail(c, http.StatusForbidden, errorx.Forbidden("system roles cannot be deleted"))
+		return
+	}
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("role_id = ?", id).Delete(&domain.RolePermission{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("role_id = ?", id).Delete(&domain.UserRole{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&role).Error
+	}); err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, gin.H{"deleted": true})
+}
+
+func (h *Handler) GetRolePermissions(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	var permissions []domain.Permission
+	if err := h.db.Table("permissions p").
+		Select("p.*").
+		Joins("JOIN role_permissions rp ON rp.permission_id = p.id").
+		Where("rp.role_id = ?", id).Order("p.resource, p.action").Scan(&permissions).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, permissionViews(permissions))
+}
+
+func (h *Handler) AssignRolePermissions(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	req, ok := bindJSON[permissionIDsRequest](c)
+	if !ok {
+		return
+	}
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("role_id = ?", id).Delete(&domain.RolePermission{}).Error; err != nil {
+			return err
+		}
+		for _, raw := range req.PermissionIDs {
+			permissionID, err := strconv.ParseUint(raw, 10, 64)
+			if err != nil {
+				return err
+			}
+			if err := tx.Create(&domain.RolePermission{RoleID: id, PermissionID: permissionID}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, gin.H{"updated": true})
+}
+
+func (h *Handler) ListPermissions(c *gin.Context) {
+	var permissions []domain.Permission
+	if err := h.db.Order("resource, action").Find(&permissions).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, permissionViews(permissions))
+}
+
+func (h *Handler) CreatePermission(c *gin.Context) {
+	req, ok := bindJSON[permissionRequest](c)
+	if !ok {
+		return
+	}
+	permission := domain.Permission{Name: req.Name, Resource: req.Resource, Action: req.Action}
+	if err := h.db.Create(&permission).Error; err != nil {
+		response.Fail(c, http.StatusConflict, errorx.Conflict("permission already exists"))
+		return
+	}
+	response.OK(c, http.StatusCreated, permissionViews([]domain.Permission{permission})[0])
+}
+
+func (h *Handler) GetPermission(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	var permission domain.Permission
+	if err := h.db.First(&permission, id).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, permissionViews([]domain.Permission{permission})[0])
+}
+
+func (h *Handler) UpdatePermission(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	req, ok := bindJSON[permissionRequest](c)
+	if !ok {
+		return
+	}
+	var permission domain.Permission
+	if err := h.db.First(&permission, id).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	if err := h.db.Model(&permission).Updates(map[string]any{"name": req.Name, "resource": req.Resource, "action": req.Action}).Error; err != nil {
+		response.Fail(c, http.StatusConflict, errorx.Conflict("permission update conflicts with an existing permission"))
+		return
+	}
+	response.OK(c, http.StatusOK, permissionViews([]domain.Permission{permission})[0])
+}
+
+func (h *Handler) DeletePermission(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("permission_id = ?", id).Delete(&domain.RolePermission{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&domain.Permission{}, id).Error
+	}); err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, gin.H{"deleted": true})
+}
+
+func permissionViews(permissions []domain.Permission) []permissionView {
+	out := make([]permissionView, 0, len(permissions))
+	for _, permission := range permissions {
+		out = append(out, permissionView{
+			ID: strconv.FormatUint(permission.ID, 10), Name: permission.Name,
+			Resource: permission.Resource, Action: permission.Action,
+		})
+	}
+	return out
+}

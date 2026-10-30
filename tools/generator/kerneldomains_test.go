@@ -59,7 +59,7 @@ func TestGeneratedProjectCarriesKernelRequiredDomainsAndBuilds(t *testing.T) {
 		name string
 		opts NewOptions
 	}{
-		{"with queue", NewOptions{With: "queue"}},
+		{"with queue", NewOptions{With: withProtectedProvider("queue")}},
 		{"with apikey", NewOptions{With: "apikey"}},
 		{"profile machine", NewOptions{Profile: "machine"}},
 	}
