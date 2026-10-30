@@ -63,7 +63,7 @@ func TestGeneratedProjectBuildsAndVetsForEverySelection(t *testing.T) {
 }
 
 // TestSelectedCapabilityIsAssembledWithItsWholeCompileClosure 钉住端口化后的裁剪：
-// breach 仅复制自身完整代码；内核编译期仍需携带 access/tenant/user 的 domain。
+// breach 与受保护链 fallback apikey 都进入装配集；内核编译期仍需携带 access/tenant/user 的 domain。
 func TestSelectedCapabilityIsAssembledWithItsWholeCompileClosure(t *testing.T) {
 	requireHeavyMatrix(t)
 	dir := filepath.Join(t.TempDir(), "proj")
@@ -71,11 +71,12 @@ func TestSelectedCapabilityIsAssembledWithItsWholeCompileClosure(t *testing.T) {
 	require.NoError(t, err)
 	// auth 是 breach 的可选运行时配置来源，不属于此生成项目的编译闭包。
 	assert.ElementsMatch(t,
-		[]string{"access", "breach", "tenant", "user"},
+		[]string{"access", "apikey", "breach", "tenant", "user"},
 		res.CopySet)
-	// 装配集只有 breach；其余三个能力仅携带 domain。
-	assert.Equal(t, []string{"breach"}, res.Capabilities, "Capabilities 是装配集（Declared）")
+	// apikey 是受保护链 fallback，与 breach 一起装配；其余三个能力仅携带 domain。
+	assert.Equal(t, []string{"apikey", "breach"}, res.Capabilities, "Capabilities 是装配集（Declared）")
 	for _, p := range []string{
+		"internal/capabilities/apikey/wire.go",
 		"internal/capabilities/breach/wire.go",
 		"internal/capabilities/access/domain",
 		"internal/capabilities/tenant/domain",
