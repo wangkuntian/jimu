@@ -18,13 +18,13 @@ import (
 // 且每一项都来自这棵树：闭包文件/代码行、解析集、迁移/表/路由都是正数。
 func TestReportMeasuresTheGeneratedProject(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := newProjectForTest(t, NewOptions{Dir: dir, With: "queue", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, With: withProtectedProvider("queue"), Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 
 	m, err := Report(dir)
 	require.NoError(t, err)
 	assert.Equal(t, "app", m.Profile, "--with 的默认形态名")
-	assert.Equal(t, []string{"queue"}, m.Capabilities, "解析集只含声明集（outbox 依赖 queue，反向不成立）")
+	assert.Equal(t, []string{"apikey", "queue"}, m.Capabilities, "apikey 是受保护路由的 fallback 提供者；outbox 不得反向依赖 queue")
 	assert.Positive(t, m.Files, "闭包文件数")
 	assert.Positive(t, m.Lines, "闭包代码行")
 	assert.Positive(t, m.Routes, "路由数")
@@ -91,7 +91,7 @@ func TestReportSucceedsForEverySelection(t *testing.T) {
 	for _, name := range allCapabilityNames(t) {
 		t.Run(name, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "proj")
-			_, err := newProjectForTest(t, NewOptions{Dir: dir, With: name, Module: "example.com/proj", NoTidy: true})
+			_, err := newProjectForTest(t, NewOptions{Dir: dir, With: withProtectedProvider(name), Module: "example.com/proj", NoTidy: true})
 			require.NoError(t, err)
 			m, err := Report(dir)
 			require.NoError(t, err, "选区 %s 的 --report 必须可用", name)
@@ -123,7 +123,7 @@ func TestReportRerunIsByteIdentical(t *testing.T) {
 	assert.Equal(t, string(first), string(second), "独立重跑必须逐字节幂等")
 	// --with=queue 会把 access/tenant/user 只作 domain 携带，重跑后该行不得退化成 `-`。
 	qdir := filepath.Join(t.TempDir(), "projq")
-	_, err = newProjectForTest(t, NewOptions{Dir: qdir, With: "queue", Module: "example.com/proj", NoTidy: true, Report: true})
+	_, err = newProjectForTest(t, NewOptions{Dir: qdir, With: withProtectedProvider("queue"), Module: "example.com/proj", NoTidy: true, Report: true})
 	require.NoError(t, err)
 	m, err := Report(qdir)
 	require.NoError(t, err)

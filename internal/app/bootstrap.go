@@ -58,11 +58,15 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 	// 必须在 InitTracing 之后：插件创建时固化全局 TracerProvider，
 	// 提前实例化会绑定 NoOp provider 导致 span 永不产生。
 	if cfg.OTEL.Enabled {
-		if err := container.DB.Use(gormotel.NewPlugin()); err != nil {
-			return nil, fmt.Errorf("init gorm otel plugin: %w", err)
+		if container.DB != nil {
+			if err := container.DB.Use(gormotel.NewPlugin()); err != nil {
+				return nil, fmt.Errorf("init gorm otel plugin: %w", err)
+			}
 		}
-		if err := redisotel.InstrumentTracing(container.Redis); err != nil {
-			return nil, fmt.Errorf("init redis otel tracing: %w", err)
+		if container.Redis != nil {
+			if err := redisotel.InstrumentTracing(container.Redis); err != nil {
+				return nil, fmt.Errorf("init redis otel tracing: %w", err)
+			}
 		}
 	}
 
@@ -109,14 +113,20 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 		container.Logger.Warnw("capability degraded", "name", d.Capability, "missing", strings.Join(d.Missing, ","))
 	}
 
-	sqlDB, err := container.DB.DB()
-	if err != nil {
-		return nil, fmt.Errorf("get database pool: %w", err)
+	checkers := make([]observability.Checker, 0, 2)
+	if container.DB != nil {
+		sqlDB, err := container.DB.DB()
+		if err != nil {
+			return nil, fmt.Errorf("get database pool: %w", err)
+		}
+		checkers = append(checkers, observability.NewSQLChecker(sqlDB))
+	}
+	if container.Redis != nil {
+		checkers = append(checkers, observability.NewRedisChecker(container.Redis))
 	}
 	readiness := observability.NewReadiness(
 		time.Duration(cfg.Management.ProbeTimeoutSec)*time.Second,
-		observability.NewSQLChecker(sqlDB),
-		observability.NewRedisChecker(container.Redis),
+		checkers...,
 	)
 	management := platformhttp.NewManagementServer(
 		cfg.Management,
@@ -251,8 +261,13 @@ func registerHTTP(router registerRouter, log *logger.Logger, extraProtected []gi
 	var protected []gin.HandlerFunc
 	providers := make([]string, 0, 1)
 	for _, module := range modules {
+		desc := contract.Describe(module)
 		provider, ok := module.(contract.ProtectedHTTPMiddlewareProvider)
 		if !ok {
+			if desc.ProtectedHTTPMiddleware == contract.ProtectedHTTPMiddlewarePrimary ||
+				desc.ProtectedHTTPMiddleware == contract.ProtectedHTTPMiddlewareFallback {
+				return fmt.Errorf("capability %q declares protected middleware but does not implement the provider", desc.Name)
+			}
 			continue
 		}
 		chain, err := provider.ProtectedHTTPMiddleware()
@@ -260,9 +275,17 @@ func registerHTTP(router registerRouter, log *logger.Logger, extraProtected []gi
 			return fmt.Errorf("configure protected middleware: %w", err)
 		}
 		if len(chain) == 0 {
+			if desc.ProtectedHTTPMiddleware == contract.ProtectedHTTPMiddlewarePrimary {
+				return fmt.Errorf("capability %q declares a primary protected middleware provider but returned an empty chain", desc.Name)
+			}
 			continue
 		}
-		providers = append(providers, contract.Describe(module).Name)
+		switch desc.ProtectedHTTPMiddleware {
+		case contract.ProtectedHTTPMiddlewarePrimary, contract.ProtectedHTTPMiddlewareFallback:
+		default:
+			return fmt.Errorf("capability %q provides protected middleware but does not declare it", desc.Name)
+		}
+		providers = append(providers, desc.Name)
 		protected = append(protected, chain...)
 	}
 	if len(providers) > 1 {

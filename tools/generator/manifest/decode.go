@@ -32,7 +32,10 @@ func Load(path string) (Document, error) {
 		}
 		return Document{}, fmt.Errorf("decode manifest: %w", err)
 	}
-	if err := Validate(doc); err != nil {
+	if err := validatePersistedFields(b); err != nil {
+		return Document{}, err
+	}
+	if err := ValidateComplete(doc); err != nil {
 		return Document{}, err
 	}
 	if doc.Digest == "" {
@@ -46,6 +49,39 @@ func Load(path string) (Document, error) {
 		return Document{}, fmt.Errorf("manifest digest mismatch: got %q, want %q", doc.Digest, expected)
 	}
 	return doc, nil
+}
+
+func validatePersistedFields(content []byte) error {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(content, &root); err != nil {
+		return fmt.Errorf("decode manifest fields: %w", err)
+	}
+	if err := requireJSONField(root, "generated_file_sha256"); err != nil {
+		return err
+	}
+	var framework map[string]json.RawMessage
+	if err := json.Unmarshal(root["framework"], &framework); err != nil {
+		return fmt.Errorf("decode framework fields: %w", err)
+	}
+	if err := requireJSONField(framework, "dirty"); err != nil {
+		return fmt.Errorf("framework.%w", err)
+	}
+	var selection map[string]json.RawMessage
+	if err := json.Unmarshal(root["selection"], &selection); err != nil {
+		return fmt.Errorf("decode selection fields: %w", err)
+	}
+	if err := requireJSONField(selection, "template_version"); err != nil {
+		return fmt.Errorf("selection.%w", err)
+	}
+	return nil
+}
+
+func requireJSONField(fields map[string]json.RawMessage, name string) error {
+	value, ok := fields[name]
+	if !ok || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		return fmt.Errorf("%s is required", name)
+	}
+	return nil
 }
 
 // CanonicalJSON 返回不含尾部换行的确定性 JSON。map 键由 encoding/json 按字典序编码，
@@ -75,6 +111,9 @@ func Digest(doc Document) (string, error) {
 
 // Write 计算 digest 后将 manifest 写入目标路径。
 func Write(path string, doc Document) error {
+	if err := ValidateComplete(doc); err != nil {
+		return err
+	}
 	doc.Digest = ""
 	digest, err := Digest(doc)
 	if err != nil {
@@ -144,6 +183,9 @@ func normalize(doc Document) Document {
 	}
 	doc.Prune = nonNilClone(doc.Prune)
 	doc.GeneratedFiles = sortedClone(doc.GeneratedFiles)
+	if doc.GeneratedFileSHA256 == nil {
+		doc.GeneratedFileSHA256 = map[string]string{}
+	}
 	doc.Report.Capabilities = nonNilClone(doc.Report.Capabilities)
 	doc.Report.Migrations = sortedClone(doc.Report.Migrations)
 	doc.Report.Tables = sortedClone(doc.Report.Tables)

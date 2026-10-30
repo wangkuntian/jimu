@@ -9,12 +9,22 @@ import (
 	"jimu/internal/config"
 	"jimu/internal/kernel/db"
 	"jimu/internal/kernel/logger"
+	"jimu/internal/profiles"
 
 	"github.com/spf13/cobra"
 )
 
 // version 版本号，通过 ldflags 注入：-ldflags "-X main.version=v0.1.0"
 var version = "dev"
+
+func init() {
+	applyVersion()
+}
+
+// Keep generated manifests aligned with the CLI's ldflags-injected release version.
+func applyVersion() {
+	profiles.Version = version
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "jimu",

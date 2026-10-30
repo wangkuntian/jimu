@@ -1,0 +1,16 @@
+module {{.Module}}
+
+go {{.GoVersion}}
+
+require (
+	github.com/gin-gonic/gin {{.GinVersion}}
+	github.com/go-playground/validator/v10 {{.ValidatorVersion}}
+	github.com/golang-jwt/jwt/v5 {{.JWTVersion}}
+	github.com/redis/go-redis/v9 {{.RedisVersion}}
+	github.com/spf13/viper {{.ViperVersion}}
+	go.uber.org/zap {{.ZapVersion}}
+	golang.org/x/crypto {{.CryptoVersion}}
+	gopkg.in/natefinch/lumberjack.v2 {{.LumberjackVersion}}
+	gorm.io/driver/mysql {{.GormMySQLVersion}}
+	gorm.io/gorm {{.GormVersion}}
+)

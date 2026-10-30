@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -21,6 +22,11 @@ func Validate(doc Document) error {
 	}
 	if strings.TrimSpace(doc.Selection.Shape) == "" {
 		return fmt.Errorf("selection.shape is required")
+	}
+	switch doc.Selection.Support {
+	case "", "official", "experimental", "internal":
+	default:
+		return fmt.Errorf("selection.support has unknown value %q", doc.Selection.Support)
 	}
 	if err := validateNames("selection.capabilities", doc.Selection.Capabilities); err != nil {
 		return err
@@ -121,16 +127,51 @@ func Validate(doc Document) error {
 			return err
 		}
 	}
+	generated := make(map[string]bool, len(doc.GeneratedFiles))
+	for _, file := range doc.GeneratedFiles {
+		generated[file] = true
+	}
+	hashPaths := make([]string, 0, len(doc.GeneratedFileSHA256))
+	for file := range doc.GeneratedFileSHA256 {
+		hashPaths = append(hashPaths, file)
+	}
+	sort.Strings(hashPaths)
+	for _, file := range hashPaths {
+		if err := validateActionPath("generated_file_sha256", file); err != nil {
+			return err
+		}
+		if !generated[file] {
+			return fmt.Errorf("generated_file_sha256 path %q is not listed in generated_files", file)
+		}
+		if err := validateSHA256("generated_file_sha256["+file+"]", doc.GeneratedFileSHA256[file]); err != nil {
+			return err
+		}
+	}
 	if doc.Digest != "" {
-		if !strings.HasPrefix(doc.Digest, "sha256:") {
-			return fmt.Errorf("invalid digest %q: want sha256:<64 hex characters>", doc.Digest)
+		if err := validateSHA256("digest", doc.Digest); err != nil {
+			return err
 		}
-		hexPart := strings.TrimPrefix(doc.Digest, "sha256:")
-		if len(hexPart) != 64 {
-			return fmt.Errorf("invalid digest %q: want sha256:<64 hex characters>", doc.Digest)
-		}
-		if _, err := hex.DecodeString(hexPart); err != nil {
-			return fmt.Errorf("invalid digest %q: %w", doc.Digest, err)
+	}
+	return nil
+}
+
+// ValidateComplete verifies the provenance fields required in a persisted manifest.
+func ValidateComplete(doc Document) error {
+	if err := Validate(doc); err != nil {
+		return err
+	}
+	if strings.TrimSpace(doc.Framework.Version) == "" {
+		return fmt.Errorf("framework.version is required")
+	}
+	if strings.TrimSpace(doc.Framework.Commit) == "" {
+		return fmt.Errorf("framework.commit is required")
+	}
+	if doc.Selection.Template != "" && strings.TrimSpace(doc.Selection.TemplateVersion) == "" {
+		return fmt.Errorf("selection.template_version is required for template %q", doc.Selection.Template)
+	}
+	for _, file := range doc.GeneratedFiles {
+		if _, ok := doc.GeneratedFileSHA256[file]; !ok {
+			return fmt.Errorf("missing generated file hash for %q", file)
 		}
 	}
 	return nil
@@ -147,10 +188,24 @@ func validateCapabilities(capabilities []Capability) error {
 		}
 		seen[capability.Name] = true
 		for field, names := range map[string][]string{
-			"requires": capability.Requires, "soft_requires": capability.SoftRequires, "drivers": capability.Drivers,
+			"requires":              capability.Requires,
+			"soft_requires":         capability.SoftRequires,
+			"drivers":               capability.Drivers,
+			"migration_schema_deps": capability.MigrationSchemaDeps,
+			"runtime_services":      capability.RuntimeServices,
 		} {
 			if err := validateNames(fmt.Sprintf("capabilities[%d].%s", i, field), names); err != nil {
 				return err
+			}
+		}
+		switch capability.ProtectedHTTPMiddleware {
+		case "", "primary", "fallback":
+		default:
+			return fmt.Errorf("capabilities[%d].protected middleware has unknown mode %q", i, capability.ProtectedHTTPMiddleware)
+		}
+		for _, dependency := range capability.MigrationSchemaDeps {
+			if dependency == capability.Name {
+				return fmt.Errorf("capabilities[%d].migration_schema_deps references itself", i)
 			}
 		}
 		for field, paths := range map[string][]string{
@@ -216,6 +271,20 @@ func validateActionPath(field, value string) error {
 	}
 	if path.Clean(value) == "." {
 		return fmt.Errorf("%s must not be the current directory", field)
+	}
+	return nil
+}
+
+func validateSHA256(field, value string) error {
+	if !strings.HasPrefix(value, "sha256:") {
+		return fmt.Errorf("invalid %s %q: want sha256:<64 hex characters>", field, value)
+	}
+	hexPart := strings.TrimPrefix(value, "sha256:")
+	if len(hexPart) != 64 {
+		return fmt.Errorf("invalid %s %q: want sha256:<64 hex characters>", field, value)
+	}
+	if _, err := hex.DecodeString(hexPart); err != nil {
+		return fmt.Errorf("invalid %s %q: %w", field, value, err)
 	}
 	return nil
 }

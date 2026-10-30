@@ -1,0 +1,24 @@
+# Auth API
+
+Jimu `auth-api` template: a single-tenant Go API with users, JWT authentication, RBAC, MySQL persistence and Redis sessions.
+
+## Quick start
+
+```bash
+make up
+make verify
+make down
+```
+
+`make up` creates local secrets on first run, builds the stack, runs migrations and seed, and starts the API. The generated administrator password is printed once.
+
+Set `AUTH_API_PORT` and `AUTH_API_MANAGEMENT_PORT` to change the host ports; `make verify` follows the same values.
+
+## Stack
+
+- API: `http://localhost:8080`
+- Management: `http://localhost:9090`
+- MySQL 8.4 and Redis 7 are provided by `docker-compose.yml`.
+- Migrations are under `internal/migrations/mysql/`.
+
+The project is yours to modify. `.jimu/manifest.json` records provenance and generated files only.

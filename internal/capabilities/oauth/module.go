@@ -73,11 +73,12 @@ var migrationsFS embed.FS
 
 // Descriptor 声明 OAuth 能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:       "oauth",
-	Migrations: migrationsFS,
-	Owns:       []string{"user_oauth_bindings"},
-	Requires:   []string{"auth", "user"},
-	Mount:      contract.MountPublic,
+	Name:            "oauth",
+	Migrations:      migrationsFS,
+	Owns:            []string{"user_oauth_bindings"},
+	Requires:        []string{"auth", "user"},
+	Mount:           contract.MountPublic,
+	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL, contract.RuntimeServiceRedis},
 	Configs: []contract.ConfigSpec{
 		{Section: ConfigKey, New: func() any { return &Config{} }},
 	},

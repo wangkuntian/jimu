@@ -1,0 +1,21 @@
+package response
+
+import (
+	"{{.Module}}/internal/shared/errorx"
+
+	"github.com/gin-gonic/gin"
+)
+
+type Body struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
+}
+
+func OK(c *gin.Context, status int, data any) {
+	c.JSON(status, Body{Code: 0, Message: "ok", Data: data})
+}
+
+func Fail(c *gin.Context, status int, err errorx.Error) {
+	c.AbortWithStatusJSON(status, Body{Code: err.Code, Message: err.Message})
+}

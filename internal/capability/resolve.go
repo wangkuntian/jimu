@@ -53,6 +53,33 @@ func validateStructure(caps []contract.Descriptor) error {
 			}
 			seenDriver[drv] = true
 		}
+		seenSchemaDep := make(map[string]bool, len(d.MigrationSchemaDeps))
+		for _, dep := range d.MigrationSchemaDeps {
+			if dep == d.Name {
+				return fmt.Errorf("capability %q depends on its own migration schema", d.Name)
+			}
+			if seenSchemaDep[dep] {
+				return fmt.Errorf("capability %q duplicates migration schema dependency %q", d.Name, dep)
+			}
+			seenSchemaDep[dep] = true
+		}
+		seenService := make(map[contract.RuntimeService]bool, len(d.RuntimeServices))
+		for _, service := range d.RuntimeServices {
+			if !validRuntimeService(service) {
+				return fmt.Errorf("capability %q declares unknown runtime service %q", d.Name, service)
+			}
+			if seenService[service] {
+				return fmt.Errorf("capability %q duplicates runtime service %q", d.Name, service)
+			}
+			seenService[service] = true
+		}
+		switch d.ProtectedHTTPMiddleware {
+		case contract.ProtectedHTTPMiddlewareNone,
+			contract.ProtectedHTTPMiddlewarePrimary,
+			contract.ProtectedHTTPMiddlewareFallback:
+		default:
+			return fmt.Errorf("capability %q declares unknown protected middleware mode %q", d.Name, d.ProtectedHTTPMiddleware)
+		}
 	}
 	return nil
 }
@@ -72,6 +99,11 @@ func ValidateDeclarations(caps []contract.Descriptor, known []string) error {
 		for _, dep := range d.SoftRequires {
 			if !knownSet[dep] {
 				return fmt.Errorf("capability %q soft-requires unknown capability %q", d.Name, dep)
+			}
+		}
+		for _, dep := range d.MigrationSchemaDeps {
+			if !knownSet[dep] {
+				return fmt.Errorf("capability %q depends on unknown migration schema %q", d.Name, dep)
 			}
 		}
 	}
@@ -181,7 +213,21 @@ func deepCopyDescriptor(d contract.Descriptor) contract.Descriptor {
 	d.SoftRequires = append([]string(nil), d.SoftRequires...)
 	d.Drivers = append([]string(nil), d.Drivers...)
 	d.Owns = append([]string(nil), d.Owns...)
+	d.MigrationSchemaDeps = append([]string(nil), d.MigrationSchemaDeps...)
+	d.RuntimeServices = append([]contract.RuntimeService(nil), d.RuntimeServices...)
 	d.Permissions = append([]contract.Permission(nil), d.Permissions...)
 	d.Configs = append([]contract.ConfigSpec(nil), d.Configs...)
 	return d
+}
+
+func validRuntimeService(service contract.RuntimeService) bool {
+	switch service {
+	case contract.RuntimeServiceMySQL,
+		contract.RuntimeServiceRedis,
+		contract.RuntimeServiceKafka,
+		contract.RuntimeServiceRabbitMQ:
+		return true
+	default:
+		return false
+	}
 }

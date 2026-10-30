@@ -1,0 +1,28 @@
+package auth
+
+import (
+	"testing"
+	"time"
+
+	"{{.Module}}/internal/config"
+)
+
+func TestIssueAndParseAccessToken(t *testing.T) {
+	manager := NewTokenManager(config.AuthConfig{
+		JWTSecret: "test-secret-with-enough-length", Issuer: "jimu", AccessExpireMin: 5, RefreshExpireDay: 1,
+	})
+	pair, _, err := manager.IssuePair(7, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := manager.ParseAccess(pair.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.UserID != 7 || claims.TenantID != 1 {
+		t.Fatalf("claims = %#v", claims)
+	}
+	if pair.ExpiresIn != int64((5 * time.Minute).Seconds()) {
+		t.Fatalf("expires_in = %d", pair.ExpiresIn)
+	}
+}

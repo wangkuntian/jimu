@@ -13,8 +13,9 @@ var migrationsFS embed.FS
 
 // Descriptor 能力静态描述：受保护挂载点，拥有 search_documents 表。
 var Descriptor = contract.Descriptor{
-	Name:       "search",
-	Mount:      contract.MountProtected,
-	Migrations: migrationsFS,
-	Owns:       []string{"search_documents"},
+	Name:            "search",
+	Mount:           contract.MountProtected,
+	Migrations:      migrationsFS,
+	Owns:            []string{"search_documents"},
+	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
 }

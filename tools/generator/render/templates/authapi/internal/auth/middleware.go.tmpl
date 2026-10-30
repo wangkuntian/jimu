@@ -1,0 +1,72 @@
+package auth
+
+import (
+	"net/http"
+	"strings"
+
+	"{{.Module}}/internal/domain"
+	"{{.Module}}/internal/shared/errorx"
+	"{{.Module}}/internal/shared/response"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+)
+
+const (
+	UserIDKey   = "user_id"
+	TenantIDKey = "tenant_id"
+)
+
+func AuthRequired(db *gorm.DB, tokens *TokenManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		header := c.GetHeader("Authorization")
+		if !strings.HasPrefix(header, "Bearer ") {
+			response.Fail(c, http.StatusUnauthorized, errorx.Unauthorized("missing bearer token"))
+			c.Abort()
+			return
+		}
+		claims, err := tokens.ParseAccess(strings.TrimSpace(strings.TrimPrefix(header, "Bearer ")))
+		if err != nil {
+			response.Fail(c, http.StatusUnauthorized, errorx.Unauthorized("invalid token"))
+			c.Abort()
+			return
+		}
+		var user domain.User
+		if err := db.Where("id = ? AND status = 1", claims.UserID).First(&user).Error; err != nil || user.TenantID != claims.TenantID {
+			response.Fail(c, http.StatusUnauthorized, errorx.Unauthorized("user disabled or not found"))
+			c.Abort()
+			return
+		}
+		c.Set(UserIDKey, user.ID)
+		c.Set(TenantIDKey, user.TenantID)
+		c.Next()
+	}
+}
+
+func RequirePermission(db *gorm.DB, resource, action string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.GetUint64(UserIDKey)
+		var count int64
+		err := db.Raw(`
+SELECT COUNT(*)
+FROM user_roles ur
+JOIN roles r ON r.id = ur.role_id AND r.status = 1
+JOIN role_permissions rp ON rp.role_id = r.id
+JOIN permissions p ON p.id = rp.permission_id
+WHERE ur.user_id = ?
+  AND (p.resource = ? OR p.resource = '*')
+  AND (p.action = ? OR p.action = '*')`,
+			userID, resource, action).Scan(&count).Error
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, errorx.Internal("permission check failed"))
+			c.Abort()
+			return
+		}
+		if count == 0 {
+			response.Fail(c, http.StatusForbidden, errorx.Forbidden("permission denied"))
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}

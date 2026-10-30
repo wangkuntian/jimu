@@ -80,12 +80,13 @@ var migrationsFS embed.FS
 
 // Descriptor 声明 passkey 能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:       "passkey",
-	Requires:   []string{"user", "auth"},
-	Migrations: migrationsFS,
-	Owns:       []string{"webauthn_credentials"},
-	Mount:      contract.MountSelfManaged,
-	Configs:    []contract.ConfigSpec{{Section: ConfigKey, New: func() any { return &Config{} }}},
+	Name:            "passkey",
+	Requires:        []string{"user", "auth"},
+	Migrations:      migrationsFS,
+	Owns:            []string{"webauthn_credentials"},
+	Mount:           contract.MountSelfManaged,
+	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+	Configs:         []contract.ConfigSpec{{Section: ConfigKey, New: func() any { return &Config{} }}},
 	Permissions: []contract.Permission{
 		{Name: "通行密钥登录开始", Resource: "/api/v1/auth/webauthn/login/begin", Action: "POST"},
 		{Name: "通行密钥登录完成", Resource: "/api/v1/auth/webauthn/login/finish", Action: "POST"},

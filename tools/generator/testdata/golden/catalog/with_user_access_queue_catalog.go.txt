@@ -58,7 +58,7 @@ func ValidateDeclarations() error {
 	return capability.ValidateDeclarations(entries, knownNames)
 }
 
-// All 返回清单中全部能力的深拷贝（含 Requires/SoftRequires/Drivers/Owns/Permissions/Configs），
+// All 返回清单中全部能力的深拷贝（含依赖、迁移依赖、运行时服务、Drivers/Owns/Permissions/Configs），
 // 调用方修改不影响清单。
 func All() []contract.Descriptor {
 	out := make([]contract.Descriptor, len(entries))
@@ -68,6 +68,8 @@ func All() []contract.Descriptor {
 		out[i].SoftRequires = append([]string(nil), d.SoftRequires...)
 		out[i].Drivers = append([]string(nil), d.Drivers...)
 		out[i].Owns = append([]string(nil), d.Owns...)
+		out[i].MigrationSchemaDeps = append([]string(nil), d.MigrationSchemaDeps...)
+		out[i].RuntimeServices = append([]contract.RuntimeService(nil), d.RuntimeServices...)
 		out[i].Permissions = append([]contract.Permission(nil), d.Permissions...)
 		out[i].Configs = append([]contract.ConfigSpec(nil), d.Configs...)
 	}
