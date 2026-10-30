@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"jimu/tools/generator/manifest"
@@ -20,6 +21,138 @@ func TestNewProjectWritesNothingOnDryRun(t *testing.T) {
 	require.NoError(t, err)
 	_, statErr := os.Stat(dir)
 	assert.True(t, os.IsNotExist(statErr))
+}
+
+func TestNewProjectRejectsSelectionWithoutProtectedMiddlewareProviderBeforeWriting(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "proj")
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, With: "user", Module: "example.com/proj", NoTidy: true})
+	require.ErrorContains(t, err, "protected middleware")
+	_, statErr := os.Stat(dir)
+	assert.True(t, os.IsNotExist(statErr), "preflight failure must not write the target")
+}
+
+func TestNewProjectBasicAPIHasNoExternalRuntimeDependencies(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "basic")
+	result, err := NewProject(NewOptions{
+		Dir: dir, Template: "basic-api", Module: "example.com/basic",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "basic-api", result.Template)
+	assert.Equal(t, "official", result.Support)
+
+	for _, rel := range []string{
+		"cmd/server/main.go",
+		"internal/app/app.go",
+		"internal/config/config.go",
+		"internal/api/v1/ping.go",
+		"internal/platform/health/health.go",
+		"configs/app.yaml",
+		"README.md",
+		"Makefile",
+		"Dockerfile",
+		"go.mod",
+		".jimu/manifest.json",
+	} {
+		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "缺少 basic-api 产物 %s", rel)
+	}
+	for _, rel := range []string{
+		"internal/capabilities",
+		"docker-compose.yml",
+		"deploy",
+		"docs/openapi",
+		".env.example",
+	} {
+		_, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
+		assert.True(t, os.IsNotExist(statErr), "basic-api 不应包含 %s", rel)
+	}
+	config, err := os.ReadFile(filepath.Join(dir, "configs", "app.yaml"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(config), "\ndb:")
+	assert.NotContains(t, string(config), "\nredis:")
+	assertManifestProvenance(t, dir, "basic-api")
+}
+
+func TestNewProjectAuthAPIIsCompactSingleTenantTemplate(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "auth")
+	result, err := NewProject(NewOptions{
+		Dir: dir, Template: "auth-api", Module: "example.com/auth",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "auth-api", result.Template)
+	assert.Equal(t, "official", result.Support)
+
+	for _, rel := range []string{
+		"cmd/server/main.go",
+		"cmd/cli/main.go",
+		"docker-compose.yml",
+		"scripts/init.sh",
+		"scripts/verify.sh",
+		"internal/migrations/mysql/001_tenants.sql",
+		"internal/migrations/mysql/010_permissions_updated_at.sql",
+		"internal/api/v1/auth.go",
+		"internal/api/v1/users.go",
+		"internal/api/v1/access.go",
+		"QUICKSTART.md",
+	} {
+		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "缺少 auth-api 产物 %s", rel)
+	}
+	for _, rel := range []string{
+		"internal/capabilities",
+		"deploy",
+		"docs/openapi",
+		".env.example",
+	} {
+		_, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
+		assert.True(t, os.IsNotExist(statErr), "auth-api 不应包含 %s", rel)
+	}
+	config, err := os.ReadFile(filepath.Join(dir, "configs", "app.yaml"))
+	require.NoError(t, err)
+	configText := "\n" + string(config)
+	for _, section := range []string{"http:", "management:", "log:", "db:", "redis:", "id:", "auth:"} {
+		assert.Contains(t, configText, "\n"+section)
+	}
+	for _, section := range []string{"\notel:", "\ngrpc:", "\nqueue:", "\nstorage:", "\ntenant:", "\nnotification:"} {
+		assert.NotContains(t, configText, section)
+	}
+
+	document, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "auth-api", document.Selection.Template)
+	assert.Equal(t, manifest.TemplateContractVersion, document.Selection.TemplateVersion)
+	assert.Equal(t, 24, document.Report.Routes)
+	assert.Len(t, document.Report.Migrations, 10)
+	assert.Len(t, document.Report.Tables, 8)
+
+	sqlFiles, err := filepath.Glob(filepath.Join(dir, "internal", "migrations", "mysql", "*.sql"))
+	require.NoError(t, err)
+	assert.Len(t, sqlFiles, 10)
+	createTables := 0
+	alterTables := 0
+	for _, file := range sqlFiles {
+		content, err := os.ReadFile(file)
+		require.NoError(t, err)
+		createTables += strings.Count(string(content), "CREATE TABLE")
+		alterTables += strings.Count(string(content), "ALTER TABLE")
+	}
+	assert.Equal(t, 8, createTables)
+	assert.Equal(t, 2, alterTables)
+	assertManifestProvenance(t, dir, "auth-api")
+}
+
+func assertManifestProvenance(t *testing.T, dir, template string) {
+	t.Helper()
+	document, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	require.NoError(t, manifest.ValidateComplete(document))
+	assert.Equal(t, template, document.Selection.Template)
+	assert.Equal(t, manifest.TemplateContractVersion, document.Selection.TemplateVersion)
+	assert.NotEmpty(t, document.Framework.Version)
+	assert.NotEmpty(t, document.Framework.Commit)
+	assert.True(t, document.Framework.Dirty, "development manifests must be marked dirty")
+	assert.Len(t, document.GeneratedFileSHA256, len(document.GeneratedFiles))
+	hashes, err := manifest.HashFiles(dir, document.GeneratedFiles)
+	require.NoError(t, err)
+	assert.Equal(t, hashes, document.GeneratedFileSHA256)
 }
 
 func TestNewProjectLeavesNoPartialTreeOnFailure(t *testing.T) {
@@ -141,7 +274,7 @@ func TestNewProjectCopiesKernelAndSelectedCapabilities(t *testing.T) {
 // 否则生成项目的 check-capabilities 断言①（声明的驱动目录必须存在）必红。
 func TestNewProjectWithSelectsFirstDriverAndFiltersDirectories(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := newProjectForTest(t, NewOptions{Dir: dir, With: "queue", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, With: withProtectedProvider("queue"), Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 	assert.FileExists(t, filepath.Join(dir, "internal/capabilities/queue/redis/redis_queue.go"))
 	for _, drv := range []string{"kafka", "rabbitmq"} {
@@ -150,7 +283,8 @@ func TestNewProjectWithSelectsFirstDriverAndFiltersDirectories(t *testing.T) {
 	}
 	src, err := os.ReadFile(filepath.Join(dir, "internal/capabilities/queue/migrations.go"))
 	require.NoError(t, err)
-	assert.Contains(t, string(src), `Drivers:    []string{"redis"}`)
+	assert.Contains(t, string(src), "Drivers:")
+	assert.Contains(t, string(src), `[]string{"redis"}`)
 
 	// 未被选中的能力（storage 声明 local/s3，但既不声明也未选驱动）不复制任何驱动目录。
 	_, statErr := os.Stat(filepath.Join(dir, "internal/capabilities/storage/local"))
@@ -190,8 +324,8 @@ func TestNewProjectDryRunCountMatchesRealTree(t *testing.T) {
 		name string
 		opts NewOptions
 	}{
-		{"with queue（只带 domain 的内核依赖）", NewOptions{With: "queue"}},
-		{"with user,access（schema 依赖 tenant）", NewOptions{With: "user,access"}},
+		{"with queue（只带 domain 的内核依赖）", NewOptions{With: withProtectedProvider("queue")}},
+		{"with user,access（schema 依赖 tenant）", NewOptions{With: withProtectedProvider("user,access")}},
 		{"profile minimal", NewOptions{Profile: "minimal"}},
 		// apidocs/full 会额外携带 docs/openapi（T6 的资产复制）：曾被 dry-run 漏计，使 planned < real。
 		{"with apidocs", NewOptions{With: "apidocs"}},

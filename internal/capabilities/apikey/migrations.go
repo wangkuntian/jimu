@@ -14,9 +14,11 @@ var migrationsFS embed.FS
 // Descriptor 能力静态描述：受保护挂载点，拥有 api_keys 表，
 // 可选依赖 tenant（缺省时不做租户配额校验）。
 var Descriptor = contract.Descriptor{
-	Name:         "apikey",
-	SoftRequires: []string{"tenant"},
-	Mount:        contract.MountProtected,
-	Migrations:   migrationsFS,
-	Owns:         []string{"api_keys"},
+	Name:                    "apikey",
+	SoftRequires:            []string{"tenant"},
+	Mount:                   contract.MountProtected,
+	Migrations:              migrationsFS,
+	Owns:                    []string{"api_keys"},
+	RuntimeServices:         []contract.RuntimeService{contract.RuntimeServiceMySQL},
+	ProtectedHTTPMiddleware: contract.ProtectedHTTPMiddlewareFallback,
 }

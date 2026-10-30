@@ -28,7 +28,7 @@ Jimu 将后端按可组合的能力组织。能力需要独立声明依赖和资
 | profile | 声明进入某个服务构建的能力、驱动与装配顺序 | [`internal/profiles`](../../internal/profiles) |
 | `assembly` | 解析 profile 和运行配置，注入端口并启动应用 | [`internal/assembly`](../../internal/assembly) |
 
-能力根包导出静态 `Descriptor` 与 `Wire(*assembly.Context)`。能力有生命周期行为时，`Wire` 返回 `contract.Module`；只提供端口或迁移的能力可以返回 `nil`。描述字段由 [`contract.Descriptor`](../../internal/contract/capability.go) 定义，包括依赖、表所有权、配置段、权限点、路由挂载方式、迁移、驱动和非代码资产。
+能力根包导出静态 `Descriptor` 与 `Wire(*assembly.Context)`。能力有生命周期行为时，`Wire` 返回 `contract.Module`；只提供端口或迁移的能力可以返回 `nil`。描述字段由 [`contract.Descriptor`](../../internal/contract/capability.go) 定义，包括依赖、表所有权、迁移 schema 依赖、运行时外部服务、受保护中间件提供方式、配置段、权限点、路由挂载方式、迁移、驱动和非代码资产。
 
 ```mermaid
 flowchart LR
@@ -50,6 +50,8 @@ flowchart LR
 - `catalog` 集中导入需要登记的能力根包；profile assembly 组合实际构建的一组能力。内核提供共享机制，不反向依赖具体能力。
 - `assembly` 按解析后的能力顺序调用 `Wire`，并在 `Context` 中提供端口注册与读取；端口消费者只能在提供方已注册后读取。
 - `Descriptor.Mount` 声明路由挂载方式，组合根不按能力名特判。
+- `Descriptor.ProtectedHTTPMiddleware` 显式声明受保护链的 primary/fallback 提供方式；存在 `MountProtected` 路由时必须恰好解析出一个有效提供者。注册时还会对照实现校验，阻止“声明了但没实现”或“实现了但没声明”的漂移。
+- `Descriptor.MigrationSchemaDeps` 声明迁移必须携带的其他能力 schema，`Descriptor.RuntimeServices` 声明启动所需外部服务；生成器据此在写目标目录前检查迁移闭包与配置段。
 
 ### 组合与运行时筛选
 
@@ -78,7 +80,7 @@ profile 通过 Go import 图决定哪些能力包和符号进入服务二进制�
 
 ## 约束与不变量
 
-配置段、权限点、迁移和装配集等能力事实都从描述符派生。改变描述符契约、依赖解析或组合规则时，应检查 catalog、profiles、assembly、生成器和对应门禁，并同步更新本文。清单、profile 成员和门禁输出保持为代码或工具派生数据，不在本文复写。
+配置段、权限点、迁移、迁移 schema 依赖、运行时服务、受保护中间件提供方式和装配集等能力事实都从描述符派生。改变描述符契约、依赖解析或组合规则时，应检查 catalog、profiles、assembly、生成器预检和对应门禁，并同步更新本文。清单、profile 成员和门禁输出保持为代码或工具派生数据，不在本文复写。
 
 端口消费者必须位于提供方之后；缺失端口只能按该 contract 的软依赖语义降级，硬依赖则由解析阶段拒绝。能力实现不得直接 import 其他能力内部包，catalog 是集中声明能力的组合边界例外。受保护路由必须由声明的挂载类型注册，不能绕过统一保护链。
 

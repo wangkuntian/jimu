@@ -175,11 +175,11 @@ TENANT_ID=$(sed -n 's/.*"id":"\([^"]*\)".*/\1/p' /tmp/jimu-tenant-create.json | 
 test -n "$TENANT_ID"
 
 curl -fsS -H "Authorization: Bearer ${ADMIN_ACCESS}" "${BASE_URL}/tenant-plans?page_size=1" >/tmp/jimu-plans.json
-PLAN_ID=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' /tmp/jimu-plans.json | head -1)
+PLAN_ID=$(sed -n 's/.*"id":"\([^"]*\)".*/\1/p' /tmp/jimu-plans.json | head -1)
 test -n "$PLAN_ID"
 
 curl -fsS -H "Authorization: Bearer ${ADMIN_ACCESS}" -H "Content-Type: application/json" \
-  -X PUT "${BASE_URL}/tenants/${TENANT_ID}/plan" -d "{\"plan_id\":${PLAN_ID}}" >/tmp/jimu-plan-assign.json
+  -X PUT "${BASE_URL}/tenants/${TENANT_ID}/plan" -d "{\"plan_id\":\"${PLAN_ID}\"}" >/tmp/jimu-plan-assign.json
 grep -q '"code":0' /tmp/jimu-plan-assign.json
 
 curl -fsS -H "Authorization: Bearer ${ADMIN_ACCESS}" "${BASE_URL}/tenants/usage" >/tmp/jimu-usage.json

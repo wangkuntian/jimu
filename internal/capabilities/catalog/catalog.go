@@ -67,6 +67,8 @@ func All() []contract.Descriptor {
 		out[i].SoftRequires = append([]string(nil), d.SoftRequires...)
 		out[i].Drivers = append([]string(nil), d.Drivers...)
 		out[i].Owns = append([]string(nil), d.Owns...)
+		out[i].MigrationSchemaDeps = append([]string(nil), d.MigrationSchemaDeps...)
+		out[i].RuntimeServices = append([]contract.RuntimeService(nil), d.RuntimeServices...)
 		out[i].Permissions = append([]contract.Permission(nil), d.Permissions...)
 		out[i].Configs = append([]contract.ConfigSpec(nil), d.Configs...)
 	}

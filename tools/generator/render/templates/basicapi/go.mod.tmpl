@@ -1,0 +1,11 @@
+module {{.Module}}
+
+go {{.GoVersion}}
+
+require (
+	github.com/gin-gonic/gin {{.GinVersion}}
+	github.com/go-playground/validator/v10 {{.ValidatorVersion}}
+	github.com/spf13/viper {{.ViperVersion}}
+	go.uber.org/zap {{.ZapVersion}}
+	gopkg.in/natefinch/lumberjack.v2 {{.LumberjackVersion}}
+)

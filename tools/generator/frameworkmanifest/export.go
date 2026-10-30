@@ -3,8 +3,9 @@
 package frameworkmanifest
 
 import (
+	"context"
 	"fmt"
-	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -20,16 +21,19 @@ import (
 )
 
 type Request struct {
-	Root    string
-	Profile string
-	With    string
-	Shape   string
-	Module  string
+	Root     string
+	Template string
+	Profile  string
+	With     string
+	Shape    string
+	Module   string
 }
 
 type selection struct {
 	shape      string
+	template   string
 	profile    string
+	support    string
 	declared   []string
 	known      []string
 	copy       []string
@@ -50,11 +54,27 @@ func Export(req Request) (manifest.Document, error) {
 	if req.Module == "" {
 		return manifest.Document{}, fmt.Errorf("module is required")
 	}
-	selected, err := resolveSelection(root, req)
-	if err != nil {
-		return manifest.Document{}, err
+	if req.Template == "" && req.Profile == "" && req.With == "" {
+		req.Template = "basic-api"
 	}
-	doc, err := buildDocument(root, req.Module, selected)
+	if req.Template != "" && (req.Profile != "" || req.With != "") {
+		return manifest.Document{}, fmt.Errorf("--template must not be combined with --profile or --with")
+	}
+	if req.Template != "" && req.Shape != "" {
+		return manifest.Document{}, fmt.Errorf("--shape is only valid with --with")
+	}
+	var doc manifest.Document
+	if req.Template == "auth-api" {
+		doc, err = authAPIDocument(root, req.Module)
+	} else if req.Template != "" {
+		doc, err = basicAPIDocument(root, req.Module, req.Template)
+	} else {
+		var selected selection
+		selected, err = resolveSelection(root, req)
+		if err == nil {
+			doc, err = buildDocument(root, req.Module, selected)
+		}
+	}
 	if err != nil {
 		return manifest.Document{}, err
 	}
@@ -120,10 +140,18 @@ func buildDocument(root, module string, selected selection) (manifest.Document, 
 	if catalogCoversAll(selected) {
 		pruneReason = "catalog-complete"
 	}
+	framework, err := frameworkProvenance(root)
+	if err != nil {
+		return manifest.Document{}, err
+	}
 	doc := manifest.Document{
-		SchemaVersion:  manifest.CurrentSchemaVersion,
-		Framework:      manifest.Framework{Module: "jimu", Version: profiles.Version, Commit: frameworkCommit(root)},
-		Selection:      manifest.Selection{Shape: selected.shape, Profile: selected.profile, Capabilities: slices.Clone(selected.declared), Drivers: cloneDrivers(selected.drivers)},
+		SchemaVersion: manifest.CurrentSchemaVersion,
+		Framework:     framework,
+		Selection: manifest.Selection{
+			Shape: selected.shape, Template: selected.template, TemplateVersion: templateVersion(selected.template),
+			Profile: selected.profile, Support: selected.support,
+			Capabilities: slices.Clone(selected.declared), Drivers: cloneDrivers(selected.drivers),
+		},
 		Capabilities:   capabilityFacts(root, selected),
 		Copy:           copyActions(root, selected),
 		Templates:      templateActions(root, selected),
@@ -160,20 +188,39 @@ func catalogCoversAll(selected selection) bool {
 	return true
 }
 
-func frameworkCommit(root string) string {
-	head, err := os.ReadFile(filepath.Join(root, ".git", "HEAD"))
+// frameworkProvenance resolves Git metadata through the CLI so normal clones and linked worktrees behave identically.
+func frameworkProvenance(root string) (manifest.Framework, error) {
+	commit, err := gitOutput(root, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
+		return manifest.Framework{}, fmt.Errorf("resolve framework commit: %w", err)
+	}
+	if commit == "" {
+		return manifest.Framework{}, fmt.Errorf("resolve framework commit: git returned an empty commit")
+	}
+	status, err := gitOutput(root, "status", "--porcelain=v1", "--untracked-files=normal")
+	if err != nil {
+		return manifest.Framework{}, fmt.Errorf("read framework worktree status: %w", err)
+	}
+	dirty := strings.TrimSpace(status) != "" || profiles.Version == "dev" || strings.Contains(profiles.Version, "-dev")
+	return manifest.Framework{
+		Module: "jimu", Version: profiles.Version, Commit: commit, Dirty: dirty,
+	}, nil
+}
+
+func gitOutput(root string, args ...string) (string, error) {
+	commandArgs := append([]string{"-C", root}, args...)
+	output, err := exec.CommandContext(context.Background(), "git", commandArgs...).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git %s: %w: %s", strings.Join(commandArgs, " "), err, strings.TrimSpace(string(output)))
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func templateVersion(template string) string {
+	if template == "" {
 		return ""
 	}
-	value := strings.TrimSpace(string(head))
-	if strings.HasPrefix(value, "ref: ") {
-		ref, err := os.ReadFile(filepath.Join(root, ".git", filepath.FromSlash(strings.TrimPrefix(value, "ref: "))))
-		if err != nil {
-			return ""
-		}
-		return strings.TrimSpace(string(ref))
-	}
-	return value
+	return manifest.TemplateContractVersion
 }
 
 func capabilityFacts(root string, selected selection) []manifest.Capability {
@@ -191,15 +238,18 @@ func capabilityFacts(root string, selected selection) []manifest.Capability {
 			continue
 		}
 		fact := manifest.Capability{
-			Name:          descriptor.Name,
-			Requires:      slices.Clone(descriptor.Requires),
-			SoftRequires:  slices.Clone(descriptor.SoftRequires),
-			MigrationOnly: contains(selected.migration, descriptor.Name),
-			DomainOnly:    contains(selected.domain, descriptor.Name),
-			Owns:          slices.Clone(descriptor.Owns),
-			Mount:         string(descriptor.Normalized()),
-			Drivers:       slices.Clone(descriptor.Drivers),
-			Assets:        slices.Clone(descriptor.Assets),
+			Name:                    descriptor.Name,
+			Requires:                slices.Clone(descriptor.Requires),
+			SoftRequires:            slices.Clone(descriptor.SoftRequires),
+			MigrationOnly:           contains(selected.migration, descriptor.Name),
+			DomainOnly:              contains(selected.domain, descriptor.Name),
+			Owns:                    slices.Clone(descriptor.Owns),
+			Mount:                   string(descriptor.Normalized()),
+			Drivers:                 slices.Clone(descriptor.Drivers),
+			Assets:                  slices.Clone(descriptor.Assets),
+			ProtectedHTTPMiddleware: string(descriptor.ProtectedHTTPMiddleware),
+			MigrationSchemaDeps:     append([]string{}, descriptor.MigrationSchemaDeps...),
+			RuntimeServices:         runtimeServiceNames(descriptor.RuntimeServices),
 		}
 		for _, config := range descriptor.Configs {
 			fact.Configs = append(fact.Configs, config.Section)
@@ -211,6 +261,14 @@ func capabilityFacts(root string, selected selection) []manifest.Capability {
 		out = append(out, fact)
 	}
 	_ = root
+	return out
+}
+
+func runtimeServiceNames(services []contract.RuntimeService) []string {
+	out := make([]string, len(services))
+	for i, service := range services {
+		out[i] = string(service)
+	}
 	return out
 }
 

@@ -84,11 +84,13 @@ var migrationsFS embed.FS
 
 // Descriptor 声明用户能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:         "user",
-	SoftRequires: []string{"access", "tenant"},
-	Migrations:   migrationsFS,
-	Owns:         []string{"users"},
-	Mount:        contract.MountProtected,
+	Name:                "user",
+	SoftRequires:        []string{"access", "tenant"},
+	Migrations:          migrationsFS,
+	Owns:                []string{"users"},
+	Mount:               contract.MountProtected,
+	MigrationSchemaDeps: []string{"tenant"},
+	RuntimeServices:     []contract.RuntimeService{contract.RuntimeServiceMySQL},
 	Permissions: []contract.Permission{
 		{Name: "用户列表", Resource: "/api/v1/users", Action: "GET"},
 		{Name: "用户创建", Resource: "/api/v1/users", Action: "POST"},
