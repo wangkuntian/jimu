@@ -306,13 +306,24 @@ func TestAddCapabilityPreservesEditedConfigSectionsAndIsIdempotent(t *testing.T)
 // **绝不**自动补全闭包（否则用户以为只加了一个能力，实际装配集被悄悄扩大）。
 func TestAddCapabilityRejectsMissingHardDependency(t *testing.T) {
 	root := frameworkRootForTest(t)
-	dir := generateForTest(t, NewOptions{With: "user", Shape: "app"})
+	dir := generateForTest(t, NewOptions{With: withProtectedProvider("user"), Shape: "app"})
 	before := hashTree(t, dir)
 
 	_, err := AddCapability(AddOptions{Dir: dir, Name: "passkey", From: root})
 	require.ErrorContains(t, err, `requires "auth"`)
 	require.ErrorContains(t, err, "add it first")
 	assert.Equal(t, before, hashTree(t, dir), "校验失败不得留下半成品")
+	noStagingResidue(t, dir)
+}
+
+func TestAddCapabilityRejectsPreflightFailureBeforeWriting(t *testing.T) {
+	root := frameworkRootForTest(t)
+	dir := generateForTest(t, NewOptions{With: "captcha", Shape: "app"})
+	before := hashTree(t, dir)
+
+	_, err := AddCapability(AddOptions{Dir: dir, Name: "queue", From: root})
+	require.ErrorContains(t, err, "protected middleware")
+	assert.Equal(t, before, hashTree(t, dir), "预检失败不得留下半成品")
 	noStagingResidue(t, dir)
 }
 
@@ -615,7 +626,7 @@ func TestAddCapabilityForceOnUngatedIsIdempotent(t *testing.T) {
 		cap  string
 	}{
 		{"minimal + encryption --force", NewOptions{Profile: "minimal"}, "encryption"},
-		{"with ws + ws --force", NewOptions{With: "ws", Shape: "app"}, "ws"},
+		{"with ws + ws --force", NewOptions{With: withProtectedProvider("ws"), Shape: "app"}, "ws"},
 	}
 	cache := newTestGoCache(t) // 两个用例共用一份专用缓存（cmd/server 只全量编译一次）
 	for _, tc := range cases {

@@ -147,10 +147,24 @@ func validateCapabilities(capabilities []Capability) error {
 		}
 		seen[capability.Name] = true
 		for field, names := range map[string][]string{
-			"requires": capability.Requires, "soft_requires": capability.SoftRequires, "drivers": capability.Drivers,
+			"requires":              capability.Requires,
+			"soft_requires":         capability.SoftRequires,
+			"drivers":               capability.Drivers,
+			"migration_schema_deps": capability.MigrationSchemaDeps,
+			"runtime_services":      capability.RuntimeServices,
 		} {
 			if err := validateNames(fmt.Sprintf("capabilities[%d].%s", i, field), names); err != nil {
 				return err
+			}
+		}
+		switch capability.ProtectedHTTPMiddleware {
+		case "", "primary", "fallback":
+		default:
+			return fmt.Errorf("capabilities[%d].protected middleware has unknown mode %q", i, capability.ProtectedHTTPMiddleware)
+		}
+		for _, dependency := range capability.MigrationSchemaDeps {
+			if dependency == capability.Name {
+				return fmt.Errorf("capabilities[%d].migration_schema_deps references itself", i)
 			}
 		}
 		for field, paths := range map[string][]string{

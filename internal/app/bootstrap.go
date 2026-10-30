@@ -251,8 +251,13 @@ func registerHTTP(router registerRouter, log *logger.Logger, extraProtected []gi
 	var protected []gin.HandlerFunc
 	providers := make([]string, 0, 1)
 	for _, module := range modules {
+		desc := contract.Describe(module)
 		provider, ok := module.(contract.ProtectedHTTPMiddlewareProvider)
 		if !ok {
+			if desc.ProtectedHTTPMiddleware == contract.ProtectedHTTPMiddlewarePrimary ||
+				desc.ProtectedHTTPMiddleware == contract.ProtectedHTTPMiddlewareFallback {
+				return fmt.Errorf("capability %q declares protected middleware but does not implement the provider", desc.Name)
+			}
 			continue
 		}
 		chain, err := provider.ProtectedHTTPMiddleware()
@@ -260,9 +265,17 @@ func registerHTTP(router registerRouter, log *logger.Logger, extraProtected []gi
 			return fmt.Errorf("configure protected middleware: %w", err)
 		}
 		if len(chain) == 0 {
+			if desc.ProtectedHTTPMiddleware == contract.ProtectedHTTPMiddlewarePrimary {
+				return fmt.Errorf("capability %q declares a primary protected middleware provider but returned an empty chain", desc.Name)
+			}
 			continue
 		}
-		providers = append(providers, contract.Describe(module).Name)
+		switch desc.ProtectedHTTPMiddleware {
+		case contract.ProtectedHTTPMiddlewarePrimary, contract.ProtectedHTTPMiddlewareFallback:
+		default:
+			return fmt.Errorf("capability %q provides protected middleware but does not declare it", desc.Name)
+		}
+		providers = append(providers, desc.Name)
 		protected = append(protected, chain...)
 	}
 	if len(providers) > 1 {

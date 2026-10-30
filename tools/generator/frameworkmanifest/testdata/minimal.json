@@ -65,7 +65,14 @@
         "internal/capabilities/user/migrations/mysql/008_user_version.sql"
       ],
       "drivers": null,
-      "assets": null
+      "assets": null,
+      "protected_http_middleware": "",
+      "migration_schema_deps": [
+        "tenant"
+      ],
+      "runtime_services": [
+        "mysql"
+      ]
     },
     {
       "name": "access",
@@ -163,7 +170,14 @@
         "internal/capabilities/access/migrations/mysql/009_role_system_metadata.sql"
       ],
       "drivers": null,
-      "assets": null
+      "assets": null,
+      "protected_http_middleware": "",
+      "migration_schema_deps": [
+        "tenant"
+      ],
+      "runtime_services": [
+        "mysql"
+      ]
     },
     {
       "name": "tenant",
@@ -235,7 +249,12 @@
         "internal/capabilities/tenant/migrations/mysql/014_tenant_plans.sql"
       ],
       "drivers": null,
-      "assets": null
+      "assets": null,
+      "protected_http_middleware": "",
+      "migration_schema_deps": [],
+      "runtime_services": [
+        "mysql"
+      ]
     },
     {
       "name": "auth",
@@ -265,7 +284,13 @@
         "internal/capabilities/auth/migrations/mysql/012_password_histories.sql"
       ],
       "drivers": null,
-      "assets": null
+      "assets": null,
+      "protected_http_middleware": "primary",
+      "migration_schema_deps": [],
+      "runtime_services": [
+        "mysql",
+        "redis"
+      ]
     },
     {
       "name": "encryption",
@@ -279,7 +304,12 @@
       "mount": "protected",
       "migrations": [],
       "drivers": null,
-      "assets": null
+      "assets": null,
+      "protected_http_middleware": "",
+      "migration_schema_deps": [],
+      "runtime_services": [
+        "mysql"
+      ]
     },
     {
       "name": "notification",
@@ -293,7 +323,10 @@
       "mount": "protected",
       "migrations": [],
       "drivers": null,
-      "assets": null
+      "assets": null,
+      "protected_http_middleware": "",
+      "migration_schema_deps": [],
+      "runtime_services": []
     }
   ],
   "copy": [
@@ -1631,5 +1664,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:dc10712c34ba11e2437dba49d194885b9aee8e018ea010da998f11927a21fc0a"
+  "digest": "sha256:16e4673f131e8259a9e3ee2cec6d2dfb010682f74aed6ae0434cfd1f23efcf92"
 }

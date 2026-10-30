@@ -21,6 +21,7 @@ import (
 	"jimu/tools/generator/frameworkmanifest"
 	"jimu/tools/generator/manifest"
 	"jimu/tools/generator/plan"
+	"jimu/tools/generator/preflight"
 	"jimu/tools/generator/workspace"
 	"jimu/tools/internal/profileassets"
 )
@@ -80,6 +81,9 @@ func NewProject(opts NewOptions) (*Result, error) {
 	}
 	if _, err := plan.Build(doc); err != nil {
 		return nil, err
+	}
+	if err := preflight.Validate(doc); err != nil {
+		return nil, fmt.Errorf("preflight: %w", err)
 	}
 	created, err := workspace.Create(doc, workspace.CreateOptions{
 		Target: opts.Dir, SourceRoot: root, Module: module, Force: opts.Force,

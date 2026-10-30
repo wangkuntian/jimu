@@ -82,11 +82,12 @@ var migrationsFS embed.FS
 var Descriptor = contract.Descriptor{
 	Name: "tenant",
 	// tenant 迁移（005_tenants.sql）会 ALTER users/roles，须后于 user/access 执行
-	Requires:   []string{"user", "access"},
-	Migrations: migrationsFS,
-	Owns:       []string{"tenants", "tenant_plans"},
-	Mount:      contract.MountProtected,
-	Configs:    []contract.ConfigSpec{{Section: ConfigKey, New: func() any { return &Config{} }}},
+	Requires:        []string{"user", "access"},
+	Migrations:      migrationsFS,
+	Owns:            []string{"tenants", "tenant_plans"},
+	Mount:           contract.MountProtected,
+	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+	Configs:         []contract.ConfigSpec{{Section: ConfigKey, New: func() any { return &Config{} }}},
 	Permissions: []contract.Permission{
 		{Name: "租户列表", Resource: "/api/v1/tenants", Action: "GET"},
 		{Name: "租户创建", Resource: "/api/v1/tenants", Action: "POST"},

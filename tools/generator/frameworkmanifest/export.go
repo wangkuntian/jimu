@@ -191,15 +191,18 @@ func capabilityFacts(root string, selected selection) []manifest.Capability {
 			continue
 		}
 		fact := manifest.Capability{
-			Name:          descriptor.Name,
-			Requires:      slices.Clone(descriptor.Requires),
-			SoftRequires:  slices.Clone(descriptor.SoftRequires),
-			MigrationOnly: contains(selected.migration, descriptor.Name),
-			DomainOnly:    contains(selected.domain, descriptor.Name),
-			Owns:          slices.Clone(descriptor.Owns),
-			Mount:         string(descriptor.Normalized()),
-			Drivers:       slices.Clone(descriptor.Drivers),
-			Assets:        slices.Clone(descriptor.Assets),
+			Name:                    descriptor.Name,
+			Requires:                slices.Clone(descriptor.Requires),
+			SoftRequires:            slices.Clone(descriptor.SoftRequires),
+			MigrationOnly:           contains(selected.migration, descriptor.Name),
+			DomainOnly:              contains(selected.domain, descriptor.Name),
+			Owns:                    slices.Clone(descriptor.Owns),
+			Mount:                   string(descriptor.Normalized()),
+			Drivers:                 slices.Clone(descriptor.Drivers),
+			Assets:                  slices.Clone(descriptor.Assets),
+			ProtectedHTTPMiddleware: string(descriptor.ProtectedHTTPMiddleware),
+			MigrationSchemaDeps:     append([]string{}, descriptor.MigrationSchemaDeps...),
+			RuntimeServices:         runtimeServiceNames(descriptor.RuntimeServices),
 		}
 		for _, config := range descriptor.Configs {
 			fact.Configs = append(fact.Configs, config.Section)
@@ -211,6 +214,14 @@ func capabilityFacts(root string, selected selection) []manifest.Capability {
 		out = append(out, fact)
 	}
 	_ = root
+	return out
+}
+
+func runtimeServiceNames(services []contract.RuntimeService) []string {
+	out := make([]string, len(services))
+	for i, service := range services {
+		out[i] = string(service)
+	}
 	return out
 }
 

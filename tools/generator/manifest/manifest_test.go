@@ -60,6 +60,34 @@ func TestValidateRejectsInvalidDocuments(t *testing.T) {
 			edit: func(doc *Document) { doc.Digest = "sha256:not-a-digest" },
 			want: "digest",
 		},
+		{
+			name: "invalid protected middleware mode",
+			edit: func(doc *Document) {
+				doc.Capabilities = []Capability{{Name: "auth", ProtectedHTTPMiddleware: "sometimes"}}
+			},
+			want: "protected middleware",
+		},
+		{
+			name: "duplicate migration schema dependency",
+			edit: func(doc *Document) {
+				doc.Capabilities = []Capability{{Name: "user", MigrationSchemaDeps: []string{"tenant", "tenant"}}}
+			},
+			want: "duplicate",
+		},
+		{
+			name: "self migration schema dependency",
+			edit: func(doc *Document) {
+				doc.Capabilities = []Capability{{Name: "user", MigrationSchemaDeps: []string{"user"}}}
+			},
+			want: "itself",
+		},
+		{
+			name: "duplicate runtime service",
+			edit: func(doc *Document) {
+				doc.Capabilities = []Capability{{Name: "auth", RuntimeServices: []string{"mysql", "mysql"}}}
+			},
+			want: "duplicate",
+		},
 	}
 
 	for _, tt := range tests {

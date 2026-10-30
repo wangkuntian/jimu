@@ -26,8 +26,8 @@ func TestRenderCLIMainTrimsScaffoldingAndFollowsSelection(t *testing.T) {
 		wantCommands []string
 	}{
 		{
-			name: "with user,access：无任何能力自带命令",
-			opts: NewOptions{With: "user,access"},
+			name: "with auth：无任何能力自带命令",
+			opts: NewOptions{With: "auth"},
 			// migrateCmd 的五个子命令由 init 内部注册，不进 rootCmd 的直接注册集。
 			wantCommands: []string{"config", "migrate", "seed", "version"},
 		},

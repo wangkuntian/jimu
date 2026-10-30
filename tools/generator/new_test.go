@@ -22,6 +22,14 @@ func TestNewProjectWritesNothingOnDryRun(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr))
 }
 
+func TestNewProjectRejectsSelectionWithoutProtectedMiddlewareProviderBeforeWriting(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "proj")
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, With: "user", Module: "example.com/proj", NoTidy: true})
+	require.ErrorContains(t, err, "protected middleware")
+	_, statErr := os.Stat(dir)
+	assert.True(t, os.IsNotExist(statErr), "preflight failure must not write the target")
+}
+
 func TestNewProjectLeavesNoPartialTreeOnFailure(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	// 目标目录已存在且非空 → 报错，且不得留下 proj.tmp-* 残留。
@@ -141,7 +149,7 @@ func TestNewProjectCopiesKernelAndSelectedCapabilities(t *testing.T) {
 // 否则生成项目的 check-capabilities 断言①（声明的驱动目录必须存在）必红。
 func TestNewProjectWithSelectsFirstDriverAndFiltersDirectories(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := newProjectForTest(t, NewOptions{Dir: dir, With: "queue", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, With: withProtectedProvider("queue"), Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 	assert.FileExists(t, filepath.Join(dir, "internal/capabilities/queue/redis/redis_queue.go"))
 	for _, drv := range []string{"kafka", "rabbitmq"} {
@@ -150,7 +158,8 @@ func TestNewProjectWithSelectsFirstDriverAndFiltersDirectories(t *testing.T) {
 	}
 	src, err := os.ReadFile(filepath.Join(dir, "internal/capabilities/queue/migrations.go"))
 	require.NoError(t, err)
-	assert.Contains(t, string(src), `Drivers:    []string{"redis"}`)
+	assert.Contains(t, string(src), "Drivers:")
+	assert.Contains(t, string(src), `[]string{"redis"}`)
 
 	// 未被选中的能力（storage 声明 local/s3，但既不声明也未选驱动）不复制任何驱动目录。
 	_, statErr := os.Stat(filepath.Join(dir, "internal/capabilities/storage/local"))
@@ -190,8 +199,8 @@ func TestNewProjectDryRunCountMatchesRealTree(t *testing.T) {
 		name string
 		opts NewOptions
 	}{
-		{"with queue（只带 domain 的内核依赖）", NewOptions{With: "queue"}},
-		{"with user,access（schema 依赖 tenant）", NewOptions{With: "user,access"}},
+		{"with queue（只带 domain 的内核依赖）", NewOptions{With: withProtectedProvider("queue")}},
+		{"with user,access（schema 依赖 tenant）", NewOptions{With: withProtectedProvider("user,access")}},
 		{"profile minimal", NewOptions{Profile: "minimal"}},
 		// apidocs/full 会额外携带 docs/openapi（T6 的资产复制）：曾被 dry-run 漏计，使 planned < real。
 		{"with apidocs", NewOptions{With: "apidocs"}},

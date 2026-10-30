@@ -295,6 +295,8 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 生成过程会先在暂存目录复制和渲染所选内容，再整理依赖、构建并运行能力门禁；通过后才发布到目标目录。生成清单用于识别生成文件并支持后续 `capability add`。
 
+生成前预检会读取 Descriptor 导出的 manifest 事实并 fail-closed：受保护路由必须恰好有一个有效中间件提供者（`auth` 为 primary、`apikey` 为 fallback）；迁移 schema 依赖必须随选择集带入；表所有权和迁移文件不得重复；声明的 runtime service 必须能在生成配置中找到对应段。预检失败发生在目标目录写入之前。
+
 生成闭包、模板和 manifest 的详细规则见[形态与项目生成设计](docs/design/profiles-and-project-generation.md)；稳定设计文档的范围和阅读入口见[设计文档索引](docs/design/README.md)。
 
 ## 数据库迁移
@@ -476,6 +478,7 @@ jimu/
 │   ├── generator/                # 代码生成器 facade 与框架编排
 │   │   ├── manifest/             # JSON manifest 模型、校验与 digest
 │   │   ├── frameworkmanifest/    # catalog/profile/Descriptor 到 manifest 的唯一适配层
+│   │   ├── preflight/            # 写目标目录前的受保护链、迁移与外部服务预检
 │   │   ├── plan/                 # manifest 到确定性执行计划
 │   │   ├── render/               # 计划执行、模板 embed 与文本渲染
 │   │   ├── workspace/            # 暂存、原子换入与增量更新

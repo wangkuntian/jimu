@@ -34,18 +34,21 @@ type Selection struct {
 }
 
 type Capability struct {
-	Name          string       `json:"name"`
-	Requires      []string     `json:"requires"`
-	SoftRequires  []string     `json:"soft_requires"`
-	MigrationOnly bool         `json:"migration_only"`
-	DomainOnly    bool         `json:"domain_only"`
-	Owns          []string     `json:"owns"`
-	Configs       []string     `json:"configs"`
-	Permissions   []Permission `json:"permissions"`
-	Mount         string       `json:"mount"`
-	Migrations    []string     `json:"migrations"`
-	Drivers       []string     `json:"drivers"`
-	Assets        []string     `json:"assets"`
+	Name                    string       `json:"name"`
+	Requires                []string     `json:"requires"`
+	SoftRequires            []string     `json:"soft_requires"`
+	MigrationOnly           bool         `json:"migration_only"`
+	DomainOnly              bool         `json:"domain_only"`
+	Owns                    []string     `json:"owns"`
+	Configs                 []string     `json:"configs"`
+	Permissions             []Permission `json:"permissions"`
+	Mount                   string       `json:"mount"`
+	Migrations              []string     `json:"migrations"`
+	Drivers                 []string     `json:"drivers"`
+	Assets                  []string     `json:"assets"`
+	ProtectedHTTPMiddleware string       `json:"protected_http_middleware"`
+	MigrationSchemaDeps     []string     `json:"migration_schema_deps"`
+	RuntimeServices         []string     `json:"runtime_services"`
 }
 
 type CopyAction struct {

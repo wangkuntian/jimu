@@ -35,7 +35,10 @@ type fakeAuthzModule struct{}
 
 func (fakeAuthzModule) Name() string { return "auth" }
 func (fakeAuthzModule) Descriptor() contract.Descriptor {
-	return contract.Descriptor{Name: "auth", Mount: contract.MountSelfManaged}
+	return contract.Descriptor{
+		Name: "auth", Mount: contract.MountSelfManaged,
+		ProtectedHTTPMiddleware: contract.ProtectedHTTPMiddlewarePrimary,
+	}
 }
 func (fakeAuthzModule) RegisterHTTP(r contract.Router) {
 	r.Group("/api/v1").POST("/auth/login", func(c *gin.Context) { c.Status(http.StatusNoContent) })

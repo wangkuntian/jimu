@@ -45,7 +45,7 @@
     "capability": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "requires", "soft_requires", "migration_only", "domain_only", "owns", "configs", "permissions", "mount", "migrations", "drivers", "assets"],
+      "required": ["name", "requires", "soft_requires", "migration_only", "domain_only", "owns", "configs", "permissions", "mount", "migrations", "drivers", "assets", "protected_http_middleware", "migration_schema_deps", "runtime_services"],
       "properties": {
         "name": {"type": "string", "minLength": 1},
         "requires": {"type": "array", "items": {"type": "string"}},
@@ -58,7 +58,10 @@
         "mount": {"type": "string"},
         "migrations": {"type": "array", "items": {"type": "string"}},
         "drivers": {"type": "array", "items": {"type": "string"}},
-        "assets": {"type": "array", "items": {"type": "string"}}
+        "assets": {"type": "array", "items": {"type": "string"}},
+        "protected_http_middleware": {"enum": ["", "primary", "fallback"]},
+        "migration_schema_deps": {"type": "array", "items": {"type": "string"}},
+        "runtime_services": {"type": "array", "items": {"type": "string"}}
       }
     },
     "copy": {

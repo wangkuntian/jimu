@@ -9,6 +9,7 @@ import (
 
 	"jimu/tools/generator/frameworkmanifest"
 	"jimu/tools/generator/manifest"
+	"jimu/tools/generator/preflight"
 	"jimu/tools/generator/workspace"
 )
 
@@ -79,6 +80,9 @@ func AddCapability(opts AddOptions) (*Result, error) {
 	}
 	if module == "" {
 		return nil, fmt.Errorf("manifest does not declare a module rewrite")
+	}
+	if err := preflight.Validate(next); err != nil {
+		return nil, fmt.Errorf("preflight: %w", err)
 	}
 	if opts.Module != "" {
 		for i := range next.Rewrites {

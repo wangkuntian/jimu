@@ -67,7 +67,14 @@
         "internal/capabilities/user/migrations/mysql/008_user_version.sql"
       ],
       "drivers": null,
-      "assets": null
+      "assets": null,
+      "protected_http_middleware": "",
+      "migration_schema_deps": [
+        "tenant"
+      ],
+      "runtime_services": [
+        "mysql"
+      ]
     },
     {
       "name": "access",
@@ -165,7 +172,14 @@
         "internal/capabilities/access/migrations/mysql/009_role_system_metadata.sql"
       ],
       "drivers": null,
-      "assets": null
+      "assets": null,
+      "protected_http_middleware": "",
+      "migration_schema_deps": [
+        "tenant"
+      ],
+      "runtime_services": [
+        "mysql"
+      ]
     },
     {
       "name": "tenant",
@@ -237,7 +251,12 @@
         "internal/capabilities/tenant/migrations/mysql/014_tenant_plans.sql"
       ],
       "drivers": null,
-      "assets": null
+      "assets": null,
+      "protected_http_middleware": "",
+      "migration_schema_deps": [],
+      "runtime_services": [
+        "mysql"
+      ]
     },
     {
       "name": "queue",
@@ -266,7 +285,12 @@
         "kafka",
         "rabbitmq"
       ],
-      "assets": null
+      "assets": null,
+      "protected_http_middleware": "",
+      "migration_schema_deps": [],
+      "runtime_services": [
+        "mysql"
+      ]
     }
   ],
   "copy": [
@@ -1505,5 +1529,5 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:7e382dce6d5b2f96c40c779ceec45c0016011fa258ad572a5edf9ee3ac16acfd"
+  "digest": "sha256:d8bf7be0448148c745e79bd44b7f7d8db9e197488a20544913de608dd8b43172"
 }

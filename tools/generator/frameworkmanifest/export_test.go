@@ -126,6 +126,28 @@ func TestExportManifestValidates(t *testing.T) {
 	}
 }
 
+func TestExportCarriesPreflightFacts(t *testing.T) {
+	doc, err := Export(Request{Root: repositoryRoot(t), Profile: "minimal", Module: "example.com/minimal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]manifest.Capability{}
+	for _, capability := range doc.Capabilities {
+		byName[capability.Name] = capability
+	}
+	auth := byName["auth"]
+	if auth.ProtectedHTTPMiddleware != "primary" {
+		t.Fatalf("auth protected middleware = %q, want primary", auth.ProtectedHTTPMiddleware)
+	}
+	if got := auth.RuntimeServices; len(got) != 2 || got[0] != "mysql" || got[1] != "redis" {
+		t.Fatalf("auth runtime services = %v, want [mysql redis]", got)
+	}
+	user := byName["user"]
+	if got := user.MigrationSchemaDeps; len(got) != 1 || got[0] != "tenant" {
+		t.Fatalf("user migration schema deps = %v, want [tenant]", got)
+	}
+}
+
 func TestExportMatchesGoldens(t *testing.T) {
 	root := repositoryRoot(t)
 	cases := map[string]Request{
