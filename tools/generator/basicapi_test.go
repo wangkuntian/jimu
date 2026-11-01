@@ -132,6 +132,49 @@ func TestAuthAPIComposeConfigIsValid(t *testing.T) {
 		"make up --wait must wait for readiness, not only process liveness")
 }
 
+func TestAuthAPIComposeUsesHostUIDForSecrets(t *testing.T) {
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skip("docker CLI is not installed")
+	}
+	dir := filepath.Join(t.TempDir(), "auth")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: "auth-api", Module: "example.com/auth",
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "secrets"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secrets", "admin_password.txt"), []byte("admin12345678"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secrets", "jwt_secret.txt"), []byte("compose-config-secret"), 0o600))
+
+	command := exec.Command("docker", "compose", "config", "--format", "json")
+	command.Dir = dir
+	command.Env = append(serverEnvBaseForTest(newTestGoCache(t)),
+		"APP_UID=1234",
+		"APP_GID=2345",
+	)
+	output, err := command.CombinedOutput()
+	require.NoError(t, err, "docker compose config:\n%s", output)
+
+	var config struct {
+		Services map[string]struct {
+			User string `json:"user"`
+		} `json:"services"`
+	}
+	require.NoError(t, json.Unmarshal(output, &config), "docker compose config JSON:\n%s", output)
+
+	for _, service := range []string{"init", "app"} {
+		require.Equal(t, "1234:2345", config.Services[service].User,
+			"%s must run as the host secret owner", service)
+	}
+
+	makeCommand := exec.Command("make", "-n", "up")
+	makeCommand.Dir = dir
+	makeCommand.Env = serverEnvBaseForTest(newTestGoCache(t))
+	makeOutput, err := makeCommand.CombinedOutput()
+	require.NoError(t, err, "make -n up:\n%s", makeOutput)
+	require.Contains(t, string(makeOutput), `APP_UID="$(id -u)" APP_GID="$(id -g)" docker compose up`,
+		"make up must pass the host UID/GID to Compose")
+}
+
 func freePort(t *testing.T) int {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

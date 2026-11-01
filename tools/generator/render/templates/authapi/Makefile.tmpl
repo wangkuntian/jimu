@@ -36,7 +36,7 @@ up:
 	if [ ! -s secrets/admin_password.txt ]; then openssl rand -hex 16 > secrets/admin_password.txt; created=1; fi; \
 	if [ ! -s secrets/jwt_secret.txt ]; then openssl rand -hex 32 > secrets/jwt_secret.txt; fi; \
 	chmod 600 secrets/admin_password.txt secrets/jwt_secret.txt; \
-	docker compose up -d --build --wait app; \
+	APP_UID="$$(id -u)" APP_GID="$$(id -g)" docker compose up -d --build --wait app; \
 	if [ "$${created}" = 1 ]; then printf '\nAdministrator password: %s\n' "$$(cat secrets/admin_password.txt)"; fi
 
 ## verify: readyz + login + me + protected request

@@ -38,6 +38,7 @@ services:
   init:
     build: .
     command: ["sh", "scripts/init.sh"]
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     environment: *app-env
     depends_on:
       mysql:
@@ -50,6 +51,7 @@ services:
 
   app:
     build: .
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     environment: *app-env
     depends_on:
       init:
