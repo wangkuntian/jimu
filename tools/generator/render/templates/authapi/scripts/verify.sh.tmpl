@@ -25,6 +25,12 @@ create_status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$api_url/api/v
   --data '{"username":"verify_user","password":"VerifyPass12345","role_ids":[]}')"
 [ "$create_status" = 201 ] || [ "$create_status" = 409 ] || { echo "create verifier failed: $create_status" >&2; exit 1; }
 
+short_password_status="$(curl -sS -o /dev/null -w '%{http_code}' -X PUT "$api_url/api/v1/users/999999999" \
+  -H "Authorization: Bearer $token" \
+  -H 'Content-Type: application/json' \
+  --data '{"password":"short"}')"
+[ "$short_password_status" = 400 ] || { echo "expected 400 for short password, got $short_password_status" >&2; exit 1; }
+
 user_login="$(curl -fsS -X POST "$api_url/api/v1/auth/login" \
   -H 'Content-Type: application/json' \
   --data '{"username":"verify_user","password":"VerifyPass12345"}')"

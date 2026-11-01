@@ -21,5 +21,6 @@ Set `AUTH_API_PORT` and `AUTH_API_MANAGEMENT_PORT` to change the host ports; `ma
 - MySQL 8.4 and Redis 7 are provided by `docker-compose.yml`.
 - Compose runs `init` and `app` as the invoking host UID/GID so `0600` local secrets remain readable on Linux.
 - Migrations are under `internal/migrations/mysql/`.
+- User passwords must be at least 8 characters when created or updated.
 
 The project is yours to modify. `.jimu/manifest.json` records provenance and generated files only.

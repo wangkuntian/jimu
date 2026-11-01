@@ -258,6 +258,8 @@ v0.5.0 不包含公开注册、MFA/passkey、OAuth、验证码、通知、字段
 
 数据模型固定为 8 张表：`users`、`roles`、`permissions`、`role_permissions`、`user_roles`、`tenants`、`login_histories`、`password_histories`。固定 10 个 MySQL 迁移，依赖顺序为 tenant schema carrier、user、access、auth；不得复制 `tenant_plans` 等未使用表。
 
+用户创建和更新密码均要求至少 8 个字符；`make verify` 必须覆盖短密码更新被拒绝的行为。
+
 外部服务只包含 MySQL 8.4 LTS 与 Redis 7.x。Compose 只包含 `mysql`、`redis`、初始化 job 和 `app`，不包含观测、消息队列或其它可选栈。
 
 首次启动：
@@ -295,7 +297,7 @@ make down
 
 - `TestOfficialTemplateBudgets` 直接读取 `budgets.json`，生成两个官方模板后实测文件数、直接依赖、Go 闭包、外部服务、路由、表、迁移和非代码资产，任一指标超限即失败。
 - `TestBasicAPIStartsWithoutExternalServices` 不启动容器，先跑生成项目的 build/vet/test，再验证 `/livez`、`/readyz`、示例路由、统一 404/405 响应、SIGTERM 优雅退出和冷生成至就绪预算。
-- `TestAuthAPIEmptyDatabaseEndToEnd` 先跑生成项目的 test/vet，再为每次运行创建独立 Compose 项目和宿主机端口，在全新数据卷上连续执行两次 `make up` / `make verify`，校验管理员密码只在首次输出、10 个迁移、8 张业务表、2 个用户，并验证缺失 MySQL 或 Redis 时快速失败和 `make down`。
+- `TestAuthAPIEmptyDatabaseEndToEnd` 先跑生成项目的 test/vet，再为每次运行创建独立 Compose 项目和宿主机端口，在全新数据卷上连续执行两次 `make up` / `make verify`，校验管理员密码只在首次输出、短密码更新返回 400、10 个迁移、8 张业务表、2 个用户，并验证缺失 MySQL 或 Redis 时快速失败和 `make down`。
 
 `basic-api` 验收：
 
@@ -311,6 +313,7 @@ make down
 - 全新空 MySQL 上 10 个迁移全部成功；
 - `make up` 一条命令完成 migrate、seed、start，`/readyz` 成功；
 - 管理员登录返回 access/refresh token，`/auth/me` 可用；
+- 创建和更新用户密码至少 8 个字符，短密码更新返回 400；
 - 无 token 访问受保护路由为 401，缺权限为 403；
 - 重复启动和重复 seed 幂等；
 - 故意缺 Redis 或 MySQL 时启动失败，错误中说明缺少哪个服务；

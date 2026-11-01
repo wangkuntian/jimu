@@ -3,11 +3,14 @@ package v1
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"{{.Module}}/internal/auth"
 	"{{.Module}}/internal/config"
 	"{{.Module}}/internal/platform/logging"
+
+	"github.com/gin-gonic/gin"
 )
 
 func TestAuthAPIRouteCountAndUnauthorizedAccess(t *testing.T) {
@@ -27,5 +30,30 @@ func TestAuthAPIRouteCountAndUnauthorizedAccess(t *testing.T) {
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/users", nil))
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestUpdateUserPasswordRejectsShortInput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{name: "empty", body: `{"password":""}`},
+		{name: "seven_characters", body: `{"password":"1234567"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Request = httptest.NewRequest(http.MethodPut, "/api/v1/users/1", strings.NewReader(tc.body))
+			ctx.Request.Header.Set("Content-Type", "application/json")
+
+			if _, ok := bindJSON[updateUserRequest](ctx); ok {
+				t.Fatal("short password passed request validation")
+			}
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+			}
+		})
 	}
 }
