@@ -27,8 +27,9 @@ func (m *Module) Service() *Service { return m.svc }
 
 // Descriptor 声明验证码能力的静态描述（公开挂载，无迁移、无权限点）。
 var Descriptor = contract.Descriptor{
-	Name:  "captcha",
-	Mount: contract.MountPublic,
+	Name:            "captcha",
+	Mount:           contract.MountPublic,
+	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis},
 	Configs: []contract.ConfigSpec{
 		{Section: ConfigKey, New: func() any { return &Config{} }},
 	},

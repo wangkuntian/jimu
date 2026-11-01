@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://jimu.example/schema/generator-manifest-v1.json",
+  "$id": "https://jimu.example/schema/generator-manifest-v2.json",
   "title": "Jimu generator manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "framework", "selection", "capabilities", "copy", "templates", "merges", "rewrites", "assets", "prune", "report", "generated_files", "digest"],
+  "required": ["schema_version", "framework", "selection", "capabilities", "copy", "templates", "merges", "rewrites", "assets", "prune", "report", "generated_files", "generated_file_sha256", "digest"],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"const": 2},
     "framework": {"$ref": "#/$defs/framework"},
     "selection": {"$ref": "#/$defs/selection"},
     "capabilities": {"type": "array", "items": {"$ref": "#/$defs/capability"}},
@@ -18,26 +18,31 @@
     "prune": {"type": "array", "items": {"$ref": "#/$defs/prune"}},
     "report": {"$ref": "#/$defs/report"},
     "generated_files": {"type": "array", "items": {"type": "string"}},
+    "generated_file_sha256": {"type": "object", "propertyNames": {"type": "string", "minLength": 1}, "additionalProperties": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}},
     "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
   },
   "$defs": {
     "framework": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["module", "version", "commit"],
+      "required": ["module", "version", "commit", "dirty"],
       "properties": {
         "module": {"type": "string", "minLength": 1},
         "version": {"type": "string"},
-        "commit": {"type": "string"}
+        "commit": {"type": "string", "minLength": 1},
+        "dirty": {"type": "boolean"}
       }
     },
     "selection": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["shape", "capabilities", "drivers"],
+      "required": ["shape", "template", "template_version", "profile", "support", "capabilities", "drivers"],
       "properties": {
         "shape": {"type": "string", "minLength": 1},
-        "profile": {"type": "string", "minLength": 1},
+        "template": {"type": "string"},
+        "template_version": {"type": "string"},
+        "profile": {"type": "string"},
+        "support": {"enum": ["", "official", "experimental", "internal"]},
         "capabilities": {"type": "array", "items": {"type": "string", "minLength": 1}},
         "drivers": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}}
       }
@@ -45,7 +50,7 @@
     "capability": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "requires", "soft_requires", "migration_only", "domain_only", "owns", "configs", "permissions", "mount", "migrations", "drivers", "assets"],
+      "required": ["name", "requires", "soft_requires", "migration_only", "domain_only", "owns", "configs", "permissions", "mount", "migrations", "drivers", "assets", "protected_http_middleware", "migration_schema_deps", "runtime_services"],
       "properties": {
         "name": {"type": "string", "minLength": 1},
         "requires": {"type": "array", "items": {"type": "string"}},
@@ -58,7 +63,10 @@
         "mount": {"type": "string"},
         "migrations": {"type": "array", "items": {"type": "string"}},
         "drivers": {"type": "array", "items": {"type": "string"}},
-        "assets": {"type": "array", "items": {"type": "string"}}
+        "assets": {"type": "array", "items": {"type": "string"}},
+        "protected_http_middleware": {"enum": ["", "primary", "fallback"]},
+        "migration_schema_deps": {"type": "array", "items": {"type": "string"}},
+        "runtime_services": {"type": "array", "items": {"type": "string"}}
       }
     },
     "copy": {

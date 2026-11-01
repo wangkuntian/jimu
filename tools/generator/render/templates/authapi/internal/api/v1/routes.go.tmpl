@@ -1,0 +1,67 @@
+package v1
+
+import (
+	"net/http"
+
+	"{{.Module}}/internal/auth"
+	"{{.Module}}/internal/config"
+	platformhttp "{{.Module}}/internal/platform/http"
+	"{{.Module}}/internal/platform/logging"
+	"{{.Module}}/internal/shared/errorx"
+	"{{.Module}}/internal/shared/response"
+
+	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
+)
+
+func NewRouter(log *logging.Logger, cfg *config.Config, db *gorm.DB, rdb *redis.Client, tokens *auth.TokenManager) *gin.Engine {
+	if cfg.HTTP.Mode == "release" {
+		gin.SetMode(gin.ReleaseMode)
+	} else if cfg.HTTP.Mode == "test" {
+		gin.SetMode(gin.TestMode)
+	}
+	router := gin.New()
+	router.HandleMethodNotAllowed = true
+	router.Use(platformhttp.RequestID(), platformhttp.AccessLog(log), platformhttp.Recovery(log), platformhttp.MaxBody(cfg.HTTP.MaxBodyBytes))
+	router.NoRoute(func(c *gin.Context) {
+		response.Fail(c, http.StatusNotFound, errorx.NotFound("route not found"))
+	})
+	router.NoMethod(func(c *gin.Context) {
+		response.Fail(c, http.StatusMethodNotAllowed, errorx.MethodNotAllowed("method not allowed"))
+	})
+
+	h := &Handler{db: db, redis: rdb, tokens: tokens}
+	api := router.Group("/api/v1")
+	api.POST("/auth/login", h.Login)
+	api.POST("/auth/refresh", h.Refresh)
+
+	protected := api.Group("")
+	protected.Use(auth.AuthRequired(db, tokens))
+	protected.POST("/auth/logout", h.Logout)
+	protected.GET("/auth/me", h.Me)
+	protected.GET("/auth/login-history", h.LoginHistory)
+
+	protected.GET("/users", auth.RequirePermission(db, "/api/v1/users", "GET"), h.ListUsers)
+	protected.POST("/users", auth.RequirePermission(db, "/api/v1/users", "POST"), h.CreateUser)
+	protected.GET("/users/:id", auth.RequirePermission(db, "/api/v1/users/*", "GET"), h.GetUser)
+	protected.PUT("/users/:id", auth.RequirePermission(db, "/api/v1/users/*", "PUT"), h.UpdateUser)
+	protected.DELETE("/users/:id", auth.RequirePermission(db, "/api/v1/users/*", "DELETE"), h.DeleteUser)
+	protected.POST("/users/:id/roles", auth.RequirePermission(db, "/api/v1/users/*/roles", "POST"), h.AssignUserRoles)
+
+	protected.GET("/roles/options", auth.RequirePermission(db, "/api/v1/roles/options", "GET"), h.RoleOptions)
+	protected.GET("/roles", auth.RequirePermission(db, "/api/v1/roles", "GET"), h.ListRoles)
+	protected.POST("/roles", auth.RequirePermission(db, "/api/v1/roles", "POST"), h.CreateRole)
+	protected.GET("/roles/:id", auth.RequirePermission(db, "/api/v1/roles/*", "GET"), h.GetRole)
+	protected.PUT("/roles/:id", auth.RequirePermission(db, "/api/v1/roles/*", "PUT"), h.UpdateRole)
+	protected.DELETE("/roles/:id", auth.RequirePermission(db, "/api/v1/roles/*", "DELETE"), h.DeleteRole)
+	protected.GET("/roles/:id/permissions", auth.RequirePermission(db, "/api/v1/roles/*/permissions", "GET"), h.GetRolePermissions)
+	protected.POST("/roles/:id/permissions", auth.RequirePermission(db, "/api/v1/roles/*/permissions", "POST"), h.AssignRolePermissions)
+
+	protected.GET("/permissions", auth.RequirePermission(db, "/api/v1/permissions", "GET"), h.ListPermissions)
+	protected.POST("/permissions", auth.RequirePermission(db, "/api/v1/permissions", "POST"), h.CreatePermission)
+	protected.GET("/permissions/:id", auth.RequirePermission(db, "/api/v1/permissions/*", "GET"), h.GetPermission)
+	protected.PUT("/permissions/:id", auth.RequirePermission(db, "/api/v1/permissions/*", "PUT"), h.UpdatePermission)
+	protected.DELETE("/permissions/:id", auth.RequirePermission(db, "/api/v1/permissions/*", "DELETE"), h.DeletePermission)
+	return router
+}

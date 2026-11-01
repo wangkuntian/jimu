@@ -219,7 +219,7 @@ check-capabilities: ## 校验能力声明、迁移、驱动与资产归属
 check-templates: ## 生成最小项目并执行构建与能力门禁
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -run TestTemplatesDrift -count=1 -timeout 30m
 
-test-scaffold-matrix: ## 运行重型脚手架生成/构建/运行矩阵
+test-scaffold-matrix: ## 运行重型脚手架矩阵与官方模板预算、smoke、空库 E2E（需 Docker）
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 60m -v
 
 profiles-check: ## 构建全部形态并检查依赖闭包

@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "contract_version": "v0.1",
+  "target_product_version": "v0.5.0",
+  "enforcement": "release-blocking",
+  "measurement": {
+    "generated_files": "all files in the generated tree except .jimu/manifest.json and docs/profiles/generated-report.md",
+    "direct_dependencies": "non-indirect modules reported by go list -m",
+    "go_closure_files": "non-test Go files in the package closure of ./cmd/server",
+    "go_closure_lines": "non-test Go source lines in the package closure of ./cmd/server",
+    "non_code_assets": "assets selected by the generated manifest outside cmd, internal, configs, and docs source files",
+    "routes": "registered HTTP routes excluding /livez and /readyz",
+    "readiness": "4 vCPU / 8 GB, local images; warm means Go build cache and local images are present, cold means the documented first-run path"
+  },
+  "templates": {
+    "basic-api": {
+      "limits": {
+        "generated_files": 40,
+        "direct_dependencies": 8,
+        "go_closure_files": 25,
+        "go_closure_lines": 2200,
+        "external_services": 0,
+        "business_routes": 1,
+        "health_routes": 2,
+        "tables": 0,
+        "migrations": 0,
+        "non_code_assets": 12
+      },
+      "readiness_seconds": {
+        "warm_build": 10,
+        "cold_generate_and_start": 60
+      }
+    },
+    "auth-api": {
+      "limits": {
+        "generated_files": 160,
+        "direct_dependencies": 20,
+        "go_closure_files": 70,
+        "go_closure_lines": 9000,
+        "external_services": 2,
+        "business_routes": 24,
+        "health_routes": 2,
+        "tables": 8,
+        "migrations": 10,
+        "non_code_assets": 20
+      },
+      "readiness_seconds": {
+        "warm_build": 120,
+        "cold_images": 480
+      }
+    }
+  }
+}

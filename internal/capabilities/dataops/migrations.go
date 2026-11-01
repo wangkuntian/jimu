@@ -13,11 +13,12 @@ var migrationsFS embed.FS
 
 // Descriptor 能力静态描述：受保护挂载点，拥有 import_jobs 表。
 var Descriptor = contract.Descriptor{
-	Name:       "dataops",
-	Mount:      contract.MountProtected,
-	Migrations: migrationsFS,
-	Owns:       []string{"import_jobs"},
-	Drivers:    []string{"csv", "excel"},
+	Name:            "dataops",
+	Mount:           contract.MountProtected,
+	Migrations:      migrationsFS,
+	Owns:            []string{"import_jobs"},
+	Drivers:         []string{"csv", "excel"},
+	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
 	Configs: []contract.ConfigSpec{
 		{Section: ConfigKey, New: func() any { return &Config{} }},
 	},

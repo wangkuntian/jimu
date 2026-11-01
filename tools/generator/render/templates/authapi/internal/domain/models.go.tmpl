@@ -1,0 +1,82 @@
+package domain
+
+import "time"
+
+type Tenant struct {
+	ID        uint64    `gorm:"primaryKey"`
+	Code      string    `gorm:"size:64;uniqueIndex;not null"`
+	Name      string    `gorm:"size:128;not null"`
+	Status    int       `gorm:"not null;default:1"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type User struct {
+	ID           uint64     `gorm:"primaryKey"`
+	TenantID     uint64     `gorm:"index;not null;default:1"`
+	Username     string     `gorm:"size:64;uniqueIndex;not null"`
+	PasswordHash string     `gorm:"size:255;not null"`
+	Email        string     `gorm:"size:255;index"`
+	Phone        string     `gorm:"size:32;index"`
+	Status       int        `gorm:"not null;default:1"`
+	LastLoginAt  *time.Time
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type Role struct {
+	ID        uint64 `gorm:"primaryKey"`
+	TenantID  uint64 `gorm:"uniqueIndex:idx_roles_tenant_code;not null;default:1"`
+	Name      string `gorm:"size:64;not null"`
+	Code      string `gorm:"size:64;uniqueIndex:idx_roles_tenant_code;not null"`
+	Scope     string `gorm:"size:32;not null;default:tenant"`
+	IsSystem  bool   `gorm:"not null;default:false"`
+	Status    int    `gorm:"not null;default:1"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type Permission struct {
+	ID        uint64 `gorm:"primaryKey"`
+	Name      string `gorm:"size:128;not null"`
+	Resource  string `gorm:"size:255;uniqueIndex:idx_permissions_resource_action;not null"`
+	Action    string `gorm:"size:16;uniqueIndex:idx_permissions_resource_action;not null"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type RolePermission struct {
+	RoleID       uint64 `gorm:"primaryKey"`
+	PermissionID uint64 `gorm:"primaryKey"`
+}
+
+type UserRole struct {
+	UserID uint64 `gorm:"primaryKey"`
+	RoleID uint64 `gorm:"primaryKey"`
+}
+
+type LoginHistory struct {
+	ID        uint64 `gorm:"primaryKey"`
+	UserID    uint64 `gorm:"index;not null"`
+	TenantID  uint64 `gorm:"index;not null"`
+	IP        string `gorm:"size:64"`
+	UserAgent string `gorm:"size:512"`
+	Success   bool   `gorm:"not null"`
+	CreatedAt time.Time
+}
+
+type PasswordHistory struct {
+	ID           uint64 `gorm:"primaryKey"`
+	UserID       uint64 `gorm:"index;not null"`
+	PasswordHash string `gorm:"size:255;not null"`
+	CreatedAt    time.Time
+}
+
+func (Tenant) TableName() string         { return "tenants" }
+func (User) TableName() string           { return "users" }
+func (Role) TableName() string           { return "roles" }
+func (Permission) TableName() string     { return "permissions" }
+func (RolePermission) TableName() string { return "role_permissions" }
+func (UserRole) TableName() string       { return "user_roles" }
+func (LoginHistory) TableName() string   { return "login_histories" }
+func (PasswordHistory) TableName() string { return "password_histories" }

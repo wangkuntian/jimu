@@ -41,10 +41,11 @@ var migrationsFS embed.FS
 
 // Descriptor 声明审计能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:       "audit",
-	Migrations: migrationsFS,
-	Owns:       []string{"audit_logs", "audit_chain_head"},
-	Mount:      contract.MountProtected,
+	Name:            "audit",
+	Migrations:      migrationsFS,
+	Owns:            []string{"audit_logs", "audit_chain_head"},
+	Mount:           contract.MountProtected,
+	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
 	Permissions: []contract.Permission{
 		{Name: "审计列表", Resource: "/api/v1/audits", Action: "GET"},
 		{Name: "审计详情", Resource: "/api/v1/audits/*", Action: "GET"},

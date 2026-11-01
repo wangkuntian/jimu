@@ -1,0 +1,50 @@
+http:
+  host: "0.0.0.0"
+  port: 8080
+  mode: "release"
+  read_header_timeout_sec: 5
+  read_timeout_sec: 15
+  write_timeout_sec: 30
+  idle_timeout_sec: 60
+  shutdown_timeout_sec: 15
+  max_body_bytes: 1048576
+  trusted_proxies: []
+  allowed_origins: ["http://localhost:3000"]
+
+management:
+  host: "0.0.0.0"
+  port: 9090
+  enable_pprof: false
+  probe_timeout_sec: 2
+
+log:
+  level: "info"
+  format: "json"
+  output: "stdout"
+  max_size: 100
+  max_backups: 30
+  max_age: 7
+  compress: true
+
+db:
+  host: "127.0.0.1"
+  port: 3306
+  user: "jimu"
+  password: ""
+  database: "jimu"
+  max_open: 25
+  max_idle: 5
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+
+id:
+  worker_id: 0
+
+auth:
+  jwt_secret: ""
+  issuer: "jimu"
+  access_expire_min: 60
+  refresh_expire_day: 30

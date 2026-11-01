@@ -13,6 +13,9 @@
    - `SoftRequires`：**软依赖** —— 目标缺失时本能力降级运行，不补齐、不参与拓扑序
    - `Owns`：本能力迁移 `CREATE` 的表名（**只认 `CREATE TABLE`**，`ALTER ... ADD` 不算归属）
    - `Migrations`：能力自带迁移的 `fs.FS`（根下有 `mysql/` 与 `postgres/`）
+   - `MigrationSchemaDeps`：本能力迁移还依赖哪些其他能力的 schema（如 user/access → tenant）
+   - `RuntimeServices`：启动所需外部服务（MySQL、Redis、Kafka、RabbitMQ）；生成器据此做配置预检
+   - `ProtectedHTTPMiddleware`：是否提供受保护链；`primary` 优先，`fallback` 只在没有 primary 时接管
    - `Configs`：本能力拥有的配置段（`contract.ConfigSpec{Section, New}`），可多段
    - `Permissions`：能力拥有的权限点（种子时按启用集聚合写入）
    - `Mount`：路由挂载方式（零值等价 `MountProtected`，特权路由不会被裸挂到根路由）

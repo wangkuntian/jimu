@@ -21,21 +21,23 @@ import (
 	"jimu/tools/generator/frameworkmanifest"
 	"jimu/tools/generator/manifest"
 	"jimu/tools/generator/plan"
+	"jimu/tools/generator/preflight"
 	"jimu/tools/generator/workspace"
 	"jimu/tools/internal/profileassets"
 )
 
 // NewOptions 是 `jimu new` 的全部输入。
 type NewOptions struct {
-	Dir     string
-	Profile string
-	With    string
-	Shape   string
-	Module  string
-	NoTidy  bool
-	DryRun  bool
-	Force   bool
-	Report  bool
+	Dir      string
+	Template string
+	Profile  string
+	With     string
+	Shape    string
+	Module   string
+	NoTidy   bool
+	DryRun   bool
+	Force    bool
+	Report   bool
 
 	// NoSelfCheck 只供本仓构建类测试使用；CLI 始终执行自检。
 	NoSelfCheck bool
@@ -45,6 +47,8 @@ type NewOptions struct {
 type Result struct {
 	Dir          string
 	Module       string
+	Template     string
+	Support      string
 	Shape        string
 	Capabilities []string
 	CopySet      []string
@@ -70,7 +74,7 @@ func NewProject(opts NewOptions) (*Result, error) {
 		return nil, err
 	}
 	doc, err := frameworkmanifest.Export(frameworkmanifest.Request{
-		Root: root, Profile: opts.Profile, With: opts.With, Shape: opts.Shape, Module: module,
+		Root: root, Template: opts.Template, Profile: opts.Profile, With: opts.With, Shape: opts.Shape, Module: module,
 	})
 	if err != nil {
 		return nil, err
@@ -81,6 +85,9 @@ func NewProject(opts NewOptions) (*Result, error) {
 	if _, err := plan.Build(doc); err != nil {
 		return nil, err
 	}
+	if err := preflight.Validate(doc); err != nil {
+		return nil, fmt.Errorf("preflight: %w", err)
+	}
 	created, err := workspace.Create(doc, workspace.CreateOptions{
 		Target: opts.Dir, SourceRoot: root, Module: module, Force: opts.Force,
 		NoTidy: opts.NoTidy, DryRun: opts.DryRun, Report: opts.Report, NoSelfCheck: opts.NoSelfCheck,
@@ -89,7 +96,8 @@ func NewProject(opts NewOptions) (*Result, error) {
 		return nil, err
 	}
 	return &Result{
-		Dir: created.Target, Module: created.Module, Shape: doc.Selection.Shape,
+		Dir: created.Target, Module: created.Module, Template: doc.Selection.Template,
+		Support: doc.Selection.Support, Shape: doc.Selection.Shape,
 		Capabilities: slices.Clone(doc.Selection.Capabilities),
 		CopySet:      manifestCapabilityNames(doc), Drivers: flattenDrivers(doc.Selection.Drivers),
 		Assets: manifestAssetNames(doc), Files: slices.Clone(created.Files), FileCount: created.FileCount,

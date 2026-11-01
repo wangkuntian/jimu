@@ -1,0 +1,45 @@
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"{{.Module}}/internal/config"
+	"{{.Module}}/internal/store"
+)
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Fprintln(os.Stderr, "usage: jimu <migrate [up]|seed>")
+		os.Exit(2)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		fail(err)
+	}
+	db, err := store.OpenDB(cfg.DB)
+	if err != nil {
+		fail(err)
+	}
+	defer func() { _ = store.CloseDB(db) }()
+
+	switch os.Args[1] {
+	case "migrate":
+		if len(os.Args) > 2 && os.Args[2] != "up" {
+			fail(fmt.Errorf("unknown migrate command %q", os.Args[2]))
+		}
+		err = store.Migrate(db)
+	case "seed":
+		err = store.Seed(db)
+	default:
+		fail(fmt.Errorf("unknown command %q", os.Args[1]))
+	}
+	if err != nil {
+		fail(err)
+	}
+}
+
+func fail(err error) {
+	fmt.Fprintln(os.Stderr, err)
+	os.Exit(1)
+}

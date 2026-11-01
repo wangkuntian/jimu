@@ -1,0 +1,144 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/go-playground/validator/v10"
+	"github.com/spf13/viper"
+)
+
+type Config struct {
+	HTTP       HTTPConfig       `mapstructure:"http" validate:"required"`
+	Management ManagementConfig `mapstructure:"management" validate:"required"`
+	Log        LogConfig        `mapstructure:"log" validate:"required"`
+	DB         DBConfig         `mapstructure:"db" validate:"required"`
+	Redis      RedisConfig      `mapstructure:"redis" validate:"required"`
+	ID         IDConfig         `mapstructure:"id" validate:"required"`
+	Auth       AuthConfig       `mapstructure:"auth" validate:"required"`
+}
+
+type HTTPConfig struct {
+	Host                 string   `mapstructure:"host" validate:"required"`
+	Port                 int      `mapstructure:"port" validate:"min=1,max=65535"`
+	Mode                 string   `mapstructure:"mode" validate:"required,oneof=debug release test"`
+	ReadHeaderTimeoutSec int      `mapstructure:"read_header_timeout_sec" validate:"min=1"`
+	ReadTimeoutSec       int      `mapstructure:"read_timeout_sec" validate:"min=1"`
+	WriteTimeoutSec      int      `mapstructure:"write_timeout_sec" validate:"min=1"`
+	IdleTimeoutSec       int      `mapstructure:"idle_timeout_sec" validate:"min=1"`
+	ShutdownTimeoutSec   int      `mapstructure:"shutdown_timeout_sec" validate:"min=1"`
+	MaxBodyBytes         int64    `mapstructure:"max_body_bytes" validate:"min=1"`
+	TrustedProxies       []string `mapstructure:"trusted_proxies"`
+	AllowedOrigins       []string `mapstructure:"allowed_origins"`
+}
+
+type ManagementConfig struct {
+	Host            string `mapstructure:"host" validate:"required"`
+	Port            int    `mapstructure:"port" validate:"min=1,max=65535"`
+	EnablePprof     bool   `mapstructure:"enable_pprof"`
+	ProbeTimeoutSec int    `mapstructure:"probe_timeout_sec" validate:"min=1"`
+}
+
+type LogConfig struct {
+	Level      string `mapstructure:"level" validate:"required,oneof=debug info warn error"`
+	Format     string `mapstructure:"format" validate:"required,oneof=json console"`
+	Output     string `mapstructure:"output" validate:"required"`
+	MaxSize    int    `mapstructure:"max_size" validate:"min=1"`
+	MaxBackups int    `mapstructure:"max_backups" validate:"min=1"`
+	MaxAge     int    `mapstructure:"max_age" validate:"min=1"`
+	Compress   bool   `mapstructure:"compress"`
+}
+
+type DBConfig struct {
+	Host     string `mapstructure:"host" validate:"required"`
+	Port     int    `mapstructure:"port" validate:"min=1,max=65535"`
+	User     string `mapstructure:"user" validate:"required"`
+	Password string `mapstructure:"password"`
+	Database string `mapstructure:"database" validate:"required"`
+	MaxOpen  int    `mapstructure:"max_open" validate:"min=1"`
+	MaxIdle  int    `mapstructure:"max_idle" validate:"min=1"`
+}
+
+type RedisConfig struct {
+	Addr     string `mapstructure:"addr" validate:"required"`
+	Password string `mapstructure:"password"`
+	DB       int    `mapstructure:"db" validate:"min=0"`
+}
+
+type IDConfig struct {
+	WorkerID int64 `mapstructure:"worker_id" validate:"min=0,max=1023"`
+}
+
+type AuthConfig struct {
+	JWTSecret       string `mapstructure:"jwt_secret"`
+	Issuer          string `mapstructure:"issuer" validate:"required"`
+	AccessExpireMin int    `mapstructure:"access_expire_min" validate:"min=1"`
+	RefreshExpireDay int   `mapstructure:"refresh_expire_day" validate:"min=1"`
+}
+
+func Load() (*Config, error) {
+	v := viper.New()
+	v.SetConfigFile(configPath())
+	if err := v.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("read %s: %w", configPath(), err)
+	}
+	var cfg Config
+	if err := v.UnmarshalExact(&cfg); err != nil {
+		return nil, fmt.Errorf("decode config: %w", err)
+	}
+	applyEnvironment(&cfg)
+	if cfg.Auth.JWTSecret == "" {
+		return nil, fmt.Errorf("auth.jwt_secret is required (JWT_SECRET or JWT_SECRET_FILE)")
+	}
+	if err := validator.New().Struct(&cfg); err != nil {
+		return nil, fmt.Errorf("validate config: %w", err)
+	}
+	return &cfg, nil
+}
+
+func configPath() string {
+	env := strings.TrimSpace(os.Getenv("APP_ENV"))
+	if env != "" && env != "dev" {
+		candidate := filepath.Join("configs", "app."+env+".yaml")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return filepath.Join("configs", "app.yaml")
+}
+
+func applyEnvironment(cfg *Config) {
+	overrides := map[string]any{
+		"HTTP_HOST": &cfg.HTTP.Host, "HTTP_PORT": &cfg.HTTP.Port,
+		"MANAGEMENT_HOST": &cfg.Management.Host, "MANAGEMENT_PORT": &cfg.Management.Port,
+		"LOG_LEVEL": &cfg.Log.Level,
+		"DB_HOST": &cfg.DB.Host, "DB_PORT": &cfg.DB.Port, "DB_USER": &cfg.DB.User,
+		"DB_NAME": &cfg.DB.Database, "REDIS_ADDR": &cfg.Redis.Addr, "REDIS_DB": &cfg.Redis.DB,
+	}
+	for key, target := range overrides {
+		if value := os.Getenv(key); value != "" {
+			_, _ = fmt.Sscan(value, target)
+		}
+	}
+	if value := envOrFile("DB_PASSWORD_FILE", "DB_PASSWORD"); value != "" {
+		cfg.DB.Password = value
+	}
+	if value := envOrFile("REDIS_PASSWORD_FILE", "REDIS_PASSWORD"); value != "" {
+		cfg.Redis.Password = value
+	}
+	if value := envOrFile("JWT_SECRET_FILE", "JWT_SECRET"); value != "" {
+		cfg.Auth.JWTSecret = value
+	}
+}
+
+func envOrFile(fileKey, valueKey string) string {
+	if file := os.Getenv(fileKey); file != "" {
+		content, err := os.ReadFile(file)
+		if err == nil {
+			return strings.TrimSpace(string(content))
+		}
+	}
+	return strings.TrimSpace(os.Getenv(valueKey))
+}

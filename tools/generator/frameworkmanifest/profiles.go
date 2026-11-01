@@ -34,6 +34,7 @@ func resolveSelection(root string, req Request) (selection, error) {
 			return selection{}, err
 		}
 		selected.profile = req.Profile
+		selected.support = "internal"
 		selected.shape = req.Profile
 		declared := map[string]bool{}
 		for _, item := range assemblyValue.Capabilities {
@@ -58,6 +59,7 @@ func resolveSelection(root string, req Request) (selection, error) {
 		}
 		selected.assemblies = slices.Clone(assemblyValue.Capabilities)
 	} else {
+		selected.support = "experimental"
 		selected.shape = req.Shape
 		if selected.shape == "" {
 			selected.shape = "app"

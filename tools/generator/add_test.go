@@ -306,13 +306,24 @@ func TestAddCapabilityPreservesEditedConfigSectionsAndIsIdempotent(t *testing.T)
 // **绝不**自动补全闭包（否则用户以为只加了一个能力，实际装配集被悄悄扩大）。
 func TestAddCapabilityRejectsMissingHardDependency(t *testing.T) {
 	root := frameworkRootForTest(t)
-	dir := generateForTest(t, NewOptions{With: "user", Shape: "app"})
+	dir := generateForTest(t, NewOptions{With: withProtectedProvider("user"), Shape: "app"})
 	before := hashTree(t, dir)
 
 	_, err := AddCapability(AddOptions{Dir: dir, Name: "passkey", From: root})
 	require.ErrorContains(t, err, `requires "auth"`)
 	require.ErrorContains(t, err, "add it first")
 	assert.Equal(t, before, hashTree(t, dir), "校验失败不得留下半成品")
+	noStagingResidue(t, dir)
+}
+
+func TestAddCapabilityRejectsPreflightFailureBeforeWriting(t *testing.T) {
+	root := frameworkRootForTest(t)
+	dir := generateForTest(t, NewOptions{With: "captcha", Shape: "app"})
+	before := hashTree(t, dir)
+
+	_, err := AddCapability(AddOptions{Dir: dir, Name: "queue", From: root})
+	require.ErrorContains(t, err, "protected middleware")
+	assert.Equal(t, before, hashTree(t, dir), "预检失败不得留下半成品")
 	noStagingResidue(t, dir)
 }
 
@@ -478,18 +489,19 @@ func TestAddCapabilityRejectsUnknownCapability(t *testing.T) {
 func TestManifestSaveLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	want := manifest.Document{
-		SchemaVersion:  manifest.CurrentSchemaVersion,
-		Framework:      manifest.Framework{Module: "jimu", Version: "v0.3.3", Commit: "deadbeef"},
-		Selection:      manifest.Selection{Shape: "minimal", Profile: "minimal", Capabilities: []string{"user", "access"}, Drivers: map[string][]string{"queue": {"redis"}}},
-		Capabilities:   []manifest.Capability{},
-		Copy:           []manifest.CopyAction{},
-		Templates:      []manifest.TemplateAction{},
-		Merges:         []manifest.MergeAction{},
-		Assets:         []manifest.AssetAction{},
-		Prune:          []manifest.PruneRule{},
-		Report:         manifest.ReportSpec{Capabilities: []string{}, Migrations: []string{}, Tables: []string{}, HeavyDeps: []string{}},
-		GeneratedFiles: []string{"go.mod"},
-		Rewrites:       []manifest.RewriteAction{{Kind: "module", From: "jimu", To: "example.com/proj", Files: []string{}}},
+		SchemaVersion:       manifest.CurrentSchemaVersion,
+		Framework:           manifest.Framework{Module: "jimu", Version: "v0.3.3", Commit: "deadbeef", Dirty: true},
+		Selection:           manifest.Selection{Shape: "minimal", Profile: "minimal", Capabilities: []string{"user", "access"}, Drivers: map[string][]string{"queue": {"redis"}}},
+		Capabilities:        []manifest.Capability{},
+		Copy:                []manifest.CopyAction{},
+		Templates:           []manifest.TemplateAction{},
+		Merges:              []manifest.MergeAction{},
+		Assets:              []manifest.AssetAction{},
+		Prune:               []manifest.PruneRule{},
+		Report:              manifest.ReportSpec{Capabilities: []string{}, Migrations: []string{}, Tables: []string{}, HeavyDeps: []string{}},
+		GeneratedFiles:      []string{"go.mod"},
+		GeneratedFileSHA256: map[string]string{"go.mod": "sha256:" + strings.Repeat("a", 64)},
+		Rewrites:            []manifest.RewriteAction{{Kind: "module", From: "jimu", To: "example.com/proj", Files: []string{}}},
 	}
 	digest, err := manifest.Digest(want)
 	require.NoError(t, err)
@@ -615,7 +627,7 @@ func TestAddCapabilityForceOnUngatedIsIdempotent(t *testing.T) {
 		cap  string
 	}{
 		{"minimal + encryption --force", NewOptions{Profile: "minimal"}, "encryption"},
-		{"with ws + ws --force", NewOptions{With: "ws", Shape: "app"}, "ws"},
+		{"with ws + ws --force", NewOptions{With: withProtectedProvider("ws"), Shape: "app"}, "ws"},
 	}
 	cache := newTestGoCache(t) // 两个用例共用一份专用缓存（cmd/server 只全量编译一次）
 	for _, tc := range cases {

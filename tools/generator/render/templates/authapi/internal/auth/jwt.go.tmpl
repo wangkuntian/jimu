@@ -1,0 +1,109 @@
+package auth
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"time"
+
+	"{{.Module}}/internal/config"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+const (
+	AccessTokenType  = "access"
+	RefreshTokenType = "refresh"
+)
+
+type Claims struct {
+	UserID    uint64 `json:"uid"`
+	TenantID  uint64 `json:"tid"`
+	TokenType string `json:"typ"`
+	jwt.RegisteredClaims
+}
+
+type TokenManager struct {
+	secret     []byte
+	issuer     string
+	accessTTL  time.Duration
+	refreshTTL time.Duration
+}
+
+type TokenPair struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int64  `json:"expires_in"`
+}
+
+func NewTokenManager(cfg config.AuthConfig) *TokenManager {
+	return &TokenManager{
+		secret: []byte(cfg.JWTSecret), issuer: cfg.Issuer,
+		accessTTL: time.Duration(cfg.AccessExpireMin) * time.Minute,
+		refreshTTL: time.Duration(cfg.RefreshExpireDay) * 24 * time.Hour,
+	}
+}
+
+func (m *TokenManager) IssuePair(userID, tenantID uint64) (TokenPair, string, error) {
+	now := time.Now()
+	refreshID, err := randomID()
+	if err != nil {
+		return TokenPair{}, "", err
+	}
+	access, err := m.sign(userID, tenantID, AccessTokenType, now.Add(m.accessTTL), "")
+	if err != nil {
+		return TokenPair{}, "", err
+	}
+	refresh, err := m.sign(userID, tenantID, RefreshTokenType, now.Add(m.refreshTTL), refreshID)
+	if err != nil {
+		return TokenPair{}, "", err
+	}
+	return TokenPair{AccessToken: access, RefreshToken: refresh, ExpiresIn: int64(m.accessTTL.Seconds())}, refreshID, nil
+}
+
+func (m *TokenManager) sign(userID, tenantID uint64, tokenType string, expires time.Time, id string) (string, error) {
+	claims := Claims{
+		UserID: userID, TenantID: tenantID, TokenType: tokenType,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer: m.issuer, Subject: fmt.Sprint(userID), ID: id,
+			IssuedAt: jwt.NewNumericDate(time.Now()), ExpiresAt: jwt.NewNumericDate(expires),
+		},
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secret)
+}
+
+func (m *TokenManager) ParseAccess(token string) (*Claims, error) {
+	return m.parse(token, AccessTokenType)
+}
+
+func (m *TokenManager) ParseRefresh(token string) (*Claims, error) {
+	return m.parse(token, RefreshTokenType)
+}
+
+func (m *TokenManager) RefreshTTL() time.Duration { return m.refreshTTL }
+
+func (m *TokenManager) parse(token, tokenType string) (*Claims, error) {
+	claims := &Claims{}
+	parsed, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (any, error) {
+		if token.Method != jwt.SigningMethodHS256 {
+			return nil, errors.New("unexpected signing method")
+		}
+		return m.secret, nil
+	}, jwt.WithIssuer(m.issuer), jwt.WithExpirationRequired())
+	if err != nil || !parsed.Valid {
+		return nil, errors.New("invalid token")
+	}
+	if claims.TokenType != tokenType {
+		return nil, errors.New("invalid token type")
+	}
+	return claims, nil
+}
+
+func randomID() (string, error) {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(value[:]), nil
+}

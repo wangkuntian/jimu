@@ -14,6 +14,28 @@ const (
 	MountSelfManaged MountPoint = "self-managed"
 )
 
+// ProtectedHTTPMiddlewareMode 声明能力如何参与受保护路由的中间件链。
+//
+// primary 是默认提供者；fallback 只在没有 primary 时接管。apikey 在含 auth 的形态中
+// 返回空链让位，因此它必须声明为 fallback，而不能靠运行时类型断言推断。
+type ProtectedHTTPMiddlewareMode string
+
+const (
+	ProtectedHTTPMiddlewareNone     ProtectedHTTPMiddlewareMode = ""
+	ProtectedHTTPMiddlewarePrimary  ProtectedHTTPMiddlewareMode = "primary"
+	ProtectedHTTPMiddlewareFallback ProtectedHTTPMiddlewareMode = "fallback"
+)
+
+// RuntimeService 是能力在运行期必须存在的外部服务。
+type RuntimeService string
+
+const (
+	RuntimeServiceMySQL    RuntimeService = "mysql"
+	RuntimeServiceRedis    RuntimeService = "redis"
+	RuntimeServiceKafka    RuntimeService = "kafka"
+	RuntimeServiceRabbitMQ RuntimeService = "rabbitmq"
+)
+
 // Permission 能力声明的权限点：种子阶段写入 permissions 表并授予超管角色。
 type Permission struct {
 	Name     string // 中文名称（permissions.name）
@@ -60,6 +82,18 @@ type Descriptor struct {
 	// Migrations 能力自带迁移的嵌入文件系统（根下应有 mysql/ 与 postgres/ 子目录）；
 	// nil 表示该能力无迁移。
 	Migrations fs.FS
+
+	// MigrationSchemaDeps 是本能力迁移依赖的其他能力 schema，例如 user/access 需要
+	// tenant 的迁移先把 tenant_id 列加上。依赖目标必须在框架全量能力清单中。
+	MigrationSchemaDeps []string
+
+	// RuntimeServices 是本能力启动和运行所需的外部服务。生成器用它推导配置、Compose
+	// 和启动预检；空表示不依赖外部服务。
+	RuntimeServices []RuntimeService
+
+	// ProtectedHTTPMiddleware 声明本能力是否提供受保护路由的认证/租户注入链。
+	// primary 是默认提供者；fallback 只在没有 primary 时生效。
+	ProtectedHTTPMiddleware ProtectedHTTPMiddlewareMode
 
 	// Configs 能力拥有的配置段；nil 表示该能力的配置由内核段承担或无配置。
 	// 一个能力可拥有多段（如 queue 同时拥有 queue 与 scheduler）。

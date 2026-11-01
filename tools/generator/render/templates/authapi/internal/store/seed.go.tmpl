@@ -1,0 +1,90 @@
+package store
+
+import (
+	"errors"
+	"os"
+	"strings"
+
+	"{{.Module}}/internal/auth"
+	"{{.Module}}/internal/domain"
+
+	"gorm.io/gorm"
+)
+
+var permissionDefinitions = []domain.Permission{
+	{Name: "用户列表", Resource: "/api/v1/users", Action: "GET"},
+	{Name: "用户创建", Resource: "/api/v1/users", Action: "POST"},
+	{Name: "用户详情", Resource: "/api/v1/users/*", Action: "GET"},
+	{Name: "用户修改", Resource: "/api/v1/users/*", Action: "PUT"},
+	{Name: "用户删除", Resource: "/api/v1/users/*", Action: "DELETE"},
+	{Name: "用户分配角色", Resource: "/api/v1/users/*/roles", Action: "POST"},
+	{Name: "角色选项", Resource: "/api/v1/roles/options", Action: "GET"},
+	{Name: "角色列表", Resource: "/api/v1/roles", Action: "GET"},
+	{Name: "角色创建", Resource: "/api/v1/roles", Action: "POST"},
+	{Name: "角色详情", Resource: "/api/v1/roles/*", Action: "GET"},
+	{Name: "角色修改", Resource: "/api/v1/roles/*", Action: "PUT"},
+	{Name: "角色删除", Resource: "/api/v1/roles/*", Action: "DELETE"},
+	{Name: "角色权限详情", Resource: "/api/v1/roles/*/permissions", Action: "GET"},
+	{Name: "角色分配权限", Resource: "/api/v1/roles/*/permissions", Action: "POST"},
+	{Name: "权限列表", Resource: "/api/v1/permissions", Action: "GET"},
+	{Name: "权限创建", Resource: "/api/v1/permissions", Action: "POST"},
+	{Name: "权限详情", Resource: "/api/v1/permissions/*", Action: "GET"},
+	{Name: "权限修改", Resource: "/api/v1/permissions/*", Action: "PUT"},
+	{Name: "权限删除", Resource: "/api/v1/permissions/*", Action: "DELETE"},
+}
+
+func Seed(db *gorm.DB) error {
+	password := adminPassword()
+	if password == "" {
+		return errors.New("ADMIN_PASSWORD_FILE or ADMIN_PASSWORD is required for seed")
+	}
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return err
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		tenant := domain.Tenant{ID: 1, Code: "default", Name: "Default", Status: 1}
+		if err := tx.Where("id = ?", 1).FirstOrCreate(&tenant).Error; err != nil {
+			return err
+		}
+		role := domain.Role{TenantID: 1, Name: "Administrator", Code: "admin", Scope: "tenant", IsSystem: true, Status: 1}
+		if err := tx.Where("tenant_id = ? AND code = ?", 1, "admin").FirstOrCreate(&role).Error; err != nil {
+			return err
+		}
+		for _, permission := range permissionDefinitions {
+			item := permission
+			if err := tx.Where("resource = ? AND action = ?", item.Resource, item.Action).FirstOrCreate(&item).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("role_id = ? AND permission_id = ?", role.ID, item.ID).
+				FirstOrCreate(&domain.RolePermission{RoleID: role.ID, PermissionID: item.ID}).Error; err != nil {
+				return err
+			}
+		}
+		user := domain.User{TenantID: 1, Username: "admin", PasswordHash: hash, Status: 1}
+		if err := tx.Where("username = ?", "admin").FirstOrCreate(&user).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ? AND role_id = ?", user.ID, role.ID).
+			FirstOrCreate(&domain.UserRole{UserID: user.ID, RoleID: role.ID}).Error; err != nil {
+			return err
+		}
+		var historyCount int64
+		if err := tx.Model(&domain.PasswordHistory{}).Where("user_id = ?", user.ID).Count(&historyCount).Error; err != nil {
+			return err
+		}
+		if historyCount == 0 {
+			return tx.Create(&domain.PasswordHistory{UserID: user.ID, PasswordHash: hash}).Error
+		}
+		return nil
+	})
+}
+
+func adminPassword() string {
+	if file := strings.TrimSpace(os.Getenv("ADMIN_PASSWORD_FILE")); file != "" {
+		if content, err := os.ReadFile(file); err == nil {
+			return strings.TrimSpace(string(content))
+		}
+	}
+	return strings.TrimSpace(os.Getenv("ADMIN_PASSWORD"))
+}

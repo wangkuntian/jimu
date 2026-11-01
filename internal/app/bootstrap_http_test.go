@@ -46,7 +46,9 @@ func TestRegisterHTTPAppliesProtectedMiddlewareByMountPoint(t *testing.T) {
 	router := gin.New()
 
 	// 名称刻意不用 auth/oauth：当前实现按名称特判，本用例必须能在该实现下失败。
-	self := &protectedProvider{probeModule{name: "probe-self", desc: contract.Descriptor{Name: "probe-self", Mount: contract.MountSelfManaged}}}
+	self := &protectedProvider{probeModule{name: "probe-self", desc: contract.Descriptor{
+		Name: "probe-self", Mount: contract.MountSelfManaged, ProtectedHTTPMiddleware: contract.ProtectedHTTPMiddlewarePrimary,
+	}}}
 	prot := &probeModule{name: "probe-prot", desc: contract.Descriptor{Name: "probe-prot", Mount: contract.MountProtected}}
 	pub := &probeModule{name: "probe-pub", desc: contract.Descriptor{Name: "probe-pub", Mount: contract.MountPublic}}
 
@@ -102,8 +104,12 @@ func TestRegisterHTTPFailsClosedWithoutProtectedProvider(t *testing.T) {
 func TestRegisterHTTPFailsClosedWithMultipleProtectedProviders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	a := &protectedProvider{probeModule{name: "probe-a", desc: contract.Descriptor{Name: "probe-a", Mount: contract.MountSelfManaged}}}
-	b := &protectedProvider{probeModule{name: "probe-b", desc: contract.Descriptor{Name: "probe-b", Mount: contract.MountSelfManaged}}}
+	a := &protectedProvider{probeModule{name: "probe-a", desc: contract.Descriptor{
+		Name: "probe-a", Mount: contract.MountSelfManaged, ProtectedHTTPMiddleware: contract.ProtectedHTTPMiddlewarePrimary,
+	}}}
+	b := &protectedProvider{probeModule{name: "probe-b", desc: contract.Descriptor{
+		Name: "probe-b", Mount: contract.MountSelfManaged, ProtectedHTTPMiddleware: contract.ProtectedHTTPMiddlewarePrimary,
+	}}}
 
 	err := registerHTTP(router, nil, nil, a, b)
 	if err == nil {
@@ -130,8 +136,12 @@ func (p *emptyProtectedProvider) ProtectedHTTPMiddleware() ([]gin.HandlerFunc, e
 func TestRegisterHTTPIgnoresEmptyProtectedProvider(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	real := &protectedProvider{probeModule{name: "probe-a", desc: contract.Descriptor{Name: "probe-a", Mount: contract.MountSelfManaged}}}
-	yield := &emptyProtectedProvider{probeModule{name: "probe-b", desc: contract.Descriptor{Name: "probe-b", Mount: contract.MountSelfManaged}}}
+	real := &protectedProvider{probeModule{name: "probe-a", desc: contract.Descriptor{
+		Name: "probe-a", Mount: contract.MountSelfManaged, ProtectedHTTPMiddleware: contract.ProtectedHTTPMiddlewarePrimary,
+	}}}
+	yield := &emptyProtectedProvider{probeModule{name: "probe-b", desc: contract.Descriptor{
+		Name: "probe-b", Mount: contract.MountSelfManaged, ProtectedHTTPMiddleware: contract.ProtectedHTTPMiddlewareFallback,
+	}}}
 	prot := &probeModule{name: "probe-prot", desc: contract.Descriptor{Name: "probe-prot", Mount: contract.MountProtected}}
 
 	if err := registerHTTP(router, nil, nil, real, yield, prot); err != nil {
@@ -175,5 +185,38 @@ func TestRegisterHTTPFailsClosedWhenExtraProtectedIsPresent(t *testing.T) {
 	}
 	if prot.registered {
 		t.Fatalf("capability %q must not be registered when no middleware provider exists", prot.name)
+	}
+}
+
+func TestRegisterHTTPRejectsUndeclaredProtectedMiddlewareProvider(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	provider := &protectedProvider{probeModule{name: "probe", desc: contract.Descriptor{
+		Name: "probe", Mount: contract.MountSelfManaged,
+	}}}
+
+	err := registerHTTP(router, nil, nil, provider)
+	if err == nil {
+		t.Fatal("expected error when a module provides middleware without declaring it")
+	}
+	if !strings.Contains(err.Error(), "does not declare") {
+		t.Fatalf("error = %v, want undeclared provider error", err)
+	}
+}
+
+func TestRegisterHTTPRejectsDeclaredFallbackWithoutImplementation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	module := &probeModule{name: "probe", desc: contract.Descriptor{
+		Name: "probe", Mount: contract.MountProtected,
+		ProtectedHTTPMiddleware: contract.ProtectedHTTPMiddlewareFallback,
+	}}
+
+	err := registerHTTP(router, nil, nil, module)
+	if err == nil {
+		t.Fatal("expected error when a capability declares fallback middleware without implementing it")
+	}
+	if !strings.Contains(err.Error(), "does not implement") {
+		t.Fatalf("error = %v, want missing implementation error", err)
 	}
 }

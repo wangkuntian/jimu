@@ -1,13 +1,17 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "framework": {
     "module": "jimu",
     "version": "dev",
-    "commit": "\u003ccommit\u003e"
+    "commit": "\u003ccommit\u003e",
+    "dirty": true
   },
   "selection": {
     "shape": "app",
+    "template": "",
+    "template_version": "",
     "profile": "",
+    "support": "experimental",
     "capabilities": [
       "user",
       "access",
@@ -67,7 +71,14 @@
         "internal/capabilities/user/migrations/mysql/008_user_version.sql"
       ],
       "drivers": null,
-      "assets": null
+      "assets": null,
+      "protected_http_middleware": "",
+      "migration_schema_deps": [
+        "tenant"
+      ],
+      "runtime_services": [
+        "mysql"
+      ]
     },
     {
       "name": "access",
@@ -165,7 +176,14 @@
         "internal/capabilities/access/migrations/mysql/009_role_system_metadata.sql"
       ],
       "drivers": null,
-      "assets": null
+      "assets": null,
+      "protected_http_middleware": "",
+      "migration_schema_deps": [
+        "tenant"
+      ],
+      "runtime_services": [
+        "mysql"
+      ]
     },
     {
       "name": "tenant",
@@ -237,7 +255,12 @@
         "internal/capabilities/tenant/migrations/mysql/014_tenant_plans.sql"
       ],
       "drivers": null,
-      "assets": null
+      "assets": null,
+      "protected_http_middleware": "",
+      "migration_schema_deps": [],
+      "runtime_services": [
+        "mysql"
+      ]
     },
     {
       "name": "queue",
@@ -266,7 +289,12 @@
         "kafka",
         "rabbitmq"
       ],
-      "assets": null
+      "assets": null,
+      "protected_http_middleware": "",
+      "migration_schema_deps": [],
+      "runtime_services": [
+        "mysql"
+      ]
     }
   ],
   "copy": [
@@ -1147,6 +1175,7 @@
     "internal/app/capconfig.go",
     "internal/app/capconfig_test.go",
     "internal/app/container.go",
+    "internal/app/container_http_only_test.go",
     "internal/app/seed.go",
     "internal/app/seed_test.go",
     "internal/assembly/assembly.go",
@@ -1505,5 +1534,6 @@
     "tools/profileassets/main.go",
     "tools/profileoverlay/main.go"
   ],
-  "digest": "sha256:7e382dce6d5b2f96c40c779ceec45c0016011fa258ad572a5edf9ee3ac16acfd"
+  "generated_file_sha256": {},
+  "digest": "sha256:20bb23153760a70c582daaf8ff96a9b7d9e40b59b7eb81c767cf510eb748885b"
 }

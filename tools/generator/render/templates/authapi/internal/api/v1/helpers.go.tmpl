@@ -1,0 +1,133 @@
+package v1
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strconv"
+
+	"{{.Module}}/internal/auth"
+	"{{.Module}}/internal/domain"
+	"{{.Module}}/internal/shared/errorx"
+	"{{.Module}}/internal/shared/response"
+
+	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
+)
+
+type Handler struct {
+	db     *gorm.DB
+	redis  *redis.Client
+	tokens *auth.TokenManager
+}
+
+type roleView struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Code string `json:"code"`
+}
+
+type permissionView struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Resource string `json:"resource"`
+	Action   string `json:"action"`
+}
+
+type userView struct {
+	ID       string       `json:"id"`
+	Username string       `json:"username"`
+	Email    string       `json:"email"`
+	Phone    string       `json:"phone"`
+	Status   int          `json:"status"`
+	Roles    []roleView   `json:"roles"`
+}
+
+func bindJSON[T any](c *gin.Context) (T, bool) {
+	var value T
+	if err := c.ShouldBindJSON(&value); err != nil {
+		response.Fail(c, http.StatusBadRequest, errorx.BadRequest("invalid request body"))
+		return value, false
+	}
+	return value, true
+}
+
+func parseID(c *gin.Context) (uint64, bool) {
+	value, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || value == 0 {
+		response.Fail(c, http.StatusBadRequest, errorx.BadRequest("invalid id"))
+		return 0, false
+	}
+	return value, true
+}
+
+func failDB(c *gin.Context, err error) {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		response.Fail(c, http.StatusNotFound, errorx.NotFound("not found"))
+		return
+	}
+	response.Fail(c, http.StatusInternalServerError, errorx.Internal("internal server error"))
+}
+
+func issuePair(ctx context.Context, h *Handler, user domain.User) (auth.TokenPair, error) {
+	pair, refreshID, err := h.tokens.IssuePair(user.ID, user.TenantID)
+	if err != nil {
+		return auth.TokenPair{}, err
+	}
+	if err := h.redis.Set(ctx, "auth:refresh:"+refreshID, user.ID, h.tokens.RefreshTTL()).Err(); err != nil {
+		return auth.TokenPair{}, err
+	}
+	return pair, nil
+}
+
+func rolesForUser(db *gorm.DB, userID uint64) ([]roleView, error) {
+	var roles []domain.Role
+	err := db.Table("roles r").
+		Select("r.*").
+		Joins("JOIN user_roles ur ON ur.role_id = r.id").
+		Where("ur.user_id = ? AND r.status = 1", userID).
+		Order("r.id").
+		Scan(&roles).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]roleView, 0, len(roles))
+	for _, role := range roles {
+		out = append(out, roleView{ID: strconv.FormatUint(role.ID, 10), Name: role.Name, Code: role.Code})
+	}
+	return out, nil
+}
+
+func permissionsForUser(db *gorm.DB, userID uint64) ([]permissionView, error) {
+	var permissions []domain.Permission
+	err := db.Table("permissions p").
+		Select("DISTINCT p.*").
+		Joins("JOIN role_permissions rp ON rp.permission_id = p.id").
+		Joins("JOIN user_roles ur ON ur.role_id = rp.role_id").
+		Where("ur.user_id = ?", userID).
+		Order("p.resource, p.action").
+		Scan(&permissions).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]permissionView, 0, len(permissions))
+	for _, permission := range permissions {
+		out = append(out, permissionView{
+			ID: strconv.FormatUint(permission.ID, 10), Name: permission.Name,
+			Resource: permission.Resource, Action: permission.Action,
+		})
+	}
+	return out, nil
+}
+
+func toUserView(db *gorm.DB, user domain.User) (userView, error) {
+	roles, err := rolesForUser(db, user.ID)
+	if err != nil {
+		return userView{}, err
+	}
+	return userView{
+		ID: strconv.FormatUint(user.ID, 10), Username: user.Username,
+		Email: user.Email, Phone: user.Phone, Status: user.Status, Roles: roles,
+	}, nil
+}

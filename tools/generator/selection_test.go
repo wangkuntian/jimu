@@ -53,7 +53,7 @@ func TestGeneratedProjectBuildsAndVetsForEverySelection(t *testing.T) {
 
 			dir := filepath.Join(t.TempDir(), "proj")
 			_, err := newProjectForTest(t, NewOptions{
-				Dir: dir, With: name, Module: "example.com/proj", NoTidy: true,
+				Dir: dir, With: withProtectedProvider(name), Module: "example.com/proj", NoTidy: true,
 			})
 			require.NoError(t, err)
 			assertProjectBuilds(t, dir, cache)
@@ -63,19 +63,20 @@ func TestGeneratedProjectBuildsAndVetsForEverySelection(t *testing.T) {
 }
 
 // TestSelectedCapabilityIsAssembledWithItsWholeCompileClosure 钉住端口化后的裁剪：
-// breach 仅复制自身完整代码；内核编译期仍需携带 access/tenant/user 的 domain。
+// breach 与受保护链 fallback apikey 都进入装配集；内核编译期仍需携带 access/tenant/user 的 domain。
 func TestSelectedCapabilityIsAssembledWithItsWholeCompileClosure(t *testing.T) {
 	requireHeavyMatrix(t)
 	dir := filepath.Join(t.TempDir(), "proj")
-	res, err := newProjectForTest(t, NewOptions{Dir: dir, With: "breach", Module: "example.com/proj", NoTidy: true})
+	res, err := newProjectForTest(t, NewOptions{Dir: dir, With: withProtectedProvider("breach"), Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 	// auth 是 breach 的可选运行时配置来源，不属于此生成项目的编译闭包。
 	assert.ElementsMatch(t,
-		[]string{"access", "breach", "tenant", "user"},
+		[]string{"access", "apikey", "breach", "tenant", "user"},
 		res.CopySet)
-	// 装配集只有 breach；其余三个能力仅携带 domain。
-	assert.Equal(t, []string{"breach"}, res.Capabilities, "Capabilities 是装配集（Declared）")
+	// apikey 是受保护链 fallback，与 breach 一起装配；其余三个能力仅携带 domain。
+	assert.Equal(t, []string{"apikey", "breach"}, res.Capabilities, "Capabilities 是装配集（Declared）")
 	for _, p := range []string{
+		"internal/capabilities/apikey/wire.go",
 		"internal/capabilities/breach/wire.go",
 		"internal/capabilities/access/domain",
 		"internal/capabilities/tenant/domain",
@@ -151,10 +152,10 @@ func TestGeneratedProjectTestTreeIsGreen(t *testing.T) {
 		{"profile saas", NewOptions{Profile: "saas"}},
 		{"profile enterprise", NewOptions{Profile: "enterprise"}},
 		{"profile machine", NewOptions{Profile: "machine"}},
-		{"with queue", NewOptions{With: "queue"}},
-		{"with storage", NewOptions{With: "storage"}},
+		{"with queue", NewOptions{With: withProtectedProvider("queue")}},
+		{"with storage", NewOptions{With: withProtectedProvider("storage")}},
 		{"with apidocs", NewOptions{With: "apidocs"}},
-		{"with grpc", NewOptions{With: "grpc"}},
+		{"with grpc", NewOptions{With: withProtectedProvider("grpc")}},
 	}
 	indices, err := scaffoldShardIndices(os.Getenv(scaffoldShardEnv), len(cases))
 	require.NoError(t, err)
@@ -228,7 +229,7 @@ func TestFullProfileKeepsCompositionDependentTests(t *testing.T) {
 	}
 
 	subset := filepath.Join(t.TempDir(), "subset")
-	_, err = newProjectForTest(t, NewOptions{Dir: subset, With: "queue", Module: "example.com/proj", NoTidy: true})
+	_, err = newProjectForTest(t, NewOptions{Dir: subset, With: withProtectedProvider("queue"), Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 	for _, rel := range compositionDeps {
 		assert.NoFileExists(t, filepath.Join(subset, filepath.FromSlash(rel)), "子集选区应裁掉组成依赖文件 %s", rel)
@@ -434,7 +435,7 @@ func TestParseCapabilitySetAcceptsUngatedCapabilities(t *testing.T) {
 func TestGeneratedCatalogKnownCoversEveryCapability(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	// user/access 会带出 schema 依赖 tenant，正好覆盖 Minor 7。
-	_, err := newProjectForTest(t, NewOptions{Dir: dir, With: "user,access", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, With: withProtectedProvider("user,access"), Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 	content, err := os.ReadFile(filepath.Join(dir, "internal/capabilities/catalog/catalog.go"))
 	require.NoError(t, err)

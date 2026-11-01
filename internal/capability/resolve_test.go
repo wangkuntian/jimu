@@ -188,6 +188,23 @@ func TestResolveReturnsDeepCopyOfDrivers(t *testing.T) {
 	assert.Equal(t, "csv", again[1].Drivers[0], "Resolve() must not expose the registry's Drivers backing array")
 }
 
+func TestResolveReturnsDeepCopyOfMigrationSchemaDepsAndRuntimeServices(t *testing.T) {
+	caps := []contract.Descriptor{{
+		Name:                "a",
+		MigrationSchemaDeps: []string{"b"},
+		RuntimeServices:     []contract.RuntimeService{contract.RuntimeServiceMySQL},
+	}}
+	got, err := Resolve(caps, []string{"a"})
+	require.NoError(t, err)
+	got[0].MigrationSchemaDeps[0] = "mutated"
+	got[0].RuntimeServices[0] = contract.RuntimeService("mutated")
+
+	again, err := Resolve(caps, []string{"a"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"b"}, again[0].MigrationSchemaDeps)
+	assert.Equal(t, []contract.RuntimeService{contract.RuntimeServiceMySQL}, again[0].RuntimeServices)
+}
+
 func TestResolveReportsFirstDanglingDependencyInListOrder(t *testing.T) {
 	// 两个坏依赖：错误必须稳定指向清单顺序里的第一个，而不是 map 遍历的随机一个
 	caps := []contract.Descriptor{
@@ -257,6 +274,22 @@ func TestValidateDeclarationsChecksKnownAgainstList(t *testing.T) {
 	require.NoError(t, ValidateDeclarations(caps, []string{"a", "b"}))
 	require.Error(t, ValidateDeclarations(caps, []string{"a"}), "known 少一项时软依赖名不得命中")
 	require.Error(t, ValidateDeclarations(caps, nil))
+}
+
+func TestValidateDeclarationsChecksMigrationSchemaDependencies(t *testing.T) {
+	known := []string{"a", "b"}
+	valid := []contract.Descriptor{{Name: "a", MigrationSchemaDeps: []string{"b"}}, {Name: "b"}}
+	require.NoError(t, ValidateDeclarations(valid, known))
+
+	for name, caps := range map[string][]contract.Descriptor{
+		"self dependency":     {{Name: "a", MigrationSchemaDeps: []string{"a"}}},
+		"unknown dependency":  {{Name: "a", MigrationSchemaDeps: []string{"ghost"}}},
+		"duplicate dependenc": {{Name: "a", MigrationSchemaDeps: []string{"b", "b"}}, {Name: "b"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.Error(t, ValidateDeclarations(caps, known))
+		})
+	}
 }
 
 // TestValidateDeclarationsRejectsStructureDefects 完整校验包含结构校验。

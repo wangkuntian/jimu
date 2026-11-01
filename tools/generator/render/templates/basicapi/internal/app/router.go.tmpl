@@ -1,0 +1,32 @@
+package app
+
+import (
+	"net/http"
+
+	v1 "{{.Module}}/internal/api/v1"
+	platformhttp "{{.Module}}/internal/platform/http"
+	"{{.Module}}/internal/platform/logging"
+	"{{.Module}}/internal/shared/errorx"
+	"{{.Module}}/internal/shared/response"
+
+	"github.com/gin-gonic/gin"
+)
+
+func NewRouter(log *logging.Logger, mode string, maxBodyBytes int64) *gin.Engine {
+	if mode == "release" {
+		gin.SetMode(gin.ReleaseMode)
+	} else if mode == "test" {
+		gin.SetMode(gin.TestMode)
+	}
+	router := gin.New()
+	router.HandleMethodNotAllowed = true
+	router.Use(platformhttp.RequestID(), platformhttp.AccessLog(log), platformhttp.Recovery(log), platformhttp.MaxBody(maxBodyBytes))
+	router.NoRoute(func(c *gin.Context) {
+		response.Fail(c, http.StatusNotFound, errorx.NotFound("route not found"))
+	})
+	router.NoMethod(func(c *gin.Context) {
+		response.Fail(c, http.StatusMethodNotAllowed, errorx.MethodNotAllowed("method not allowed"))
+	})
+	v1.RegisterRoutes(router.Group("/api/v1"))
+	return router
+}

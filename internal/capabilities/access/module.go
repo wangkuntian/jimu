@@ -61,12 +61,14 @@ var migrationsFS embed.FS
 
 // Descriptor 声明访问控制能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:         "access",
-	Requires:     []string{"user"},
-	SoftRequires: []string{"tenant"},
-	Migrations:   migrationsFS,
-	Owns:         []string{"roles", "permissions", "role_permissions", "user_roles"},
-	Mount:        contract.MountProtected,
+	Name:                "access",
+	Requires:            []string{"user"},
+	SoftRequires:        []string{"tenant"},
+	Migrations:          migrationsFS,
+	Owns:                []string{"roles", "permissions", "role_permissions", "user_roles"},
+	Mount:               contract.MountProtected,
+	MigrationSchemaDeps: []string{"tenant"},
+	RuntimeServices:     []contract.RuntimeService{contract.RuntimeServiceMySQL},
 	Permissions: []contract.Permission{
 		// 角色
 		{Name: "角色列表", Resource: "/api/v1/roles", Action: "GET"},

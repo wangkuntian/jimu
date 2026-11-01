@@ -1,0 +1,73 @@
+package http
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"net/http"
+	"runtime/debug"
+	"time"
+
+	"{{.Module}}/internal/platform/logging"
+	"{{.Module}}/internal/shared/errorx"
+	"{{.Module}}/internal/shared/response"
+
+	"github.com/gin-gonic/gin"
+)
+
+const requestIDHeader = "X-Request-ID"
+
+func RequestID() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		requestID := c.GetHeader(requestIDHeader)
+		if requestID == "" {
+			requestID = newRequestID()
+		}
+		c.Header(requestIDHeader, requestID)
+		c.Set("request_id", requestID)
+		c.Next()
+	}
+}
+
+func AccessLog(log *logging.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		log.Infow("http request",
+			"request_id", c.GetString("request_id"),
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path,
+			"status", c.Writer.Status(),
+			"duration_ms", time.Since(start).Milliseconds(),
+		)
+	}
+}
+
+func Recovery(log *logging.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				log.Errorw("http panic", "request_id", c.GetString("request_id"), "error", recovered, "stack", string(debug.Stack()))
+				response.Fail(c, http.StatusInternalServerError, errorx.Internal("internal server error"))
+				c.Abort()
+			}
+		}()
+		c.Next()
+	}
+}
+
+func MaxBody(limit int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.Body != nil {
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
+		}
+		c.Next()
+	}
+}
+
+func newRequestID() string {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		return "unknown"
+	}
+	return hex.EncodeToString(value[:])
+}

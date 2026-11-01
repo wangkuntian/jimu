@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,7 +10,7 @@ import (
 
 func validDocument() Document {
 	return Document{
-		SchemaVersion: 1,
+		SchemaVersion: CurrentSchemaVersion,
 		Framework:     Framework{Module: "jimu", Version: "v0.3.3", Commit: "744c7a3"},
 		Selection:     Selection{Shape: "app", Profile: "minimal", Capabilities: []string{"tenant", "user"}},
 		Copy:          []CopyAction{{Source: "internal/kernel", Destination: "internal/kernel", Include: []string{}, Exclude: []string{}}},
@@ -30,7 +31,7 @@ func TestValidateRejectsInvalidDocuments(t *testing.T) {
 		},
 		{
 			name: "unknown schema version",
-			edit: func(doc *Document) { doc.SchemaVersion = 2 },
+			edit: func(doc *Document) { doc.SchemaVersion = CurrentSchemaVersion + 1 },
 			want: "schema version",
 		},
 		{
@@ -60,6 +61,41 @@ func TestValidateRejectsInvalidDocuments(t *testing.T) {
 			edit: func(doc *Document) { doc.Digest = "sha256:not-a-digest" },
 			want: "digest",
 		},
+		{
+			name: "invalid protected middleware mode",
+			edit: func(doc *Document) {
+				doc.Capabilities = []Capability{{Name: "auth", ProtectedHTTPMiddleware: "sometimes"}}
+			},
+			want: "protected middleware",
+		},
+		{
+			name: "duplicate migration schema dependency",
+			edit: func(doc *Document) {
+				doc.Capabilities = []Capability{{Name: "user", MigrationSchemaDeps: []string{"tenant", "tenant"}}}
+			},
+			want: "duplicate",
+		},
+		{
+			name: "self migration schema dependency",
+			edit: func(doc *Document) {
+				doc.Capabilities = []Capability{{Name: "user", MigrationSchemaDeps: []string{"user"}}}
+			},
+			want: "itself",
+		},
+		{
+			name: "duplicate runtime service",
+			edit: func(doc *Document) {
+				doc.Capabilities = []Capability{{Name: "auth", RuntimeServices: []string{"mysql", "mysql"}}}
+			},
+			want: "duplicate",
+		},
+		{
+			name: "invalid support level",
+			edit: func(doc *Document) {
+				doc.Selection.Support = "preview"
+			},
+			want: "support",
+		},
 	}
 
 	for _, tt := range tests {
@@ -77,7 +113,7 @@ func TestValidateRejectsInvalidDocuments(t *testing.T) {
 func TestLoadRejectsUnknownJSONFields(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "manifest.json")
-	content := `{"schema_version":1,"framework":{"module":"jimu","unknown":true}}`
+	content := `{"schema_version":2,"framework":{"module":"jimu","unknown":true}}`
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -148,6 +184,54 @@ func TestWriteAndLoadRoundTrip(t *testing.T) {
 	if got.Digest != mustDigest(t, got) {
 		t.Fatalf("loaded digest %q does not match document", got.Digest)
 	}
+}
+
+func TestLoadRejectsMissingProvenanceFields(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		path []string
+	}{
+		{"framework dirty", []string{"framework", "dirty"}},
+		{"selection template version", []string{"selection", "template_version"}},
+		{"generated file hashes", []string{"generated_file_sha256"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), ".jimu", "manifest.json")
+			doc := validDocument()
+			doc.GeneratedFiles = []string{"go.mod"}
+			doc.GeneratedFileSHA256 = map[string]string{"go.mod": "sha256:" + strings.Repeat("a", 64)}
+			if err := Write(path, doc); err != nil {
+				t.Fatal(err)
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var raw map[string]any
+			if err := json.Unmarshal(content, &raw); err != nil {
+				t.Fatal(err)
+			}
+			removeJSONPath(raw, tc.path)
+			content, err = json.Marshal(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, content, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Load(path); err == nil || !strings.Contains(err.Error(), tc.path[len(tc.path)-1]) {
+				t.Fatalf("Load() error = %v, want missing %s", err, tc.path[len(tc.path)-1])
+			}
+		})
+	}
+}
+
+func removeJSONPath(root map[string]any, path []string) {
+	current := root
+	for _, part := range path[:len(path)-1] {
+		current = current[part].(map[string]any)
+	}
+	delete(current, path[len(path)-1])
 }
 
 func mustDigest(t *testing.T, doc Document) string {

@@ -1,0 +1,189 @@
+package v1
+
+import (
+	"net/http"
+	"strconv"
+
+	"{{.Module}}/internal/auth"
+	"{{.Module}}/internal/domain"
+	"{{.Module}}/internal/shared/errorx"
+	"{{.Module}}/internal/shared/response"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+)
+
+type createUserRequest struct {
+	Username string   `json:"username" binding:"required"`
+	Password string   `json:"password" binding:"required,min=8"`
+	Email    string   `json:"email"`
+	Phone    string   `json:"phone"`
+	RoleIDs  []string `json:"role_ids"`
+}
+
+type updateUserRequest struct {
+	Password *string `json:"password"`
+	Email    *string `json:"email"`
+	Phone    *string `json:"phone"`
+	Status   *int    `json:"status"`
+}
+
+func (h *Handler) ListUsers(c *gin.Context) {
+	var users []domain.User
+	if err := h.db.Order("id").Find(&users).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	views := make([]userView, 0, len(users))
+	for _, user := range users {
+		view, err := toUserView(h.db, user)
+		if err != nil {
+			failDB(c, err)
+			return
+		}
+		views = append(views, view)
+	}
+	response.OK(c, http.StatusOK, views)
+}
+
+func (h *Handler) CreateUser(c *gin.Context) {
+	req, ok := bindJSON[createUserRequest](c)
+	if !ok {
+		return
+	}
+	var count int64
+	if err := h.db.Model(&domain.User{}).Where("username = ? OR (? <> '' AND email = ?)", req.Username, req.Email, req.Email).Count(&count).Error; err != nil || count > 0 {
+		response.Fail(c, http.StatusConflict, errorx.Conflict("username or email already exists"))
+		return
+	}
+	hash, err := auth.HashPassword(req.Password)
+	if err != nil {
+		failDB(c, err)
+		return
+	}
+	user := domain.User{TenantID: 1, Username: req.Username, PasswordHash: hash, Email: req.Email, Phone: req.Phone, Status: 1}
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&user).Error; err != nil {
+			return err
+		}
+		if err := replaceUserRoles(tx, user.ID, req.RoleIDs); err != nil {
+			return err
+		}
+		return tx.Create(&domain.PasswordHistory{UserID: user.ID, PasswordHash: hash}).Error
+	}); err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusCreated, gin.H{"id": strconv.FormatUint(user.ID, 10)})
+}
+
+func (h *Handler) GetUser(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	var user domain.User
+	if err := h.db.First(&user, id).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	view, err := toUserView(h.db, user)
+	if err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, view)
+}
+
+func (h *Handler) UpdateUser(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	req, ok := bindJSON[updateUserRequest](c)
+	if !ok {
+		return
+	}
+	var user domain.User
+	if err := h.db.First(&user, id).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	updates := map[string]any{}
+	if req.Email != nil {
+		updates["email"] = *req.Email
+	}
+	if req.Phone != nil {
+		updates["phone"] = *req.Phone
+	}
+	if req.Status != nil {
+		updates["status"] = *req.Status
+	}
+	if req.Password != nil {
+		hash, err := auth.HashPassword(*req.Password)
+		if err != nil {
+			failDB(c, err)
+			return
+		}
+		updates["password_hash"] = hash
+		_ = h.db.Create(&domain.PasswordHistory{UserID: user.ID, PasswordHash: hash}).Error
+	}
+	if err := h.db.Model(&user).Updates(updates).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, gin.H{"id": strconv.FormatUint(user.ID, 10)})
+}
+
+func (h *Handler) DeleteUser(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", id).Delete(&domain.UserRole{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&domain.User{}, id).Error
+	}); err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, gin.H{"deleted": true})
+}
+
+type assignRolesRequest struct {
+	RoleIDs []string `json:"role_ids" binding:"required"`
+}
+
+func (h *Handler) AssignUserRoles(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	req, ok := bindJSON[assignRolesRequest](c)
+	if !ok {
+		return
+	}
+	if err := h.db.Transaction(func(tx *gorm.DB) error { return replaceUserRoles(tx, id, req.RoleIDs) }); err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, gin.H{"updated": true})
+}
+
+func replaceUserRoles(tx *gorm.DB, userID uint64, roleIDs []string) error {
+	if err := tx.Where("user_id = ?", userID).Delete(&domain.UserRole{}).Error; err != nil {
+		return err
+	}
+	for _, raw := range roleIDs {
+		roleID, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			return err
+		}
+		if err := tx.Create(&domain.UserRole{UserID: userID, RoleID: roleID}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}

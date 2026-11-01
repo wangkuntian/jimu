@@ -41,9 +41,19 @@ flowchart LR
 
 `jimu new <dir>` 按 `--profile` 或 `--with` 选择能力并生成独立 Go module。生成器会根据声明闭包和必要的 schema/编译依赖，复制或渲染源码、配置、驱动与资产，随后整理生成项目的 module 依赖。profile 只改变框架二进制组成；生成项目拥有自己的 `go.mod`，因此可以随选择收缩依赖。
 
+v0.5.0 起，对外产品入口收敛为模板：`--template=basic-api|auth-api` 是正式选择器，不传选择器时默认 `basic-api`；`--with` 只提供 experimental 专家组合，manifest 记录 `support: experimental`；`--profile=minimal` 在 v0.5.x 作为映射到 `auth-api` 的弃用别名。其他内部 profile（`full`/`minimal`/`saas`/`enterprise`/`machine`）继续服务 Jimu 自身构建，但不等于官方模板矩阵。模板、预算、支持级别和兼容窗口的机器可读事实源是 [`docs/templates/v1`](../templates/v1/README.md)，实现门禁和生成器不得另建第二份选择集定义。
+
+官方模板是可再生成一次的起始基线，不是持续管理的投影。生成后的工程归用户所有；`.jimu/manifest.json` 只记录来源、选择集和摘要，不授予 Jimu 覆盖用户文件的权利。v0.5.0 不提供隐式升级；已锁定不读取 schema v1 manifest，也不提供自动项目/存量数据库迁移，旧工程只支持“重新生成 + 人工迁移”。`jimu upgrade` 是 v0.6.0 的显式 opt-in 能力。
+
+`basic-api` 使用独立的零外部服务生成路径：只渲染 HTTP、配置、日志、统一错误、健康检查和示例路由所需文件，不复制能力目录或完整框架内核。生成项目没有数据库/Redis 客户端、Compose、Kubernetes/Helm 与 OpenAPI 资产，`go build`、`go test`、`go run` 均不需要外部服务。框架运行时的容器构造也已按 `Descriptor.RuntimeServices` 决定是否连接 MySQL/Redis，未声明服务的装配不会创建对应客户端。
+
+`auth-api` 使用独立单租户模板：只渲染用户、JWT 会话、RBAC、MySQL 持久化、Redis 会话、8 张业务表和 10 个迁移，并生成项目自己的 Compose、初始化与验证脚本。管理员密码首次由 `make up` 生成到 gitignored 本地 secret，迁移和 seed 幂等；生成树不携带未启用的数据库之外能力或观测资产。
+
+官方模板的发布门禁由 `make test-scaffold-matrix` 承载：预算测试读取 `docs/templates/v1/budgets.json` 并实测生成树，`basic-api` smoke 不依赖容器，`auth-api` 使用独立 Compose 项目和新数据卷执行两次 `make up` / `make verify`、数据库计数及缺失服务快速失败检查。生成项目的端口可用 `AUTH_API_PORT` / `AUTH_API_MANAGEMENT_PORT` 隔离，Compose 就绪检查使用 `/readyz` 而非仅进程存活。
+
 生成器从框架读取能力、profile、contract 和资产信息的唯一适配层是 [`tools/generator/frameworkmanifest`](../../tools/generator/frameworkmanifest)。适配层导出校验后的 manifest；计划、渲染、文件工作区和报告逻辑消费 manifest，不直接依赖框架内部包。这样框架内部结构变化集中在适配层与明确的生成模板中。
 
-manifest 记录项目选择、复制与模板动作、合并和重写规则、资产、测试裁剪、生成文件及摘要；它也是识别生成产物和 `jimu capability add` 增量更新的依据。更新能力时，生成器根据新的选择重算产物，并保留受支持的用户配置合并规则。
+manifest 记录项目选择、复制与模板动作、合并和重写规则、资产、测试裁剪、生成文件及摘要；它也是识别生成产物和 `jimu capability add` 增量更新的依据。schema v2 额外记录 `framework.version`、`framework.commit`、`framework.dirty`、官方模板的 `selection.template_version` 和 `generated_file_sha256`。commit 只通过 `git rev-parse --verify HEAD^{commit}` 从框架根解析，因此普通 clone 与 linked worktree 使用同一路径；解析或 dirty 检查失败时在写目标前终止。生成文件哈希在 tidy、自检和配置合并后计算，排除 manifest 与报告自身。更新能力时，生成器根据新的选择重算产物，并保留受支持的用户配置合并规则。
 
 项目先写入暂存目录，再执行依赖整理、构建和能力门禁自检；通过后才发布到目标路径。失败时清理暂存内容。`make check-templates` 检查生成模板与当前框架结构的一致性。
 
@@ -86,6 +96,7 @@ flowchart TD
 - **生成结果先验证再发布。** 暂存目录承载依赖整理、构建和能力门禁自检；验证通过后才写入目标路径。
 - **Manifest 是生成计划和更新识别的共同契约。** 计划不直接探测框架包；manifest 校验动作有效性后，渲染层执行它描述的操作。这样读取框架内部事实与写文件事务能分别测试。
 - **增量更新只管理已生成文件。** manifest 保存生成文件集合、摘要与合并规则，更新对受管理产物计算变更；这保留受支持的配置合并，同时为覆盖风险提供显式 `--force`。
+- **官方模板与内部 profile 是两套产品契约。** 模板定义对外承诺、硬预算和端到端验收；profile 仍只描述 Jimu 服务二进制的编译期组成。两者可共享能力声明，但不能互相替代。
 
 ## 约束与不变量
 

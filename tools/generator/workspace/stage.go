@@ -96,11 +96,6 @@ func Create(doc manifest.Document, opts CreateOptions) (Result, error) {
 		return Result{}, err
 	}
 	doc.GeneratedFiles = slices.Clone(rendered)
-	doc.Digest = ""
-	doc.Digest, err = manifest.Digest(doc)
-	if err != nil {
-		return Result{}, err
-	}
 	if !opts.NoTidy {
 		if err := Tidy(staging); err != nil {
 			return Result{}, fmt.Errorf("go mod tidy: %w", err)
@@ -110,6 +105,10 @@ func Create(doc manifest.Document, opts CreateOptions) (Result, error) {
 		if err := SelfCheck(staging); err != nil {
 			return Result{}, fmt.Errorf("self check: %w", err)
 		}
+	}
+	doc.GeneratedFileSHA256, err = manifest.HashFiles(staging, doc.GeneratedFiles)
+	if err != nil {
+		return Result{}, err
 	}
 	if err := manifest.Write(filepath.Join(staging, manifestRel), doc); err != nil {
 		return Result{}, err
@@ -170,12 +169,11 @@ func Update(previous manifest.Document, next manifest.Document, opts UpdateOptio
 	}
 	rendered := listFiles(staging)
 	next.GeneratedFiles = slices.Clone(rendered)
-	next.Digest = ""
-	next.Digest, err = manifest.Digest(next)
-	if err != nil {
+	if err := mergeConfigs(projectRoot, staging, next.Merges); err != nil {
 		return Result{}, err
 	}
-	if err := mergeConfigs(projectRoot, staging, next.Merges); err != nil {
+	next.GeneratedFileSHA256, err = manifest.HashFiles(staging, next.GeneratedFiles)
+	if err != nil {
 		return Result{}, err
 	}
 	if err := manifest.Write(filepath.Join(staging, manifestRel), next); err != nil {

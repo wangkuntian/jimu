@@ -27,6 +27,10 @@ func fakeGeneratedProject(t *testing.T, capabilities []string) string {
 		Root: root, With: strings.Join(capabilities, ","), Shape: "app", Module: "example.com/proj",
 	})
 	require.NoError(t, err)
+	doc.GeneratedFileSHA256 = make(map[string]string, len(doc.GeneratedFiles))
+	for _, file := range doc.GeneratedFiles {
+		doc.GeneratedFileSHA256[file] = "sha256:" + strings.Repeat("0", 64)
+	}
 	require.NoError(t, manifest.Write(filepath.Join(dir, ".jimu", "manifest.json"), doc))
 	return dir
 }

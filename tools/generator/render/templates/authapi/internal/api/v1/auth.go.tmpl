@@ -1,0 +1,119 @@
+package v1
+
+import (
+	"net/http"
+	"strconv"
+	"time"
+
+	"{{.Module}}/internal/auth"
+	"{{.Module}}/internal/domain"
+	"{{.Module}}/internal/shared/errorx"
+	"{{.Module}}/internal/shared/response"
+
+	"github.com/gin-gonic/gin"
+)
+
+type loginRequest struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+func (h *Handler) Login(c *gin.Context) {
+	req, ok := bindJSON[loginRequest](c)
+	if !ok {
+		return
+	}
+	var user domain.User
+	err := h.db.Where("username = ? AND status = 1", req.Username).First(&user).Error
+	success := err == nil && auth.CheckPassword(user.PasswordHash, req.Password)
+	history := domain.LoginHistory{UserID: user.ID, TenantID: user.TenantID, IP: c.ClientIP(), UserAgent: c.Request.UserAgent(), Success: success}
+	if success {
+		pair, pairErr := issuePair(c.Request.Context(), h, user)
+		if pairErr != nil {
+			failDB(c, pairErr)
+			return
+		}
+		now := time.Now()
+		_ = h.db.Model(&user).Update("last_login_at", now).Error
+		_ = h.db.Create(&history).Error
+		response.OK(c, http.StatusOK, pair)
+		return
+	}
+	_ = h.db.Create(&history).Error
+	response.Fail(c, http.StatusUnauthorized, errorx.Unauthorized("invalid username or password"))
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+func (h *Handler) Refresh(c *gin.Context) {
+	req, ok := bindJSON[refreshRequest](c)
+	if !ok {
+		return
+	}
+	claims, err := h.tokens.ParseRefresh(req.RefreshToken)
+	if err != nil || claims.ID == "" {
+		response.Fail(c, http.StatusUnauthorized, errorx.Unauthorized("invalid refresh token"))
+		return
+	}
+	key := "auth:refresh:" + claims.ID
+	stored, err := h.redis.Get(c.Request.Context(), key).Result()
+	if err != nil || stored != strconv.FormatUint(claims.UserID, 10) {
+		response.Fail(c, http.StatusUnauthorized, errorx.Unauthorized("refresh token expired"))
+		return
+	}
+	var user domain.User
+	if err := h.db.Where("id = ? AND status = 1", claims.UserID).First(&user).Error; err != nil {
+		response.Fail(c, http.StatusUnauthorized, errorx.Unauthorized("user disabled or not found"))
+		return
+	}
+	_ = h.redis.Del(c.Request.Context(), key).Err()
+	pair, err := issuePair(c.Request.Context(), h, user)
+	if err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, pair)
+}
+
+func (h *Handler) Logout(c *gin.Context) {
+	req, ok := bindJSON[refreshRequest](c)
+	if !ok {
+		return
+	}
+	if claims, err := h.tokens.ParseRefresh(req.RefreshToken); err == nil && claims.ID != "" {
+		_ = h.redis.Del(c.Request.Context(), "auth:refresh:"+claims.ID).Err()
+	}
+	response.OK(c, http.StatusOK, gin.H{"logged_out": true})
+}
+
+func (h *Handler) Me(c *gin.Context) {
+	userID := c.GetUint64(auth.UserIDKey)
+	var user domain.User
+	if err := h.db.First(&user, userID).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	view, err := toUserView(h.db, user)
+	if err != nil {
+		failDB(c, err)
+		return
+	}
+	permissions, err := permissionsForUser(h.db, userID)
+	if err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, gin.H{"user": view, "roles": view.Roles, "permissions": permissions})
+}
+
+func (h *Handler) LoginHistory(c *gin.Context) {
+	userID := c.GetUint64(auth.UserIDKey)
+	var history []domain.LoginHistory
+	if err := h.db.Where("user_id = ?", userID).Order("id DESC").Limit(100).Find(&history).Error; err != nil {
+		failDB(c, err)
+		return
+	}
+	response.OK(c, http.StatusOK, history)
+}

@@ -62,6 +62,10 @@ var Descriptor = contract.Descriptor{
 	Name:     "console",
 	Requires: []string{"auth", "access"},
 	Mount:    contract.MountSelfManaged,
+	RuntimeServices: []contract.RuntimeService{
+		contract.RuntimeServiceMySQL,
+		contract.RuntimeServiceRedis,
+	},
 	Permissions: []contract.Permission{
 		{Name: "管理后台读取", Resource: "/api/v1/admin/*", Action: "GET"},
 		{Name: "管理后台写入", Resource: "/api/v1/admin/*", Action: "POST"},

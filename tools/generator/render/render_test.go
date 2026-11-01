@@ -22,7 +22,7 @@ func TestExecuteManifestActions(t *testing.T) {
 	writeFixture(t, source, "src/unsupported_test.go", "package src\nimport _ \"example.com/app/missing\"\n")
 
 	doc := manifest.Document{
-		SchemaVersion:  1,
+		SchemaVersion:  manifest.CurrentSchemaVersion,
 		Framework:      manifest.Framework{Module: "jimu"},
 		Selection:      manifest.Selection{Shape: "app", Capabilities: []string{"user"}, Drivers: map[string][]string{}},
 		Copy:           []manifest.CopyAction{{Source: "src/input.txt", Destination: "copied/input.txt", Include: []string{}, Exclude: []string{}}},

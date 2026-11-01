@@ -1,0 +1,71 @@
+package logging
+
+import (
+	"os"
+
+	"{{.Module}}/internal/config"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
+)
+
+type Logger struct {
+	base *zap.Logger
+}
+
+func New(cfg config.LogConfig) (*Logger, error) {
+	level, err := zapcore.ParseLevel(cfg.Level)
+	if err != nil {
+		return nil, err
+	}
+	encoderConfig := zap.NewProductionEncoderConfig()
+	encoderConfig.TimeKey = "time"
+	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
+
+	var encoder zapcore.Encoder
+	if cfg.Format == "console" {
+		encoder = zapcore.NewConsoleEncoder(encoderConfig)
+	} else {
+		encoder = zapcore.NewJSONEncoder(encoderConfig)
+	}
+	writeSyncer := zapcore.AddSync(os.Stdout)
+	if cfg.Output != "" && cfg.Output != "stdout" {
+		writeSyncer = zapcore.AddSync(&lumberjack.Logger{
+			Filename:   cfg.Output,
+			MaxSize:    cfg.MaxSize,
+			MaxBackups: cfg.MaxBackups,
+			MaxAge:     cfg.MaxAge,
+			Compress:   cfg.Compress,
+		})
+	}
+	core := zapcore.NewCore(encoder, writeSyncer, level)
+	return &Logger{base: zap.New(core)}, nil
+}
+
+func (l *Logger) Infow(message string, fields ...any) {
+	l.base.Sugar().Infow(message, fields...)
+}
+
+func (l *Logger) Errorw(message string, fields ...any) {
+	l.base.Sugar().Errorw(message, fields...)
+}
+
+func (l *Logger) Sync() error {
+	if l == nil || l.base == nil {
+		return nil
+	}
+	return l.base.Sync()
+}
+
+func DefaultTestLogConfig() config.LogConfig {
+	return config.LogConfig{
+		Level:      "error",
+		Format:     "console",
+		Output:     "stdout",
+		MaxSize:    100,
+		MaxBackups: 1,
+		MaxAge:     1,
+	}
+}

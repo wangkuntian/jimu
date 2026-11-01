@@ -26,34 +26,55 @@ func withEntries(t *testing.T, ds ...contract.Descriptor) {
 func fixture() []contract.Descriptor {
 	return []contract.Descriptor{
 		{Name: "user", SoftRequires: []string{"access", "tenant"},
-			Owns: []string{"users"}, Mount: contract.MountProtected},
+			Owns: []string{"users"}, Mount: contract.MountProtected,
+			MigrationSchemaDeps: []string{"tenant"},
+			RuntimeServices:     []contract.RuntimeService{contract.RuntimeServiceMySQL}},
 		{Name: "access", Requires: []string{"user"}, SoftRequires: []string{"tenant"},
 			Owns:  []string{"roles", "permissions", "role_permissions", "user_roles"},
-			Mount: contract.MountProtected},
+			Mount: contract.MountProtected, MigrationSchemaDeps: []string{"tenant"},
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
 		{Name: "tenant", Requires: []string{"user", "access"},
-			Owns: []string{"tenants", "tenant_plans"}, Mount: contract.MountProtected},
+			Owns: []string{"tenants", "tenant_plans"}, Mount: contract.MountProtected,
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
 		{Name: "mfa", Requires: []string{"user"}, SoftRequires: []string{"auth"},
-			Owns: []string{"user_mfa", "trusted_devices"}, Mount: contract.MountSelfManaged},
+			Owns: []string{"user_mfa", "trusted_devices"}, Mount: contract.MountSelfManaged,
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
 		{Name: "auth", Requires: []string{"user", "access"},
 			SoftRequires: []string{"tenant", "mfa", "captcha", "breach"},
 			Owns:         []string{"login_histories", "password_histories"},
-			Mount:        contract.MountSelfManaged},
+			Mount:        contract.MountSelfManaged,
+			RuntimeServices: []contract.RuntimeService{
+				contract.RuntimeServiceMySQL,
+				contract.RuntimeServiceRedis,
+			},
+			ProtectedHTTPMiddleware: contract.ProtectedHTTPMiddlewarePrimary},
 		{Name: "passkey", Requires: []string{"user", "auth"},
-			Owns: []string{"webauthn_credentials"}, Mount: contract.MountSelfManaged},
-		{Name: "audit", Owns: []string{"audit_logs", "audit_chain_head"}, Mount: contract.MountProtected},
-		{Name: "console", Requires: []string{"auth", "access"}, Mount: contract.MountSelfManaged},
+			Owns: []string{"webauthn_credentials"}, Mount: contract.MountSelfManaged,
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
+		{Name: "audit", Owns: []string{"audit_logs", "audit_chain_head"}, Mount: contract.MountProtected,
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
+		{Name: "console", Requires: []string{"auth", "access"}, Mount: contract.MountSelfManaged,
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL, contract.RuntimeServiceRedis}},
 		{Name: "oauth", Requires: []string{"auth", "user"},
-			Owns: []string{"user_oauth_bindings"}, Mount: contract.MountPublic},
+			Owns: []string{"user_oauth_bindings"}, Mount: contract.MountPublic,
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL, contract.RuntimeServiceRedis}},
 		{Name: "apikey", SoftRequires: []string{"tenant"},
-			Owns: []string{"api_keys"}, Mount: contract.MountProtected},
+			Owns: []string{"api_keys"}, Mount: contract.MountProtected,
+			RuntimeServices:         []contract.RuntimeService{contract.RuntimeServiceMySQL},
+			ProtectedHTTPMiddleware: contract.ProtectedHTTPMiddlewareFallback},
 		{Name: "queue", Owns: []string{"jobs", "job_history", "dead_letters", "scheduled_jobs"},
-			Drivers: []string{"redis", "kafka", "rabbitmq"}, Mount: contract.MountProtected},
+			Drivers: []string{"redis", "kafka", "rabbitmq"}, Mount: contract.MountProtected,
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
 		{Name: "outbox", SoftRequires: []string{"queue"},
-			Owns: []string{"outbox_events"}, Mount: contract.MountProtected},
+			Owns: []string{"outbox_events"}, Mount: contract.MountProtected,
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
 		{Name: "dataops", Owns: []string{"import_jobs"},
-			Drivers: []string{"csv", "excel"}, Mount: contract.MountProtected},
-		{Name: "search", Owns: []string{"search_documents"}, Mount: contract.MountProtected},
-		{Name: "captcha", Mount: contract.MountPublic},
+			Drivers: []string{"csv", "excel"}, Mount: contract.MountProtected,
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
+		{Name: "search", Owns: []string{"search_documents"}, Mount: contract.MountProtected,
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
+		{Name: "captcha", Mount: contract.MountPublic,
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis}},
 		{Name: "uploadsec", Mount: contract.MountProtected},
 		{Name: "breach", Mount: contract.MountProtected},
 	}
@@ -104,6 +125,20 @@ func TestAllReturnsDeepCopyOfDrivers(t *testing.T) {
 	again := All()
 	assert.Equal(t, "redis", again[0].Drivers[0], "All() must not expose the registry's Drivers backing array")
 	assert.Equal(t, "csv", again[1].Drivers[0], "All() must not expose the registry's Drivers backing array")
+}
+
+func TestAllReturnsDeepCopyOfMigrationSchemaDepsAndRuntimeServices(t *testing.T) {
+	withEntries(t, contract.Descriptor{
+		Name:                "a",
+		MigrationSchemaDeps: []string{"b"},
+		RuntimeServices:     []contract.RuntimeService{contract.RuntimeServiceMySQL},
+	})
+	got := All()
+	got[0].MigrationSchemaDeps[0] = "mutated"
+	got[0].RuntimeServices[0] = contract.RuntimeService("mutated")
+	again := All()
+	assert.Equal(t, []string{"b"}, again[0].MigrationSchemaDeps)
+	assert.Equal(t, []contract.RuntimeService{contract.RuntimeServiceMySQL}, again[0].RuntimeServices)
 }
 
 // TestValidateDeclarationsAcceptsCurrentCatalog 真实清单必须通过声明校验。

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -105,16 +106,28 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 	if err := db.InitSnowflake(cfg.ID.WorkerID); err != nil {
 		return nil, err
 	}
-	dbConn, err := db.ConnectWithRetry(cfg.DB, log)
-	if err != nil {
-		return nil, err
+	requiredServices := requiredRuntimeServices(caps)
+	var dbConn *gorm.DB
+	var err error
+	if requiredServices[contract.RuntimeServiceMySQL] {
+		dbConn, err = db.ConnectWithRetry(cfg.DB, log)
+		if err != nil {
+			return nil, err
+		}
 	}
-	rdb, err := redistore.ConnectWithRetry(cfg.Redis, log)
-	if err != nil {
-		return nil, err
+	var rdb redistore.Client
+	if requiredServices[contract.RuntimeServiceRedis] {
+		rdb, err = redistore.ConnectWithRetry(cfg.Redis, log)
+		if err != nil {
+			closeGormDB(dbConn)
+			return nil, err
+		}
 	}
 
-	lock := redistore.NewLock(rdb, "lock")
+	var lock *redistore.Lock
+	if rdb != nil {
+		lock = redistore.NewLock(rdb, "lock")
+	}
 
 	// 调度器是内核件：其配置段由 queue 能力声明并已按启用集解码；未启用时取零值
 	// （memory 存储），与下沉前的「不接线/默认行为」一致。
@@ -124,6 +137,9 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 	}
 	var schedStore scheduler.Store = scheduler.NewMemoryStore()
 	if schedulerCfg.Store == scheduler.StoreMySQL {
+		if dbConn == nil {
+			return nil, fmt.Errorf("scheduler store mysql requires a mysql runtime service")
+		}
 		schedStore = scheduler.NewMySQLStore(dbConn)
 	}
 	var sched *scheduler.CronScheduler
@@ -147,7 +163,15 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 
 	// DB Metrics Collector
 	var dbCollector *observability.DBCollector
-	if sqlDB, err := dbConn.DB(); err == nil {
+	if dbConn != nil {
+		sqlDB, err := dbConn.DB()
+		if err != nil {
+			closeGormDB(dbConn)
+			if rdb != nil {
+				_ = rdb.Close()
+			}
+			return nil, fmt.Errorf("get database pool: %w", err)
+		}
 		dbCollector = observability.NewDBCollector(sqlDB, "primary")
 	}
 
@@ -173,4 +197,23 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 		HTTPClient:        httpClient,
 		LogExporter:       logExporter,
 	}, nil
+}
+
+func requiredRuntimeServices(caps []contract.Descriptor) map[contract.RuntimeService]bool {
+	required := map[contract.RuntimeService]bool{}
+	for _, capability := range caps {
+		for _, service := range capability.RuntimeServices {
+			required[service] = true
+		}
+	}
+	return required
+}
+
+func closeGormDB(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		_ = sqlDB.Close()
+	}
 }

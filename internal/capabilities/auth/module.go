@@ -94,6 +94,11 @@ var Descriptor = contract.Descriptor{
 	SoftRequires: []string{"tenant", "mfa", "captcha", "breach"},
 	Owns:         []string{"login_histories", "password_histories"},
 	Mount:        contract.MountSelfManaged,
+	RuntimeServices: []contract.RuntimeService{
+		contract.RuntimeServiceMySQL,
+		contract.RuntimeServiceRedis,
+	},
+	ProtectedHTTPMiddleware: contract.ProtectedHTTPMiddlewarePrimary,
 	// auth 拥有整个 auth 段（含嵌套 webauthn/provisioning），不拆段（设计 §8 ¶2）
 	Configs: []contract.ConfigSpec{
 		{Section: ConfigKey, New: func() any { return &Config{} }},

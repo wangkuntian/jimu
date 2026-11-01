@@ -321,7 +321,7 @@ func TestCheckProfilesGoldenMatchesTheGeneratedClosure(t *testing.T) {
 	}
 	var cases []tc
 	for _, name := range allCapabilityNames(t) {
-		cases = append(cases, tc{name: "with " + name, shape: "app", opts: NewOptions{With: name}})
+		cases = append(cases, tc{name: "with " + name, shape: "app", opts: NewOptions{With: withProtectedProvider(name)}})
 	}
 	for _, name := range registry.Names() {
 		cases = append(cases, tc{name: "profile " + name, shape: name, opts: NewOptions{Profile: name}})

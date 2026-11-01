@@ -6,6 +6,17 @@ import (
 	"testing"
 )
 
+// withProtectedProvider returns a selectable capability expression that satisfies the
+// preflight rule for every protected capability under test.
+func withProtectedProvider(name string) string {
+	switch name {
+	case "auth", "apikey", "apidocs", "captcha", "oauth":
+		return name
+	default:
+		return "apikey," + name
+	}
+}
+
 func newTestRepository(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

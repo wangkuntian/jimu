@@ -60,7 +60,7 @@ jobs:
             echo "code=false" >> "$GITHUB_OUTPUT"
           fi
           # go：代码质量门禁关心的路径（沿用原 ci.yml 的口径）
-          if grep -Eq '^(cmd/|internal/|tools/|go\.mod$|go\.sum$|internal/capabilities/.*/migrations/|proto/|configs/|scripts/|Makefile$|deploy/|docs/openapi/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
+          if grep -Eq '^(cmd/|internal/|tools/|go\.mod$|go\.sum$|internal/capabilities/.*/migrations/|proto/|configs/|scripts/|Makefile$|deploy/|docs/templates/v1/|docs/openapi/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
             echo "go=true" >> "$GITHUB_OUTPUT"
           else
             echo "go=false" >> "$GITHUB_OUTPUT"
