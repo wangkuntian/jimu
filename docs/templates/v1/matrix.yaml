@@ -112,6 +112,7 @@ templates:
       - one-command-start
       - readyz
       - login-me-protected-request
+      - short-password-update-rejected
       - missing-service-fails-fast
 
 preflight:
