@@ -277,7 +277,7 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 `basic-api` 的生成产物已按零外部服务基线落地：不含数据库/Redis 配置、Compose、Kubernetes/Helm 或 OpenAPI 资产，启动时只创建 HTTP 与管理端口；`/livez`、`/readyz` 和 `/api/v1/ping` 不检查外部依赖。按 v0.4.0 的既定决定，生成项目不恢复受跟踪的 `.env.example`，环境变量与配置入口写在项目 README。
 
-`auth-api` 生成单租户 Go 工程，包含用户、JWT 会话、RBAC、MySQL 8.4、Redis 7、8 张业务表、10 个迁移和 24 条业务路由；项目自己的 `make up` 完成构建、迁移、seed 和启动，`make verify` 验证 readyz、login、me 和受保护请求。`AUTH_API_PORT` 与 `AUTH_API_MANAGEMENT_PORT` 可覆盖默认宿主机端口，`make verify` 会自动沿用对应地址，便于并行验收和避开本机端口冲突。Compose 的 `init` 与 `app` 使用调用 `make up` 的宿主 UID/GID 运行，确保 Linux 下 `0600` 本地 secret 可读。
+`auth-api` 生成单租户 Go 工程，包含用户、JWT 会话、RBAC、MySQL 8.4、Redis 7、8 张业务表、10 个迁移和 24 条业务路由；用户创建和更新密码至少 8 个字符。项目自己的 `make up` 完成构建、迁移、seed 和启动，`make verify` 验证 readyz、login、me、受保护请求和短密码拒绝。`AUTH_API_PORT` 与 `AUTH_API_MANAGEMENT_PORT` 可覆盖默认宿主机端口，`make verify` 会自动沿用对应地址，便于并行验收和避开本机端口冲突。Compose 的 `init` 与 `app` 使用调用 `make up` 的宿主 UID/GID 运行，确保 Linux 下 `0600` 本地 secret 可读。
 
 `jimu capability add <name>` 在已生成项目中追加框架已有的能力。`jimu capability create <name>` 只在框架仓库中创建能力骨架，不自动修改 catalog 或 profile。旧 `jimu module create` 已移除。
 
