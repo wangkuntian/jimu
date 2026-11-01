@@ -173,6 +173,12 @@ func TestAuthAPIComposeUsesHostUIDForSecrets(t *testing.T) {
 	require.NoError(t, err, "make -n up:\n%s", makeOutput)
 	require.Contains(t, string(makeOutput), `APP_UID="$(id -u)" APP_GID="$(id -g)" docker compose up`,
 		"make up must pass the host UID/GID to Compose")
+
+	env := dockerTestEnv("")
+	require.Contains(t, env, fmt.Sprintf("APP_UID=%d", os.Getuid()),
+		"direct compose calls in the gate must use the host UID")
+	require.Contains(t, env, fmt.Sprintf("APP_GID=%d", os.Getgid()),
+		"direct compose calls in the gate must use the host GID")
 }
 
 func freePort(t *testing.T) int {

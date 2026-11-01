@@ -181,6 +181,10 @@ func dockerTestEnv(cache string, extra ...string) []string {
 			env = append(env, key+"="+value)
 		}
 	}
+	env = append(env,
+		fmt.Sprintf("APP_UID=%d", os.Getuid()),
+		fmt.Sprintf("APP_GID=%d", os.Getgid()),
+	)
 	return append(env, extra...)
 }
 
