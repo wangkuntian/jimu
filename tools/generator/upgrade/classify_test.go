@@ -199,6 +199,61 @@ func TestClassifyDeletedFileWithLocalEditIsConflict(t *testing.T) {
 	}
 }
 
+func TestClassifyMergedConfigPreservesLocalEdits(t *testing.T) {
+	projectRoot := t.TempDir()
+	targetRoot := t.TempDir()
+	writeFile(t, projectRoot, "configs/app.yaml", "server:\n  port: 9000\n")
+	writeFile(t, targetRoot, "configs/app.yaml", "server:\n  port: 9000\nnew:\n  enabled: true\n")
+	doc := manifest.Document{
+		GeneratedFiles:      []string{"configs/app.yaml"},
+		GeneratedFileSHA256: map[string]string{"configs/app.yaml": hashContent("server:\n  port: 8080\n")},
+	}
+	report, err := Classify(Options{
+		ProjectRoot: projectRoot,
+		Previous:    doc,
+		TargetRoot:  targetRoot,
+		TargetFiles: []string{"configs/app.yaml"},
+		Merged:      []string{"configs/app.yaml"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := onlyEntry(t, report)
+	if entry.Category != Modified || entry.Action != ActionInstall {
+		t.Fatalf("entry = %s/%s, want modified/install", entry.Category, entry.Action)
+	}
+	if !strings.Contains(entry.Reason, "preserving the local file") {
+		t.Fatalf("reason = %q", entry.Reason)
+	}
+	if report.HasConflicts() {
+		t.Fatal("merged config must not be a conflict")
+	}
+}
+
+func TestClassifyMergedConfigMissingLocallyIsConflict(t *testing.T) {
+	projectRoot := t.TempDir()
+	targetRoot := t.TempDir()
+	writeFile(t, targetRoot, "configs/app.yaml", "server:\n  port: 8080\n")
+	doc := manifest.Document{
+		GeneratedFiles:      []string{"configs/app.yaml"},
+		GeneratedFileSHA256: map[string]string{"configs/app.yaml": hashContent("server:\n  port: 8080\n")},
+	}
+	report, err := Classify(Options{
+		ProjectRoot: projectRoot,
+		Previous:    doc,
+		TargetRoot:  targetRoot,
+		TargetFiles: []string{"configs/app.yaml"},
+		Merged:      []string{"configs/app.yaml"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := onlyEntry(t, report)
+	if entry.Category != Conflict || entry.Action != ActionKeep {
+		t.Fatalf("entry = %s/%s, want conflict/keep", entry.Category, entry.Action)
+	}
+}
+
 func TestClassifyIsStableAcrossInputOrder(t *testing.T) {
 	baseline := map[string]string{
 		"z.txt": "same",

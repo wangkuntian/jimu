@@ -169,7 +169,7 @@ func Update(previous manifest.Document, next manifest.Document, opts UpdateOptio
 	}
 	rendered := listFiles(staging)
 	next.GeneratedFiles = slices.Clone(rendered)
-	if err := mergeConfigs(projectRoot, staging, next.Merges); err != nil {
+	if err := MergeConfigs(projectRoot, staging, next.Merges); err != nil {
 		return Result{}, err
 	}
 	next.GeneratedFileSHA256, err = manifest.HashFiles(staging, next.GeneratedFiles)

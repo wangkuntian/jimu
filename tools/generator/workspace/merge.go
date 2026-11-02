@@ -9,7 +9,10 @@ import (
 	"jimu/tools/generator/render"
 )
 
-func mergeConfigs(projectRoot, staging string, actions []manifest.MergeAction) error {
+// MergeConfigs overlays the generated config sections on the project's current
+// files. Existing sections and their values always win; only sections missing
+// from the project are taken from the staged template output.
+func MergeConfigs(projectRoot, staging string, actions []manifest.MergeAction) error {
 	for _, action := range actions {
 		if action.Strategy != "sections" {
 			continue

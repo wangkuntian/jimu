@@ -74,6 +74,9 @@ type Options struct {
 	Previous    manifest.Document
 	TargetRoot  string
 	TargetFiles []string
+	// Merged lists manifest merge destinations whose target content already
+	// preserves local sections. User edits in those paths are not conflicts.
+	Merged []string
 }
 
 var categoryOrder = []Category{Conflict, Modified, New, Deleted, Untouched}
@@ -108,10 +111,14 @@ func Classify(opts Options) (Report, error) {
 	for rel := range target {
 		paths[rel] = true
 	}
+	merged := make(map[string]bool, len(opts.Merged))
+	for _, rel := range opts.Merged {
+		merged[rel] = true
+	}
 	entries := make([]Entry, 0, len(paths))
 	counts := zeroCounts()
 	for _, rel := range sortedKeys(paths) {
-		entry, err := classifyPath(projectRoot, rel, baseline, target)
+		entry, err := classifyPath(projectRoot, rel, baseline, target, merged[rel])
 		if err != nil {
 			return Report{}, err
 		}
@@ -208,7 +215,7 @@ func inspectLocalFile(projectRoot, rel string) (localFile, error) {
 	return localFile{exists: true, regular: true, hash: hash}, nil
 }
 
-func classifyPath(projectRoot, rel string, baseline, target map[string]string) (Entry, error) {
+func classifyPath(projectRoot, rel string, baseline, target map[string]string, merged bool) (Entry, error) {
 	baseHash, hasBaseline := baseline[rel]
 	targetHash, hasTarget := target[rel]
 	local, err := inspectLocalFile(projectRoot, rel)
@@ -218,6 +225,9 @@ func classifyPath(projectRoot, rel string, baseline, target map[string]string) (
 	entry := Entry{Path: rel, BaselineSHA256: baseHash, TargetSHA256: targetHash}
 	if local.regular {
 		entry.LocalSHA256 = local.hash
+	}
+	if merged {
+		return classifyMerged(entry, local, hasBaseline, hasTarget, baseHash, targetHash)
 	}
 	switch {
 	case !hasBaseline:
@@ -288,6 +298,74 @@ func classifyPath(projectRoot, rel string, baseline, target map[string]string) (
 		entry.Reason = "local file and target template both changed"
 		return entry, nil
 	}
+}
+
+// classifyMerged handles manifest merge destinations. Their target content was
+// rendered on top of the local file, so differences only mean new template
+// sections are available and the merged content is safe to install.
+func classifyMerged(entry Entry, local localFile, hasBaseline, hasTarget bool, baseHash, targetHash string) (Entry, error) {
+	switch {
+	case !hasBaseline:
+		if !local.exists {
+			entry.Category = New
+			entry.Action = ActionInstall
+			entry.Reason = "target template adds a merged config that is not part of the manifest baseline"
+			return entry, nil
+		}
+		entry.Category = Conflict
+		entry.Action = ActionKeep
+		entry.Reason = "target template adds a merged config, but the path already exists locally and was not in the manifest baseline"
+		return entry, nil
+	case !local.exists:
+		entry.Category = Conflict
+		entry.Action = ActionKeep
+		entry.Reason = "generated merged config is missing locally and cannot be merged without overwriting user intent"
+		return entry, nil
+	case !local.regular:
+		entry.Category = Conflict
+		entry.Action = ActionKeep
+		entry.Reason = "local merged config path is not a regular file"
+		return entry, nil
+	case !hasTarget:
+		entry.Category = Deleted
+		entry.Action = ActionKeep
+		entry.Reason = "target template no longer manages this merged config; the existing copy is left in place"
+		return entry, nil
+	case local.hash == targetHash:
+		entry.Category = Untouched
+		entry.Action = ActionNone
+		entry.Reason = "local merged config already contains every target section"
+		return entry, nil
+	case local.hash == baseHash:
+		entry.Category = Modified
+		entry.Action = ActionInstall
+		entry.Reason = "target merged config changed; the local file matches the manifest baseline"
+		return entry, nil
+	default:
+		entry.Category = Modified
+		entry.Action = ActionInstall
+		entry.Reason = "target merged config adds sections while preserving the local file"
+		return entry, nil
+	}
+}
+
+// VerifyLocal re-hashes every path the report would install. It fails if the
+// project changed after planning, so an upgrade never overwrites a concurrent
+// edit that the plan did not classify.
+func (r Report) VerifyLocal(projectRoot string) error {
+	for _, entry := range r.Entries {
+		if entry.Action != ActionInstall {
+			continue
+		}
+		local, err := inspectLocalFile(projectRoot, entry.Path)
+		if err != nil {
+			return err
+		}
+		if local.exists != (entry.LocalSHA256 != "") || local.hash != entry.LocalSHA256 {
+			return fmt.Errorf("project changed after upgrade planning: %s", entry.Path)
+		}
+	}
+	return nil
 }
 
 func fileHash(path string) (string, error) {

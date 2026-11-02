@@ -24,12 +24,44 @@ func upgradeCommandForTest(out *bytes.Buffer) *cobra.Command {
 	return root
 }
 
-func TestUpgradeCmdRequiresMode(t *testing.T) {
-	dir := fakeGeneratedProject(t, []string{"user", "access", "auth"})
+func TestUpgradeCmdDefaultsToReadOnlyNoOpWhenUpToDate(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "proj")
+	_, err := generator.NewProject(generator.NewOptions{
+		Dir: dir, Template: "basic-api", Module: "example.com/proj", NoTidy: true, NoSelfCheck: true,
+	})
+	require.NoError(t, err)
+	manifest := filepath.Join(dir, ".jimu", "manifest.json")
+	before, err := os.ReadFile(manifest)
+	require.NoError(t, err)
+
 	var out bytes.Buffer
 	c := upgradeCommandForTest(&out)
-	c.SetArgs([]string{"upgrade", dir})
-	require.ErrorContains(t, c.Execute(), "--dry-run or --check")
+	c.SetArgs([]string{"upgrade", dir, "--no-tidy"})
+	require.NoError(t, c.Execute())
+	assert.Contains(t, out.String(), "upgrade:")
+	assert.Contains(t, out.String(), "status       up-to-date")
+	assert.Contains(t, out.String(), "no changes")
+	after, err := os.ReadFile(manifest)
+	require.NoError(t, err)
+	assert.Equal(t, before, after)
+}
+
+func TestUpgradeCmdDefaultAbortsOnConflictsWithoutWriting(t *testing.T) {
+	dir := fakeGeneratedProject(t, []string{"user", "access", "auth"})
+	manifest := filepath.Join(dir, ".jimu", "manifest.json")
+	before, err := os.ReadFile(manifest)
+	require.NoError(t, err)
+
+	var out bytes.Buffer
+	c := upgradeCommandForTest(&out)
+	c.SetArgs([]string{"upgrade", dir, "--no-tidy"})
+	err = c.Execute()
+	require.ErrorContains(t, err, "upgrade plan has conflicts")
+	assert.Contains(t, out.String(), "upgrade:")
+	assert.Contains(t, out.String(), "status       conflict")
+	after, readErr := os.ReadFile(manifest)
+	require.NoError(t, readErr)
+	assert.Equal(t, before, after)
 }
 
 func TestUpgradeCmdRejectsBothModes(t *testing.T) {

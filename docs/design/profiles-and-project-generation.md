@@ -102,7 +102,13 @@ flowchart TD
 | `new` | 目标模板新增，本地不存在 | 安装 |
 | `deleted` | 目标模板不再生成基线文件；本地副本保持原状，不自动删除 | 不安装、不删除 |
 
-`--dry-run` 输出完整分类报告；`--check` 复用同一报告，存在 `conflict` 时退出非 0。两者都不写项目目录，临时目录中的目标渲染和 `go mod tidy` 在报告结束后清理。冲突绝不静默覆盖；`deleted` 也不会自动删除用户目录中的文件。实际写入、逐文件备份、升级后 tidy/build/test 与回滚由独立的升级事务承担；规划器本身不修改 manifest 或项目文件。
+`--dry-run` 输出完整分类报告；`--check` 复用同一报告，存在 `conflict` 时退出非 0。两者都不写项目目录，临时目录中的目标渲染和 `go mod tidy` 在报告结束后清理。
+
+### 显式升级事务
+
+不带 `--dry-run` / `--check` 的 `jimu upgrade` 执行写入事务：先按规划器结论拒绝冲突，再把每个将改变的路径（含 manifest，以及可能被 tidy 改写的 `go.mod`/`go.sum`）备份到项目外的临时目录；随后逐文件安装目标产物，受支持配置在暂存副本里以项目现有段值为底合并。安装完成后在同一项目上执行 `go mod tidy`、`go build ./...` 与 `go test ./...`（`--no-tidy` 只跳过规划临时副本的 tidy，不跳过这里的验证）；任一安装、验证或 manifest 写入失败都按原字节恢复所有已触碰文件并删除本次新增的空目录。
+
+验证通过后才写入新 manifest：重新计算 `generated_files` 的最终哈希（覆盖 tidy 产生的变化），记录当前框架 provenance 与组合块，并重新计算 digest。文件与 manifest 都没变化时事务不做任何写入，也不重复跑验证。`conflict` 绝不静默覆盖；`deleted` 不自动删除用户目录中的文件，只从后续 manifest 基线中移除。
 
 ## 关键决策
 
@@ -123,6 +129,6 @@ profile 选择必须只通过 active 选点进入服务构建；registry 留在�
 - Profile：[internal/profiles](../../internal/profiles)、[tools/profileoverlay](../../tools/profileoverlay)
 - 项目生成：[tools/generator](../../tools/generator)、[frameworkmanifest](../../tools/generator/frameworkmanifest)
 - 契约与事务：[manifest model](../../tools/generator/manifest/model.go)、[manifest validation](../../tools/generator/manifest/validate.go)、[workspace staging](../../tools/generator/workspace/stage.go)
-- 升级规划：[upgrade classifier](../../tools/generator/upgrade/classify.go)、[upgrade facade](../../tools/generator/upgrade.go)
+- 升级规划与事务：[upgrade classifier](../../tools/generator/upgrade/classify.go)、[upgrade facade](../../tools/generator/upgrade.go)、[workspace transaction](../../tools/generator/workspace/upgrade.go)
 - 验证：`go test ./tools/generator/...`、`jimu check <generated-dir>`、`jimu upgrade <generated-dir> --dry-run`、`make profiles-check`、`make check-capabilities`、`make test-scaffold-official`、`make test-scaffold-matrix`
 - CLI 参数和操作示例见 README「[生成项目](../../README.md#生成项目jimu-new--jimu-capability-add)」；能力声明和运行时装配见[能力架构](capability-architecture.md)。

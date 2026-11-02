@@ -247,6 +247,7 @@ make cli
 ./bin/jimu new ./myapp --with=user,access,auth,queue                         # 按能力名解析（硬依赖闭包 + 拓扑序）
 ./bin/jimu new ./myapp --with=queue:kafka,storage:local,user,access,auth     # 冒号后缀逐项指定驱动
 ./bin/jimu check ./myapp                                                     # 只读检查已生成项目的 manifest 与组合一致性
+./bin/jimu upgrade ./myapp                                                   # 显式升级事务：备份、安装、tidy/build/test、回滚、更新 manifest
 ./bin/jimu upgrade ./myapp --dry-run                                        # 只读三方 diff：分类 + 冲突路径/原因
 ./bin/jimu upgrade ./myapp --check                                          # 同上；存在 conflict 时退出非 0
 ./bin/jimu capability add dataops                                            # 在已生成项目里增量追加能力（见「生成项目」）
@@ -284,15 +285,17 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 `jimu check <dir>` 只读检查已生成项目：读取 `<dir>/.jimu/manifest.json`，按与 `jimu new` 相同的组合规则校验硬依赖、冲突、端口、驱动、迁移 schema 依赖、表/迁移、运行时服务/配置、受保护中间件与生成计划。合法项目退出 0；非法项目退出非 0，并逐条输出 `code`、`capability`、`path`、`message`、`fix`。该命令属于框架仓，不复制进生成项目。
 
-`jimu upgrade <dir> --dry-run` 只读规划显式升级：以 manifest 的 `generated_file_sha256` 为基线，把项目中记录的选择集按当前框架重新渲染到临时目录，再对每个受管路径做三方比较。输出按 `conflict`、`modified`、`new`、`deleted`、`untouched` 分组，路径稳定排序；每条带原因和动作。`--check` 使用同一份报告，存在 `conflict` 时退出非 0。两种模式都不写项目目录；目标产物与 `go mod tidy` 只作用于系统临时副本，`--no-tidy` 可跳过临时副本的 tidy。当前版本只提供规划，不带模式调用会拒绝执行；写入、备份和回滚属于后续升级事务。
+`jimu upgrade <dir>` 显式升级生成项目：以 manifest 的 `generated_file_sha256` 为基线，把项目中记录的选择集按当前框架重新渲染到临时目录，再对每个受管路径做三方比较。默认执行写入事务——冲突在写盘前中止；变换的文件先备份再逐个安装；受支持配置（manifest 声明 `merges.strategy=sections` 的项目）以现有段值为底合并；随后在项目里执行 `go mod tidy`、`go build ./...` 和 `go test ./...`，任一失败即按原字节回滚。成功后把目标 manifest 写回 `.jimu/manifest.json`（含新的文件哈希与组合块），重复执行同一版本幂等。`--dry-run` 输出完整分类报告；`--check` 复用同一报告，存在 `conflict` 时退出非 0。两种检查模式都不写项目目录，`--no-tidy` 只跳过临时规划副本中的 tidy，升级后的验证始终执行 tidy/build/test。
 
 | 分类 | 判定 | 策略 |
 |---|---|---|
 | `untouched` | 本地内容与目标产物都等于 manifest 基线 | 不动作 |
 | `modified` | 目标模板变化，本地仍等于基线 | 可安全安装目标产物 |
-| `conflict` | 本地已偏离基线（用户修改、删除或路径被占用） | 绝不覆盖，输出路径和原因 |
+| `conflict` | 本地已偏离基线（用户修改、删除或路径被占用） | 绝不覆盖，输出路径和原因；事务在写盘前中止 |
 | `new` | 目标模板新增且本地不存在 | 可安装 |
 | `deleted` | 目标模板不再生成该文件 | 保留本地副本，不自动删除；模板删除且本地也改过时归入 `conflict` |
+
+官方模板的 `configs/*.yaml` 是整文件模板，手改会被识别为 `conflict`；通过 `--with` 生成的项目在 manifest 中声明了配置段合并，手改段值会保留，只补入目标模板新增的段。升级只修改生成器管理的文件，用户自有文件、已删除的模板文件和 manifest 之外的路径都不触碰。
 
 `jimu capability add <name>` 在已生成项目中追加框架已有的能力。`jimu capability create <name>` 只在框架仓库中创建能力骨架，不自动修改 catalog 或 profile。旧 `jimu module create` 已移除。
 
