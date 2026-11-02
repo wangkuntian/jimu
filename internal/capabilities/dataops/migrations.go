@@ -19,6 +19,10 @@ var Descriptor = contract.Descriptor{
 	Owns:            []string{"import_jobs"},
 	Drivers:         []string{"csv", "excel"},
 	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+	DriverSpecs: []contract.DriverSpec{
+		{Name: "csv"},
+		{Name: "excel"},
+	},
 	Configs: []contract.ConfigSpec{
 		{Section: ConfigKey, New: func() any { return &Config{} }},
 	},

@@ -66,6 +66,7 @@ var Descriptor = contract.Descriptor{
 		contract.RuntimeServiceMySQL,
 		contract.RuntimeServiceRedis,
 	},
+	Consumes: []contract.ConsumedPort{{Name: "ws"}},
 	Permissions: []contract.Permission{
 		{Name: "管理后台读取", Resource: "/api/v1/admin/*", Action: "GET"},
 		{Name: "管理后台写入", Resource: "/api/v1/admin/*", Action: "POST"},

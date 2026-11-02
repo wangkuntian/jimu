@@ -30,6 +30,7 @@ var Descriptor = contract.Descriptor{
 	Name:            "captcha",
 	Mount:           contract.MountPublic,
 	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis},
+	Provides:        []contract.ProvidedPort{{Name: PortName}},
 	Configs: []contract.ConfigSpec{
 		{Section: ConfigKey, New: func() any { return &Config{} }},
 	},

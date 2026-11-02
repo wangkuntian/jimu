@@ -20,6 +20,10 @@
    - `Permissions`：能力拥有的权限点（种子时按启用集聚合写入）
    - `Mount`：路由挂载方式（零值等价 `MountProtected`，特权路由不会被裸挂到根路由）
    - `Drivers`：能力支持的**驱动包名**（有第三方驱动时才写，见 [profile-driver.md](profile-driver.md)）
+   - `Conflicts`：不能同时启用的能力名；门禁校验未知/自引用/重复目标
+   - `Provides`：本能力在 `Wire` 中注册的 contract 端口名（全仓唯一）
+   - `Consumes`：本能力从装配上下文读取的 contract 端口名；`Required` 表示该形态内必须有提供方
+   - `DriverSpecs`：驱动级组合元数据（目前为额外 `RuntimeServices`；`Name` 必须命中 `Drivers`）
    - `Assets`：能力拥有的非代码资产（仓库相对路径；有资产时才写）
 3. **导出 `Wire` 自装配**，有 HTTP、任务、事件或生命周期职责时实现 `contract.Module`；仅提供端口或迁移的能力可返回 nil。能力内部只依赖 `contract` 端口；**禁止**跨能力 import（包括测试和驱动子包）
 4. **在 `internal/capabilities/catalog` 登记**该能力
@@ -42,6 +46,6 @@ go test ./internal/... -count=1   # 能力自带单测全绿
 | 症状 | 定位 |
 |---|---|
 | `check-capabilities` ① 号红：声明的表没有迁移创建 / 一张表被两个能力声明 | `Owns` 与实际 `CREATE TABLE` 逐值对齐；`ALTER TABLE ... ADD` 不参与归属 |
-| `check-capabilities` ④ 号红：选点包 import 了不止一个形态 | 只改形态包，**不要**动 `internal/profiles/active` 与 `cmd/server` |
+| `check-capabilities` ⑤ 号红：选点包 import 了不止一个形态 | 只改形态包，**不要**动 `internal/profiles/active` 与 `cmd/server` |
 | 能力声明了但没生效 | 该能力不在当前形态清单里，或 `capabilities.enabled` 排除了它 —— 见 [runtime.md](runtime.md) |
 | 启动报「多个受保护中间件提供者」 | 同一启用集只允许一个能力**真实**提供受保护链，见 [runtime.md](runtime.md) |

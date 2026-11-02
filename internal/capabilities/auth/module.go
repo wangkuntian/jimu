@@ -98,6 +98,21 @@ var Descriptor = contract.Descriptor{
 		contract.RuntimeServiceMySQL,
 		contract.RuntimeServiceRedis,
 	},
+	Provides: []contract.ProvidedPort{{Name: PortName}},
+	Consumes: []contract.ConsumedPort{
+		{Name: "user.account", Required: true},
+		{Name: "access.provisioning"},
+		{Name: "tenant.provisioner"},
+		{Name: "tenant"},
+		{Name: contract.TenantInfoPortName},
+		{Name: contract.UserinfoPortName},
+		{Name: "mfa"},
+		{Name: "captcha"},
+		{Name: "outbox"},
+		{Name: "notification"},
+		{Name: "encryption"},
+		{Name: "breach"},
+	},
 	ProtectedHTTPMiddleware: contract.ProtectedHTTPMiddlewarePrimary,
 	// auth 拥有整个 auth 段（含嵌套 webauthn/provisioning），不拆段（设计 §8 ¶2）
 	Configs: []contract.ConfigSpec{

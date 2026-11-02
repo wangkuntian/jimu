@@ -69,6 +69,15 @@ var Descriptor = contract.Descriptor{
 	Mount:               contract.MountProtected,
 	MigrationSchemaDeps: []string{"tenant"},
 	RuntimeServices:     []contract.RuntimeService{contract.RuntimeServiceMySQL},
+	Provides: []contract.ProvidedPort{
+		{Name: PortName},
+		{Name: ProvisioningRolePortName},
+	},
+	Consumes: []contract.ConsumedPort{
+		{Name: "tenant"},
+		{Name: contract.TenantInfoPortName},
+		{Name: contract.TenantRoleStoreBinderPortName},
+	},
 	Permissions: []contract.Permission{
 		// 角色
 		{Name: "角色列表", Resource: "/api/v1/roles", Action: "GET"},

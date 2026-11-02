@@ -28,17 +28,41 @@ func fixture() []contract.Descriptor {
 		{Name: "user", SoftRequires: []string{"access", "tenant"},
 			Owns: []string{"users"}, Mount: contract.MountProtected,
 			MigrationSchemaDeps: []string{"tenant"},
-			RuntimeServices:     []contract.RuntimeService{contract.RuntimeServiceMySQL}},
+			RuntimeServices:     []contract.RuntimeService{contract.RuntimeServiceMySQL},
+			Provides:            []contract.ProvidedPort{{Name: "user.info"}, {Name: "user.account"}},
+			Consumes: []contract.ConsumedPort{
+				{Name: "access"},
+				{Name: "tenant"},
+				{Name: "tenant.info"},
+				{Name: "outbox"},
+			}},
 		{Name: "access", Requires: []string{"user"}, SoftRequires: []string{"tenant"},
 			Owns:  []string{"roles", "permissions", "role_permissions", "user_roles"},
 			Mount: contract.MountProtected, MigrationSchemaDeps: []string{"tenant"},
-			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+			Provides:        []contract.ProvidedPort{{Name: "access"}, {Name: "access.provisioning"}},
+			Consumes: []contract.ConsumedPort{
+				{Name: "tenant"},
+				{Name: "tenant.info"},
+				{Name: "tenant.role_store_binder"},
+			}},
 		{Name: "tenant", Requires: []string{"user", "access"},
 			Owns: []string{"tenants", "tenant_plans"}, Mount: contract.MountProtected,
-			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+			Provides: []contract.ProvidedPort{
+				{Name: "tenant"},
+				{Name: "tenant.info"},
+				{Name: "tenant.provisioner"},
+				{Name: "tenant.role_store_binder"},
+			}},
 		{Name: "mfa", Requires: []string{"user"}, SoftRequires: []string{"auth"},
 			Owns: []string{"user_mfa", "trusted_devices"}, Mount: contract.MountSelfManaged,
-			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+			Provides:        []contract.ProvidedPort{{Name: "mfa"}},
+			Consumes: []contract.ConsumedPort{
+				{Name: "user.info"},
+				{Name: "tenant.info"},
+			}},
 		{Name: "auth", Requires: []string{"user", "access"},
 			SoftRequires: []string{"tenant", "mfa", "captcha", "breach"},
 			Owns:         []string{"login_histories", "password_histories"},
@@ -47,36 +71,74 @@ func fixture() []contract.Descriptor {
 				contract.RuntimeServiceMySQL,
 				contract.RuntimeServiceRedis,
 			},
+			Provides: []contract.ProvidedPort{{Name: "auth"}},
+			Consumes: []contract.ConsumedPort{
+				{Name: "user.account", Required: true},
+				{Name: "access.provisioning"},
+				{Name: "tenant.provisioner"},
+				{Name: "tenant"},
+				{Name: "tenant.info"},
+				{Name: "user.info"},
+				{Name: "mfa"},
+				{Name: "captcha"},
+				{Name: "outbox"},
+				{Name: "notification"},
+				{Name: "encryption"},
+				{Name: "breach"},
+			},
 			ProtectedHTTPMiddleware: contract.ProtectedHTTPMiddlewarePrimary},
 		{Name: "passkey", Requires: []string{"user", "auth"},
 			Owns: []string{"webauthn_credentials"}, Mount: contract.MountSelfManaged,
-			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+			Consumes: []contract.ConsumedPort{
+				{Name: "auth", Required: true},
+				{Name: "user.info"},
+				{Name: "tenant.info"},
+			}},
 		{Name: "audit", Owns: []string{"audit_logs", "audit_chain_head"}, Mount: contract.MountProtected,
 			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
 		{Name: "console", Requires: []string{"auth", "access"}, Mount: contract.MountSelfManaged,
-			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL, contract.RuntimeServiceRedis}},
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL, contract.RuntimeServiceRedis},
+			Consumes:        []contract.ConsumedPort{{Name: "ws"}}},
 		{Name: "oauth", Requires: []string{"auth", "user"},
 			Owns: []string{"user_oauth_bindings"}, Mount: contract.MountPublic,
-			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL, contract.RuntimeServiceRedis}},
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL, contract.RuntimeServiceRedis},
+			Consumes: []contract.ConsumedPort{
+				{Name: "user.account", Required: true},
+				{Name: "tenant.info"},
+			}},
 		{Name: "apikey", SoftRequires: []string{"tenant"},
 			Owns: []string{"api_keys"}, Mount: contract.MountProtected,
 			RuntimeServices:         []contract.RuntimeService{contract.RuntimeServiceMySQL},
+			Consumes:                []contract.ConsumedPort{{Name: "tenant"}, {Name: "auth"}},
 			ProtectedHTTPMiddleware: contract.ProtectedHTTPMiddlewareFallback},
 		{Name: "queue", Owns: []string{"jobs", "job_history", "dead_letters", "scheduled_jobs"},
 			Drivers: []string{"redis", "kafka", "rabbitmq"}, Mount: contract.MountProtected,
-			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+			Provides:        []contract.ProvidedPort{{Name: "outbox_mq"}},
+			DriverSpecs: []contract.DriverSpec{
+				{Name: "redis", RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis}},
+				{Name: "kafka", RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceKafka}},
+				{Name: "rabbitmq", RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRabbitMQ}},
+			}},
 		{Name: "outbox", SoftRequires: []string{"queue"},
 			Owns: []string{"outbox_events"}, Mount: contract.MountProtected,
-			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+			Provides:        []contract.ProvidedPort{{Name: "outbox"}},
+			Consumes:        []contract.ConsumedPort{{Name: "outbox_mq"}}},
 		{Name: "dataops", Owns: []string{"import_jobs"},
 			Drivers: []string{"csv", "excel"}, Mount: contract.MountProtected,
-			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+			DriverSpecs:     []contract.DriverSpec{{Name: "csv"}, {Name: "excel"}}},
 		{Name: "search", Owns: []string{"search_documents"}, Mount: contract.MountProtected,
 			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
 		{Name: "captcha", Mount: contract.MountPublic,
-			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis}},
-		{Name: "uploadsec", Mount: contract.MountProtected},
-		{Name: "breach", Mount: contract.MountProtected},
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis},
+			Provides:        []contract.ProvidedPort{{Name: "captcha"}}},
+		{Name: "uploadsec", Mount: contract.MountProtected,
+			Consumes: []contract.ConsumedPort{{Name: "storage"}}},
+		{Name: "breach", Mount: contract.MountProtected,
+			Provides: []contract.ProvidedPort{{Name: "breach"}}},
 	}
 }
 
@@ -125,6 +187,33 @@ func TestAllReturnsDeepCopyOfDrivers(t *testing.T) {
 	again := All()
 	assert.Equal(t, "redis", again[0].Drivers[0], "All() must not expose the registry's Drivers backing array")
 	assert.Equal(t, "csv", again[1].Drivers[0], "All() must not expose the registry's Drivers backing array")
+}
+
+// TestAllReturnsDeepCopyOfCompositionFields conflicts/provides/consumes/driver specs
+// 同样不得暴露清单底层数组（含 DriverSpec.RuntimeServices 的嵌套切片）。
+func TestAllReturnsDeepCopyOfCompositionFields(t *testing.T) {
+	withEntries(t, contract.Descriptor{
+		Name:      "queue",
+		Conflicts: []string{"legacy_queue"},
+		Provides:  []contract.ProvidedPort{{Name: "outbox_mq"}},
+		Consumes:  []contract.ConsumedPort{{Name: "tenant", Required: true}},
+		Drivers:   []string{"redis"},
+		DriverSpecs: []contract.DriverSpec{
+			{Name: "redis", RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis}},
+		},
+	})
+	got := All()
+	got[0].Conflicts[0] = "mutated"
+	got[0].Provides[0].Name = "mutated"
+	got[0].Consumes[0].Name = "mutated"
+	got[0].DriverSpecs[0].Name = "mutated"
+	got[0].DriverSpecs[0].RuntimeServices[0] = contract.RuntimeService("mutated")
+	again := All()
+	assert.Equal(t, "legacy_queue", again[0].Conflicts[0])
+	assert.Equal(t, "outbox_mq", again[0].Provides[0].Name)
+	assert.Equal(t, "tenant", again[0].Consumes[0].Name)
+	assert.Equal(t, "redis", again[0].DriverSpecs[0].Name)
+	assert.Equal(t, contract.RuntimeServiceRedis, again[0].DriverSpecs[0].RuntimeServices[0])
 }
 
 func TestAllReturnsDeepCopyOfMigrationSchemaDepsAndRuntimeServices(t *testing.T) {

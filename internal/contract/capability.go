@@ -72,6 +72,22 @@ type Descriptor struct {
 	// 驱动包在 init() 中向能力核心注册（设计 §3.7）。
 	Drivers []string
 
+	// Conflicts 声明不能与本能力同时启用的能力名。
+	// 门禁校验同名、自引用、重复与未知目标；配对检查由组合解析器负责。
+	Conflicts []string
+
+	// Provides 声明本能力在 Wire 中注册的 contract 端口；全仓声明中端口名必须唯一
+	// （与 assembly.Context.Provide 同名即报错一致）。
+	Provides []ProvidedPort
+
+	// Consumes 声明本能力从装配上下文读取的 contract 端口；
+	// Required 表示缺失即非法，false 表示缺失时按软依赖降级。
+	Consumes []ConsumedPort
+
+	// DriverSpecs 为 Drivers 中的驱动补充组合元数据（如额外运行时服务）；
+	// 每一项的 Name 必须命中 Drivers，未列出的驱动视为没有额外要求。
+	DriverSpecs []DriverSpec
+
 	// Permissions 能力拥有的权限点；种子时由启用集聚合写入，未启用的能力不种。
 	Permissions []Permission
 

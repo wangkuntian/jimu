@@ -52,6 +52,8 @@ flowchart LR
 - `Descriptor.Mount` 声明路由挂载方式，组合根不按能力名特判。
 - `Descriptor.ProtectedHTTPMiddleware` 显式声明受保护链的 primary/fallback 提供方式；存在 `MountProtected` 路由时必须恰好解析出一个有效提供者。注册时还会对照实现校验，阻止“声明了但没实现”或“实现了但没声明”的漂移。
 - `Descriptor.MigrationSchemaDeps` 声明迁移必须携带的其他能力 schema，`Descriptor.RuntimeServices` 声明启动所需外部服务；生成器据此在写目标目录前检查迁移闭包与配置段。
+- `Descriptor.Conflicts` 声明不能同时启用的能力；`Descriptor.Provides` / `Descriptor.Consumes` 声明 contract 端口的提供与消费关系（`Required` 表示该形态内缺失即非法）；`Descriptor.DriverSpecs` 为 `Drivers` 中的驱动补充驱动级运行时服务。`make check-capabilities` 校验未知/自引用/重复冲突、全仓重复提供方、每个形态内必需消费者缺失和非法驱动声明。
+- 组合状态用两个正交维度描述：`validity`（`valid|invalid`）表示结构是否合法，`support`（`certified|validated|experimental`）表示官方支持级别；合法性不隐含支持级别，反之亦然。
 
 ### 组合与运行时筛选
 

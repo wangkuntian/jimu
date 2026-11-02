@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -63,6 +64,72 @@ func TestProfilePortFlow(t *testing.T) {
 			require.NoError(t, assembly.ValidatePortFlow(withAbsentPortStubs(t, p.a, universe)))
 		})
 	}
+}
+
+// TestProfileProvidesMatchDescriptors 钉住 Descriptor.Provides 与 Wire 实际 ctx.Provide 的
+// 一致性：P0-2 起端口声明是组合解析的事实源，声明多写/少写会让合法子集被误拒或漏拒。
+func TestProfileProvidesMatchDescriptors(t *testing.T) {
+	for _, p := range profileAssemblies() {
+		t.Run(p.name, func(t *testing.T) {
+			res, err := assembly.ProbeAssembly(p.a, nil)
+			require.NoError(t, err)
+			for _, c := range p.a.Capabilities {
+				name := c.Descriptor.Name
+				want := providedNames(c.Descriptor.Provides)
+				require.ElementsMatch(t, want, res.Provided[name],
+					"能力 %q 的 Provides 与 Wire 实际 Provide 不一致", name)
+			}
+		})
+	}
+}
+
+// conditionalConsumes 记录默认配置下不会执行到的端口读取分支。这些端口仍必须是合法声明，
+// 但它们不会出现在 ProbeAssembly 的观测结果里；其余声明必须与实际读取逐项一致。
+var conditionalConsumes = map[string]bool{
+	"auth/access.provisioning": true,
+	"outbox/outbox_mq":         true,
+}
+
+// TestProfileConsumesMatchDescriptors 钉住 Descriptor.Consumes 与 Wire 实际 ctx.Port 读取的
+// 一致性：未声明的读取、拼错的声明（尤其可选端口）都会在这里暴露。
+func TestProfileConsumesMatchDescriptors(t *testing.T) {
+	for _, p := range profileAssemblies() {
+		t.Run(p.name, func(t *testing.T) {
+			res, err := assembly.ProbeAssembly(p.a, nil)
+			require.NoError(t, err)
+			for _, c := range p.a.Capabilities {
+				name := c.Descriptor.Name
+				declared := consumedNames(c.Descriptor.Consumes)
+				for _, port := range res.Consumed[name] {
+					require.Contains(t, declared, port,
+						"能力 %q 读取了未声明的端口 %q", name, port)
+				}
+				for _, port := range declared {
+					if slices.Contains(res.Consumed[name], port) {
+						continue
+					}
+					require.True(t, conditionalConsumes[name+"/"+port],
+						"能力 %q 声明消费端口 %q，但 Wire 未读取且不在条件分支清单中", name, port)
+				}
+			}
+		})
+	}
+}
+
+func providedNames(ports []contract.ProvidedPort) []string {
+	out := make([]string, 0, len(ports))
+	for _, port := range ports {
+		out = append(out, port.Name)
+	}
+	return out
+}
+
+func consumedNames(ports []contract.ConsumedPort) []string {
+	out := make([]string, 0, len(ports))
+	for _, port := range ports {
+		out = append(out, port.Name)
+	}
+	return out
 }
 
 // TestProfileNonCatalogEntriesAreUngated 每个形态里非 catalog 条目都必须标记 Ungated

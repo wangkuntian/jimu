@@ -1260,6 +1260,8 @@ capabilities:
 
 新增能力、profile 或驱动时，更新对应声明与组合清单，并运行 `make check-capabilities`、`make profiles-check`。能力依赖、驱动选择、资产所有权和生成器边界见[能力架构](docs/design/capability-architecture.md)与[形态与项目生成](docs/design/profiles-and-project-generation.md)；逐步操作见 `skills/jimu/references/`。
 
+能力根包在 `Descriptor` 中同时声明组合契约：`Conflicts`（互斥能力）、`Provides` / `Consumes`（contract 端口，`Required` 表示硬前提）、`DriverSpecs`（驱动级运行时服务）。`make check-capabilities` 拒绝未知/自引用/重复冲突、重复提供方、必需消费者缺失和非法驱动声明；组合状态用 `validity: valid|invalid` 与 `support: certified|validated|experimental` 两个正交维度表示。
+
 ### 错误码
 
 定义在 `internal/shared/errors/errors.go`，按模块分段分配，后续模块依次向后分配：

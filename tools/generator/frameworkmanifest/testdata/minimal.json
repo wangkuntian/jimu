@@ -1444,6 +1444,7 @@
     "internal/capabilities/user/module_test.go",
     "internal/capabilities/user/userinfo_port.go",
     "internal/capabilities/user/wire.go",
+    "internal/capability/composition_test.go",
     "internal/capability/resolve.go",
     "internal/capability/resolve_test.go",
     "internal/config/capsection_test.go",
@@ -1455,6 +1456,8 @@
     "internal/contract/capability_test.go",
     "internal/contract/client.go",
     "internal/contract/client_test.go",
+    "internal/contract/composition.go",
+    "internal/contract/composition_test.go",
     "internal/contract/events.go",
     "internal/contract/module.go",
     "internal/contract/openapi.go",
@@ -1653,6 +1656,7 @@
     "internal/shared/validator/validator_test.go",
     "scripts/check_profiles.sh",
     "tools/checkcapabilities/assets.go",
+    "tools/checkcapabilities/composition.go",
     "tools/checkcapabilities/drivers.go",
     "tools/checkcapabilities/generator_boundary.go",
     "tools/checkcapabilities/imports.go",
@@ -1670,5 +1674,5 @@
     "tools/profileoverlay/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:fbc0cff232e46398df37347339c59d1c4306424780ca51fb9a339c8bb4b26cb9"
+  "digest": "sha256:a164b86e7f89a17bba57253408a94830e1fd44576ab78c5061682f6b613bf6dc"
 }

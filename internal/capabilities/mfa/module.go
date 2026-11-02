@@ -58,6 +58,11 @@ var Descriptor = contract.Descriptor{
 	Owns:            []string{"user_mfa", "trusted_devices"},
 	Mount:           contract.MountSelfManaged,
 	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+	Provides:        []contract.ProvidedPort{{Name: PortName}},
+	Consumes: []contract.ConsumedPort{
+		{Name: contract.UserinfoPortName},
+		{Name: contract.TenantInfoPortName},
+	},
 	Permissions: []contract.Permission{
 		{Name: "MFA 绑定密钥", Resource: "/api/v1/auth/mfa/setup", Action: "POST"},
 		{Name: "MFA 启用", Resource: "/api/v1/auth/mfa/enable", Action: "POST"},
