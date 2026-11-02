@@ -1,20 +1,19 @@
 name: CI (Scaffold)
 
-# 重型脚手架矩阵：真实生成项目 + `go build/vet/test/run`，并执行官方模板预算、basic smoke 与
-# auth 新空库 Compose E2E（由 JIMU_HEAVY_MATRIX=1 门控，本地等价命令
-# `make test-scaffold-matrix`）。**普通开发 PR 不跑** —— 冷跑要十几到几十分钟，
-# 只在发布候选 PR 与 dependabot 依赖 PR 上运行，避免每个开发 PR 都等待重型矩阵。
+# 两层脚手架门禁：
+#   official：两个官方模板的预算、basic smoke 与 auth 空库 Compose E2E；release/* 与
+#             dependabot/* → master PR 运行，本地等价命令 `make test-scaffold-official`。
+#   full：全能力/全 profile 生成器矩阵；只在 schedule 与 workflow_dispatch 运行，
+#         本地等价命令 `make test-scaffold-matrix`。
+# **普通开发 PR 不跑** —— feature/fix → release 不触发本 workflow。
 #
-# 触发口径（任一满足）：
-#   ① 手动 workflow_dispatch：只跑这条重型 workflow（这是它独立成文件的主要理由之一 —— 挂在 ci.yml 上
-#      时手动触发会把 Lint/Test/Race/Bench/Govulncheck 一起拉起来）；
-#   ② release/* → master 的 PR：发布候选全量验证；以及 dependabot/* → master 的依赖 PR：
-#      依赖升级必须**当场**被脚手架矩阵验证（攒批分支 `dependency-updates` 已移除，依赖 PR 直接
-#      面向 master —— 若这里不放行，依赖 PR 会在 `Scaffold Gate` 上红且无法合并；放行后升级被
-#      模板/闭包打破会在 PR 当场暴露，而不是等到发布才发现）；
-#   ③ 每周一次的夜间定时：模板/闭包漂移在两次 release 之间就能抓到。
-# ①② 之外的其它来源 PR 由下面的 `Scaffold Gate` 聚合 job fail-closed 拒绝。
-# tag 发布不再重复执行矩阵；release→master PR 的必需检查负责验证要发布的 master tip。
+# 触发口径：
+#   ① release/* 与 dependabot/* → master PR：official；
+#   ② workflow_dispatch：full（用于发布前或改动生成器/能力后的人工完整验证）；
+#   ③ 每周一次的夜间定时：full。
+# ① 之外的其它来源 PR 由下面的 `Scaffold Gate` 聚合 job fail-closed 拒绝。
+# tag 发布不再重复执行矩阵；release→master PR 的必需检查验证 official，full 需要时在合并前手动
+# workflow_dispatch 验证同一 ref。
 #
 # 为什么独立成 workflow（而不是 ci.yml 里的一个 job）：
 #   1. 手动触发只跑矩阵，不附带整套 PR 门禁；
@@ -26,14 +25,15 @@ name: CI (Scaffold)
 # 构成是 25 个选区构建网 ≈560s（占 65%）、5+5 个生成项目测试树 239s、其余门控用例 ~150s、
 # 编译/缓存恢复 ~100s。已做的优化：`heavyBuildConcurrency` 从 2 提到 4（标准 runner 是
 # 4 vCPU，定死在 2 只用一半 CPU；旧注释里的「2 vCPU」是从 `CPU 时间 3330s / 墙钟 28min ≈ 2`
-# 反推出来的，那个 2 其实是当时的并发上限）+ 下面这份滚动缓存。现在拆成 4 个构建、
-# 2 个生成项目测试、1 个其余用例并行作业；聚合 job 以 Scaffold Gate 这一名称对外保留单一必需检查。
+# 反推出来的，那个 2 其实是当时的并发上限）+ 下面这份滚动缓存。full 档仍拆成 4 个构建、
+# 2 个生成项目测试、1 个其余用例并行作业；official 是单个 job。聚合 job 以 Scaffold Gate
+# 这一名称对外保留单一必需检查。
 
 on:
   workflow_dispatch:
   pull_request:
-    # 监听面向 master 的 PR：release/*（发布候选）与 dependabot/**（依赖升级）会真跑矩阵，
-    # 其它来源由下面的 Scaffold Gate 聚合 job fail-closed 拒绝；feature/fix → release 不跑重型矩阵。
+    # 监听面向 master 的 PR：release/*（发布候选）与 dependabot/**（依赖升级）跑 official，
+    # 其它来源由下面的 Scaffold Gate 聚合 job fail-closed 拒绝；feature/fix → release 不触发本 workflow。
     types: [opened, synchronize, reopened]
     branches: [master]
   schedule:
@@ -80,10 +80,27 @@ jobs:
             echo "heavy=false" >> "$GITHUB_OUTPUT"
           fi
 
-  scaffold-shards:
+  scaffold-official:
+    name: Scaffold (official)
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true' && github.event_name == 'pull_request' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'dependabot/'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: "🏗️ Run official scaffold gate"
+        run: make test-scaffold-official
+
+  scaffold-full:
     name: Scaffold (${{ matrix.name }})
     needs: changes
-    if: needs.changes.outputs.heavy == 'true' && (github.event_name != 'pull_request' || startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'dependabot/'))
+    if: needs.changes.outputs.heavy == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -110,7 +127,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/scaffold-gocache
-          # 滚动 key（发布候选 PR 与手动/定时运行共用同一规范）：
+          # 滚动 key（full 矩阵在手动/定时运行中使用）：
           #   `-vN`（当前 `-v2`）是**可递增的版本后缀** —— 体积超阈值（见下方守卫）或怀疑缓存内容损坏/被污染时，
           #   递增（-v2、-v3…）后重跑即可强制重建；新 key 必然未命中，旧条目由仓库 actions/cache
           #   配额（10 GB）LRU 淘汰。
@@ -124,7 +141,7 @@ jobs:
             scaffold-gocache-v2-${{ runner.os }}-${{ hashFiles('go.sum') }}-
             scaffold-gocache-v2-${{ runner.os }}-
 
-      - name: "🏗️ Run scaffold shard"
+      - name: "🏗️ Run full scaffold shard"
         env:
           JIMU_HEAVY_MATRIX: "1"
           JIMU_TEST_GOCACHE: ${{ runner.temp }}/scaffold-gocache
@@ -164,7 +181,7 @@ jobs:
 
   scaffold-matrix:
     name: Scaffold Gate
-    needs: [changes, scaffold-shards]
+    needs: [changes, scaffold-official, scaffold-full]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -172,24 +189,40 @@ jobs:
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           HEAVY: ${{ needs.changes.outputs.heavy }}
-          SHARDS_RESULT: ${{ needs.scaffold-shards.result }}
+          OFFICIAL_RESULT: ${{ needs.scaffold-official.result }}
+          FULL_RESULT: ${{ needs.scaffold-full.result }}
           RELEASE_SOURCE: ${{ github.head_ref }}
         run: |
           if [ "$CHANGES_RESULT" != success ]; then
             echo "::error::Scaffold input detection failed: $CHANGES_RESULT"
             exit 1
           fi
-          # 只接受 release/* 与 dependabot/* 来源的 master PR：前者是发布候选，后者是依赖升级
-          # （依赖 PR 直接面向 master，必须当场被脚手架矩阵验证；其余来源仍 fail-closed）。
+          # 只接受 release/* 与 dependabot/* 来源的 master PR：前者是发布候选，后者是依赖升级。
+          # PR 只跑 official；full 只允许在 schedule/workflow_dispatch 运行。
           if [ "$GITHUB_EVENT_NAME" = pull_request ] && [[ "$RELEASE_SOURCE" != release/* && "$RELEASE_SOURCE" != dependabot/* ]]; then
             echo "::error::Scaffold Gate only accepts release/* and dependabot/* -> master PRs: $RELEASE_SOURCE"
             exit 1
           fi
-          if [ "$HEAVY" = true ] && [ "$SHARDS_RESULT" != success ]; then
-            echo "::error::Scaffold shards failed or were skipped: $SHARDS_RESULT"
-            exit 1
-          fi
-          if [ "$HEAVY" = false ] && [ "$SHARDS_RESULT" != skipped ]; then
-            echo "::error::Scaffold shards unexpectedly ran: $SHARDS_RESULT"
-            exit 1
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            if [ "$HEAVY" = true ] && [ "$OFFICIAL_RESULT" != success ]; then
+              echo "::error::official scaffold gate failed or was skipped: $OFFICIAL_RESULT"
+              exit 1
+            fi
+            if [ "$HEAVY" = false ] && [ "$OFFICIAL_RESULT" != skipped ]; then
+              echo "::error::official scaffold gate unexpectedly ran: $OFFICIAL_RESULT"
+              exit 1
+            fi
+            if [ "$FULL_RESULT" != skipped ]; then
+              echo "::error::full scaffold matrix must not run on pull requests: $FULL_RESULT"
+              exit 1
+            fi
+          else
+            if [ "$FULL_RESULT" != success ]; then
+              echo "::error::full scaffold matrix failed or was skipped: $FULL_RESULT"
+              exit 1
+            fi
+            if [ "$OFFICIAL_RESULT" != skipped ]; then
+              echo "::error::official scaffold gate must not run outside pull requests: $OFFICIAL_RESULT"
+              exit 1
+            fi
           fi

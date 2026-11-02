@@ -1298,7 +1298,7 @@ capabilities:
 
 ### 质量门禁
 
-本地基础检查运行 `make fmt`、`make vet`、`make lint` 与 `make test`。能力、profile 和生成器边界分别由 `make check-capabilities`、`make profiles-check` 与 `make test-scaffold-matrix` 覆盖；重型矩阵同时执行官方模板预算、`basic-api` smoke 和 `auth-api` 空库端到端。报告变化时运行 `make compose-report-check`。
+本地基础检查运行 `make fmt`、`make vet`、`make lint` 与 `make test`。能力、profile 和生成器边界分别由 `make check-capabilities`、`make profiles-check` 与 `make test-scaffold-official` / `make test-scaffold-matrix` 覆盖；official 执行两个官方模板的预算、`basic-api` smoke 和 `auth-api` 空库端到端，full 在夜间/手动验证全部 `--with` 与内部 profile 选区。报告变化时运行 `make compose-report-check`。
 
 CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)。
 
@@ -1342,8 +1342,9 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 | `make lint` | golangci-lint |
 | `make check-capabilities` | 校验能力声明与迁移/驱动关系、形态生产 import 边界、非代码资产归属及生成器依赖边界；已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job |
 | `make check-config` | 校验 Secret、Compose、observability 与 Helm/K8s 部署 manifest 契约 |
-| `make check-templates` | 模板漂移门禁：用生成器在临时目录生成最小项目（`--profile=minimal`）并真构建 + 跑生成项目自己的 `check-capabilities`；用例被 `JIMU_HEAVY_MATRIX` 门控，目标内显式置 1；CI 的脚手架矩阵会覆盖这条用例 |
-| `make test-scaffold-matrix` | 本地完整运行重型脚手架矩阵（`JIMU_HEAVY_MATRIX=1`：真实生成项目 + `go build/vet/test/run`，并执行 `budgets.json` 预算门禁、`basic-api` smoke 与 `auth-api` 新空库 Compose 端到端；需 Docker Compose，耗时数分钟起）；CI 在发布候选 PR、手动触发或定时任务中并行运行，并聚合检查结果；`JIMU_TEST_GOCACHE=<dir>` 可指定跨运行复用的 GOCACHE |
+| `make check-templates` | 模板漂移门禁：用生成器在临时目录生成最小项目（`--profile=minimal`）并真构建 + 跑生成项目自己的 `check-capabilities`；用例被 `JIMU_HEAVY_MATRIX` 门控，目标内显式置 1；CI 的 full 脚手架矩阵（夜间/手动）会覆盖这条用例 |
+| `make test-scaffold-official` | 两个官方模板的发布门禁（`JIMU_HEAVY_MATRIX=1`：`basic-api` smoke、`auth-api` 空库 Compose E2E、模板预算和生成配置检查；需 Docker Compose）；CI 在 release/* 与 dependabot/* → master PR 中运行 |
+| `make test-scaffold-matrix` | 本地完整运行重型脚手架矩阵（`JIMU_HEAVY_MATRIX=1`：真实生成项目 + `go build/vet/test/run`，覆盖全部 `--with` 和内部 profile；需 Docker Compose，耗时数分钟起）；CI 在手动触发或定时任务中并行运行，并聚合检查结果；`JIMU_TEST_GOCACHE=<dir>` 可指定跨运行复用的 GOCACHE |
 | `make profiles-check` | 用 overlay 构建已注册 profile 并检查依赖闭包（golden）；`JIMU_PROFILES_SMOKE=1` 时额外启动各 profile 并轮询管理端 `/readyz`（需 DB+Redis）；已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job |
 | `make compose-report` | 生成形态编译面报告 `docs/profiles/compose-report.md`（二进制/路由/迁移/表/本仓闭包代码量与文件数/重型依赖列；不连库、不启动监听） |
 | `make compose-report-check` | 报告漂移门禁：重新实测并比对入库报告的**平台无关部分**（路由/迁移/表/本仓闭包文件数与代码行/重型依赖/直接依赖数）；二进制大小列**平台相关**（darwin 与 linux 实测值不同），不参与逐字节比对、只作归档打印到日志（相对关系由 `tools/composereport` 的单测在度量所在机器上断言）。已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job（P2.8 收口） |
@@ -1352,7 +1353,8 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 | `make cli` | 编译 CLI |
 | `make compose-check` | 使用临时项目、Secret 和数据卷进行 Compose 运行时/API 验证，不影响本地服务 |
 | `make release-check` | 发布前检查（fmt-check + vet + check-log-usage + check-capabilities + profiles-check + compose-report-check + test + govulncheck + Compose 运行时/API 验证 + 重型脚手架矩阵） |
-| `make ci` | 本地 CI 检查（无外部依赖：fmt-check + vet + lint + check-log-usage + check-capabilities + profiles-check + compose-report-check + test + 覆盖率（逐包「不低于」下限由 CI 的 `Coverage & Docs` 按 DB 口径执行；本地 `make ci` 无 DB 口径、`*/infrastructure` 测试 SKIP，故以 `SKIP_COVERAGE_FLOORS=1` 跳过该判定；该开关**在 CI 中会被门禁拒绝**（`GITHUB_ACTIONS=true` 时报错非零退出，fail-closed，以免逐包门禁被静默关掉），详见 `docs/releases/v0.3.6.md`）+ race + swagger + smoke + build + govulncheck + 重型脚手架矩阵，完整 CI 见 `.github/workflows/ci.yml`） |
+| `make ci` | 本地 CI 检查（fmt-check + vet + lint + check-log-usage + check-capabilities + profiles-check + compose-report-check + test + 覆盖率（逐包「不低于」下限由 CI 的 `Coverage & Docs` 按 DB 口径执行；本地 `make ci` 无 DB 口径、`*/infrastructure` 测试 SKIP，故以 `SKIP_COVERAGE_FLOORS=1` 跳过该判定；该开关**在 CI 中会被门禁拒绝**（`GITHUB_ACTIONS=true` 时报错非零退出，fail-closed，以免逐包门禁被静默关掉），详见 `docs/releases/v0.3.6.md`）+ race + swagger + smoke + build + govulncheck + `test-scaffold-official`） |
+| `make ci-full` | 与 `make ci` 相同，但把 official 脚手架门禁替换为完整的 `test-scaffold-matrix`；用于生成器/能力大改或发布前的本地全量验证 |
 | `make clean` | 清理构建产物 |
 | `make hooks` | 安装 git 钩子（pre-commit 框架 + `githooks/commit-msg` 提交消息全英文检查） |
 

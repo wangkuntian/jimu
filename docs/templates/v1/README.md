@@ -293,7 +293,7 @@ make down
 
 生成文件数排除 `.jimu/manifest.json` 和 `docs/profiles/generated-report.md`；依赖与闭包按生成项目的 `go list` / `go/packages` 口径统计。
 
-自动门禁由 `make test-scaffold-matrix` 执行，并纳入 CI `Scaffold Gate`（`auth-api` 用例需要可用的 Docker Compose）：
+官方模板的自动门禁由 `make test-scaffold-official` 执行，并纳入 CI `Scaffold Gate`（`auth-api` 用例需要可用的 Docker Compose）；full 生成器矩阵由 `make test-scaffold-matrix` 在手动触发或夜间定时运行：
 
 - `TestOfficialTemplateBudgets` 直接读取 `budgets.json`，生成两个官方模板后实测文件数、直接依赖、Go 闭包、外部服务、路由、表、迁移和非代码资产，任一指标超限即失败。
 - `TestBasicAPIStartsWithoutExternalServices` 不启动容器，先跑生成项目的 build/vet/test，再验证 `/livez`、`/readyz`、示例路由、统一 404/405 响应、SIGTERM 优雅退出和冷生成至就绪预算。
