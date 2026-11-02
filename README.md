@@ -247,6 +247,8 @@ make cli
 ./bin/jimu new ./myapp --with=user,access,auth,queue                         # 按能力名解析（硬依赖闭包 + 拓扑序）
 ./bin/jimu new ./myapp --with=queue:kafka,storage:local,user,access,auth     # 冒号后缀逐项指定驱动
 ./bin/jimu check ./myapp                                                     # 只读检查已生成项目的 manifest 与组合一致性
+./bin/jimu upgrade ./myapp --dry-run                                        # 只读三方 diff：分类 + 冲突路径/原因
+./bin/jimu upgrade ./myapp --check                                          # 同上；存在 conflict 时退出非 0
 ./bin/jimu capability add dataops                                            # 在已生成项目里增量追加能力（见「生成项目」）
 
 # 能力骨架（本仓内开发用；生成项目不携带此命令）
@@ -281,6 +283,16 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 `auth-api` 生成单租户 Go 工程，包含用户、JWT 会话、RBAC、MySQL 8.4、Redis 7、8 张业务表、10 个迁移和 24 条业务路由；用户创建和更新密码至少 8 个字符。项目自己的 `make up` 完成构建、迁移、seed 和启动，`make verify` 验证 readyz、login、me、受保护请求和短密码拒绝。`AUTH_API_PORT` 与 `AUTH_API_MANAGEMENT_PORT` 可覆盖默认宿主机端口，`make verify` 会自动沿用对应地址，便于并行验收和避开本机端口冲突。Compose 的 `init` 与 `app` 使用调用 `make up` 的宿主 UID/GID 运行，确保 Linux 下 `0600` 本地 secret 可读。
 
 `jimu check <dir>` 只读检查已生成项目：读取 `<dir>/.jimu/manifest.json`，按与 `jimu new` 相同的组合规则校验硬依赖、冲突、端口、驱动、迁移 schema 依赖、表/迁移、运行时服务/配置、受保护中间件与生成计划。合法项目退出 0；非法项目退出非 0，并逐条输出 `code`、`capability`、`path`、`message`、`fix`。该命令属于框架仓，不复制进生成项目。
+
+`jimu upgrade <dir> --dry-run` 只读规划显式升级：以 manifest 的 `generated_file_sha256` 为基线，把项目中记录的选择集按当前框架重新渲染到临时目录，再对每个受管路径做三方比较。输出按 `conflict`、`modified`、`new`、`deleted`、`untouched` 分组，路径稳定排序；每条带原因和动作。`--check` 使用同一份报告，存在 `conflict` 时退出非 0。两种模式都不写项目目录；目标产物与 `go mod tidy` 只作用于系统临时副本，`--no-tidy` 可跳过临时副本的 tidy。当前版本只提供规划，不带模式调用会拒绝执行；写入、备份和回滚属于后续升级事务。
+
+| 分类 | 判定 | 策略 |
+|---|---|---|
+| `untouched` | 本地内容与目标产物都等于 manifest 基线 | 不动作 |
+| `modified` | 目标模板变化，本地仍等于基线 | 可安全安装目标产物 |
+| `conflict` | 本地已偏离基线（用户修改、删除或路径被占用） | 绝不覆盖，输出路径和原因 |
+| `new` | 目标模板新增且本地不存在 | 可安装 |
+| `deleted` | 目标模板不再生成该文件 | 保留本地副本，不自动删除；模板删除且本地也改过时归入 `conflict` |
 
 `jimu capability add <name>` 在已生成项目中追加框架已有的能力。`jimu capability create <name>` 只在框架仓库中创建能力骨架，不自动修改 catalog 或 profile。旧 `jimu module create` 已移除。
 

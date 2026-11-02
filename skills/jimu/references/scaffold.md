@@ -20,6 +20,8 @@
 ./bin/jimu new ./myapp --with=user,access,auth,queue --shape=app              # 能力名（硬依赖闭包 + 拓扑序）
 ./bin/jimu new ./myapp --with=auth,queue:kafka --dry-run                      # 只打印计划，不落盘
 ./bin/jimu check ./myapp                                                      # 只读检查 manifest 与组合一致性
+./bin/jimu upgrade ./myapp --dry-run                                          # 只读三方 diff，不写项目目录
+./bin/jimu upgrade ./myapp --check                                            # 有 conflict 时退出非 0
 ```
 
 | 参数 | 说明 |
@@ -39,6 +41,10 @@
 **组合解析顺序（P0-2）**：输入校验 → 硬依赖闭包 → 冲突 → `Provides`/`Consumes` → 驱动 → 迁移 schema 依赖 → 表/迁移 → 运行时服务/配置 → 中间件 → plan。诊断统一含 `code`/`capability`/`path`/`message`/`fix` 并稳定排序；非法组合在写目标目录前失败。`jimu check <dir>` 用同一套预检只读检查已有项目，合法退出 0、非法退出非 0。
 
 **Provenance**：`.jimu/manifest.json` 为 schema v3，`framework.commit` 来自 `git rev-parse --verify HEAD^{commit}`（支持普通 clone 与 worktree），同时记录 `framework.dirty`、官方模板的 `selection.template_version`、覆盖全部 `generated_files` 的 `generated_file_sha256`，以及 `composition` 组合块（契约版本、requested/resolved/auto-added、驱动、validity/support）。`--dry-run` 与 `jimu check` 的 support 读取 `composition.support`；schema v2 只读用于升级，schema v1 fail-closed。
+
+## `jimu upgrade <dir>`（只读规划）
+
+以 manifest 的 `generated_file_sha256` 为基线，把记录的选择集按当前框架重新渲染到系统临时目录，再与当前项目做三方比较。分类固定为 `untouched`、`modified`、`conflict`、`new`、`deleted`，输出按分类分组、路径稳定排序，每条带原因和动作。`conflict` 表示本地已偏离基线（用户修改、删除或路径被占用），绝不覆盖；`deleted` 表示目标模板不再生成该文件，不自动删除本地副本。`--dry-run` 打印完整报告；`--check` 复用报告并在有冲突时退出非 0。两种模式都不写项目目录，临时副本上的 `go mod tidy` 可用 `--no-tidy` 跳过。当前版本不带模式调用会拒绝执行；实际写入/备份/回滚属于后续 upgrade 事务。
 
 **生成物是子集**：内核目录原样复制；能力按复制集（声明集 ∪ 编译闭包 ∪ schema 依赖的迁移携带目录 ∪ 内核 domain 依赖）落地；`internal/profiles/{registry,<shape>,active}`、`internal/capabilities/catalog/*`、`configs/*.yaml`、`Makefile`/`Dockerfile`/`scripts/check_profiles.sh` 按能力集**渲染**（单形态，无 `PROFILE=`、无 overlay）；测试树按「逐文件 import 可满足性 + 资产依赖」裁剪（规则写入 `.jimu/manifest.json` 的 `prune` 段，文件清单写入 `generated_files`）。manifest 只支持 JSON，路径必须为相对路径。
 

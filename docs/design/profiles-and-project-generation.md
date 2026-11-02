@@ -90,6 +90,20 @@ flowchart TD
 
 新增能力的硬依赖必须已经在项目声明集中，不会静默追加依赖。未使用 `--force` 且项目 manifest 摘要已变化时，追加操作拒绝继续。更新仅安装生成器管理的差异文件，并保留现有配置值；受管文件写入失败时恢复已备份文件。该增量追加流程不执行新建项目使用的 `go mod tidy` 和构建自检。
 
+### 显式升级规划
+
+`jimu upgrade` 是独立的显式升级入口，不复用 `capability add` 或隐式重生成。规划阶段只读：读取现有 manifest（schema v2 在内存升级为 v3），按 `selection.template`、`selection.profile` 或 `composition.requested` 重建当前框架下的目标 manifest，再把目标产物渲染到系统临时目录。规划器比较三份事实：manifest 的 `generated_file_sha256` 基线、项目当前文件、目标模板产物。
+
+| 分类 | 判定 | 动作 |
+|---|---|---|
+| `untouched` | 本地与目标都等于基线（或本地已与目标一致） | 不安装 |
+| `modified` | 本地等于基线，目标模板变化 | 安装目标产物 |
+| `conflict` | 本地偏离基线（修改、删除、路径被非普通文件占用），或目标新增路径已被本地文件占用 | 保留本地，报告路径和原因 |
+| `new` | 目标模板新增，本地不存在 | 安装 |
+| `deleted` | 目标模板不再生成基线文件；本地副本保持原状，不自动删除 | 不安装、不删除 |
+
+`--dry-run` 输出完整分类报告；`--check` 复用同一报告，存在 `conflict` 时退出非 0。两者都不写项目目录，临时目录中的目标渲染和 `go mod tidy` 在报告结束后清理。冲突绝不静默覆盖；`deleted` 也不会自动删除用户目录中的文件。实际写入、逐文件备份、升级后 tidy/build/test 与回滚由独立的升级事务承担；规划器本身不修改 manifest 或项目文件。
+
 ## 关键决策
 
 - **profile 不负责缩小框架 `go.mod`。** 它通过 Go import 图改变服务构建闭包；真正拥有独立依赖清单的是 `jimu new` 生成的项目。
@@ -109,5 +123,6 @@ profile 选择必须只通过 active 选点进入服务构建；registry 留在�
 - Profile：[internal/profiles](../../internal/profiles)、[tools/profileoverlay](../../tools/profileoverlay)
 - 项目生成：[tools/generator](../../tools/generator)、[frameworkmanifest](../../tools/generator/frameworkmanifest)
 - 契约与事务：[manifest model](../../tools/generator/manifest/model.go)、[manifest validation](../../tools/generator/manifest/validate.go)、[workspace staging](../../tools/generator/workspace/stage.go)
-- 验证：`go test ./tools/generator/...`、`jimu check <generated-dir>`、`make profiles-check`、`make check-capabilities`、`make test-scaffold-official`、`make test-scaffold-matrix`
+- 升级规划：[upgrade classifier](../../tools/generator/upgrade/classify.go)、[upgrade facade](../../tools/generator/upgrade.go)
+- 验证：`go test ./tools/generator/...`、`jimu check <generated-dir>`、`jimu upgrade <generated-dir> --dry-run`、`make profiles-check`、`make check-capabilities`、`make test-scaffold-official`、`make test-scaffold-matrix`
 - CLI 参数和操作示例见 README「[生成项目](../../README.md#生成项目jimu-new--jimu-capability-add)」；能力声明和运行时装配见[能力架构](capability-architecture.md)。
