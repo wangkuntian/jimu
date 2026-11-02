@@ -4,9 +4,9 @@
 .PHONY: migrate migrate-down migrate-status seed
 .PHONY: backup restore build-backup-image compose-db-backup compose-db-restore test-backup-restore
 .PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race check-makefile check-config
-.PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates test-scaffold-matrix
+.PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates test-scaffold-official test-scaffold-matrix
 .PHONY: profiles-check compose-report compose-report-check check-skills skills-install
-.PHONY: swagger swagger-check smoke-check compose-check govulncheck check ci release-check
+.PHONY: swagger swagger-check smoke-check compose-check govulncheck check ci ci-full release-check
 .PHONY: proto bench bench-ci loadtest cli all hooks
 
 .DEFAULT_GOAL := help
@@ -20,6 +20,9 @@ SERVER_BIN = $(BIN_DIR)/jimu-server$(if $(filter-out full,$(PROFILE)),-$(PROFILE
 CLI_BIN = $(BIN_DIR)/jimu-cli$(if $(filter-out full,$(PROFILE)),-$(PROFILE),)
 SERVER_CMD := cmd/server/main.go
 CLI_PKG := ./cmd/cli
+
+# official 档只覆盖两个官方模板；full 仍由 test-scaffold-matrix 运行全部生成器用例。
+SCAFFOLD_OFFICIAL_TESTS := ^(TestOfficialTemplateBudgets|TestNewProjectBasicAPIHasNoExternalRuntimeDependencies|TestNewProjectAuthAPIIsCompactSingleTenantTemplate|TestBasicAPIStartsWithoutExternalServices|TestAuthAPIComposeConfigIsValid|TestAuthAPIComposeUsesHostUIDForSecrets|TestAuthAPIEmptyDatabaseEndToEnd)$
 
 ENV ?= dev
 VERSION ?= dev
@@ -219,7 +222,10 @@ check-capabilities: ## 校验能力声明、迁移、驱动与资产归属
 check-templates: ## 生成最小项目并执行构建与能力门禁
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -run TestTemplatesDrift -count=1 -timeout 30m
 
-test-scaffold-matrix: ## 运行重型脚手架矩阵与官方模板预算、smoke、空库 E2E（需 Docker）
+test-scaffold-official: ## 运行两个官方模板的发布门禁（需 Docker）
+	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 30m -v -run '$(SCAFFOLD_OFFICIAL_TESTS)'
+
+test-scaffold-matrix: ## 运行完整生成器矩阵（夜间/手动；需 Docker）
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 60m -v
 
 profiles-check: ## 构建全部形态并检查依赖闭包
@@ -282,8 +288,13 @@ check-config: ## 校验 Secret、Compose、observability 与部署 manifest 契�
 check: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-config test ## 运行开发质量门禁
 	@echo "✅ All checks passed"
 
-ci: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-config test-cover test-coverage-check-local test-race swagger-check smoke-check build govulncheck test-scaffold-matrix ## 运行完整本地 CI
-	@echo "✅ All local CI checks passed"
+CI_CHECKS := fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-config test-cover test-coverage-check-local test-race swagger-check smoke-check build govulncheck
+
+ci: $(CI_CHECKS) test-scaffold-official ## 运行本地 CI（官方模板门禁）
+	@echo "✅ All local CI checks passed (official)"
+
+ci-full: $(CI_CHECKS) test-scaffold-matrix ## 运行完整本地 CI（含 full 脚手架矩阵）
+	@echo "✅ All local CI checks passed (full)"
 
 release-check: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-config test govulncheck compose-check test-scaffold-matrix ## 运行发布前检查
 	@echo "All checks passed"
