@@ -310,7 +310,7 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 预检读取 Descriptor 导出的 manifest 事实并 fail-closed：受保护路由必须恰好有一个有效中间件提供者（`auth` 为 primary、`apikey` 为 fallback）；迁移 schema 依赖必须随选择集带入；表所有权和迁移文件不得重复；声明的 runtime service（含所选驱动规格）必须能在生成配置中找到对应段。
 
-`.jimu/manifest.json` 使用 schema v2 记录 provenance：`framework.version`、`framework.commit`、`framework.dirty`、官方模板的 `selection.template_version`，以及 `generated_files` 对应的 `generated_file_sha256`。commit 由 `git rev-parse --verify HEAD^{commit}` 解析，普通 clone 和 linked worktree 都必须成功；文件哈希在 tidy、自检和配置合并完成后计算，manifest 与可选报告自身不计入哈希表。v0.5.0 不提供 schema v1 只读兼容，旧生成项目按“重新生成 + 人工迁移”处理。
+`.jimu/manifest.json` 使用 schema v3 记录 provenance 与组合结果：`framework.version`、`framework.commit`、`framework.dirty`、官方模板的 `selection.template_version`、`generated_files` 对应的 `generated_file_sha256`，以及 `composition` 中的组合契约版本、`requested`/`resolved`/`auto_added`、驱动选择、`validity` 和 `support`。commit 由 `git rev-parse --verify HEAD^{commit}` 解析，普通 clone 和 linked worktree 都必须成功；文件哈希在 tidy、自检和配置合并完成后计算，manifest 与可选报告自身不计入哈希表。`--dry-run` 与 `jimu check` 的 support 读取 `composition.support`。schema v2 只读用于升级规划：加载时校验原 digest 后换成当前 schema，新增组合块由 `selection` 确定性推导；v2 只可能在预检通过后写出，因此加载时推导 `validity: valid`，需要当前合法性时仍应重新运行 resolver。writer 只接受 schema v3，schema v1 继续 fail-closed。
 
 生成闭包、模板和 manifest 的详细规则见[形态与项目生成设计](docs/design/profiles-and-project-generation.md)；稳定设计文档的范围和阅读入口见[设计文档索引](docs/design/README.md)。
 

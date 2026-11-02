@@ -163,6 +163,12 @@ func TestExportDefaultsToOfficialBasicAPI(t *testing.T) {
 	if doc.Selection.Template != "basic-api" || doc.Selection.TemplateVersion != manifest.TemplateContractVersion || doc.Selection.Support != "official" {
 		t.Fatalf("selection = %#v, want official basic-api", doc.Selection)
 	}
+	if doc.Composition == nil || doc.Composition.Support != manifest.CompositionSupportCertified {
+		t.Fatalf("composition = %#v, want certified basic-api", doc.Composition)
+	}
+	if len(doc.Composition.Requested) != 0 || len(doc.Composition.Resolved) != 0 {
+		t.Fatalf("basic-api composition = %#v, want empty selection", doc.Composition)
+	}
 	if doc.Framework.Commit == "" {
 		t.Fatal("basic-api manifest has an empty framework commit")
 	}
@@ -176,11 +182,60 @@ func TestExportAuthAPITemplateIsOfficialStandaloneSelection(t *testing.T) {
 	if doc.Selection.Template != "auth-api" || doc.Selection.TemplateVersion != manifest.TemplateContractVersion || doc.Selection.Support != "official" {
 		t.Fatalf("selection = %#v, want official auth-api", doc.Selection)
 	}
+	if doc.Composition == nil || doc.Composition.Support != manifest.CompositionSupportCertified {
+		t.Fatalf("composition = %#v, want certified auth-api", doc.Composition)
+	}
+	if got := doc.Composition.Resolved; len(got) != 3 || got[0] != "access" || got[1] != "auth" || got[2] != "user" {
+		t.Fatalf("auth-api resolved = %v, want sorted declared capabilities", got)
+	}
 	if doc.Framework.Commit == "" {
 		t.Fatal("auth-api manifest has an empty framework commit")
 	}
 	if doc.Selection.Profile != "" {
 		t.Fatalf("profile = %q, want standalone auth-api selection", doc.Selection.Profile)
+	}
+}
+
+func TestExportPersistsCompositionResult(t *testing.T) {
+	doc, err := Export(Request{Root: repositoryRoot(t), With: "access,auth", Shape: "app", Module: "example.com/composed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Composition == nil {
+		t.Fatal("manifest has no composition")
+	}
+	if got := doc.Composition.Requested; len(got) != 2 || got[0] != "access" || got[1] != "auth" {
+		t.Fatalf("requested = %v, want [access auth]", got)
+	}
+	if got := doc.Composition.Resolved; len(got) != 3 || got[0] != "access" || got[1] != "auth" || got[2] != "user" {
+		t.Fatalf("resolved = %v, want [access auth user]", got)
+	}
+	if got := doc.Composition.AutoAdded; len(got) != 1 || got[0] != "user" {
+		t.Fatalf("auto_added = %v, want [user]", got)
+	}
+	if doc.Composition.Validity != manifest.CompositionValidityValid || doc.Composition.Support != manifest.CompositionSupportExperimental {
+		t.Fatalf("status = %s/%s, want valid/experimental", doc.Composition.Validity, doc.Composition.Support)
+	}
+}
+
+func TestExportForAddPreservesRequestedAndAutoAdded(t *testing.T) {
+	root := repositoryRoot(t)
+	previous, err := Export(Request{Root: root, With: "access,auth", Shape: "app", Module: "example.com/composed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := ExportForAdd(root, previous, "notification", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := next.Composition.Requested; len(got) != 3 || got[0] != "access" || got[1] != "auth" || got[2] != "notification" {
+		t.Fatalf("requested after add = %v, want [access auth notification]", got)
+	}
+	if got := next.Composition.Resolved; len(got) != 4 || got[0] != "access" || got[1] != "auth" || got[2] != "notification" || got[3] != "user" {
+		t.Fatalf("resolved after add = %v, want [access auth notification user]", got)
+	}
+	if got := next.Composition.AutoAdded; len(got) != 1 || got[0] != "user" {
+		t.Fatalf("auto_added after add = %v, want [user]", got)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"jimu/tools/generator/manifest"
@@ -66,6 +67,9 @@ func TestCheckCmdRejectsInvalidProject(t *testing.T) {
 			doc, err := manifest.Load(path)
 			require.NoError(t, err)
 			doc.Selection.Capabilities = test.capabilities
+			doc.Composition.Requested = slices.Clone(test.capabilities)
+			doc.Composition.Resolved = slices.Clone(test.capabilities)
+			doc.Composition.AutoAdded = []string{}
 			require.NoError(t, manifest.Write(path, doc))
 
 			var out bytes.Buffer

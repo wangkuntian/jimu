@@ -489,9 +489,18 @@ func TestAddCapabilityRejectsUnknownCapability(t *testing.T) {
 func TestManifestSaveLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	want := manifest.Document{
-		SchemaVersion:       manifest.CurrentSchemaVersion,
-		Framework:           manifest.Framework{Module: "jimu", Version: "v0.3.3", Commit: "deadbeef", Dirty: true},
-		Selection:           manifest.Selection{Shape: "minimal", Profile: "minimal", Capabilities: []string{"user", "access"}, Drivers: map[string][]string{"queue": {"redis"}}},
+		SchemaVersion: manifest.CurrentSchemaVersion,
+		Framework:     manifest.Framework{Module: "jimu", Version: "v0.3.3", Commit: "deadbeef", Dirty: true},
+		Selection:     manifest.Selection{Shape: "minimal", Profile: "minimal", Capabilities: []string{"user", "access", "queue"}, Drivers: map[string][]string{"queue": {"redis"}}},
+		Composition: &manifest.Composition{
+			ContractVersion: manifest.CompositionContractVersion,
+			Requested:       []string{"access", "queue", "user"},
+			Resolved:        []string{"access", "queue", "user"},
+			AutoAdded:       []string{},
+			Drivers:         map[string][]string{"queue": {"redis"}},
+			Validity:        manifest.CompositionValidityValid,
+			Support:         manifest.CompositionSupportExperimental,
+		},
 		Capabilities:        []manifest.Capability{},
 		Copy:                []manifest.CopyAction{},
 		Templates:           []manifest.TemplateAction{},
@@ -510,6 +519,27 @@ func TestManifestSaveLoadRoundTrip(t *testing.T) {
 	got, err := workspace.LoadProjectManifest(dir)
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
+}
+
+// TestAddCapabilityPreservesRequestedAndAutoAdded 是 P0-3 的事实源护栏：
+// add 只能把用户新加的能力记入 requested，不能把既有 auto-added 依赖提升为 requested。
+func TestAddCapabilityPreservesRequestedAndAutoAdded(t *testing.T) {
+	root := frameworkRootForTest(t)
+	dir := generateForTest(t, NewOptions{With: "access,auth", Shape: "app"})
+
+	before, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	require.Equal(t, []string{"access", "auth"}, before.Composition.Requested)
+	require.Equal(t, []string{"user"}, before.Composition.AutoAdded)
+
+	_, err = AddCapability(AddOptions{Dir: dir, Name: "notification", From: root})
+	require.NoError(t, err)
+
+	after, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"access", "auth", "notification"}, after.Composition.Requested)
+	assert.Equal(t, []string{"access", "auth", "notification", "user"}, after.Composition.Resolved)
+	assert.Equal(t, []string{"user"}, after.Composition.AutoAdded)
 }
 
 // TestGeneratedProjectHasNoCapabilityScaffolding 钉住脚手架命令不进生成项目：

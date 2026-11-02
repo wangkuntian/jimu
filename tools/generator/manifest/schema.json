@@ -1,14 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://jimu.example/schema/generator-manifest-v2.json",
+  "$id": "https://jimu.example/schema/generator-manifest-v3.json",
   "title": "Jimu generator manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "framework", "selection", "capabilities", "copy", "templates", "merges", "rewrites", "assets", "prune", "report", "generated_files", "generated_file_sha256", "digest"],
+  "required": ["schema_version", "framework", "selection", "composition", "capabilities", "copy", "templates", "merges", "rewrites", "assets", "prune", "report", "generated_files", "generated_file_sha256", "digest"],
   "properties": {
-    "schema_version": {"const": 2},
+    "schema_version": {"const": 3},
     "framework": {"$ref": "#/$defs/framework"},
     "selection": {"$ref": "#/$defs/selection"},
+    "composition": {"$ref": "#/$defs/composition"},
     "capabilities": {"type": "array", "items": {"$ref": "#/$defs/capability"}},
     "copy": {"type": "array", "items": {"$ref": "#/$defs/copy"}},
     "templates": {"type": "array", "items": {"$ref": "#/$defs/template"}},
@@ -45,6 +46,20 @@
         "support": {"enum": ["", "official", "experimental", "internal"]},
         "capabilities": {"type": "array", "items": {"type": "string", "minLength": 1}},
         "drivers": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}}
+      }
+    },
+    "composition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "requested", "resolved", "auto_added", "drivers", "validity", "support"],
+      "properties": {
+        "contract_version": {"const": "v0.1"},
+        "requested": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "resolved": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "auto_added": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "drivers": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string", "minLength": 1}}},
+        "validity": {"enum": ["valid", "invalid"]},
+        "support": {"enum": ["certified", "validated", "experimental"]}
       }
     },
     "capability": {

@@ -91,7 +91,7 @@ func TestNewCmdDefaultsToBasicAPI(t *testing.T) {
 	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--dry-run"})
 	require.NoError(t, c.Execute())
 	assert.Contains(t, out.String(), "template     basic-api")
-	assert.Contains(t, out.String(), "support      official")
+	assert.Contains(t, out.String(), "support      certified")
 }
 
 func TestNewCmdMapsLegacyMinimalToAuthAPI(t *testing.T) {
@@ -101,7 +101,7 @@ func TestNewCmdMapsLegacyMinimalToAuthAPI(t *testing.T) {
 	require.NoError(t, c.Execute())
 	assert.Contains(t, out.String(), "warning: --profile=minimal")
 	assert.Contains(t, out.String(), "template     auth-api")
-	assert.Contains(t, out.String(), "support      official")
+	assert.Contains(t, out.String(), "support      certified")
 }
 
 func TestNewCmdAcceptsAuthAPITemplate(t *testing.T) {
@@ -110,7 +110,7 @@ func TestNewCmdAcceptsAuthAPITemplate(t *testing.T) {
 	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--template=auth-api", "--dry-run"})
 	require.NoError(t, c.Execute())
 	assert.Contains(t, out.String(), "template     auth-api")
-	assert.Contains(t, out.String(), "support      official")
+	assert.Contains(t, out.String(), "support      certified")
 }
 
 func TestNewCmdRejectsUnknownTemplate(t *testing.T) {

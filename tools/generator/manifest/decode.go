@@ -32,29 +32,74 @@ func Load(path string) (Document, error) {
 		}
 		return Document{}, fmt.Errorf("decode manifest: %w", err)
 	}
-	if err := validatePersistedFields(b); err != nil {
-		return Document{}, err
+	if doc.SchemaVersion == 0 {
+		return Document{}, fmt.Errorf("schema_version is required")
 	}
-	if err := ValidateComplete(doc); err != nil {
-		return Document{}, err
+	switch doc.SchemaVersion {
+	case CurrentSchemaVersion:
+		if err := validatePersistedFields(b, CurrentSchemaVersion); err != nil {
+			return Document{}, err
+		}
+		if err := ValidateComplete(doc); err != nil {
+			return Document{}, err
+		}
+		if err := validateDigest(doc); err != nil {
+			return Document{}, err
+		}
+		return doc, nil
+	case LegacySchemaVersion:
+		if err := validatePersistedFields(b, LegacySchemaVersion); err != nil {
+			return Document{}, err
+		}
+		if err := validateCompleteLegacy(doc); err != nil {
+			return Document{}, err
+		}
+		if err := validateDigestLegacy(doc); err != nil {
+			return Document{}, err
+		}
+		return upgradeFromV2(doc)
+	default:
+		return Document{}, fmt.Errorf("unsupported schema version %d", doc.SchemaVersion)
 	}
+}
+
+func validateDigest(doc Document) error {
 	if doc.Digest == "" {
-		return Document{}, fmt.Errorf("manifest digest is required")
+		return fmt.Errorf("manifest digest is required")
 	}
 	expected, err := Digest(doc)
 	if err != nil {
-		return Document{}, err
+		return err
 	}
 	if doc.Digest != expected {
-		return Document{}, fmt.Errorf("manifest digest mismatch: got %q, want %q", doc.Digest, expected)
+		return fmt.Errorf("manifest digest mismatch: got %q, want %q", doc.Digest, expected)
 	}
-	return doc, nil
+	return nil
 }
 
-func validatePersistedFields(content []byte) error {
+func validateDigestLegacy(doc Document) error {
+	if doc.Digest == "" {
+		return fmt.Errorf("manifest digest is required")
+	}
+	expected, err := digestLegacyV2(doc)
+	if err != nil {
+		return err
+	}
+	if doc.Digest != expected {
+		return fmt.Errorf("manifest digest mismatch: got %q, want %q", doc.Digest, expected)
+	}
+	return nil
+}
+
+func validatePersistedFields(content []byte, schemaVersion int) error {
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(content, &root); err != nil {
 		return fmt.Errorf("decode manifest fields: %w", err)
+	}
+	if schemaVersion == LegacySchemaVersion {
+		if _, ok := root["composition"]; ok {
+			return fmt.Errorf("composition is not valid in schema v2")
+		}
 	}
 	if err := requireJSONField(root, "generated_file_sha256"); err != nil {
 		return err
@@ -73,6 +118,20 @@ func validatePersistedFields(content []byte) error {
 	if err := requireJSONField(selection, "template_version"); err != nil {
 		return fmt.Errorf("selection.%w", err)
 	}
+	if schemaVersion == CurrentSchemaVersion {
+		if err := requireJSONField(root, "composition"); err != nil {
+			return err
+		}
+		var composition map[string]json.RawMessage
+		if err := json.Unmarshal(root["composition"], &composition); err != nil {
+			return fmt.Errorf("decode composition fields: %w", err)
+		}
+		for _, field := range []string{"contract_version", "requested", "resolved", "auto_added", "drivers", "validity", "support"} {
+			if err := requireJSONField(composition, field); err != nil {
+				return fmt.Errorf("composition.%w", err)
+			}
+		}
+	}
 	return nil
 }
 
@@ -90,6 +149,10 @@ func CanonicalJSON(doc Document) ([]byte, error) {
 	if err := Validate(doc); err != nil {
 		return nil, err
 	}
+	return marshalCanonical(doc)
+}
+
+func marshalCanonical(doc Document) ([]byte, error) {
 	normalized := normalize(doc)
 	b, err := json.Marshal(normalized)
 	if err != nil {
@@ -107,6 +170,57 @@ func Digest(doc Document) (string, error) {
 	}
 	sum := sha256.Sum256(b)
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+// digestLegacyV2 verifies a v2 manifest with the v2 JSON shape: no
+// composition field and schema_version 2.
+func digestLegacyV2(doc Document) (string, error) {
+	if err := validateLegacy(doc); err != nil {
+		return "", err
+	}
+	doc.Digest = ""
+	b, err := marshalCanonical(doc)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(b)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+// upgradeFromV2 converts a verified legacy manifest into the current schema in
+// memory. Schema v2 has no explicit composition block, so its declared
+// capability set is the resolved set and no dependency is known to be auto-added.
+// v2 manifests could only be written after preflight, so validity is derived as
+// valid; consumers that need current validity must re-run the resolver.
+func upgradeFromV2(doc Document) (Document, error) {
+	doc.SchemaVersion = CurrentSchemaVersion
+	doc.Composition = &Composition{
+		ContractVersion: CompositionContractVersion,
+		Requested:       sortedClone(doc.Selection.Capabilities),
+		Resolved:        sortedClone(doc.Selection.Capabilities),
+		AutoAdded:       []string{},
+		Drivers:         cloneDriverMap(doc.Selection.Drivers),
+		Validity:        CompositionValidityValid,
+		Support:         compositionSupportFromLegacy(doc.Selection.Support),
+	}
+	doc.Digest = ""
+	digest, err := Digest(doc)
+	if err != nil {
+		return Document{}, err
+	}
+	doc.Digest = digest
+	return doc, nil
+}
+
+func compositionSupportFromLegacy(support string) string {
+	switch support {
+	case "official":
+		return CompositionSupportCertified
+	case "experimental", "internal":
+		return CompositionSupportExperimental
+	default:
+		return CompositionSupportExperimental
+	}
 }
 
 // Write 计算 digest 后将 manifest 写入目标路径。
@@ -136,14 +250,14 @@ func Write(path string, doc Document) error {
 
 func normalize(doc Document) Document {
 	doc.Selection.Capabilities = nonNilClone(doc.Selection.Capabilities)
-	if doc.Selection.Drivers == nil {
-		doc.Selection.Drivers = map[string][]string{}
-	} else {
-		drivers := make(map[string][]string, len(doc.Selection.Drivers))
-		for name, selected := range doc.Selection.Drivers {
-			drivers[name] = slices.Sorted(slices.Values(selected))
-		}
-		doc.Selection.Drivers = drivers
+	doc.Selection.Drivers = cloneSortedDriverMap(doc.Selection.Drivers)
+	if doc.Composition != nil {
+		composition := *doc.Composition
+		composition.Requested = sortedClone(composition.Requested)
+		composition.Resolved = sortedClone(composition.Resolved)
+		composition.AutoAdded = sortedClone(composition.AutoAdded)
+		composition.Drivers = cloneSortedDriverMap(composition.Drivers)
+		doc.Composition = &composition
 	}
 	doc.Capabilities = nonNilClone(doc.Capabilities)
 	for i := range doc.Capabilities {
@@ -191,6 +305,22 @@ func normalize(doc Document) Document {
 	doc.Report.Tables = sortedClone(doc.Report.Tables)
 	doc.Report.HeavyDeps = sortedClone(doc.Report.HeavyDeps)
 	return doc
+}
+
+func cloneDriverMap(in map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(in))
+	for name, values := range in {
+		out[name] = nonNilClone(values)
+	}
+	return out
+}
+
+func cloneSortedDriverMap(in map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(in))
+	for name, values := range in {
+		out[name] = slices.Sorted(slices.Values(values))
+	}
+	return out
 }
 
 func nonNilClone[T any](values []T) []T {

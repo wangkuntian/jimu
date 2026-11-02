@@ -110,7 +110,7 @@ func NewProject(opts NewOptions) (*Result, error) {
 	}
 	return &Result{
 		Dir: created.Target, Module: created.Module, Template: doc.Selection.Template,
-		Support: doc.Selection.Support, Shape: doc.Selection.Shape,
+		Support: doc.Composition.Support, Shape: doc.Selection.Shape,
 		Validity:     resolution.Validity,
 		Requested:    slices.Clone(resolution.Requested),
 		Resolved:     slices.Clone(resolution.Resolved),

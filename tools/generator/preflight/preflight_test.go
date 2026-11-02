@@ -17,6 +17,15 @@ func validDocument() manifest.Document {
 			Shape:        "app",
 			Capabilities: []string{"user", "access", "auth"},
 		},
+		Composition: &manifest.Composition{
+			ContractVersion: manifest.CompositionContractVersion,
+			Requested:       []string{"user", "access", "auth"},
+			Resolved:        []string{"user", "access", "auth"},
+			AutoAdded:       []string{},
+			Drivers:         map[string][]string{},
+			Validity:        manifest.CompositionValidityValid,
+			Support:         manifest.CompositionSupportExperimental,
+		},
 		Capabilities: []manifest.Capability{
 			{
 				Name:                    "tenant",

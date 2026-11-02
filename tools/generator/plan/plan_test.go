@@ -12,6 +12,15 @@ func validDocument() manifest.Document {
 		SchemaVersion: manifest.CurrentSchemaVersion,
 		Framework:     manifest.Framework{Module: "jimu", Version: "v0.3.3"},
 		Selection:     manifest.Selection{Shape: "app", Capabilities: []string{"user"}, Drivers: map[string][]string{}},
+		Composition: &manifest.Composition{
+			ContractVersion: manifest.CompositionContractVersion,
+			Requested:       []string{"user"},
+			Resolved:        []string{"user"},
+			AutoAdded:       []string{},
+			Drivers:         map[string][]string{},
+			Validity:        manifest.CompositionValidityValid,
+			Support:         manifest.CompositionSupportExperimental,
+		},
 		Copy: []manifest.CopyAction{
 			{Source: "z", Destination: "z", Include: []string{}, Exclude: []string{}},
 			{Source: "a", Destination: "a", Include: []string{}, Exclude: []string{}},

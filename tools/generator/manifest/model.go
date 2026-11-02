@@ -1,16 +1,36 @@
 package manifest
 
-// CurrentSchemaVersion 是当前生成器支持的 manifest schema 版本。
-const CurrentSchemaVersion = 2
+// Schema versions understood by the generator. New manifests always use the
+// current version; the legacy version is read-only and exists for upgrades.
+const (
+	LegacySchemaVersion  = 2
+	CurrentSchemaVersion = 3
+)
 
 // TemplateContractVersion is the official template contract implemented by this generator.
 const TemplateContractVersion = "v0.1"
+
+// CompositionContractVersion is the capability composition contract persisted
+// in schema v3 manifests.
+const CompositionContractVersion = "v0.1"
+
+// Composition validity and support values mirror internal/contract's
+// composition dimensions without making the manifest package depend on it.
+const (
+	CompositionValidityValid   = "valid"
+	CompositionValidityInvalid = "invalid"
+
+	CompositionSupportCertified    = "certified"
+	CompositionSupportValidated    = "validated"
+	CompositionSupportExperimental = "experimental"
+)
 
 // Document 是生成器使用的完整 JSON manifest。
 type Document struct {
 	SchemaVersion       int               `json:"schema_version"`
 	Framework           Framework         `json:"framework"`
 	Selection           Selection         `json:"selection"`
+	Composition         *Composition      `json:"composition,omitempty"`
 	Capabilities        []Capability      `json:"capabilities"`
 	Copy                []CopyAction      `json:"copy"`
 	Templates           []TemplateAction  `json:"templates"`
@@ -39,6 +59,19 @@ type Selection struct {
 	Support         string              `json:"support"`
 	Capabilities    []string            `json:"capabilities"`
 	Drivers         map[string][]string `json:"drivers"`
+}
+
+// Composition is the persisted result of capability resolution. It is the
+// fact source for upgrades and diagnostics; schema v2 manifests are upgraded
+// in memory when loaded and carry a synthesized composition.
+type Composition struct {
+	ContractVersion string              `json:"contract_version"`
+	Requested       []string            `json:"requested"`
+	Resolved        []string            `json:"resolved"`
+	AutoAdded       []string            `json:"auto_added"`
+	Drivers         map[string][]string `json:"drivers"`
+	Validity        string              `json:"validity"`
+	Support         string              `json:"support"`
 }
 
 type Capability struct {

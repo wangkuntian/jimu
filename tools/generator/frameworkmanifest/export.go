@@ -111,6 +111,10 @@ func resolutionFor(doc manifest.Document, selected selection) Resolution {
 	if selected.requested != nil {
 		requested = slices.Clone(selected.requested)
 	}
+	support := doc.Selection.Support
+	if doc.Composition != nil {
+		support = doc.Composition.Support
+	}
 	services := map[string]bool{}
 	for _, capability := range doc.Capabilities {
 		for _, service := range capability.RuntimeServices {
@@ -130,7 +134,7 @@ func resolutionFor(doc manifest.Document, selected selection) Resolution {
 		RuntimeServices: serviceNames,
 		Migrations:      slices.Clone(doc.Report.Migrations),
 		Validity:        string(contract.ValidityValid),
-		Support:         doc.Selection.Support,
+		Support:         support,
 	}
 }
 
@@ -163,7 +167,13 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 		}
 		break
 	}
-	with := strings.Join(selected, ",")
+	// Rebuild from the requested baseline so capabilities auto-added by an
+	// earlier resolution stay auto-added instead of becoming requested.
+	requested := slices.Clone(previous.Composition.Requested)
+	if !contains(requested, name) {
+		requested = append(requested, name)
+	}
+	with := strings.Join(requested, ",")
 	module := previous.Framework.Module
 	for _, rewrite := range previous.Rewrites {
 		if rewrite.Kind == "module" && rewrite.To != "" {
@@ -200,6 +210,7 @@ func buildDocument(root, module string, selected selection) (manifest.Document, 
 			Profile: selected.profile, Support: selected.support,
 			Capabilities: slices.Clone(selected.declared), Drivers: cloneDrivers(selected.drivers),
 		},
+		Composition:    compositionFor(selected),
 		Capabilities:   capabilityFacts(root, selected),
 		Copy:           copyActions(root, selected),
 		Templates:      templateActions(root, selected),
@@ -218,6 +229,33 @@ func buildDocument(root, module string, selected selection) (manifest.Document, 
 		return manifest.Document{}, err
 	}
 	return doc, nil
+}
+
+func compositionFor(selected selection) *manifest.Composition {
+	requested := selected.requested
+	if requested == nil {
+		requested = selected.declared
+	}
+	return &manifest.Composition{
+		ContractVersion: manifest.CompositionContractVersion,
+		Requested:       sortedStrings(requested),
+		Resolved:        sortedStrings(selected.declared),
+		AutoAdded:       sortedStrings(selected.autoAdded),
+		Drivers:         cloneDrivers(selected.drivers),
+		Validity:        manifest.CompositionValidityValid,
+		Support:         compositionSupport(selected.support),
+	}
+}
+
+func compositionSupport(legacy string) string {
+	switch legacy {
+	case "official":
+		return manifest.CompositionSupportCertified
+	case "validated":
+		return manifest.CompositionSupportValidated
+	default:
+		return manifest.CompositionSupportExperimental
+	}
 }
 
 func catalogCoversAll(selected selection) bool {

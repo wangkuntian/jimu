@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "framework": {
     "module": "jimu",
     "version": "dev",
@@ -22,6 +22,27 @@
         "redis"
       ]
     }
+  },
+  "composition": {
+    "contract_version": "v0.1",
+    "requested": [
+      "access",
+      "queue",
+      "user"
+    ],
+    "resolved": [
+      "access",
+      "queue",
+      "user"
+    ],
+    "auto_added": [],
+    "drivers": {
+      "queue": [
+        "redis"
+      ]
+    },
+    "validity": "valid",
+    "support": "experimental"
   },
   "capabilities": [
     {
@@ -304,70 +325,70 @@
       "destination": "internal/kernel",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "internal/app",
       "destination": "internal/app",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "internal/assembly",
       "destination": "internal/assembly",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "internal/capability",
       "destination": "internal/capability",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "internal/contract",
       "destination": "internal/contract",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "internal/config",
       "destination": "internal/config",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "internal/shared",
       "destination": "internal/shared",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "internal/e2e",
       "destination": "internal/e2e",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "conf",
       "destination": "conf",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "cmd/server",
       "destination": "cmd/server",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "cmd/cli",
@@ -1546,5 +1567,5 @@
     "tools/profileoverlay/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:ee1b27f7b831f3f0ccf29d751480da59b54cba62dbee23d29e60c1ec3a243dc7"
+  "digest": "sha256:4706954a4608fa9362a99177fc33a01c650b3bdab81eb9604cb7dfd950b0c55a"
 }

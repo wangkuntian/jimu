@@ -441,6 +441,9 @@ func mapsKeys(values map[string]bool) []string {
 }
 
 func sortedStrings(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
 	out := slices.Clone(values)
 	sort.Strings(out)
 	return out

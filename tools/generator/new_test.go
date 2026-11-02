@@ -38,7 +38,7 @@ func TestNewProjectBasicAPIHasNoExternalRuntimeDependencies(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "basic-api", result.Template)
-	assert.Equal(t, "official", result.Support)
+	assert.Equal(t, "certified", result.Support)
 
 	for _, rel := range []string{
 		"cmd/server/main.go",
@@ -79,7 +79,7 @@ func TestNewProjectAuthAPIIsCompactSingleTenantTemplate(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "auth-api", result.Template)
-	assert.Equal(t, "official", result.Support)
+	assert.Equal(t, "certified", result.Support)
 
 	for _, rel := range []string{
 		"cmd/server/main.go",
@@ -144,6 +144,10 @@ func assertManifestProvenance(t *testing.T, dir, template string) {
 	document, err := workspace.LoadProjectManifest(dir)
 	require.NoError(t, err)
 	require.NoError(t, manifest.ValidateComplete(document))
+	assert.Equal(t, manifest.CurrentSchemaVersion, document.SchemaVersion)
+	require.NotNil(t, document.Composition, "生成项目必须持久化 composition")
+	assert.Equal(t, manifest.CompositionContractVersion, document.Composition.ContractVersion)
+	assert.Equal(t, manifest.CompositionValidityValid, document.Composition.Validity)
 	assert.Equal(t, template, document.Selection.Template)
 	assert.Equal(t, manifest.TemplateContractVersion, document.Selection.TemplateVersion)
 	assert.NotEmpty(t, document.Framework.Version)

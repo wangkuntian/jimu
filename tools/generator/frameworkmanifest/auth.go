@@ -86,6 +86,12 @@ func authAPIDocument(root, module string) (manifest.Document, error) {
 			Shape: "auth-api", Template: "auth-api", TemplateVersion: manifest.TemplateContractVersion, Support: "official",
 			Capabilities: []string{"user", "access", "auth"}, Drivers: map[string][]string{},
 		},
+		Composition: &manifest.Composition{
+			ContractVersion: manifest.CompositionContractVersion,
+			Requested:       []string{"access", "auth", "user"}, Resolved: []string{"access", "auth", "user"},
+			AutoAdded: []string{}, Drivers: map[string][]string{},
+			Validity: manifest.CompositionValidityValid, Support: manifest.CompositionSupportCertified,
+		},
 		Capabilities: facts,
 		Copy: []manifest.CopyAction{
 			{Source: "go.sum", Destination: "go.sum", Include: []string{}, Exclude: []string{}},

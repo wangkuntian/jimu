@@ -53,11 +53,17 @@ func CheckProject(opts CheckOptions) (*CheckResult, error) {
 	}
 	capability.SortDiagnostics(diagnostics)
 	validity := string(capability.Validity(diagnostics))
+	support := doc.Selection.Support
+	capabilities := slices.Clone(doc.Selection.Capabilities)
+	if doc.Composition != nil {
+		support = doc.Composition.Support
+		capabilities = slices.Clone(doc.Composition.Resolved)
+	}
 	return &CheckResult{
 		Dir:          absolute,
 		Validity:     validity,
-		Support:      doc.Selection.Support,
-		Capabilities: slices.Clone(doc.Selection.Capabilities),
+		Support:      support,
+		Capabilities: capabilities,
 		Diagnostics:  diagnostics,
 	}, nil
 }
