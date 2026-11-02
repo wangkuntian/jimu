@@ -413,6 +413,8 @@
         "activecaps_test.go",
         "capability.go",
         "capability_test.go",
+        "check.go",
+        "check_test.go",
         "main.go",
         "new.go",
         "new_test.go"
@@ -1444,7 +1446,11 @@
     "internal/capabilities/user/module_test.go",
     "internal/capabilities/user/userinfo_port.go",
     "internal/capabilities/user/wire.go",
+    "internal/capability/aliases.go",
+    "internal/capability/compose.go",
+    "internal/capability/compose_test.go",
     "internal/capability/composition_test.go",
+    "internal/capability/diagnostic.go",
     "internal/capability/resolve.go",
     "internal/capability/resolve_test.go",
     "internal/config/capsection_test.go",
@@ -1674,5 +1680,5 @@
     "tools/profileoverlay/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:a164b86e7f89a17bba57253408a94830e1fd44576ab78c5061682f6b613bf6dc"
+  "digest": "sha256:e0c8250fbf2b5e47b4ec8453c346793e5aefb3061c2eb0f1ba70c25fc34c0d43"
 }

@@ -91,6 +91,12 @@ func Names() []string {
 	return out
 }
 
+// KnownNames 返回声明校验使用的全量能力名。框架 catalog 只登记正式能力；
+// 形态专有能力由调用方在拿到 profile 清单后追加。
+func KnownNames() []string {
+	return Names()
+}
+
 // Degradation 是 capability.Degradation 的别名，保留能力清单侧的既有引用。
 type Degradation = capability.Degradation
 

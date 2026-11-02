@@ -24,15 +24,33 @@ import (
 // 跳过条件是 requireHeavyMatrix（`-short` 或未设 JIMU_HEAVY_MATRIX）。
 func TestTemplatesDrift(t *testing.T) {
 	requireHeavyMatrix(t)
-	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := newProjectForTest(t, NewOptions{
-		Dir: dir, Profile: "minimal", Module: "example.com/proj-templates", NoTidy: true,
-	})
-	require.NoError(t, err)
 	cache := newTestGoCache(t)
-	runGoInProject(t, dir, cache, "build", "./...")
-	out, err := runGoInProjectOutput(t, dir, cache, "run", "./tools/checkcapabilities")
-	require.NoError(t, err, "生成项目的 checkcapabilities 必须绿:\n%s", out)
-	// 第七条覆盖生成器核心与框架内部包的边界，少一条就是门禁被削弱的信号。
-	assert.Equal(t, 7, strings.Count(out, "✅ check-capabilities:"), "门禁必须仍是 7 条:\n%s", out)
+	cases := []struct {
+		name string
+		opts NewOptions
+	}{
+		{
+			name: "minimal profile",
+			opts: NewOptions{Profile: "minimal", Module: "example.com/proj-templates"},
+		},
+		{
+			name: "with selected driver",
+			// 覆盖 P0-1 遗留的 DriverSpecs 收窄缺陷：queue:kafka 的 DriverSpecs 必须同步收窄。
+			opts: NewOptions{With: "auth,queue:kafka", Shape: "app", Module: "example.com/proj-drivers"},
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			opts := test.opts
+			opts.Dir = filepath.Join(t.TempDir(), "proj")
+			opts.NoTidy = true
+			_, err := newProjectForTest(t, opts)
+			require.NoError(t, err)
+			runGoInProject(t, opts.Dir, cache, "build", "./...")
+			out, err := runGoInProjectOutput(t, opts.Dir, cache, "run", "./tools/checkcapabilities")
+			require.NoError(t, err, "生成项目的 checkcapabilities 必须绿:\n%s", out)
+			// 第八条覆盖生成器核心与框架内部包的边界，少一条就是门禁被削弱的信号。
+			assert.Equal(t, 8, strings.Count(out, "✅ check-capabilities:"), "门禁必须仍是 8 条:\n%s", out)
+		})
+	}
 }

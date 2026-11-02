@@ -72,6 +72,11 @@ func Names() []string {
 	return out
 }
 
+// KnownNames 返回生成期固化的框架全量能力名，供声明校验与组合门禁使用。
+func KnownNames() []string {
+	return append([]string(nil), knownNames...)
+}
+
 // Degradation 是 capability.Degradation 的别名，保留能力清单侧的既有引用。
 type Degradation = capability.Degradation
 

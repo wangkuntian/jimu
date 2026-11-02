@@ -54,6 +54,8 @@ flowchart LR
 - `Descriptor.MigrationSchemaDeps` 声明迁移必须携带的其他能力 schema，`Descriptor.RuntimeServices` 声明启动所需外部服务；生成器据此在写目标目录前检查迁移闭包与配置段。
 - `Descriptor.Conflicts` 声明不能同时启用的能力；`Descriptor.Provides` / `Descriptor.Consumes` 声明 contract 端口的提供与消费关系（`Required` 表示该形态内缺失即非法）；`Descriptor.DriverSpecs` 为 `Drivers` 中的驱动补充驱动级运行时服务。`make check-capabilities` 校验未知/自引用/重复冲突、全仓重复提供方、每个形态内必需消费者缺失和非法驱动声明。
 - 组合状态用两个正交维度描述：`validity`（`valid|invalid`）表示结构是否合法，`support`（`certified|validated|experimental`）表示官方支持级别；合法性不隐含支持级别，反之亦然。
+- 组合 resolver（[internal/capability](../../internal/capability/compose.go)）按固定顺序解析固定 catalog 子集：输入校验 → 硬依赖闭包 → 冲突 → `Provides`/`Consumes` → 驱动 → 迁移 schema 依赖 → 表/迁移 → 运行时服务/配置 → 中间件 → plan。它同时返回 `requested`、`resolved`、`auto-added`、驱动、运行时服务、迁移与诊断；诊断统一包含 `code`、`capability`、`path`、`message`、`fix`，并按阶段稳定排序。
+- `jimu new` 在写目标目录前运行 resolver 与 manifest 预检；`jimu check` 对已有项目的 `.jimu/manifest.json` 复用同一套规则，只读检查组合一致性并以非 0 退出报告非法组合。两个入口都不得在诊断非空时写文件。
 
 ### 组合与运行时筛选
 
@@ -89,7 +91,8 @@ profile 通过 Go import 图决定哪些能力包和符号进入服务二进制�
 ## 实现映射
 
 - 契约：[internal/contract](../../internal/contract) 与 [`contract.Descriptor`](../../internal/contract/capability.go)
+- 组合解析与诊断：[internal/capability/compose.go](../../internal/capability/compose.go)、[internal/capability/diagnostic.go](../../internal/capability/diagnostic.go)
 - 组合：[internal/capabilities/catalog](../../internal/capabilities/catalog)、[internal/profiles](../../internal/profiles)、[internal/assembly](../../internal/assembly)
 - 流程与生命周期：[internal/assembly.Run](../../internal/assembly/assembly.go)、[internal/app.Bootstrap](../../internal/app/bootstrap.go)、[internal/app.Application](../../internal/app/application.go)
-- 验证：`make check-capabilities`、`make profiles-check`、`make compose-report-check`
+- 验证：`go test ./internal/capability/... ./tools/generator/...`、`make check-capabilities`、`make profiles-check`、`make compose-report-check`；已有项目用 `jimu check <dir>` 做只读组合诊断。
 - 相关设计：[身份与租户](identity-and-tenancy.md)、[配置与数据生命周期](configuration-and-data-lifecycle.md)、[形态与项目生成](profiles-and-project-generation.md)

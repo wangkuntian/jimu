@@ -285,6 +285,11 @@ func TestNewProjectWithSelectsFirstDriverAndFiltersDirectories(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(src), "Drivers:")
 	assert.Contains(t, string(src), `[]string{"redis"}`)
+	// DriverSpecs 必须与 Drivers 同步收窄，否则生成项目 check-capabilities 会报
+	// driver spec "kafka"/"rabbitmq" outside Drivers。
+	assert.Contains(t, string(src), `Name: "redis"`)
+	assert.NotContains(t, string(src), `Name: "kafka"`)
+	assert.NotContains(t, string(src), `Name: "rabbitmq"`)
 
 	// 未被选中的能力（storage 声明 local/s3，但既不声明也未选驱动）不复制任何驱动目录。
 	_, statErr := os.Stat(filepath.Join(dir, "internal/capabilities/storage/local"))

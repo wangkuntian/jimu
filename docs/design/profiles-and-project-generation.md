@@ -51,11 +51,13 @@ v0.5.0 起，对外产品入口收敛为模板：`--template=basic-api|auth-api`
 
 官方模板的发布门禁由 `make test-scaffold-official` 承载：预算测试读取 `docs/templates/v1/budgets.json` 并实测生成树，`basic-api` smoke 不依赖容器，`auth-api` 使用独立 Compose 项目和新数据卷执行两次 `make up` / `make verify`、数据库计数及缺失服务快速失败检查。生成项目的端口可用 `AUTH_API_PORT` / `AUTH_API_MANAGEMENT_PORT` 隔离，Compose 就绪检查使用 `/readyz` 而非仅进程存活。`make test-scaffold-matrix` 保留为 full 档，继续覆盖全部 `--with` 与内部 profile 的生成/构建/测试选区，在手动触发或夜间定时运行。
 
-生成器从框架读取能力、profile、contract 和资产信息的唯一适配层是 [`tools/generator/frameworkmanifest`](../../tools/generator/frameworkmanifest)。适配层导出校验后的 manifest；计划、渲染、文件工作区和报告逻辑消费 manifest，不直接依赖框架内部包。这样框架内部结构变化集中在适配层与明确的生成模板中。
+生成器从框架读取能力、profile、contract 和资产信息的唯一适配层是 [`tools/generator/frameworkmanifest`](../../tools/generator/frameworkmanifest)。适配层导出校验后的 manifest；计划、渲染、文件工作区和报告逻辑消费 manifest，不直接依赖框架内部包。唯一例外是叶子包 [`internal/capability`](../../internal/capability)：它只 import `internal/contract`，提供组合 resolver 与结构化诊断，不携带能力、形态或资产事实；`preflight` 复用该包以保持生成器与 `jimu check` 同一套组合规则。
 
 manifest 记录项目选择、复制与模板动作、合并和重写规则、资产、测试裁剪、生成文件及摘要；它也是识别生成产物和 `jimu capability add` 增量更新的依据。schema v2 额外记录 `framework.version`、`framework.commit`、`framework.dirty`、官方模板的 `selection.template_version` 和 `generated_file_sha256`。commit 只通过 `git rev-parse --verify HEAD^{commit}` 从框架根解析，因此普通 clone 与 linked worktree 使用同一路径；解析或 dirty 检查失败时在写目标前终止。生成文件哈希在 tidy、自检和配置合并后计算，排除 manifest 与报告自身。更新能力时，生成器根据新的选择重算产物，并保留受支持的用户配置合并规则。
 
 项目先写入暂存目录，再执行依赖整理、构建和能力门禁自检；通过后才发布到目标路径。失败时清理暂存内容。`make check-templates` 检查生成模板与当前框架结构的一致性。
+
+生成前由组合 resolver 按固定顺序校验：输入 → 硬依赖闭包 → 冲突 → 端口 → 驱动 → 迁移 schema 依赖 → 表/迁移 → 运行时服务/配置 → 中间件 → plan。诊断统一输出 `code`/`capability`/`path`/`message`/`fix` 并稳定排序；任一非法组合在创建暂存目录前终止，因此不会写目标目录。`jimu check <dir>` 对已有项目的 `.jimu/manifest.json` 复用同一预检，只读报告合法性；`--with` 与模板路径都经过该预检，且 `--with` 仍标记 `support: experimental`。
 
 ### 新建项目流程
 
@@ -92,7 +94,7 @@ flowchart TD
 
 - **profile 不负责缩小框架 `go.mod`。** 它通过 Go import 图改变服务构建闭包；真正拥有独立依赖清单的是 `jimu new` 生成的项目。
 - **运行时开关不能补入未编译代码。** `capabilities.enabled` 只控制当前 profile 已编入的能力集合，保持构建期和运行期职责清晰。
-- **生成器通过 manifest 适配框架事实。** 仅 `frameworkmanifest` 读取框架内部结构，生成步骤消费校验后的 manifest，内部包调整的影响集中在适配层。
+- **生成器通过 manifest 适配框架事实。** 仅 `frameworkmanifest` 读取框架内部结构，生成步骤消费校验后的 manifest；`internal/capability` 作为只依赖 contract 的叶子例外，提供共享的组合 resolver/诊断。内部包调整的影响集中在适配层与这个叶子包。
 - **生成结果先验证再发布。** 暂存目录承载依赖整理、构建和能力门禁自检；验证通过后才写入目标路径。
 - **Manifest 是生成计划和更新识别的共同契约。** 计划不直接探测框架包；manifest 校验动作有效性后，渲染层执行它描述的操作。这样读取框架内部事实与写文件事务能分别测试。
 - **增量更新只管理已生成文件。** manifest 保存生成文件集合、摘要与合并规则，更新对受管理产物计算变更；这保留受支持的配置合并，同时为覆盖风险提供显式 `--force`。
@@ -100,12 +102,12 @@ flowchart TD
 
 ## 约束与不变量
 
-profile 选择必须只通过 active 选点进入服务构建；registry 留在工具侧。生成器读取框架内部事实只经 `frameworkmanifest`，其余生成逻辑消费 manifest。服务 profile 不改变框架 `go.mod`；只有独立生成项目可以整理自身依赖。默认 CLI 路径执行自检，绕过自检的选项只留给受控测试调用方。更改组成或复制规则时同步更新对应门禁和本文，不在 README 重复内部裁剪算法。
+profile 选择必须只通过 active 选点进入服务构建；registry 留在工具侧。生成器读取框架内部事实只经 `frameworkmanifest`（以及只依赖 contract 的 `internal/capability` 叶子包），其余生成逻辑消费 manifest。服务 profile 不改变框架 `go.mod`；只有独立生成项目可以整理自身依赖。默认 CLI 路径执行自检，绕过自检的选项只留给受控测试调用方。更改组成或复制规则时同步更新对应门禁和本文，不在 README 重复内部裁剪算法。
 
 ## 实现映射
 
 - Profile：[internal/profiles](../../internal/profiles)、[tools/profileoverlay](../../tools/profileoverlay)
 - 项目生成：[tools/generator](../../tools/generator)、[frameworkmanifest](../../tools/generator/frameworkmanifest)
 - 契约与事务：[manifest model](../../tools/generator/manifest/model.go)、[manifest validation](../../tools/generator/manifest/validate.go)、[workspace staging](../../tools/generator/workspace/stage.go)
-- 验证：`go test ./tools/generator/...`、`make profiles-check`、`make check-capabilities`、`make test-scaffold-official`、`make test-scaffold-matrix`
+- 验证：`go test ./tools/generator/...`、`jimu check <generated-dir>`、`make profiles-check`、`make check-capabilities`、`make test-scaffold-official`、`make test-scaffold-matrix`
 - CLI 参数和操作示例见 README「[生成项目](../../README.md#生成项目jimu-new--jimu-capability-add)」；能力声明和运行时装配见[能力架构](capability-architecture.md)。

@@ -17,23 +17,26 @@
 ./bin/jimu new ./myapp --module=example.com/myapp --report                   # 默认 basic-api
 ./bin/jimu new ./myapp --template=basic-api --module=example.com/myapp       # 官方模板
 ./bin/jimu new ./myapp --template=auth-api --module=example.com/myapp        # 单租户认证模板
-./bin/jimu new ./myapp --with=user,access,queue --shape=app                   # 能力名（硬依赖闭包 + 拓扑序）
-./bin/jimu new ./myapp --with=queue:kafka --dry-run                           # 只打印计划，不落盘
+./bin/jimu new ./myapp --with=user,access,auth,queue --shape=app              # 能力名（硬依赖闭包 + 拓扑序）
+./bin/jimu new ./myapp --with=auth,queue:kafka --dry-run                      # 只打印计划，不落盘
+./bin/jimu check ./myapp                                                      # 只读检查 manifest 与组合一致性
 ```
 
 | 参数 | 说明 |
 |---|---|
 | `--template=basic-api\|auth-api` | 官方模板；省略选择器时默认 `basic-api` |
 | `--profile=minimal` | 弃用兼容别名，映射为 `auth-api`，v0.6.0 移除；其他 profile 由 CLI 拒绝 |
-| `--with=<cap>[:<drv>][,…]` | experimental 专家模式；名字取自 catalog 与 Ungated 能力，驱动默认取 `Descriptor.Drivers` 首项，用 `<cap>:<drv>` 覆盖 |
+| `--with=<cap>[:<drv>][,…]` | experimental 专家模式；名字取自 catalog 与 Ungated 能力，驱动默认取 `Descriptor.Drivers` 首项，用 `<cap>:<drv>` 覆盖。受保护能力需要同时选择 middleware provider（如 `auth`） |
 | `--shape=<name>` | 仅用于 `--with` 的形态名（默认 `app`） |
 | `--module=<path>` | 重写 `go.mod` 的 module 指令与文本里的 `jimu/` 前缀；**不改**框架运行期名字 / CLI 名 / 镜像名 / protobuf 描述符 |
-| `--dry-run` | 只打印计划，不落盘 |
+| `--dry-run` | 只打印 requested/resolved/auto-added、驱动、外部服务、迁移、status 与文件/资产计划，不落盘 |
 | `--force` | 只覆盖带 `.jimu/manifest.json` 的产物（识别依据是 manifest，不是时间戳） |
 | `--no-tidy` | 跳过 `go mod tidy`（`go.mod` 保持框架依赖集） |
 | `--report` | 写 `<dir>/docs/profiles/generated-report.md`（文件数 / 闭包 Go 文件数与代码行 / 直接依赖数 / 迁移数 / 表数 / 路由数 / 重型依赖 / 资产数） |
 
 **默认自检**：生成后跑 `go build ./...` 与生成项目自己的 `check-capabilities`，任一失败**整体回滚**。
+
+**组合解析顺序（P0-2）**：输入校验 → 硬依赖闭包 → 冲突 → `Provides`/`Consumes` → 驱动 → 迁移 schema 依赖 → 表/迁移 → 运行时服务/配置 → 中间件 → plan。诊断统一含 `code`/`capability`/`path`/`message`/`fix` 并稳定排序；非法组合在写目标目录前失败。`jimu check <dir>` 用同一套预检只读检查已有项目，合法退出 0、非法退出非 0。
 
 **Provenance**：`.jimu/manifest.json` 为 schema v2，`framework.commit` 来自 `git rev-parse --verify HEAD^{commit}`（支持普通 clone 与 worktree），同时记录 `framework.dirty`、官方模板的 `selection.template_version` 和覆盖全部 `generated_files` 的 `generated_file_sha256`。
 
@@ -59,6 +62,7 @@
 ```bash
 ./bin/jimu new /tmp/sk-demo --template=basic-api --module=example.com/demo --dry-run   # 只打印计划
 ./bin/jimu new /tmp/sk-demo --template=auth-api --module=example.com/demo --report     # 单租户认证模板
+./bin/jimu check /tmp/sk-demo                                                          # 只读组合检查（退出 0）
 cd /tmp/sk-demo && go build ./... && go run ./tools/checkcapabilities && go test ./... -count=1
 grep -rn '"jimu/' /tmp/sk-demo --include='*.go'      # 期望 0 命中（module 已重写）
 make check-templates                                 # 本仓模板漂移门禁

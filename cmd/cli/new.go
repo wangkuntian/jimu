@@ -23,11 +23,20 @@ var (
 // 两个能力集都要打印并显式标注（它们不相等）：`capabilities` = **装配集**（会进 assembly、
 // 挂路由），`copy set` = **复制集**（额外含编译闭包/迁移携带/内核编译期 domain 依赖的目录）。
 func printScaffoldPlan(w io.Writer, res *generator.Result) {
-	plan := fmt.Sprintf("dry-run: %s\n  module       %s\n  template     %s\n  support      %s\n  shape        %s\n  capabilities %s (装配集)\n  copy set     %s (复制集：装配集 + 编译闭包 + 迁移携带)\n  drivers      %s\n  files        %d (复制 + 渲染的上界；未减去按 import/资产/组成可满足性裁剪的测试文件)\n  assets       %d\n",
+	plan := fmt.Sprintf("dry-run: %s\n  module       %s\n  template     %s\n  support      %s\n  shape        %s\n  requested    %s\n  resolved     %s\n  auto-added   %s\n  capabilities %s (装配集)\n  copy set     %s (复制集：装配集 + 编译闭包 + 迁移携带)\n  drivers      %s\n  services     %s\n  migrations   %s\n  status       %s\n  files        %d (复制 + 渲染的上界；未减去按 import/资产/组成可满足性裁剪的测试文件)\n  assets       %d\n",
 		res.Dir, res.Module, res.Template, res.Support, res.Shape,
+		joinOrNone(res.Requested), joinOrNone(res.Resolved), joinOrNone(res.AutoAdded),
 		strings.Join(res.Capabilities, ", "), strings.Join(res.CopySet, ", "),
-		strings.Join(res.Drivers, ", "), res.FileCount, len(res.Assets))
+		joinOrNone(res.Drivers), joinOrNone(res.Services), joinOrNone(res.Migrations),
+		res.Validity+"/"+res.Support, res.FileCount, len(res.Assets))
 	_, _ = io.WriteString(w, plan)
+}
+
+func joinOrNone(values []string) string {
+	if len(values) == 0 {
+		return "none"
+	}
+	return strings.Join(values, ", ")
 }
 
 var newCmd = newScaffoldCmd()

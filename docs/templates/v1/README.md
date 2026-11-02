@@ -77,7 +77,7 @@ jimu new <dir> --with=user,access,auth # 专家模式，标记 experimental
 - 不传选择器时默认 `basic-api`。
 - `--with` 允许生成，但 manifest 必须标记 `support: experimental`，并执行全部硬预检。
 - `--profile=minimal` 在 v0.5.x 映射为 `auth-api` 并打印弃用警告，v0.6.0 移除；其他 profile 名称只供 Jimu 自身构建使用，不是对外模板。
-- `--dry-run` 打印解析后的能力、驱动、迁移、外部服务、预检和预算结果，不写文件。
+- `--dry-run` 打印 requested/resolved/auto-added、驱动、迁移、外部服务、合法性/支持级别（status）、预检和预算结果，不写文件。
 - 所有生成先写暂存目录；预检、tidy、build、test 和生成项目自检通过后才原子发布。失败不得留下半成品。
 
 契约版本与产品版本分开管理：

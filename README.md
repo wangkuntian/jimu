@@ -244,8 +244,9 @@ make cli
 
 # 生成新项目（能力可插拔的出货口：只复制选中能力的代码/迁移/配置段/资产）
 ./bin/jimu new ./myapp --template=basic-api --module=example.com/myapp --report  # 默认跑 go mod tidy + 自检
-./bin/jimu new ./myapp --with=user,access,queue                              # 按能力名解析（硬依赖闭包 + 拓扑序）
-./bin/jimu new ./myapp --with=queue:kafka,storage:local,user                 # 冒号后缀逐项指定驱动
+./bin/jimu new ./myapp --with=user,access,auth,queue                         # 按能力名解析（硬依赖闭包 + 拓扑序）
+./bin/jimu new ./myapp --with=queue:kafka,storage:local,user,access,auth     # 冒号后缀逐项指定驱动
+./bin/jimu check ./myapp                                                     # 只读检查已生成项目的 manifest 与组合一致性
 ./bin/jimu capability add dataops                                            # 在已生成项目里增量追加能力（见「生成项目」）
 
 # 能力骨架（本仓内开发用；生成项目不携带此命令）
@@ -279,31 +280,35 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 `auth-api` 生成单租户 Go 工程，包含用户、JWT 会话、RBAC、MySQL 8.4、Redis 7、8 张业务表、10 个迁移和 24 条业务路由；用户创建和更新密码至少 8 个字符。项目自己的 `make up` 完成构建、迁移、seed 和启动，`make verify` 验证 readyz、login、me、受保护请求和短密码拒绝。`AUTH_API_PORT` 与 `AUTH_API_MANAGEMENT_PORT` 可覆盖默认宿主机端口，`make verify` 会自动沿用对应地址，便于并行验收和避开本机端口冲突。Compose 的 `init` 与 `app` 使用调用 `make up` 的宿主 UID/GID 运行，确保 Linux 下 `0600` 本地 secret 可读。
 
+`jimu check <dir>` 只读检查已生成项目：读取 `<dir>/.jimu/manifest.json`，按与 `jimu new` 相同的组合规则校验硬依赖、冲突、端口、驱动、迁移 schema 依赖、表/迁移、运行时服务/配置、受保护中间件与生成计划。合法项目退出 0；非法项目退出非 0，并逐条输出 `code`、`capability`、`path`、`message`、`fix`。该命令属于框架仓，不复制进生成项目。
+
 `jimu capability add <name>` 在已生成项目中追加框架已有的能力。`jimu capability create <name>` 只在框架仓库中创建能力骨架，不自动修改 catalog 或 profile。旧 `jimu module create` 已移除。
 
 ```bash
 ./bin/jimu new ./myapp --module=example.com/myapp
 ./bin/jimu new ./myapp --template=basic-api --module=example.com/myapp
 ./bin/jimu new ./myapp --template=auth-api --module=example.com/myapp
-./bin/jimu new ./myapp --with=user,access,queue --shape=app
-./bin/jimu new ./myapp --with=queue:kafka --dry-run
+./bin/jimu new ./myapp --with=user,access,auth,queue --shape=app
+./bin/jimu new ./myapp --with=auth,queue:kafka --dry-run
 ```
 
 | 参数 | 说明 |
 |---|---|
 | `--template=basic-api\|auth-api` | 官方模板；不传选择器时默认 `basic-api` |
 | `--profile=minimal` | 弃用兼容别名，映射为 `auth-api` 并打印警告；v0.6.0 移除 |
-| `--with=<cap>[:<drv>][,…]` | experimental 专家模式；manifest 标记为 `support: experimental`，可指定驱动 |
+| `--with=<cap>[:<drv>][,…]` | experimental 专家模式；manifest 标记为 `support: experimental`，可指定驱动。受保护能力需要同时选择 middleware provider（如 `auth`） |
 | `--shape=<name>` | 仅用于 `--with`（默认 `app`）；模板/兼容 profile 不允许覆盖 |
 | `--module=<path>` | 生成项目的 module 路径，默认由 `<dir>` 推导 |
-| `--dry-run` | 只打印模板、支持级别、能力、驱动、文件与资产计划，不落盘 |
+| `--dry-run` | 只打印 requested/resolved/auto-added、驱动、外部服务、迁移、合法性/支持级别、文件与资产计划，不落盘 |
 | `--force` | 只替换生成清单标记的生成器产物 |
 | `--no-tidy` | 跳过默认执行的 `go mod tidy` |
 | `--report` | 在生成项目中写入 `docs/profiles/generated-report.md` 并打印报告 |
 
 生成过程会先在暂存目录复制和渲染所选内容，再整理依赖、构建并运行能力门禁；通过后才发布到目标目录。生成清单用于识别生成文件并支持后续 `capability add`。
 
-生成前预检会读取 Descriptor 导出的 manifest 事实并 fail-closed：受保护路由必须恰好有一个有效中间件提供者（`auth` 为 primary、`apikey` 为 fallback）；迁移 schema 依赖必须随选择集带入；表所有权和迁移文件不得重复；声明的 runtime service 必须能在生成配置中找到对应段。预检失败发生在目标目录写入之前。
+生成前按固定顺序解析：输入校验 → 硬依赖闭包 → 冲突 → `Provides`/`Consumes` → 驱动 → 迁移 schema 依赖 → 表/迁移 → 运行时服务/配置 → 中间件 → plan。诊断统一包含 `code`、`capability`、`path`、`message`、`fix`，并按阶段稳定排序；任一非法组合都在写目标目录前失败，退出码非 0。`--with` 走同一 resolver，但支持级别仍标记为 `experimental`。
+
+预检读取 Descriptor 导出的 manifest 事实并 fail-closed：受保护路由必须恰好有一个有效中间件提供者（`auth` 为 primary、`apikey` 为 fallback）；迁移 schema 依赖必须随选择集带入；表所有权和迁移文件不得重复；声明的 runtime service（含所选驱动规格）必须能在生成配置中找到对应段。
 
 `.jimu/manifest.json` 使用 schema v2 记录 provenance：`framework.version`、`framework.commit`、`framework.dirty`、官方模板的 `selection.template_version`，以及 `generated_files` 对应的 `generated_file_sha256`。commit 由 `git rev-parse --verify HEAD^{commit}` 解析，普通 clone 和 linked worktree 都必须成功；文件哈希在 tidy、自检和配置合并完成后计算，manifest 与可选报告自身不计入哈希表。v0.5.0 不提供 schema v1 只读兼容，旧生成项目按“重新生成 + 人工迁移”处理。
 
@@ -415,7 +420,7 @@ jimu/
 │   │   ├── application.go      # Application 生命周期
 │   │   └── seed.go             # 数据种子（权限点聚合自能力 Descriptor）
 │   ├── assembly/               # 形态装配驱动（Assembly/Context/Wire 调用、Run、端口流向护栏）
-│   ├── capability/             # 描述符解析叶子包（启用闭包 / 声明校验 / 降级项；只 import contract）
+│   ├── capability/             # 描述符解析叶子包（组合 resolver / 结构化诊断 / 启用闭包 / 声明校验 / 降级项；只 import contract）
 │   ├── profiles/               # 形态清单（每个形态一份 Assembly：full/minimal/saas/enterprise/machine）
 │   │   ├── active/             # 选点包：唯一入口只 import 它；提交态默认 full，构建期由 overlay 替换
 │   │   └── registry/           # 形态名与清单的唯一来源（Names/All/Lookup；只被 tools/* 引用）
@@ -488,7 +493,7 @@ jimu/
 │   ├── generator/                # 代码生成器 facade 与框架编排
 │   │   ├── manifest/             # JSON manifest 模型、校验与 digest
 │   │   ├── frameworkmanifest/    # catalog/profile/Descriptor 到 manifest 的唯一适配层
-│   │   ├── preflight/            # 写目标目录前的受保护链、迁移与外部服务预检
+│   │   ├── preflight/            # manifest → 组合 resolver 的写前预检（依赖/冲突/端口/驱动/迁移/服务/中间件）
 │   │   ├── plan/                 # manifest 到确定性执行计划
 │   │   ├── render/               # 计划执行、模板 embed 与文本渲染（basicapi/ 为最小模板产物）
 │   │   ├── workspace/            # 暂存、原子换入与增量更新

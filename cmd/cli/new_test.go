@@ -135,6 +135,37 @@ func TestNewCmdMarksWithAsExperimental(t *testing.T) {
 	assert.Contains(t, out.String(), "support      experimental")
 }
 
+// TestNewCmdDryRunShowsComposition 钉住 P0-2 的 dry-run 输出字段：
+// requested/resolved/auto-added/drivers/services/migrations/status 都必须可见，
+// 且 --with 仍标记 experimental。
+func TestNewCmdDryRunShowsComposition(t *testing.T) {
+	var out bytes.Buffer
+	c := newCommandForTest(&out)
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--with=access,auth", "--dry-run"})
+	require.NoError(t, c.Execute())
+
+	plan := out.String()
+	assert.Contains(t, planLine(t, plan, "requested"), "access")
+	assert.Contains(t, planLine(t, plan, "resolved"), "user")
+	assert.Contains(t, planLine(t, plan, "resolved"), "access")
+	assert.Contains(t, planLine(t, plan, "auto-added"), "user")
+	assert.Contains(t, planLine(t, plan, "services"), "mysql")
+	assert.Contains(t, planLine(t, plan, "migrations"), "tenant")
+	assert.Contains(t, planLine(t, plan, "status"), "valid/experimental")
+}
+
+// TestNewCmdInvalidCompositionDoesNotWriteTarget 是 fail-closed 护栏：非法组合
+// 必须在 workspace.Create 之前失败，目标目录连空壳都不能出现。
+func TestNewCmdInvalidCompositionDoesNotWriteTarget(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "proj")
+	c := newCommandForTest(&bytes.Buffer{})
+	c.SetArgs([]string{"new", dir, "--with=ghost"})
+	err := c.Execute()
+	require.ErrorContains(t, err, "unknown capability")
+	_, statErr := os.Stat(dir)
+	assert.True(t, os.IsNotExist(statErr), "非法组合不得写目标目录")
+}
+
 func TestNewCmdRejectsTemplateSelectorsTogether(t *testing.T) {
 	for _, args := range [][]string{
 		{"--template=basic-api", "--profile=minimal"},

@@ -33,6 +33,9 @@ func checkGeneratorBoundary(root string) error {
 		modulePath + "/internal/profiles",
 		modulePath + "/internal/contract",
 	}
+	// internal/capability is deliberately allowed: it is a dependency-free leaf
+	// (it only imports internal/contract) that generator core uses for composition
+	// resolution and diagnostics. It exposes no capability, profile, or asset facts.
 	var violations []string
 	err = filepath.WalkDir(generatorRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {

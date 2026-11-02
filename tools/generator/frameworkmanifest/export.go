@@ -34,6 +34,8 @@ type selection struct {
 	template   string
 	profile    string
 	support    string
+	requested  []string
+	autoAdded  []string
 	declared   []string
 	known      []string
 	copy       []string
@@ -45,45 +47,91 @@ type selection struct {
 	assemblies []assembly.Capability
 }
 
+// Resolution 是 `jimu new --dry-run` 与后续 manifest composition（P0-3）共用的解析摘要。
+type Resolution struct {
+	Requested       []string            `json:"requested"`
+	Resolved        []string            `json:"resolved"`
+	AutoAdded       []string            `json:"auto_added"`
+	Drivers         map[string][]string `json:"drivers"`
+	RuntimeServices []string            `json:"runtime_services"`
+	Migrations      []string            `json:"migrations"`
+	Validity        string              `json:"validity"`
+	Support         string              `json:"support"`
+}
+
 // Export 根据框架当前事实生成一份可校验、可复现的 manifest。
 func Export(req Request) (manifest.Document, error) {
+	doc, _, err := ExportDetailed(req)
+	return doc, err
+}
+
+// ExportDetailed 与 Export 相同，但额外返回本次解析的 requested/resolved/auto-added 等摘要。
+func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 	root, err := filepath.Abs(req.Root)
 	if err != nil {
-		return manifest.Document{}, fmt.Errorf("resolve framework root: %w", err)
+		return manifest.Document{}, Resolution{}, fmt.Errorf("resolve framework root: %w", err)
 	}
 	if req.Module == "" {
-		return manifest.Document{}, fmt.Errorf("module is required")
+		return manifest.Document{}, Resolution{}, fmt.Errorf("module is required")
 	}
 	if req.Template == "" && req.Profile == "" && req.With == "" {
 		req.Template = "basic-api"
 	}
 	if req.Template != "" && (req.Profile != "" || req.With != "") {
-		return manifest.Document{}, fmt.Errorf("--template must not be combined with --profile or --with")
+		return manifest.Document{}, Resolution{}, fmt.Errorf("--template must not be combined with --profile or --with")
 	}
 	if req.Template != "" && req.Shape != "" {
-		return manifest.Document{}, fmt.Errorf("--shape is only valid with --with")
+		return manifest.Document{}, Resolution{}, fmt.Errorf("--shape is only valid with --with")
 	}
 	var doc manifest.Document
+	var selected selection
 	if req.Template == "auth-api" {
 		doc, err = authAPIDocument(root, req.Module)
 	} else if req.Template != "" {
 		doc, err = basicAPIDocument(root, req.Module, req.Template)
 	} else {
-		var selected selection
 		selected, err = resolveSelection(root, req)
 		if err == nil {
 			doc, err = buildDocument(root, req.Module, selected)
 		}
 	}
 	if err != nil {
-		return manifest.Document{}, err
+		return manifest.Document{}, Resolution{}, err
 	}
 	digest, err := manifest.Digest(doc)
 	if err != nil {
-		return manifest.Document{}, err
+		return manifest.Document{}, Resolution{}, err
 	}
 	doc.Digest = digest
-	return doc, nil
+	return doc, resolutionFor(doc, selected), nil
+}
+
+func resolutionFor(doc manifest.Document, selected selection) Resolution {
+	requested := slices.Clone(doc.Selection.Capabilities)
+	if selected.requested != nil {
+		requested = slices.Clone(selected.requested)
+	}
+	services := map[string]bool{}
+	for _, capability := range doc.Capabilities {
+		for _, service := range capability.RuntimeServices {
+			services[service] = true
+		}
+	}
+	serviceNames := make([]string, 0, len(services))
+	for service := range services {
+		serviceNames = append(serviceNames, service)
+	}
+	slices.Sort(serviceNames)
+	return Resolution{
+		Requested:       requested,
+		Resolved:        slices.Clone(doc.Selection.Capabilities),
+		AutoAdded:       slices.Clone(selected.autoAdded),
+		Drivers:         cloneDrivers(doc.Selection.Drivers),
+		RuntimeServices: serviceNames,
+		Migrations:      slices.Clone(doc.Report.Migrations),
+		Validity:        string(contract.ValidityValid),
+		Support:         doc.Selection.Support,
+	}
 }
 
 // ExportForAdd 在原有声明集上增加一个能力。硬依赖必须已经存在，避免 add 静默改变用户选择。
@@ -249,7 +297,7 @@ func capabilityFacts(root string, selected selection) []manifest.Capability {
 			Assets:                  slices.Clone(descriptor.Assets),
 			ProtectedHTTPMiddleware: string(descriptor.ProtectedHTTPMiddleware),
 			MigrationSchemaDeps:     append([]string{}, descriptor.MigrationSchemaDeps...),
-			RuntimeServices:         runtimeServiceNames(descriptor.RuntimeServices),
+			RuntimeServices:         runtimeServiceNames(effectiveRuntimeServices(descriptor, selected.drivers[descriptor.Name])),
 		}
 		for _, config := range descriptor.Configs {
 			fact.Configs = append(fact.Configs, config.Section)
@@ -269,6 +317,35 @@ func runtimeServiceNames(services []contract.RuntimeService) []string {
 	for i, service := range services {
 		out[i] = string(service)
 	}
+	return out
+}
+
+// effectiveRuntimeServices 合并能力自身与所选驱动规格声明的运行时服务。
+// 生成项目的 preflight 与 jimu check 都读取这份派生事实。
+func effectiveRuntimeServices(descriptor contract.Descriptor, drivers []string) []contract.RuntimeService {
+	seen := make(map[contract.RuntimeService]bool, len(descriptor.RuntimeServices))
+	var out []contract.RuntimeService
+	appendService := func(service contract.RuntimeService) {
+		if seen[service] {
+			return
+		}
+		seen[service] = true
+		out = append(out, service)
+	}
+	for _, service := range descriptor.RuntimeServices {
+		appendService(service)
+	}
+	for _, driver := range drivers {
+		for _, spec := range descriptor.DriverSpecs {
+			if spec.Name != driver {
+				continue
+			}
+			for _, service := range spec.RuntimeServices {
+				appendService(service)
+			}
+		}
+	}
+	slices.Sort(out)
 	return out
 }
 

@@ -293,7 +293,8 @@
       "protected_http_middleware": "",
       "migration_schema_deps": [],
       "runtime_services": [
-        "mysql"
+        "mysql",
+        "redis"
       ]
     }
   ],
@@ -377,6 +378,8 @@
         "activecaps_test.go",
         "capability.go",
         "capability_test.go",
+        "check.go",
+        "check_test.go",
         "main.go",
         "new.go",
         "new_test.go"
@@ -1309,7 +1312,11 @@
     "internal/capabilities/user/module_test.go",
     "internal/capabilities/user/userinfo_port.go",
     "internal/capabilities/user/wire.go",
+    "internal/capability/aliases.go",
+    "internal/capability/compose.go",
+    "internal/capability/compose_test.go",
     "internal/capability/composition_test.go",
+    "internal/capability/diagnostic.go",
     "internal/capability/resolve.go",
     "internal/capability/resolve_test.go",
     "internal/config/capsection_test.go",
@@ -1539,5 +1546,5 @@
     "tools/profileoverlay/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:a6dff6d4582f95bfe710fc5f8fd476598ef95e2806e37ece98ae3597569ec5d2"
+  "digest": "sha256:ee1b27f7b831f3f0ccf29d751480da59b54cba62dbee23d29e60c1ec3a243dc7"
 }

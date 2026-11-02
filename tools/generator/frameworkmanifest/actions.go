@@ -53,6 +53,8 @@ var kernelExcludes = []string{
 	"cmd/cli/main.go",
 	"cmd/cli/new.go",
 	"cmd/cli/new_test.go",
+	"cmd/cli/check.go",
+	"cmd/cli/check_test.go",
 	"cmd/cli/capability.go",
 	"cmd/cli/capability_test.go",
 	"cmd/cli/activecaps_test.go",

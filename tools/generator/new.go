@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"jimu/internal/capability"
 	"jimu/tools/generator/frameworkmanifest"
 	"jimu/tools/generator/manifest"
 	"jimu/tools/generator/plan"
@@ -50,6 +51,12 @@ type Result struct {
 	Template     string
 	Support      string
 	Shape        string
+	Validity     string
+	Requested    []string
+	Resolved     []string
+	AutoAdded    []string
+	Services     []string
+	Migrations   []string
 	Capabilities []string
 	CopySet      []string
 	Drivers      []string
@@ -73,7 +80,7 @@ func NewProject(opts NewOptions) (*Result, error) {
 	if err := validateModule(module); err != nil {
 		return nil, err
 	}
-	doc, err := frameworkmanifest.Export(frameworkmanifest.Request{
+	doc, resolution, err := frameworkmanifest.ExportDetailed(frameworkmanifest.Request{
 		Root: root, Template: opts.Template, Profile: opts.Profile, With: opts.With, Shape: opts.Shape, Module: module,
 	})
 	if err != nil {
@@ -82,11 +89,17 @@ func NewProject(opts NewOptions) (*Result, error) {
 	if err := manifest.Validate(doc); err != nil {
 		return nil, err
 	}
-	if _, err := plan.Build(doc); err != nil {
-		return nil, err
-	}
-	if err := preflight.Validate(doc); err != nil {
+	if err := preflight.ValidateWithOverlay(doc, frameworkmanifest.CompositionDescriptors()); err != nil {
 		return nil, fmt.Errorf("preflight: %w", err)
+	}
+	if _, err := plan.Build(doc); err != nil {
+		return nil, &capability.Error{Diagnostics: []capability.Diagnostic{{
+			Phase:   capability.PhasePlan,
+			Code:    capability.CodeInvalidPlan,
+			Path:    "plan",
+			Message: err.Error(),
+			Fix:     "fix the manifest actions or regenerate the project",
+		}}}
 	}
 	created, err := workspace.Create(doc, workspace.CreateOptions{
 		Target: opts.Dir, SourceRoot: root, Module: module, Force: opts.Force,
@@ -98,6 +111,12 @@ func NewProject(opts NewOptions) (*Result, error) {
 	return &Result{
 		Dir: created.Target, Module: created.Module, Template: doc.Selection.Template,
 		Support: doc.Selection.Support, Shape: doc.Selection.Shape,
+		Validity:     resolution.Validity,
+		Requested:    slices.Clone(resolution.Requested),
+		Resolved:     slices.Clone(resolution.Resolved),
+		AutoAdded:    slices.Clone(resolution.AutoAdded),
+		Services:     slices.Clone(resolution.RuntimeServices),
+		Migrations:   slices.Clone(resolution.Migrations),
 		Capabilities: slices.Clone(doc.Selection.Capabilities),
 		CopySet:      manifestCapabilityNames(doc), Drivers: flattenDrivers(doc.Selection.Drivers),
 		Assets: manifestAssetNames(doc), Files: slices.Clone(created.Files), FileCount: created.FileCount,

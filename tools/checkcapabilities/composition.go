@@ -16,7 +16,7 @@ import (
 // 不在 catalog 里，但同样参与组合契约校验。
 func compositionDescriptors(asms map[string]assembly.Assembly) ([]contract.Descriptor, []string) {
 	out := catalog.All()
-	known := catalog.Names()
+	known := catalog.KnownNames()
 	seen := make(map[string]bool, len(out))
 	for _, d := range out {
 		seen[d.Name] = true
