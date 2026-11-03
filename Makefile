@@ -41,6 +41,9 @@ JIMU_SECRETS_DIR ?= $(CURDIR)/secrets
 COMPOSE_ENV = APP_ENV=$(ENV) JIMU_SECRETS_DIR=$(JIMU_SECRETS_DIR) JIMU_IMAGE=$(IMAGE_TAG)
 
 SWAG := go run -mod=mod github.com/swaggo/swag/cmd/swag
+# Upgrade fixtures are complete nested modules with their own response package;
+# keep swag from resolving duplicate package names outside the framework module.
+SWAG_EXCLUDE ?= tools/generator/testdata
 LINT_VERSION ?= v2.15.0
 GOVULNCHECK_VERSION ?= v1.8.0
 
@@ -254,14 +257,14 @@ skills-install: ## 安装 skills/ 到 Agent 发现路径
 swagger: ## 生成 OpenAPI 文档
 	@assets=$$(go run ./tools/profileassets "$(PROFILE)") || exit 1; \
 	printf '%s\n' "$$assets" | grep -qx 'docs/openapi' || { echo "SKIP swagger：形态 $(PROFILE) 未编入 apidocs"; exit 0; }; \
-	echo "$(SWAG) init -g $(SERVER_CMD) -o docs/openapi"; \
-	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi
+	echo "$(SWAG) init -g $(SERVER_CMD) -o docs/openapi --exclude=$(SWAG_EXCLUDE)"; \
+	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi --exclude=$(SWAG_EXCLUDE)
 
 swagger-check: ## 校验 OpenAPI 文档为最新
 	@assets=$$(go run ./tools/profileassets "$(PROFILE)") || exit 1; \
 	printf '%s\n' "$$assets" | grep -qx 'docs/openapi' || { echo "SKIP swagger-check：形态 $(PROFILE) 未编入 apidocs"; exit 0; }; \
-	echo "$(SWAG) init -g $(SERVER_CMD) -o docs/openapi"; \
-	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi >/dev/null || exit 1; \
+	echo "$(SWAG) init -g $(SERVER_CMD) -o docs/openapi --exclude=$(SWAG_EXCLUDE)"; \
+	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi --exclude=$(SWAG_EXCLUDE) >/dev/null || exit 1; \
 	git diff --exit-code docs/openapi || { echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; }; \
 	echo "✅ OpenAPI 文档为最新"
 
