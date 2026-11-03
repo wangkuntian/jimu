@@ -75,7 +75,7 @@ jobs:
             echo "heavy=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if git diff --name-only "$BASE_SHA...$HEAD_SHA" | grep -Eq '^(cmd/|internal/|tools/|go\.mod$|go\.sum$|internal/capabilities/.*/migrations/|proto/|configs/|scripts/|Makefile$|docs/templates/v1/|docs/openapi/|\.github/workflows/ci-scaffold\.yml$)'; then
+          if git diff --name-only "$BASE_SHA...$HEAD_SHA" | grep -Eq '^(cmd/|internal/|tools/|bundle\.go$|go\.mod$|go\.sum$|internal/capabilities/.*/migrations/|proto/|configs/|scripts/|Makefile$|docs/templates/v1/|docs/openapi/|\.github/workflows/ci-scaffold\.yml$)'; then
             echo "heavy=true" >> "$GITHUB_OUTPUT"
           else
             echo "heavy=false" >> "$GITHUB_OUTPUT"
@@ -208,9 +208,70 @@ jobs:
           path: ${{ runner.temp }}/scaffold-gocache
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
+  build-clean-room-cli:
+    name: Build Clean-room CLI
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true' && github.event_name == 'pull_request' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'dependabot/'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: "🔎 Verify the template bundle source"
+        run: make bundle-check
+
+      - name: "🏗️ Build the Release CLI"
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/clean-room"
+          CGO_ENABLED=0 go build -o "$RUNNER_TEMP/clean-room/jimu" ./cmd/jimu
+          cp scripts/clean_room_e2e.sh "$RUNNER_TEMP/clean-room/clean_room_e2e.sh"
+          chmod +x "$RUNNER_TEMP/clean-room/jimu" "$RUNNER_TEMP/clean-room/clean_room_e2e.sh"
+
+      - name: "📤 Upload clean-room assets"
+        uses: actions/upload-artifact@v7
+        with:
+          name: clean-room-cli
+          path: ${{ runner.temp }}/clean-room
+          if-no-files-found: error
+          retention-days: 1
+
+  clean-room:
+    name: Clean-room (no checkout)
+    needs: [changes, build-clean-room-cli]
+    if: needs.changes.outputs.heavy == 'true' && github.event_name == 'pull_request' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'dependabot/'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: "📥 Download clean-room assets"
+        uses: actions/download-artifact@v8
+        with:
+          name: clean-room-cli
+          path: ${{ runner.temp }}/clean-room
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: "🧪 Run clean-room basic-api and auth-api"
+        run: |
+          set -euo pipefail
+          script="$(find "$RUNNER_TEMP/clean-room" -type f -name clean_room_e2e.sh -print -quit)"
+          test -n "$script"
+          chmod +x "$RUNNER_TEMP/clean-room/jimu" "$script"
+          JIMU_BIN="$RUNNER_TEMP/clean-room/jimu" \
+            WORKDIR="$RUNNER_TEMP/clean-room/work" \
+            bash "$script"
+
   scaffold-matrix:
     name: Scaffold Gate
-    needs: [changes, scaffold-official, scaffold-full]
+    needs: [changes, scaffold-official, scaffold-full, build-clean-room-cli, clean-room]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -220,6 +281,8 @@ jobs:
           HEAVY: ${{ needs.changes.outputs.heavy }}
           OFFICIAL_RESULT: ${{ needs.scaffold-official.result }}
           FULL_RESULT: ${{ needs.scaffold-full.result }}
+          BUILD_CLEAN_ROOM_RESULT: ${{ needs.build-clean-room-cli.result }}
+          CLEAN_ROOM_RESULT: ${{ needs.clean-room.result }}
           RELEASE_SOURCE: ${{ github.head_ref }}
         run: |
           if [ "$CHANGES_RESULT" != success ]; then
@@ -237,8 +300,24 @@ jobs:
               echo "::error::official scaffold gate failed or was skipped: $OFFICIAL_RESULT"
               exit 1
             fi
+            if [ "$HEAVY" = true ] && [ "$BUILD_CLEAN_ROOM_RESULT" != success ]; then
+              echo "::error::clean-room CLI build failed or was skipped: $BUILD_CLEAN_ROOM_RESULT"
+              exit 1
+            fi
+            if [ "$HEAVY" = true ] && [ "$CLEAN_ROOM_RESULT" != success ]; then
+              echo "::error::clean-room gate failed or was skipped: $CLEAN_ROOM_RESULT"
+              exit 1
+            fi
             if [ "$HEAVY" = false ] && [ "$OFFICIAL_RESULT" != skipped ]; then
               echo "::error::official scaffold gate unexpectedly ran: $OFFICIAL_RESULT"
+              exit 1
+            fi
+            if [ "$HEAVY" = false ] && [ "$BUILD_CLEAN_ROOM_RESULT" != skipped ]; then
+              echo "::error::clean-room CLI build unexpectedly ran: $BUILD_CLEAN_ROOM_RESULT"
+              exit 1
+            fi
+            if [ "$HEAVY" = false ] && [ "$CLEAN_ROOM_RESULT" != skipped ]; then
+              echo "::error::clean-room gate unexpectedly ran: $CLEAN_ROOM_RESULT"
               exit 1
             fi
             if [ "$FULL_RESULT" != skipped ]; then
@@ -252,6 +331,10 @@ jobs:
             fi
             if [ "$OFFICIAL_RESULT" != skipped ]; then
               echo "::error::official scaffold gate must not run outside pull requests: $OFFICIAL_RESULT"
+              exit 1
+            fi
+            if [ "$BUILD_CLEAN_ROOM_RESULT" != skipped ] || [ "$CLEAN_ROOM_RESULT" != skipped ]; then
+              echo "::error::clean-room gate must not run outside pull requests: build=$BUILD_CLEAN_ROOM_RESULT run=$CLEAN_ROOM_RESULT"
               exit 1
             fi
           fi

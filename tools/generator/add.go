@@ -24,12 +24,13 @@ import (
 
 // AddOptions 是 `jimu capability add` 的全部输入。
 type AddOptions struct {
-	Name   string // 要加入的能力名（框架全量集合）
-	From   string // 框架源根；空则从当前 jimu checkout 解析
-	Dir    string // 生成项目根
-	Module string // 覆盖 manifest 里的 module（默认取 manifest rewrite）
-	Force  bool   // 能力已在 entries 里时也允许（重建该能力，只对生成器产物）
-	DryRun bool   // 只报计划，不落盘
+	Name      string // 要加入的能力名（框架全量集合）
+	From      string // 框架源根；空则从当前 jimu checkout 解析
+	Dir       string // 生成项目根
+	Module    string // 覆盖 manifest 里的 module（默认取 manifest rewrite）
+	Force     bool   // 能力已在 entries 里时也允许（重建该能力，只对生成器产物）
+	DryRun    bool   // 只报计划，不落盘
+	Framework *manifest.Framework
 }
 
 // AddCapability 往已生成项目追加一个能力。
@@ -59,18 +60,11 @@ func AddCapability(opts AddOptions) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	root := opts.From
-	if root == "" {
-		root, err = frameworkRoot()
-		if err != nil {
-			return nil, fmt.Errorf("framework source root is required for capability add: pass --from=<jimu checkout>: %w", err)
-		}
-	}
-	root, err = filepath.Abs(root)
+	root, err := resolveSourceRoot(opts.From)
 	if err != nil {
-		return nil, fmt.Errorf("resolve framework source root: %w", err)
+		return nil, fmt.Errorf("framework source root is unavailable for capability add: pass --from=<jimu checkout>: %w", err)
 	}
-	next, err := frameworkmanifest.ExportForAdd(root, previous, name, opts.Force)
+	next, err := frameworkmanifest.ExportForAdd(root, previous, name, opts.Force, opts.Framework)
 	if err != nil {
 		return nil, err
 	}

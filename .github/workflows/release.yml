@@ -4,8 +4,8 @@ name: Release
 # 发布候选的常规门禁与重型 Scaffold Gate 由 release/* → master PR 的 required checks 承担；
 # 这里拒绝不是当前 master tip 的 tag，避免绕过候选 PR 直接发布旧提交或分支提交。
 #
-# 发布物：full 与 minimal 两个形态 × 4 平台 = 8 个二进制，名为 jimu-<profile>-<os>-<arch>
-# （v0.3.5 起改名；旧名 jimu-<os>-<arch> 不再产出）。
+# 发布物：full 与 minimal 两个形态 × 4 平台的 server 二进制，加 4 个 Release CLI 二进制、
+# template-bundle.json 和 checksums。
 # 采用 verify → build(矩阵) → publish 三段：4 次交叉编译之间无法复用编译缓存（Go 构建缓存键含
 # GOOS/GOARCH，实测单次约 68s），加 minimal 后串行约 9 分钟，故必须并行。
 on:
@@ -16,6 +16,9 @@ on:
 permissions:
   contents: write
 
+env:
+  GO_VERSION: "1.26.10"
+
 jobs:
   verify:
     name: Verify Tag
@@ -24,6 +27,21 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - uses: ./.github/actions/go-setup
+        with:
+          flavor: release
+          cache: "false"
+
+      - name: "🔎 Verify the template bundle source"
+        run: |
+          set -euo pipefail
+          make bundle-check
+          if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+            echo "::error::release checkout is not clean; refusing to build a dirty template bundle"
+            git status --short
+            exit 1
+          fi
 
       - name: Verify tag points to current master tip
         run: |
@@ -97,9 +115,58 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  build-cli:
+    name: Build CLI (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux,  goarch: amd64 }
+          - { goos: linux,  goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/go-setup
+        with:
+          flavor: release
+          cache: "false"
+
+      - name: "🏗️ Build jimu-${{ matrix.goos }}-${{ matrix.goarch }}"
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build \
+            -ldflags "-X main.version=${GITHUB_REF_NAME} -X jimu.BundleVersion=${GITHUB_REF_NAME} -X jimu.BundleCommit=${GITHUB_SHA} -X jimu.BundleDirty=false -X jimu.ContractVersion=v0.1" \
+            -o "dist/jimu-${GOOS}-${GOARCH}" ./cmd/jimu
+
+      - name: "📤 Upload jimu-${{ matrix.goos }}-${{ matrix.goarch }}"
+        uses: actions/upload-artifact@v7
+        with:
+          name: jimu-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/jimu-${{ matrix.goos }}-${{ matrix.goarch }}
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: "📤 Upload clean-room script"
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: clean-room-script
+          path: scripts/clean_room_e2e.sh
+          if-no-files-found: error
+          retention-days: 1
+
   publish:
     name: Verify & Publish
-    needs: [verify, build]
+    needs: [verify, build, build-cli]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -111,6 +178,27 @@ jobs:
           pattern: jimu-*
           merge-multiple: true
           path: dist
+
+      - uses: ./.github/actions/go-setup
+        with:
+          flavor: release
+          cache: "false"
+
+      - name: "🧾 Generate template bundle metadata"
+        run: |
+          set -euo pipefail
+          go run ./tools/bundlemeta \
+            --root . \
+            --version "${GITHUB_REF_NAME}" \
+            --commit "${GITHUB_SHA}" \
+            --contract v0.1 \
+            --output dist/template-bundle.json
+
+      - name: "🔐 Generate checksums"
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum jimu-* template-bundle.json > "jimu-${GITHUB_REF_NAME}-checksums.txt"
 
       - name: "🔎 List the release assets"
         run: ls -l dist
@@ -142,6 +230,49 @@ jobs:
         with:
           name: ${{ steps.notes.outputs.version }}
           body: ${{ steps.notes.outputs.body }}
-          files: dist/jimu-*
+          files: |
+            dist/jimu-*
+            dist/template-bundle.json
           draft: false
           prerelease: false
+
+  smoke:
+    name: Release Clean Room
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: "📥 Download clean-room script"
+        uses: actions/download-artifact@v8
+        with:
+          name: clean-room-script
+          path: ${{ runner.temp }}/clean-room
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: "📥 Download the published CLI and checksum"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/clean-room"
+          cd "$RUNNER_TEMP/clean-room"
+          asset="jimu-$(go env GOOS)-$(go env GOARCH)"
+          gh release download "$GITHUB_REF_NAME" \
+            --pattern "$asset" \
+            --pattern "jimu-${GITHUB_REF_NAME}-checksums.txt"
+          grep -E "  ${asset}$" "jimu-${GITHUB_REF_NAME}-checksums.txt" | sha256sum -c -
+          chmod +x "$asset"
+
+      - name: "🧪 Run published clean-room smoke"
+        run: |
+          set -euo pipefail
+          script="$(find "$RUNNER_TEMP/clean-room" -type f -name clean_room_e2e.sh -print -quit)"
+          test -n "$script"
+          asset="jimu-$(go env GOOS)-$(go env GOARCH)"
+          JIMU_BIN="$RUNNER_TEMP/clean-room/$asset" \
+            WORKDIR="$RUNNER_TEMP/clean-room/work" \
+            bash "$script"

@@ -21,11 +21,11 @@ type basicAPITemplateData struct {
 	LumberjackVersion string
 }
 
-func basicAPIDocument(root, module, template string) (manifest.Document, error) {
+func basicAPIDocument(root, module, template string, frameworkOverride *manifest.Framework) (manifest.Document, error) {
 	if template != "basic-api" {
 		return manifest.Document{}, fmt.Errorf("unknown template %q (available: basic-api)", template)
 	}
-	framework, err := frameworkProvenance(root)
+	framework, err := frameworkProvenance(root, frameworkOverride)
 	if err != nil {
 		return manifest.Document{}, err
 	}

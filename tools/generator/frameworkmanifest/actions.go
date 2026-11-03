@@ -60,6 +60,7 @@ var kernelExcludes = []string{
 	"cmd/cli/capability.go",
 	"cmd/cli/capability_test.go",
 	"cmd/cli/activecaps_test.go",
+	"cmd/cli/source.go",
 }
 
 func copyActions(root string, selected selection) []manifest.CopyAction {

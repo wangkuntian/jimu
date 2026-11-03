@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"jimu/internal/profiles"
+	"jimu/tools/generator/manifest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,7 @@ func TestFrameworkProvenanceMatchesEveryGitWorktree(t *testing.T) {
 			continue
 		}
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			got, err := frameworkProvenance(path)
+			got, err := frameworkProvenance(path, nil)
 			require.NoError(t, err)
 			assert.Equal(t, "jimu", got.Module)
 			assert.Equal(t, profiles.Version, got.Version)
@@ -43,14 +44,27 @@ func TestFrameworkProvenanceSupportsLinkedWorktree(t *testing.T) {
 		t.Skip("当前 checkout 是普通 clone，不是 linked git worktree")
 	}
 
-	got, err := frameworkProvenance(root)
+	got, err := frameworkProvenance(root, nil)
 	require.NoError(t, err)
 	assert.Equal(t, mustGitOutput(t, root, "rev-parse", "--verify", "HEAD^{commit}"), got.Commit)
 }
 
 func TestFrameworkProvenanceRejectsNonGitDirectory(t *testing.T) {
-	_, err := frameworkProvenance(t.TempDir())
+	_, err := frameworkProvenance(t.TempDir(), nil)
 	require.ErrorContains(t, err, "rev-parse")
+}
+
+func TestFrameworkProvenanceUsesProvidedMetadata(t *testing.T) {
+	want := &manifest.Framework{
+		Module:  "jimu",
+		Version: "v9.9.9",
+		Commit:  "deadbeef",
+		Dirty:   false,
+	}
+
+	got, err := frameworkProvenance(t.TempDir(), want)
+	require.NoError(t, err)
+	assert.Equal(t, *want, got)
 }
 
 func gitWorktreePaths(t *testing.T, root string) []string {

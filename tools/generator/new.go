@@ -29,16 +29,18 @@ import (
 
 // NewOptions 是 `jimu new` 的全部输入。
 type NewOptions struct {
-	Dir      string
-	Template string
-	Profile  string
-	With     string
-	Shape    string
-	Module   string
-	NoTidy   bool
-	DryRun   bool
-	Force    bool
-	Report   bool
+	Dir        string
+	Template   string
+	Profile    string
+	With       string
+	Shape      string
+	Module     string
+	NoTidy     bool
+	DryRun     bool
+	Force      bool
+	Report     bool
+	SourceRoot string
+	Framework  *manifest.Framework
 
 	// NoSelfCheck 只供本仓构建类测试使用；CLI 始终执行自检。
 	NoSelfCheck bool
@@ -69,7 +71,7 @@ type Result struct {
 
 // NewProject 是根包 facade；框架事实、动作计划和文件事务分别由职责子包拥有。
 func NewProject(opts NewOptions) (*Result, error) {
-	root, err := frameworkRoot()
+	root, err := resolveSourceRoot(opts.SourceRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +84,7 @@ func NewProject(opts NewOptions) (*Result, error) {
 	}
 	doc, resolution, err := frameworkmanifest.ExportDetailed(frameworkmanifest.Request{
 		Root: root, Template: opts.Template, Profile: opts.Profile, With: opts.With, Shape: opts.Shape, Module: module,
+		Framework: opts.Framework,
 	})
 	if err != nil {
 		return nil, err

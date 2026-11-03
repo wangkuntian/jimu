@@ -4,7 +4,7 @@
 .PHONY: migrate migrate-down migrate-status seed
 .PHONY: backup restore build-backup-image compose-db-backup compose-db-restore test-backup-restore
 .PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race check-makefile check-config
-.PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates test-scaffold-official test-scaffold-matrix test-scaffold-upgrade test-scaffold-composition
+.PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates bundle-check bundle-meta test-scaffold-official test-scaffold-matrix test-scaffold-upgrade test-scaffold-composition
 .PHONY: profiles-check compose-report compose-report-check check-skills skills-install
 .PHONY: swagger swagger-check smoke-check compose-check govulncheck check ci ci-full release-check
 .PHONY: proto bench bench-ci loadtest cli all hooks
@@ -227,6 +227,12 @@ check-capabilities: ## 校验能力声明、迁移、驱动与资产归属
 check-templates: ## 生成最小项目并执行构建与能力门禁
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -run TestTemplatesDrift -count=1 -timeout 30m
 
+bundle-check: ## 检查 embedded template bundle 与 git tracked 文件是否一致
+	@go test . -run TestTemplateBundleMatchesTrackedFiles -count=1
+
+bundle-meta: ## 生成开发用 template-bundle.json（不入 embedded bundle）
+	@go run ./tools/bundlemeta --root . --version "$(APP_VERSION)" --commit "$$(git rev-parse --short HEAD 2>/dev/null || true)" --contract v0.1 --output template-bundle.json
+
 test-scaffold-official: ## 运行两个官方模板的发布门禁（需 Docker）
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 30m -v -run '$(SCAFFOLD_OFFICIAL_TESTS)'
 
@@ -307,7 +313,7 @@ ci: $(CI_CHECKS) test-scaffold-official ## 运行本地 CI（官方模板门禁�
 ci-full: $(CI_CHECKS) test-scaffold-matrix ## 运行完整本地 CI（含 full 脚手架矩阵）
 	@echo "✅ All local CI checks passed (full)"
 
-release-check: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-config test govulncheck compose-check test-scaffold-matrix ## 运行发布前检查
+release-check: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-config bundle-check test govulncheck compose-check test-scaffold-matrix ## 运行发布前检查
 	@echo "All checks passed"
 
 ##@ 工具
