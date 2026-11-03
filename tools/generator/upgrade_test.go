@@ -170,6 +170,64 @@ func TestApplyUpgradePreservesEditedConfigWithoutConflict(t *testing.T) {
 	assert.Equal(t, edited, readFileForTest(t, config))
 }
 
+// TestApplyUpgradePreservesNonDefaultDrivers `--with` 项目的升级必须按
+// composition.drivers 重建，不能把用户选择的非默认驱动静默重置为默认驱动；
+// 否则构建/测试会通过，运行时却因编译进错误的驱动而 fail-closed。
+func TestApplyUpgradePreservesNonDefaultDrivers(t *testing.T) {
+	dir := generateForTest(t, NewOptions{With: "auth,queue:kafka"})
+	before, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	require.Equal(t, []string{"kafka"}, before.Composition.Drivers["queue"])
+
+	stubUpgradeVerify(t, nil)
+	result, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot(), NoTidy: true})
+	require.NoError(t, err)
+	assert.Empty(t, result.Changed, "upgrading an untouched --with project must not change files")
+
+	loaded, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"kafka"}, loaded.Composition.Drivers["queue"])
+	assert.Equal(t, []string{"kafka"}, loaded.Selection.Drivers["queue"])
+	assert.FileExists(t, filepath.Join(dir, "internal", "capabilities", "queue", "kafka", "kafka_queue.go"))
+	assert.NoFileExists(t, filepath.Join(dir, "internal", "capabilities", "queue", "redis", "redis_queue.go"))
+}
+
+// TestApplyUpgradeRefreshesExistingGeneratedReport 升级改变装配或文件集时，项目里已有的
+// `--report` 产物必须同批重算刷新；本来没有报告的项目不得凭空创建。
+func TestApplyUpgradeRefreshesExistingGeneratedReport(t *testing.T) {
+	dir := generateForTest(t, NewOptions{With: withProtectedProvider("queue"), Report: true})
+	reportPath := filepath.Join(dir, filepath.FromSlash(reportRelPath))
+	stale := []byte("# stale generated report\n")
+	require.NoError(t, os.WriteFile(reportPath, stale, 0o644))
+	stubUpgradeVerify(t, nil)
+
+	plan, err := PlanUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot(), NoTidy: true})
+	require.NoError(t, err)
+	entry := upgradeEntry(t, plan.Report, reportRelPath)
+	assert.Equal(t, upgradeplan.Modified, entry.Category)
+	assert.Equal(t, upgradeplan.ActionInstall, entry.Action)
+	assert.Equal(t, stale, readFileForTest(t, reportPath), "planning must not write the report")
+
+	applied, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot(), NoTidy: true})
+	require.NoError(t, err)
+	assert.Contains(t, applied.Changed, reportRelPath)
+	refreshed := readFileForTest(t, reportPath)
+	assert.NotEqual(t, stale, refreshed)
+	assert.Contains(t, string(refreshed), "# 生成项目编译面报告")
+
+	repeated, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot(), NoTidy: true})
+	require.NoError(t, err)
+	assert.Empty(t, repeated.Changed, "a refreshed report must be idempotent")
+
+	plain := generateForTest(t, NewOptions{Template: "basic-api"})
+	stubUpgradeVerify(t, nil)
+	applied, err = ApplyUpgrade(UpgradeOptions{Dir: plain, From: FrameworkRoot(), NoTidy: true})
+	require.NoError(t, err)
+	assert.Empty(t, applied.Changed)
+	assert.NoFileExists(t, filepath.Join(plain, filepath.FromSlash(reportRelPath)),
+		"upgrade must not create a report that the project never had")
+}
+
 func TestPlanUpgradeMergedConfigIsReadOnly(t *testing.T) {
 	dir := generateForTest(t, NewOptions{With: withProtectedProvider("queue")})
 	config := filepath.Join(dir, "configs", "app.yaml")

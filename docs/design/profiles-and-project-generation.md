@@ -96,7 +96,7 @@ flowchart TD
 
 ### 显式升级规划
 
-`jimu upgrade` 是独立的显式升级入口，不复用 `capability add` 或隐式重生成。规划阶段只读：读取现有 manifest（schema v2 在内存升级为 v3），按 `selection.template`、`selection.profile` 或 `composition.requested` 重建当前框架下的目标 manifest，再把目标产物渲染到系统临时目录。规划器比较三份事实：manifest 的 `generated_file_sha256` 基线、项目当前文件、目标模板产物。
+`jimu upgrade` 是独立的显式升级入口，不复用 `capability add` 或隐式重生成。规划阶段只读：读取现有 manifest（schema v2 在内存升级为 v3），按 `selection.template`、`selection.profile` 或 `composition.requested` 重建当前框架下的目标 manifest；`--with` 项目同时透传 `composition.drivers`，保留非默认驱动选择。随后把目标产物渲染到系统临时目录；项目已有 `docs/profiles/generated-report.md` 时，在同一暂存树重算报告并纳入比较。规划器比较三份事实：manifest 的 `generated_file_sha256` 基线、项目当前文件、目标模板产物（含重算后的报告）。
 
 | 分类 | 判定 | 动作 |
 |---|---|---|

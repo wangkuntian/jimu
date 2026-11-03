@@ -114,7 +114,7 @@ func Create(doc manifest.Document, opts CreateOptions) (Result, error) {
 		return Result{}, err
 	}
 	if opts.Report {
-		if err := writeReport(staging, module, doc); err != nil {
+		if err := WriteReport(staging, module, doc); err != nil {
 			return Result{}, err
 		}
 	}
@@ -180,7 +180,7 @@ func Update(previous manifest.Document, next manifest.Document, opts UpdateOptio
 		return Result{}, err
 	}
 	if opts.Report {
-		if err := writeReport(staging, module, next); err != nil {
+		if err := WriteReport(staging, module, next); err != nil {
 			return Result{}, err
 		}
 	}
@@ -290,7 +290,10 @@ func createStage(target string) (string, error) {
 	return stage, nil
 }
 
-func writeReport(root, module string, doc manifest.Document) error {
+// WriteReport measures the rendered tree and writes the optional project report.
+// Callers stage the tree before committing, so a measurement failure never
+// leaves a partial report in the project.
+func WriteReport(root, module string, doc manifest.Document) error {
 	spec := projectmetrics.ReportSpec{
 		Name:         doc.Selection.Shape,
 		Capabilities: doc.Report.Capabilities,

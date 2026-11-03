@@ -24,12 +24,13 @@ description: 在 jimu 框架仓内改动时使用：新增/删除能力、新增
 | `internal/kernel/` | 内核（不可勾选）：JWT/Session/限流机制、db、租户上下文、Casbin 强制器、logger 等 |
 | `internal/capabilities/<name>/` | 能力实现：静态 `Descriptor` + `Wire` 入口，按职责实现 `contract.Module` 与分层目录 |
 | `internal/capabilities/catalog/` | 能力清单（唯一真源；非 catalog 条目在形态清单中标 `Ungated`） |
-| `internal/capability/` | 描述符解析叶子包（`Resolve` / `ValidateDeclarations` / `Degraded`） |
+| `internal/capability/` | 描述符解析与组合算法叶子包（`Resolve` / `ValidateDeclarations` / `Degraded` / `Compose` / 结构化诊断） |
 | `internal/assembly/` | 装配与生命周期（`Assembly` / `Capability` / `Run` / `ProbeAssembly`） |
 | `internal/profiles/<name>/` | 形态清单（`full`/`minimal`/`saas`/`enterprise`/`machine`）+ `registry`（形态总表）+ `active`（选点包） |
 | `internal/contract/` | 能力间端口与 `Descriptor` 定义 |
 | `cmd/server/` | 唯一入口：只 import `internal/assembly` 与选点包 `internal/profiles/active` |
-| `cmd/cli/` | `jimu` CLI（`migrate` / `seed` / `new` / `capability create/add` / `apikey`） |
+| `cmd/cli/` | `jimu` CLI（`migrate` / `seed` / `new` / `check` / `upgrade` / `capability create/add` / `apikey`） |
+| `tools/generator/` | 生成器：组合 resolver/preflight、manifest 与 upgrade planner/事务（`jimu new` / `check` / `upgrade` / `capability add`） |
 | `tools/*` | 门禁与报告工具（`checkcapabilities` / `composereport` / `profileoverlay` / `profileassets` / `generator`） |
 | `configs/*.yaml` | 内核段之外的能力配置段由各能力 `Descriptor.Configs` 声明并按启用集加载 |
 
@@ -42,7 +43,7 @@ description: 在 jimu 框架仓内改动时使用：新增/删除能力、新增
 | 编写 / 修改迁移、存量库 adopt | `references/migration.md` |
 | 门禁红了、报告漂移了 | `references/gates.md` |
 | 能力没生效、启动降级、形态起不来 | `references/runtime.md` |
-| 用脚手架生成项目 / 追加能力 | `references/scaffold.md` |
+| 用脚手架生成项目 / 检查组合 / 追加能力 / 升级 | `references/scaffold.md` |
 
 ## 最常用的验收命令
 

@@ -169,11 +169,33 @@ func planUpgrade(opts UpgradeOptions) (*plannedUpgrade, error) {
 	if err := workspace.MergeConfigs(dir, staging, target.Merges); err != nil {
 		return nil, fmt.Errorf("merge target config: %w", err)
 	}
-	report, err := upgradeplan.Classify(upgradeplan.Options{
+	previousForClassify := previous
+	targetFiles := slices.Clone(rendered)
+	_, reportErr := os.Stat(filepath.Join(dir, filepath.FromSlash(reportRelPath)))
+	switch {
+	case reportErr == nil:
+		if err := workspace.WriteReport(staging, request.Module, target); err != nil {
+			return nil, fmt.Errorf("refresh generated report: %w", err)
+		}
+		reportHashes, err := manifest.HashFiles(dir, []string{reportRelPath})
+		if err != nil {
+			return nil, fmt.Errorf("hash generated report: %w", err)
+		}
+		previousForClassify.GeneratedFiles = append(slices.Clone(previous.GeneratedFiles), reportRelPath)
+		previousForClassify.GeneratedFileSHA256 = make(map[string]string, len(previous.GeneratedFileSHA256)+1)
+		for path, hash := range previous.GeneratedFileSHA256 {
+			previousForClassify.GeneratedFileSHA256[path] = hash
+		}
+		previousForClassify.GeneratedFileSHA256[reportRelPath] = reportHashes[reportRelPath]
+		targetFiles = append(targetFiles, reportRelPath)
+	case !os.IsNotExist(reportErr):
+		return nil, fmt.Errorf("inspect generated report: %w", reportErr)
+	}
+	planReport, err := upgradeplan.Classify(upgradeplan.Options{
 		ProjectRoot: dir,
-		Previous:    previous,
+		Previous:    previousForClassify,
 		TargetRoot:  staging,
-		TargetFiles: rendered,
+		TargetFiles: targetFiles,
 		Merged:      upgradeMergeDestinations(target.Merges),
 	})
 	if err != nil {
@@ -197,7 +219,7 @@ func planUpgrade(opts UpgradeOptions) (*plannedUpgrade, error) {
 		Resolution: resolution,
 		Previous:   previous,
 		Target:     target,
-		Report:     report,
+		Report:     planReport,
 	}, staging: staging}, nil
 }
 
@@ -240,8 +262,20 @@ func upgradeRequest(previous manifest.Document, root, projectDir string) (framew
 	case previous.Composition != nil && len(previous.Composition.Requested) > 0:
 		request.With = strings.Join(previous.Composition.Requested, ",")
 		request.Shape = previous.Selection.Shape
+		request.Drivers = cloneSelectedDrivers(previous.Composition.Drivers)
 	default:
 		return frameworkmanifest.Request{}, fmt.Errorf("manifest has no reproducible selection (template, profile or composition.requested)")
 	}
 	return request, nil
+}
+
+func cloneSelectedDrivers(drivers map[string][]string) map[string][]string {
+	if len(drivers) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(drivers))
+	for name, values := range drivers {
+		out[name] = slices.Clone(values)
+	}
+	return out
 }

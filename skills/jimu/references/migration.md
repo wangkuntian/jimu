@@ -16,11 +16,11 @@
 ## 运行方式（都跟随**编译期形态**）
 
 ```bash
-./bin/jimu migrate up                    # 执行全部待应用迁移
-./bin/jimu migrate status                # 查看各能力版本表状态
-./bin/jimu migrate down                  # 每能力回滚其最后一条迁移（按反向能力序）
-./bin/jimu migrate redo                  # 每能力重做其最后一条迁移
-./bin/jimu migrate adopt-capabilities    # 存量库：登记各能力版本表基线
+./bin/jimu-cli migrate up                    # 执行全部待应用迁移
+./bin/jimu-cli migrate status                # 查看各能力版本表状态
+./bin/jimu-cli migrate down                  # 每能力回滚其最后一条迁移（按反向能力序）
+./bin/jimu-cli migrate redo                  # 每能力重做其最后一条迁移
+./bin/jimu-cli migrate adopt-capabilities    # 存量库：登记各能力版本表基线
 PROFILE=minimal make migrate-status      # make 目标同样叠加形态 overlay（表数下降）
 ```
 

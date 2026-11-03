@@ -6,7 +6,7 @@
 
 ## 步骤
 
-1. **建能力目录**：`internal/capabilities/<name>/`，按需分层（`domain/` / `application/` / `infrastructure/` / `interfaces/`）。用脚手架打底：`./bin/jimu capability create <name>`（只落典型 CRUD 骨架，**不改任何注册点**）
+1. **建能力目录**：`internal/capabilities/<name>/`，按需分层（`domain/` / `application/` / `infrastructure/` / `interfaces/`）。用脚手架打底：`./bin/jimu-cli capability create <name>`（只落典型 CRUD 骨架，**不改任何注册点**）
 2. **导出静态 `Descriptor`**（`contract.Descriptor`，字段定义见 `internal/contract/capability.go`）：
    - `Name`：能力名，全仓唯一，必须与 `catalog` 清单里的名字一致
    - `Requires`：**硬依赖** —— 启用本能力必须同时启用这些能力，参与闭包补齐与拓扑序

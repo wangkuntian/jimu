@@ -285,7 +285,7 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu-cli seed  # 插入初�
 
 `jimu check <dir>` 只读检查已生成项目：读取 `<dir>/.jimu/manifest.json`，按与 `jimu new` 相同的组合规则校验硬依赖、冲突、端口、驱动、迁移 schema 依赖、表/迁移、运行时服务/配置、受保护中间件与生成计划。合法项目退出 0；非法项目退出非 0，并逐条输出 `code`、`capability`、`path`、`message`、`fix`。该命令属于框架仓，不复制进生成项目。
 
-`jimu upgrade <dir>` 显式升级生成项目：以 manifest 的 `generated_file_sha256` 为基线，把项目中记录的选择集按当前框架重新渲染到临时目录，再对每个受管路径做三方比较。默认执行写入事务——冲突在写盘前中止；变换的文件先备份再逐个安装；受支持配置（manifest 声明 `merges.strategy=sections` 的项目）以现有段值为底合并；随后在项目里执行 `go mod tidy`、`go build ./...` 和 `go test ./...`，任一失败即按原字节回滚。成功后把目标 manifest 写回 `.jimu/manifest.json`（含新的文件哈希与组合块），重复执行同一版本幂等。`--dry-run` 输出完整分类报告；`--check` 复用同一报告，存在 `conflict` 时退出非 0。两种检查模式都不写项目目录，`--no-tidy` 只跳过临时规划副本中的 tidy，升级后的验证始终执行 tidy/build/test。
+`jimu upgrade <dir>` 显式升级生成项目：以 manifest 的 `generated_file_sha256` 为基线，把项目中记录的选择集按当前框架重新渲染到临时目录，再对每个受管路径做三方比较。`--with` 项目按 `composition.requested` 重建并透传 `composition.drivers`，不会把非默认驱动重置为默认值。默认执行写入事务——冲突在写盘前中止；变换的文件先备份再逐个安装；受支持配置（manifest 声明 `merges.strategy=sections` 的项目）以现有段值为底合并；项目已有 `docs/profiles/generated-report.md` 时在暂存树重算并同批安装（本来没有报告则不创建）；随后在项目里执行 `go mod tidy`、`go build ./...` 和 `go test ./...`，任一失败即按原字节回滚。成功后把目标 manifest 写回 `.jimu/manifest.json`（含新的文件哈希与组合块），重复执行同一版本幂等。`--dry-run` 输出完整分类报告；`--check` 复用同一报告，存在 `conflict` 时退出非 0。两种检查模式都不写项目目录，`--no-tidy` 只跳过临时规划副本中的 tidy，升级后的验证始终执行 tidy/build/test。
 
 | 分类 | 判定 | 策略 |
 |---|---|---|
