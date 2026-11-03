@@ -4,7 +4,7 @@
 .PHONY: migrate migrate-down migrate-status seed
 .PHONY: backup restore build-backup-image compose-db-backup compose-db-restore test-backup-restore
 .PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race check-makefile check-config
-.PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates test-scaffold-official test-scaffold-matrix
+.PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates test-scaffold-official test-scaffold-matrix test-scaffold-upgrade test-scaffold-composition
 .PHONY: profiles-check compose-report compose-report-check check-skills skills-install
 .PHONY: swagger swagger-check smoke-check compose-check govulncheck check ci ci-full release-check
 .PHONY: proto bench bench-ci loadtest cli all hooks
@@ -23,6 +23,8 @@ CLI_PKG := ./cmd/cli
 
 # official 档只覆盖两个官方模板；full 仍由 test-scaffold-matrix 运行全部生成器用例。
 SCAFFOLD_OFFICIAL_TESTS := ^(TestOfficialTemplateBudgets|TestNewProjectBasicAPIHasNoExternalRuntimeDependencies|TestNewProjectAuthAPIIsCompactSingleTenantTemplate|TestBasicAPIStartsWithoutExternalServices|TestAuthAPIComposeConfigIsValid|TestAuthAPIComposeUsesHostUIDForSecrets|TestAuthAPIEmptyDatabaseEndToEnd)$
+SCAFFOLD_UPGRADE_TESTS := ^(TestUpgradeFixtures|TestUpgradeFixturesMatchV050)$
+SCAFFOLD_COMPOSITION_TESTS := ^(TestRepresentativeCompositionMatrix|TestCompositionMatrixBudget|TestCompositionNegativeMatrix)$
 
 ENV ?= dev
 VERSION ?= dev
@@ -39,6 +41,9 @@ JIMU_SECRETS_DIR ?= $(CURDIR)/secrets
 COMPOSE_ENV = APP_ENV=$(ENV) JIMU_SECRETS_DIR=$(JIMU_SECRETS_DIR) JIMU_IMAGE=$(IMAGE_TAG)
 
 SWAG := go run -mod=mod github.com/swaggo/swag/cmd/swag
+# Upgrade fixtures are complete nested modules with their own response package;
+# keep swag from resolving duplicate package names outside the framework module.
+SWAG_EXCLUDE ?= tools/generator/testdata
 LINT_VERSION ?= v2.15.0
 GOVULNCHECK_VERSION ?= v1.8.0
 
@@ -228,6 +233,12 @@ test-scaffold-official: ## 运行两个官方模板的发布门禁（需 Docker�
 test-scaffold-matrix: ## 运行完整生成器矩阵（夜间/手动；需 Docker）
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 60m -v
 
+test-scaffold-upgrade: ## 运行 v0.5 upgrade fixtures 的升级场景门禁
+	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 30m -v -run '$(SCAFFOLD_UPGRADE_TESTS)'
+
+test-scaffold-composition: ## 运行固定 pairwise 组合与冲突负例门禁
+	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 30m -v -run '$(SCAFFOLD_COMPOSITION_TESTS)'
+
 profiles-check: ## 构建全部形态并检查依赖闭包
 	@bash scripts/check_profiles.sh
 
@@ -246,14 +257,14 @@ skills-install: ## 安装 skills/ 到 Agent 发现路径
 swagger: ## 生成 OpenAPI 文档
 	@assets=$$(go run ./tools/profileassets "$(PROFILE)") || exit 1; \
 	printf '%s\n' "$$assets" | grep -qx 'docs/openapi' || { echo "SKIP swagger：形态 $(PROFILE) 未编入 apidocs"; exit 0; }; \
-	echo "$(SWAG) init -g $(SERVER_CMD) -o docs/openapi"; \
-	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi
+	echo "$(SWAG) init -g $(SERVER_CMD) -o docs/openapi --exclude=$(SWAG_EXCLUDE)"; \
+	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi --exclude=$(SWAG_EXCLUDE)
 
 swagger-check: ## 校验 OpenAPI 文档为最新
 	@assets=$$(go run ./tools/profileassets "$(PROFILE)") || exit 1; \
 	printf '%s\n' "$$assets" | grep -qx 'docs/openapi' || { echo "SKIP swagger-check：形态 $(PROFILE) 未编入 apidocs"; exit 0; }; \
-	echo "$(SWAG) init -g $(SERVER_CMD) -o docs/openapi"; \
-	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi >/dev/null || exit 1; \
+	echo "$(SWAG) init -g $(SERVER_CMD) -o docs/openapi --exclude=$(SWAG_EXCLUDE)"; \
+	$(SWAG) init -g $(SERVER_CMD) -o docs/openapi --exclude=$(SWAG_EXCLUDE) >/dev/null || exit 1; \
 	git diff --exit-code docs/openapi || { echo "❌ docs/openapi 不是最新，请运行 make swagger"; exit 1; }; \
 	echo "✅ OpenAPI 文档为最新"
 

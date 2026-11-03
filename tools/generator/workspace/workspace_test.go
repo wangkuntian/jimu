@@ -181,9 +181,18 @@ func TestLoadProjectManifestRejectsMissingAndBadDigest(t *testing.T) {
 
 func fixtureDocument(generated, config string) manifest.Document {
 	return manifest.Document{
-		SchemaVersion:  manifest.CurrentSchemaVersion,
-		Framework:      manifest.Framework{Module: "jimu", Version: "v0.5.0-dev", Commit: strings.Repeat("a", 40)},
-		Selection:      manifest.Selection{Shape: "app"},
+		SchemaVersion: manifest.CurrentSchemaVersion,
+		Framework:     manifest.Framework{Module: "jimu", Version: "v0.5.0-dev", Commit: strings.Repeat("a", 40)},
+		Selection:     manifest.Selection{Shape: "app"},
+		Composition: &manifest.Composition{
+			ContractVersion: manifest.CompositionContractVersion,
+			Requested:       []string{},
+			Resolved:        []string{},
+			AutoAdded:       []string{},
+			Drivers:         map[string][]string{},
+			Validity:        manifest.CompositionValidityValid,
+			Support:         manifest.CompositionSupportExperimental,
+		},
 		Copy:           []manifest.CopyAction{{Source: "input.txt", Destination: generated}},
 		Merges:         []manifest.MergeAction{{Source: config, Destination: config, Strategy: "sections"}},
 		Rewrites:       []manifest.RewriteAction{{Kind: "module", From: "jimu", To: "example.com/app"}},

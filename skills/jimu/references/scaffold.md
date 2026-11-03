@@ -14,28 +14,38 @@
 ## `jimu new <dir>`
 
 ```bash
-./bin/jimu new ./myapp --module=example.com/myapp --report                   # 默认 basic-api
-./bin/jimu new ./myapp --template=basic-api --module=example.com/myapp       # 官方模板
-./bin/jimu new ./myapp --template=auth-api --module=example.com/myapp        # 单租户认证模板
-./bin/jimu new ./myapp --with=user,access,queue --shape=app                   # 能力名（硬依赖闭包 + 拓扑序）
-./bin/jimu new ./myapp --with=queue:kafka --dry-run                           # 只打印计划，不落盘
+./bin/jimu-cli new ./myapp --module=example.com/myapp --report                   # 默认 basic-api
+./bin/jimu-cli new ./myapp --template=basic-api --module=example.com/myapp       # 官方模板
+./bin/jimu-cli new ./myapp --template=auth-api --module=example.com/myapp        # 单租户认证模板
+./bin/jimu-cli new ./myapp --with=user,access,auth,queue --shape=app              # 能力名（硬依赖闭包 + 拓扑序）
+./bin/jimu-cli new ./myapp --with=auth,queue:kafka --dry-run                      # 只打印计划，不落盘
+./bin/jimu-cli check ./myapp                                                      # 只读检查 manifest 与组合一致性
+./bin/jimu-cli upgrade ./myapp                                                    # 显式升级：备份、安装、验证、回滚、更新 manifest
+./bin/jimu-cli upgrade ./myapp --dry-run                                          # 只读三方 diff，不写项目目录
+./bin/jimu-cli upgrade ./myapp --check                                            # 有 conflict 时退出非 0
 ```
 
 | 参数 | 说明 |
 |---|---|
 | `--template=basic-api\|auth-api` | 官方模板；省略选择器时默认 `basic-api` |
-| `--profile=minimal` | 弃用兼容别名，映射为 `auth-api`，v0.6.0 移除；其他 profile 由 CLI 拒绝 |
-| `--with=<cap>[:<drv>][,…]` | experimental 专家模式；名字取自 catalog 与 Ungated 能力，驱动默认取 `Descriptor.Drivers` 首项，用 `<cap>:<drv>` 覆盖 |
+| `--profile=minimal` | 已移除的兼容别名；传入即报错并提示改用 `--template=auth-api`，其他内部 profile 由 CLI 拒绝 |
+| `--with=<cap>[:<drv>][,…]` | experimental 专家模式；名字取自 catalog 与 Ungated 能力，驱动默认取 `Descriptor.Drivers` 首项，用 `<cap>:<drv>` 覆盖。受保护能力需要同时选择 middleware provider（如 `auth`） |
 | `--shape=<name>` | 仅用于 `--with` 的形态名（默认 `app`） |
 | `--module=<path>` | 重写 `go.mod` 的 module 指令与文本里的 `jimu/` 前缀；**不改**框架运行期名字 / CLI 名 / 镜像名 / protobuf 描述符 |
-| `--dry-run` | 只打印计划，不落盘 |
+| `--dry-run` | 只打印 requested/resolved/auto-added、驱动、外部服务、迁移、status 与文件/资产计划，不落盘 |
 | `--force` | 只覆盖带 `.jimu/manifest.json` 的产物（识别依据是 manifest，不是时间戳） |
 | `--no-tidy` | 跳过 `go mod tidy`（`go.mod` 保持框架依赖集） |
 | `--report` | 写 `<dir>/docs/profiles/generated-report.md`（文件数 / 闭包 Go 文件数与代码行 / 直接依赖数 / 迁移数 / 表数 / 路由数 / 重型依赖 / 资产数） |
 
 **默认自检**：生成后跑 `go build ./...` 与生成项目自己的 `check-capabilities`，任一失败**整体回滚**。
 
-**Provenance**：`.jimu/manifest.json` 为 schema v2，`framework.commit` 来自 `git rev-parse --verify HEAD^{commit}`（支持普通 clone 与 worktree），同时记录 `framework.dirty`、官方模板的 `selection.template_version` 和覆盖全部 `generated_files` 的 `generated_file_sha256`。
+**组合解析顺序（P0-2）**：输入校验 → 硬依赖闭包 → 冲突 → `Provides`/`Consumes` → 驱动 → 迁移 schema 依赖 → 表/迁移 → 运行时服务/配置 → 中间件 → plan。诊断统一含 `code`/`capability`/`path`/`message`/`fix` 并稳定排序；非法组合在写目标目录前失败。`jimu check <dir>` 用同一套预检只读检查已有项目，合法退出 0、非法退出非 0。
+
+**Provenance**：`.jimu/manifest.json` 为 schema v3，`framework.commit` 来自 `git rev-parse --verify HEAD^{commit}`（支持普通 clone 与 worktree），同时记录 `framework.dirty`、官方模板的 `selection.template_version`、覆盖全部 `generated_files` 的 `generated_file_sha256`，以及 `composition` 组合块（契约版本、requested/resolved/auto-added、驱动、validity/support）。`--dry-run` 与 `jimu check` 的 support 读取 `composition.support`；schema v2 只读用于升级，schema v1 fail-closed。
+
+## `jimu upgrade <dir>`
+
+默认执行显式升级事务：以 manifest 的 `generated_file_sha256` 为基线做三方比较，冲突在写盘前中止；变换文件先备份再逐个安装，受支持配置以现有段值为底合并；`--with` 项目按 `composition.requested` 重建并透传 `composition.drivers`，保留非默认驱动选择；已有 `docs/profiles/generated-report.md` 时在暂存树重算并同批安装（本来没有则不创建）；随后在项目里跑 tidy/build/test，失败按原字节回滚；成功后更新 manifest，重复升级幂等。`--dry-run` 打印完整报告；`--check` 复用报告并在有冲突时退出非 0。两种检查模式都不写项目目录，`--no-tidy` 只跳过临时规划副本中的 tidy，升级后验证始终执行 tidy/build/test。
 
 **生成物是子集**：内核目录原样复制；能力按复制集（声明集 ∪ 编译闭包 ∪ schema 依赖的迁移携带目录 ∪ 内核 domain 依赖）落地；`internal/profiles/{registry,<shape>,active}`、`internal/capabilities/catalog/*`、`configs/*.yaml`、`Makefile`/`Dockerfile`/`scripts/check_profiles.sh` 按能力集**渲染**（单形态，无 `PROFILE=`、无 overlay）；测试树按「逐文件 import 可满足性 + 资产依赖」裁剪（规则写入 `.jimu/manifest.json` 的 `prune` 段，文件清单写入 `generated_files`）。manifest 只支持 JSON，路径必须为相对路径。
 
@@ -43,7 +53,7 @@
 
 ## `jimu capability add <name>`
 
-在**已生成项目**上增量追加能力：确定性重渲染、幂等（同一集合重跑逐字节等价）；`configs/*.yaml` 与 `deploy/helm/values.yaml` 以项目现有文件为底补齐新增段，**不覆盖**用户手改的值。若项目里已有 `--report` 产物，成功后同批重算刷新（本来没有则不创建）。
+在 **`--with` 生成的 experimental 项目**上增量追加能力：确定性重渲染、幂等（同一集合重跑逐字节等价）；写前复用与 `jimu new` / `jimu check` 相同的 resolver/preflight，缺失硬依赖、冲突、端口、驱动、迁移/配置/中间件问题都在写盘前失败；保留既有驱动选择与 auto-added 语义，并写回 schema v3 的 `composition`。`configs/*.yaml` 与 `deploy/helm/values.yaml` 以项目现有文件为底补齐新增段，**不覆盖**用户手改的值。落盘复用 `jimu upgrade` 的 manifest 事务（备份、manifest 最后写、失败按原字节回滚），但不执行 tidy/build 自检；支持级别保持 `experimental`。官方模板 `basic-api` / `auth-api` 不接受 `capability add`，扩展需用 `--with`。若项目里已有 `--report` 产物，成功后同批重算刷新（本来没有则不创建）。
 
 ## `jimu capability create <name>`
 
@@ -57,8 +67,9 @@
 ## 验收命令与期望输出
 
 ```bash
-./bin/jimu new /tmp/sk-demo --template=basic-api --module=example.com/demo --dry-run   # 只打印计划
-./bin/jimu new /tmp/sk-demo --template=auth-api --module=example.com/demo --report     # 单租户认证模板
+./bin/jimu-cli new /tmp/sk-demo --template=basic-api --module=example.com/demo --dry-run   # 只打印计划
+./bin/jimu-cli new /tmp/sk-demo --template=auth-api --module=example.com/demo --report     # 单租户认证模板
+./bin/jimu-cli check /tmp/sk-demo                                                          # 只读组合检查（退出 0）
 cd /tmp/sk-demo && go build ./... && go run ./tools/checkcapabilities && go test ./... -count=1
 grep -rn '"jimu/' /tmp/sk-demo --include='*.go'      # 期望 0 命中（module 已重写）
 make check-templates                                 # 本仓模板漂移门禁

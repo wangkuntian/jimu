@@ -21,8 +21,9 @@ func (m *Module) Name() string { return "uploadsec" }
 
 // Descriptor 声明上传安全能力的静态描述。
 var Descriptor = contract.Descriptor{
-	Name:  "uploadsec",
-	Mount: contract.MountProtected,
+	Name:     "uploadsec",
+	Mount:    contract.MountProtected,
+	Consumes: []contract.ConsumedPort{{Name: contract.StoragePortName}},
 	Configs: []contract.ConfigSpec{
 		{Section: ConfigKey, New: func() any { return &Config{} }},
 	},

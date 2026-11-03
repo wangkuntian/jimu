@@ -62,10 +62,14 @@ func newCapabilityAddCmd() *cobra.Command {
 
 读取 <dir>/.jimu/manifest.json（模块路径、声明集、驱动集），按同一套渲染管线在暂存目录
 重渲染后逐文件落盘：生成文件（DO NOT EDIT）被覆盖，configs/*.yaml 与 deploy/helm/values.yaml
-以现有文件为底合并（保住手改的段值），用户自有文件原样保留。任一失败即回滚，不留半成品。
+以现有文件为底合并（保住手改的段值），用户自有文件原样保留。写前复用组合 resolver/preflight，
+冲突、缺失依赖、端口、驱动、迁移/配置/中间件问题都在落盘前失败；落盘使用与 upgrade 相同的
+manifest 事务，任一失败按原字节回滚，不留半成品。
 
-硬依赖必须已在项目里 —— 缺依赖直接报错并提示先加依赖，不会自动补全。
-能力已在 catalog entries 里时用 --force 才允许重建。`,
+硬依赖必须已在项目里 —— 缺依赖直接报错并提示先加依赖，不会自动补全。既有驱动选择与
+auto-added 语义会保留，支持级别保持 experimental。
+能力已在 catalog entries 里时用 --force 才允许重建。官方模板（basic-api/auth-api）是认证基线，
+不接受 capability add；需要扩展时用 --with 生成 experimental 项目。`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var opts generator.AddOptions

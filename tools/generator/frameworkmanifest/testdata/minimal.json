@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "framework": {
     "module": "jimu",
     "version": "dev",
@@ -20,6 +20,27 @@
       "notification"
     ],
     "drivers": {}
+  },
+  "composition": {
+    "contract_version": "v0.1",
+    "requested": [
+      "access",
+      "auth",
+      "encryption",
+      "notification",
+      "user"
+    ],
+    "resolved": [
+      "access",
+      "auth",
+      "encryption",
+      "notification",
+      "user"
+    ],
+    "auto_added": [],
+    "drivers": {},
+    "validity": "valid",
+    "support": "experimental"
   },
   "capabilities": [
     {
@@ -339,70 +360,70 @@
       "destination": "internal/kernel",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "internal/app",
       "destination": "internal/app",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "internal/assembly",
       "destination": "internal/assembly",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "internal/capability",
       "destination": "internal/capability",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "internal/contract",
       "destination": "internal/contract",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "internal/config",
       "destination": "internal/config",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "internal/shared",
       "destination": "internal/shared",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "internal/e2e",
       "destination": "internal/e2e",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "conf",
       "destination": "conf",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "cmd/server",
       "destination": "cmd/server",
       "optional": false,
       "include": [],
-      "exclude": null
+      "exclude": []
     },
     {
       "source": "cmd/cli",
@@ -413,9 +434,13 @@
         "activecaps_test.go",
         "capability.go",
         "capability_test.go",
+        "check.go",
+        "check_test.go",
         "main.go",
         "new.go",
-        "new_test.go"
+        "new_test.go",
+        "upgrade.go",
+        "upgrade_test.go"
       ]
     },
     {
@@ -1444,6 +1469,11 @@
     "internal/capabilities/user/module_test.go",
     "internal/capabilities/user/userinfo_port.go",
     "internal/capabilities/user/wire.go",
+    "internal/capability/aliases.go",
+    "internal/capability/compose.go",
+    "internal/capability/compose_test.go",
+    "internal/capability/composition_test.go",
+    "internal/capability/diagnostic.go",
     "internal/capability/resolve.go",
     "internal/capability/resolve_test.go",
     "internal/config/capsection_test.go",
@@ -1455,6 +1485,8 @@
     "internal/contract/capability_test.go",
     "internal/contract/client.go",
     "internal/contract/client_test.go",
+    "internal/contract/composition.go",
+    "internal/contract/composition_test.go",
     "internal/contract/events.go",
     "internal/contract/module.go",
     "internal/contract/openapi.go",
@@ -1653,6 +1685,7 @@
     "internal/shared/validator/validator_test.go",
     "scripts/check_profiles.sh",
     "tools/checkcapabilities/assets.go",
+    "tools/checkcapabilities/composition.go",
     "tools/checkcapabilities/drivers.go",
     "tools/checkcapabilities/generator_boundary.go",
     "tools/checkcapabilities/imports.go",
@@ -1670,5 +1703,5 @@
     "tools/profileoverlay/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:fbc0cff232e46398df37347339c59d1c4306424780ca51fb9a339c8bb4b26cb9"
+  "digest": "sha256:b8f0b7125b71e0f4069576d5d9b112773bb96a90b82cc896dd2059a6f375ae43"
 }

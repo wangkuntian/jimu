@@ -79,6 +79,10 @@ var Descriptor = contract.Descriptor{
 	Requires:        []string{"auth", "user"},
 	Mount:           contract.MountPublic,
 	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL, contract.RuntimeServiceRedis},
+	Consumes: []contract.ConsumedPort{
+		{Name: "user.account", Required: true},
+		{Name: contract.TenantInfoPortName},
+	},
 	Configs: []contract.ConfigSpec{
 		{Section: ConfigKey, New: func() any { return &Config{} }},
 	},

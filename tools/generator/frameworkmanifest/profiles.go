@@ -23,10 +23,6 @@ func resolveSelection(root string, req Request) (selection, error) {
 		return selection{}, fmt.Errorf("one of --profile or --with is required")
 	}
 	all, inCatalog := allDescriptors()
-	byName := make(map[string]contract.Descriptor, len(all))
-	for _, descriptor := range all {
-		byName[descriptor.Name] = descriptor
-	}
 	selected := selection{drivers: map[string][]string{}, ungated: map[string]bool{}}
 	if req.Profile != "" {
 		assemblyValue, err := lookupProfile(req.Profile)
@@ -71,30 +67,29 @@ func resolveSelection(root string, req Request) (selection, error) {
 		if err != nil {
 			return selection{}, err
 		}
-		resolved, err := capability.Resolve(all, names)
-		if err != nil {
+		requestedDrivers := cloneDrivers(req.Drivers)
+		for name, driver := range overrides {
+			requestedDrivers[name] = []string{driver}
+		}
+		composed := capability.Compose(all, capability.ComposeRequest{
+			Capabilities:   names,
+			Drivers:        requestedDrivers,
+			DefaultDrivers: true,
+			Support:        contract.SupportExperimental,
+		})
+		if err := composed.Err(); err != nil {
 			return selection{}, err
 		}
-		for _, descriptor := range resolved {
+		selected.requested = composed.Requested
+		selected.autoAdded = composed.AutoAdded
+		for _, descriptor := range composed.Resolved {
 			selected.declared = append(selected.declared, descriptor.Name)
 			if !inCatalog[descriptor.Name] {
 				selected.ungated[descriptor.Name] = true
 			}
-			if len(descriptor.Drivers) > 0 {
-				selected.drivers[descriptor.Name] = []string{descriptor.Drivers[0]}
-			}
 		}
-		for name, driver := range overrides {
-			descriptor, ok := byName[name]
-			if !ok || !slices.Contains(descriptor.Drivers, driver) {
-				available := ""
-				if ok {
-					available = strings.Join(descriptor.Drivers, ", ")
-				}
-				return selection{}, fmt.Errorf("unknown driver %q for capability %q (available: %s)", driver, name, available)
-			}
-			selected.drivers[name] = []string{driver}
-		}
+		selected.drivers = composed.Drivers
+		selected.migration = composed.MigrationCarriers
 		selected.assemblies = assemblyCapabilitiesFor(selected.declared, selected.drivers)
 	}
 	return completeSelection(root, selected, all)
@@ -113,6 +108,13 @@ func allDescriptors() ([]contract.Descriptor, map[string]bool) {
 		all = append(all, item.Descriptor)
 	}
 	return all, inCatalog
+}
+
+// CompositionDescriptors 返回框架当前的全量组合事实，供写前预检与 `jimu check`
+// 叠加到 manifest 事实之上（schema v2 尚未持久化 conflicts/provides/consumes）。
+func CompositionDescriptors() []contract.Descriptor {
+	all, _ := allDescriptors()
+	return all
 }
 
 func lookupProfile(name string) (assembly.Assembly, error) {
@@ -195,22 +197,15 @@ func completeSelection(root string, selected selection, all []contract.Descripto
 		return selection{}, err
 	}
 	selected.roots = roots
-	declaredSet := make(map[string]bool, len(selected.declared))
-	for _, name := range selected.declared {
-		declaredSet[name] = true
-	}
 	for _, name := range selected.declared {
 		if info, err := os.Stat(filepath.Join(root, "internal", "capabilities", name)); err != nil || !info.IsDir() {
 			return selection{}, fmt.Errorf("capability %q has no source directory", name)
 		}
 	}
-	only := map[string]bool{}
-	for name := range declaredSet {
-		for _, dependency := range catalog.MigrationSchemaDeps[name] {
-			if !declaredSet[dependency] {
-				only[dependency] = true
-			}
-		}
+	carriers := capability.MigrationCarriers(all, selected.declared)
+	only := make(map[string]bool, len(carriers))
+	for _, name := range carriers {
+		only[name] = true
 	}
 	covered := map[string]bool{}
 	copySet := map[string]bool{}
@@ -229,11 +224,7 @@ func completeSelection(root string, selected selection, all []contract.Descripto
 			copySet[name] = true
 		}
 	}
-	selected.migration = make([]string, 0, len(only))
-	for name := range only {
-		selected.migration = append(selected.migration, name)
-	}
-	slices.Sort(selected.migration)
+	selected.migration = slices.Clone(carriers)
 	selected.domain = uniqueSorted(selected.domain)
 	selected.copy = make([]string, 0, len(copySet))
 	for name := range copySet {

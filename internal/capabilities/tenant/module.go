@@ -87,7 +87,13 @@ var Descriptor = contract.Descriptor{
 	Owns:            []string{"tenants", "tenant_plans"},
 	Mount:           contract.MountProtected,
 	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
-	Configs:         []contract.ConfigSpec{{Section: ConfigKey, New: func() any { return &Config{} }}},
+	Provides: []contract.ProvidedPort{
+		{Name: PortName},
+		{Name: contract.TenantInfoPortName},
+		{Name: ProvisionerPortName},
+		{Name: contract.TenantRoleStoreBinderPortName},
+	},
+	Configs: []contract.ConfigSpec{{Section: ConfigKey, New: func() any { return &Config{} }}},
 	Permissions: []contract.Permission{
 		{Name: "租户列表", Resource: "/api/v1/tenants", Action: "GET"},
 		{Name: "租户创建", Resource: "/api/v1/tenants", Action: "POST"},

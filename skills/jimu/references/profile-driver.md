@@ -13,13 +13,13 @@
 3. **同步 golden 闭包清单**：`scripts/check_profiles.sh` 的 `EXPECTED_<name>` / `FORBIDDEN_<name>`（能力根包逐值锁定）。不更新即 `make profiles-check` 失败 —— 这是刻意的「新增能力必须显式声明」刹车
 4. **守住两条不变式**：
    - 选点包 `internal/profiles/active` **恰好** import 一个形态
-   - `internal/profiles/registry` **不得**被 `cmd/server` 或选点包 import（它 import 全部形态包，被引用会把所有形态拉回二进制、层②裁剪失效）。两条都由 `make check-capabilities` ④ 号断言检查
+   - `internal/profiles/registry` **不得**被 `cmd/server` 或选点包 import（它 import 全部形态包，被引用会把所有形态拉回二进制、层②裁剪失效）。两条都由 `make check-capabilities` ⑤ 号断言检查
 5. **非 catalog 条目按 `Ungated` 声明**：非 catalog 能力在形态清单中标记 `Ungated`，不受 `capabilities.enabled` 门控
 
 **验收**：
 
 ```bash
-make check-capabilities                       # 7 条 ✅（④ 号管入口与选点包，⑦ 号管生成器边界）
+make check-capabilities                       # 8 条 ✅（⑤ 号管入口与选点包，⑧ 号管生成器边界）
 make profiles-check                           # 新形态 overlay 构建 + golden 闭包通过
 PROFILE=<name> make build-server              # 产物 bin/jimu-server-<name>
 JIMU_PROFILES_SMOKE=1 make profiles-check     # 启动并轮询管理端 /readyz（需 DB+Redis）
@@ -36,7 +36,7 @@ JIMU_PROFILES_SMOKE=1 make profiles-check     # 启动并轮询管理端 /readyz
 **验收**：
 
 ```bash
-make check-capabilities        # ②③ 号断言管驱动
+make check-capabilities        # ③④ 号断言管驱动
 make compose-report            # 看「重型依赖」列（aws-sdk-go-v2 / kafka-go / amqp091-go / excelize）
 make compose-report-check      # 报告入库后：实测与入库一致
 ```
@@ -46,6 +46,6 @@ make compose-report-check      # 报告入库后：实测与入库一致
 | 症状 | 定位 |
 |---|---|
 | `profiles-check` 报某形态闭包集合不匹配 | 更新 `scripts/check_profiles.sh` 的 `EXPECTED_<name>`（新增能力）或检查是否漏了 `FORBIDDEN_<name>` |
-| `check-capabilities` ④ 号红 | 选点包被改成了 import 多个形态，或 `registry` 被入口/选点包引用 |
+| `check-capabilities` ⑤ 号红 | 选点包被改成了 import 多个形态，或 `registry` 被入口/选点包引用 |
 | 新增驱动目录 + 形态 blank import 了，但门禁没报错 | **预期行为**：集合比较看不见未声明项（被 `available` 过滤）。唯一捕获点是「驱动包只被 `internal/profiles/*` import」与「形态生产代码只 import 已声明驱动」两条断言 —— 所以驱动**必须**先在 `Descriptor.Drivers` 声明 |
 | 某形态下配置写了某驱动却启动报错 | 该驱动没编进这个形态（fail-closed 的刻意行为，错误里会列出已编译的驱动集合） |

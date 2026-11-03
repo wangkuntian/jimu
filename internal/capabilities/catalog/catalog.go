@@ -57,8 +57,8 @@ func ValidateDeclarations() error {
 	return capability.ValidateDeclarations(entries, Names())
 }
 
-// All 返回清单中全部能力的深拷贝（含 Requires/SoftRequires/Drivers/Owns/Permissions/Configs），
-// 调用方修改不影响清单。
+// All 返回清单中全部能力的深拷贝（含 Requires/SoftRequires/Drivers/Owns/Permissions/Configs
+// 以及组合契约字段），调用方修改不影响清单。
 func All() []contract.Descriptor {
 	out := make([]contract.Descriptor, len(entries))
 	for i, d := range entries {
@@ -66,6 +66,13 @@ func All() []contract.Descriptor {
 		out[i].Requires = append([]string(nil), d.Requires...)
 		out[i].SoftRequires = append([]string(nil), d.SoftRequires...)
 		out[i].Drivers = append([]string(nil), d.Drivers...)
+		out[i].Conflicts = append([]string(nil), d.Conflicts...)
+		out[i].Provides = append([]contract.ProvidedPort(nil), d.Provides...)
+		out[i].Consumes = append([]contract.ConsumedPort(nil), d.Consumes...)
+		out[i].DriverSpecs = append([]contract.DriverSpec(nil), d.DriverSpecs...)
+		for j := range out[i].DriverSpecs {
+			out[i].DriverSpecs[j].RuntimeServices = append([]contract.RuntimeService(nil), d.DriverSpecs[j].RuntimeServices...)
+		}
 		out[i].Owns = append([]string(nil), d.Owns...)
 		out[i].MigrationSchemaDeps = append([]string(nil), d.MigrationSchemaDeps...)
 		out[i].RuntimeServices = append([]contract.RuntimeService(nil), d.RuntimeServices...)
@@ -82,6 +89,12 @@ func Names() []string {
 		out = append(out, d.Name)
 	}
 	return out
+}
+
+// KnownNames 返回声明校验使用的全量能力名。框架 catalog 只登记正式能力；
+// 形态专有能力由调用方在拿到 profile 清单后追加。
+func KnownNames() []string {
+	return Names()
 }
 
 // Degradation 是 capability.Degradation 的别名，保留能力清单侧的既有引用。

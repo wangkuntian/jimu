@@ -49,6 +49,11 @@ func basicAPIDocument(root, module, template string) (manifest.Document, error) 
 			Shape: "basic-api", Template: "basic-api", TemplateVersion: manifest.TemplateContractVersion, Support: "official",
 			Capabilities: []string{}, Drivers: map[string][]string{},
 		},
+		Composition: &manifest.Composition{
+			ContractVersion: manifest.CompositionContractVersion,
+			Requested:       []string{}, Resolved: []string{}, AutoAdded: []string{}, Drivers: map[string][]string{},
+			Validity: manifest.CompositionValidityValid, Support: manifest.CompositionSupportCertified,
+		},
 		Capabilities: []manifest.Capability{},
 		Copy: []manifest.CopyAction{
 			{Source: "go.sum", Destination: "go.sum", Include: []string{}, Exclude: []string{}},

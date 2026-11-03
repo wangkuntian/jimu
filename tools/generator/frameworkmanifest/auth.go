@@ -54,7 +54,7 @@ func authAPIDocument(root, module string) (manifest.Document, error) {
 	}
 	facts := []manifest.Capability{
 		{
-			Name: "tenant", MigrationOnly: true, Mount: "protected", Owns: []string{"tenants"},
+			Name: "tenant", MigrationOnly: true, Mount: "protected", Requires: []string{"user", "access"}, Owns: []string{"tenants"},
 			Migrations: []string{migrations[0]}, Configs: []string{"db"}, RuntimeServices: []string{"mysql"},
 		},
 		{
@@ -63,13 +63,13 @@ func authAPIDocument(root, module string) (manifest.Document, error) {
 			Configs: []string{"db"}, RuntimeServices: []string{"mysql"},
 		},
 		{
-			Name: "access", Mount: "protected",
+			Name: "access", Mount: "protected", Requires: []string{"user"},
 			Owns:                []string{"roles", "permissions", "role_permissions", "user_roles"},
 			Migrations:          []string{migrations[2], migrations[3], migrations[4], migrations[5], migrations[9]},
 			MigrationSchemaDeps: []string{"tenant"}, Configs: []string{"db"}, RuntimeServices: []string{"mysql"},
 		},
 		{
-			Name: "auth", Mount: "self-managed", ProtectedHTTPMiddleware: "primary",
+			Name: "auth", Mount: "self-managed", Requires: []string{"user", "access"}, ProtectedHTTPMiddleware: "primary",
 			Owns:       []string{"login_histories", "password_histories"},
 			Migrations: []string{migrations[6], migrations[7]},
 			Configs:    []string{"auth", "db", "redis"}, RuntimeServices: []string{"mysql", "redis"},
@@ -85,6 +85,12 @@ func authAPIDocument(root, module string) (manifest.Document, error) {
 		Selection: manifest.Selection{
 			Shape: "auth-api", Template: "auth-api", TemplateVersion: manifest.TemplateContractVersion, Support: "official",
 			Capabilities: []string{"user", "access", "auth"}, Drivers: map[string][]string{},
+		},
+		Composition: &manifest.Composition{
+			ContractVersion: manifest.CompositionContractVersion,
+			Requested:       []string{"access", "auth", "user"}, Resolved: []string{"access", "auth", "user"},
+			AutoAdded: []string{}, Drivers: map[string][]string{},
+			Validity: manifest.CompositionValidityValid, Support: manifest.CompositionSupportCertified,
 		},
 		Capabilities: facts,
 		Copy: []manifest.CopyAction{

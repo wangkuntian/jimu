@@ -20,6 +20,8 @@ var Descriptor = contract.Descriptor{
 	Migrations:      migrationsFS,
 	Owns:            []string{"outbox_events"},
 	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+	Provides:        []contract.ProvidedPort{{Name: PortName}},
+	Consumes:        []contract.ConsumedPort{{Name: contract.OutboxMQPortName}},
 	Configs: []contract.ConfigSpec{
 		{Section: ConfigKey, New: func() any { return &Config{} }},
 	},

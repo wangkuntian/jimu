@@ -16,6 +16,7 @@ func TestScaffoldShardIndicesCoverAllCasesOnce(t *testing.T) {
 	}{
 		{name: "capability builds", cases: 25, shards: 4},
 		{name: "generated test trees", cases: 10, shards: 2},
+		{name: "composition matrix", cases: len(compositionMatrixCases), shards: compositionMatrixShards},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			seen := make(map[int]bool)

@@ -81,7 +81,7 @@ func AddCapability(opts AddOptions) (*Result, error) {
 	if module == "" {
 		return nil, fmt.Errorf("manifest does not declare a module rewrite")
 	}
-	if err := preflight.Validate(next); err != nil {
+	if err := preflight.ValidateWithOverlay(next, frameworkmanifest.CompositionDescriptors()); err != nil {
 		return nil, fmt.Errorf("preflight: %w", err)
 	}
 	if opts.Module != "" {

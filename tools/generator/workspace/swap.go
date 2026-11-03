@@ -38,61 +38,6 @@ func replaceDirectory(target, staging string) error {
 // Package-level callers may replace it briefly to verify rollback behavior.
 var InstallFile = copyStagedFile
 
-func installStaged(root, staging string, changed, removed []string) error {
-	touched := append(append([]string{}, changed...), removed...)
-	sort.Strings(touched)
-	if len(touched) == 0 {
-		return nil
-	}
-	backup, err := os.MkdirTemp(filepath.Dir(root), filepath.Base(root)+".backup-")
-	if err != nil {
-		return fmt.Errorf("create update backup: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(backup) }()
-	backed := make([]string, 0, len(touched))
-	restore := func() {
-		for _, rel := range touched {
-			_ = os.RemoveAll(filepath.Join(root, filepath.FromSlash(rel)))
-		}
-		for index := len(backed) - 1; index >= 0; index-- {
-			rel := backed[index]
-			from := filepath.Join(backup, filepath.FromSlash(rel))
-			to := filepath.Join(root, filepath.FromSlash(rel))
-			_ = os.MkdirAll(filepath.Dir(to), 0o755)
-			_ = os.Rename(from, to)
-		}
-	}
-	for _, rel := range touched {
-		target := filepath.Join(root, filepath.FromSlash(rel))
-		if _, err := os.Lstat(target); os.IsNotExist(err) {
-			continue
-		} else if err != nil {
-			return fmt.Errorf("inspect update target %s: %w", rel, err)
-		}
-		backupPath := filepath.Join(backup, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(backupPath), 0o755); err != nil {
-			return err
-		}
-		if err := os.Rename(target, backupPath); err != nil {
-			return fmt.Errorf("backup update target %s: %w", rel, err)
-		}
-		backed = append(backed, rel)
-	}
-	for _, rel := range changed {
-		if err := InstallFile(staging, root, rel); err != nil {
-			restore()
-			return fmt.Errorf("install update target %s: %w", rel, err)
-		}
-	}
-	for _, rel := range removed {
-		if err := os.RemoveAll(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
-			restore()
-			return fmt.Errorf("remove obsolete generated file %s: %w", rel, err)
-		}
-	}
-	return nil
-}
-
 func copyStagedFile(sourceRoot, targetRoot, rel string) error {
 	source := filepath.Join(sourceRoot, filepath.FromSlash(rel))
 	target := filepath.Join(targetRoot, filepath.FromSlash(rel))

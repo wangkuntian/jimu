@@ -11,10 +11,26 @@ import (
 
 // Validate 检查 manifest 的 schema、路径和动作目标不变量。
 func Validate(doc Document) error {
+	return validate(doc, false)
+}
+
+// validateLegacy checks a read-only schema v2 manifest before it is upgraded.
+func validateLegacy(doc Document) error {
+	return validate(doc, true)
+}
+
+func validate(doc Document, legacy bool) error {
 	if doc.SchemaVersion == 0 {
 		return fmt.Errorf("schema_version is required")
 	}
-	if doc.SchemaVersion != CurrentSchemaVersion {
+	if legacy {
+		if doc.SchemaVersion != LegacySchemaVersion {
+			return fmt.Errorf("unsupported legacy schema version %d", doc.SchemaVersion)
+		}
+		if doc.Composition != nil {
+			return fmt.Errorf("composition is not valid in schema v2")
+		}
+	} else if doc.SchemaVersion != CurrentSchemaVersion {
 		return fmt.Errorf("unsupported schema version %d", doc.SchemaVersion)
 	}
 	if strings.TrimSpace(doc.Framework.Module) == "" {
@@ -33,6 +49,17 @@ func Validate(doc Document) error {
 	}
 	if err := validateCapabilities(doc.Capabilities); err != nil {
 		return err
+	}
+	if !legacy {
+		if doc.Composition == nil {
+			return fmt.Errorf("composition is required")
+		}
+		if err := validateComposition(*doc.Composition); err != nil {
+			return err
+		}
+		if !sameStringSet(doc.Composition.Resolved, doc.Selection.Capabilities) {
+			return fmt.Errorf("composition.resolved does not match selection.capabilities")
+		}
 	}
 
 	usedDestinations := map[string]string{}
@@ -157,7 +184,21 @@ func Validate(doc Document) error {
 
 // ValidateComplete verifies the provenance fields required in a persisted manifest.
 func ValidateComplete(doc Document) error {
-	if err := Validate(doc); err != nil {
+	return validateComplete(doc, false)
+}
+
+func validateCompleteLegacy(doc Document) error {
+	return validateComplete(doc, true)
+}
+
+func validateComplete(doc Document, legacy bool) error {
+	var err error
+	if legacy {
+		err = validateLegacy(doc)
+	} else {
+		err = Validate(doc)
+	}
+	if err != nil {
 		return err
 	}
 	if strings.TrimSpace(doc.Framework.Version) == "" {
@@ -175,6 +216,88 @@ func ValidateComplete(doc Document) error {
 		}
 	}
 	return nil
+}
+
+func validateComposition(composition Composition) error {
+	if composition.ContractVersion != CompositionContractVersion {
+		return fmt.Errorf("composition.contract_version %q is unsupported; want %q", composition.ContractVersion, CompositionContractVersion)
+	}
+	for _, field := range []struct {
+		name   string
+		values []string
+	}{
+		{"requested", composition.Requested},
+		{"resolved", composition.Resolved},
+		{"auto_added", composition.AutoAdded},
+	} {
+		if err := validateNames("composition."+field.name, field.values); err != nil {
+			return err
+		}
+	}
+	resolved := make(map[string]bool, len(composition.Resolved))
+	for _, name := range composition.Resolved {
+		resolved[name] = true
+	}
+	requested := make(map[string]bool, len(composition.Requested))
+	for _, name := range composition.Requested {
+		requested[name] = true
+		if !resolved[name] {
+			return fmt.Errorf("composition.requested references %q which is not resolved", name)
+		}
+	}
+	for _, name := range composition.AutoAdded {
+		if !resolved[name] {
+			return fmt.Errorf("composition.auto_added references %q which is not resolved", name)
+		}
+		if requested[name] {
+			return fmt.Errorf("composition.auto_added references requested capability %q", name)
+		}
+	}
+	for name := range composition.Drivers {
+		if !resolved[name] {
+			return fmt.Errorf("composition.drivers references capability %q which is not resolved", name)
+		}
+	}
+	switch composition.Validity {
+	case CompositionValidityValid, CompositionValidityInvalid:
+	default:
+		return fmt.Errorf("composition.validity has unknown value %q", composition.Validity)
+	}
+	switch composition.Support {
+	case CompositionSupportCertified, CompositionSupportValidated, CompositionSupportExperimental:
+	default:
+		return fmt.Errorf("composition.support has unknown value %q", composition.Support)
+	}
+	driverNames := make([]string, 0, len(composition.Drivers))
+	for name := range composition.Drivers {
+		driverNames = append(driverNames, name)
+	}
+	sort.Strings(driverNames)
+	for _, name := range driverNames {
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("composition.drivers contains an empty capability name")
+		}
+		if err := validateNames("composition.drivers."+name, composition.Drivers[name]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func sameStringSet(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	values := make(map[string]bool, len(left))
+	for _, value := range left {
+		values[value] = true
+	}
+	for _, value := range right {
+		if !values[value] {
+			return false
+		}
+	}
+	return true
 }
 
 func validateCapabilities(capabilities []Capability) error {

@@ -1,7 +1,12 @@
 package generator
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -52,6 +57,57 @@ func TestRenderCatalogMatchesGoldenForWithSelection(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, string(want), string(files[rel]), rel)
 	}
+}
+
+// TestRenderCatalogCopiesAllDescriptorFields 生成版 catalog 的 All() 必须与框架蓝本复制
+// 同一组 Descriptor 字段；新增字段只改一边会在 P0-2 依赖声明时静默丢数据。
+func TestRenderCatalogCopiesAllDescriptorFields(t *testing.T) {
+	set, err := ParseCapabilitySet("minimal", "", "")
+	require.NoError(t, err)
+	files, err := RenderCatalog(set)
+	require.NoError(t, err)
+	framework, err := os.ReadFile(filepath.Join("..", "..", "internal", "capabilities", "catalog", "catalog.go"))
+	require.NoError(t, err)
+
+	assert.Equal(t, directCopyFields(t, framework), directCopyFields(t, files[catalogRel]))
+}
+
+// directCopyFields 提取 All() 中 `out[i].<Field> = …` 的直接字段集合。
+func directCopyFields(t *testing.T, src []byte) []string {
+	t.Helper()
+	file, err := parser.ParseFile(token.NewFileSet(), "", src, 0)
+	require.NoError(t, err)
+
+	var fields []string
+	ast.Inspect(file, func(node ast.Node) bool {
+		fn, ok := node.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != "All" || fn.Body == nil {
+			return true
+		}
+		ast.Inspect(fn.Body, func(node ast.Node) bool {
+			assign, ok := node.(*ast.AssignStmt)
+			if !ok || len(assign.Lhs) != 1 {
+				return true
+			}
+			selector, ok := assign.Lhs[0].(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			index, ok := selector.X.(*ast.IndexExpr)
+			if !ok {
+				return true
+			}
+			ident, ok := index.X.(*ast.Ident)
+			if !ok || ident.Name != "out" {
+				return true
+			}
+			fields = append(fields, selector.Sel.Name)
+			return true
+		})
+		return false
+	})
+	slices.Sort(fields)
+	return fields
 }
 
 // TestRenderCatalogKeepsTopologicalOrderAndCarriesMigrationDeps 钉住裁定修订第 1 条：entries 是

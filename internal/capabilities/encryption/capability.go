@@ -11,4 +11,5 @@ var Descriptor = contract.Descriptor{
 	Name:            "encryption",
 	Mount:           contract.MountProtected,
 	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+	Provides:        []contract.ProvidedPort{{Name: PortName}},
 }

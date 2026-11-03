@@ -86,7 +86,12 @@ var Descriptor = contract.Descriptor{
 	Owns:            []string{"webauthn_credentials"},
 	Mount:           contract.MountSelfManaged,
 	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
-	Configs:         []contract.ConfigSpec{{Section: ConfigKey, New: func() any { return &Config{} }}},
+	Consumes: []contract.ConsumedPort{
+		{Name: "auth", Required: true},
+		{Name: contract.UserinfoPortName},
+		{Name: contract.TenantInfoPortName},
+	},
+	Configs: []contract.ConfigSpec{{Section: ConfigKey, New: func() any { return &Config{} }}},
 	Permissions: []contract.Permission{
 		{Name: "通行密钥登录开始", Resource: "/api/v1/auth/webauthn/login/begin", Action: "POST"},
 		{Name: "通行密钥登录完成", Resource: "/api/v1/auth/webauthn/login/finish", Action: "POST"},

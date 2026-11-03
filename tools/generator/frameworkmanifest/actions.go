@@ -53,6 +53,10 @@ var kernelExcludes = []string{
 	"cmd/cli/main.go",
 	"cmd/cli/new.go",
 	"cmd/cli/new_test.go",
+	"cmd/cli/check.go",
+	"cmd/cli/check_test.go",
+	"cmd/cli/upgrade.go",
+	"cmd/cli/upgrade_test.go",
 	"cmd/cli/capability.go",
 	"cmd/cli/capability_test.go",
 	"cmd/cli/activecaps_test.go",
@@ -439,6 +443,9 @@ func mapsKeys(values map[string]bool) []string {
 }
 
 func sortedStrings(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
 	out := slices.Clone(values)
 	sort.Strings(out)
 	return out

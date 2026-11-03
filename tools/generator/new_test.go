@@ -38,7 +38,7 @@ func TestNewProjectBasicAPIHasNoExternalRuntimeDependencies(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "basic-api", result.Template)
-	assert.Equal(t, "official", result.Support)
+	assert.Equal(t, "certified", result.Support)
 
 	for _, rel := range []string{
 		"cmd/server/main.go",
@@ -79,7 +79,7 @@ func TestNewProjectAuthAPIIsCompactSingleTenantTemplate(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "auth-api", result.Template)
-	assert.Equal(t, "official", result.Support)
+	assert.Equal(t, "certified", result.Support)
 
 	for _, rel := range []string{
 		"cmd/server/main.go",
@@ -144,6 +144,10 @@ func assertManifestProvenance(t *testing.T, dir, template string) {
 	document, err := workspace.LoadProjectManifest(dir)
 	require.NoError(t, err)
 	require.NoError(t, manifest.ValidateComplete(document))
+	assert.Equal(t, manifest.CurrentSchemaVersion, document.SchemaVersion)
+	require.NotNil(t, document.Composition, "生成项目必须持久化 composition")
+	assert.Equal(t, manifest.CompositionContractVersion, document.Composition.ContractVersion)
+	assert.Equal(t, manifest.CompositionValidityValid, document.Composition.Validity)
 	assert.Equal(t, template, document.Selection.Template)
 	assert.Equal(t, manifest.TemplateContractVersion, document.Selection.TemplateVersion)
 	assert.NotEmpty(t, document.Framework.Version)
@@ -285,6 +289,11 @@ func TestNewProjectWithSelectsFirstDriverAndFiltersDirectories(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(src), "Drivers:")
 	assert.Contains(t, string(src), `[]string{"redis"}`)
+	// DriverSpecs 必须与 Drivers 同步收窄，否则生成项目 check-capabilities 会报
+	// driver spec "kafka"/"rabbitmq" outside Drivers。
+	assert.Contains(t, string(src), `Name: "redis"`)
+	assert.NotContains(t, string(src), `Name: "kafka"`)
+	assert.NotContains(t, string(src), `Name: "rabbitmq"`)
 
 	// 未被选中的能力（storage 声明 local/s3，但既不声明也未选驱动）不复制任何驱动目录。
 	_, statErr := os.Stat(filepath.Join(dir, "internal/capabilities/storage/local"))

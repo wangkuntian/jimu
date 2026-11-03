@@ -14,6 +14,7 @@ import (
 var (
 	errScaffoldSelectors        = errors.New("--template, --profile and --with are mutually exclusive")
 	errFrameworkInternalProfile = errors.New("is framework-internal; use --template or --with")
+	errMinimalProfileRemoved    = errors.New("was removed; use --template=auth-api")
 	errShapeRequiresWith        = errors.New("--shape is only valid with --with")
 )
 
@@ -23,11 +24,20 @@ var (
 // 两个能力集都要打印并显式标注（它们不相等）：`capabilities` = **装配集**（会进 assembly、
 // 挂路由），`copy set` = **复制集**（额外含编译闭包/迁移携带/内核编译期 domain 依赖的目录）。
 func printScaffoldPlan(w io.Writer, res *generator.Result) {
-	plan := fmt.Sprintf("dry-run: %s\n  module       %s\n  template     %s\n  support      %s\n  shape        %s\n  capabilities %s (装配集)\n  copy set     %s (复制集：装配集 + 编译闭包 + 迁移携带)\n  drivers      %s\n  files        %d (复制 + 渲染的上界；未减去按 import/资产/组成可满足性裁剪的测试文件)\n  assets       %d\n",
+	plan := fmt.Sprintf("dry-run: %s\n  module       %s\n  template     %s\n  support      %s\n  shape        %s\n  requested    %s\n  resolved     %s\n  auto-added   %s\n  capabilities %s (装配集)\n  copy set     %s (复制集：装配集 + 编译闭包 + 迁移携带)\n  drivers      %s\n  services     %s\n  migrations   %s\n  status       %s\n  files        %d (复制 + 渲染的上界；未减去按 import/资产/组成可满足性裁剪的测试文件)\n  assets       %d\n",
 		res.Dir, res.Module, res.Template, res.Support, res.Shape,
+		joinOrNone(res.Requested), joinOrNone(res.Resolved), joinOrNone(res.AutoAdded),
 		strings.Join(res.Capabilities, ", "), strings.Join(res.CopySet, ", "),
-		strings.Join(res.Drivers, ", "), res.FileCount, len(res.Assets))
+		joinOrNone(res.Drivers), joinOrNone(res.Services), joinOrNone(res.Migrations),
+		res.Validity+"/"+res.Support, res.FileCount, len(res.Assets))
 	_, _ = io.WriteString(w, plan)
+}
+
+func joinOrNone(values []string) string {
+	if len(values) == 0 {
+		return "none"
+	}
+	return strings.Join(values, ", ")
 }
 
 var newCmd = newScaffoldCmd()
@@ -40,8 +50,9 @@ func newScaffoldCmd() *cobra.Command {
 
 选择器（互斥）：
   --template=<name>     官方模板：basic-api（默认）或 auth-api
-  --profile=minimal     已弃用兼容别名，映射为 auth-api；v0.6.0 移除
   --with=<cap>[:<drv>]  专家模式（experimental），按能力名解析硬依赖与驱动
+
+--profile 只用于拒绝内部形态；--profile=minimal 已移除，请改用 --template=auth-api。
 
 生成顺序：复制/渲染 → go mod tidy → 自检（生成项目内 go build ./... 与
 生成项目测试都必须绿）→ 原子换上 <dir>。产物先写 <dir>.tmp-<rand>，
@@ -66,12 +77,10 @@ func newScaffoldCmd() *cobra.Command {
 				if opts.With != "" {
 					return errScaffoldSelectors
 				}
-				if opts.Profile != "minimal" {
-					return fmt.Errorf("profile %q %w", opts.Profile, errFrameworkInternalProfile)
+				if opts.Profile == "minimal" {
+					return fmt.Errorf("profile %q %w", opts.Profile, errMinimalProfileRemoved)
 				}
-				opts.Template = "auth-api"
-				opts.Profile = ""
-				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "warning: --profile=minimal is deprecated; use --template=auth-api (removed in v0.6.0)")
+				return fmt.Errorf("profile %q %w", opts.Profile, errFrameworkInternalProfile)
 			}
 			if cmd.Flags().Changed("shape") && opts.Template != "" {
 				return errShapeRequiresWith
@@ -87,7 +96,7 @@ func newScaffoldCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("template", "", "official template: basic-api (default) or auth-api (mutually exclusive with --profile/--with)")
-	cmd.Flags().String("profile", "", "deprecated compatibility alias; only minimal is accepted")
+	cmd.Flags().String("profile", "", "framework-internal profile selector; rejected by the CLI (use --template=auth-api instead of --profile=minimal)")
 	cmd.Flags().String("with", "", "comma-separated capabilities, optionally <cap>:<driver> (mutually exclusive with --profile)")
 	cmd.Flags().String("shape", "", "shape name for --with (default \"app\")")
 	cmd.Flags().String("module", "", "Go module path (default: derived from <dir>)")

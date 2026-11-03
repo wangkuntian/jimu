@@ -80,6 +80,93 @@ func validateStructure(caps []contract.Descriptor) error {
 		default:
 			return fmt.Errorf("capability %q declares unknown protected middleware mode %q", d.Name, d.ProtectedHTTPMiddleware)
 		}
+		if err := validateConflicts(d); err != nil {
+			return err
+		}
+		if err := validatePorts(d); err != nil {
+			return err
+		}
+		if err := validateDriverSpecs(d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateConflicts 校验冲突声明自洽：非空、不自引用、不重复。
+// 目标能力是否存在由 ValidateDeclarations 在拿到已知能力名后判断。
+func validateConflicts(d contract.Descriptor) error {
+	seen := make(map[string]bool, len(d.Conflicts))
+	for _, name := range d.Conflicts {
+		if name == "" {
+			return fmt.Errorf("capability %q declares an empty conflict", d.Name)
+		}
+		if name == d.Name {
+			return fmt.Errorf("capability %q conflicts with itself", d.Name)
+		}
+		if seen[name] {
+			return fmt.Errorf("capability %q duplicates conflict %q", d.Name, name)
+		}
+		seen[name] = true
+	}
+	return nil
+}
+
+// validatePorts 校验端口声明自洽：名字非空、同一能力内不重复。
+// 全局唯一提供方与必需消费者覆盖由 ValidateDeclarations 在完整清单上判断。
+func validatePorts(d contract.Descriptor) error {
+	provided := make(map[string]bool, len(d.Provides))
+	for _, port := range d.Provides {
+		if port.Name == "" {
+			return fmt.Errorf("capability %q declares an empty provided port", d.Name)
+		}
+		if provided[port.Name] {
+			return fmt.Errorf("capability %q duplicates provided port %q", d.Name, port.Name)
+		}
+		provided[port.Name] = true
+	}
+	consumed := make(map[string]bool, len(d.Consumes))
+	for _, port := range d.Consumes {
+		if port.Name == "" {
+			return fmt.Errorf("capability %q declares an empty consumed port", d.Name)
+		}
+		if consumed[port.Name] {
+			return fmt.Errorf("capability %q duplicates consumed port %q", d.Name, port.Name)
+		}
+		consumed[port.Name] = true
+	}
+	return nil
+}
+
+// validateDriverSpecs 校验驱动元数据：非空、不重复、必须命中 Drivers，且声明的
+// 额外运行时服务合法且不重复。
+func validateDriverSpecs(d contract.Descriptor) error {
+	declared := make(map[string]bool, len(d.Drivers))
+	for _, drv := range d.Drivers {
+		declared[drv] = true
+	}
+	seen := make(map[string]bool, len(d.DriverSpecs))
+	for _, spec := range d.DriverSpecs {
+		if spec.Name == "" {
+			return fmt.Errorf("capability %q declares an empty driver spec name", d.Name)
+		}
+		if seen[spec.Name] {
+			return fmt.Errorf("capability %q duplicates driver spec %q", d.Name, spec.Name)
+		}
+		seen[spec.Name] = true
+		if !declared[spec.Name] {
+			return fmt.Errorf("capability %q declares driver spec %q outside Drivers", d.Name, spec.Name)
+		}
+		services := make(map[contract.RuntimeService]bool, len(spec.RuntimeServices))
+		for _, service := range spec.RuntimeServices {
+			if !validRuntimeService(service) {
+				return fmt.Errorf("capability %q driver %q declares unknown runtime service %q", d.Name, spec.Name, service)
+			}
+			if services[service] {
+				return fmt.Errorf("capability %q driver %q duplicates runtime service %q", d.Name, spec.Name, service)
+			}
+			services[service] = true
+		}
 	}
 	return nil
 }
@@ -104,6 +191,30 @@ func ValidateDeclarations(caps []contract.Descriptor, known []string) error {
 		for _, dep := range d.MigrationSchemaDeps {
 			if !knownSet[dep] {
 				return fmt.Errorf("capability %q depends on unknown migration schema %q", d.Name, dep)
+			}
+		}
+		for _, name := range d.Conflicts {
+			if !knownSet[name] {
+				return fmt.Errorf("capability %q conflicts with unknown capability %q", d.Name, name)
+			}
+		}
+	}
+	providers := make(map[string]string, len(caps))
+	for _, d := range caps {
+		for _, port := range d.Provides {
+			if prev, dup := providers[port.Name]; dup {
+				return fmt.Errorf("port %q is provided by both %q and %q", port.Name, prev, d.Name)
+			}
+			providers[port.Name] = d.Name
+		}
+	}
+	for _, d := range caps {
+		for _, port := range d.Consumes {
+			if !port.Required {
+				continue
+			}
+			if _, ok := providers[port.Name]; !ok {
+				return fmt.Errorf("capability %q requires port %q but no capability provides it", d.Name, port.Name)
 			}
 		}
 	}
@@ -212,6 +323,13 @@ func deepCopyDescriptor(d contract.Descriptor) contract.Descriptor {
 	d.Requires = append([]string(nil), d.Requires...)
 	d.SoftRequires = append([]string(nil), d.SoftRequires...)
 	d.Drivers = append([]string(nil), d.Drivers...)
+	d.Conflicts = append([]string(nil), d.Conflicts...)
+	d.Provides = append([]contract.ProvidedPort(nil), d.Provides...)
+	d.Consumes = append([]contract.ConsumedPort(nil), d.Consumes...)
+	d.DriverSpecs = append([]contract.DriverSpec(nil), d.DriverSpecs...)
+	for i := range d.DriverSpecs {
+		d.DriverSpecs[i].RuntimeServices = append([]contract.RuntimeService(nil), d.DriverSpecs[i].RuntimeServices...)
+	}
 	d.Owns = append([]string(nil), d.Owns...)
 	d.MigrationSchemaDeps = append([]string(nil), d.MigrationSchemaDeps...)
 	d.RuntimeServices = append([]contract.RuntimeService(nil), d.RuntimeServices...)

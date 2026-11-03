@@ -22,6 +22,20 @@ import (
 	}
 }
 
+// TestGeneratorBoundaryAllowsCapabilityLeaf 钉住 P0-2 的显式例外：
+// internal/capability 只依赖 contract，承载生成器核心可复用的组合算法与诊断，
+// 不是能力/形态/资产事实来源；其余 internal 包仍只允许 frameworkmanifest 读取。
+func TestGeneratorBoundaryAllowsCapabilityLeaf(t *testing.T) {
+	root := generatorBoundaryFixture(t)
+	writeGeneratorFixture(t, root, "tools/generator/preflight/preflight.go", `package preflight
+
+import _ "jimu/internal/capability"
+`)
+	if err := checkGeneratorBoundary(root); err != nil {
+		t.Fatalf("internal/capability leaf must be allowed: %v", err)
+	}
+}
+
 func TestGeneratorBoundaryRejectsCoreImports(t *testing.T) {
 	root := generatorBoundaryFixture(t)
 	writeGeneratorFixture(t, root, "tools/generator/manifest/model.go", `package manifest

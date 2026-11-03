@@ -3,6 +3,7 @@ package assembly
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"jimu/internal/app"
@@ -19,6 +20,8 @@ type ProbeResult struct {
 	Capabilities []string
 	// Provided 各能力经 Context.Provide 注册的端口名，按注册顺序。
 	Provided map[string][]string
+	// Consumed 各能力经 Context.Port 读取的端口名（去重，按首次读取顺序）。
+	Consumed map[string][]string
 	// Modules 按装配顺序登记的非空 Module 实例（Wire 返回 nil、只提供端口或仅参与迁移的
 	// 条目不出现）。供「编译面」报告工具在不启动服务的前提下统计该形态的路由数。
 	Modules []contract.Module
@@ -130,6 +133,7 @@ func probeWires(a Assembly, enabled []string) (ProbeResult, []string, error) {
 	result := ProbeResult{
 		Capabilities: make([]string, 0, len(caps)),
 		Provided:     make(map[string][]string, len(caps)),
+		Consumed:     make(map[string][]string, len(caps)),
 	}
 	for _, d := range caps {
 		result.Capabilities = append(result.Capabilities, d.Name)
@@ -138,6 +142,9 @@ func probeWires(a Assembly, enabled []string) (ProbeResult, []string, error) {
 	var violations []string
 	current := ""
 	ctx.onPort = func(name string, provided bool) {
+		if !slices.Contains(result.Consumed[current], name) {
+			result.Consumed[current] = append(result.Consumed[current], name)
+		}
 		if !provided {
 			violations = append(violations,
 				fmt.Sprintf("capability %q reads port %q before it is provided", current, name))

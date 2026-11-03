@@ -53,7 +53,7 @@ func checkOwnership(declared, created map[string][]string) error {
 }
 
 func main() {
-	if err := catalog.ValidateDeclarations(); err != nil {
+	if err := checkCompositionContract(registry.All()); err != nil {
 		fmt.Fprintln(os.Stderr, "❌ check-capabilities:", err)
 		os.Exit(1)
 	}
@@ -113,6 +113,7 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("✅ check-capabilities: 能力自描述与迁移归属一致")
+	fmt.Println("✅ check-capabilities: 组合契约声明自洽（conflicts/provides/consumes/driver specs）")
 	fmt.Println("✅ check-capabilities: 驱动可用集/选中集/import 闭包一致")
 	fmt.Println("✅ check-capabilities: 形态生产代码只 import 已声明的驱动")
 	fmt.Println("✅ check-capabilities: 唯一入口与选点包只 import 一个形态")

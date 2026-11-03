@@ -114,7 +114,7 @@ func Create(doc manifest.Document, opts CreateOptions) (Result, error) {
 		return Result{}, err
 	}
 	if opts.Report {
-		if err := writeReport(staging, module, doc); err != nil {
+		if err := WriteReport(staging, module, doc); err != nil {
 			return Result{}, err
 		}
 	}
@@ -169,7 +169,7 @@ func Update(previous manifest.Document, next manifest.Document, opts UpdateOptio
 	}
 	rendered := listFiles(staging)
 	next.GeneratedFiles = slices.Clone(rendered)
-	if err := mergeConfigs(projectRoot, staging, next.Merges); err != nil {
+	if err := MergeConfigs(projectRoot, staging, next.Merges); err != nil {
 		return Result{}, err
 	}
 	next.GeneratedFileSHA256, err = manifest.HashFiles(staging, next.GeneratedFiles)
@@ -180,7 +180,7 @@ func Update(previous manifest.Document, next manifest.Document, opts UpdateOptio
 		return Result{}, err
 	}
 	if opts.Report {
-		if err := writeReport(staging, module, next); err != nil {
+		if err := WriteReport(staging, module, next); err != nil {
 			return Result{}, err
 		}
 	}
@@ -203,10 +203,23 @@ func Update(previous manifest.Document, next manifest.Document, opts UpdateOptio
 	}
 	result.Files = append(slices.Clone(next.GeneratedFiles), manifestRel)
 	sort.Strings(result.Files)
-	if opts.DryRun || (len(changed) == 0 && len(removed) == 0) {
+	if opts.DryRun {
 		return result, nil
 	}
-	if err := installStaged(projectRoot, staging, changed, removed); err != nil {
+	install := make([]string, 0, len(changed))
+	for _, rel := range changed {
+		if rel == manifestRel {
+			continue
+		}
+		install = append(install, rel)
+	}
+	if _, err := ApplyTransaction(TransactionOptions{
+		ProjectRoot: projectRoot,
+		StagingRoot: staging,
+		Install:     install,
+		Remove:      removed,
+		Manifest:    &next,
+	}); err != nil {
 		return Result{}, err
 	}
 	return result, nil
@@ -277,7 +290,10 @@ func createStage(target string) (string, error) {
 	return stage, nil
 }
 
-func writeReport(root, module string, doc manifest.Document) error {
+// WriteReport measures the rendered tree and writes the optional project report.
+// Callers stage the tree before committing, so a measurement failure never
+// leaves a partial report in the project.
+func WriteReport(root, module string, doc manifest.Document) error {
 	spec := projectmetrics.ReportSpec{
 		Name:         doc.Selection.Shape,
 		Capabilities: doc.Report.Capabilities,

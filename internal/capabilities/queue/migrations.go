@@ -20,6 +20,12 @@ var Descriptor = contract.Descriptor{
 	Owns:            []string{"jobs", "job_history", "dead_letters", "scheduled_jobs"},
 	Drivers:         []string{"redis", "kafka", "rabbitmq"},
 	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+	Provides:        []contract.ProvidedPort{{Name: contract.OutboxMQPortName}},
+	DriverSpecs: []contract.DriverSpec{
+		{Name: "redis", RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis}},
+		{Name: "kafka", RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceKafka}},
+		{Name: "rabbitmq", RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRabbitMQ}},
+	},
 	// 调度器实例由本能力用于作业调度（/admin/tasks*、job_history），其配置段随之归本能力
 	Configs: []contract.ConfigSpec{
 		{Section: ConfigKey, New: func() any { return &Config{} }},

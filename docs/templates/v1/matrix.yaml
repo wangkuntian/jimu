@@ -14,10 +14,10 @@ selection:
   compatibility:
     - flag: --profile=minimal
       maps_to: auth-api
-      status: deprecated
-      available_through: v0.5.x
+      replacement: --template=auth-api
+      status: removed
       removed_in: v0.6.0
-      warning_required: true
+      warning_required: false
   other_profiles:
     public: false
     purpose: framework-internal-build-only
@@ -27,16 +27,19 @@ support_levels:
     contract: stable
     budgets: release-blocking
     end_to_end_acceptance: required
-    upgrade_commitment: none-until-v0.6.0
+    composition_support: certified
+    upgrade_commitment: explicit-in-v0.6.0
   experimental:
     contract: none
     budgets: report-only
     end_to_end_acceptance: preflight-and-generated-self-check
+    composition_support: experimental
     upgrade_commitment: none
   internal:
     contract: none
     budgets: none
     end_to_end_acceptance: framework-gates-only
+    composition_support: experimental
     upgrade_commitment: none
 
 templates:
@@ -151,10 +154,13 @@ lifecycle:
     manifest_schema_v1:
       read_compatibility: false
       policy: fail-closed
+    manifest_schema_v2:
+      read_compatibility: true
+      policy: read-only-upgrade
     existing_projects:
-      upgrade_model: regenerate-and-manual-migrate
+      upgrade_model: explicit-three-way-diff
       automated_project_migration: false
-      manifest_rewrite: false
+      manifest_rewrite: explicit-upgrade-only
       existing_database_migration: false
   generated_manifest: .jimu/manifest.json
   manifest_support_fields:
@@ -170,3 +176,9 @@ lifecycle:
     available_in: v0.6.0
     explicit_only: true
     strategy: three-way-diff
+    conflict_policy: abort-before-write
+    rollback: byte-for-byte
+    verification:
+      - tidy
+      - build
+      - test

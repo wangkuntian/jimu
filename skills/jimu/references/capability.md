@@ -6,7 +6,7 @@
 
 ## 步骤
 
-1. **建能力目录**：`internal/capabilities/<name>/`，按需分层（`domain/` / `application/` / `infrastructure/` / `interfaces/`）。用脚手架打底：`./bin/jimu capability create <name>`（只落典型 CRUD 骨架，**不改任何注册点**）
+1. **建能力目录**：`internal/capabilities/<name>/`，按需分层（`domain/` / `application/` / `infrastructure/` / `interfaces/`）。用脚手架打底：`./bin/jimu-cli capability create <name>`（只落典型 CRUD 骨架，**不改任何注册点**）
 2. **导出静态 `Descriptor`**（`contract.Descriptor`，字段定义见 `internal/contract/capability.go`）：
    - `Name`：能力名，全仓唯一，必须与 `catalog` 清单里的名字一致
    - `Requires`：**硬依赖** —— 启用本能力必须同时启用这些能力，参与闭包补齐与拓扑序
@@ -20,6 +20,10 @@
    - `Permissions`：能力拥有的权限点（种子时按启用集聚合写入）
    - `Mount`：路由挂载方式（零值等价 `MountProtected`，特权路由不会被裸挂到根路由）
    - `Drivers`：能力支持的**驱动包名**（有第三方驱动时才写，见 [profile-driver.md](profile-driver.md)）
+   - `Conflicts`：不能同时启用的能力名；门禁校验未知/自引用/重复目标
+   - `Provides`：本能力在 `Wire` 中注册的 contract 端口名（全仓唯一）
+   - `Consumes`：本能力从装配上下文读取的 contract 端口名；`Required` 表示该形态内必须有提供方
+   - `DriverSpecs`：驱动级组合元数据（目前为额外 `RuntimeServices`；`Name` 必须命中 `Drivers`）
    - `Assets`：能力拥有的非代码资产（仓库相对路径；有资产时才写）
 3. **导出 `Wire` 自装配**，有 HTTP、任务、事件或生命周期职责时实现 `contract.Module`；仅提供端口或迁移的能力可返回 nil。能力内部只依赖 `contract` 端口；**禁止**跨能力 import（包括测试和驱动子包）
 4. **在 `internal/capabilities/catalog` 登记**该能力
@@ -42,6 +46,6 @@ go test ./internal/... -count=1   # 能力自带单测全绿
 | 症状 | 定位 |
 |---|---|
 | `check-capabilities` ① 号红：声明的表没有迁移创建 / 一张表被两个能力声明 | `Owns` 与实际 `CREATE TABLE` 逐值对齐；`ALTER TABLE ... ADD` 不参与归属 |
-| `check-capabilities` ④ 号红：选点包 import 了不止一个形态 | 只改形态包，**不要**动 `internal/profiles/active` 与 `cmd/server` |
+| `check-capabilities` ⑤ 号红：选点包 import 了不止一个形态 | 只改形态包，**不要**动 `internal/profiles/active` 与 `cmd/server` |
 | 能力声明了但没生效 | 该能力不在当前形态清单里，或 `capabilities.enabled` 排除了它 —— 见 [runtime.md](runtime.md) |
 | 启动报「多个受保护中间件提供者」 | 同一启用集只允许一个能力**真实**提供受保护链，见 [runtime.md](runtime.md) |

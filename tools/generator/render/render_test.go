@@ -22,9 +22,18 @@ func TestExecuteManifestActions(t *testing.T) {
 	writeFixture(t, source, "src/unsupported_test.go", "package src\nimport _ \"example.com/app/missing\"\n")
 
 	doc := manifest.Document{
-		SchemaVersion:  manifest.CurrentSchemaVersion,
-		Framework:      manifest.Framework{Module: "jimu"},
-		Selection:      manifest.Selection{Shape: "app", Capabilities: []string{"user"}, Drivers: map[string][]string{}},
+		SchemaVersion: manifest.CurrentSchemaVersion,
+		Framework:     manifest.Framework{Module: "jimu"},
+		Selection:     manifest.Selection{Shape: "app", Capabilities: []string{"user"}, Drivers: map[string][]string{}},
+		Composition: &manifest.Composition{
+			ContractVersion: manifest.CompositionContractVersion,
+			Requested:       []string{"user"},
+			Resolved:        []string{"user"},
+			AutoAdded:       []string{},
+			Drivers:         map[string][]string{},
+			Validity:        manifest.CompositionValidityValid,
+			Support:         manifest.CompositionSupportExperimental,
+		},
 		Copy:           []manifest.CopyAction{{Source: "src/input.txt", Destination: "copied/input.txt", Include: []string{}, Exclude: []string{}}},
 		Templates:      []manifest.TemplateAction{{Source: "template.txt", Destination: "generated.txt", Kind: "text", Data: map[string]any{"module": "example.com/app"}}},
 		Merges:         []manifest.MergeAction{{Source: "configs/app.yaml", Destination: "configs/app.yaml", Strategy: "sections", Sections: []string{}}},

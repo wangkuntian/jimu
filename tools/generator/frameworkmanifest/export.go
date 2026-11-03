@@ -12,9 +12,9 @@ import (
 
 	"jimu/internal/assembly"
 	"jimu/internal/capabilities/catalog"
+	"jimu/internal/capability"
 	"jimu/internal/contract"
 	"jimu/internal/profiles"
-	"jimu/internal/profiles/full"
 	"jimu/tools/generator/manifest"
 
 	"github.com/gin-gonic/gin"
@@ -27,6 +27,8 @@ type Request struct {
 	With     string
 	Shape    string
 	Module   string
+	// Drivers 保留既有项目的驱动选择；未列出的能力由默认驱动规则补齐。
+	Drivers map[string][]string
 }
 
 type selection struct {
@@ -34,6 +36,8 @@ type selection struct {
 	template   string
 	profile    string
 	support    string
+	requested  []string
+	autoAdded  []string
 	declared   []string
 	known      []string
 	copy       []string
@@ -45,51 +49,107 @@ type selection struct {
 	assemblies []assembly.Capability
 }
 
+// Resolution 是 `jimu new --dry-run` 与后续 manifest composition（P0-3）共用的解析摘要。
+type Resolution struct {
+	Requested       []string            `json:"requested"`
+	Resolved        []string            `json:"resolved"`
+	AutoAdded       []string            `json:"auto_added"`
+	Drivers         map[string][]string `json:"drivers"`
+	RuntimeServices []string            `json:"runtime_services"`
+	Migrations      []string            `json:"migrations"`
+	Validity        string              `json:"validity"`
+	Support         string              `json:"support"`
+}
+
 // Export 根据框架当前事实生成一份可校验、可复现的 manifest。
 func Export(req Request) (manifest.Document, error) {
+	doc, _, err := ExportDetailed(req)
+	return doc, err
+}
+
+// ExportDetailed 与 Export 相同，但额外返回本次解析的 requested/resolved/auto-added 等摘要。
+func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 	root, err := filepath.Abs(req.Root)
 	if err != nil {
-		return manifest.Document{}, fmt.Errorf("resolve framework root: %w", err)
+		return manifest.Document{}, Resolution{}, fmt.Errorf("resolve framework root: %w", err)
 	}
 	if req.Module == "" {
-		return manifest.Document{}, fmt.Errorf("module is required")
+		return manifest.Document{}, Resolution{}, fmt.Errorf("module is required")
 	}
 	if req.Template == "" && req.Profile == "" && req.With == "" {
 		req.Template = "basic-api"
 	}
 	if req.Template != "" && (req.Profile != "" || req.With != "") {
-		return manifest.Document{}, fmt.Errorf("--template must not be combined with --profile or --with")
+		return manifest.Document{}, Resolution{}, fmt.Errorf("--template must not be combined with --profile or --with")
 	}
 	if req.Template != "" && req.Shape != "" {
-		return manifest.Document{}, fmt.Errorf("--shape is only valid with --with")
+		return manifest.Document{}, Resolution{}, fmt.Errorf("--shape is only valid with --with")
 	}
 	var doc manifest.Document
+	var selected selection
 	if req.Template == "auth-api" {
 		doc, err = authAPIDocument(root, req.Module)
 	} else if req.Template != "" {
 		doc, err = basicAPIDocument(root, req.Module, req.Template)
 	} else {
-		var selected selection
 		selected, err = resolveSelection(root, req)
 		if err == nil {
 			doc, err = buildDocument(root, req.Module, selected)
 		}
 	}
 	if err != nil {
-		return manifest.Document{}, err
+		return manifest.Document{}, Resolution{}, err
 	}
 	digest, err := manifest.Digest(doc)
 	if err != nil {
-		return manifest.Document{}, err
+		return manifest.Document{}, Resolution{}, err
 	}
 	doc.Digest = digest
-	return doc, nil
+	return doc, resolutionFor(doc, selected), nil
+}
+
+func resolutionFor(doc manifest.Document, selected selection) Resolution {
+	requested := slices.Clone(doc.Selection.Capabilities)
+	if selected.requested != nil {
+		requested = slices.Clone(selected.requested)
+	}
+	support := doc.Selection.Support
+	if doc.Composition != nil {
+		support = doc.Composition.Support
+	}
+	services := map[string]bool{}
+	for _, capability := range doc.Capabilities {
+		for _, service := range capability.RuntimeServices {
+			services[service] = true
+		}
+	}
+	serviceNames := make([]string, 0, len(services))
+	for service := range services {
+		serviceNames = append(serviceNames, service)
+	}
+	slices.Sort(serviceNames)
+	return Resolution{
+		Requested:       requested,
+		Resolved:        slices.Clone(doc.Selection.Capabilities),
+		AutoAdded:       slices.Clone(selected.autoAdded),
+		Drivers:         cloneDrivers(doc.Selection.Drivers),
+		RuntimeServices: serviceNames,
+		Migrations:      slices.Clone(doc.Report.Migrations),
+		Validity:        string(contract.ValidityValid),
+		Support:         support,
+	}
 }
 
 // ExportForAdd 在原有声明集上增加一个能力。硬依赖必须已经存在，避免 add 静默改变用户选择。
 func ExportForAdd(root string, previous manifest.Document, name string, force bool) (manifest.Document, error) {
 	if err := manifest.Validate(previous); err != nil {
 		return manifest.Document{}, fmt.Errorf("validate previous manifest: %w", err)
+	}
+	if previous.Selection.Template != "" {
+		return manifest.Document{}, fmt.Errorf(
+			"capability add does not extend official template projects (%s); regenerate with --with to use an experimental composition",
+			previous.Selection.Template,
+		)
 	}
 	for _, capability := range previous.Capabilities {
 		if capability.Name != name || !capability.MigrationOnly || force {
@@ -104,18 +164,36 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 	if !contains(selected, name) {
 		selected = append(selected, name)
 	}
-	for _, descriptor := range full.Assembly().Capabilities {
-		if descriptor.Descriptor.Name != name {
+	all, _ := allDescriptors()
+	// add 的产品规则是不自动补依赖：新增能力的硬依赖必须已在现有装配集中。
+	for _, descriptor := range all {
+		if descriptor.Name != name {
 			continue
 		}
-		for _, required := range descriptor.Descriptor.Requires {
+		for _, required := range descriptor.Requires {
 			if !contains(selected, required) {
 				return manifest.Document{}, fmt.Errorf("capability %q requires %q; add it first (add the dependency first)", name, required)
 			}
 		}
-		break
 	}
-	with := strings.Join(selected, ",")
+	composed := capability.Compose(all, capability.ComposeRequest{
+		Capabilities:   selected,
+		Drivers:        previous.Composition.Drivers,
+		DefaultDrivers: true,
+		// 已生成项目的装配集必须是闭包；严格模式阻止 resolver 自动补依赖。
+		RequireResolvedSelection: true,
+		Support:                  contract.SupportExperimental,
+	})
+	if err := composed.Err(); err != nil {
+		return manifest.Document{}, fmt.Errorf("capability %q cannot be added: %w", name, err)
+	}
+	// Rebuild from the requested baseline so capabilities auto-added by an
+	// earlier resolution stay auto-added instead of becoming requested.
+	requested := slices.Clone(previous.Composition.Requested)
+	if !contains(requested, name) {
+		requested = append(requested, name)
+	}
+	with := strings.Join(requested, ",")
 	module := previous.Framework.Module
 	for _, rewrite := range previous.Rewrites {
 		if rewrite.Kind == "module" && rewrite.To != "" {
@@ -132,7 +210,9 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 	if profile != "" {
 		return Export(Request{Root: root, Profile: profile, Module: module})
 	}
-	return Export(Request{Root: root, Profile: profile, With: with, Shape: previous.Selection.Shape, Module: module})
+	return Export(Request{
+		Root: root, Profile: profile, With: with, Shape: previous.Selection.Shape, Module: module, Drivers: composed.Drivers,
+	})
 }
 
 func buildDocument(root, module string, selected selection) (manifest.Document, error) {
@@ -152,6 +232,7 @@ func buildDocument(root, module string, selected selection) (manifest.Document, 
 			Profile: selected.profile, Support: selected.support,
 			Capabilities: slices.Clone(selected.declared), Drivers: cloneDrivers(selected.drivers),
 		},
+		Composition:    compositionFor(selected),
 		Capabilities:   capabilityFacts(root, selected),
 		Copy:           copyActions(root, selected),
 		Templates:      templateActions(root, selected),
@@ -170,6 +251,33 @@ func buildDocument(root, module string, selected selection) (manifest.Document, 
 		return manifest.Document{}, err
 	}
 	return doc, nil
+}
+
+func compositionFor(selected selection) *manifest.Composition {
+	requested := selected.requested
+	if requested == nil {
+		requested = selected.declared
+	}
+	return &manifest.Composition{
+		ContractVersion: manifest.CompositionContractVersion,
+		Requested:       sortedStrings(requested),
+		Resolved:        sortedStrings(selected.declared),
+		AutoAdded:       sortedStrings(selected.autoAdded),
+		Drivers:         cloneDrivers(selected.drivers),
+		Validity:        manifest.CompositionValidityValid,
+		Support:         compositionSupport(selected.support),
+	}
+}
+
+func compositionSupport(legacy string) string {
+	switch legacy {
+	case "official":
+		return manifest.CompositionSupportCertified
+	case "validated":
+		return manifest.CompositionSupportValidated
+	default:
+		return manifest.CompositionSupportExperimental
+	}
 }
 
 func catalogCoversAll(selected selection) bool {
@@ -249,7 +357,7 @@ func capabilityFacts(root string, selected selection) []manifest.Capability {
 			Assets:                  slices.Clone(descriptor.Assets),
 			ProtectedHTTPMiddleware: string(descriptor.ProtectedHTTPMiddleware),
 			MigrationSchemaDeps:     append([]string{}, descriptor.MigrationSchemaDeps...),
-			RuntimeServices:         runtimeServiceNames(descriptor.RuntimeServices),
+			RuntimeServices:         runtimeServiceNames(effectiveRuntimeServices(descriptor, selected.drivers[descriptor.Name])),
 		}
 		for _, config := range descriptor.Configs {
 			fact.Configs = append(fact.Configs, config.Section)
@@ -269,6 +377,35 @@ func runtimeServiceNames(services []contract.RuntimeService) []string {
 	for i, service := range services {
 		out[i] = string(service)
 	}
+	return out
+}
+
+// effectiveRuntimeServices 合并能力自身与所选驱动规格声明的运行时服务。
+// 生成项目的 preflight 与 jimu check 都读取这份派生事实。
+func effectiveRuntimeServices(descriptor contract.Descriptor, drivers []string) []contract.RuntimeService {
+	seen := make(map[contract.RuntimeService]bool, len(descriptor.RuntimeServices))
+	var out []contract.RuntimeService
+	appendService := func(service contract.RuntimeService) {
+		if seen[service] {
+			return
+		}
+		seen[service] = true
+		out = append(out, service)
+	}
+	for _, service := range descriptor.RuntimeServices {
+		appendService(service)
+	}
+	for _, driver := range drivers {
+		for _, spec := range descriptor.DriverSpecs {
+			if spec.Name != driver {
+				continue
+			}
+			for _, service := range spec.RuntimeServices {
+				appendService(service)
+			}
+		}
+	}
+	slices.Sort(out)
 	return out
 }
 
