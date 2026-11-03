@@ -1,9 +1,11 @@
 package app
 
 import (
+	"fmt"
 	"net/http"
 
 	v1 "{{.Module}}/internal/api/v1"
+	"{{.Module}}/internal/config"
 	platformhttp "{{.Module}}/internal/platform/http"
 	"{{.Module}}/internal/platform/logging"
 	"{{.Module}}/internal/shared/errorx"
@@ -12,15 +14,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func NewRouter(log *logging.Logger, mode string, maxBodyBytes int64) *gin.Engine {
-	if mode == "release" {
+func NewRouter(log *logging.Logger, cfg *config.Config) (*gin.Engine, error) {
+	if cfg.HTTP.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
-	} else if mode == "test" {
+	} else if cfg.HTTP.Mode == "test" {
 		gin.SetMode(gin.TestMode)
 	}
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
-	router.Use(platformhttp.RequestID(), platformhttp.AccessLog(log), platformhttp.Recovery(log), platformhttp.MaxBody(maxBodyBytes))
+	router.Use(
+		platformhttp.SecurityHeaders(),
+		platformhttp.CORS(cfg.HTTP.AllowedOrigins),
+		platformhttp.RequestID(),
+		platformhttp.AccessLog(log),
+		platformhttp.Recovery(log),
+		platformhttp.MaxBody(cfg.HTTP.MaxBodyBytes),
+	)
+	if err := platformhttp.ConfigureTrustedProxies(router, cfg.HTTP.TrustedProxies); err != nil {
+		return nil, fmt.Errorf("configure trusted proxies: %w", err)
+	}
 	router.NoRoute(func(c *gin.Context) {
 		response.Fail(c, http.StatusNotFound, errorx.NotFound("route not found"))
 	})
@@ -28,5 +40,5 @@ func NewRouter(log *logging.Logger, mode string, maxBodyBytes int64) *gin.Engine
 		response.Fail(c, http.StatusMethodNotAllowed, errorx.MethodNotAllowed("method not allowed"))
 	})
 	v1.RegisterRoutes(router.Group("/api/v1"))
-	return router
+	return router, nil
 }
