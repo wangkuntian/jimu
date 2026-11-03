@@ -28,7 +28,7 @@
 | 参数 | 说明 |
 |---|---|
 | `--template=basic-api\|auth-api` | 官方模板；省略选择器时默认 `basic-api` |
-| `--profile=minimal` | 弃用兼容别名，映射为 `auth-api`，v0.6.0 移除；其他 profile 由 CLI 拒绝 |
+| `--profile=minimal` | 已移除的兼容别名；传入即报错并提示改用 `--template=auth-api`，其他内部 profile 由 CLI 拒绝 |
 | `--with=<cap>[:<drv>][,…]` | experimental 专家模式；名字取自 catalog 与 Ungated 能力，驱动默认取 `Descriptor.Drivers` 首项，用 `<cap>:<drv>` 覆盖。受保护能力需要同时选择 middleware provider（如 `auth`） |
 | `--shape=<name>` | 仅用于 `--with` 的形态名（默认 `app`） |
 | `--module=<path>` | 重写 `go.mod` 的 module 指令与文本里的 `jimu/` 前缀；**不改**框架运行期名字 / CLI 名 / 镜像名 / protobuf 描述符 |
@@ -53,7 +53,7 @@
 
 ## `jimu capability add <name>`
 
-在**已生成项目**上增量追加能力：确定性重渲染、幂等（同一集合重跑逐字节等价）；`configs/*.yaml` 与 `deploy/helm/values.yaml` 以项目现有文件为底补齐新增段，**不覆盖**用户手改的值。若项目里已有 `--report` 产物，成功后同批重算刷新（本来没有则不创建）。
+在 **`--with` 生成的 experimental 项目**上增量追加能力：确定性重渲染、幂等（同一集合重跑逐字节等价）；写前复用与 `jimu new` / `jimu check` 相同的 resolver/preflight，缺失硬依赖、冲突、端口、驱动、迁移/配置/中间件问题都在写盘前失败；保留既有驱动选择与 auto-added 语义，并写回 schema v3 的 `composition`。`configs/*.yaml` 与 `deploy/helm/values.yaml` 以项目现有文件为底补齐新增段，**不覆盖**用户手改的值。落盘复用 `jimu upgrade` 的 manifest 事务（备份、manifest 最后写、失败按原字节回滚），但不执行 tidy/build 自检；支持级别保持 `experimental`。官方模板 `basic-api` / `auth-api` 不接受 `capability add`，扩展需用 `--with`。若项目里已有 `--report` 产物，成功后同批重算刷新（本来没有则不创建）。
 
 ## `jimu capability create <name>`
 

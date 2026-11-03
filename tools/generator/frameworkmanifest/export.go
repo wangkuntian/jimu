@@ -12,9 +12,9 @@ import (
 
 	"jimu/internal/assembly"
 	"jimu/internal/capabilities/catalog"
+	"jimu/internal/capability"
 	"jimu/internal/contract"
 	"jimu/internal/profiles"
-	"jimu/internal/profiles/full"
 	"jimu/tools/generator/manifest"
 
 	"github.com/gin-gonic/gin"
@@ -27,6 +27,8 @@ type Request struct {
 	With     string
 	Shape    string
 	Module   string
+	// Drivers 保留既有项目的驱动选择；未列出的能力由默认驱动规则补齐。
+	Drivers map[string][]string
 }
 
 type selection struct {
@@ -143,6 +145,12 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 	if err := manifest.Validate(previous); err != nil {
 		return manifest.Document{}, fmt.Errorf("validate previous manifest: %w", err)
 	}
+	if previous.Selection.Template != "" {
+		return manifest.Document{}, fmt.Errorf(
+			"capability add does not extend official template projects (%s); regenerate with --with to use an experimental composition",
+			previous.Selection.Template,
+		)
+	}
 	for _, capability := range previous.Capabilities {
 		if capability.Name != name || !capability.MigrationOnly || force {
 			continue
@@ -156,16 +164,28 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 	if !contains(selected, name) {
 		selected = append(selected, name)
 	}
-	for _, descriptor := range full.Assembly().Capabilities {
-		if descriptor.Descriptor.Name != name {
+	all, _ := allDescriptors()
+	// add 的产品规则是不自动补依赖：新增能力的硬依赖必须已在现有装配集中。
+	for _, descriptor := range all {
+		if descriptor.Name != name {
 			continue
 		}
-		for _, required := range descriptor.Descriptor.Requires {
+		for _, required := range descriptor.Requires {
 			if !contains(selected, required) {
 				return manifest.Document{}, fmt.Errorf("capability %q requires %q; add it first (add the dependency first)", name, required)
 			}
 		}
-		break
+	}
+	composed := capability.Compose(all, capability.ComposeRequest{
+		Capabilities:   selected,
+		Drivers:        previous.Composition.Drivers,
+		DefaultDrivers: true,
+		// 已生成项目的装配集必须是闭包；严格模式阻止 resolver 自动补依赖。
+		RequireResolvedSelection: true,
+		Support:                  contract.SupportExperimental,
+	})
+	if err := composed.Err(); err != nil {
+		return manifest.Document{}, fmt.Errorf("capability %q cannot be added: %w", name, err)
 	}
 	// Rebuild from the requested baseline so capabilities auto-added by an
 	// earlier resolution stay auto-added instead of becoming requested.
@@ -190,7 +210,9 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 	if profile != "" {
 		return Export(Request{Root: root, Profile: profile, Module: module})
 	}
-	return Export(Request{Root: root, Profile: profile, With: with, Shape: previous.Selection.Shape, Module: module})
+	return Export(Request{
+		Root: root, Profile: profile, With: with, Shape: previous.Selection.Shape, Module: module, Drivers: composed.Drivers,
+	})
 }
 
 func buildDocument(root, module string, selected selection) (manifest.Document, error) {

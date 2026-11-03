@@ -477,6 +477,18 @@ func TestAddCapabilityRejectsForeignDirectory(t *testing.T) {
 	require.ErrorContains(t, err, markerFile)
 }
 
+// TestAddCapabilityRejectsOfficialTemplate 钉住支持边界：官方模板是认证基线，
+// capability add 只扩展 experimental 组合；拒绝必须发生在写盘前。
+func TestAddCapabilityRejectsOfficialTemplate(t *testing.T) {
+	root := frameworkRootForTest(t)
+	dir := generateForTest(t, NewOptions{Template: "basic-api"})
+	before := hashTree(t, dir)
+
+	_, err := AddCapability(AddOptions{Dir: dir, Name: "notification", From: root})
+	require.ErrorContains(t, err, "does not extend official template projects")
+	assert.Equal(t, before, hashTree(t, dir), "拒绝路径不得落盘")
+}
+
 // TestAddCapabilityRejectsUnknownCapability 能力名必须在框架全量集合里。
 func TestAddCapabilityRejectsUnknownCapability(t *testing.T) {
 	root := frameworkRootForTest(t)
@@ -540,6 +552,38 @@ func TestAddCapabilityPreservesRequestedAndAutoAdded(t *testing.T) {
 	assert.Equal(t, []string{"access", "auth", "notification"}, after.Composition.Requested)
 	assert.Equal(t, []string{"access", "auth", "notification", "user"}, after.Composition.Resolved)
 	assert.Equal(t, []string{"user"}, after.Composition.AutoAdded)
+}
+
+// TestAddCapabilityPreservesDriverSelectionAndManifestContract 钉住增量追加的组合契约：
+// 既有驱动选择不能被重渲染静默重置为默认驱动；写回后 manifest 仍是合法 schema v3，
+// support 保持 experimental，文件哈希与实际内容一致。
+func TestAddCapabilityPreservesDriverSelectionAndManifestContract(t *testing.T) {
+	root := frameworkRootForTest(t)
+	dir := generateForTest(t, NewOptions{With: "apikey,queue:kafka", Shape: "app"})
+
+	before, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	require.Equal(t, []string{"kafka"}, before.Composition.Drivers["queue"])
+
+	_, err = AddCapability(AddOptions{Dir: dir, Name: "notification", From: root})
+	require.NoError(t, err)
+
+	after, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err, "add 后的 manifest 必须通过 digest 与 schema 校验")
+	assert.Equal(t, manifest.CurrentSchemaVersion, after.SchemaVersion)
+	assert.Equal(t, []string{"kafka"}, after.Selection.Drivers["queue"], "既有驱动选择必须保留")
+	assert.Equal(t, []string{"kafka"}, after.Composition.Drivers["queue"])
+	assert.Contains(t, after.Composition.Requested, "notification")
+	assert.Contains(t, after.Selection.Capabilities, "notification")
+	assert.Equal(t, manifest.CompositionValidityValid, after.Composition.Validity)
+	assert.Equal(t, manifest.CompositionSupportExperimental, after.Composition.Support)
+	assert.Equal(t, "experimental", after.Selection.Support)
+	require.NoError(t, manifest.ValidateComplete(after))
+
+	hashes, err := manifest.HashFiles(dir, after.GeneratedFiles)
+	require.NoError(t, err)
+	assert.Equal(t, after.GeneratedFileSHA256, hashes, "写回的 manifest 必须记录真实文件哈希")
+	assert.FileExists(t, filepath.Join(dir, "internal/capabilities/queue/kafka/kafka_queue.go"))
 }
 
 // TestGeneratedProjectHasNoCapabilityScaffolding 钉住脚手架命令不进生成项目：

@@ -67,7 +67,7 @@ func resolveSelection(root string, req Request) (selection, error) {
 		if err != nil {
 			return selection{}, err
 		}
-		requestedDrivers := make(map[string][]string, len(overrides))
+		requestedDrivers := cloneDrivers(req.Drivers)
 		for name, driver := range overrides {
 			requestedDrivers[name] = []string{driver}
 		}

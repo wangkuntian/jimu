@@ -26,8 +26,9 @@ name: CI (Scaffold)
 # 编译/缓存恢复 ~100s。已做的优化：`heavyBuildConcurrency` 从 2 提到 4（标准 runner 是
 # 4 vCPU，定死在 2 只用一半 CPU；旧注释里的「2 vCPU」是从 `CPU 时间 3330s / 墙钟 28min ≈ 2`
 # 反推出来的，那个 2 其实是当时的并发上限）+ 下面这份滚动缓存。full 档仍拆成 4 个构建、
-# 2 个生成项目测试、1 个其余用例并行作业；official 是单个 job。聚合 job 以 Scaffold Gate
-# 这一名称对外保留单一必需检查。
+# 2 个生成项目测试、2 个固定组合矩阵、1 个 upgrade fixtures、1 个其余用例并行作业；
+# official 是单个 job。聚合 job 以 Scaffold Gate 这一名称对外保留单一必需检查。
+# 组合矩阵本地实测 121s（10 个生成项目、2 路并发）；CI 每个 shard 的实际耗时写入 step summary。
 
 on:
   workflow_dispatch:
@@ -113,6 +114,9 @@ jobs:
           - { name: capability-build-4, spec: '4/4', test: TestGeneratedProjectBuildsAndVetsForEverySelection }
           - { name: generated-tests-1, spec: '1/2', test: TestGeneratedProjectTestTreeIsGreen }
           - { name: generated-tests-2, spec: '2/2', test: TestGeneratedProjectTestTreeIsGreen }
+          - { name: composition-1, spec: '1/2', test: TestRepresentativeCompositionMatrix }
+          - { name: composition-2, spec: '2/2', test: TestRepresentativeCompositionMatrix }
+          - { name: upgrade-fixtures, spec: '', test: TestUpgradeFixtures }
           - { name: invariants, spec: '', test: '' }
     steps:
       - uses: actions/checkout@v7
@@ -148,10 +152,35 @@ jobs:
           JIMU_SCAFFOLD_SHARD: ${{ matrix.spec }}
           MATRIX_TEST: ${{ matrix.test }}
         run: |
+          set -o pipefail
+          LOG="$RUNNER_TEMP/scaffold-test.log"
+          start=$SECONDS
+          set +e
           if [ -n "$MATRIX_TEST" ]; then
-            go test ./tools/generator/ -count=1 -timeout 60m -v -run "^$MATRIX_TEST$"
+            go test ./tools/generator/ -count=1 -timeout 60m -v -run "^$MATRIX_TEST$" 2>&1 | tee "$LOG"
           else
-            go test ./tools/generator/ -count=1 -timeout 60m -v -skip '^(TestGeneratedProjectBuildsAndVetsForEverySelection|TestGeneratedProjectTestTreeIsGreen)$'
+            go test ./tools/generator/ -count=1 -timeout 60m -v -skip '^(TestGeneratedProjectBuildsAndVetsForEverySelection|TestGeneratedProjectTestTreeIsGreen|TestRepresentativeCompositionMatrix|TestUpgradeFixtures)$' 2>&1 | tee "$LOG"
+          fi
+          status=${PIPESTATUS[0]}
+          set -e
+          duration=$((SECONDS - start))
+          echo "scaffold shard ${{ matrix.name }} duration: ${duration}s"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            {
+              echo "| shard | duration |"
+              echo "| --- | --- |"
+              echo "| ${{ matrix.name }} | ${duration}s |"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+          # fail-closed：显式运行某个测试时，它必须真的 PASS；SKIP 也会被当成门禁失败，
+          # 避免 full 矩阵在 CI 里因环境变量缺失而静默跳过。
+          if [ -n "$MATRIX_TEST" ] && ! grep -Eq "^--- PASS: $MATRIX_TEST( |$)" "$LOG"; then
+            echo "::error::$MATRIX_TEST did not report PASS; the full scaffold gate must not silently skip"
+            grep -E "^--- (SKIP|FAIL): $MATRIX_TEST" "$LOG" || true
+            exit 1
           fi
 
       - name: "📏 Report the scaffold GOCACHE size"
@@ -171,7 +200,7 @@ jobs:
             exit 1
           fi
 
-      # 七个作业均从同一滚动快照恢复；只由一个作业保存，避免写入竞态和缓存配额放大。
+      # 十个作业均从同一滚动快照恢复；只由一个作业保存，避免写入竞态和缓存配额放大。
       - name: "💾 Save the scaffold GOCACHE"
         if: matrix.name == 'generated-tests-1' && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6

@@ -32,7 +32,7 @@ Go 语言通用后端基础框架 — 稳定底座 + 可组合模块 + 标准适
 - **审计日志** — 有界队列批量写入，匿名请求安全处理；**防篡改哈希链**：每条审计按租户写入 `prev_hash`/`entry_hash`（`audit.hash_secret` 配置时用 HMAC-SHA256，否则 SHA-256），写入时锁定链头行保证多实例全序；`GET /api/v1/audits/verify` 可按范围重算校验，检测内容篡改、链接断裂与链尾截断；`GET /api/v1/audits/export` 按时间范围流式导出 CSV（含 BOM，Excel 可直接打开）或 NDJSON，单次上限 5 万条、跨度 90 天
 - **管理端点** — 独立 management server 暴露健康检查、metrics、最终启用/降级能力清单（`/capabilities`）和可选 pprof
 - **管理 API** — 系统状态、在线用户、强制下线、错误码文档
-- **脚手架** — Cobra CLI 一键生成完整模块骨架
+- **可组合脚手架** — `jimu new` 按官方模板或 experimental 能力组合生成独立 Go 项目；`jimu check` 只读诊断组合一致性，`jimu upgrade` 显式升级并在失败时回滚；`.jimu/manifest.json` 记录 provenance 与组合结果
 - **API 文档** — Swagger UI 交互式文档（中文注释）
 - **健康检查** — `/livez` 与 `/readyz`，readiness 有界探测 DB + Redis
 - **优雅停机** — 显式 Application 生命周期，反向停止组件
@@ -243,31 +243,31 @@ make up-observability
 make cli
 
 # 生成新项目（能力可插拔的出货口：只复制选中能力的代码/迁移/配置段/资产）
-./bin/jimu new ./myapp --template=basic-api --module=example.com/myapp --report  # 默认跑 go mod tidy + 自检
-./bin/jimu new ./myapp --with=user,access,auth,queue                         # 按能力名解析（硬依赖闭包 + 拓扑序）
-./bin/jimu new ./myapp --with=queue:kafka,storage:local,user,access,auth     # 冒号后缀逐项指定驱动
-./bin/jimu check ./myapp                                                     # 只读检查已生成项目的 manifest 与组合一致性
-./bin/jimu upgrade ./myapp                                                   # 显式升级事务：备份、安装、tidy/build/test、回滚、更新 manifest
-./bin/jimu upgrade ./myapp --dry-run                                        # 只读三方 diff：分类 + 冲突路径/原因
-./bin/jimu upgrade ./myapp --check                                          # 同上；存在 conflict 时退出非 0
-./bin/jimu capability add dataops                                            # 在已生成项目里增量追加能力（见「生成项目」）
+./bin/jimu-cli new ./myapp --template=basic-api --module=example.com/myapp --report  # 默认跑 go mod tidy + 自检
+./bin/jimu-cli new ./myapp --with=user,access,auth,queue                         # 按能力名解析（硬依赖闭包 + 拓扑序）
+./bin/jimu-cli new ./myapp --with=queue:kafka,storage:local,user,access,auth     # 冒号后缀逐项指定驱动
+./bin/jimu-cli check ./myapp                                                     # 只读检查已生成项目的 manifest 与组合一致性
+./bin/jimu-cli upgrade ./myapp                                                   # 显式升级事务：备份、安装、tidy/build/test、回滚、更新 manifest
+./bin/jimu-cli upgrade ./myapp --dry-run                                        # 只读三方 diff：分类 + 冲突路径/原因
+./bin/jimu-cli upgrade ./myapp --check                                          # 同上；存在 conflict 时退出非 0
+./bin/jimu-cli capability add dataops                                            # 在已生成项目里增量追加能力（见「生成项目」）
 
 # 能力骨架（本仓内开发用；生成项目不携带此命令）
-./bin/jimu capability create product  # 生成典型 CRUD 能力骨架，不修改注册点
+./bin/jimu-cli capability create product  # 生成典型 CRUD 能力骨架，不修改注册点
 
 # 数据库迁移（均跟随当前形态；默认 full）
-./bin/jimu migrate up               # 执行所有迁移
-./bin/jimu migrate down             # 回滚各能力最后一次迁移（按反向能力序）
-./bin/jimu migrate status           # 查看迁移状态
-./bin/jimu migrate redo             # 重做各能力最后一次迁移（按反向能力序）
-./bin/jimu migrate adopt-capabilities  # 存量库登记各能力版本表基线（升级到 v0.3.0 后执行一次）
+./bin/jimu-cli migrate up               # 执行所有迁移
+./bin/jimu-cli migrate down             # 回滚各能力最后一次迁移（按反向能力序）
+./bin/jimu-cli migrate status           # 查看迁移状态
+./bin/jimu-cli migrate redo             # 重做各能力最后一次迁移（按反向能力序）
+./bin/jimu-cli migrate adopt-capabilities  # 存量库登记各能力版本表基线（升级到 v0.3.0 后执行一次）
 
 # 数据初始化
-ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例）
+ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu-cli seed  # 插入初始数据（含 Casbin 策略同步与内置 free 套餐示例）
 
 # API Key（命令由 apikey 能力自带：internal/capabilities/apikey/cli）
-./bin/jimu apikey issue --name=ci --scopes=api:access   # 签发 API Key（明文只显示一次；另有 --expires-days/--created-by）
-./bin/jimu apikey list --limit=20                       # 列出 API Key（表格含 TENANT/CREATED_AT；不显示明文）
+./bin/jimu-cli apikey issue --name=ci --scopes=api:access   # 签发 API Key（明文只显示一次；另有 --expires-days/--created-by）
+./bin/jimu-cli apikey list --limit=20                       # 列出 API Key（表格含 TENANT/CREATED_AT；不显示明文）
 
 ```
 
@@ -277,7 +277,7 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 `jimu new <dir>` 默认生成 `basic-api` 模板；`--template` 选择官方模板，`--with` 直接指定 experimental 能力集。生成项目有自己的 module 并运行 `go mod tidy`，因此可以减少项目依赖；profile 只裁剪框架二进制的编译闭包，不改变框架 `go.mod`。
 
-> **v0.5.0 模板入口**：`--template=basic-api|auth-api`，默认 `basic-api`；`--with` 只作为 experimental 专家模式；`--profile=minimal` 映射为 `auth-api` 并打印弃用警告，v0.6.0 移除。其他 profile 仅供框架自身构建，CLI 会拒绝。模板、支持矩阵、兼容窗口和发布阻断预算见[模板契约 v0.1](docs/templates/v1/README.md)。
+> **模板入口**：`--template=basic-api|auth-api`，默认 `basic-api`；`--with` 只作为 experimental 专家模式；`--profile=minimal` 已移除，传入会报错并提示改用 `--template=auth-api`。其他 profile 仅供框架自身构建，CLI 会拒绝。模板、支持矩阵、兼容窗口和发布阻断预算见[模板契约 v0.1](docs/templates/v1/README.md)。
 
 `basic-api` 的生成产物已按零外部服务基线落地：不含数据库/Redis 配置、Compose、Kubernetes/Helm 或 OpenAPI 资产，启动时只创建 HTTP 与管理端口；`/livez`、`/readyz` 和 `/api/v1/ping` 不检查外部依赖。按 v0.4.0 的既定决定，生成项目不恢复受跟踪的 `.env.example`，环境变量与配置入口写在项目 README。
 
@@ -297,20 +297,20 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 官方模板的 `configs/*.yaml` 是整文件模板，手改会被识别为 `conflict`；通过 `--with` 生成的项目在 manifest 中声明了配置段合并，手改段值会保留，只补入目标模板新增的段。升级只修改生成器管理的文件，用户自有文件、已删除的模板文件和 manifest 之外的路径都不触碰。
 
-`jimu capability add <name>` 在已生成项目中追加框架已有的能力。`jimu capability create <name>` 只在框架仓库中创建能力骨架，不自动修改 catalog 或 profile。旧 `jimu module create` 已移除。
+`jimu capability add <name>` 在 **`--with` 生成的 experimental 项目**中追加框架已有的能力：复用与 `jimu new` / `jimu check` 相同的组合 resolver 和 preflight，缺失硬依赖、冲突、端口、驱动、迁移/配置/中间件问题都在写盘前失败；保留既有驱动选择和 auto-added 语义，并写回 schema v3 manifest 的 `composition` 块。落盘使用与 `jimu upgrade` 相同的 manifest 事务：先备份受影响文件，逐文件安装，失败按原字节回滚；增量追加不执行 tidy/build 自检，支持级别保持 `experimental`。官方模板 `basic-api` / `auth-api` 是认证基线，不接受 `capability add`，需要扩展时用 `--with` 生成。`jimu capability create <name>` 只在框架仓库中创建能力骨架，不自动修改 catalog 或 profile。旧 `jimu module create` 已移除。
 
 ```bash
-./bin/jimu new ./myapp --module=example.com/myapp
-./bin/jimu new ./myapp --template=basic-api --module=example.com/myapp
-./bin/jimu new ./myapp --template=auth-api --module=example.com/myapp
-./bin/jimu new ./myapp --with=user,access,auth,queue --shape=app
-./bin/jimu new ./myapp --with=auth,queue:kafka --dry-run
+./bin/jimu-cli new ./myapp --module=example.com/myapp
+./bin/jimu-cli new ./myapp --template=basic-api --module=example.com/myapp
+./bin/jimu-cli new ./myapp --template=auth-api --module=example.com/myapp
+./bin/jimu-cli new ./myapp --with=user,access,auth,queue --shape=app
+./bin/jimu-cli new ./myapp --with=auth,queue:kafka --dry-run
 ```
 
 | 参数 | 说明 |
 |---|---|
 | `--template=basic-api\|auth-api` | 官方模板；不传选择器时默认 `basic-api` |
-| `--profile=minimal` | 弃用兼容别名，映射为 `auth-api` 并打印警告；v0.6.0 移除 |
+| `--profile=minimal` | 已移除的兼容别名；传入即报错并提示改用 `--template=auth-api` |
 | `--with=<cap>[:<drv>][,…]` | experimental 专家模式；manifest 标记为 `support: experimental`，可指定驱动。受保护能力需要同时选择 middleware provider（如 `auth`） |
 | `--shape=<name>` | 仅用于 `--with`（默认 `app`）；模板/兼容 profile 不允许覆盖 |
 | `--module=<path>` | 生成项目的 module 路径，默认由 `<dir>` 推导 |
@@ -327,7 +327,7 @@ ADMIN_PASSWORD_FILE=secrets/admin_password.txt ./bin/jimu seed  # 插入初始�
 
 `.jimu/manifest.json` 使用 schema v3 记录 provenance 与组合结果：`framework.version`、`framework.commit`、`framework.dirty`、官方模板的 `selection.template_version`、`generated_files` 对应的 `generated_file_sha256`，以及 `composition` 中的组合契约版本、`requested`/`resolved`/`auto_added`、驱动选择、`validity` 和 `support`。commit 由 `git rev-parse --verify HEAD^{commit}` 解析，普通 clone 和 linked worktree 都必须成功；文件哈希在 tidy、自检和配置合并完成后计算，manifest 与可选报告自身不计入哈希表。`--dry-run` 与 `jimu check` 的 support 读取 `composition.support`。schema v2 只读用于升级规划：加载时校验原 digest 后换成当前 schema，新增组合块由 `selection` 确定性推导；v2 只可能在预检通过后写出，因此加载时推导 `validity: valid`，需要当前合法性时仍应重新运行 resolver。writer 只接受 schema v3，schema v1 继续 fail-closed。
 
-生成闭包、模板和 manifest 的详细规则见[形态与项目生成设计](docs/design/profiles-and-project-generation.md)；稳定设计文档的范围和阅读入口见[设计文档索引](docs/design/README.md)。
+生成闭包、模板和 manifest 的详细规则见[形态与项目生成设计](docs/design/profiles-and-project-generation.md)；组合契约、解析顺序、诊断和 `validity`/`support` 状态见[能力组合设计](docs/design/capability-composition.md)；稳定设计文档的范围和阅读入口见[设计文档索引](docs/design/README.md)。
 
 ## 数据库迁移
 
@@ -1280,7 +1280,7 @@ capabilities:
 
 新增能力、profile 或驱动时，更新对应声明与组合清单，并运行 `make check-capabilities`、`make profiles-check`。能力依赖、驱动选择、资产所有权和生成器边界见[能力架构](docs/design/capability-architecture.md)与[形态与项目生成](docs/design/profiles-and-project-generation.md)；逐步操作见 `skills/jimu/references/`。
 
-能力根包在 `Descriptor` 中同时声明组合契约：`Conflicts`（互斥能力）、`Provides` / `Consumes`（contract 端口，`Required` 表示硬前提）、`DriverSpecs`（驱动级运行时服务）。`make check-capabilities` 拒绝未知/自引用/重复冲突、重复提供方、必需消费者缺失和非法驱动声明；组合状态用 `validity: valid|invalid` 与 `support: certified|validated|experimental` 两个正交维度表示。
+能力根包在 `Descriptor` 中同时声明组合契约：`Conflicts`（互斥能力）、`Provides` / `Consumes`（contract 端口，`Required` 表示硬前提）、`DriverSpecs`（驱动级运行时服务）。`make check-capabilities` 拒绝未知/自引用/重复冲突、重复提供方、必需消费者缺失和非法驱动声明；组合状态用 `validity: valid|invalid` 与 `support: certified|validated|experimental` 两个正交维度表示。解析顺序、诊断和状态边界见[能力组合设计](docs/design/capability-composition.md)。
 
 ### 错误码
 
@@ -1320,7 +1320,7 @@ capabilities:
 
 ### 质量门禁
 
-本地基础检查运行 `make fmt`、`make vet`、`make lint` 与 `make test`。能力、profile 和生成器边界分别由 `make check-capabilities`、`make profiles-check` 与 `make test-scaffold-official` / `make test-scaffold-matrix` 覆盖；official 执行两个官方模板的预算、`basic-api` smoke 和 `auth-api` 空库端到端，full 在夜间/手动验证全部 `--with` 与内部 profile 选区。报告变化时运行 `make compose-report-check`。
+本地基础检查运行 `make fmt`、`make vet`、`make lint` 与 `make test`。能力、profile 和生成器边界分别由 `make check-capabilities`、`make profiles-check` 与 `make test-scaffold-official` / `make test-scaffold-matrix` 覆盖；official 执行两个官方模板的预算、`basic-api` smoke 和 `auth-api` 空库端到端，full 在夜间/手动验证全部 `--with`、内部 profile 选区、固定 pairwise 组合矩阵和 v0.5 upgrade fixtures。组合矩阵与升级场景也可以分别用 `make test-scaffold-composition`、`make test-scaffold-upgrade` 单独运行。报告变化时运行 `make compose-report-check`。
 
 CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)。
 
@@ -1364,9 +1364,11 @@ CI 的触发条件、发布候选检查和本地集成测试流程见 [docs/CONT
 | `make lint` | golangci-lint |
 | `make check-capabilities` | 校验能力声明与迁移/驱动关系、形态生产 import 边界、非代码资产归属及生成器依赖边界；已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job |
 | `make check-config` | 校验 Secret、Compose、observability 与 Helm/K8s 部署 manifest 契约 |
-| `make check-templates` | 模板漂移门禁：用生成器在临时目录生成最小项目（`--profile=minimal`）并真构建 + 跑生成项目自己的 `check-capabilities`；用例被 `JIMU_HEAVY_MATRIX` 门控，目标内显式置 1；CI 的 full 脚手架矩阵（夜间/手动）会覆盖这条用例 |
+| `make check-templates` | 模板漂移门禁：用生成器按内部 `minimal` 形态在临时目录生成最小项目并真构建 + 跑生成项目自己的 `check-capabilities`；用例被 `JIMU_HEAVY_MATRIX` 门控，目标内显式置 1；CI 的 full 脚手架矩阵（夜间/手动）会覆盖这条用例 |
 | `make test-scaffold-official` | 两个官方模板的发布门禁（`JIMU_HEAVY_MATRIX=1`：`basic-api` smoke、`auth-api` 空库 Compose E2E、模板预算和生成配置检查；需 Docker Compose）；CI 在 release/* 与 dependabot/* → master PR 中运行 |
-| `make test-scaffold-matrix` | 本地完整运行重型脚手架矩阵（`JIMU_HEAVY_MATRIX=1`：真实生成项目 + `go build/vet/test/run`，覆盖全部 `--with` 和内部 profile；需 Docker Compose，耗时数分钟起）；CI 在手动触发或定时任务中并行运行，并聚合检查结果；`JIMU_TEST_GOCACHE=<dir>` 可指定跨运行复用的 GOCACHE |
+| `make test-scaffold-matrix` | 本地完整运行重型脚手架矩阵（`JIMU_HEAVY_MATRIX=1`：真实生成项目 + `go build/vet/test/run`，覆盖全部 `--with`、内部 profile、固定 pairwise 组合与 v0.5 upgrade fixtures；需 Docker Compose，耗时数分钟起）；CI 在手动触发或定时任务中并行运行，并聚合检查结果；`JIMU_TEST_GOCACHE=<dir>` 可指定跨运行复用的 GOCACHE |
+| `make test-scaffold-composition` | 运行固定 pairwise 组合矩阵与冲突负例（`JIMU_HEAVY_MATRIX=1`：组合项目真实 `go build/vet`，负例在写目录前失败；清单与预算见 `tools/generator/composition_matrix_test.go`）；CI 的 full 脚手架矩阵拆成 2 个 `composition-*` shard |
+| `make test-scaffold-upgrade` | 运行固定 v0.5 `basic-api` / `auth-api` fixtures 的升级门禁（untouched、用户修改生成文件冲突、用户自有文件保留、用户删除、模板删除、重复升级、验证失败回滚；每个场景可单独用 `go test -run 'TestUpgradeFixtures/<template>/<scenario>'` 定位）；CI 的 full 脚手架矩阵单独运行该 job |
 | `make profiles-check` | 用 overlay 构建已注册 profile 并检查依赖闭包（golden）；`JIMU_PROFILES_SMOKE=1` 时额外启动各 profile 并轮询管理端 `/readyz`（需 DB+Redis）；已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job |
 | `make compose-report` | 生成形态编译面报告 `docs/profiles/compose-report.md`（二进制/路由/迁移/表/本仓闭包代码量与文件数/重型依赖列；不连库、不启动监听） |
 | `make compose-report-check` | 报告漂移门禁：重新实测并比对入库报告的**平台无关部分**（路由/迁移/表/本仓闭包文件数与代码行/重型依赖/直接依赖数）；二进制大小列**平台相关**（darwin 与 linux 实测值不同），不参与逐字节比对、只作归档打印到日志（相对关系由 `tools/composereport` 的单测在度量所在机器上断言）。已接入 `make ci`/`release-check` 与 CI 的 `Capability Gates` job（P2.8 收口） |

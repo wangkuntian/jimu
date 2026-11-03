@@ -4,7 +4,7 @@
 .PHONY: migrate migrate-down migrate-status seed
 .PHONY: backup restore build-backup-image compose-db-backup compose-db-restore test-backup-restore
 .PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race check-makefile check-config
-.PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates test-scaffold-official test-scaffold-matrix
+.PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates test-scaffold-official test-scaffold-matrix test-scaffold-upgrade test-scaffold-composition
 .PHONY: profiles-check compose-report compose-report-check check-skills skills-install
 .PHONY: swagger swagger-check smoke-check compose-check govulncheck check ci ci-full release-check
 .PHONY: proto bench bench-ci loadtest cli all hooks
@@ -23,6 +23,8 @@ CLI_PKG := ./cmd/cli
 
 # official 档只覆盖两个官方模板；full 仍由 test-scaffold-matrix 运行全部生成器用例。
 SCAFFOLD_OFFICIAL_TESTS := ^(TestOfficialTemplateBudgets|TestNewProjectBasicAPIHasNoExternalRuntimeDependencies|TestNewProjectAuthAPIIsCompactSingleTenantTemplate|TestBasicAPIStartsWithoutExternalServices|TestAuthAPIComposeConfigIsValid|TestAuthAPIComposeUsesHostUIDForSecrets|TestAuthAPIEmptyDatabaseEndToEnd)$
+SCAFFOLD_UPGRADE_TESTS := ^(TestUpgradeFixtures|TestUpgradeFixturesMatchV050)$
+SCAFFOLD_COMPOSITION_TESTS := ^(TestRepresentativeCompositionMatrix|TestCompositionMatrixBudget|TestCompositionNegativeMatrix)$
 
 ENV ?= dev
 VERSION ?= dev
@@ -227,6 +229,12 @@ test-scaffold-official: ## 运行两个官方模板的发布门禁（需 Docker�
 
 test-scaffold-matrix: ## 运行完整生成器矩阵（夜间/手动；需 Docker）
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 60m -v
+
+test-scaffold-upgrade: ## 运行 v0.5 upgrade fixtures 的升级场景门禁
+	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 30m -v -run '$(SCAFFOLD_UPGRADE_TESTS)'
+
+test-scaffold-composition: ## 运行固定 pairwise 组合与冲突负例门禁
+	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 30m -v -run '$(SCAFFOLD_COMPOSITION_TESTS)'
 
 profiles-check: ## 构建全部形态并检查依赖闭包
 	@bash scripts/check_profiles.sh

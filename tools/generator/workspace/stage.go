@@ -203,10 +203,23 @@ func Update(previous manifest.Document, next manifest.Document, opts UpdateOptio
 	}
 	result.Files = append(slices.Clone(next.GeneratedFiles), manifestRel)
 	sort.Strings(result.Files)
-	if opts.DryRun || (len(changed) == 0 && len(removed) == 0) {
+	if opts.DryRun {
 		return result, nil
 	}
-	if err := installStaged(projectRoot, staging, changed, removed); err != nil {
+	install := make([]string, 0, len(changed))
+	for _, rel := range changed {
+		if rel == manifestRel {
+			continue
+		}
+		install = append(install, rel)
+	}
+	if _, err := ApplyTransaction(TransactionOptions{
+		ProjectRoot: projectRoot,
+		StagingRoot: staging,
+		Install:     install,
+		Remove:      removed,
+		Manifest:    &next,
+	}); err != nil {
 		return Result{}, err
 	}
 	return result, nil

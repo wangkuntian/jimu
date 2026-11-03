@@ -35,6 +35,7 @@
 
 - `make check-templates`：用生成器在临时目录生成最小项目并真构建 + 跑生成项目自己的 `check-capabilities`
 - 所有「真实生成项目 + `go build/vet/test/run`」的用例由 **`JIMU_HEAVY_MATRIX=1`** 门控（只认字面量 `1`；`-short`/未设都跳过）；本地入口 `make test-scaffold-matrix`
+- `make test-scaffold-composition`（full 的组合 shard）运行固定 pairwise 清单与冲突负例；清单和预算在 `tools/generator/composition_matrix_test.go`，不遍历全幂集
 - CI 侧在 `.github/workflows/ci-scaffold.yml` 的 `Scaffold Gate` job，**默认不在普通 PR 上跑**：只在 `release/*` → `master` 的发布候选 PR、`workflow_dispatch` 手动触发与每周一定时运行
 
 ## 聚合目标成员

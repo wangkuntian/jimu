@@ -1,11 +1,11 @@
 # Jimu 模板契约 v0.1
 
-> 状态：已冻结并完成实现。契约版本为 `v0.1`，首个按本契约交付的产品版本为 Jimu `v0.5.0`。CLI、预检、模板、预算和门禁均已按本契约落地；当前发布状态见 [v0.5.0 发布说明](../../releases/v0.5.0.md)。
+> 状态：模板契约 `v0.1` 已冻结；`v0.5.0` 首次按本契约交付两个官方模板，`v0.6.0` 保持这两个模板及其预算不变，并交付显式升级与组合 schema。模板契约修订不自动代表 Jimu 主版本变化；当前发布状态见 [v0.6.0 发布说明](../../releases/v0.6.0.md)。
 
 机器可读事实源：
 
 - [matrix.yaml](matrix.yaml)：模板、支持级别、兼容窗口、预检项和生命周期规则。
-- [budgets.json](budgets.json)：v0.5.0 发布阻断预算及统一计量口径。
+- [budgets.json](budgets.json)：官方模板发布阻断预算及统一计量口径（自 v0.5.0 起未放宽，v0.6.0 沿用）。
 
 ## 定位
 
@@ -40,7 +40,7 @@ Jimu 不解决：
 
 ## 生成物所有权
 
-v0.5.0 锁定为“用户拥有的 fork”模型。生成完成后，项目内的代码、配置、迁移和部署资产归用户所有，用户可以自由修改；生成的工程不依赖常驻的 Jimu 运行时。
+自 v0.5.0 起锁定为“用户拥有的 fork”模型。生成完成后，项目内的代码、配置、迁移和部署资产归用户所有，用户可以自由修改；生成的工程不依赖常驻的 Jimu 运行时。
 
 | 文件类别 | 归属 | 规则 |
 |---|---|---|
@@ -49,24 +49,27 @@ v0.5.0 锁定为“用户拥有的 fork”模型。生成完成后，项目内�
 | 其余生成文件 | 用户代码的起始基线 | 生成后由用户维护；Jimu 不做隐式覆盖。 |
 | 用户新增或修改的文件 | 用户 | 不在 manifest 生成文件清单中的文件永不自动覆盖。 |
 
-v0.5.0 锁定以下兼容决策：
+v0.5.0 的兼容决策继续有效：
 
 - manifest schema v1 不做只读兼容，当前生成器继续 fail-closed；
 - v0.4.x 生成项目只支持“用目标版本重新生成到新目录 + 人工 diff + 选择性迁移”，不提供自动项目升级、manifest 重写或存量数据库模板迁移。
 
-v0.5.0 不提供自动升级，也不承诺框架安全修复自动进入已生成项目。
+v0.5.0 未提供自动升级，也不承诺框架安全修复自动进入已生成项目；v0.6.0 起提供显式 `jimu upgrade`：默认事务以 manifest 基线、项目当前内容和当前框架目标产物做三方比较，`conflict` 在写盘前中止；备份后逐文件安装，随后执行 tidy/build/test，任一失败按原字节回滚；成功后才更新 manifest。`--dry-run` 与 `--check` 只读。升级只修改生成器管理的文件，用户自有文件、已删除的模板文件和 manifest 之外的路径都不触碰；存量数据库 schema 不在升级范围内。
 
-`jimu capability add` 在 v0.5.0 仍是专家实验能力，不是升级通道。`jimu upgrade` 计划在 v0.6.0 提供显式触发、三方 diff、仅修改未改动的生成文件、冲突不覆盖、tidy/build/test、备份和回滚。
+`jimu capability add` 仍是专家实验能力，不是升级通道：它只在 `--with` 生成的 experimental 项目中追加能力，拒绝官方模板项目，落盘复用 upgrade 的 manifest 事务，但不执行 tidy/build，也不提升支持级别。组合契约、解析顺序和 `validity`/`support` 的完整规则见[能力组合设计](../../design/capability-composition.md)。
 
 ## CLI 与版本语义
 
-v0.5.0 的正式入口：
+正式入口（v0.5.0 起；v0.6.0 保持同一选择器）：
 
 ```bash
 jimu new <dir>                         # 默认 basic-api
 jimu new <dir> --template=basic-api
 jimu new <dir> --template=auth-api
 jimu new <dir> --with=user,access,auth # 专家模式，标记 experimental
+jimu check <dir>                       # 只读检查 manifest 与组合一致性
+jimu upgrade <dir> --dry-run           # 只读三方 diff
+jimu upgrade <dir>                     # 显式升级事务
 ```
 
 规则：
@@ -76,28 +79,31 @@ jimu new <dir> --with=user,access,auth # 专家模式，标记 experimental
 - `--template`、`--profile`、`--with` 三者互斥。
 - 不传选择器时默认 `basic-api`。
 - `--with` 允许生成，但 manifest 必须标记 `support: experimental`，并执行全部硬预检。
-- `--profile=minimal` 在 v0.5.x 映射为 `auth-api` 并打印弃用警告，v0.6.0 移除；其他 profile 名称只供 Jimu 自身构建使用，不是对外模板。
+- `--profile=minimal` 已移除；传入会报错并提示改用 `--template=auth-api`。其他 profile 名称只供 Jimu 自身构建使用，不是对外模板。
 - `--dry-run` 打印 requested/resolved/auto-added、驱动、迁移、外部服务、合法性/支持级别（status）、预检和预算结果，不写文件。
 - 所有生成先写暂存目录；预检、tidy、build、test 和生成项目自检通过后才原子发布。失败不得留下半成品。
+- `jimu check` 只读校验已有项目；`jimu upgrade` 不带 `--dry-run` / `--check` 时执行显式写入事务，冲突在写盘前中止，失败按原字节回滚。
 
 契约版本与产品版本分开管理：
 
-- 本文件是模板契约 `v0.1`，目标产品版本为 Jimu `v0.5.0`；
+- 本文件是模板契约 `v0.1`，首个目标产品版本为 Jimu `v0.5.0`；v0.6.0 沿用同一模板集合、兼容窗口和预算；
 - 模板契约的修订不自动代表 Jimu 主版本变化；
-- `v0.5.0` 生成的 manifest 使用 schema v2，必须记录 `selection.template`、`selection.template_version`、`selection.support`、`framework.version`、`framework.commit`、`framework.dirty` 和 `generated_file_sha256`；
+- `v0.5.0` 生成的 manifest 使用 schema v2，必须记录 `selection.template`、`selection.template_version`、`selection.support`、`framework.version`、`framework.commit`、`framework.dirty` 和 `generated_file_sha256`；schema v2 在 v0.6.0 只读用于升级；
+- `v0.6.0` 生成的 manifest 只写 schema v3，在 provenance 之外增加 `composition` 块（契约版本、requested/resolved/auto-added、驱动、validity、support）；schema v1 继续 fail-closed；
 - framework commit 必须通过 `git rev-parse --verify HEAD^{commit}` 解析，普通 clone 与 git worktree 都必须得到非空 commit；解析失败时拒绝生成；
 - `generated_file_sha256` 必须覆盖 `generated_files` 的全部文件，值格式为 `sha256:<64 hex>`；manifest 和可选生成报告自身不进入该映射；
-- 开发态允许 `version=v0.5.0-dev`，但必须记录真实 commit，且 `dirty` 必须为 `true`。
+- 开发态允许 `version=<当前版本>-dev`，但必须记录真实 commit，且 `dirty` 必须为 `true`。
 
 ## 支持模型
 
 | 级别 | 范围 | 承诺 |
 |---|---|---|
-| 官方模板 | `basic-api`、`auth-api` | 固定契约、硬预算、端到端验收和发布阻断门禁。 |
-| 专家选择 | 能通过硬预检的 `--with` | 允许生成并标记 `experimental`；不承诺组合稳定性、预算或升级。 |
-| 内部 profile | `full`、`minimal`、`saas`、`enterprise`、`machine` | 仅用于 Jimu 自身构建和维护，不是 v0.5.0 对外模板矩阵。 |
+| `certified` | `basic-api`、`auth-api` 两个官方模板预设 | 固定契约、硬预算、端到端验收和发布阻断门禁；manifest 的 `composition.support` 为 `certified`。 |
+| `validated` | 固定 catalog 中通过完整发布门禁的子集（保留级别） | 用于未来推广；v0.6.0 没有选择器产出该级别，pairwise 构建矩阵不自动提升支持级别。 |
+| `experimental` | 能通过硬预检的 `--with` 组合与 `capability add` 项目 | 允许生成/追加并标记 `experimental`；不承诺组合稳定性、预算、E2E 或升级兼容。 |
+| 内部 profile | `full`、`minimal`、`saas`、`enterprise`、`machine` | 仅用于 Jimu 自身构建和维护，不是对外模板矩阵；manifest 的 `composition.support` 映射为 `experimental`。 |
 
-本版本不新增“已认证专家组合”。只有写入 `matrix.yaml` 的选择才获得正式兼容承诺，`--with` 不能绕过支持边界。
+`matrix.yaml` 的 `official` 模板档对应 `certified`，`experimental` 专家档对应 `experimental`。本版本不新增“已认证专家组合”：只有写入 `matrix.yaml` 的选择才获得正式兼容承诺，`--with` 不能绕过支持边界。`validity: valid|invalid` 与 `support` 正交；合法组合不自动获得 `validated` 或 `certified`。
 
 ## 生成前预检
 
@@ -106,7 +112,7 @@ jimu new <dir> --with=user,access,auth # 专家模式，标记 experimental
 1. **受保护中间件唯一性**
    - Descriptor 必须显式声明是否提供 `ProtectedHTTPMiddleware`。
    - 只要选择集中存在 `MountProtected` 路由，就必须恰好有一个有效提供者。
-   - 零提供者或多提供者均拒绝；v0.5.0 不允许 `auth` 与 `apikey` 同时提供受保护链。
+   - 零提供者或多提供者均拒绝；当前不允许 `auth` 与 `apikey` 同时提供受保护链。
 2. **迁移依赖与表所有权**
    - 迁移集等于声明能力迁移与 `MigrationSchemaDeps` 闭包的并集。
    - 每张表只能有一个所有者，同一张表只能出现一次 `CREATE`。
@@ -205,9 +211,9 @@ make run
 - 项目自带 Compose；
 - 项目自带 `cmd/cli migrate` 与 `seed`。
 
-v0.5.0 不包含公开注册、MFA/passkey、OAuth、验证码、通知、字段级加密、审计、队列、对象存储、观测栈或多租户管理 API。
+`auth-api` 不包含公开注册、MFA/passkey、OAuth、验证码、通知、字段级加密、审计、队列、对象存储、观测栈或多租户管理 API。
 
-单租户语义：`auth-api` 的部署只有一个业务租户。为兼容现有 `user`/`access` schema，v0.5.0 保留一个不可操作的默认 tenant carrier：
+单租户语义：`auth-api` 的部署只有一个业务租户。为兼容现有 `user`/`access` schema，模板保留一个不可操作的默认 tenant carrier：
 
 - 保留 `tenants.id=1`、`users.tenant_id`、`roles.tenant_id` 和相关 join；
 - manifest 标记为 `migration/domain-only`；
@@ -293,11 +299,16 @@ make down
 
 生成文件数排除 `.jimu/manifest.json` 和 `docs/profiles/generated-report.md`；依赖与闭包按生成项目的 `go list` / `go/packages` 口径统计。
 
-官方模板的自动门禁由 `make test-scaffold-official` 执行，并纳入 CI `Scaffold Gate`（`auth-api` 用例需要可用的 Docker Compose）；full 生成器矩阵由 `make test-scaffold-matrix` 在手动触发或夜间定时运行：
+v0.5.1 起 `Scaffold Gate` 分为 official 与 full 两档：official 是 `release/*` 和 `dependabot/*` → `master` PR 的必需检查，只跑两个官方模板的预算、smoke 和空库 E2E；full 只在 `workflow_dispatch` 或夜间定时运行，覆盖全部 `--with`、内部 profile 和重型生成器用例。这样普通 PR 不必等待全矩阵，同时保留夜间/发布前的完整回归。
+
+官方模板的自动门禁由 `make test-scaffold-official` 执行（`auth-api` 用例需要可用的 Docker Compose）；full 生成器矩阵由 `make test-scaffold-matrix` 在手动触发或夜间定时运行。v0.6.0 在 full 中新增固定 pairwise 组合矩阵和 v0.5 upgrade fixtures，official 的选择集和行为不变：
 
 - `TestOfficialTemplateBudgets` 直接读取 `budgets.json`，生成两个官方模板后实测文件数、直接依赖、Go 闭包、外部服务、路由、表、迁移和非代码资产，任一指标超限即失败。
 - `TestBasicAPIStartsWithoutExternalServices` 不启动容器，先跑生成项目的 build/vet/test，再验证 `/livez`、`/readyz`、示例路由、统一 404/405 响应、SIGTERM 优雅退出和冷生成至就绪预算。
 - `TestAuthAPIEmptyDatabaseEndToEnd` 先跑生成项目的 test/vet，再为每次运行创建独立 Compose 项目和宿主机端口，在全新数据卷上连续执行两次 `make up` / `make verify`，校验管理员密码只在首次输出、短密码更新返回 400、10 个迁移、8 张业务表、2 个用户，并验证缺失 MySQL 或 Redis 时快速失败和 `make down`。
+- `TestRepresentativeCompositionMatrix` / `TestCompositionMatrixBudget` / `TestCompositionNegativeMatrix` 运行固定、代表性的 pairwise 清单与冲突负例；组合项目只做 build/vet，不遍历全幂集，也不承诺组合级 E2E。
+- `TestUpgradeFixtures` 复制 v0.5.0 `basic-api` / `auth-api` 快照，覆盖 untouched、用户修改生成文件冲突、用户自有文件保留、用户删除、模板删除、重复升级和验证失败回滚；失败日志带 project/scenario。
+- CI 的每个 full shard 把耗时写入 step summary；显式运行时测试必须报告 `PASS`，`SKIP` 视为门禁失败，避免 full 静默跳过。
 
 `basic-api` 验收：
 
@@ -331,4 +342,4 @@ make down
 6. 建立预算、basic smoke 和 auth 空库端到端门禁。
 7. 修复 provenance，扩展 manifest。
 8. 完成 v0.5.0 发布说明与破坏性变更说明。
-9. 在 v0.6.0 启动 opt-in `jimu upgrade`。
+9. 在 v0.6.0 交付 opt-in `jimu upgrade`（已完成）。

@@ -74,7 +74,7 @@ fix(auth): reject expired refresh token
 
 1. 至少 1 人 review 通过
 2. feature/fix/hotfix → release PR 必须通过 `PR Gate`（代码质量、门禁、分片、覆盖率、DB 集成、提交消息、版本日志）与 `Image Gate`（镜像构建、漏洞扫描、容器冒烟）；这些 workflow 只响应 PR，不在合并后的 branch push 上重复运行
-3. release/* → master 发布候选 PR 还必须通过一次 `Scaffold Gate`（official 档：两个官方模板的预算、`basic-api` smoke 与 `auth-api` 空库 Compose E2E）；向 master 直接提交的其它来源分支会在该 check 中失败。full 生成器矩阵在 `workflow_dispatch` 或夜间定时运行，生成器/能力大改或发布前需要时手动触发。master 有 required checks（`PR Gate`/`Image Gate`/`Scaffold Gate`，`strict` 策略要求分支与 master 同步）；release/* 只有 `non_fast_forward` 规则、无 required checks
+3. release/* → master 发布候选 PR 还必须通过一次 `Scaffold Gate`（official 档：两个官方模板的预算、`basic-api` smoke 与 `auth-api` 空库 Compose E2E）；向 master 直接提交的其它来源分支会在该 check 中失败。full 生成器矩阵在 `workflow_dispatch` 或夜间定时运行，覆盖固定 pairwise 组合矩阵与 upgrade fixtures；生成器/能力大改或发布前需要时手动触发。master 有 required checks（`PR Gate`/`Image Gate`/`Scaffold Gate`，`strict` 策略要求分支与 master 同步）；release/* 只有 `non_fast_forward` 规则、无 required checks
 4. 合并策略：feature/fix/hotfix → release 用 squash merge；release → master 用 merge commit
 5. 合并后删除源分支
 
@@ -133,6 +133,7 @@ fix(auth): reject expired refresh token
 - 条目使用中文，面向使用者说明结果，不写内部流水账
 - 没有内容的分类可以省略，但 `亮点`、`验证`、`说明` 必须保留
 - `验证` 必须包含 `make release-check` 的结果，除非明确说明无法运行
+- 组合或升级相关版本必须在 `说明` 中区分 `certified`、`validated`、`experimental` 的适用范围，并列出未覆盖项
 
 ## 代码规范
 
@@ -140,6 +141,7 @@ fix(auth): reject expired refresh token
 
 - 所有改动必须通过 `make fmt`、`make vet`、`make lint`、`make test`
 - 修改代码后，必须同步更新 README.md 相关章节
+- 能力组合契约、`support` 级别或 upgrade 语义变化时，同步更新 `docs/design/capability-composition.md`；模板集合、预算或兼容窗口变化时同步更新 `docs/templates/v1/`
 
 ## 测试
 
@@ -185,7 +187,7 @@ docker rm -f jimu-test-mysql
 ## 模块开发 / 新增能力
 
 ```bash
-./bin/jimu capability create product # 本仓内生成能力骨架：internal/capabilities/product/
+./bin/jimu-cli capability create product # 本仓内生成能力骨架：internal/capabilities/product/
 ```
 
 `jimu capability create` 只往 `internal/capabilities/<name>/` 落典型 CRUD 骨架（含 `Descriptor` 和 `Wire`），**不改动任何注册点**；旧 `module create` 不再可用。注册分两处：能力清单 `internal/capabilities/catalog`，以及需要该能力的形态清单 `internal/profiles/<name>/assembly.go`（非 catalog 条目按 `Ungated` 声明）。唯一入口 `cmd/server` 只调 `assembly.Run(active.Assembly())`，当前形态由选点包 `internal/profiles/active` 决定，不在这里逐个装配能力。

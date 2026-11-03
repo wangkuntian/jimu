@@ -24,11 +24,11 @@ func TestCLIVersionIsSharedWithGenerator(t *testing.T) {
 	assert.Equal(t, version, profiles.Version)
 }
 
-// TestNewCmdRejectsBothProfileAndWith 参数互斥校验只在 ParseCapabilitySet 一处：
-// 命令层不重复实现，但必须把同一错误透出来（--dry-run 也走同一校验）。
+// TestNewCmdRejectsBothProfileAndWith 钉住 --profile 与 --with 的互斥优先于 profile 拒绝：
+// 用户同时给了两个选择器时应先看到互斥错误。
 func TestNewCmdRejectsBothProfileAndWith(t *testing.T) {
 	c := newCommandForTest(&bytes.Buffer{})
-	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=minimal", "--with=user", "--dry-run"})
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=full", "--with=user", "--dry-run"})
 	err := c.Execute()
 	require.ErrorContains(t, err, "mutually exclusive")
 }
@@ -51,11 +51,11 @@ func TestNewCmdWiresEveryFlag(t *testing.T) {
 // TestNewCmdDryRunDistinguishesAssemblyFromCopySet ④：`--dry-run` 的两个能力集口径不同且必须各自
 // 标注 —— 装配集（写进 marker/assembly 的声明集）与复制集（额外含编译闭包/迁移携带/内核编译期
 // domain 依赖的目录）。曾经只打一行 `capabilities` 且打的是复制集，读者会把它当装配集。
-// `minimal` 装配集不含 schema 依赖 tenant，复制集会额外携带它。
+// `--with=user,access,auth` 的装配集不含 schema 依赖 tenant，复制集会额外携带它。
 func TestNewCmdDryRunDistinguishesAssemblyFromCopySet(t *testing.T) {
 	var out bytes.Buffer
 	c := newCommandForTest(&out)
-	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=minimal", "--module=example.com/proj", "--dry-run"})
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--with=user,access,auth", "--module=example.com/proj", "--dry-run"})
 	require.NoError(t, c.Execute())
 
 	plan := out.String()
@@ -94,14 +94,15 @@ func TestNewCmdDefaultsToBasicAPI(t *testing.T) {
 	assert.Contains(t, out.String(), "support      certified")
 }
 
-func TestNewCmdMapsLegacyMinimalToAuthAPI(t *testing.T) {
+func TestNewCmdRejectsRemovedMinimalProfile(t *testing.T) {
 	var out bytes.Buffer
 	c := newCommandForTest(&out)
 	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=minimal", "--dry-run"})
-	require.NoError(t, c.Execute())
-	assert.Contains(t, out.String(), "warning: --profile=minimal")
-	assert.Contains(t, out.String(), "template     auth-api")
-	assert.Contains(t, out.String(), "support      certified")
+	err := c.Execute()
+	require.ErrorContains(t, err, `profile "minimal"`)
+	require.ErrorContains(t, err, "--template=auth-api")
+	assert.NotContains(t, out.String(), "warning:")
+	assert.NotContains(t, out.String(), "template     auth-api", "不得再静默映射为 auth-api")
 }
 
 func TestNewCmdAcceptsAuthAPITemplate(t *testing.T) {
@@ -120,11 +121,15 @@ func TestNewCmdRejectsUnknownTemplate(t *testing.T) {
 }
 
 func TestNewCmdRejectsInternalProfile(t *testing.T) {
-	c := newCommandForTest(&bytes.Buffer{})
-	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=full", "--dry-run"})
-	err := c.Execute()
-	require.ErrorContains(t, err, "framework-internal")
-	require.ErrorContains(t, err, "--template")
+	for _, profile := range []string{"full", "saas", "enterprise", "machine"} {
+		t.Run(profile, func(t *testing.T) {
+			c := newCommandForTest(&bytes.Buffer{})
+			c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=" + profile, "--dry-run"})
+			err := c.Execute()
+			require.ErrorContains(t, err, "framework-internal")
+			require.ErrorContains(t, err, "--template")
+		})
+	}
 }
 
 func TestNewCmdMarksWithAsExperimental(t *testing.T) {
@@ -168,7 +173,7 @@ func TestNewCmdInvalidCompositionDoesNotWriteTarget(t *testing.T) {
 
 func TestNewCmdRejectsTemplateSelectorsTogether(t *testing.T) {
 	for _, args := range [][]string{
-		{"--template=basic-api", "--profile=minimal"},
+		{"--template=basic-api", "--profile=full"},
 		{"--template=basic-api", "--with=apidocs"},
 	} {
 		c := newCommandForTest(&bytes.Buffer{})
