@@ -21,12 +21,13 @@ import (
 )
 
 type Request struct {
-	Root     string
-	Template string
-	Profile  string
-	With     string
-	Shape    string
-	Module   string
+	Root      string
+	Template  string
+	Profile   string
+	With      string
+	Shape     string
+	Module    string
+	Framework *manifest.Framework
 	// Drivers 保留既有项目的驱动选择；未列出的能力由默认驱动规则补齐。
 	Drivers map[string][]string
 }
@@ -88,13 +89,13 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 	var doc manifest.Document
 	var selected selection
 	if req.Template == "auth-api" {
-		doc, err = authAPIDocument(root, req.Module)
+		doc, err = authAPIDocument(root, req.Module, req.Framework)
 	} else if req.Template != "" {
-		doc, err = basicAPIDocument(root, req.Module, req.Template)
+		doc, err = basicAPIDocument(root, req.Module, req.Template, req.Framework)
 	} else {
 		selected, err = resolveSelection(root, req)
 		if err == nil {
-			doc, err = buildDocument(root, req.Module, selected)
+			doc, err = buildDocument(root, req.Module, selected, req.Framework)
 		}
 	}
 	if err != nil {
@@ -141,7 +142,7 @@ func resolutionFor(doc manifest.Document, selected selection) Resolution {
 }
 
 // ExportForAdd 在原有声明集上增加一个能力。硬依赖必须已经存在，避免 add 静默改变用户选择。
-func ExportForAdd(root string, previous manifest.Document, name string, force bool) (manifest.Document, error) {
+func ExportForAdd(root string, previous manifest.Document, name string, force bool, framework *manifest.Framework) (manifest.Document, error) {
 	if err := manifest.Validate(previous); err != nil {
 		return manifest.Document{}, fmt.Errorf("validate previous manifest: %w", err)
 	}
@@ -208,19 +209,20 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 		profile = previous.Selection.Profile
 	}
 	if profile != "" {
-		return Export(Request{Root: root, Profile: profile, Module: module})
+		return Export(Request{Root: root, Profile: profile, Module: module, Framework: framework})
 	}
 	return Export(Request{
 		Root: root, Profile: profile, With: with, Shape: previous.Selection.Shape, Module: module, Drivers: composed.Drivers,
+		Framework: framework,
 	})
 }
 
-func buildDocument(root, module string, selected selection) (manifest.Document, error) {
+func buildDocument(root, module string, selected selection, frameworkOverride *manifest.Framework) (manifest.Document, error) {
 	pruneReason := "test-import"
 	if catalogCoversAll(selected) {
 		pruneReason = "catalog-complete"
 	}
-	framework, err := frameworkProvenance(root)
+	framework, err := frameworkProvenance(root, frameworkOverride)
 	if err != nil {
 		return manifest.Document{}, err
 	}
@@ -297,7 +299,10 @@ func catalogCoversAll(selected selection) bool {
 }
 
 // frameworkProvenance resolves Git metadata through the CLI so normal clones and linked worktrees behave identically.
-func frameworkProvenance(root string) (manifest.Framework, error) {
+func frameworkProvenance(root string, override *manifest.Framework) (manifest.Framework, error) {
+	if override != nil {
+		return *override, nil
+	}
 	commit, err := gitOutput(root, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
 		return manifest.Framework{}, fmt.Errorf("resolve framework commit: %w", err)

@@ -224,7 +224,7 @@ func TestExportForAddPreservesRequestedAndAutoAdded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	next, err := ExportForAdd(root, previous, "notification", false)
+	next, err := ExportForAdd(root, previous, "notification", false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

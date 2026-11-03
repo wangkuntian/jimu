@@ -26,8 +26,8 @@ type authAPITemplateData struct {
 	CryptoVersion     string
 }
 
-func authAPIDocument(root, module string) (manifest.Document, error) {
-	framework, err := frameworkProvenance(root)
+func authAPIDocument(root, module string, frameworkOverride *manifest.Framework) (manifest.Document, error) {
+	framework, err := frameworkProvenance(root, frameworkOverride)
 	if err != nil {
 		return manifest.Document{}, err
 	}

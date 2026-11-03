@@ -21,9 +21,10 @@ import (
 // UpgradeOptions controls an explicit upgrade. Dir is the generated project;
 // From optionally overrides framework source discovery.
 type UpgradeOptions struct {
-	Dir    string
-	From   string
-	NoTidy bool
+	Dir       string
+	From      string
+	NoTidy    bool
+	Framework *manifest.Framework
 }
 
 // UpgradeResult is the planner output. Applying it is the responsibility of
@@ -109,18 +110,11 @@ func planUpgrade(opts UpgradeOptions) (*plannedUpgrade, error) {
 	if err != nil {
 		return nil, err
 	}
-	root := opts.From
-	if root == "" {
-		root, err = frameworkRoot()
-		if err != nil {
-			return nil, err
-		}
-	}
-	root, err = filepath.Abs(root)
+	root, err := resolveSourceRoot(opts.From)
 	if err != nil {
-		return nil, fmt.Errorf("resolve framework source root: %w", err)
+		return nil, err
 	}
-	request, err := upgradeRequest(previous, root, dir)
+	request, err := upgradeRequest(previous, root, dir, opts.Framework)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +239,7 @@ func upgradeInstallPaths(report upgradeplan.Report) []string {
 	return out
 }
 
-func upgradeRequest(previous manifest.Document, root, projectDir string) (frameworkmanifest.Request, error) {
+func upgradeRequest(previous manifest.Document, root, projectDir string, framework *manifest.Framework) (frameworkmanifest.Request, error) {
 	module := moduleFromManifest(previous)
 	if module == "" {
 		module, _ = moduleOf(filepath.Join(projectDir, "go.mod"))
@@ -253,7 +247,7 @@ func upgradeRequest(previous manifest.Document, root, projectDir string) (framew
 	if module == "" {
 		return frameworkmanifest.Request{}, fmt.Errorf("cannot determine project module: manifest has no module rewrite and go.mod is unreadable")
 	}
-	request := frameworkmanifest.Request{Root: root, Module: module}
+	request := frameworkmanifest.Request{Root: root, Module: module, Framework: framework}
 	switch {
 	case previous.Selection.Template != "":
 		request.Template = previous.Selection.Template
