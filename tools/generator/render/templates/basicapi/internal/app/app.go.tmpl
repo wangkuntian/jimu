@@ -25,7 +25,11 @@ func Run(version string) error {
 	}
 	defer func() { _ = log.Sync() }()
 
-	public, err := platformhttp.NewPublic(cfg.HTTP, NewRouter(log, cfg.HTTP.Mode, cfg.HTTP.MaxBodyBytes))
+	router, err := NewRouter(log, cfg)
+	if err != nil {
+		return fmt.Errorf("create router: %w", err)
+	}
+	public, err := platformhttp.NewPublic(cfg.HTTP, router)
 	if err != nil {
 		return fmt.Errorf("create public server: %w", err)
 	}

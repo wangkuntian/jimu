@@ -105,6 +105,15 @@ jimu upgrade <dir>                     # 显式升级事务
 
 `matrix.yaml` 的 `official` 模板档对应 `certified`，`experimental` 专家档对应 `experimental`。本版本不新增“已认证专家组合”：只有写入 `matrix.yaml` 的选择才获得正式兼容承诺，`--with` 不能绕过支持边界。`validity: valid|invalid` 与 `support` 正交；合法组合不自动获得 `validated` 或 `certified`。
 
+## 升级支持窗口
+
+- 支持从 `v0.5.0` 及之后生成、manifest schema v2/v3 的 `basic-api` / `auth-api` 项目升级到当前 certified 模板。
+- `v0.4.x` 和 schema v1 项目不支持直接升级，使用目标版本重新生成并人工迁移。
+- `--with` 与 `capability add` 保持 experimental；可以使用 `jimu check` / `upgrade --check` 诊断，但不承诺组合升级兼容。
+- 安全修复只保证当前 0.7.x 的最新 patch，旧 patch 不 backport。
+
+完整命令、冲突处理和 CI 配方见[升级](../../UPGRADING.md)；决策记录见 [ADR 0003](../../adr/0003-upgrade-support-window.md)。
+
 ## 生成前预检
 
 预检发生在写目标目录之前，并在生成项目启动自检中复核关键运行时不变量。

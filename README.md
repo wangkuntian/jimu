@@ -35,7 +35,7 @@ Jimu 不是运行时框架，也不要求业务代码依赖 Jimu SDK。`jimu new
 
 ```bash
 # 以 Linux amd64 为例；macOS 将 OS/ARCH 改为 darwin/arm64
-OS=linux ARCH=amd64; curl -fL "https://github.com/wangkuntian/jimu/releases/download/v0.7.0/jimu-${OS}-${ARCH}" -o jimu
+OS=linux ARCH=amd64; curl -fL "https://github.com/wangkuntian/jimu/releases/download/v0.7.1/jimu-${OS}-${ARCH}" -o jimu
 chmod +x jimu
 ```
 
@@ -51,7 +51,7 @@ Release 同时提供 `template-bundle.json` 和 SHA-256 checksum 文件。需要
 ## 快速开始：basic-api
 
 ```bash
-OS=linux ARCH=amd64; curl -fL "https://github.com/wangkuntian/jimu/releases/download/v0.7.0/jimu-${OS}-${ARCH}" -o jimu && chmod +x jimu
+OS=linux ARCH=amd64; curl -fL "https://github.com/wangkuntian/jimu/releases/download/v0.7.1/jimu-${OS}-${ARCH}" -o jimu && chmod +x jimu
 ./jimu new demo --template=basic-api
 cd demo && make run
 ```
@@ -67,7 +67,7 @@ cd demo && make run
 ## 快速开始：auth-api
 
 ```bash
-OS=linux ARCH=amd64; curl -fL "https://github.com/wangkuntian/jimu/releases/download/v0.7.0/jimu-${OS}-${ARCH}" -o jimu && chmod +x jimu
+OS=linux ARCH=amd64; curl -fL "https://github.com/wangkuntian/jimu/releases/download/v0.7.1/jimu-${OS}-${ARCH}" -o jimu && chmod +x jimu
 ./jimu new demo --template=auth-api
 cd demo
 make up
@@ -95,7 +95,7 @@ make verify
 - [运维](docs/OPERATIONS.md)
 - [升级](docs/UPGRADING.md)
 - [与常见方案的区别](docs/COMPARISON.md)
-- [生产检查](docs/PRODUCTION.md)
+- [生产上线与模板检查清单](docs/PRODUCTION.md)
 
 模板预算、兼容窗口和发布阻断规则见[模板契约 v0.1](docs/templates/v1/README.md)。生成器、manifest 和能力组合的稳定设计见[设计文档索引](docs/design/README.md)。
 

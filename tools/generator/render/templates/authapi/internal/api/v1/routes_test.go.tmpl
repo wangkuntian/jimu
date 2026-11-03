@@ -18,18 +18,33 @@ func TestAuthAPIRouteCountAndUnauthorizedAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := &config.Config{HTTP: config.HTTPConfig{Mode: "test", MaxBodyBytes: 1 << 20}}
+	cfg := &config.Config{HTTP: config.HTTPConfig{
+		Mode:           "test",
+		MaxBodyBytes:   1 << 20,
+		AllowedOrigins: []string{"https://app.example"},
+	}}
 	tokens := auth.NewTokenManager(config.AuthConfig{
 		JWTSecret: "test-secret-for-jwt-signing-123", Issuer: "jimu", AccessExpireMin: 5, RefreshExpireDay: 1,
 	})
-	router := NewRouter(log, cfg, nil, nil, tokens)
+	router, err := NewRouter(log, cfg, nil, nil, tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got := len(router.Routes()); got != 24 {
 		t.Fatalf("route count = %d, want 24", got)
 	}
 	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/users", nil))
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
+	request.Header.Set("Origin", "https://app.example")
+	router.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+	}
+	if got := recorder.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q", got)
+	}
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "https://app.example" {
+		t.Fatalf("Access-Control-Allow-Origin = %q", got)
 	}
 }
 

@@ -59,3 +59,15 @@ _Avoid_：模板载荷版本、模板版本、模板源版本
 **Template contract version**：
 官方模板的兼容契约版本，当前为 `v0.1`；它不是 CLI 或 template bundle 的发布版本。
 _Avoid_：接口版本、模板版本
+
+**Upgrade support window**：
+Jimu 承诺可以显式升级到当前 certified 模板的版本范围；当前从 `v0.5.0` 起的 manifest schema v2/v3 项目，不包含 `v0.4.x`、schema v1 或 experimental 组合。
+_Avoid_：永久兼容、任意旧版本升级
+
+**Production readiness checklist**：
+针对某个 official template 的上线前检查集合，分为必须配置、可选配置和上线前验证，并映射到生成项目的配置键、命令或文档。
+_Avoid_：通用安全清单、部署教程
+
+**Security remediation drill**：
+在受控旧项目上验证“安全修复进入模板 → 发布候选 CLI → 执行升级 → 验证修复生效”的可重复演练；它不等于真实漏洞公告。
+_Avoid_：CVE 公告、渗透测试

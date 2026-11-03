@@ -41,20 +41,22 @@ ENCRYPTION_KEY_FILE=/run/secrets/encryption_key
 
 ## 模板差异
 
-- `basic-api`：只需要 HTTP、Management、Log；不读取数据库或 Redis 配置，启动不依赖外部服务。
-- `auth-api`：额外需要 `db`、`redis`、`auth`；`make up` 会生成本地 `secrets/admin_password.txt` 和 `secrets/jwt_secret.txt`，并完成迁移与 seed。
+- `basic-api`：只需要 HTTP、Management、Log；不读取数据库或 Redis 配置，启动不依赖外部服务。模板执行 `http.allowed_origins`、`http.trusted_proxies` 并写入基线安全 Header；不内置 TLS 和限流。
+- `auth-api`：额外需要 `db`、`redis`、`auth`；`make up` 会生成本地 `secrets/admin_password.txt` 和 `secrets/jwt_secret.txt`，并完成迁移与 seed。模板执行 CORS、可信代理和安全 Header；不内置登录锁定、全局限流或指标端点。
 
 生成项目的配置键和默认值以其仓库内 `configs/app.yaml` 为准；不要从框架全量配置复制未选择的段。
 
+`APP_ENV` 会优先选择 `configs/app.<env>.yaml`；生成项目默认只有 `configs/app.yaml`，因此生产覆盖应通过环境变量或自行新增 `configs/app.prod.yaml`。`http.allowed_origins` 出现 `*` 时生成项目启动失败。
+
 ## 安全配置
 
-生产上线前至少检查：
+生成项目生产上线前至少检查：
 
 - `auth.jwt_secret` 通过 `JWT_SECRET` 或 Secret 文件注入，不使用默认值。
 - 设置明确的 `http.allowed_origins`，不要保留 wildcard。
-- 启用 `http.tls` 或由反向代理终止 TLS，并配置 `http.trusted_proxies`。
-- 根据流量设置 `server.rate_limit_rate`、`server.rate_limit_burst` 和 `server.max_concurrency`。
-- 配置 `security.ip_allowlist` / `security.admin_ip_allowlist`（如适用）。
-- 可选字段加密必须使用恰好 32 字节的 `security.encryption_key`。
+- 由反向代理终止 TLS，并把 `http.trusted_proxies` 设为实际代理 IP/CIDR。
+- 在反向代理或网关设置限流；生成模板不读取 `server.rate_limit_*`。
+- 管理端口只对内网/探针开放；`management.enable_pprof` 保持关闭。
+- 使用 `configs/app.yaml` 中存在的键；`security.ip_allowlist`、字段加密等是框架完整服务的配置，不在 `basic-api` / `auth-api` 生成模板中。
 
-更完整的生产入口见[生产检查](PRODUCTION.md)和[安全策略](SECURITY.md)。
+更完整的生产入口见[生产上线](PRODUCTION.md)、两个模板的检查清单和[安全策略](SECURITY.md)。

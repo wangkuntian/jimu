@@ -23,14 +23,40 @@ const (
 )
 
 type upgradeFixtureCase struct {
-	template       string
-	module         string
-	generatedFiles int
+	template           string
+	module             string
+	generatedFiles     int
+	securityChanges    []string
+	securityRouterPath string
 }
 
 var upgradeFixtureCases = []upgradeFixtureCase{
-	{template: "basic-api", module: "example.com/upgrade-basic-api", generatedFiles: 22},
-	{template: "auth-api", module: "example.com/upgrade-auth-api", generatedFiles: 49},
+	{
+		template:       "basic-api",
+		module:         "example.com/upgrade-basic-api",
+		generatedFiles: 22,
+		securityChanges: []string{
+			"internal/app/app.go",
+			"internal/app/router.go",
+			"internal/app/router_test.go",
+			"internal/config/config.go",
+			"internal/platform/http/middleware.go",
+		},
+		securityRouterPath: "internal/app/router.go",
+	},
+	{
+		template:       "auth-api",
+		module:         "example.com/upgrade-auth-api",
+		generatedFiles: 49,
+		securityChanges: []string{
+			"internal/api/v1/routes.go",
+			"internal/api/v1/routes_test.go",
+			"internal/app/app.go",
+			"internal/config/config.go",
+			"internal/platform/http/middleware.go",
+		},
+		securityRouterPath: "internal/api/v1/routes.go",
+	},
 }
 
 // TestUpgradeFixturesMatchV050 钉住 fixture 的固定来源和内容完整性。这是轻量测试，
@@ -135,18 +161,24 @@ func testUpgradeFixtureUntouched(t *testing.T, fixture upgradeFixtureCase) {
 	require.NoError(t, err, "project=%s scenario=untouched plan", fixture.template)
 	assert.Equal(t, before, hashTree(t, dir), "project=%s scenario=untouched planning must be read-only", fixture.template)
 	assert.False(t, plan.Report.HasConflicts())
-	assert.Equal(t, upgradeplan.StatusUpToDate, plan.Report.Status())
-	assert.Positive(t, plan.Report.Count(upgradeplan.Untouched))
-	assert.Zero(t, plan.Report.Count(upgradeplan.Modified))
+	assert.Equal(t, upgradeplan.StatusUpgradeAvailable, plan.Report.Status())
+	assert.Equal(t, fixture.generatedFiles-len(fixture.securityChanges), plan.Report.Count(upgradeplan.Untouched))
+	assert.Equal(t, len(fixture.securityChanges), plan.Report.Count(upgradeplan.Modified))
 	assert.Zero(t, plan.Report.Count(upgradeplan.New))
 	assert.Zero(t, plan.Report.Count(upgradeplan.Deleted))
-	assert.Equal(t, fixture.generatedFiles, plan.Report.Count(upgradeplan.Untouched))
+	for _, rel := range fixture.securityChanges {
+		entry := upgradeEntry(t, plan.Report, rel)
+		assert.Equal(t, upgradeplan.Modified, entry.Category, "project=%s path=%s", fixture.template, rel)
+		assert.Equal(t, upgradeplan.ActionInstall, entry.Action, "project=%s path=%s", fixture.template, rel)
+	}
 
 	applied, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot()})
 	require.NoError(t, err, "project=%s scenario=untouched apply", fixture.template)
 	assert.True(t, applied.Verified)
 	assert.True(t, applied.ManifestUpdated)
-	assert.Empty(t, applied.Changed, "v0.5 official templates must upgrade without file changes")
+	assert.ElementsMatch(t, fixture.securityChanges, applied.Changed)
+	assert.Contains(t, string(readFileForTest(t, filepath.Join(dir, "internal/platform/http/middleware.go"))), "func SecurityHeaders()")
+	assert.Contains(t, string(readFileForTest(t, filepath.Join(dir, fixture.securityRouterPath))), "platformhttp.SecurityHeaders()")
 
 	loaded, err := workspace.LoadProjectManifest(dir)
 	require.NoError(t, err)
@@ -183,7 +215,7 @@ func testUpgradeFixtureUserOwnedPreserved(t *testing.T, fixture upgradeFixtureCa
 	applied, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot()})
 	require.NoError(t, err, "project=%s scenario=user-owned-preserved", fixture.template)
 	assert.True(t, applied.ManifestUpdated)
-	assert.Empty(t, applied.Changed)
+	assert.ElementsMatch(t, fixture.securityChanges, applied.Changed)
 	assert.Equal(t, []byte("# user-owned file\n"), readFileForTest(t, owned))
 	loaded, err := workspace.LoadProjectManifest(dir)
 	require.NoError(t, err)
@@ -245,7 +277,7 @@ func testUpgradeFixtureRepeated(t *testing.T, fixture upgradeFixtureCase) {
 
 	first, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot()})
 	require.NoError(t, err, "project=%s scenario=repeated-upgrade first apply", fixture.template)
-	assert.Empty(t, first.Changed)
+	assert.ElementsMatch(t, fixture.securityChanges, first.Changed)
 	assert.True(t, first.ManifestUpdated)
 	assert.True(t, first.Verified)
 	afterFirst := hashTree(t, dir)

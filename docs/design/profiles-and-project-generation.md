@@ -43,7 +43,7 @@ flowchart LR
 
 对外产品入口只保留模板：`--template=basic-api|auth-api` 是正式选择器，不传选择器时默认 `basic-api`；`--with` 只提供 experimental 专家组合，manifest 记录 `support: experimental`；`--profile=minimal` 已移除，传入会报错并提示改用 `--template=auth-api`。其他内部 profile（`full`/`minimal`/`saas`/`enterprise`/`machine`）继续服务 Jimu 自身构建，但不等于官方模板矩阵。模板、预算、支持级别和兼容窗口的机器可读事实源是 [`docs/templates/v1`](../templates/v1/README.md)，实现门禁和生成器不得另建第二份选择集定义。
 
-官方模板是可再生成一次的起始基线，不是持续管理的投影。生成后的工程归用户所有；`.jimu/manifest.json` 只记录来源、选择集和摘要，不授予 Jimu 覆盖用户文件的权利。v0.5.0 不提供隐式升级；v0.6.0 起提供显式 `jimu upgrade`，只在无冲突时修改生成器管理文件，并在备份后执行 tidy/build/test，失败按原字节回滚。schema v1 仍 fail-closed，也不提供自动项目/存量数据库迁移；v0.4.x 生成项目仍只支持“重新生成 + 人工迁移”，v0.5 的 schema v2 项目可通过显式 `jimu upgrade` 升级。
+官方模板是可再生成一次的起始基线，不是持续管理的投影。生成后的工程归用户所有；`.jimu/manifest.json` 只记录来源、选择集和摘要，不授予 Jimu 覆盖用户文件的权利。v0.5.0 不提供隐式升级；v0.6.0 起提供显式 `jimu upgrade`，只在无冲突时修改生成器管理文件，并在备份后执行 tidy/build/test，失败按原字节回滚。schema v1 仍 fail-closed，也不提供自动项目/存量数据库迁移；v0.4.x 生成项目仍只支持“重新生成 + 人工迁移”，v0.5 的 schema v2 项目可通过显式 `jimu upgrade` 升级。升级支持窗口固定为 `v0.5.0` 起的 certified 模板，安全修复只保证当前 0.7.x 的最新 patch；决策见 [ADR 0003](../adr/0003-upgrade-support-window.md)。
 
 `basic-api` 使用独立的零外部服务生成路径：只渲染 HTTP、配置、日志、统一错误、健康检查和示例路由所需文件，不复制能力目录或完整框架内核。生成项目没有数据库/Redis 客户端、Compose、Kubernetes/Helm 与 OpenAPI 资产，`go build`、`go test`、`go run` 均不需要外部服务。框架运行时的容器构造也已按 `Descriptor.RuntimeServices` 决定是否连接 MySQL/Redis，未声明服务的装配不会创建对应客户端。
 
@@ -114,7 +114,7 @@ flowchart TD
 
 验证通过后才写入新 manifest：重新计算 `generated_files` 的最终哈希（覆盖 tidy 产生的变化），记录当前框架 provenance 与组合块，并重新计算 digest。文件与 manifest 都没变化时事务不做任何写入，也不重复跑验证。`conflict` 绝不静默覆盖；`deleted` 不自动删除用户目录中的文件，只从后续 manifest 基线中移除。
 
-升级发布门禁使用 `tools/generator/testdata/upgrade/v0.5` 下两个固定项目快照：`basic-api` 与 `auth-api` 均由 v0.5.0 tag 按默认 `jimu new`（含 tidy）生成，manifest 保持 schema v2、`framework.version=v0.5.0` 与真实 tag commit。测试先校验 snapshot 的 digest、文件哈希和 provenance，再逐场景复制到临时目录，覆盖 untouched（官方模板无文件差异，仅迁移 manifest）、用户修改生成文件判冲突、用户自有文件保留、用户删除、模板删除、重复升级和验证失败回滚；场景在 `go test` 中按模板与场景命名，失败日志同时带 project/scenario。`make test-scaffold-upgrade` 单独运行该门禁，完整 `make test-scaffold-matrix` 也包含它；`make test-scaffold-official` 的选择集不变。
+升级发布门禁使用 `tools/generator/testdata/upgrade/v0.5` 下两个固定项目快照：`basic-api` 与 `auth-api` 均由 v0.5.0 tag 按默认 `jimu new`（含 tidy）生成，manifest 保持 schema v2、`framework.version=v0.5.0` 与真实 tag commit。测试先校验 snapshot 的 digest、文件哈希和 provenance，再逐场景复制到临时目录，覆盖 untouched（无用户修改，但会安装模板安全修复并迁移 manifest）、用户修改生成文件判冲突、用户自有文件保留、用户删除、模板删除、重复升级和验证失败回滚；场景在 `go test` 中按模板与场景命名，失败日志同时带 project/scenario。`make test-scaffold-upgrade` 单独运行该门禁，完整 `make test-scaffold-matrix` 也包含它；`make test-scaffold-official` 的选择集不变。
 
 ## 关键决策
 

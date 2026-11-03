@@ -58,6 +58,11 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("decode config: %w", err)
 	}
 	applyEnvironment(&cfg)
+	for _, origin := range cfg.HTTP.AllowedOrigins {
+		if origin == "*" {
+			return nil, fmt.Errorf("http.allowed_origins must not contain wildcard")
+		}
+	}
 	if err := validator.New().Struct(&cfg); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
