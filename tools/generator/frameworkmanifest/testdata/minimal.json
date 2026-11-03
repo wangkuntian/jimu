@@ -439,6 +439,7 @@
         "main.go",
         "new.go",
         "new_test.go",
+        "source.go",
         "upgrade.go",
         "upgrade_test.go"
       ]
@@ -1703,5 +1704,5 @@
     "tools/profileoverlay/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:b8f0b7125b71e0f4069576d5d9b112773bb96a90b82cc896dd2059a6f375ae43"
+  "digest": "sha256:cd308a41a0418f153e21ca5bea0731a120ecf5f465889ffbe9724d11eedee0b0"
 }
