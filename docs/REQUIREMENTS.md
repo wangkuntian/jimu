@@ -14,7 +14,7 @@
 | 未完成 | 尚未开始，或没有可验收结果 |
 | 未启动 | 面向未来的决策项，当前不排期 |
 
-截至 2026-11-03，按当前仓库事实统计：**已完成 5 项，部分完成 3 项，未完成 2 项，未启动 4 项**。
+截至 2026-11-03，按当前仓库事实统计：**已完成 6 项，部分完成 2 项，未完成 2 项，未启动 4 项**。
 
 ## 1. 背景与定位
 
@@ -68,9 +68,9 @@ Jimu 是面向生产团队的、可组合且可升级的 Go 后端项目脚手�
 | 编号 | 优先级 | 需求 | 完成状态 | 当前依据 / 缺口 |
 |---|---|---|---|---|
 | P0-01 | P0 | CLI 独立定位模板源 | 已完成 | Release CLI 内嵌 template bundle；仓库外 `new --dry-run` 和 clean-room 生成通过；external bundle 版本/摘要校验有测试 |
-| P0-02 | P0 | 发布 CLI 二进制 | 部分完成（实现完成，待 tag 发布验证） | Release workflow 已配置 4 个 CLI target、`template-bundle.json` 和 checksums；尚未在真实 tag 上发布并下载验证 |
+| P0-02 | P0 | 发布 CLI 二进制 | 已完成 | v0.7.0 Release 已发布 4 个 CLI target、`template-bundle.json` 和 checksums；实际资产下载、SHA-256 校验和 clean-room 已验证 |
 | P0-03 | P0 | 重写 README 首屏与快速开始 | 已完成 | README 首屏、3/5 条快速开始、六个文档入口和比较文档均落地 |
-| P0-04 | P0 | 干净机器端到端门禁 | 已完成（本地 clean-room；CI 待首跑） | 新增无 checkout 的 GitHub Actions clean-room job；本地 fresh volumes 的 basic/auth 冒烟通过 |
+| P0-04 | P0 | 干净机器端到端门禁 | 已完成 | GitHub Actions 无 checkout clean-room job 在 PR #189 通过；v0.7.0 实际资产在 fresh volumes 上的 basic/auth 冒烟通过 |
 | P1-01 | P1 | 两个 certified 模板生产级质量 | 已完成（认证口径） | 两个模板有预算、E2E 和发布阻断门禁；真实项目验证见 P1-04 |
 | P1-02 | P1 | 生产上线检查清单 | 未完成 | 尚无按模板组织的生产检查表 |
 | P1-03 | P1 | 安全修复进入生成项目的策略 | 部分完成 | 已有安全报告政策和版本支持说明；缺少生成项目修复/升级演练 |
@@ -107,7 +107,7 @@ Jimu 是面向生产团队的、可组合且可升级的 Go 后端项目脚手�
 
 #### P0-02 发布 CLI 二进制
 
-**当前状态：部分完成（实现完成，待 tag 发布验证）。** Release workflow 已增加 `cmd/jimu` 的四平台构建、`template-bundle.json` 和 checksums；真实 tag 尚未创建，因此“从 Release 下载”链路未在 GitHub 上验证。
+**当前状态：已完成。** `v0.7.0` Release 已发布四平台 CLI、`template-bundle.json` 和 checksums；实际下载 macOS arm64 CLI 后完成 SHA-256 校验和 clean-room 验证。
 
 **问题**
 
@@ -121,8 +121,8 @@ Jimu 是面向生产团队的、可组合且可升级的 Go 后端项目脚手�
 
 **验收标准**
 
-- [ ] 从 Release 下载 CLI 后可执行 `jimu version`。
-- [ ] 使用下载的 CLI 可完成 `jimu new`。
+- [x] 从 Release 下载 CLI 后可执行 `jimu version`。
+- [x] 使用下载的 CLI 可完成 `jimu new`。
 - [x] Release 资产包含校验和，下载损坏时可检测。
 - [x] 支持平台列表写入用户文档。
 
@@ -150,7 +150,7 @@ README 目前是完整手册，首屏仍以“后端框架”和大量能力清�
 
 #### P0-04 干净机器端到端门禁
 
-**当前状态：已完成（本地 clean-room；CI 待首跑）。** 新增无 checkout 的 CI job 和 `scripts/clean_room_e2e.sh`；本地使用 embedded Release CLI 在 fresh volumes 上验证了 `basic-api` 和 `auth-api`。GitHub Actions 的首轮运行仍需在 PR/发布流程中观察。
+**当前状态：已完成。** 无 checkout 的 GitHub Actions clean-room job 已在 PR #189 通过；v0.7.0 实际 Release 资产也在 fresh volumes 上验证了 `basic-api` 和 `auth-api`。
 
 **需求**
 

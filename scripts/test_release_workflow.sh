@@ -7,7 +7,7 @@ failed=0
 
 check() {
   local pattern="$1"
-  if ! grep -Fq "$pattern" "$WORKFLOW"; then
+  if ! grep -Fq -- "$pattern" "$WORKFLOW"; then
     echo "FAIL: release workflow is missing: $pattern" >&2
     failed=1
   fi
@@ -20,6 +20,7 @@ check 'jimu.BundleCommit'
 check 'template-bundle.json'
 check 'sha256sum'
 check 'jimu-${GITHUB_REF_NAME}-checksums.txt'
+check '--repo "$GITHUB_REPOSITORY"'
 check 'goos: linux'
 check 'goarch: amd64'
 check 'goos: darwin'
