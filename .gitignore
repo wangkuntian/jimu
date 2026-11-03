@@ -39,6 +39,7 @@ secrets/
 bin/
 .overlay/
 logs/
+template-bundle.json
 .VSCodeCounter/
 
 # AI
