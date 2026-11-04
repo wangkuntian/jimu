@@ -24,7 +24,7 @@ func newRootCommand() (*cobra.Command, func() error) {
 	root.AddCommand(
 		scaffold.NewCommand(resolveRelease),
 		scaffold.NewCapabilityCommand(resolveRelease),
-		scaffold.NewCheckCommand(),
+		scaffold.NewCheckCommand(resolveRelease),
 		scaffold.NewUpgradeCommand(resolveRelease),
 		newVersionCommand(),
 	)
