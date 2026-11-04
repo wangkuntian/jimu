@@ -114,3 +114,5 @@ jimu upgrade <dir> --check
 ## 支持边界
 
 当前支持窗口、模板契约和兼容性承诺见[模板契约 v0.1](templates/v1/README.md)。跨大版本升级遇到 `conflict` 时先保留本地改动，人工合并后重新运行 `--check`。
+
+真实项目参与跨版本升级验证的资格、证据字段和隐私边界见[真实项目升级验证](UPGRADE-VALIDATION.md)。
