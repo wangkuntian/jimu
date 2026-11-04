@@ -28,6 +28,30 @@ _Avoid_：源码根、模板目录
 由 `jimu new` 产出、拥有独立 module 的 Go 项目；生成后归使用者所有。
 _Avoid_：脚手架目录、示例项目
 
+**Upgrade validation project**：
+由 Release CLI 基于 official template 生成、已被真实团队用于实际服务，并包含团队修改的项目；它用于验证跨版本升级。中文首次出现可写“升级验证项目”。
+_Avoid_：真实项目、示例项目、测试 fixture
+
+**Upgrade evidence record**：
+一次 upgrade validation project 从指定起始版本升级到目标版本的可审计记录，包含命令输出、冲突路径与原因、耗时和回滚次数。
+_Avoid_：升级日志、测试报告
+
+**Project lifecycle check**：
+对 generated project 的组合、受管文件状态、可用升级和下一步操作进行的只读检查；深检可以再执行配置、build 和 test。中文首次出现可写“项目生命周期检查”。
+_Avoid_：doctor、status、健康检查
+
+**Upgrade conflict diagnosis**：
+对一次只读 upgrade plan 中需要处理的条目展示分类、三方哈希、local↔target 内容差异和下一步动作的稳定诊断。中文首次出现可写“升级冲突诊断”。
+_Avoid_：自动合并、升级修复
+
+**Design partner**：
+愿意在真实服务中采用一个 official template 并提供反馈的团队；其项目采用记录和案例授权是两种独立证据。
+_Avoid_：用户、客户、尝鲜者
+
+**Local metric collection**：
+只在用户或维护者控制的文件与流程中记录和汇总产品指标的方式；数据默认不上传。
+_Avoid_：产品遥测、埋点
+
 **Official template**：
 `basic-api` 和 `auth-api` 两个 certified 模板，受发布阻断门禁保护。
 _Avoid_：预设项目、样例
