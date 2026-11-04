@@ -25,6 +25,8 @@ type UpgradeOptions struct {
 	From      string
 	NoTidy    bool
 	Framework *manifest.Framework
+	// IncludeDiff adds local-to-target text diffs to the read-only report.
+	IncludeDiff bool
 }
 
 // UpgradeResult is the planner output. Applying it is the responsibility of
@@ -191,6 +193,7 @@ func planUpgrade(opts UpgradeOptions) (*plannedUpgrade, error) {
 		TargetRoot:  staging,
 		TargetFiles: targetFiles,
 		Merged:      upgradeMergeDestinations(target.Merges),
+		IncludeDiff: opts.IncludeDiff,
 	})
 	if err != nil {
 		return nil, err
