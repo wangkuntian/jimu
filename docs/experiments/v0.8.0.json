@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "version": "v0.8.0",
+  "generated_at": "2026-11-04T10:14:00.839069+00:00",
+  "environment": {
+    "platform": "macOS-27.2-arm64-arm-64bit",
+    "system": "Darwin",
+    "machine": "arm64",
+    "python": "3.9.6",
+    "go": "go version go1.27.3 darwin/arm64",
+    "jimu": "v0.8.0",
+    "cpu_count": 14,
+    "git": {
+      "commit": "c080c18db27f50cb70ae0d3731527d47c1be6b38",
+      "dirty": true
+    }
+  },
+  "inputs": {
+    "template": "basic-api",
+    "runs": 3,
+    "network_upload": false
+  },
+  "runs": [
+    {
+      "run": 1,
+      "success": true,
+      "new_seconds": 2.862299584,
+      "new_to_ready_seconds": 3.996343792,
+      "readiness_seconds": 0.5566913340000004,
+      "check_fast_seconds": 0.11459312499999985,
+      "check_deep_seconds": 2.2583005419999997,
+      "upgrade_check_json_diff_seconds": 0.09667233299999989,
+      "check_json_deterministic": true,
+      "upgrade_json_deterministic": true
+    },
+    {
+      "run": 2,
+      "success": true,
+      "new_seconds": 1.5434647089999993,
+      "new_to_ready_seconds": 2.6691717500000003,
+      "readiness_seconds": 0.5410925410000011,
+      "check_fast_seconds": 0.10992670899999979,
+      "check_deep_seconds": 2.256761040999999,
+      "upgrade_check_json_diff_seconds": 0.09750075000000002,
+      "check_json_deterministic": true,
+      "upgrade_json_deterministic": true
+    },
+    {
+      "run": 3,
+      "success": true,
+      "new_seconds": 1.7192403340000002,
+      "new_to_ready_seconds": 2.8851213330000007,
+      "readiness_seconds": 0.5880248750000003,
+      "check_fast_seconds": 0.11502679100000002,
+      "check_deep_seconds": 2.195751249999999,
+      "upgrade_check_json_diff_seconds": 0.09783629100000013,
+      "check_json_deterministic": true,
+      "upgrade_json_deterministic": true
+    }
+  ],
+  "summary": {
+    "new_seconds": {
+      "median_seconds": 1.719,
+      "min_seconds": 1.543,
+      "max_seconds": 2.862,
+      "spread_seconds": 1.319
+    },
+    "new_to_ready_seconds": {
+      "median_seconds": 2.885,
+      "min_seconds": 2.669,
+      "max_seconds": 3.996,
+      "spread_seconds": 1.327
+    },
+    "check_fast_seconds": {
+      "median_seconds": 0.115,
+      "min_seconds": 0.11,
+      "max_seconds": 0.115,
+      "spread_seconds": 0.005
+    },
+    "check_deep_seconds": {
+      "median_seconds": 2.257,
+      "min_seconds": 2.196,
+      "max_seconds": 2.258,
+      "spread_seconds": 0.063
+    },
+    "upgrade_check_json_diff_seconds": {
+      "median_seconds": 0.098,
+      "min_seconds": 0.097,
+      "max_seconds": 0.098,
+      "spread_seconds": 0.001
+    }
+  },
+  "success_rate": 1.0,
+  "check_json_deterministic_rate": 1.0,
+  "upgrade_json_deterministic_rate": 1.0,
+  "anomalies": []
+}

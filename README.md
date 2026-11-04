@@ -81,12 +81,19 @@ make verify
 ```bash
 ./jimu version
 ./jimu check demo
+./jimu check demo --deep
+./jimu check demo --json
 ./jimu upgrade demo --check
+./jimu upgrade demo --check --json --diff
 ./jimu upgrade demo --dry-run
 ./jimu upgrade demo
 ```
 
-`jimu version` 同时显示 CLI、template bundle、template contract 和 commit。升级只修改 manifest 管理的文件；数据库 schema 不在自动升级范围内。详见[升级](docs/UPGRADING.md)。
+`jimu check` 默认只读检查 manifest、能力组合、受管文件漂移、目标版本、升级状态和下一步命令。受管文件漂移、可用升级或 conflict 只产生 warning；非法 manifest/组合退出非 0。`--deep` 在私有临时副本中串行执行配置校验、`go build ./...` 和 `go test ./...`，不会改写项目。
+
+`upgrade --check --json --diff` 输出 schema `v1` 的确定性机器结果和 local→target 内容差异；二进制文件只报告存在状态、哈希和分类。升级只修改 manifest 管理的文件；数据库 schema 不在自动升级范围内。详见[升级](docs/UPGRADING.md)。
+
+`jimu version` 同时显示 CLI、template bundle、template contract 和 commit。
 
 ## 文档
 
@@ -94,6 +101,7 @@ make verify
 - [配置](docs/CONFIGURATION.md)
 - [运维](docs/OPERATIONS.md)
 - [升级](docs/UPGRADING.md)
+- [本地实验指标](docs/EXPERIMENTS.md)
 - [真实项目升级验证](docs/UPGRADE-VALIDATION.md)
 - [与常见方案的区别](docs/COMPARISON.md)
 - [生产上线与模板检查清单](docs/PRODUCTION.md)
