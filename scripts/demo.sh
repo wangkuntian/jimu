@@ -94,6 +94,19 @@ until curl -fsS "http://127.0.0.1:${MGMT_PORT}/readyz" >/dev/null 2>&1; do
   sleep 2
 done
 
+if [ "${JIMU_DEMO_E2E:-0}" = "1" ]; then
+  echo "==> 运行真实后端 E2E（Playwright 启动 Vite）"
+  ( cd "$WEB_DIR" && bun install --frozen-lockfile )
+  (
+    cd "$WEB_DIR"
+    E2E_REAL_BACKEND=1 \
+      E2E_ADMIN_PASSWORD="$(cat "$SECRETS_DIR/admin_password.txt")" \
+      JIMU_API_PROXY_TARGET="http://127.0.0.1:${HTTP_PORT}" \
+      bun run test:e2e e2e/real-backend.spec.ts
+  )
+  exit 0
+fi
+
 echo "==> 启动 jimu-web（Vite，端口 ${WEB_PORT}）"
 ( cd "$WEB_DIR" && bun install --frozen-lockfile )
 (

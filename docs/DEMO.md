@@ -46,6 +46,28 @@ admin 登录
 
 不需要手工连数据库；迁移和结构种子由 Compose 的 `jimu-init` 完成。
 
+## 真实后端 E2E
+
+```bash
+make demo-e2e
+```
+
+脚本会启动同一个独立 demo 栈，等 `/readyz` 就绪后，用 `jimu-web` 的 Playwright 用例驱动真实后端：
+
+- admin 登录 → 租户/套餐 → 角色/用户 → 账号安全。
+- demo 全链路用例创建的租户、角色和用户带 `e2e_<时间戳>` 后缀，结束时通过 API 清理。
+- 管理员密码从 `secrets/admin_password.txt` 注入，不写入命令行或日志。
+- 结束后自动执行 `make down`，demo 数据卷保留。
+
+首次运行前需要安装 Playwright chromium：
+
+```bash
+cd ../jimu-web
+bunx playwright install chromium
+```
+
+> 账号安全页面目前是占位页，E2E 只验证路由可达和占位状态，不代表 MFA/Passkey 已实现。
+
 ## 端口与隔离
 
 默认端口刻意避开常规开发栈：
