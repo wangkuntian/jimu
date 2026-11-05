@@ -80,7 +80,6 @@ func TestMigrationSetCarriesSchemaDependencies(t *testing.T) {
 	// 顺序仍是 catalog 序（tenant 在 user/access 之后）。
 	assert.Less(t, indexOf(names, "user"), indexOf(names, "tenant"))
 	assert.Less(t, indexOf(names, "access"), indexOf(names, "tenant"))
-
 }
 
 func indexOf(xs []string, want string) int {
