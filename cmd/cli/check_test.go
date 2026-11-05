@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 
+	"jimu/tools/generator"
 	"jimu/tools/generator/manifest"
 
 	"github.com/spf13/cobra"
@@ -41,6 +43,91 @@ func TestCheckCmdAcceptsValidProject(t *testing.T) {
 	after, err := os.ReadFile(filepath.Join(dir, ".jimu", "manifest.json"))
 	require.NoError(t, err)
 	assert.Equal(t, before, after, "jimu check 必须只读")
+}
+
+func TestCheckCmdJSONReportsLifecycleAndKeepsFailuresMachineReadable(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "proj")
+	_, err := generator.NewProject(generator.NewOptions{
+		Dir: dir, Template: "basic-api", Module: "example.com/proj", NoSelfCheck: true,
+	})
+	require.NoError(t, err)
+	before := upgradeTreeDigest(t, dir)
+
+	var out bytes.Buffer
+	c := checkCommandForTest(&out)
+	c.SetArgs([]string{"check", dir, "--json"})
+	require.NoError(t, c.Execute())
+	firstJSON := out.String()
+	var report struct {
+		SchemaVersion int `json:"schema_version"`
+		Status        string
+		Summary       struct {
+			Errors int `json:"errors"`
+		} `json:"summary"`
+		ManagedFiles []struct {
+			Path   string
+			Status string
+		} `json:"managed_files"`
+		Upgrade struct {
+			Status        string `json:"status"`
+			TargetVersion string `json:"target_version"`
+		} `json:"upgrade"`
+		NextActions []string `json:"next_actions"`
+	}
+	require.NoError(t, json.Unmarshal(out.Bytes(), &report))
+	assert.Equal(t, 1, report.SchemaVersion)
+	assert.Equal(t, "passed", report.Status)
+	assert.Zero(t, report.Summary.Errors)
+	assert.NotEmpty(t, report.ManagedFiles)
+	assert.Equal(t, "up-to-date", report.Upgrade.Status)
+	assert.NotEmpty(t, report.Upgrade.TargetVersion)
+	assert.NotEmpty(t, report.NextActions)
+	assert.Equal(t, before, upgradeTreeDigest(t, dir), "check --json must be read-only")
+
+	var repeated bytes.Buffer
+	repeatedCmd := checkCommandForTest(&repeated)
+	repeatedCmd.SetArgs([]string{"check", dir, "--json"})
+	require.NoError(t, repeatedCmd.Execute())
+	assert.Equal(t, firstJSON, repeated.String(), "repeated check JSON must be byte-for-byte stable")
+
+	path := filepath.Join(dir, ".jimu", "manifest.json")
+	require.NoError(t, os.WriteFile(path, []byte("{"), 0o644))
+	var invalidOut bytes.Buffer
+	invalid := checkCommandForTest(&invalidOut)
+	invalid.SetArgs([]string{"check", dir, "--json"})
+	require.ErrorContains(t, invalid.Execute(), "check failed")
+	var invalidReport struct {
+		Status      string `json:"status"`
+		Diagnostics []struct {
+			Code     string `json:"code"`
+			Severity string `json:"severity"`
+		} `json:"diagnostics"`
+	}
+	require.NoError(t, json.Unmarshal(invalidOut.Bytes(), &invalidReport))
+	assert.Equal(t, "failed", invalidReport.Status)
+	require.NotEmpty(t, invalidReport.Diagnostics)
+	assert.Equal(t, "manifest_invalid", invalidReport.Diagnostics[0].Code)
+	assert.Equal(t, "error", invalidReport.Diagnostics[0].Severity)
+}
+
+func TestCheckCmdDeepJSONIsDeterministic(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "proj")
+	_, err := generator.NewProject(generator.NewOptions{
+		Dir: dir, Template: "basic-api", Module: "example.com/proj", NoSelfCheck: true,
+	})
+	require.NoError(t, err)
+
+	var first bytes.Buffer
+	firstCmd := checkCommandForTest(&first)
+	firstCmd.SetArgs([]string{"check", dir, "--json", "--deep"})
+	require.NoError(t, firstCmd.Execute())
+
+	var second bytes.Buffer
+	secondCmd := checkCommandForTest(&second)
+	secondCmd.SetArgs([]string{"check", dir, "--json", "--deep"})
+	require.NoError(t, secondCmd.Execute())
+
+	assert.Equal(t, first.String(), second.String(), "deep check JSON must be deterministic")
 }
 
 func TestCheckCmdRejectsInvalidProject(t *testing.T) {

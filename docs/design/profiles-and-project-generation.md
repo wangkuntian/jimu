@@ -59,7 +59,7 @@ manifest 记录项目选择、复制与模板动作、合并和重写规则、�
 
 项目先写入暂存目录，再执行依赖整理、构建和能力门禁自检；通过后才发布到目标路径。失败时清理暂存内容。`make check-templates` 检查生成模板与当前框架结构的一致性。
 
-生成前由组合 resolver 校验硬依赖、冲突、端口、驱动、迁移 schema 依赖、表/迁移、运行时服务/配置、中间件与 plan；诊断统一输出 `code`/`capability`/`path`/`message`/`fix` 并稳定排序，任一非法组合在创建暂存目录前终止，因此不会写目标目录。固定解析顺序和错误码见[能力组合](capability-composition.md)。`jimu check <dir>` 对已有项目的 `.jimu/manifest.json` 复用同一预检，只读报告合法性；`--with` 与模板路径都经过该预检，且 `--with` 仍标记 `support: experimental`。
+生成前由组合 resolver 校验硬依赖、冲突、端口、驱动、迁移 schema 依赖、表/迁移、运行时服务/配置、中间件与 plan；诊断统一输出 `code`/`capability`/`path`/`message`/`fix` 并稳定排序，任一非法组合在创建暂存目录前终止，因此不会写目标目录。固定解析顺序和错误码见[能力组合](capability-composition.md)。`jimu check <dir>` 对已有项目的 `.jimu/manifest.json` 复用同一预检，并进一步报告受管文件漂移、当前/目标版本、升级可用性和下一步命令；`--deep` 只在私有临时副本中运行配置、build 和 test。`--with` 与模板路径都经过该预检，且 `--with` 仍标记 `support: experimental`。
 
 ### 新建项目流程
 
@@ -106,7 +106,7 @@ flowchart TD
 | `new` | 目标模板新增，本地不存在 | 安装 |
 | `deleted` | 目标模板不再生成基线文件；本地副本保持原状，不自动删除 | 不安装、不删除 |
 
-`--dry-run` 输出完整分类报告；`--check` 复用同一报告，存在 `conflict` 时退出非 0。两者都不写项目目录，临时目录中的目标渲染和 `go mod tidy` 在报告结束后清理。
+`--dry-run` 输出完整分类报告；`--check` 复用同一报告，存在 `conflict` 时退出非 0。两者都不写项目目录，临时目录中的目标渲染和 `go mod tidy` 在报告结束后清理。`--json` 从同一报告输出稳定 schema `v1`；`--diff` 物化 local→target 文本差异，二进制只保留元数据。两个 flag 只允许用于只读模式。
 
 ### 显式升级事务
 

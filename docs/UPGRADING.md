@@ -20,6 +20,7 @@
 ```bash
 jimu upgrade <dir> --dry-run   # 只读三方比较，输出完整分类
 jimu upgrade <dir> --check     # 有 conflict 时退出非 0，适合 CI
+jimu upgrade <dir> --check --json --diff
 jimu upgrade <dir>             # 备份、安装、tidy/build/test，失败回滚
 ```
 
@@ -34,6 +35,10 @@ jimu upgrade <dir>             # 备份、安装、tidy/build/test，失败回�
 | `deleted` | 目标不再生成 | 保留本地副本，不自动删除；确认不再需要后自行清理 |
 
 升级只改动生成器管理的文件；用户自有文件和 manifest 之外的路径不触碰。`configs/*.yaml` 是整文件模板，手改会判为 `conflict`；`--with` 项目的配置段按段合并。
+
+`--json` 输出 schema `v1`，包含状态、当前/目标框架版本、模板选择、分类计数、稳定排序的条目、各侧存在状态与 SHA-256、下一步动作。manifest 只保存 baseline 哈希，因此 `baseline_content_available` 固定为 `false`；conflict 的 diff 方向是 local → target。
+
+`--diff` 为 `conflict`、`modified`、`new`、`deleted` 生成统一 diff，默认省略 `untouched`。二进制或非法 UTF-8 文件只输出元数据和 `diff_unavailable_reason`。`--json` 与 `--diff` 可以组合，但只允许用于 `--dry-run`/`--check`；实际升级接受任一 flag 都会失败。`--json` 不改变 conflict 的非零退出语义，机器输出不含时间戳。
 
 ## CI 配方
 
@@ -105,11 +110,12 @@ jimu-upgrade-check:
 安全修复进入生成项目的流程、公告格式和演练记录见[安全政策](SECURITY.md#安全修复进入生成项目)。用户应至少执行：
 
 ```bash
-jimu check <dir>
-jimu upgrade <dir> --check
+jimu check <dir> --json
+jimu check <dir> --deep
+jimu upgrade <dir> --check --json --diff
 ```
 
-`jimu check` 验证 manifest 和组合一致性；`upgrade --check` 判断是否存在需要人工处理的冲突。两者都不写项目目录。
+`jimu check` fast 模式验证 manifest、组合、受管文件和升级状态；受管文件漂移、可用升级和 conflict 只产生 warning。`--deep` 在临时副本中执行配置、build 和 test，不运行 Make 或业务脚本。`upgrade --check` 判断是否存在需要人工处理的冲突。所有只读模式都不写项目目录。
 
 ## 支持边界
 

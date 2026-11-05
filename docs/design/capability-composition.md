@@ -113,7 +113,7 @@ manifest 校验保证：
 | 入口 | 组合输入 | 校验 | 写行为 |
 |---|---|---|---|
 | `jimu new` | `--template` 或 `--with` | `--with` 走 resolver，模板使用 certified 预设；两者都执行 preflight + 生成项目 tidy/build/自检 | 通过后才发布目标目录；`--with` 标记 `experimental`。 |
-| `jimu check` | 已有 `.jimu/manifest.json` | 以当前框架描述符（catalog ∪ 形态清单）补全组合字段，执行严格 resolver、preflight 和 plan | 只读；合法退出 0，非法退出非 0 并输出诊断。 |
+| `jimu check` | 已有 `.jimu/manifest.json` | 执行组合 preflight/plan，并以同一 upgrade planner 检查受管文件、目标版本和 conflict | fast 只读；受管文件漂移/升级/conflict 为 warning，非法组合退出非 0；`--deep` 只在临时副本运行配置、build、test。 |
 | `jimu upgrade` | manifest 的 template/profile/`composition.requested` | 模板按预设重建，profile / `--with` 重新解析；执行 preflight 和 plan | `--dry-run` / `--check` 只读；默认事务备份、安装、验证并在失败时回滚。 |
 | `jimu capability add` | 已有 `--with` 项目的声明集 + 新能力 | 严格依赖闭包（不自动补依赖）、resolver、preflight | 复用 upgrade 的 manifest 事务；不执行 tidy/build；支持级别保持 `experimental`。 |
 
@@ -132,6 +132,14 @@ manifest 校验保证：
 默认事务先备份所有将改变的文件（含 manifest 和可能被 tidy 改写的 `go.mod`/`go.sum`），逐文件安装；受支持配置按 manifest 的 `merges.strategy=sections` 以项目现有段值为底合并；随后执行 `go mod tidy`、`go build ./...` 和 `go test ./...`。任一安装、验证或 manifest 写入失败都按原字节恢复。成功后才写回新 manifest 的最终文件哈希与组合块；文件和 manifest 都没变化时不重复验证，重复执行幂等。
 
 发布门禁只固定覆盖 v0.5.0 的 `basic-api` 与 `auth-api` 快照。`--with` 组合是 experimental，升级不获得与官方模板相同的兼容承诺；已有数据库 schema 不在升级范围内。
+
+### 生命周期诊断
+
+`jimu check` 与 `jimu upgrade --check` 读取同一 upgrade plan。`check --json` 使用 schema version 1 输出 summary、诊断、受管文件、upgrade 和 deep 结果；该 JSON 不含时间戳并稳定排序。`upgrade --check --json --diff` 使用 schema `v1` 输出同一计划的条目，manifest baseline 只提供哈希，不伪造三方正文。
+
+受管文件出现 `modified`、`missing` 或 baseline 缺失时，`check` 输出 warning 和修复建议；非法 manifest、非法组合、无法形成 upgrade plan 或 deep 失败输出 error 并退出非 0。deep 在私有临时副本中串行执行配置校验、`go build ./...` 和 `go test ./...`，不调用 Make、业务脚本或项目内写入流程。
+
+本地实验口径和 v0.8.0 基线见 [EXPERIMENTS](../EXPERIMENTS.md) 与 [experiments/v0.8.0](../experiments/v0.8.0.md)。实验只做本地显式采集，不上传数据，不作为 CI、生产或真实项目采用证据。
 
 ## 关键决策
 

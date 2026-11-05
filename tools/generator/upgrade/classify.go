@@ -4,6 +4,7 @@
 package upgrade
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -11,8 +12,11 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"unicode/utf8"
 
 	"jimu/tools/generator/manifest"
+
+	"github.com/pmezard/go-difflib/difflib"
 )
 
 // Category is the upgrade decision for one generated file.
@@ -52,13 +56,20 @@ const (
 // Entry is one path in the upgrade report. Hashes are omitted when the
 // corresponding side does not exist.
 type Entry struct {
-	Path           string   `json:"path"`
-	Category       Category `json:"category"`
-	Action         Action   `json:"action"`
-	Reason         string   `json:"reason"`
-	BaselineSHA256 string   `json:"baseline_sha256,omitempty"`
-	LocalSHA256    string   `json:"local_sha256,omitempty"`
-	TargetSHA256   string   `json:"target_sha256,omitempty"`
+	Path                     string   `json:"path"`
+	Category                 Category `json:"category"`
+	Action                   Action   `json:"action"`
+	Reason                   string   `json:"reason"`
+	BaselineExists           bool     `json:"baseline_exists"`
+	LocalExists              bool     `json:"local_exists"`
+	TargetExists             bool     `json:"target_exists"`
+	BaselineContentAvailable bool     `json:"baseline_content_available"`
+	BaselineSHA256           string   `json:"baseline_sha256,omitempty"`
+	LocalSHA256              string   `json:"local_sha256,omitempty"`
+	TargetSHA256             string   `json:"target_sha256,omitempty"`
+	Diff                     string   `json:"diff,omitempty"`
+	DiffUnavailableReason    string   `json:"diff_unavailable_reason,omitempty"`
+	Binary                   bool     `json:"binary,omitempty"`
 }
 
 // Report is the deterministic, read-only result of an upgrade plan.
@@ -74,6 +85,9 @@ type Options struct {
 	Previous    manifest.Document
 	TargetRoot  string
 	TargetFiles []string
+	// IncludeDiff materializes local-to-target text diffs for changed files.
+	// The manifest contains hashes only, so baseline content is never available.
+	IncludeDiff bool
 	// Merged lists manifest merge destinations whose target content already
 	// preserves local sections. User edits in those paths are not conflicts.
 	Merged []string
@@ -121,6 +135,12 @@ func Classify(opts Options) (Report, error) {
 		entry, err := classifyPath(projectRoot, rel, baseline, target, merged[rel])
 		if err != nil {
 			return Report{}, err
+		}
+		if opts.IncludeDiff {
+			entry, err = addContentDiff(projectRoot, targetRoot, entry)
+			if err != nil {
+				return Report{}, err
+			}
 		}
 		entries = append(entries, entry)
 		counts[entry.Category]++
@@ -222,7 +242,14 @@ func classifyPath(projectRoot, rel string, baseline, target map[string]string, m
 	if err != nil {
 		return Entry{}, err
 	}
-	entry := Entry{Path: rel, BaselineSHA256: baseHash, TargetSHA256: targetHash}
+	entry := Entry{
+		Path:           rel,
+		BaselineExists: hasBaseline,
+		LocalExists:    local.exists,
+		TargetExists:   hasTarget,
+		BaselineSHA256: baseHash,
+		TargetSHA256:   targetHash,
+	}
 	if local.regular {
 		entry.LocalSHA256 = local.hash
 	}
@@ -298,6 +325,61 @@ func classifyPath(projectRoot, rel string, baseline, target map[string]string, m
 		entry.Reason = "local file and target template both changed"
 		return entry, nil
 	}
+}
+
+func addContentDiff(projectRoot, targetRoot string, entry Entry) (Entry, error) {
+	if entry.Category == Untouched {
+		return entry, nil
+	}
+	var local []byte
+	if entry.LocalExists {
+		localPath := filepath.Join(projectRoot, filepath.FromSlash(entry.Path))
+		info, err := os.Lstat(localPath)
+		if err != nil {
+			return Entry{}, fmt.Errorf("inspect local file %s for diff: %w", entry.Path, err)
+		}
+		if !info.Mode().IsRegular() {
+			entry.DiffUnavailableReason = "local path is not a regular file"
+			return entry, nil
+		}
+		local, err = os.ReadFile(localPath)
+		if err != nil {
+			return Entry{}, fmt.Errorf("read local file %s for diff: %w", entry.Path, err)
+		}
+	}
+	var target []byte
+	if entry.TargetExists {
+		targetPath := filepath.Join(targetRoot, filepath.FromSlash(entry.Path))
+		content, err := os.ReadFile(targetPath)
+		if err != nil {
+			return Entry{}, fmt.Errorf("read target file %s for diff: %w", entry.Path, err)
+		}
+		target = content
+	}
+	if isBinaryContent(local) || isBinaryContent(target) {
+		entry.Binary = true
+		entry.DiffUnavailableReason = "binary or invalid UTF-8 content"
+		return entry, nil
+	}
+	if bytes.Equal(local, target) {
+		return entry, nil
+	}
+	diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+		A:        difflib.SplitLines(string(local)),
+		B:        difflib.SplitLines(string(target)),
+		FromFile: "local/" + entry.Path,
+		ToFile:   "target/" + entry.Path,
+		Context:  3,
+	})
+	if err != nil {
+		return Entry{}, fmt.Errorf("render diff for %s: %w", entry.Path, err)
+	}
+	entry.Diff = diff
+	return entry, nil
+}
+
+func isBinaryContent(content []byte) bool {
+	return bytes.IndexByte(content, 0) >= 0 || !utf8.Valid(content)
 }
 
 // classifyMerged handles manifest merge destinations. Their target content was

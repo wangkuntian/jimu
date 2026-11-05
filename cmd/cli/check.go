@@ -9,7 +9,7 @@ import (
 var checkCmd = newCheckCmd()
 
 func newCheckCmd() *cobra.Command {
-	return scaffold.NewCheckCommand()
+	return scaffold.NewCheckCommand(resolveFromCheckout)
 }
 
 func init() {

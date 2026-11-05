@@ -19,10 +19,13 @@
 ./bin/jimu-cli new ./myapp --template=auth-api --module=example.com/myapp        # 单租户认证模板
 ./bin/jimu-cli new ./myapp --with=user,access,auth,queue --shape=app              # 能力名（硬依赖闭包 + 拓扑序）
 ./bin/jimu-cli new ./myapp --with=auth,queue:kafka --dry-run                      # 只打印计划，不落盘
-./bin/jimu-cli check ./myapp                                                      # 只读检查 manifest 与组合一致性
+./bin/jimu-cli check ./myapp                                                      # fast 生命周期检查
+./bin/jimu-cli check ./myapp --deep                                               # 临时副本配置/build/test
+./bin/jimu-cli check ./myapp --json                                               # 确定性机器结果
 ./bin/jimu-cli upgrade ./myapp                                                    # 显式升级：备份、安装、验证、回滚、更新 manifest
 ./bin/jimu-cli upgrade ./myapp --dry-run                                          # 只读三方 diff，不写项目目录
 ./bin/jimu-cli upgrade ./myapp --check                                            # 有 conflict 时退出非 0
+./bin/jimu-cli upgrade ./myapp --check --json --diff                              # schema v1 + local→target diff
 ```
 
 | 参数 | 说明 |
@@ -41,11 +44,13 @@
 
 **组合解析顺序（P0-2）**：输入校验 → 硬依赖闭包 → 冲突 → `Provides`/`Consumes` → 驱动 → 迁移 schema 依赖 → 表/迁移 → 运行时服务/配置 → 中间件 → plan。诊断统一含 `code`/`capability`/`path`/`message`/`fix` 并稳定排序；非法组合在写目标目录前失败。`jimu check <dir>` 用同一套预检只读检查已有项目，合法退出 0、非法退出非 0。
 
+`jimu check` 还复用 upgrade planner 检查受管文件漂移、目标版本、可用升级和 conflict；这些状态是 warning，非法 manifest/组合和 deep 失败才退出非 0。`--deep` 在私有临时副本中串行执行配置校验、`go build ./...`、`go test ./...`，不运行 Make 或业务脚本。
+
 **Provenance**：`.jimu/manifest.json` 为 schema v3，`framework.commit` 来自 `git rev-parse --verify HEAD^{commit}`（支持普通 clone 与 worktree），同时记录 `framework.dirty`、官方模板的 `selection.template_version`、覆盖全部 `generated_files` 的 `generated_file_sha256`，以及 `composition` 组合块（契约版本、requested/resolved/auto-added、驱动、validity/support）。`--dry-run` 与 `jimu check` 的 support 读取 `composition.support`；schema v2 只读用于升级，schema v1 fail-closed。
 
 ## `jimu upgrade <dir>`
 
-默认执行显式升级事务：以 manifest 的 `generated_file_sha256` 为基线做三方比较，冲突在写盘前中止；变换文件先备份再逐个安装，受支持配置以现有段值为底合并；`--with` 项目按 `composition.requested` 重建并透传 `composition.drivers`，保留非默认驱动选择；已有 `docs/profiles/generated-report.md` 时在暂存树重算并同批安装（本来没有则不创建）；随后在项目里跑 tidy/build/test，失败按原字节回滚；成功后更新 manifest，重复升级幂等。`--dry-run` 打印完整报告；`--check` 复用报告并在有冲突时退出非 0。两种检查模式都不写项目目录，`--no-tidy` 只跳过临时规划副本中的 tidy，升级后验证始终执行 tidy/build/test。
+默认执行显式升级事务：以 manifest 的 `generated_file_sha256` 为基线做三方比较，冲突在写盘前中止；变换文件先备份再逐个安装，受支持配置以现有段值为底合并；`--with` 项目按 `composition.requested` 重建并透传 `composition.drivers`，保留非默认驱动选择；已有 `docs/profiles/generated-report.md` 时在暂存树重算并同批安装（本来没有则不创建）；随后在项目里跑 tidy/build/test，失败按原字节回滚；成功后更新 manifest，重复升级幂等。`--dry-run` 打印完整报告；`--check` 复用报告并在有冲突时退出非 0。两种检查模式都不写项目目录，`--no-tidy` 只跳过临时规划副本中的 tidy，升级后验证始终执行 tidy/build/test。`--json` 从同一报告输出 schema `v1`；`--diff` 输出 local→target 文本差异，二进制只报告存在状态、哈希和原因。诊断 flags 不能用于实际升级。
 
 **生成物是子集**：内核目录原样复制；能力按复制集（声明集 ∪ 编译闭包 ∪ schema 依赖的迁移携带目录 ∪ 内核 domain 依赖）落地；`internal/profiles/{registry,<shape>,active}`、`internal/capabilities/catalog/*`、`configs/*.yaml`、`Makefile`/`Dockerfile`/`scripts/check_profiles.sh` 按能力集**渲染**（单形态，无 `PROFILE=`、无 overlay）；测试树按「逐文件 import 可满足性 + 资产依赖」裁剪（规则写入 `.jimu/manifest.json` 的 `prune` 段，文件清单写入 `generated_files`）。manifest 只支持 JSON，路径必须为相对路径。
 
