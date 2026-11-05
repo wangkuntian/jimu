@@ -17,23 +17,25 @@
 
 ### 0.2 六个月需求列表
 
-| 编号 | 优先级 | 需求 | 验收 / 产物 | 目标版本 |
-|---|---|---|---|---|
-| A1 | P0 | 六个月路线与 ADR | 本文件；ADR 0005/0006/0007 | `v0.8.1` |
-| A2 | P0 | Profile 退役与冻结 | 退役 `enterprise`/`machine`/`saas`；冻结 `minimal`；保留 `full`；`make profiles-check` 只构建 `full`+`minimal`；同步 registry、compose-report、设计文档 | `v0.8.1` |
-| A3 | P0 | Solo-maintainer 流程 | ADR 0005；自审合并、CI 门禁不降级、PR 风险记录 | `v0.8.1` |
-| B1 | P0 | `jimu-web` 契约同步 | 契约 pin 指向当前 `full` server；重新生成类型；`bun run check` 通过 | `v0.9.0` |
-| B2 | P0 | `make demo` 全栈环境 | 干净机器一条命令启动 `full` server + `jimu-web`；10 分钟内可演示 | `v0.9.0` |
-| B3 | P0 | Demo 流程与 E2E | admin 登录 → 租户/套餐 → 用户/角色 → 账号安全；不手工连数据库 | `v0.9.0` |
-| B4 | P0 | CLI-only `jimu new` smoke | `jimu new --template=auth-api` + `make up` + `make verify`；不接前端 | `v0.9.0` |
-| B5 | P0 | 8 周 gate 证据 | 3 个外部试用/明确反馈；至少 1 个团队愿意进入下一步 | 2027-01 |
-| C1 | P1 | Gate 决策 | 继续或停止路线 B；更新路线图和非目标 | `v0.10.0` |
-| C2 | P1 | 条件项：fullstack 预览设计 | 仅当 gate 通过：时间盒 4 周，评估 generated full-stack 的契约与模板边界；不承诺 certified | `v0.10.0+` |
-| C3 | P1 | 条件项：回到路线 A | 仅当 gate 停止：设计伙伴/真实升级证据或质量加固 | `v0.10.0+` |
-| C4 | P1 | v1.0 评审 | 路线 A 的真实项目证据满足才发 `v1.0.0`；否则停在 `v0.12.x` | 2027-05 |
-| D1 | P1 | 每月发布与维护 | `make release-check`、安全修复、文档、契约同步；占 20–25% 容量 | 持续 |
+| 编号 | 优先级 | 需求 | 完成情况 | 验收 / 产物 | 目标版本 |
+|---|---|---|---|---|---|
+| A1 | P0 | 六个月路线与 ADR | 已完成 | 本文件；ADR 0005/0006/0007 | `v0.8.1` |
+| A2 | P0 | Profile 退役与冻结 | 已完成 | 退役 `enterprise`/`machine`/`saas`；冻结 `minimal`；保留 `full`；`make profiles-check` 只构建 `full`+`minimal`；同步 registry、compose-report、设计文档 | `v0.8.1` |
+| A3 | P0 | Solo-maintainer 流程 | 已完成 | ADR 0005；自审合并、CI 门禁不降级、PR 风险记录 | `v0.8.1` |
+| B1 | P0 | `jimu-web` 契约同步 | 部分完成 | 契约 pin 指向当前 `full` server；重新生成类型；`bun run check` 通过；`jimu-web` pin 待提交 | `v0.9.0` |
+| B2 | P0 | `make demo` 全栈环境 | 未启动 | 干净机器一条命令启动 `full` server + `jimu-web`；10 分钟内可演示 | `v0.9.0` |
+| B3 | P0 | Demo 流程与 E2E | 未启动 | admin 登录 → 租户/套餐 → 用户/角色 → 账号安全；不手工连数据库 | `v0.9.0` |
+| B4 | P0 | CLI-only `jimu new` smoke | 未启动 | `jimu new --template=auth-api` + `make up` + `make verify`；不接前端 | `v0.9.0` |
+| B5 | P0 | 8 周 gate 证据 | 未启动 | 3 个外部试用/明确反馈；至少 1 个团队愿意进入下一步 | 2027-01 |
+| C1 | P1 | Gate 决策 | 未启动（条件项） | 继续或停止路线 B；更新路线图和非目标 | `v0.10.0` |
+| C2 | P1 | 条件项：fullstack 预览设计 | 未启动（条件项） | 仅当 gate 通过：时间盒 4 周，评估 generated full-stack 的契约与模板边界；不承诺 certified | `v0.10.0+` |
+| C3 | P1 | 条件项：回到路线 A | 未启动（条件项） | 仅当 gate 停止：设计伙伴/真实升级证据或质量加固 | `v0.10.0+` |
+| C4 | P1 | v1.0 评审 | 未启动（条件项） | 路线 A 的真实项目证据满足才发 `v1.0.0`；否则停在 `v0.12.x` | 2027-05 |
+| D1 | P1 | 每月发布与维护 | 持续 | `make release-check`、安全修复、文档、契约同步；占 20–25% 容量 | 持续 |
 
-截至 2026-11-05：A1–A3 已完成；B1–B5 未开始；C1–C4 条件项未开始；D1 持续。
+完成情况使用：`已完成`、`部分完成`、`未启动`、`持续`。条件项只有 gate 触发后才进入执行。
+
+截至 2026-11-05：A1–A3 已完成；B1 部分完成（pin 已更新并验证，`jimu-web` 变更待提交）；B2–B5 未启动；C1–C4 条件项未启动；D1 持续。
 
 ### 0.3 里程碑与容量
 
