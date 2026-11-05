@@ -69,10 +69,10 @@ func TestOwnerInRejectsEqualLengthTie(t *testing.T) {
 	assert.Equal(t, "group:ops", owner)
 }
 
-// 内核资产组全形态携带；能力资产随形态（apidocs 只在 full 的清单里，
+// 内核资产组由保留形态携带；能力资产随形态（apidocs 只在 full 的清单里，
 // 因此只有 full 含 docs/openapi —— 这正是 APIdocs 条件化的前提）。
 func TestForProfileIncludesCapabilityAssetsAndCoreGroups(t *testing.T) {
-	for _, profile := range []string{"full", "minimal", "saas", "enterprise", "machine"} {
+	for _, profile := range []string{"full", "minimal"} {
 		got, err := ForProfile(profile)
 		require.NoErrorf(t, err, "ForProfile(%q)", profile)
 		assert.Containsf(t, got, "deploy/openobserve", "%s 应含内核观测资产组", profile)
@@ -84,7 +84,7 @@ func TestForProfileIncludesCapabilityAssetsAndCoreGroups(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, full, "docs/openapi")
 
-	for _, profile := range []string{"minimal", "saas", "enterprise", "machine"} {
+	for _, profile := range []string{"minimal"} {
 		got, err := ForProfile(profile)
 		require.NoErrorf(t, err, "ForProfile(%q)", profile)
 		assert.NotContainsf(t, got, "docs/openapi", "%s 的清单不含 apidocs，故不应带 APIdocs 资产", profile)
@@ -147,7 +147,7 @@ func TestOwnershipSkipsDotEntries(t *testing.T) {
 
 // 派生输出必须与归属判定同口径：每个形态的资产路径都已是 canonical（幂等）。
 func TestForProfileEmitsCanonicalPaths(t *testing.T) {
-	for _, profile := range []string{"full", "minimal", "saas", "enterprise", "machine"} {
+	for _, profile := range []string{"full", "minimal"} {
 		paths, err := ForProfile(profile)
 		require.NoErrorf(t, err, "ForProfile(%q)", profile)
 		for _, p := range paths {

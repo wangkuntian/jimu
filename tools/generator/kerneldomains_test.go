@@ -61,7 +61,6 @@ func TestGeneratedProjectCarriesKernelRequiredDomainsAndBuilds(t *testing.T) {
 	}{
 		{"with queue", NewOptions{With: withProtectedProvider("queue")}},
 		{"with apikey", NewOptions{With: "apikey"}},
-		{"profile machine", NewOptions{Profile: "machine"}},
 	}
 	cache := newTestGoCache(t) // 全组共用一个随测试删除的专用缓存
 	for _, tc := range cases {

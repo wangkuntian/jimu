@@ -110,7 +110,7 @@ make verify
 
 ## 从本仓开发
 
-本仓自身是完整服务，包含更多内部 profile、运维与集成测试：
+本仓自身是完整服务，保留 `full`/`minimal` 两个内部 profile、运维与集成测试：
 
 ```bash
 make init

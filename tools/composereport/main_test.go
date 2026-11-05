@@ -46,21 +46,21 @@ func TestRenderReportPinsTheCommittedShape(t *testing.T) {
 	assert.Contains(t, out, "形态由 `internal/profiles/active` 的**构建期 overlay** 决定")
 	assert.Contains(t, out, "- 二进制：`minimal` 是 `full` 的 50.0%（要求 ≤ 85%）")
 	assert.Contains(t, out, "- 路由数：`minimal` 30 < `full` 100")
-	assert.Contains(t, out, "五个形态的 go.mod 直接依赖数**逐形态完全相同**（各 64 个）")
+	assert.Contains(t, out, "各形态的 go.mod 直接依赖数**逐形态完全相同**（各 64 个）")
 	assert.Contains(t, out, "| `minimal` | auth |")
 }
 
 // TestRenderReportWithoutMinimal 无 minimal 时不渲染验收段（只按数据渲染，不对形态名做隐藏假设）；
 // 无 full 基准时同样跳过。用两个形态走多形态分支（单形态分支由下一条测试钉住）。
 func TestRenderReportWithoutMinimal(t *testing.T) {
-	out := renderReport([]Metrics{{Profile: "full", BinaryBytes: 200}, {Profile: "saas", BinaryBytes: 2}}, 64)
+	out := renderReport([]Metrics{{Profile: "full", BinaryBytes: 200}, {Profile: "app", BinaryBytes: 2}}, 64)
 	assert.NotContains(t, out, "要求 ≤ 85%")
 	assert.Contains(t, out, "| `full` | 0.0 | 100.0% |")
 }
 
 // TestRenderSingleShapeReportHasNoMultiShapeClaims 是 T8 裁定 15 的收口：`jimu new` 的生成项目
 // 里 `make compose-report` 只度量一个形态，报告必须单形态正确 —— 没有「相对 full」列、没有构建期
-// overlay 叙述、没有「五个形态」的结论，也不引用生成项目里不存在的 README 章节与本仓测试名；
+// overlay 叙述、没有多形态结论，也不引用生成项目里不存在的 README 章节与本仓测试名；
 // 主模块名取 modulePath（生成时被受控重写改成 --module）。
 func TestRenderSingleShapeReportHasNoMultiShapeClaims(t *testing.T) {
 	out := renderReport([]Metrics{{
@@ -81,7 +81,7 @@ func TestRenderSingleShapeReportHasNoMultiShapeClaims(t *testing.T) {
 
 	// 多形态口吻与失效引用一律不得出现。
 	for _, gone := range []string{
-		"相对 full", "overlay", "五个形态", "README", "TestMinimalCompiledSurfaceIsMateriallySmaller",
+		"相对 full", "overlay", "各形态", "README", "TestMinimalCompiledSurfaceIsMateriallySmaller",
 		"各形态", "full",
 	} {
 		assert.NotContains(t, out, gone, "单形态报告不得出现 %q", gone)
@@ -115,13 +115,13 @@ func TestOverlayForProfileMatchesTheSharedPackage(t *testing.T) {
 // 隔离写出（`.overlay/<profile>/`）：路径、active.go 内容与 Replace 映射逐字节一致。
 func TestWriteOverlayMatchesTheSharedPackage(t *testing.T) {
 	root := t.TempDir()
-	path, err := writeOverlay(root, "enterprise")
+	path, err := writeOverlay(root, "minimal")
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(profileoverlay.Dir(root, "enterprise"), "overlay.json"), path)
+	assert.Equal(t, filepath.Join(profileoverlay.Dir(root, "minimal"), "overlay.json"), path)
 
-	src, err := profileoverlay.Source("enterprise")
+	src, err := profileoverlay.Source("minimal")
 	require.NoError(t, err)
-	active, err := os.ReadFile(filepath.Join(profileoverlay.Dir(root, "enterprise"), "active.go"))
+	active, err := os.ReadFile(filepath.Join(profileoverlay.Dir(root, "minimal"), "active.go"))
 	require.NoError(t, err)
 	assert.Equal(t, src, string(active))
 
@@ -130,7 +130,7 @@ func TestWriteOverlayMatchesTheSharedPackage(t *testing.T) {
 	var cfg struct{ Replace map[string]string }
 	require.NoError(t, json.Unmarshal(content, &cfg))
 	assert.Equal(t,
-		filepath.Join(profileoverlay.Dir(root, "enterprise"), "active.go"),
+		filepath.Join(profileoverlay.Dir(root, "minimal"), "active.go"),
 		cfg.Replace[filepath.Join(root, "internal", "profiles", "active", "assembly.go")])
 
 	_, err = writeOverlay(root, "ghost")
@@ -142,7 +142,7 @@ func TestWriteOverlayMatchesTheSharedPackage(t *testing.T) {
 // 因此内核膨胀或能力增减都不会让用例误报 —— 只会让真正的裁剪失效暴露出来。
 func TestMinimalCompiledSurfaceIsMateriallySmaller(t *testing.T) {
 	if testing.Short() {
-		t.Skip("构建 5 个形态二进制，-short 下跳过")
+		t.Skip("构建保留形态二进制，-short 下跳过")
 	}
 	if os.Getenv(profileShardEnv) != "" {
 		t.Skip("按形态切片：" + profileShardEnv + " 已设，本次由 TestProfileCompiledSurface 度量；跨形态关系由未设该变量时的完整度量承担")
@@ -173,10 +173,9 @@ func TestMinimalCompiledSurfaceIsMateriallySmaller(t *testing.T) {
 	assert.Less(t, minM.Files, fullM.Files, "minimal 本仓 Go 文件数应少于 full")
 	assert.Less(t, minM.Lines, fullM.Lines, "minimal 本仓代码行数应少于 full")
 
-	// 驱动拆包后的重型依赖列：full 编进全部四类驱动，其余形态的编译面为零
-	//（可插拔的实际效果；enterprise 已收敛为 local + csv）。
+	// 驱动拆包后的重型依赖列：full 编进全部四类驱动，minimal 的编译面为零。
 	assert.ElementsMatch(t, heavydeps.Names(), fullM.HeavyDeps, "full 应含全部四类重型依赖")
-	for _, name := range []string{"minimal", "saas", "enterprise", "machine"} {
+	for _, name := range []string{"minimal"} {
 		m, ok := byName[name]
 		require.True(t, ok, "报告缺少形态 %s", name)
 		assert.Empty(t, m.HeavyDeps, "%s 不应把重型依赖编进编译面", name)

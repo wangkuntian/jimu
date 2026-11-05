@@ -84,15 +84,9 @@ GENERATOR_PINS=(
 SHARD_TEST_TIMEOUT=15m
 
 # tools/composereport 的重型用例按**形态**切片：它在 `-race` 下每个形态都要做一次全依赖图
-# packages.Load + 全闭包行数统计，整包实测 257s（隔离后依然如此），是 tools 分片变成长杆的唯一
-# 原因。切成 COMPOSEREPORT_SHARDS 片后每片只度量自己那部分形态；**每个形态仍被 `-race` 跑过**。
-# 片数保持 4（形态按 registry 顺序切成 2/1/1/1）：实测（run 38016751586）把片数提到 5
-# （一形态一片）后墙钟零收益 —— 每片分片步骤 133–138s 里 ~96% 与形态数无关，是
-# `go run ./tools/profileoverlay -list` 守卫（82–106s）+ race 编译（24–31s），真正的形态度量
-# 只有 3.9–5.3s；4 片时最长 composereport 步骤 136s，与 5 片等价却少占一个并发槽（正式
-# 流水线还要与 lint / Capability Gates / Performance Regression / DB Integration / Docker Build /
-# Cache Warmup 共 6 个 job 并行，公共仓并发上限 20 ⇒ 分片数 ≤ 14）。**将来想加片前先看这组数**。
-COMPOSEREPORT_SHARDS=4
+# packages.Load + 全闭包行数统计。当前只保留 full/minimal 两个 profile，因此切 2 片；
+# 每个形态仍被 `-race` 跑过。形态数变化时同步此值，避免出现空分片。
+COMPOSEREPORT_SHARDS=2
 COMPOSEREPORT_PKG="./tools/composereport"
 COMPOSEREPORT_IMPORT="$MODULE/tools/composereport"
 # 与 tools/composereport/main_test.go 的 profileShardEnv 同名，它是这条切片的开关

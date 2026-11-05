@@ -82,7 +82,7 @@ func TestFullDriverSelection(t *testing.T) {
 	}, driverSelection(Assembly()))
 }
 
-// TestFullCompiledStorageDrivers 钉住进程内注册表（与 enterprise 侧
+// TestFullCompiledStorageDrivers 钉住进程内注册表（与裁剪形态侧
 // TestEnterpriseDriverSelection 同款）：`drivers.go` 的两个 blank import 一旦被删，
 // `go build ./...` 与 TestFullDriverSelection 仍全绿（后者只钉 Capability.Drivers 声明），
 // 失败只会在运行期的 wire.go fail-closed 文案里暴露 —— 而 full 正是出货形态

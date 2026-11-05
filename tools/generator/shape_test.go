@@ -91,7 +91,7 @@ func TestParseCapabilitySetValidatesShape(t *testing.T) {
 		})
 	}
 	// 合法形态名（含默认值）照常放行。
-	for _, ok := range []string{"app", "minimal", "machine", "my_app2"} {
+	for _, ok := range []string{"app", "minimal", "service", "my_app2"} {
 		if _, err := ParseCapabilitySet("", "queue", ok); err != nil {
 			t.Errorf("--shape=%s 应当放行：%v", ok, err)
 		}

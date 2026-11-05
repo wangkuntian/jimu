@@ -345,7 +345,7 @@ func TestCheckProfilesGoldenMatchesTheGeneratedClosure(t *testing.T) {
 	}
 }
 
-// TestProfileGoldensMatchTheRepoCheckProfilesScript 交叉网：生成器为 5 个形态算出的 golden 必须与
+// TestProfileGoldensMatchTheRepoCheckProfilesScript 交叉网：生成器为保留形态算出的 golden 必须与
 // 本仓 scripts/check_profiles.sh 的手写 EXPECTED_<profile> 逐值一致 —— 两处漂移会让「本仓门禁」
 // 与「生成项目的门禁」对同一形态给出不同结论。
 func TestProfileGoldensMatchTheRepoCheckProfilesScript(t *testing.T) {

@@ -55,13 +55,13 @@ func TestReplaceMapPointsActiveAtTheGeneratedContent(t *testing.T) {
 // 逐字节相同；返回的是 JSON 的绝对路径（go build -overlay= 的入参）。
 func TestWriteFilesWritesBothArtifactsPerProfile(t *testing.T) {
 	root := t.TempDir()
-	jsonPath, err := WriteFiles(root, "enterprise")
+	jsonPath, err := WriteFiles(root, "minimal")
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(root, ".overlay", "enterprise", "overlay.json"), jsonPath)
+	assert.Equal(t, filepath.Join(root, ".overlay", "minimal", "overlay.json"), jsonPath)
 
-	src, err := Source("enterprise")
+	src, err := Source("minimal")
 	require.NoError(t, err)
-	active, err := os.ReadFile(filepath.Join(root, ".overlay", "enterprise", "active.go"))
+	active, err := os.ReadFile(filepath.Join(root, ".overlay", "minimal", "active.go"))
 	require.NoError(t, err)
 	assert.Equal(t, src, string(active))
 
@@ -70,7 +70,7 @@ func TestWriteFilesWritesBothArtifactsPerProfile(t *testing.T) {
 	var cfg struct{ Replace map[string]string }
 	require.NoError(t, json.Unmarshal(content, &cfg))
 	assert.Equal(t,
-		filepath.Join(root, ".overlay", "enterprise", "active.go"),
+		filepath.Join(root, ".overlay", "minimal", "active.go"),
 		cfg.Replace[filepath.Join(root, "internal", "profiles", "active", "assembly.go")])
 }
 

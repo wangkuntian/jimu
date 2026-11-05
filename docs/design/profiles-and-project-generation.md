@@ -41,7 +41,7 @@ flowchart LR
 
 `jimu new <dir>` 按 `--template` 或 `--with` 选择能力并生成独立 Go module。生成器会根据声明闭包和必要的 schema/编译依赖，复制或渲染源码、配置、驱动与资产，随后整理生成项目的 module 依赖。profile 只改变框架二进制组成；生成项目拥有自己的 `go.mod`，因此可以随选择收缩依赖。
 
-对外产品入口只保留模板：`--template=basic-api|auth-api` 是正式选择器，不传选择器时默认 `basic-api`；`--with` 只提供 experimental 专家组合，manifest 记录 `support: experimental`；`--profile=minimal` 已移除，传入会报错并提示改用 `--template=auth-api`。其他内部 profile（`full`/`minimal`/`saas`/`enterprise`/`machine`）继续服务 Jimu 自身构建，但不等于官方模板矩阵。模板、预算、支持级别和兼容窗口的机器可读事实源是 [`docs/templates/v1`](../templates/v1/README.md)，实现门禁和生成器不得另建第二份选择集定义。
+对外产品入口只保留模板：`--template=basic-api|auth-api` 是正式选择器，不传选择器时默认 `basic-api`；`--with` 只提供 experimental 专家组合，manifest 记录 `support: experimental`；`--profile=minimal` 已移除，传入会报错并提示改用 `--template=auth-api`。保留的内部 profile 只有 `full`（开发、测试和 demo 的全量形态）与 `minimal`（冻结，仅保持构建和闭包门禁）；`enterprise`、`machine`、`saas` 已按 [ADR 0007](../adr/0007-profiles-are-internal-build-shapes.md) 退役。内部 profile 不等于官方模板矩阵。模板、预算、支持级别和兼容窗口的机器可读事实源是 [`docs/templates/v1`](../templates/v1/README.md)，实现门禁和生成器不得另建第二份选择集定义。
 
 官方模板是可再生成一次的起始基线，不是持续管理的投影。生成后的工程归用户所有；`.jimu/manifest.json` 只记录来源、选择集和摘要，不授予 Jimu 覆盖用户文件的权利。v0.5.0 不提供隐式升级；v0.6.0 起提供显式 `jimu upgrade`，只在无冲突时修改生成器管理文件，并在备份后执行 tidy/build/test，失败按原字节回滚。schema v1 仍 fail-closed，也不提供自动项目/存量数据库迁移；v0.4.x 生成项目仍只支持“重新生成 + 人工迁移”，v0.5 的 schema v2 项目可通过显式 `jimu upgrade` 升级。升级支持窗口固定为 `v0.5.0` 起的 certified 模板，安全修复只保证当前 0.7.x 的最新 patch；决策见 [ADR 0003](../adr/0003-upgrade-support-window.md)。
 

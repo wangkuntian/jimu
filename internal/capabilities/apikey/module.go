@@ -16,7 +16,7 @@ import (
 type Module struct {
 	service  *application.AdminAPIKeyService
 	verifier *APIKeyVerifier
-	// protected 声明本能力是否充当受保护中间件提供者：machine 形态没有 auth，
+	// protected 声明本能力是否充当受保护中间件提供者：无 auth 的 experimental 组合没有 auth，
 	// 受保护路由由 X-API-Key 承担；full 形态 auth 已在，apikey 让位（空链），
 	// 以免触发 bootstrap 的单提供者 fail-closed 规则。
 	protected bool
@@ -65,7 +65,7 @@ func (m *Module) RegisterJobs(j contract.JobRegistry) {}
 
 func (m *Module) RegisterEvents(e contract.EventBus) {}
 
-// ProtectedHTTPMiddleware 实现 contract.ProtectedHTTPMiddlewareProvider：machine 形态
+// ProtectedHTTPMiddleware 实现 contract.ProtectedHTTPMiddlewareProvider：无 auth 组合
 // 没有 auth（无登录/会话端点），受保护路由改由 X-API-Key 认证 + scope 校验 + Key 归属
 // 租户注入承担，复用能力内既有的两条中间件而不是新写认证路径。
 // 启用集里已有 auth 时本能力不是提供者，返回空链让位（见 bootstrap 的单提供者规则）。
@@ -78,5 +78,5 @@ func (m *Module) ProtectedHTTPMiddleware() ([]gin.HandlerFunc, error) {
 
 var _ contract.Module = (*Module)(nil)
 
-// 受保护中间件提供者（machine 形态；启用集含 auth 时返回空链让位）。
+// 受保护中间件提供者（无 auth 组合；启用集含 auth 时返回空链让位）。
 var _ contract.ProtectedHTTPMiddlewareProvider = (*Module)(nil)

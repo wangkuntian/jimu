@@ -28,9 +28,6 @@
 |---|---:|---:|---:|---:|---:|---:|---:|---|
 | `full` | 124.8 | 100.0% | 96 | 26 | 23 | 347 | 38825 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
 | `minimal` | 86.1 | 69.0% | 31 | 11 | 9 | 165 | 18278 | - |
-| `saas` | 86.4 | 69.2% | 47 | 14 | 11 | 194 | 21457 | - |
-| `enterprise` | 86.8 | 69.5% | 54 | 17 | 13 | 236 | 24211 | - |
-| `machine` | 84.0 | 67.3% | 25 | 11 | 8 | 152 | 17411 | - |
 
 ## 验收断言
 
@@ -45,7 +42,7 @@
 
 ## 层②边界：go.mod 直接依赖
 
-五个形态的 go.mod 直接依赖数**逐形态完全相同**（各 66 个）。这不是漏测：Go 的依赖裁剪
+各形态的 go.mod 直接依赖数**逐形态完全相同**（各 66 个）。这不是漏测：Go 的依赖裁剪
 作用于整个 module —— `go.mod`/`go.sum` 描述 module 而非包，profile 入口包只改变**编进二进制的
 包与符号集合**，不改变 module 依赖图。真正让 `go.mod` 变小的是层①（`jimu new` 生成专属 module
 并 `go mod tidy`），不是层②。设计原文见 §11「层②的边界」。
@@ -56,6 +53,3 @@
 |---|---|
 | `full` | encryption storage notification queue outbox breach tenant access user captcha mfa auth passkey audit ws console oauth apikey dataops uploadsec search apidocs grpc |
 | `minimal` | encryption notification access user auth |
-| `saas` | encryption notification tenant access user auth audit |
-| `enterprise` | encryption storage notification access user auth audit ws console oauth dataops |
-| `machine` | encryption access user apikey grpc |

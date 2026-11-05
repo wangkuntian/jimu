@@ -88,19 +88,19 @@ func TestSelectedCapabilityIsAssembledWithItsWholeCompileClosure(t *testing.T) {
 	assertProjectBuilds(t, dir, newTestGoCache(t))
 }
 
-// TestGeneratedServerSurvivesProtobufDescriptor 是 C2 的端到端验收：`--profile=machine`
+// TestGeneratedServerSurvivesProtobufDescriptor 是 C2 的端到端验收：包含 grpc 的
 // 生成项目里 `go run ./cmd/server` **不得**出现 protobuf 描述符解析 panic。
 // 连库失败是预期（无 MySQL），只要不是 filedesc/slice bounds 崩溃即可。
 func TestGeneratedServerSurvivesProtobufDescriptor(t *testing.T) {
 	requireHeavyMatrix(t)
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "machine", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, With: withProtectedProvider("grpc"), Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 
 	// 先确认生成树里的 raw descriptor 逐字节完好（不是靠运行期侥幸）。
 	pb := filepath.Join(dir, "internal/capabilities/grpc/userinfopb/userinfo.pb.go")
 	content, err := os.ReadFile(pb)
-	require.NoError(t, err, "machine 形态应含 grpc 与它的 .pb.go")
+	require.NoError(t, err, "包含 grpc 的选区应含 grpc 与它的 .pb.go")
 	assert.Contains(t, string(content), `\x1cproto/jimu/v1/userinfo.proto`)
 	assert.NotContains(t, string(content), "proto/example.com")
 
@@ -129,7 +129,7 @@ func failedTestNames(output string) []string {
 	return slices.Compact(names)
 }
 
-// TestGeneratedProjectTestTreeIsGreen minimal/queue/machine 三例的生成项目 `go test ./...`：
+// TestGeneratedProjectTestTreeIsGreen 保留形态与代表性 `--with` 选区的生成项目 `go test ./...`：
 // 保留下来的测试必须**全部通过**。
 //
 // 曾经的唯一豁免（`TestOpenAPIIncludesCRUDContract` 读 docs/openapi/swagger.json）已按**资产依赖**
@@ -137,7 +137,7 @@ func failedTestNames(output string) []string {
 // 「已登记的失败」白名单 —— 新出现的任何失败都让本测试红。
 func TestGeneratedProjectTestTreeIsGreen(t *testing.T) {
 	requireHeavyMatrix(t)
-	// 覆盖 5 个 profile + 单能力/小集合的「裁剪得最狠」选区：保留的测试必须真的能跑（不只是能编译）。
+	// 覆盖两个保留 profile + 单能力/小集合的「裁剪得最狠」选区：保留的测试必须真的能跑（不只是能编译）。
 	// 全部用例共用一个专用 GOCACHE（依赖只编译一次），仍不碰共享缓存（见 projectbuild_test.go）。
 	// 十个选区彼此独立、共用同一个只读的 cache，故子用例并行 + 与构建网同一个并发上限：
 	// 串行时这十条占了整个重型 job 的 ~28%（实测 239s）。
@@ -149,9 +149,6 @@ func TestGeneratedProjectTestTreeIsGreen(t *testing.T) {
 	}{
 		{"profile full", NewOptions{Profile: "full"}},
 		{"profile minimal", NewOptions{Profile: "minimal"}},
-		{"profile saas", NewOptions{Profile: "saas"}},
-		{"profile enterprise", NewOptions{Profile: "enterprise"}},
-		{"profile machine", NewOptions{Profile: "machine"}},
 		{"with queue", NewOptions{With: withProtectedProvider("queue")}},
 		{"with storage", NewOptions{With: withProtectedProvider("storage")}},
 		{"with apidocs", NewOptions{With: "apidocs"}},

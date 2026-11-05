@@ -121,7 +121,7 @@ func TestNewCmdRejectsUnknownTemplate(t *testing.T) {
 }
 
 func TestNewCmdRejectsInternalProfile(t *testing.T) {
-	for _, profile := range []string{"full", "saas", "enterprise", "machine"} {
+	for _, profile := range []string{"full"} {
 		t.Run(profile, func(t *testing.T) {
 			c := newCommandForTest(&bytes.Buffer{})
 			c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=" + profile, "--dry-run"})
