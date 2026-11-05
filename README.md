@@ -102,6 +102,7 @@ make verify
 - [运维](docs/OPERATIONS.md)
 - [升级](docs/UPGRADING.md)
 - [本地实验指标](docs/EXPERIMENTS.md)
+- [本地全栈 demo](docs/DEMO.md)
 - [真实项目升级验证](docs/UPGRADE-VALIDATION.md)
 - [与常见方案的区别](docs/COMPARISON.md)
 - [生产上线与模板检查清单](docs/PRODUCTION.md)

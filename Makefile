@@ -1,6 +1,6 @@
 .PHONY: help build build-server build-cli clean dev
 .PHONY: image ensure-image init prepare-secrets prepare-observability-secrets
-.PHONY: up up-observability down restart status logs adminer
+.PHONY: up up-observability demo down restart status logs adminer
 .PHONY: migrate migrate-down migrate-status seed
 .PHONY: backup restore build-backup-image compose-db-backup compose-db-restore test-backup-restore
 .PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race check-makefile check-config
@@ -107,6 +107,9 @@ ensure-image:
 
 up: prepare-secrets ensure-image ## 初始化 Secret、按需构建镜像并启动核心栈
 	$(COMPOSE_ENV) $(COMPOSE) up -d --no-build
+
+demo: ## 启动 full server + jimu-web 全栈 demo
+	@./scripts/demo.sh
 
 up-observability: prepare-observability-secrets ensure-image ## 启动观测栈并初始化 dashboard（配置 webhook 时同步告警）
 	$(COMPOSE_ENV) $(COMPOSE_ALL) up -d --no-build
