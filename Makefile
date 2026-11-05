@@ -6,7 +6,7 @@
 .PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race check-makefile check-config
 .PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates bundle-check bundle-meta test-scaffold-official test-scaffold-matrix test-scaffold-upgrade test-scaffold-composition
 .PHONY: profiles-check compose-report compose-report-check check-skills skills-install
-.PHONY: swagger swagger-check smoke-check compose-check govulncheck check ci ci-full release-check
+.PHONY: swagger swagger-check smoke-check compose-check govulncheck check ci ci-full release-check release-check-fast
 .PHONY: proto bench bench-ci loadtest cli all hooks
 
 .DEFAULT_GOAL := help
@@ -313,7 +313,10 @@ ci: $(CI_CHECKS) test-scaffold-official ## 运行本地 CI（官方模板门禁�
 ci-full: $(CI_CHECKS) test-scaffold-matrix ## 运行完整本地 CI（含 full 脚手架矩阵）
 	@echo "✅ All local CI checks passed (full)"
 
-release-check: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-config bundle-check test govulncheck compose-check test-scaffold-matrix ## 运行发布前检查
+release-check-fast: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-config bundle-check test govulncheck compose-check ## 运行发布前快速检查（不含完整脚手架矩阵）
+	@echo "Fast release checks passed (full scaffold matrix skipped)"
+
+release-check: release-check-fast test-scaffold-matrix ## 运行发布前检查（含完整脚手架矩阵）
 	@echo "All checks passed"
 
 ##@ 工具
