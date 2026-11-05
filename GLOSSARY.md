@@ -56,6 +56,26 @@ _Avoid_：产品遥测、埋点
 `basic-api` 和 `auth-api` 两个 certified 模板，受发布阻断门禁保护。
 _Avoid_：预设项目、样例
 
+**Profile**：
+Jimu 服务二进制的编译期组成形态；不是 `jimu new` 模板，也不是对外产品契约。
+_Avoid_：模板、模板源、运行形态
+
+**Frozen profile**：
+保留构建和门禁、但不再新增能力或进入产品路线的内部 profile。
+_Avoid_：废弃 profile、实验 profile
+
+**Retired profile**：
+已从 registry、构建脚本、发布矩阵和文档中移除的内部 profile。
+_Avoid_：隐藏 profile、禁用 profile
+
+**Full-stack demo**：
+用 `full` profile 运行 Jimu server 并连接 `jimu-web` 的可演示全栈体验；它不证明 `jimu new` 生成全栈项目。
+_Avoid_：全栈模板、generated full-stack
+
+**Full-stack preview**：
+以 experimental 支持级别发布的 full-stack demo 版本；不是 certified 模板或生产承诺。
+_Avoid_：全栈正式版、稳定版
+
 **Experimental composition**：
 通过 `--with` 或 `capability add` 形成的能力组合，不对应官方模板，支持级别为 experimental。
 _Avoid_：自定义模板、扩展包

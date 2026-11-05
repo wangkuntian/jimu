@@ -101,7 +101,7 @@ jimu upgrade <dir>                     # 显式升级事务
 | `certified` | `basic-api`、`auth-api` 两个官方模板预设 | 固定契约、硬预算、端到端验收和发布阻断门禁；manifest 的 `composition.support` 为 `certified`。 |
 | `validated` | 固定 catalog 中通过完整发布门禁的子集（保留级别） | 用于未来推广；v0.6.0 没有选择器产出该级别，pairwise 构建矩阵不自动提升支持级别。 |
 | `experimental` | 能通过硬预检的 `--with` 组合与 `capability add` 项目 | 允许生成/追加并标记 `experimental`；不承诺组合稳定性、预算、E2E 或升级兼容。 |
-| 内部 profile | `full`、`minimal`、`saas`、`enterprise`、`machine` | 仅用于 Jimu 自身构建和维护，不是对外模板矩阵；manifest 的 `composition.support` 映射为 `experimental`。 |
+| 内部 profile | `full`、`minimal` | `full` 用于开发、测试和 demo；`minimal` 已冻结。`enterprise`、`machine`、`saas` 已退役。不是对外模板矩阵；manifest 的 `composition.support` 映射为 `experimental`。 |
 
 `matrix.yaml` 的 `official` 模板档对应 `certified`，`experimental` 专家档对应 `experimental`。本版本不新增“已认证专家组合”：只有写入 `matrix.yaml` 的选择才获得正式兼容承诺，`--with` 不能绕过支持边界。`validity: valid|invalid` 与 `support` 正交；合法组合不自动获得 `validated` 或 `certified`。
 

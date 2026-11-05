@@ -58,10 +58,10 @@ func validateShape(shape string) error {
 		return fmt.Errorf("--shape 不得为空")
 	}
 	if !shapeIdentifier.MatchString(shape) {
-		return fmt.Errorf("invalid --shape %q: 只允许小写字母、数字与下划线且以字母开头（示例：app、minimal、machine）", shape)
+		return fmt.Errorf("invalid --shape %q: 只允许小写字母、数字与下划线且以字母开头（示例：app、minimal、service）", shape)
 	}
 	if reservedShapes[shape] {
-		return fmt.Errorf("invalid --shape %q: 是生成目录结构的保留名（registry/active/catalog/configs/profiles/internal/cmd 不可用），请换一个（示例：app、minimal、machine）", shape)
+		return fmt.Errorf("invalid --shape %q: 是生成目录结构的保留名（registry/active/catalog/configs/profiles/internal/cmd 不可用），请换一个（示例：app、minimal、service）", shape)
 	}
 	return nil
 }

@@ -90,25 +90,16 @@ ALL_CAPS="access apidocs apikey audit auth breach captcha console dataops encryp
 # 来源＝ internal/profiles/<profile>/assembly.go 的清单 + 传递必需的编译期依赖。
 EXPECTED_full="access apidocs apikey audit auth breach captcha console dataops encryption grpc mfa notification oauth outbox passkey queue search storage tenant uploadsec user ws"
 EXPECTED_minimal="access auth encryption notification user"
-EXPECTED_saas="access audit auth encryption notification tenant user"
-EXPECTED_enterprise="access audit auth console dataops encryption notification oauth storage user ws"
-EXPECTED_machine="access apikey encryption grpc user"
 
 # FORBIDDEN_<profile>：该形态闭包里明确禁止出现的能力（本次修复的逐形态「不得包含」清单）。
 # 未列出的形态按「ALL_CAPS − EXPECTED」即全部非预期能力处理（见下方 FORBIDDEN_* 逐条列明）。
 FORBIDDEN_full=""
 FORBIDDEN_minimal="tenant passkey oauth dataops audit console grpc storage queue outbox search uploadsec breach apidocs ws"
-FORBIDDEN_saas="apidocs apikey breach captcha console dataops grpc mfa oauth passkey search storage uploadsec ws"
-FORBIDDEN_enterprise="apidocs apikey breach captcha grpc mfa passkey search tenant uploadsec"
-FORBIDDEN_machine="auth tenant mfa passkey oauth console audit dataops storage queue outbox notification"
 
 # ALLOWED_<profile>：从 FORBIDDEN 中显式豁免的既有类型级传递残留（见文件头注释），
 # 它们仍是 EXPECTED 的成员，只豁免「禁止」不改「锁定」。
 ALLOWED_full=""
 ALLOWED_minimal="outbox queue"
-ALLOWED_saas=""
-ALLOWED_enterprise=""
-ALLOWED_machine="notification outbox queue"
 
 # cap_roots <overlay>：该形态（./cmd/server + overlay）闭包里的能力**根包**名
 # （不含 access/domain 之类的子包），排序去重。
@@ -176,7 +167,7 @@ if [[ "${JIMU_PROFILES_SMOKE:-}" != "1" ]]; then
   for p in "${PROFILES[@]}"; do
     echo "SKIP 形态 $p 启动与健康检查：需要 DB+Redis（设置 JIMU_PROFILES_SMOKE=1 启用；APP_ENV=dev，端口 ${HTTP_PORT}/${MGMT_PORT}）"
   done
-  echo "✅ 各形态（overlay 构建 cmd/server）+ 依赖闭包裁剪门禁通过（启动与健康检查已跳过：未设置 JIMU_PROFILES_SMOKE=1）"
+echo "✅ 保留形态（overlay 构建 cmd/server）+ 依赖闭包裁剪门禁通过（启动与健康检查已跳过：未设置 JIMU_PROFILES_SMOKE=1）"
   exit 0
 fi
 
@@ -210,4 +201,4 @@ for p in "${PROFILES[@]}"; do
   echo "    ok  形态 $p 就绪（GET /readyz）"
 done
 
-echo "✅ 各形态（overlay 构建 cmd/server）+ 依赖闭包裁剪门禁 + 启动 + 健康检查通过"
+echo "✅ 保留形态（overlay 构建 cmd/server）+ 依赖闭包裁剪门禁 + 启动 + 健康检查通过"

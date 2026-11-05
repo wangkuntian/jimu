@@ -25,8 +25,8 @@ func TestMigrationSetFullEqualsCatalogOrder(t *testing.T) {
 func TestMigrationSetCarriesSchemaDeps(t *testing.T) {
 	for _, declared := range []map[string]bool{
 		{"user": true, "access": true, "auth": true},                // minimal
-		{"user": true, "access": true, "apikey": true},              // machine
-		{"user": true, "access": true, "auth": true, "audit": true}, // saas
+		{"user": true, "access": true, "apikey": true},              // apikey-only
+		{"user": true, "access": true, "auth": true, "audit": true}, // tenant + audit
 	} {
 		names := make([]string, 0, len(declared))
 		for _, d := range MigrationSet(declared) {

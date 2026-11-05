@@ -15,7 +15,7 @@ import (
 )
 
 // TestAssetsForProfilesMatchesProfileassetsOracle 是 AssetsFor 的**独立对照**（Fix round 1 / Minor ③）：
-// 对 5 个形态，AssetsFor(set) 必须逐路径等于 profileassets.ForProfile(profile) —— 后者的能力集来自
+// 对每个保留形态，AssetsFor(set) 必须逐路径等于 profileassets.ForProfile(profile) —— 后者的能力集来自
 // registry 的形态清单（另一条来源），不是从 CapabilitySet.Declared 反推。下面那条
 // TestAssetsForMatchesTheAssetTableTheGeneratedProjectDerives 的 want 与实现同源，单靠它会漏掉
 // 「--profile 分支与声明集派生分叉」这类偏差；本测试补上这层独立网。

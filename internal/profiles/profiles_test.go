@@ -19,11 +19,8 @@ import (
 	"jimu/internal/contract"
 	"jimu/internal/kernel/logger"
 	"jimu/internal/profiles"
-	"jimu/internal/profiles/enterprise"
 	"jimu/internal/profiles/full"
-	"jimu/internal/profiles/machine"
 	"jimu/internal/profiles/minimal"
-	"jimu/internal/profiles/saas"
 	"jimu/internal/shared/testutil"
 
 	"github.com/stretchr/testify/require"
@@ -32,7 +29,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// profileAssemblies 是设计 §2 的 5 个形态入口。
+// profileAssemblies 是保留的形态入口。
 func profileAssemblies() []struct {
 	name string
 	a    assembly.Assembly
@@ -43,9 +40,6 @@ func profileAssemblies() []struct {
 	}{
 		{"full", full.Assembly()},
 		{"minimal", minimal.Assembly()},
-		{"saas", saas.Assembly()},
-		{"enterprise", enterprise.Assembly()},
-		{"machine", machine.Assembly()},
 	}
 }
 

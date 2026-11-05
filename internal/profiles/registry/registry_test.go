@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNamesIsTheFiveProfilesInReportOrder(t *testing.T) {
-	assert.Equal(t, []string{"full", "minimal", "saas", "enterprise", "machine"}, Names())
+func TestNamesIsTheSupportedProfilesInReportOrder(t *testing.T) {
+	assert.Equal(t, []string{"full", "minimal"}, Names())
 }
 
 func TestAllCoversEveryName(t *testing.T) {
@@ -24,7 +24,7 @@ func TestAllCoversEveryName(t *testing.T) {
 func TestLookupRejectsUnknownProfile(t *testing.T) {
 	_, err := Lookup("ghost")
 	require.ErrorContains(t, err, `unknown profile "ghost"`)
-	require.ErrorContains(t, err, "full, minimal, saas, enterprise, machine")
+	require.ErrorContains(t, err, "full, minimal")
 	if _, err := Lookup("minimal"); err != nil {
 		t.Fatalf("Lookup(minimal) error: %v", err)
 	}

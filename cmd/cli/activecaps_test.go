@@ -80,19 +80,6 @@ func TestMigrationSetCarriesSchemaDependencies(t *testing.T) {
 	// 顺序仍是 catalog 序（tenant 在 user/access 之后）。
 	assert.Less(t, indexOf(names, "user"), indexOf(names, "tenant"))
 	assert.Less(t, indexOf(names, "access"), indexOf(names, "tenant"))
-
-	// machine 只有 user/access/apikey/grpc/encryption：同样补 tenant。
-	machine, err := registry.Lookup("machine")
-	require.NoError(t, err)
-	mDeclared := map[string]bool{}
-	for _, c := range machine.Capabilities {
-		mDeclared[c.Descriptor.Name] = true
-	}
-	mNames := make([]string, 0, len(mDeclared))
-	for _, d := range catalog.MigrationSet(mDeclared) {
-		mNames = append(mNames, d.Name)
-	}
-	assert.Contains(t, mNames, "tenant")
 }
 
 func indexOf(xs []string, want string) int {

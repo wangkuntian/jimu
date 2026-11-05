@@ -56,7 +56,7 @@ func TestCheckProfileDriverImportsAcceptsDeclaredDrivers(t *testing.T) {
 }
 
 // TestCheckProfileDriverImportsRejectsUndeclaredDriverImport 真仓 RED 路径：available 集
-// 故意漏掉形态实际 import 的驱动（dataops/csv，full 与 enterprise 都选中）时，必须在文案里
+// 故意漏掉形态实际 import 的驱动（dataops/csv，full 会选中）时，必须在文案里
 // 点出「哪个形态包 → import 了哪个包 → 未声明为驱动」。
 func TestCheckProfileDriverImportsRejectsUndeclaredDriverImport(t *testing.T) {
 	available := availableDrivers(registry.All())
@@ -70,7 +70,7 @@ func TestCheckProfileDriverImportsRejectsUndeclaredDriverImport(t *testing.T) {
 }
 
 // TestActiveSelectionMustImportExactlyOneProfile 选点包恰好 import 一个形态包（且是
-// registry 认识的形态）；选点包 import registry 会把 5 个形态全拉回二进制，必须拦下。
+// registry 认识的形态）；选点包 import registry 会把所有保留形态拉回二进制，必须拦下。
 func TestActiveSelectionMustImportExactlyOneProfile(t *testing.T) {
 	require.NoError(t, checkActiveImports([]string{"jimu/internal/assembly", "jimu/internal/profiles/full"}))
 	require.ErrorContains(t, checkActiveImports([]string{"jimu/internal/profiles/full", "jimu/internal/profiles/minimal"}), "exactly one")

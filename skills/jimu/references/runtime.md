@@ -50,13 +50,9 @@ JIMU_PROFILES_SMOKE=1 make profiles-check     # 需 DB+Redis；逐形态启动�
 
 未设该变量时逐形态打印 `SKIP` —— **SKIP 不是通过**。
 
-## `machine` 形态的例外
+## 已退役 profile
 
-`machine` 刻意不含 `auth`，因此 `/api/v1/admin/apikeys`（位于 `middleware.AdminAuth()` 之后）无法自助签发。首把 API Key 走能力自带 CLI 带外签发：
-
-```bash
-PROFILE=machine make build-cli && ./bin/jimu-cli-machine apikey issue --name=first
-```
+`enterprise`、`machine`、`saas` 已按 ADR 0007 退役；`minimal` 冻结，`full` 保留。不要再以这些 profile 作为运行、测试或文档的默认示例。
 
 ## 常见红与定位
 

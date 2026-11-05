@@ -173,7 +173,7 @@ var staleModulePathConst = regexp.MustCompile(`modulePath\s*=\s*"jimu"`)
 // assertNoStaleModulePath 精确判据（Fix round 4，替代只查 `"jimu/` 的宽松版本）：
 // 生成树里不得残留框架 module path 的**两种**形态 —— `"jimu/…`（import 前缀）与
 // `modulePath = "jimu"`（度量工具里的 module path 常量）；**显式放行** protobuf rawDesc 与
-// gRPC Metadata 里必须保留的 proto 文件名。这样既能在含 grpc 的选择上跑（machine），也不会因为
+// gRPC Metadata 里必须保留的 proto 文件名。这样既能在含 grpc 的选择上跑，也不会因为
 // `Metadata: "jimu/v1/ping.proto"` 这类**应当保留**的字面量而误报。
 func assertNoStaleModulePath(t *testing.T, root string) {
 	t.Helper()

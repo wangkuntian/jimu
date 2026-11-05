@@ -10,7 +10,7 @@
 //	   声明驱动包；后者只允许 import assembly 与选点包 internal/profiles/active —— 驱动选中
 //	   只允许发生在 internal/profiles/<name>/drivers.go。抓「新增驱动目录 + profile blank
 //	   import 却忘声明」，也堵住「把 blank import 写进入口包绕过归属判定」。选点包本身由
-//	   两条纯函数断言把守：恰好 import 一个形态包，且不得 import registry（否则 5 个形态
+//	   两条纯函数断言把守：恰好 import 一个形态包，且不得 import registry（否则所有保留形态
 //	   全被静默拉回二进制）。
 package main
 
@@ -59,7 +59,7 @@ func profileClosure(root, profile string) (map[string][]string, error) {
 
 // driverDescriptors 汇总所有「声明过驱动」的 Descriptor：catalog 条目 + 各形态清单里的
 // 非 catalog 条目（storage 等 Ungated 能力不进 catalog，只在形态清单里声明 Drivers）。
-// 同一能力在不同形态可选中不同子集（enterprise 只选 storage/local），因此这里是并集来源。
+// 同一能力在不同形态可选中不同子集（例如某些形态只选 storage/local），因此这里是并集来源。
 func driverDescriptors(asms map[string]assembly.Assembly) []contract.Descriptor {
 	out := make([]contract.Descriptor, 0, len(catalog.All()))
 	for _, d := range catalog.All() {

@@ -1,7 +1,7 @@
 // Package cli 由 apikey 能力自带其 CLI 子命令（P2.6 的命令归属接缝：
 // 能力在自己的包内提供命令，cmd/cli 显式 import 并注册；internal/contract 不引入 cobra）。
 //
-// 存在意义之一是补上 machine 形态的缺口：该形态刻意没有 auth/JWT 链，
+// 存在意义之一是补上无 auth 组合的缺口：该组合刻意没有 auth/JWT 链，
 // /api/v1/admin/apikeys 无法自助访问，首把 API Key 需要带外签发。
 package cli
 

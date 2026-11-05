@@ -228,7 +228,7 @@ func pickProfiles(names, wanted []string) ([]string, error) {
 // `go build` 会**静默按提交态（full）构建**（该失败被本文件的
 // TestMinimalCompiledSurfaceIsMateriallySmaller 抓过一次）；而生成物 active.go 落到哪个目录
 // 是自由的。共享包的 WriteFiles(root, profile) 把值固定在 `<root>/.overlay/<profile>/`，
-// 因此这里只能传仓库根当 root —— 代价是 5 个形态的 overlay 常驻 gitignored 的 .overlay/。
+// 因此这里只能传仓库根当 root —— 代价是保留形态的 overlay 常驻 gitignored 的 .overlay/。
 func buildSize(root, name string) (int64, error) {
 	dir, err := os.MkdirTemp("", "jimu-compose-report-")
 	if err != nil {
@@ -331,7 +331,7 @@ func renderReport(ms []Metrics, deps int) string {
 	b.WriteString("\n")
 
 	b.WriteString("## 层②边界：go.mod 直接依赖\n\n")
-	fmt.Fprintf(&b, "五个形态的 go.mod 直接依赖数**逐形态完全相同**（各 %d 个）。这不是漏测：Go 的依赖裁剪\n", deps)
+	fmt.Fprintf(&b, "各形态的 go.mod 直接依赖数**逐形态完全相同**（各 %d 个）。这不是漏测：Go 的依赖裁剪\n", deps)
 	b.WriteString("作用于整个 module —— `go.mod`/`go.sum` 描述 module 而非包，profile 入口包只改变**编进二进制的\n")
 	b.WriteString("包与符号集合**，不改变 module 依赖图。真正让 `go.mod` 变小的是层①（`jimu new` 生成专属 module\n")
 	b.WriteString("并 `go mod tidy`），不是层②。设计原文见 §11「层②的边界」。\n\n")

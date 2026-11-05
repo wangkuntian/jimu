@@ -86,7 +86,7 @@ fix(auth): reject expired refresh token
 - 发布流程：`Start Release Branch` workflow（手动触发）**只需输入版本号**，总是从 `master` 切出 `release/<version>`；依赖升级平时已经直接进 master，发布分支天然包含它们，不再有「吸收」步骤
 - 来源白名单：`Scaffold Gate` 的来源白名单维护在 `.github/workflows/ci-scaffold.yml`（official job 的 `head_ref` 守卫与聚合 job 的来源判定），**已同时放行 `release/*`（发布候选）与 `dependabot/*`（依赖升级）**；其余来源一律 fail-closed。PR 只允许 official，full 只允许 `schedule`/`workflow_dispatch`。`dependabot-auto-merge.yml` 的 `branches`/`base.ref` 亦已改为 `master`。注意这两处是**配套**的：若只改 `dependabot.yml` 的 `target-branch` 而不放行白名单，依赖 PR 会在 `Scaffold Gate` 上红且无法合并（master ruleset 没有 bypass actor）
 - 历史说明：v0.3.5 曾引入常驻分支 `dependency-updates` 攒批依赖升级；v0.3.6 先移除了它的同步自动化（`sync-dependency-branch.yml`），并在本版本重切时连同该分支与其 ruleset 一并删除。移除原因：该分支必须 require `PR Gate`（否则 `--auto` 会抢跑），而 required check **同时拦截直推** ⇒ 同步只能走 PR；`GITHUB_TOKEN` 默认不允许创建 PR，即使允许，用它创建的 PR 也不会触发工作流 ⇒ 自动化无解；且 `Start Release Branch` 从它切出会漏掉 master 的提交。现在只有 `master` 一条长期分支
-- `make release-check` 仍可在本地发布前人工运行；tag 与 release notes 同步推送；不发布未经 tag 的 commit
+- 日常使用 `make release-check-fast`（不含完整脚手架矩阵）；发布前使用 `make release-check`（含 `test-scaffold-matrix`），或手动触发 CI 的 full scaffold matrix。tag 与 release notes 同步推送；不发布未经 tag 的 commit
 - 回滚：master 不接受 force push，用 revert commit 或新 hotfix PR；release 分支回滚切 hotfix 分支修复后重复合并流程
 
 ## Release Note

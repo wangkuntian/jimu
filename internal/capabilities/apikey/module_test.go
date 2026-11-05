@@ -66,7 +66,7 @@ type fakeAPIKeyQuota struct{}
 
 func (fakeAPIKeyQuota) CheckAPIKeyQuota(context.Context, uint64) error { return nil }
 
-// TestModuleProtectedHTTPMiddleware machine 形态：apikey 是唯一受保护中间件提供者，
+// TestModuleProtectedHTTPMiddleware 无 auth 组合：apikey 是唯一受保护中间件提供者，
 // 返回「X-API-Key 认证（含租户注入）+ scope 校验」链。
 func TestModuleProtectedHTTPMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)

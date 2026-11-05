@@ -26,7 +26,7 @@ description: 在 jimu 框架仓内改动时使用：新增/删除能力、新增
 | `internal/capabilities/catalog/` | 能力清单（唯一真源；非 catalog 条目在形态清单中标 `Ungated`） |
 | `internal/capability/` | 描述符解析与组合算法叶子包（`Resolve` / `ValidateDeclarations` / `Degraded` / `Compose` / 结构化诊断） |
 | `internal/assembly/` | 装配与生命周期（`Assembly` / `Capability` / `Run` / `ProbeAssembly`） |
-| `internal/profiles/<name>/` | 形态清单（`full`/`minimal`/`saas`/`enterprise`/`machine`）+ `registry`（形态总表）+ `active`（选点包） |
+| `internal/profiles/<name>/` | 保留的形态清单（`full`/`minimal`；`minimal` 已冻结）+ `registry`（形态总表）+ `active`（选点包）；`enterprise`/`machine`/`saas` 已退役 |
 | `internal/contract/` | 能力间端口与 `Descriptor` 定义 |
 | `cmd/server/` | 唯一入口：只 import `internal/assembly` 与选点包 `internal/profiles/active` |
 | `cmd/cli/` | `jimu` CLI（`migrate` / `seed` / `new` / `check` / `upgrade` / `capability create/add` / `apikey`） |
