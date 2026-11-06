@@ -1,0 +1,183 @@
+name: Measure Shard Weights
+
+# 在 **CI runner**（4 vCPU，与 race 分片同档）上实测 `tools/generator` 每条用例的
+# `-race` 耗时，产出 scripts/test_shard_weights.tsv 并作为 artifact 上传。
+#
+# 为什么需要它：权重表决定 LPT 分片配平，但本地（Apple Silicon）与 CI runner 的
+# 放大比例并不一致 —— 同一个分片本地 121s、CI 612s（5×），而分片之间的相对比例也不同。
+# 用本地测的表配平，在 CI 上仍会留下长杆。这张表必须以 CI 的数值为准。
+#
+# 触发：手动 workflow_dispatch。**不**在 PR/schedule 上跑 —— 它只是测量，
+# 跑一次需要约 10 分钟（4 片并行，每片 ~2.5 分钟 + 固定开销）。
+#
+# 用法：
+#   1. Actions → Measure Shard Weights → Run workflow
+#   2. 下载 artifact `test-shard-weights`，覆盖 scripts/test_shard_weights.tsv
+#   3. bash scripts/test_shards.sh plan 确认各片负载接近，提交
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: measure-shard-weights-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.26.10"
+
+jobs:
+  plan:
+    name: Plan shards
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: "🗂️ Emit the generator shard list"
+        id: plan
+        run: |
+          # 只挑出 generator-* 片；分片数由 GENERATOR_SHARDS 决定，与权重表内容无关。
+          shards=$(bash scripts/test_shards.sh shards-json db \
+            | jq -c '[.[] | select(startswith("generator-"))]')
+          echo "shards=${shards}" >> "$GITHUB_OUTPUT"
+          echo "measured shards: ${shards}"
+
+  measure:
+    name: Measure (${{ matrix.shard }})
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    # 与 ci.yml 的 race 分片保持同一环境：tools/generator 里有经 testutil.SkipUnlessMysql
+    # 连库的用例，缺服务会被 skip，测出来的权重会偏低。
+    services:
+      mariadb:
+        image: mariadb:12.1.2-noble
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: jimu_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: jimu_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d jimu_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:8.4.0-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/go-setup
+        with:
+          flavor: shards
+          save: "false"
+
+      - name: "⏱️ Time each test in ${{ matrix.shard }}"
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: "3306"
+          DB_USER: root
+          DB_PASSWORD: root
+          DB_NAME: jimu_test
+        run: |
+          set -euo pipefail
+          # 与 race 分片同口径：`-race` + 同一个 `-run` 正则。
+          # `-v` 才能拿到每条用例的耗时；输出格式 `--- PASS: Name (12.34s)`。
+          pattern=$(bash scripts/test_shards.sh pattern "${{ matrix.shard }}")
+          if [ -z "$pattern" ]; then
+            echo "::error::empty pattern for ${{ matrix.shard }}"
+            exit 1
+          fi
+          go test -race -v -count=1 -timeout 25m \
+            -run "^(${pattern})$" ./tools/generator \
+            > "$RUNNER_TEMP/measure-${{ matrix.shard }}.log" 2>&1 || true
+          grep -E '^--- (PASS|FAIL|SKIP): ' "$RUNNER_TEMP/measure-${{ matrix.shard }}.log" \
+            | sed -E 's/^--- (PASS|FAIL|SKIP): ([^ ]+) \(([0-9.]+)s\)/\3\t\2/' \
+            > "$RUNNER_TEMP/${{ matrix.shard }}.tsv" || true
+          echo "measured $(wc -l < "$RUNNER_TEMP/${{ matrix.shard }}.tsv" | tr -d ' ') tests"
+
+      - name: "📤 Upload raw timings"
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: weights-${{ matrix.shard }}
+          path: ${{ runner.temp }}/${{ matrix.shard }}.tsv
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Merge weights
+    needs: measure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: "📥 Download all timings"
+        uses: actions/download-artifact@v8
+        with:
+          pattern: weights-*
+          merge-multiple: true
+          path: weights
+
+      - name: "🧮 Build the weights table"
+        run: |
+          set -euo pipefail
+          cat weights/*.tsv | sort -t$'\t' -k1,1nr > "$RUNNER_TEMP/rows.tsv"
+          count=$(wc -l < "$RUNNER_TEMP/rows.tsv" | tr -d ' ')
+          median=$(awk -F'\t' '{print $1}' "$RUNNER_TEMP/rows.tsv" | sort -n \
+            | awk '{a[NR]=$1} END { if (NR==0) print 1; else print a[int((NR+1)/2)] }')
+          total=$(awk -F'\t' '{s+=$1} END {printf "%.1f", s}' "$RUNNER_TEMP/rows.tsv")
+          shards=$(grep -E '^GENERATOR_SHARDS=' scripts/test_shards.sh | cut -d= -f2)
+          {
+            echo "# generator 用例耗时权重（秒），由 .github/workflows/measure-shard-weights.yml 在 CI runner 上实测生成。"
+            echo "# 用途：生成器按 LPT 贪心装箱把用例分到 generator-1..N，使最长分片最小。"
+            echo "# 未列出的用例按中位数估计；过期只会让配平变差，不会漏测。"
+            echo "#"
+            echo "# 为什么用 CI 的数值：本地（Apple Silicon）与 CI runner 的放大比例不一致，"
+            echo "# 同一个分片本地 121s、CI 612s，且分片之间的相对比例也不同。"
+            echo "# 刷新：Actions → Measure Shard Weights → Run workflow，下载 artifact 覆盖本文件。"
+            echo "# shards=${shards}"
+            echo "# median=${median}"
+            echo "# total=${total}"
+            cat "$RUNNER_TEMP/rows.tsv"
+          } > scripts/test_shard_weights.tsv
+          echo "✅ 写入 $count 条用例，median=${median}s total=${total}s"
+
+      - name: "📋 Show the resulting plan"
+        run: bash scripts/test_shards.sh plan
+
+      - name: "📤 Upload the weights table"
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-shard-weights
+          path: scripts/test_shard_weights.tsv
+          if-no-files-found: error
+          retention-days: 30

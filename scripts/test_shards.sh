@@ -48,6 +48,7 @@
 #   scripts/test_shards.sh verify                 # 守卫：包/用例/形态的并集 == 全集、且互不重叠
 #   scripts/test_shards.sh shard-weights run      # 实测 generator 用例耗时，刷新权重表（入库）
 #   scripts/test_shards.sh plan                    # 打印 generator 分片计划与各片负载（秒）
+#   scripts/test_shards.sh pattern <shard>         # 打印该分片的 -run 正则 / 形态列表
 #
 # 本脚本同时服务两件事：竞争检测（`-race`）与覆盖率（`-covermode=atomic -coverprofile`）。
 # 两者可以同跑（`go test -race -covermode=atomic`），因此 CI 只跑一遍测试套件：
@@ -480,6 +481,19 @@ cmd_shards_json() {
   printf '[%s]\n' "${out%,}"
 }
 
+# 打印某个 generator 分片的 `-run` 正则（供测量 workflow 与调试用）。
+cmd_pattern() {
+  local shard="${1:-}"
+  case "$shard" in
+    generator-*) generator_pattern "${shard#generator-}" ;;
+    composereport-*) composereport_profiles "${shard#composereport-}" | paste -sd, - ;;
+    *)
+      echo "用法: test_shards.sh pattern <generator-N|composereport-N>" >&2
+      exit 2
+      ;;
+  esac
+}
+
 cmd_list() {
   local shard="${1:-}"
   [ -n "$shard" ] || {
@@ -598,6 +612,7 @@ case "${1:-}" in
   shards) cmd_shards ;;
   shards-json) shift; cmd_shards_json "${1:-all}" ;;
   list) shift; cmd_list "$@" ;;
+  pattern) shift; cmd_pattern "$@" ;;
   run) shift; cmd_run "$@" ;;
   merge-cover) shift; cmd_merge_cover "$@" ;;
   shard-weights) shift; cmd_shard_weights "$@" ;;
