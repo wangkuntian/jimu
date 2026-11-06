@@ -114,16 +114,15 @@ func TestParseCapabilitySetRejectsUnknownProfile(t *testing.T) {
 //   - `<cap>/domain…` 子包**忽略**（由裁定 ④/S2 决定只带 domain/，否则 tenant/auth 链会被拖进来）；
 //   - 完整复制成员再传递补齐 Requires。
 //
-// queue 自身经 `./queue` 根包进闭包；access/tenant/user 只出现在结果里，是裁定 ④ 的
-// **内核编译期 domain 依赖**（internal/app/seed.go 直接 import 它们的 domain 叶子包），
-// 且只带 domain/、不带 migrations 与生成的 module。
+// v0.10.0 起 internal/app 不再 import 能力 domain（seed 模型下沉到 kernel/seedmodel），
+// 因此没有"内核编译期 domain 依赖"这一层，queue 就是唯一成员。
 func TestCapabilityRootsClosureOfQueueOnly(t *testing.T) {
 	set, err := ParseCapabilitySet("", "queue", "app")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"queue"}, set.Declared)
-	assert.Equal(t, []string{"access", "queue", "tenant", "user"}, set.Copy)
-	assert.Equal(t, []string{"access", "tenant", "user"}, set.DomainOnly)
-	assert.Empty(t, set.MigrationOnly, "queue 不触发 schema 依赖：tenant 是 domain 携带而非迁移携带")
+	assert.Equal(t, []string{"queue"}, set.Copy)
+	assert.Empty(t, set.DomainOnly, "kernel no longer imports capability domains")
+	assert.Empty(t, set.MigrationOnly, "queue 不触发 schema 依赖")
 	assert.NotContains(t, set.Copy, "auth")
 }
 

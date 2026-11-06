@@ -31,7 +31,7 @@ func upgradeCommandForTest(out *bytes.Buffer) *cobra.Command {
 func TestUpgradeCmdDefaultsToReadOnlyNoOpWhenUpToDate(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := generator.NewProject(generator.NewOptions{
-		Dir: dir, Template: "basic-api", Module: "example.com/proj", NoTidy: true, NoSelfCheck: true,
+		Dir: dir, Template: "minimal", Module: "example.com/proj", NoTidy: true, NoSelfCheck: true,
 	})
 	require.NoError(t, err)
 	manifest := filepath.Join(dir, ".jimu", "manifest.json")
@@ -117,7 +117,7 @@ func TestUpgradeCmdCheckFailsOnConflicts(t *testing.T) {
 func TestUpgradeCmdCheckPassesOnCleanProject(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := generator.NewProject(generator.NewOptions{
-		Dir: dir, Template: "basic-api", Module: "example.com/proj", NoTidy: true, NoSelfCheck: true,
+		Dir: dir, Template: "minimal", Module: "example.com/proj", NoTidy: true, NoSelfCheck: true,
 	})
 	require.NoError(t, err)
 
@@ -133,11 +133,11 @@ func TestUpgradeCmdCheckPassesOnCleanProject(t *testing.T) {
 func TestUpgradeCmdJSONDiffReportsConflictWithoutWriting(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := generator.NewProject(generator.NewOptions{
-		Dir: dir, Template: "basic-api", Module: "example.com/proj", NoTidy: true, NoSelfCheck: true,
+		Dir: dir, Template: "minimal", Module: "example.com/proj", NoTidy: true, NoSelfCheck: true,
 	})
 	require.NoError(t, err)
-	readme := filepath.Join(dir, "README.md")
-	require.NoError(t, os.WriteFile(readme, []byte("local README\n"), 0o644))
+	makefile := filepath.Join(dir, "Makefile")
+	require.NoError(t, os.WriteFile(makefile, []byte("local Makefile\n"), 0o644))
 	before := upgradeTreeDigest(t, dir)
 
 	var first bytes.Buffer
@@ -171,13 +171,13 @@ func TestUpgradeCmdJSONDiffReportsConflictWithoutWriting(t *testing.T) {
 	assert.Equal(t, "conflict", report.Status)
 	assert.Equal(t, 1, report.Counts.Conflict)
 	require.NotEmpty(t, report.Entries)
-	assert.Equal(t, "README.md", report.Entries[0].Path)
+	assert.Equal(t, "Makefile", report.Entries[0].Path)
 	assert.True(t, report.Entries[0].BaselineExists)
 	assert.True(t, report.Entries[0].LocalExists)
 	assert.True(t, report.Entries[0].TargetExists)
 	assert.False(t, report.Entries[0].BaselineContentAvailable)
-	assert.Contains(t, report.Entries[0].Diff, "--- local/README.md")
-	assert.Contains(t, report.Entries[0].Diff, "+++ target/README.md")
+	assert.Contains(t, report.Entries[0].Diff, "--- local/Makefile")
+	assert.Contains(t, report.Entries[0].Diff, "+++ target/Makefile")
 	assert.Equal(t, before, upgradeTreeDigest(t, dir), "JSON diff diagnostics must be read-only")
 
 	var second bytes.Buffer
@@ -190,17 +190,17 @@ func TestUpgradeCmdJSONDiffReportsConflictWithoutWriting(t *testing.T) {
 func TestUpgradeCmdHumanDiffAndDiagnosticFlagsRequireReadOnlyMode(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := generator.NewProject(generator.NewOptions{
-		Dir: dir, Template: "basic-api", Module: "example.com/proj", NoTidy: true, NoSelfCheck: true,
+		Dir: dir, Template: "minimal", Module: "example.com/proj", NoTidy: true, NoSelfCheck: true,
 	})
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("local README\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Makefile"), []byte("local Makefile\n"), 0o644))
 
 	var out bytes.Buffer
 	c := upgradeCommandForTest(&out)
 	c.SetArgs([]string{"upgrade", dir, "--dry-run", "--diff", "--no-tidy"})
 	require.NoError(t, c.Execute())
-	assert.Contains(t, out.String(), "--- local/README.md")
-	assert.Contains(t, out.String(), "+++ target/README.md")
+	assert.Contains(t, out.String(), "--- local/Makefile")
+	assert.Contains(t, out.String(), "+++ target/Makefile")
 
 	for _, args := range [][]string{
 		{"upgrade", dir, "--json", "--no-tidy"},
@@ -215,10 +215,10 @@ func TestUpgradeCmdHumanDiffAndDiagnosticFlagsRequireReadOnlyMode(t *testing.T) 
 func TestUpgradeCmdJSONDiffReportsBinaryMetadataWithoutPatch(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := generator.NewProject(generator.NewOptions{
-		Dir: dir, Template: "basic-api", Module: "example.com/proj", NoTidy: true, NoSelfCheck: true,
+		Dir: dir, Template: "minimal", Module: "example.com/proj", NoTidy: true, NoSelfCheck: true,
 	})
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("local\x00payload"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Makefile"), []byte("local\x00payload"), 0o644))
 
 	var out bytes.Buffer
 	c := upgradeCommandForTest(&out)
@@ -237,7 +237,7 @@ func TestUpgradeCmdJSONDiffReportsBinaryMetadataWithoutPatch(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(out.Bytes(), &report))
 	require.NotEmpty(t, report.Entries)
-	assert.Equal(t, "README.md", report.Entries[0].Path)
+	assert.Equal(t, "Makefile", report.Entries[0].Path)
 	assert.True(t, report.Entries[0].Binary)
 	assert.Empty(t, report.Entries[0].Diff)
 	assert.Contains(t, report.Entries[0].DiffUnavailableReason, "binary")

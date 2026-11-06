@@ -50,10 +50,10 @@ func TestReleaseCLINewOutsideCheckoutDryRun(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"new", "demo", "--template=basic-api", "--dry-run"})
+	cmd.SetArgs([]string{"new", "demo", "--template=minimal", "--dry-run"})
 
 	require.NoError(t, cmd.Execute())
-	assert.Contains(t, out.String(), "template     basic-api")
+	assert.Contains(t, out.String(), "template     minimal")
 	_, err := os.Stat("demo")
 	assert.True(t, os.IsNotExist(err))
 }

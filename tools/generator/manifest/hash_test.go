@@ -74,7 +74,7 @@ func TestValidateCompleteRequiresProvenance(t *testing.T) {
 	}{
 		{"framework version", func(doc *Document) { doc.Framework.Version = "" }, "framework.version"},
 		{"framework commit", func(doc *Document) { doc.Framework.Commit = "" }, "framework.commit"},
-		{"template version", func(doc *Document) { doc.Selection.Template = "basic-api" }, "template_version"},
+		{"template version", func(doc *Document) { doc.Selection.Template = "minimal" }, "template_version"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := validDocument()

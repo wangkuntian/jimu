@@ -39,13 +39,13 @@ func TestNewCmdWiresEveryFlag(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	var out bytes.Buffer
 	c := newCommandForTest(&out)
-	c.SetArgs([]string{"new", dir, "--template=basic-api", "--module=example.com/proj", "--dry-run"})
+	c.SetArgs([]string{"new", dir, "--template=minimal", "--module=example.com/proj", "--dry-run"})
 	require.NoError(t, c.Execute())
 
 	_, statErr := os.Stat(dir)
 	assert.True(t, os.IsNotExist(statErr), "--dry-run 绝不落盘")
 	assert.Contains(t, out.String(), "example.com/proj")
-	assert.Contains(t, out.String(), "basic-api")
+	assert.Contains(t, out.String(), "minimal")
 }
 
 // TestNewCmdDryRunDistinguishesAssemblyFromCopySet ④：`--dry-run` 的两个能力集口径不同且必须各自
@@ -85,12 +85,12 @@ func planLine(t *testing.T, plan, label string) string {
 	return ""
 }
 
-func TestNewCmdDefaultsToBasicAPI(t *testing.T) {
+func TestNewCmdDefaultsToMinimalPreset(t *testing.T) {
 	var out bytes.Buffer
 	c := newCommandForTest(&out)
 	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--dry-run"})
 	require.NoError(t, c.Execute())
-	assert.Contains(t, out.String(), "template     basic-api")
+	assert.Contains(t, out.String(), "template     minimal")
 	assert.Contains(t, out.String(), "support      certified")
 }
 
@@ -100,17 +100,17 @@ func TestNewCmdRejectsRemovedMinimalProfile(t *testing.T) {
 	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=minimal", "--dry-run"})
 	err := c.Execute()
 	require.ErrorContains(t, err, `profile "minimal"`)
-	require.ErrorContains(t, err, "--template=auth-api")
+	require.ErrorContains(t, err, "--template=minimal")
 	assert.NotContains(t, out.String(), "warning:")
-	assert.NotContains(t, out.String(), "template     auth-api", "不得再静默映射为 auth-api")
+	assert.NotContains(t, out.String(), "template     minimal", "不得静默把 --profile 映射成预设")
 }
 
-func TestNewCmdAcceptsAuthAPITemplate(t *testing.T) {
+func TestNewCmdAcceptsAuthPreset(t *testing.T) {
 	var out bytes.Buffer
 	c := newCommandForTest(&out)
-	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--template=auth-api", "--dry-run"})
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--template=auth", "--dry-run"})
 	require.NoError(t, c.Execute())
-	assert.Contains(t, out.String(), "template     auth-api")
+	assert.Contains(t, out.String(), "template     auth")
 	assert.Contains(t, out.String(), "support      certified")
 }
 
@@ -173,8 +173,8 @@ func TestNewCmdInvalidCompositionDoesNotWriteTarget(t *testing.T) {
 
 func TestNewCmdRejectsTemplateSelectorsTogether(t *testing.T) {
 	for _, args := range [][]string{
-		{"--template=basic-api", "--profile=full"},
-		{"--template=basic-api", "--with=apidocs"},
+		{"--template=minimal", "--profile=full"},
+		{"--template=minimal", "--with=apidocs"},
 	} {
 		c := newCommandForTest(&bytes.Buffer{})
 		c.SetArgs(append([]string{"new", filepath.Join(t.TempDir(), "proj"), "--dry-run"}, args...))
@@ -184,7 +184,7 @@ func TestNewCmdRejectsTemplateSelectorsTogether(t *testing.T) {
 
 func TestNewCmdRejectsShapeWithoutWith(t *testing.T) {
 	c := newCommandForTest(&bytes.Buffer{})
-	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--template=basic-api", "--shape=app", "--dry-run"})
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--template=minimal", "--shape=app", "--dry-run"})
 	require.ErrorContains(t, c.Execute(), "--shape is only valid with --with")
 }
 

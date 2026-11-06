@@ -22,7 +22,7 @@ func TestNewProjectUsesProvidedSourceProvenance(t *testing.T) {
 
 	_, err := NewProject(NewOptions{
 		Dir:         dir,
-		Template:    "basic-api",
+		Template:    "minimal",
 		Module:      "example.com/proj",
 		SourceRoot:  FrameworkRoot(),
 		Framework:   provenance,

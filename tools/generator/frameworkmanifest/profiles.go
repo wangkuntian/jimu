@@ -217,13 +217,6 @@ func completeSelection(root string, selected selection, all []contract.Descripto
 		copySet[name] = true
 		covered[name] = true
 	}
-	for _, entry := range []string{"access/domain", "tenant/domain", "user/domain"} {
-		name := strings.SplitN(entry, "/", 2)[0]
-		if !covered[name] {
-			selected.domain = append(selected.domain, name)
-			copySet[name] = true
-		}
-	}
 	selected.migration = slices.Clone(carriers)
 	selected.domain = uniqueSorted(selected.domain)
 	selected.copy = make([]string, 0, len(copySet))
@@ -238,4 +231,43 @@ func uniqueSorted(values []string) []string {
 	values = slices.Clone(values)
 	slices.Sort(values)
 	return slices.Compact(values)
+}
+
+// resolvePresetSelection 把预设解析成一次生成选择。
+//
+// 与 --with 的差别只有两处：能力集/驱动集来自预设（不是用户手敲），
+// 并把 template 记为预设名，使 manifest 能区分"预设起点"与"专家组合"。
+// 其余（编译闭包、迁移携带、拓扑序）全部复用同一套 completeSelection。
+func resolvePresetSelection(root string, preset Preset) (selection, error) {
+	all, inCatalog := allDescriptors()
+	composed := capability.Compose(all, capability.ComposeRequest{
+		Capabilities:   preset.Capabilities,
+		Drivers:        preset.Drivers,
+		DefaultDrivers: false,
+		Support:        contract.SupportLevel(preset.Support),
+	})
+	if err := composed.Err(); err != nil {
+		return selection{}, err
+	}
+	selected := selection{
+		shape:    preset.Name,
+		template: preset.Name,
+		support:  preset.Support,
+		drivers:  composed.Drivers,
+		ungated:  map[string]bool{},
+	}
+	if selected.drivers == nil {
+		selected.drivers = map[string][]string{}
+	}
+	selected.requested = composed.Requested
+	selected.autoAdded = composed.AutoAdded
+	for _, descriptor := range composed.Resolved {
+		selected.declared = append(selected.declared, descriptor.Name)
+		if !inCatalog[descriptor.Name] {
+			selected.ungated[descriptor.Name] = true
+		}
+	}
+	selected.migration = composed.MigrationCarriers
+	selected.assemblies = assemblyCapabilitiesFor(selected.declared, selected.drivers)
+	return completeSelection(root, selected, all)
 }

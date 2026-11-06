@@ -78,7 +78,7 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 		return manifest.Document{}, Resolution{}, fmt.Errorf("module is required")
 	}
 	if req.Template == "" && req.Profile == "" && req.With == "" {
-		req.Template = "basic-api"
+		req.Template = "minimal"
 	}
 	if req.Template != "" && (req.Profile != "" || req.With != "") {
 		return manifest.Document{}, Resolution{}, fmt.Errorf("--template must not be combined with --profile or --with")
@@ -88,10 +88,15 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 	}
 	var doc manifest.Document
 	var selected selection
-	if req.Template == "auth-api" {
-		doc, err = authAPIDocument(root, req.Module, req.Framework)
-	} else if req.Template != "" {
-		doc, err = basicAPIDocument(root, req.Module, req.Template, req.Framework)
+	if req.Template != "" {
+		var preset Preset
+		preset, err = LookupPreset(req.Template)
+		if err == nil {
+			selected, err = resolvePresetSelection(root, preset)
+			if err == nil {
+				doc, err = buildDocument(root, req.Module, selected, req.Framework)
+			}
+		}
 	} else {
 		selected, err = resolveSelection(root, req)
 		if err == nil {
@@ -146,9 +151,12 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 	if err := manifest.Validate(previous); err != nil {
 		return manifest.Document{}, fmt.Errorf("validate previous manifest: %w", err)
 	}
-	if previous.Selection.Template != "" {
+	// 旧模板已退役，其渲染路径不存在，无法在其产物上增量。
+	// 预设项目（minimal/auth/full）是允许扩展的：它们只是能力集的起点。
+	switch previous.Selection.Template {
+	case "basic-api", "auth-api":
 		return manifest.Document{}, fmt.Errorf(
-			"capability add does not extend official template projects (%s); regenerate with --with to use an experimental composition",
+			"template %q is retired and cannot be extended; regenerate with --template=minimal|auth|full or --with",
 			previous.Selection.Template,
 		)
 	}
@@ -226,6 +234,14 @@ func buildDocument(root, module string, selected selection, frameworkOverride *m
 	if err != nil {
 		return manifest.Document{}, err
 	}
+	copyActionsValue, err := copyActions(root, selected)
+	if err != nil {
+		return manifest.Document{}, err
+	}
+	generatedFilesValue, err := generatedFiles(root, selected)
+	if err != nil {
+		return manifest.Document{}, err
+	}
 	doc := manifest.Document{
 		SchemaVersion: manifest.CurrentSchemaVersion,
 		Framework:     framework,
@@ -236,13 +252,13 @@ func buildDocument(root, module string, selected selection, frameworkOverride *m
 		},
 		Composition:    compositionFor(selected),
 		Capabilities:   capabilityFacts(root, selected),
-		Copy:           copyActions(root, selected),
+		Copy:           copyActionsValue,
 		Templates:      templateActions(root, selected),
 		Merges:         mergeActions(root, selected),
 		Rewrites:       rewriteActions(module),
 		Assets:         assetActions(root, selected),
 		Prune:          []manifest.PruneRule{{Kind: "test-import", Path: "**/*_test.go", Reason: pruneReason}},
-		GeneratedFiles: generatedFiles(root, selected),
+		GeneratedFiles: generatedFilesValue,
 	}
 	routes, err := routeCount(root, selected.assemblies)
 	if err != nil {

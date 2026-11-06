@@ -30,10 +30,10 @@ func TestScaffoldCommandUsesResolvedSource(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"demo", "--template=basic-api", "--dry-run"})
+	cmd.SetArgs([]string{"demo", "--template=minimal", "--dry-run"})
 
 	require.NoError(t, cmd.Execute())
 	assert.Equal(t, 1, called)
 	assert.Equal(t, 1, cleaned)
-	assert.Contains(t, out.String(), "template     basic-api")
+	assert.Contains(t, out.String(), "template     minimal")
 }

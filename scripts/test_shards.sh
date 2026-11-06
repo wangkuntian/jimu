@@ -27,17 +27,28 @@
 # 见 ci.yml 的 `Run the composereport package tests`）。形态名单来自
 # `tools/profileoverlay -list`（registry 唯一来源），不写死。
 #
-# generator 的用例切分：两条已知最重的用例定向分到不同分片（隔离实测各占该包 ~24% / ~22%，
-# 纯轮转会把它们并到一片、把最短的一片压到 1/3），其余用例按名字排序取模轮转。
-# 名单从 `go test -list` 实时取，不写死 —— 新增用例自动归位，rename/删除用例也不会让分片失效。
+# generator 的用例切分：按**实测耗时**做 LPT 贪心装箱（见 `generator_shard_plan`）。
+# 权重来自 `scripts/test_shard_weights.tsv`（`shard-weights run` 生成，入库）；没有权重的用例
+# 取该表中位数作为估计，因此新增/改名用例不会让切分失效，只是配平精度暂时下降。
+# 名单从 `go test -list` 实时取，不写死。
+#
+# 为什么不按名字取模轮转（旧做法）：用例耗时差两个数量级（最重 ~54s，中位数 0.16s），
+# 按名字均分会让某一片独自扛下最重的几条 —— v0.10.0 实测 generator-4 单分片 11m41s，
+# 而 generator-5 只有 2m03s，是整条流水线的唯一长杆。改为耗时装箱后 4 片的负载
+# 是 121/121/121/121s（误差 <1s）。
 #
 # 用法：
-#   scripts/test_shards.sh shards-json            # workflow 矩阵用的 JSON 数组（如 ["core",…]）
+#   scripts/test_shards.sh shards-json [all|db|nodb]
+#                                                # workflow 矩阵用的 JSON 数组；db/nodb 按
+#                                                # 是否真的连库拆成两个 job（nodb 不挂容器）
 #   scripts/test_shards.sh shards                 # 分片名逐行列出
 #   scripts/test_shards.sh list <shard>           # 打印该分片覆盖的包
 #   scripts/test_shards.sh run <shard> [--cover]  # 执行该分片；--cover 同时产出 cover-<shard>.out
 #   scripts/test_shards.sh merge-cover <dir> <out> # 合并分片覆盖率 profile（表头 + 正文拼接）
 #   scripts/test_shards.sh verify                 # 守卫：包/用例/形态的并集 == 全集、且互不重叠
+#   scripts/test_shards.sh shard-weights run      # 实测 generator 用例耗时，刷新权重表（入库）
+#   scripts/test_shards.sh plan                    # 打印 generator 分片计划与各片负载（秒）
+#   scripts/test_shards.sh pattern <shard>         # 打印该分片的 -run 正则 / 形态列表
 #
 # 本脚本同时服务两件事：竞争检测（`-race`）与覆盖率（`-covermode=atomic -coverprofile`）。
 # 两者可以同跑（`go test -race -covermode=atomic`），因此 CI 只跑一遍测试套件：
@@ -46,6 +57,9 @@
 #
 # `run` 开跑前会自己跑一次守卫（fail-closed）：分片清单落后于代码树（新增包没人覆盖、
 # 用例切分漏了用例、形态切片漏了形态）会直接失败，而不是静默少测。
+#
+# 按是否连库拆两个 job：`tools` 与 `composereport-*` 不碰数据库，ci.yml 让它们跑在
+# `shards-nodb`（无 service container）。三个容器会和 `-race` 抢 4 vCPU runner 的 CPU。
 
 set -euo pipefail
 
@@ -61,24 +75,14 @@ GENERATOR_IMPORT="$MODULE/tools/generator"
 
 # generator 分片数。改这里必须同时确认 .github/workflows/ci.yml 的 race 矩阵来自
 # `shards-json`（是自动派生的，无需手改）—— 分片名会自动变成 generator-1…generator-N。
-# 依据（实测，run 38016751586 热跑）：4 片时 generator 组的最长分片是整条流水线的长杆
-# （job 287s / 分片步骤 226s）；提到 5 片后最长分片降到 job 197s / 步骤 139s，各片测试工作
-# 65.5 / 84.3 / 53.8 / 35.1 / 46.5s —— 没有空闲片，再加片只会多付固定开销。generator 是
-# 分片配平里唯一有效的那根杠杆（composereport 的步骤几乎全是固定成本，见下）。
-GENERATOR_SHARDS=5
+# 分片数只影响并行度；配平由 `generator_shard_plan` 按权重完成，不需要手工重排。
+# 4 片的依据见 scripts/test_shard_weights.tsv 里的 `# shards=` 行（`shard-weights run` 会
+# 按当前权重表算出「再加一片还能省多少」并写回）。
+GENERATOR_SHARDS=4
 
-# 定向分片：下标 0 是 generator-1，依此类推；空串表示该片不额外定向。
-# 只影响均衡度，不影响正确性（守卫保证用例不丢、不重）。
-# 两条已知最重的用例定向分到**不同**分片，其余用例按名字排序取模轮转；分片数变了要重新定
-# 这两条的位置，让最重的落在轮转池最轻的片上（5 片时按本机逐用例 race 耗时定的池子权重是
-# 14.6 / 17.5 / 29.8 / 24.6 / 30.2s，故 pin 依次放 generator-1、generator-2，上界最小）。
-GENERATOR_PINS=(
-  "TestCheckProfilesGoldenMatchesTheGeneratedClosure"
-  "TestReportSucceedsForEverySelection"
-  ""
-  ""
-  ""
-)
+# 用例耗时权重表：`<秒>\t<用例名>`，由 `scripts/test_shards.sh shard-weights run` 实测生成。
+# 入库是因为 CI 无法在不额外跑一遍测试的前提下得到权重；表过期只会让配平变差，不会让门禁失效。
+GENERATOR_WEIGHTS_FILE="scripts/test_shard_weights.tsv"
 
 # 单分片超时：与分片前的 `go test -race ./... -timeout 15m` 一致。
 SHARD_TEST_TIMEOUT=15m
@@ -150,21 +154,61 @@ generator_test_list() {
   printf '%s\n' "$generator_tests_cache"
 }
 
-# generator-<i> 片要跑的用例正则（`^(A|B|C)$`），由全量用例清单实时切分。
+# 用例权重（秒）。未在表中的用例取中位数估计：新用例既不会掉出分片，也不会因为猜成 0
+# 被全塞进同一片。表不存在时全部退回中位数（= 纯轮转的等价物），门禁仍然正确。
+generator_weight_of() {
+  local name="$1" weights="$2"
+  awk -F'\t' -v n="$name" '$2 == n { print $1; found=1; exit } END { if (!found) print "" }' \
+    <<<"$weights"
+}
+
+# generator 分片计划：LPT（Longest Processing Time first）贪心——用例按耗时降序，
+# 每条放进当前负载最小的分片。对「减少最大片」这个目标，LPT 有 4/3 近似保证，
+# 而 35 条用例的规模下它实际上就是最优或接近最优。
+#
+# 输出 `generator-<i><TAB><用例名>`，按分片名排序；重复调用结果一致（同权重同排序）。
+# 权重会随机器/负载漂移，但同一份表在同一 CI 配置下是稳定的，因此矩阵仍然确定性。
+generator_shard_plan() {
+  local weights="" median=""
+  if [ -f "$GENERATOR_WEIGHTS_FILE" ]; then
+    weights=$(grep -vE '^[[:space:]]*(#|$)' "$GENERATOR_WEIGHTS_FILE" || true)
+    median=$(printf '%s\n' "$weights" | awk -F'\t' 'NF>=2 {print $1}' | sort -n \
+      | awk '{a[NR]=$1} END { if (NR==0) print 1; else print a[int((NR+1)/2)] }')
+  fi
+  [ -n "$median" ] || median=1
+
+  generator_test_list | while read -r name; do
+    local w
+    w=$(generator_weight_of "$name" "$weights")
+    [ -n "$w" ] || w="$median"
+    printf '%s\t%s\n' "$w" "$name"
+  done | sort -t$'\t' -k1,1nr -k2,2 | awk -F'\t' \
+    -v n="$GENERATOR_SHARDS" '
+      {
+        # 选当前负载最小的片；并列时选下标最小的，保证确定性。
+        target = 1
+        for (i = 2; i <= n; i++) if (load[i] < load[target]) target = i
+        load[target] += $1
+        print "generator-" target "\t" $2
+      }'
+}
+
+# generator-<i> 片要跑的用例正则（`^(A|B|C)$`）。
 generator_pattern() {
-  local idx="$1"
-  local pinned="${GENERATOR_PINS[$((idx - 1))]:-}"
-  local rest rot p
-  rest=$(generator_test_list)
-  # **所有**被定向的用例都要从轮转池里剔除，且每个分片用同一份池子：只剔除本分片那条会让
-  # 各分片的池子长度不同，取模的相位随之错开 —— 结果既重复又漏（守卫抓过这个 bug）。
-  for p in "${GENERATOR_PINS[@]}"; do
-    [ -n "$p" ] || continue
-    rest=$(printf '%s\n' "$rest" | grep -vxF -- "$p" || true)
-  done
-  rot=$(printf '%s\n' "$rest" \
-    | awk -v n="$GENERATOR_SHARDS" -v i="$((idx - 1))" 'NR % n == i')
-  { printf '%s\n' "$pinned"; printf '%s\n' "$rot"; } | grep -v '^$' | paste -sd'|' -
+  local idx="$1" plan
+  plan=$(generator_shard_plan_cache)
+  printf '%s\n' "$plan" \
+    | awk -F'\t' -v s="generator-$idx" '$1 == s { print $2 }' \
+    | paste -sd'|' -
+}
+
+# 计划只算一次：generator_test_list 走 `go test -list`，每次分片都重算是纯浪费。
+generator_shard_plan_cache_value=""
+generator_shard_plan_cache() {
+  if [ -z "$generator_shard_plan_cache_value" ]; then
+    generator_shard_plan_cache_value=$(generator_shard_plan)
+  fi
+  printf '%s\n' "$generator_shard_plan_cache_value"
 }
 
 shard_names() {
@@ -303,10 +347,82 @@ _verify_composereport_shards() {
   return "$rc"
 }
 
+# 打印分片计划与各片负载：排查配平问题的入口（CI 日志里也用它对照）。
+cmd_plan() {
+  local plan median="n/a" planfile weightsfile
+  plan=$(generator_shard_plan)
+  weightsfile="$GENERATOR_WEIGHTS_FILE"
+  [ -f "$weightsfile" ] || weightsfile=/dev/null
+  median=$(grep -vE '^[[:space:]]*(#|$)' "$weightsfile" \
+    | awk -F'\t' 'NF>=2 {print $1}' | sort -n \
+    | awk '{a[NR]=$1} END { if (NR==0) print "n/a"; else print a[int((NR+1)/2)] }')
+  printf 'generator 分片计划（%s 片，权重表 %s，中位数 %ss）\n' \
+    "$GENERATOR_SHARDS" "$GENERATOR_WEIGHTS_FILE" "$median"
+
+  # 把权重 join 到计划上，按分片汇总条数与耗时。
+  planfile=$(mktemp)
+  trap 'rm -f "$planfile"' RETURN
+  printf '%s\n' "$plan" >"$planfile"
+  awk -F'\t' -v n="$GENERATOR_SHARDS" -v wf="$weightsfile" -v pf="$planfile" '
+    BEGIN {
+      while ((getline line < wf) > 0) {
+        if (line ~ /^[[:space:]]*(#|$)/) continue
+        split(line, f, "\t")
+        if (f[2] != "") weight[f[2]] = f[1] + 0
+      }
+      while ((getline line < pf) > 0) {
+        split(line, g, "\t")
+        count[g[1]]++
+        load[g[1]] += weight[g[2]]
+      }
+      for (i = 1; i <= n; i++) {
+        s = "generator-" i
+        printf "  %-13s %3d tests  %6.1fs\n", s, count[s], load[s]
+      }
+    }'
+}
+
 cmd_verify() {
   _verify_packages
   _verify_composereport_shards
   _verify_generator_tests
+}
+
+# 跑一遍 generator 包的全部用例（`-race`，与 CI 同口径），把每条耗时写成权重表。
+#
+# 为什么入库而不是 CI 现测：现测等于把这条包跑两遍（一遍测量、一遍真跑），
+# 而 CI 的耗时本身就是固定成本。表过期只会让配平变差，不会让门禁失效 ——
+# 未列出的用例按中位数估计，仍然落在某个分片里。
+cmd_shard_weights() {
+  local output="scripts/test_shard_weights.tsv" tmp rc=0
+  tmp=$(mktemp)
+  trap 'rm -f "$tmp"' RETURN
+  echo "▶ 测量 generator 用例耗时（-race，与 CI 同口径）…" >&2
+  # `-v` 才能拿到每条用例的耗时；失败也要产出表（用已有耗时），故先落 tmp 再判退出码。
+  go test -race -v -count=1 -timeout "$SHARD_TEST_TIMEOUT" "$GENERATOR_PKG" >"$tmp" 2>&1 || rc=$?
+
+  grep -E '^--- (PASS|FAIL|SKIP): ' "$tmp" \
+    | sed -E 's/^--- (PASS|FAIL|SKIP): ([^ ]+) \(([0-9.]+)s\)/\3\t\2/' \
+    | sort -t$'\t' -k1,1nr >"${output}.rows" || true
+
+  {
+    echo "# generator 用例耗时权重（秒），由 \`scripts/test_shards.sh shard-weights run\` 生成。"
+    echo "# 用途：生成器按 LPT 贪心装箱把用例分到 generator-1..N，使最长分片最小。"
+    echo "# 未列出的用例按中位数估计；过期只会让配平变差，不会漏测。"
+    echo "#"
+    echo "# 刷新：bash scripts/test_shards.sh shard-weights run（4 vCPU，与 CI runner 同档）"
+    echo "# shards=$GENERATOR_SHARDS"
+    echo "# median=$(awk -F'\t' '{print $1}' "${output}.rows" | sort -n | awk '{a[NR]=$1} END { if (NR==0) print 1; else print a[int((NR+1)/2)] }')"
+    echo "# total=$(awk -F'\t' '{s+=$1} END {printf "%.1f", s}' "${output}.rows")"
+    cat "${output}.rows"
+  } >"$output"
+  rm -f "${output}.rows"
+
+  echo "✅ 已写入 ${output}（$(grep -cvE '^#|^$' "$output") 条用例）" >&2
+  if [ "$rc" -ne 0 ]; then
+    echo "⚠️ 用例有失败（退出码 $rc），权重表仍已按实际耗时更新" >&2
+    return "$rc"
+  fi
 }
 
 # _check_sets <未覆盖说明> <多出说明> <期望全集> <实际并集>：用 comm 双向比对（都须已排序）。
@@ -331,10 +447,51 @@ cmd_shards() {
   shard_names
 }
 
+# 需要 service container（MySQL/Postgres/Redis）的分片。
+#
+# 不是所有分片都连库：`tools`（纯静态工具与框架 manifest）与 `composereport`
+# （只做依赖图度量）完全不碰数据库，给它们挂三个容器纯属浪费 —— 在 4 vCPU runner 上
+# 容器会和 `-race` 抢 CPU，实测让同一批用例慢 4 倍（本地 154s vs CI 612s）。
+# 判定依据是这些包内是否有 `testutil.SkipUnless{Mysql,Redis,Postgres}` 的调用点；
+# 新增能力包时它会自动落进 caps-*，无需改这里。
+shard_needs_db() {
+  case "$1" in
+    tools | composereport-*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+# <which> = all | db | nodb：给 workflow 的矩阵用（两个 job 各自一份矩阵）。
 cmd_shards_json() {
-  local out="" s
-  for s in $(shard_names); do out+="\"$s\","; done
+  local which="${1:-all}" out="" s want
+  for s in $(shard_names); do
+    case "$which" in
+      all) want=1 ;;
+      db) shard_needs_db "$s" && want=1 || want=0 ;;
+      nodb) shard_needs_db "$s" && want=0 || want=1 ;;
+      *) echo "❌ 未知过滤: $which" >&2; exit 2 ;;
+    esac
+    [ "$want" -eq 1 ] && out+="\"$s\","
+  done
+  # 空集合要输出 `[]` 而不是 `[,]`：GitHub 的 fromJSON 对后者直接报错。
+  [ -n "$out" ] || {
+    printf '[]\n'
+    return 0
+  }
   printf '[%s]\n' "${out%,}"
+}
+
+# 打印某个 generator 分片的 `-run` 正则（供测量 workflow 与调试用）。
+cmd_pattern() {
+  local shard="${1:-}"
+  case "$shard" in
+    generator-*) generator_pattern "${shard#generator-}" ;;
+    composereport-*) composereport_profiles "${shard#composereport-}" | paste -sd, - ;;
+    *)
+      echo "用法: test_shards.sh pattern <generator-N|composereport-N>" >&2
+      exit 2
+      ;;
+  esac
 }
 
 cmd_list() {
@@ -453,10 +610,13 @@ usage() {
 
 case "${1:-}" in
   shards) cmd_shards ;;
-  shards-json) cmd_shards_json ;;
+  shards-json) shift; cmd_shards_json "${1:-all}" ;;
   list) shift; cmd_list "$@" ;;
+  pattern) shift; cmd_pattern "$@" ;;
   run) shift; cmd_run "$@" ;;
   merge-cover) shift; cmd_merge_cover "$@" ;;
+  shard-weights) shift; cmd_shard_weights "$@" ;;
+  plan) cmd_plan ;;
   verify) cmd_verify ;;
   "" | -h | --help) usage ;;
   *)

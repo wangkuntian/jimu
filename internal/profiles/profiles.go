@@ -29,6 +29,11 @@ var Version = "dev"
 // 跳过时还会在**库中无任何账号**的情况下补一条 error 级提示（app.WarnIfNoAccounts）：
 // 关闭公开注册又没种出 admin 的部署将没有任何可用登录，必须显式告知下一步。
 func StructuralSeed(ctx *assembly.Context) error {
+	// 0 能力项目不建 DB：此时没有表可种，也没有登录入口可建，跳过而不是失败。
+	if ctx.DB() == nil {
+		ctx.Logger().Warnw("structural seed skipped", "missing", "database")
+		return nil
+	}
 	if app.AdminPassword() == "" {
 		ctx.Logger().Warnw("structural seed skipped", "missing", "ADMIN_PASSWORD or ADMIN_PASSWORD_FILE")
 		app.WarnIfNoAccounts(ctx.DB(), ctx.Logger())

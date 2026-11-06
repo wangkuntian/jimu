@@ -477,18 +477,6 @@ func TestAddCapabilityRejectsForeignDirectory(t *testing.T) {
 	require.ErrorContains(t, err, markerFile)
 }
 
-// TestAddCapabilityRejectsOfficialTemplate 钉住支持边界：官方模板是认证基线，
-// capability add 只扩展 experimental 组合；拒绝必须发生在写盘前。
-func TestAddCapabilityRejectsOfficialTemplate(t *testing.T) {
-	root := frameworkRootForTest(t)
-	dir := generateForTest(t, NewOptions{Template: "basic-api"})
-	before := hashTree(t, dir)
-
-	_, err := AddCapability(AddOptions{Dir: dir, Name: "notification", From: root})
-	require.ErrorContains(t, err, "does not extend official template projects")
-	assert.Equal(t, before, hashTree(t, dir), "拒绝路径不得落盘")
-}
-
 // TestAddCapabilityRejectsUnknownCapability 能力名必须在框架全量集合里。
 func TestAddCapabilityRejectsUnknownCapability(t *testing.T) {
 	root := frameworkRootForTest(t)
@@ -850,4 +838,39 @@ func TestServerEnvForTestCarriesNoAppConfigKeys(t *testing.T) {
 			assert.Contains(t, []string{"DB_HOST=127.0.0.1", "DB_PORT=1"}, kv, "DB 相关键只允许这两条显式值：%s", kv)
 		}
 	}
+}
+
+func TestAddCapabilityToMinimalPresetProject(t *testing.T) {
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	res, err := AddCapability(AddOptions{Dir: dir, From: FrameworkRoot(), Name: "apikey"})
+	require.NoError(t, err)
+	require.Contains(t, res.Changed, "internal/capabilities/apikey/module.go")
+
+	doc, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	require.Empty(t, doc.Selection.Template, "added preset project must fall back to composition")
+	require.Equal(t, manifest.CompositionSupportExperimental, doc.Composition.Support)
+	require.Contains(t, doc.Composition.Requested, "apikey")
+}
+
+func TestAddCapabilityToAuthPresetProject(t *testing.T) {
+	dir := generateForTest(t, NewOptions{Template: "auth"})
+	_, err := AddCapability(AddOptions{Dir: dir, From: FrameworkRoot(), Name: "mfa"})
+	require.NoError(t, err)
+	doc, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"user", "access", "auth", "mfa"}, doc.Composition.Requested)
+	require.Equal(t, manifest.CompositionSupportExperimental, doc.Composition.Support)
+}
+
+func TestAddExistingCapabilityToFullPresetFails(t *testing.T) {
+	dir := generateForTest(t, NewOptions{Template: "full"})
+	_, err := AddCapability(AddOptions{Dir: dir, From: FrameworkRoot(), Name: "tenant"})
+	require.ErrorContains(t, err, "already present as a declared capability")
+}
+
+func TestAddCapabilityToRetiredTemplateFails(t *testing.T) {
+	dir := writeManifestWithTemplate(t, "basic-api")
+	_, err := AddCapability(AddOptions{Dir: dir, From: FrameworkRoot(), Name: "apikey"})
+	require.ErrorContains(t, err, `template "basic-api" is retired`)
 }

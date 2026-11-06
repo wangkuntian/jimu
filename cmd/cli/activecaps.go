@@ -40,6 +40,10 @@ func declaredDescriptors() ([]contract.Descriptor, error) {
 	for _, c := range a.Capabilities {
 		declared[c.Descriptor.Name] = true
 	}
+	// 0 能力项目没有可种的东西：空集是正常状态，不是配置错误。
+	if len(declared) == 0 {
+		return []contract.Descriptor{}, nil
+	}
 	out := make([]contract.Descriptor, 0, len(declared))
 	for _, d := range catalog.All() {
 		if declared[d.Name] {
@@ -52,14 +56,17 @@ func declaredDescriptors() ([]contract.Descriptor, error) {
 	return out, nil
 }
 
-// resolveActive 是 activeDescriptors 的纯函数部分（便于单测）：过滤 + 空集 fail-closed。
+// resolveActive 是 activeDescriptors 的纯函数部分（便于单测）：过滤 + 迁移集校验。
+//
+// 空声明集返回空结果：0 能力项目（minimal 预设）没有任何表，migrate/seed 是 no-op。
+// 非空但一个迁移都没有仍 fail-closed —— 那通常意味着选错了能力，静默「迁移零个能力」更危险。
 func resolveActive(profile string, declared map[string]bool) ([]contract.Descriptor, error) {
+	if len(declared) == 0 {
+		return []contract.Descriptor{}, nil
+	}
 	// 迁移集 = 声明集 ∪ schema 依赖（catalog.MigrationSet，与 compose-report 同一口径）：
 	// 裁剪形态也要能建出自己写得进去的表。装配集不受影响。
 	caps := catalog.MigrationSet(declared)
-	if len(caps) == 0 {
-		return nil, fmt.Errorf("%w: %q", errNoCatalogCapabilities, profile)
-	}
 	// 更细一层：有 catalog 能力但一个迁移都没有 → 同样是「迁移零个能力」，必须报错。
 	hasMigrations := false
 	for _, d := range caps {

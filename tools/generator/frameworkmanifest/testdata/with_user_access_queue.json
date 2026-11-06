@@ -325,7 +325,9 @@
       "destination": "internal/kernel",
       "optional": false,
       "include": [],
-      "exclude": []
+      "exclude": [
+        "cache"
+      ]
     },
     {
       "source": "internal/app",
@@ -365,13 +367,6 @@
     {
       "source": "internal/shared",
       "destination": "internal/shared",
-      "optional": false,
-      "include": [],
-      "exclude": []
-    },
-    {
-      "source": "internal/e2e",
-      "destination": "internal/e2e",
       "optional": false,
       "include": [],
       "exclude": []
@@ -1362,15 +1357,6 @@
     "internal/contract/ports.go",
     "internal/contract/systemroles.go",
     "internal/contract/systemroles_test.go",
-    "internal/e2e/admin_routes_parity_test.go",
-    "internal/e2e/api_contract_test.go",
-    "internal/e2e/auth_me_test.go",
-    "internal/e2e/auth_routes_parity_test.go",
-    "internal/e2e/grpc_contract_test.go",
-    "internal/e2e/helpers_test.go",
-    "internal/e2e/tenant_delete_roles_test.go",
-    "internal/e2e/tenant_provisioning_test.go",
-    "internal/e2e/user_delete_roles_test.go",
     "internal/kernel/access/casbin.go",
     "internal/kernel/access/permission_middleware.go",
     "internal/kernel/access/roles.go",
@@ -1393,8 +1379,6 @@
     "internal/kernel/breaker/breaker_test.go",
     "internal/kernel/breaker/db_plugin.go",
     "internal/kernel/breaker/db_plugin_test.go",
-    "internal/kernel/cache/cache.go",
-    "internal/kernel/cache/cache_test.go",
     "internal/kernel/db/adopt_test.go",
     "internal/kernel/db/concurrency.go",
     "internal/kernel/db/concurrency_test.go",
@@ -1513,6 +1497,8 @@
     "internal/kernel/scheduler/scheduler_store_test.go",
     "internal/kernel/scheduler/store.go",
     "internal/kernel/scheduler/store_test.go",
+    "internal/kernel/seedmodel/seedmodel.go",
+    "internal/kernel/seedmodel/seedmodel_test.go",
     "internal/kernel/tenant/tenant.go",
     "internal/kernel/tenant/tenant_test.go",
     "internal/kernel/tlsconf/tlsconf.go",
@@ -1570,5 +1556,5 @@
     "tools/profileoverlay/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:7fdf8f33f090d72dd809f36e0a95406678b4cc6ed5b4a63bab4d89838e296f54"
+  "digest": "sha256:4a515b3b5e9c854fdade054e4383effa47c75d1888537d1ed49ef7ec4aa546ce"
 }

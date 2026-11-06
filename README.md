@@ -20,14 +20,20 @@ Jimu 不是运行时框架，也不要求业务代码依赖 Jimu SDK。`jimu new
 - 需要任意 experimental 能力组合的生产兼容承诺。
 - 需要开箱即用的多租户 SaaS 或全栈模板。
 
-## 选择模板
+## 选择预设
 
-| 模板 | 适合场景 | 外部依赖 |
+| 预设 | 能力集 | 外部依赖 |
 |---|---|---|
-| `basic-api` | HTTP API、BFF、轻量服务 | 无数据库、Redis 或消息队列 |
-| `auth-api` | 单租户后台 API、登录与权限 | MySQL 8.4、Redis 7，由 Compose 提供 |
+| `minimal` | 0 能力，只含最小内核 | 无数据库、Redis 或消息队列 |
+| `auth` | user + access + auth（含 tenant 闭包） | MySQL 8.4、Redis 7 |
+| `full` | 全部 23 个能力 | MySQL 8.4、Redis 7、Kafka、RabbitMQ 或 S3（按驱动） |
 
-默认模板是 `basic-api`。`--with` 是 experimental 专家模式，不承诺组合级生产兼容。
+默认预设是 `minimal`。`full` 首发支持级别是 `validated`，不是 `certified`。
+预设只是裁剪起点：生成后可用 `jimu capability add` 继续组合能力。
+`--with` 是 experimental 专家模式，不承诺组合级生产兼容。
+
+> `basic-api` 与 `auth-api` 已在 v0.10.0 退役。由它们生成的项目执行 `jimu upgrade` 会硬失败，
+> 需要按 `minimal`/`auth` 重新生成。
 
 ## 安装 Release CLI
 
@@ -48,12 +54,12 @@ Release asset 名为 `jimu-<os>-<arch>`；不支持 Windows。
 
 Release 同时提供 `template-bundle.json` 和 SHA-256 checksum 文件。需要时先校验下载，再把 `jimu` 放入 `PATH`。
 
-## 快速开始：basic-api
+## 快速开始：minimal
 
 ```bash
 OS=linux ARCH=amd64; curl -fL "https://github.com/wangkuntian/jimu/releases/download/v0.7.1/jimu-${OS}-${ARCH}" -o jimu && chmod +x jimu
-./jimu new demo --template=basic-api
-cd demo && make run
+./jimu new demo --template=minimal
+cd demo && make dev
 ```
 
 服务启动后可访问：
@@ -62,19 +68,22 @@ cd demo && make run
 - `GET http://127.0.0.1:9090/livez`
 - `GET http://127.0.0.1:9090/readyz`
 
-`basic-api` 生成项目不需要数据库、Redis 或其他外部服务。
+`minimal` 生成项目不需要数据库、Redis 或其他外部服务。
 
-## 快速开始：auth-api
+## 快速开始：auth
 
 ```bash
 OS=linux ARCH=amd64; curl -fL "https://github.com/wangkuntian/jimu/releases/download/v0.7.1/jimu-${OS}-${ARCH}" -o jimu && chmod +x jimu
-./jimu new demo --template=auth-api
+./jimu new demo --template=auth
 cd demo
-make up
-make verify
+make migrate
+make seed
+make dev
 ```
 
-`make up` 会生成首次管理员密码、构建并启动 Compose 栈、执行迁移和 seed；`make verify` 验证 readyz、登录、当前用户和受保护请求。需要 Docker Compose v2。
+`auth` 预设不生成 `docker-compose.yml`；数据库与 Redis 需自行提供，连接信息通过 `DB_*`
+与 `REDIS_*` 环境变量覆盖。首次启动前运行 `make migrate` 与 `make seed`，
+seed 会读取 `ADMIN_PASSWORD`（或 `ADMIN_PASSWORD_FILE`）创建管理员账号。
 
 ## 检查与升级
 

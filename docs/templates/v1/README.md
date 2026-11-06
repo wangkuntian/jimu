@@ -27,7 +27,7 @@ Jimu 不解决：
 - 任意能力的笛卡尔积兼容保证；
 - 运行时插件热加载、控制面、应用托管或 Kubernetes Operator；
 - 生成后的持续托管、自动同步或强制覆盖；
-- 开箱即用的多租户产品。`auth-api` 的产品语义是单租户。
+- 开箱即用的多租户 SaaS 产品。
 
 与普通 Go 框架或脚手架的差异：
 
@@ -56,16 +56,17 @@ v0.5.0 的兼容决策继续有效：
 
 v0.5.0 未提供自动升级，也不承诺框架安全修复自动进入已生成项目；v0.6.0 起提供显式 `jimu upgrade`：默认事务以 manifest 基线、项目当前内容和当前框架目标产物做三方比较，`conflict` 在写盘前中止；备份后逐文件安装，随后执行 tidy/build/test，任一失败按原字节回滚；成功后才更新 manifest。`--dry-run` 与 `--check` 只读。升级只修改生成器管理的文件，用户自有文件、已删除的模板文件和 manifest 之外的路径都不触碰；存量数据库 schema 不在升级范围内。
 
-`jimu capability add` 仍是专家实验能力，不是升级通道：它只在 `--with` 生成的 experimental 项目中追加能力，拒绝官方模板项目，落盘复用 upgrade 的 manifest 事务，但不执行 tidy/build，也不提升支持级别。组合契约、解析顺序和 `validity`/`support` 的完整规则见[能力组合设计](../../design/capability-composition.md)。
+`jimu capability add` 仍是专家实验能力，不是升级通道：它在 `--with` 生成的 experimental 项目和三个预设项目中追加能力，只拒绝已退役模板生成的项目；落盘复用 upgrade 的 manifest 事务，但不执行 tidy/build，也不提升支持级别。组合契约、解析顺序和 `validity`/`support` 的完整规则见[能力组合设计](../../design/capability-composition.md)。
 
 ## CLI 与版本语义
 
 正式入口（v0.5.0 起；v0.6.0 保持同一选择器）：
 
 ```bash
-jimu new <dir>                         # 默认 basic-api
-jimu new <dir> --template=basic-api
-jimu new <dir> --template=auth-api
+jimu new <dir>                         # 默认 minimal
+jimu new <dir> --template=minimal
+jimu new <dir> --template=auth
+jimu new <dir> --template=full
 jimu new <dir> --with=user,access,auth # 专家模式，标记 experimental
 jimu check <dir>                       # 只读检查 manifest 与组合一致性
 jimu upgrade <dir> --dry-run           # 只读三方 diff
@@ -75,11 +76,11 @@ jimu upgrade <dir>                     # 显式升级事务
 规则：
 
 - `<dir>` 必填；`--module` 继续显式推荐，无法可靠推导时拒绝生成。
-- `--template` 只接受 `basic-api` 或 `auth-api`。
+- `--template` 只接受 `minimal`、`auth` 或 `full`；`basic-api`/`auth-api` 已退役。
 - `--template`、`--profile`、`--with` 三者互斥。
-- 不传选择器时默认 `basic-api`。
+- 不传选择器时默认 `minimal`。
 - `--with` 允许生成，但 manifest 必须标记 `support: experimental`，并执行全部硬预检。
-- `--profile=minimal` 已移除；传入会报错并提示改用 `--template=auth-api`。其他 profile 名称只供 Jimu 自身构建使用，不是对外模板。
+- `--profile` 只用于拒绝框架内部形态；预设请用 `--template`。其他 profile 名称只供 Jimu 自身构建使用，不是对外预设。
 - `--dry-run` 打印 requested/resolved/auto-added、驱动、迁移、外部服务、合法性/支持级别（status）、预检和预算结果，不写文件。
 - 所有生成先写暂存目录；预检、tidy、build、test 和生成项目自检通过后才原子发布。失败不得留下半成品。
 - `jimu check` 只读校验已有项目；`jimu upgrade` 不带 `--dry-run` / `--check` 时执行显式写入事务，冲突在写盘前中止，失败按原字节回滚。
@@ -98,16 +99,17 @@ jimu upgrade <dir>                     # 显式升级事务
 
 | 级别 | 范围 | 承诺 |
 |---|---|---|
-| `certified` | `basic-api`、`auth-api` 两个官方模板预设 | 固定契约、硬预算、端到端验收和发布阻断门禁；manifest 的 `composition.support` 为 `certified`。 |
-| `validated` | 固定 catalog 中通过完整发布门禁的子集（保留级别） | 用于未来推广；v0.6.0 没有选择器产出该级别，pairwise 构建矩阵不自动提升支持级别。 |
+| `certified` | `minimal`、`auth` 两个预设 | 固定契约、硬预算、端到端验收和发布阻断门禁；manifest 的 `composition.support` 为 `certified`。 |
+| `validated` | `full` 预设 | 通过预算与构建门禁，但缺完整组合级 E2E；pairwise 构建矩阵不自动提升支持级别。 |
 | `experimental` | 能通过硬预检的 `--with` 组合与 `capability add` 项目 | 允许生成/追加并标记 `experimental`；不承诺组合稳定性、预算、E2E 或升级兼容。 |
-| 内部 profile | `full`、`minimal` | `full` 用于开发、测试和 demo；`minimal` 已冻结。`enterprise`、`machine`、`saas` 已退役。不是对外模板矩阵；manifest 的 `composition.support` 映射为 `experimental`。 |
+| 内部 profile | `full`、`minimal` | `full` 用于开发、测试和 demo；`minimal` 已冻结。`enterprise`、`machine`、`saas` 已退役。不是对外预设；manifest 的 `composition.support` 映射为 `experimental`。 |
 
-`matrix.yaml` 的 `official` 模板档对应 `certified`，`experimental` 专家档对应 `experimental`。本版本不新增“已认证专家组合”：只有写入 `matrix.yaml` 的选择才获得正式兼容承诺，`--with` 不能绕过支持边界。`validity: valid|invalid` 与 `support` 正交；合法组合不自动获得 `validated` 或 `certified`。
+`matrix.yaml` 的 `official` 档对应 `certified`，`experimental` 专家档对应 `experimental`。本版本不新增"已认证专家组合"：只有写入 `matrix.yaml` 的选择才获得正式兼容承诺，`--with` 不能绕过支持边界。`validity: valid|invalid` 与 `support` 正交；合法组合不自动获得 `validated` 或 `certified`。
 
 ## 升级支持窗口
 
-- 支持从 `v0.5.0` 及之后生成、manifest schema v2/v3 的 `basic-api` / `auth-api` 项目升级到当前 certified 模板。
+- 支持从 `v0.5.0` 及之后生成、manifest schema v2/v3 的 `minimal` / `auth` 项目升级到当前 certified 预设。
+- `basic-api` / `auth-api` 已在 v0.10.0 退役：由它们生成的项目执行 `jimu upgrade` 直接硬失败，需按新预设重新生成。
 - `v0.4.x` 和 schema v1 项目不支持直接升级，使用目标版本重新生成并人工迁移。
 - `--with` 与 `capability add` 保持 experimental；可以使用 `jimu check` / `upgrade --check` 诊断，但不承诺组合升级兼容。
 - 安全修复只保证当前 0.7.x 的最新 patch，旧 patch 不 backport。
@@ -126,229 +128,119 @@ jimu upgrade <dir>                     # 显式升级事务
    - 迁移集等于声明能力迁移与 `MigrationSchemaDeps` 闭包的并集。
    - 每张表只能有一个所有者，同一张表只能出现一次 `CREATE`。
    - 迁移文件必须存在，能力内编号唯一，MySQL 的 Up/Down 必须成对。
-   - `auth-api` 必须在空 MySQL 上完整执行迁移，不能依赖预置库。
+   - `auth` 预设必须在空 MySQL 上完整执行迁移，不能依赖预置库。
 3. **外部服务与启动不变量**
-   - 能力必须声明 MySQL、Redis、broker 等运行时服务；生成器据此生成配置、Compose 和 `/readyz` 检查。
-   - `basic-api` 的必需服务集合必须为空，启动路径不得创建 DB/Redis 客户端。
-   - `auth-api` 必须同时声明 MySQL 与 Redis，缺少任一服务时 fail fast。
+   - 能力必须声明 MySQL、Redis、broker 等运行时服务；生成器据此裁剪配置段与 `/readyz` 检查。
+   - `minimal` 的必需服务集合必须为空：启动路径不得创建 DB/Redis 客户端，配置不得含 `db:`/`redis:` 段。
+   - `auth` 必须同时声明 MySQL 与 Redis，缺少任一服务时 fail fast。
 4. **硬拒绝，不提供绕过**
    - 未知能力或驱动、空能力名、重复能力；
    - `--template`、`--profile`、`--with` 冲突；
    - 受保护路由没有唯一提供者，或迁移 schema 依赖不完整；
-   - 重复表所有权，或服务声明与配置/Compose 不一致；
+   - 重复表所有权，或服务声明与配置不一致；
    - framework commit 无法解析；
    - tidy、build、test 或生成项目自检失败。
 
-## `basic-api`
+## 三个预设
 
-适用场景：普通 HTTP API、BFF、Webhook、内部服务和需要完全自控基础设施的起点。
+所有预设都从**当前主代码仓库**按 import 闭包裁剪生成，不维护独立的模板树。预设只是起点：
+生成后可用 `jimu capability add` 继续组合能力。
 
-能力集合：
+### `minimal`
 
-- Gin HTTP server、`/api/v1` 路由约定和示例路由；
-- Viper 配置加载与严格校验；
-- Zap 结构化日志、request id、访问日志和 panic recovery；
-- 统一成功/错误响应与稳定错误码；
-- `/livez`、`/readyz`；
-- SIGINT/SIGTERM 优雅停机；
-- 单元测试和最小 README、Makefile、Dockerfile。
+适用场景：不需要任何业务能力的 HTTP 服务、BFF、Webhook、内部服务。
 
-目标目录：
+- 0 个能力；内核只保留被 `cmd/server`/`cmd/cli` 闭包实际引用到的包。
+- 内核提供 `/livez`、`/readyz`、`/api/v1/ping` 和 SIGINT/SIGTERM 优雅停机。
+- 配置只含非 DB/Redis 段；不含 `internal/e2e`、`docker-compose.yml` 和 OpenAPI 资产。
+- 设置或不设置 `ADMIN_PASSWORD` 都能启动：0 能力时 DB 为 nil，种子被护栏跳过。
 
-```text
-.
-├── cmd/server/main.go
-├── internal/app/{app.go,router.go}
-├── internal/config/config.go
-├── internal/api/v1/{routes.go,ping.go}
-├── internal/platform/http/{server.go,middleware.go}
-├── internal/platform/health/health.go
-├── internal/platform/logging/logger.go
-├── internal/shared/errorx/error.go
-├── internal/shared/response/response.go
-├── configs/app.yaml
-├── README.md
-├── Makefile
-├── Dockerfile
-├── .gitignore
-├── .golangci.yml
-├── go.mod
-├── go.sum
-└── .jimu/manifest.json
-```
+### `auth`
 
-测试文件放在对应包内，不另建镜像目录。
+适用场景：需要用户、登录会话、RBAC 和持久化的后台或业务 API。
 
-依赖边界：Gin、Viper、Zap、validator 和少量日志轮转依赖；直接依赖最多 8 个。不得带入 GORM、Redis、Casbin、JWT、OTel、Prometheus、Kafka、S3 或云厂商 SDK。
+- 能力集合 `user` + `access` + `auth`，编译闭包带 `tenant`。支持级别 `certified`。
+- 生成 MySQL/Redis 客户端、11 个迁移与 `cmd/cli migrate`/`seed`。
+- 不含公开注册、MFA/passkey、OAuth、验证码、通知、字段级加密、审计、队列、对象存储、观测栈或多租户管理 API。
+- **不生成 `docker-compose.yml`**：数据库与 Redis 由使用者提供。
 
-配置只包含 `http`、`management`、`log`。默认 HTTP 端口为 `8080`，管理端口为 `9090`；敏感配置不从仓库默认值提供。
+### `full`
 
-路由：
+适用场景：需要完整能力集的起点，或据此继续裁剪。
 
-| 路由 | 说明 |
-|---|---|
-| `GET /api/v1/ping` | 示例业务路由，返回统一成功结构。 |
-| `GET /livez` | 进程存活，不检查外部依赖。 |
-| `GET /readyz` | 服务可接收请求；`basic-api` 不检查外部依赖。 |
+- 全部 23 个能力，支持级别 `validated`。
+- 完整驱动集：`storage` 的 `s3`/`local`、`queue` 的 `kafka`/`rabbitmq`/`redis`、`dataops` 的 `excel`/`csv`。
+  `--with` 的缺省只取每个能力的首个驱动，无法表达完整集，因此 `full` 从 `internal/profiles/full/assembly.go` 派生。
+- 首发是 `validated` 而不是 `certified`：预算与构建门禁已就位，但缺完整的组合级 E2E。
 
-404、405、绑定失败和 panic 都必须返回统一错误结构，不能泄露堆栈或内部路径。迁移、表、Compose、Kubernetes、Helm、OpenObserve 和 Swagger 资产均为 0。
-
-首次启动：
-
-```bash
-jimu new demo
-cd demo
-go test ./...
-go build ./...
-make run
-# GET http://127.0.0.1:8080/api/v1/ping
-# GET http://127.0.0.1:9090/readyz
-```
-
-不启动任何容器，不设置 DB/Redis 环境变量。
-
-## `auth-api`
-
-适用场景：单部署、单租户的后台或业务 API，需要用户、登录会话、RBAC 和持久化。
-
-能力集合：
-
-- `basic-api` 的全部基础能力；
-- 声明能力 `user`、`access`、`auth`；
-- MySQL 持久化与 Redis 会话/限流；
-- 迁移、结构性 seed 和管理员初始化；
-- 项目自带 Compose；
-- 项目自带 `cmd/cli migrate` 与 `seed`。
-
-`auth-api` 不包含公开注册、MFA/passkey、OAuth、验证码、通知、字段级加密、审计、队列、对象存储、观测栈或多租户管理 API。
-
-单租户语义：`auth-api` 的部署只有一个业务租户。为兼容现有 `user`/`access` schema，模板保留一个不可操作的默认 tenant carrier：
-
-- 保留 `tenants.id=1`、`users.tenant_id`、`roles.tenant_id` 和相关 join；
-- manifest 标记为 `migration/domain-only`；
-- 不生成 tenant 配置，不装配 tenant 模块，不注册 tenant 路由，不暴露租户选择；
-- 所有管理 API 固定作用于默认租户。
-
-目标目录：
-
-```text
-.
-├── cmd/server/main.go
-├── cmd/cli/main.go
-├── internal/app/
-├── internal/config/
-├── internal/domain/models.go
-├── internal/store/{db,migrate,redis,seed}.go
-├── internal/auth/{jwt,middleware,password}.go
-├── internal/api/v1/{routes,helpers,auth,users,access}.go
-├── internal/migrations/migrate.go
-├── internal/migrations/mysql/*.sql
-├── internal/platform/
-├── internal/shared/
-├── configs/app.yaml
-├── conf/rbac_model.conf
-├── docker-compose.yml
-├── scripts/{init.sh,verify.sh}
-├── README.md
-├── QUICKSTART.md
-├── Makefile
-├── Dockerfile
-├── .gitignore
-├── go.mod
-├── go.sum
-└── .jimu/manifest.json
-```
-
-业务路由固定为 24 条，不含 `/livez` 和 `/readyz`。v0.1 固定以下核心路由：
-
-| 分组 | 路由 |
-|---|---|
-| 认证 | `POST /api/v1/auth/login`、`POST /api/v1/auth/refresh`、`POST /api/v1/auth/logout`、`GET /api/v1/auth/me`、`GET /api/v1/auth/login-history` |
-| 用户 | `POST/GET /api/v1/users`、`GET/PUT/DELETE /api/v1/users/:id` |
-| 角色 | `GET /api/v1/roles/options`、`POST/GET /api/v1/roles`、`GET/PUT/DELETE /api/v1/roles/:id`、`GET/POST /api/v1/roles/:id/permissions` |
-| 权限 | `POST/GET /api/v1/permissions`、`GET/PUT/DELETE /api/v1/permissions/:id` |
-| 用户角色 | `POST /api/v1/users/:id/roles` |
-
-配置只包含 `http`、`management`、`log`、`db`（MySQL）、`redis`、`id`、`auth`。不得生成 `otel`、`grpc`、`queue`、`storage`、`tenant`、`mfa`、`oauth`、`captcha`、`email`、`notification` 等未启用段。
-
-数据模型固定为 8 张表：`users`、`roles`、`permissions`、`role_permissions`、`user_roles`、`tenants`、`login_histories`、`password_histories`。固定 10 个 MySQL 迁移，依赖顺序为 tenant schema carrier、user、access、auth；不得复制 `tenant_plans` 等未使用表。
-
-用户创建和更新密码均要求至少 8 个字符；`make verify` 必须覆盖短密码更新被拒绝的行为。
-
-外部服务只包含 MySQL 8.4 LTS 与 Redis 7.x。Compose 只包含 `mysql`、`redis`、初始化 job 和 `app`，不包含观测、消息队列或其它可选栈。
-
-首次启动：
-
-```bash
-jimu new demo --template=auth-api
-cd demo
-make up       # migrate + seed + start；返回时 /readyz 已就绪
-make verify   # readyz + login + me + 一次受保护请求
-make down
-```
-
-管理员密码由 `make up` 生成到被 gitignore 的本地 secret，只显示一次，不使用 `admin/123456` 等默认凭据。重复 `make up` 必须幂等，不得重复建表或产生第二个管理员。
 
 ## 预算与验收
 
 发布阻断预算见 [budgets.json](budgets.json)。
 
-| 指标 | SIRIUS-9 `minimal` 基线 | `basic-api` 上限 | `auth-api` 上限 |
+| 指标 | `minimal` 上限 | `auth` 上限 | `full` 上限 |
 |---|---:|---:|---:|
-| 生成文件 | 431 | 40 | 160 |
-| 直接依赖 | 48 | 8 | 20 |
-| `cmd/server` Go 闭包文件 | 162 | 25 | 70 |
-| Go 闭包代码行 | 17,217 | 2,200 | 9,000 |
-| 外部服务 | MySQL + Redis | 0 | MySQL + Redis |
-| 业务路由 | 31 | 1 | 24 |
-| 表 | 9 | 0 | 8 |
-| 迁移文件 | 11 | 0 | 10 |
-| 非代码资产 | 45+ | ≤12 | ≤20 |
-| 首次 `/readyz` | 需 DB/Redis | 热缓存 ≤10 秒；冷生成至就绪 ≤60 秒 | 热缓存 ≤2 分钟；冷镜像 ≤8 分钟 |
+| 生成文件 | 300 | 420 | 800 |
+| 直接依赖 | 44 | 44 | 64 |
+| `cmd/server` Go 闭包文件 | 95 | 150 | 350 |
+| Go 闭包代码行 | 11,650 | 17,150 | 39,000 |
+| 外部服务 | 0 | MySQL + Redis | 4（MySQL、Redis、Kafka/RabbitMQ、对象存储） |
+| 业务路由 | 0 | 31 | 94 |
+| 表 | 0 | 9 | 23 |
+| 迁移文件 | 0 | 11 | 26 |
+| 非代码资产 | 9 | 9 | 10 |
+| 首次 `/readyz` | 热缓存 ≤10 秒；冷生成至就绪 ≤60 秒 | 热缓存 ≤2 分钟；冷镜像 ≤8 分钟 | 热缓存 ≤3 分钟；冷镜像 ≤10 分钟 |
 
-生成文件数排除 `.jimu/manifest.json` 和 `docs/profiles/generated-report.md`；依赖与闭包按生成项目的 `go list` / `go/packages` 口径统计。
+生成文件数包含 `.jimu/manifest.json`；依赖与闭包按生成项目的 `go list` / `go/packages` 口径统计。内核路由（`/livez`、`/readyz`、`/api/v1/ping`）不计入 `report.routes`，该字段只统计能力注册的业务路由。
 
-v0.5.1 起 `Scaffold Gate` 分为 official 与 full 两档：official 是 `release/*` 和 `dependabot/*` → `master` PR 的必需检查，只跑两个官方模板的预算、smoke 和空库 E2E；full 只在 `workflow_dispatch` 或夜间定时运行，覆盖全部 `--with`、内部 profile 和重型生成器用例。这样普通 PR 不必等待全矩阵，同时保留夜间/发布前的完整回归。
+v0.5.1 起 `Scaffold Gate` 分为 official 与 full 两档：official 是 `release/*` 和 `dependabot/*` → `master` PR 的必需检查，只跑需要 Docker 的 auth 空库 E2E；full 只在 `workflow_dispatch` 或夜间定时运行，覆盖全部 `--with`、内部 profile 和重型生成器用例。这样普通 PR 不必等待全矩阵，同时保留夜间/发布前的完整回归。
 
-官方模板的自动门禁由 `make test-scaffold-official` 执行（`auth-api` 用例需要可用的 Docker Compose）；full 生成器矩阵由 `make test-scaffold-matrix` 在手动触发或夜间定时运行。v0.6.0 在 full 中新增固定 pairwise 组合矩阵和 v0.5 upgrade fixtures，official 的选择集和行为不变：
+门禁按「需不需要 Docker」分工，同一条用例不在两个 workflow 各跑一遍：
 
-- `TestOfficialTemplateBudgets` 直接读取 `budgets.json`，生成两个官方模板后实测文件数、直接依赖、Go 闭包、外部服务、路由、表、迁移和非代码资产，任一指标超限即失败。
-- `TestBasicAPIStartsWithoutExternalServices` 不启动容器，先跑生成项目的 build/vet/test，再验证 `/livez`、`/readyz`、示例路由、统一 404/405 响应、SIGTERM 优雅退出和冷生成至就绪预算。
-- `TestAuthAPIEmptyDatabaseEndToEnd` 先跑生成项目的 test/vet，再为每次运行创建独立 Compose 项目和宿主机端口，在全新数据卷上连续执行两次 `make up` / `make verify`，校验管理员密码只在首次输出、短密码更新返回 400、10 个迁移、8 张业务表、2 个用户，并验证缺失 MySQL 或 Redis 时快速失败和 `make down`。
+- `CI (PR)` 的 race 分片跑 `TestPresetBudgets` 与 `TestMinimalPresetStartsWithoutDependencies`。它们不需要 Docker，所以每个 PR 都有覆盖，包括不触发 `CI (Scaffold)` 的 `feature/*`。
+- `make test-scaffold-official` 只跑 `TestAuthPresetEmptyDatabaseEndToEnd`（需要 Docker daemon，race 分片里会 skip）。
+- full 生成器矩阵由 `make test-scaffold-matrix` 在手动触发或夜间定时运行。v0.6.0 在 full 中新增固定 pairwise 组合矩阵。
+
+各条用例的职责：
+
+- `TestPresetBudgets` 直接读取 `budgets.json`，生成 minimal/auth/full 后实测文件数、直接依赖、Go 闭包、外部服务、路由、表、迁移和非代码资产，任一指标超限即失败。
+- `TestMinimalPresetStartsWithoutDependencies` 不启动任何容器，构建并运行生成项目的 server 二进制，在「设置」与「不设置」`ADMIN_PASSWORD` 两种 env 下都验证 `/livez`、`/readyz` 和 `/api/v1/ping`。第二种 env 是空能力集种子的回归钉子：0 能力时 DB 为 nil，种子必须被跳过而不是 panic。
+- `TestAuthPresetEmptyDatabaseEndToEnd` 用 `docker run` 起独立 MySQL 8.4 与 Redis 7 容器（不使用 Compose），在全新空库上迁移、seed，校验 `/readyz`、`/api/v1/ping` 和管理员登录返回 access token。
 - `TestRepresentativeCompositionMatrix` / `TestCompositionMatrixBudget` / `TestCompositionNegativeMatrix` 运行固定、代表性的 pairwise 清单与冲突负例；组合项目只做 build/vet，不遍历全幂集，也不承诺组合级 E2E。
-- `TestUpgradeFixtures` 复制 v0.5.0 `basic-api` / `auth-api` 快照，覆盖 untouched、用户修改生成文件冲突、用户自有文件保留、用户删除、模板删除、重复升级和验证失败回滚；失败日志带 project/scenario。
+- `TestUpgradeFixtures` 现场生成 `auth` 预设作为 fixture（模板退役后无法再用旧模板渲染目标树），覆盖 untouched、用户修改生成文件冲突、用户自有文件保留、用户删除、模板删除、重复升级和验证失败回滚；`TestUpgradeRejectsRetiredTemplates` 钉住旧模板的硬失败路径。
 - CI 的每个 full shard 把耗时写入 step summary；显式运行时测试必须报告 `PASS`，`SKIP` 视为门禁失败，避免 full 静默跳过。
 
-`basic-api` 验收：
+`minimal` 验收：
 
 - `go test ./...`、`go vet ./...`、`go build ./...` 全部通过；
-- 无 Compose，无 DB/Redis 连接尝试；
-- `make run` 后 `/livez`、`/readyz` 和 `/api/v1/ping` 正常；
-- 未知路由和方法返回统一错误结构；
-- SIGTERM 后在配置的 shutdown timeout 内退出；
+- 无 Compose、无 DB/Redis 连接尝试，`configs/app.yaml` 不含 `db:`/`redis:` 段；
+- 设置或不设置 `ADMIN_PASSWORD` 都能启动，`/livez`、`/readyz`、`/api/v1/ping` 正常；
 - 自动报告不超过全部预算。
 
-`auth-api` 验收：
+`auth` 验收：
 
-- 全新空 MySQL 上 10 个迁移全部成功；
-- `make up` 一条命令完成 migrate、seed、start，`/readyz` 成功；
-- 管理员登录返回 access/refresh token，`/auth/me` 可用；
-- 创建和更新用户密码至少 8 个字符，短密码更新返回 400；
+- 全新空 MySQL 上 11 个迁移全部成功；
+- `make migrate` + `make seed` 幂等，`/readyz` 成功；
+- 管理员登录返回 access token，`/auth/me` 可用；
 - 无 token 访问受保护路由为 401，缺权限为 403；
-- 重复启动和重复 seed 幂等；
-- 故意缺 Redis 或 MySQL 时启动失败，错误中说明缺少哪个服务；
 - 自动报告不超过全部预算。
+
+`full` 验收：
+
+- 23 个能力与完整驱动集（`s3`/`local`、`kafka`/`rabbitmq`/`redis`、`excel`/`csv`）齐全；
+- `go build ./...` 通过，自动报告不超过全部预算；
+- 支持级别是 `validated`，不是 `certified`。
 
 预算超过即阻断发布。提高预算必须修改本契约和 `budgets.json`，不能在实现 issue 中顺手放宽。
 
 ## 实施顺序
 
-1. 固化模板契约、支持矩阵和预算基线。
+1. 固化预设契约、支持矩阵和预算基线。
 2. 为 Descriptor 补齐认证中间件提供者、迁移 schema 依赖和 runtime services，实现生成前预检。
-3. 拆出零外部依赖的 HTTP 核心，实现 `basic-api`。
-4. 实现 `--template`、默认 basic、legacy profile 映射和 experimental 标记。
-5. 实现带隐藏 tenant carrier 的 `auth-api` 与一键启动。
-6. 建立预算、basic smoke 和 auth 空库端到端门禁。
-7. 修复 provenance，扩展 manifest。
-8. 完成 v0.5.0 发布说明与破坏性变更说明。
+3. 把种子模型从能力 domain 抽到内核，解除内核与能力的唯一耦合。
+4. 实现 `--template=minimal`：0 能力 + 闭包裁剪内核 + 内核 `/api/v1/ping`。
+5. 实现 `--template=auth`（`user`/`access`/`auth`，certified）与 `--template=full`（全部能力，validated）。
+6. 建立三预设预算、minimal 无依赖 smoke 和 auth 空库端到端门禁。
+7. 退役 `basic-api`/`auth-api` 模板，旧项目 upgrade 硬失败。
+8. 完成 v0.10.0 发布说明与不兼容变更说明。
 9. 在 v0.6.0 交付 opt-in `jimu upgrade`（已完成）。

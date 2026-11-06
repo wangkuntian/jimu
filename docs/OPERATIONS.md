@@ -28,7 +28,7 @@ make up
 - 管理端 `/readyz`：数据库/Redis 等已编入依赖的就绪检查。
 - 业务端 `/api/v1/ping`：示例 HTTP 端点。
 
-`basic-api` 不依赖外部服务；`auth-api` 的 `make verify` 会检查 readyz、登录、当前用户和受保护请求。
+`minimal` 不依赖外部服务；`auth` 需要外部 MySQL/Redis，预设不生成 Compose，连接信息走 `DB_*`/`REDIS_*` 环境变量。
 
 ## 可观测性
 

@@ -16,7 +16,7 @@ import (
 func TestCheckProjectFastReportsHealthyLifecycleAndIsReadOnly(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := newProjectForTest(t, NewOptions{
-		Dir: dir, Template: "basic-api", Module: "example.com/proj",
+		Dir: dir, Template: "minimal", Module: "example.com/proj",
 	})
 	require.NoError(t, err)
 	before := hashTree(t, dir)
@@ -39,8 +39,8 @@ func TestCheckProjectFastReportsHealthyLifecycleAndIsReadOnly(t *testing.T) {
 }
 
 func TestCheckProjectFastWarnsOnManagedDriftWithoutFailing(t *testing.T) {
-	dir := generateForTest(t, NewOptions{Template: "basic-api"})
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("local change\n"), 0o644))
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("local change\n"), 0o644))
 	require.NoError(t, os.Remove(filepath.Join(dir, "Makefile")))
 	before := hashTree(t, dir)
 
@@ -51,7 +51,7 @@ func TestCheckProjectFastWarnsOnManagedDriftWithoutFailing(t *testing.T) {
 	assert.Contains(t, diagnosticCodes(result), "managed_file_modified")
 	assert.Contains(t, diagnosticCodes(result), "managed_file_missing")
 	assert.Contains(t, diagnosticCodes(result), "upgrade_conflict")
-	assert.Equal(t, ManagedFileModified, managedFile(result, "README.md").Status)
+	assert.Equal(t, ManagedFileModified, managedFile(result, "Dockerfile").Status)
 	assert.Equal(t, ManagedFileMissing, managedFile(result, "Makefile").Status)
 	assert.Equal(t, before, hashTree(t, dir), "drift warnings must not write the project")
 }
@@ -89,9 +89,9 @@ func TestCheckProjectReturnsStructuredManifestFailure(t *testing.T) {
 }
 
 func TestCheckProjectDeepFailureIsReadOnly(t *testing.T) {
-	dir := generateForTest(t, NewOptions{Template: "basic-api"})
-	testPath := filepath.Join(dir, "internal", "api", "v1", "user_check_failure_test.go")
-	require.NoError(t, os.WriteFile(testPath, []byte("package v1\n\nimport \"testing\"\n\nfunc TestUserFailure(t *testing.T) { t.Fatal(\"intentional deep failure\") }\n"), 0o644))
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	testPath := filepath.Join(dir, "internal", "kernel", "observability", "health_deep_failure_test.go")
+	require.NoError(t, os.WriteFile(testPath, []byte("package observability\n\nimport \"testing\"\n\nfunc TestHealthDeepFailure(t *testing.T) { t.Fatal(\"intentional deep failure\") }\n"), 0o644))
 	before := hashTree(t, dir)
 
 	result, err := CheckProject(CheckOptions{Dir: dir, From: FrameworkRoot(), Deep: true})
@@ -105,8 +105,11 @@ func TestCheckProjectDeepFailureIsReadOnly(t *testing.T) {
 }
 
 func TestCheckProjectDeepSupportsCertifiedTemplates(t *testing.T) {
-	for _, template := range []string{"basic-api", "auth-api"} {
+	for _, template := range []string{"minimal", "auth"} {
 		t.Run(template, func(t *testing.T) {
+			// 两个子用例各自生成独立临时目录、独立 go build/test，没有共享状态；
+			// 串行时这条用例是 generator 包里最重的一条（~66s），并行后减半。
+			t.Parallel()
 			dir := filepath.Join(t.TempDir(), "proj")
 			_, err := newProjectForTest(t, NewOptions{
 				Dir: dir, Template: template, Module: "example.com/proj",

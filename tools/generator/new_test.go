@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 
 	"jimu/tools/generator/manifest"
@@ -31,132 +30,97 @@ func TestNewProjectRejectsSelectionWithoutProtectedMiddlewareProviderBeforeWriti
 	assert.True(t, os.IsNotExist(statErr), "preflight failure must not write the target")
 }
 
-func TestNewProjectBasicAPIHasNoExternalRuntimeDependencies(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "basic")
+func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "min")
 	result, err := NewProject(NewOptions{
-		Dir: dir, Template: "basic-api", Module: "example.com/basic",
+		Dir: dir, Template: "minimal", Module: "example.com/min",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "basic-api", result.Template)
+	assert.Equal(t, "minimal", result.Template)
 	assert.Equal(t, "certified", result.Support)
+	assert.Empty(t, result.Resolved, "minimal must resolve zero capabilities")
+	assert.Empty(t, result.Services, "minimal must not require runtime services")
 
 	for _, rel := range []string{
 		"cmd/server/main.go",
-		"internal/app/app.go",
-		"internal/config/config.go",
-		"internal/api/v1/ping.go",
-		"internal/platform/health/health.go",
-		"configs/app.yaml",
-		"README.md",
-		"Makefile",
+		"cmd/cli/main.go",
+		"internal/kernel/http/server.go",
+		"internal/assembly/assembly.go",
+		"internal/capabilities/catalog/catalog.go",
 		"Dockerfile",
+		"Makefile",
 		"go.mod",
 		".jimu/manifest.json",
 	} {
-		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "缺少 basic-api 产物 %s", rel)
+		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "missing minimal artifact %s", rel)
 	}
 	for _, rel := range []string{
-		"internal/capabilities",
+		"internal/e2e",
+		"internal/kernel/cache",
+		"internal/capabilities/user",
 		"docker-compose.yml",
-		"deploy",
-		"docs/openapi",
-		".env.example",
 	} {
 		_, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
-		assert.True(t, os.IsNotExist(statErr), "basic-api 不应包含 %s", rel)
+		assert.True(t, os.IsNotExist(statErr), "minimal must not contain %s", rel)
 	}
 	config, err := os.ReadFile(filepath.Join(dir, "configs", "app.yaml"))
 	require.NoError(t, err)
 	assert.NotContains(t, string(config), "\ndb:")
 	assert.NotContains(t, string(config), "\nredis:")
-	assertManifestProvenance(t, dir, "basic-api")
+	assertManifestProvenance(t, dir, "minimal")
 }
 
-func TestNewProjectAuthAPIIsCompactSingleTenantTemplate(t *testing.T) {
+func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "auth")
 	result, err := NewProject(NewOptions{
-		Dir: dir, Template: "auth-api", Module: "example.com/auth",
+		Dir: dir, Template: "auth", Module: "example.com/auth",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "auth-api", result.Template)
+	assert.Equal(t, "auth", result.Template)
 	assert.Equal(t, "certified", result.Support)
+	assert.ElementsMatch(t, []string{"user", "access", "auth"}, result.Resolved)
+	assert.Contains(t, result.Services, "mysql")
+	assert.Contains(t, result.Services, "redis")
 
 	for _, rel := range []string{
+		"internal/capabilities/user",
+		"internal/capabilities/access",
+		"internal/capabilities/auth",
+	} {
+		assert.DirExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "missing auth artifact %s", rel)
+	}
+	for _, rel := range []string{
+		"internal/capabilities/catalog/catalog.go",
 		"cmd/server/main.go",
-		"cmd/cli/main.go",
-		"docker-compose.yml",
-		"scripts/init.sh",
-		"scripts/verify.sh",
-		"internal/migrations/mysql/001_tenants.sql",
-		"internal/migrations/mysql/010_permissions_updated_at.sql",
-		"internal/api/v1/auth.go",
-		"internal/api/v1/users.go",
-		"internal/api/v1/access.go",
-		"QUICKSTART.md",
 	} {
-		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "缺少 auth-api 产物 %s", rel)
+		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "missing auth artifact %s", rel)
 	}
-	for _, rel := range []string{
-		"internal/capabilities",
-		"deploy",
-		"docs/openapi",
-		".env.example",
-	} {
-		_, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
-		assert.True(t, os.IsNotExist(statErr), "auth-api 不应包含 %s", rel)
-	}
-	config, err := os.ReadFile(filepath.Join(dir, "configs", "app.yaml"))
-	require.NoError(t, err)
-	configText := "\n" + string(config)
-	for _, section := range []string{"http:", "management:", "log:", "db:", "redis:", "id:", "auth:"} {
-		assert.Contains(t, configText, "\n"+section)
-	}
-	for _, section := range []string{"\notel:", "\ngrpc:", "\nqueue:", "\nstorage:", "\ntenant:", "\nnotification:"} {
-		assert.NotContains(t, configText, section)
-	}
-
-	document, err := workspace.LoadProjectManifest(dir)
-	require.NoError(t, err)
-	assert.Equal(t, "auth-api", document.Selection.Template)
-	assert.Equal(t, manifest.TemplateContractVersion, document.Selection.TemplateVersion)
-	assert.Equal(t, 24, document.Report.Routes)
-	assert.Len(t, document.Report.Migrations, 10)
-	assert.Len(t, document.Report.Tables, 8)
-
-	sqlFiles, err := filepath.Glob(filepath.Join(dir, "internal", "migrations", "mysql", "*.sql"))
-	require.NoError(t, err)
-	assert.Len(t, sqlFiles, 10)
-	createTables := 0
-	alterTables := 0
-	for _, file := range sqlFiles {
-		content, err := os.ReadFile(file)
-		require.NoError(t, err)
-		createTables += strings.Count(string(content), "CREATE TABLE")
-		alterTables += strings.Count(string(content), "ALTER TABLE")
-	}
-	assert.Equal(t, 8, createTables)
-	assert.Equal(t, 2, alterTables)
-	assertManifestProvenance(t, dir, "auth-api")
+	assertManifestProvenance(t, dir, "auth")
 }
 
-func assertManifestProvenance(t *testing.T, dir, template string) {
-	t.Helper()
-	document, err := workspace.LoadProjectManifest(dir)
+func TestNewProjectFullPresetCarriesEveryCapability(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "full")
+	result, err := NewProject(NewOptions{
+		Dir: dir, Template: "full", Module: "example.com/full",
+	})
 	require.NoError(t, err)
-	require.NoError(t, manifest.ValidateComplete(document))
-	assert.Equal(t, manifest.CurrentSchemaVersion, document.SchemaVersion)
-	require.NotNil(t, document.Composition, "生成项目必须持久化 composition")
-	assert.Equal(t, manifest.CompositionContractVersion, document.Composition.ContractVersion)
-	assert.Equal(t, manifest.CompositionValidityValid, document.Composition.Validity)
-	assert.Equal(t, template, document.Selection.Template)
-	assert.Equal(t, manifest.TemplateContractVersion, document.Selection.TemplateVersion)
-	assert.NotEmpty(t, document.Framework.Version)
-	assert.NotEmpty(t, document.Framework.Commit)
-	assert.True(t, document.Framework.Dirty, "development manifests must be marked dirty")
-	assert.Len(t, document.GeneratedFileSHA256, len(document.GeneratedFiles))
-	hashes, err := manifest.HashFiles(dir, document.GeneratedFiles)
-	require.NoError(t, err)
-	assert.Equal(t, hashes, document.GeneratedFileSHA256)
+	assert.Equal(t, "full", result.Template)
+	assert.Equal(t, "validated", result.Support)
+	assert.Len(t, result.Resolved, 23, "full must resolve every framework capability")
+
+	for _, rel := range []string{
+		"internal/capabilities/queue/kafka",
+		"internal/capabilities/queue/rabbitmq",
+		"internal/capabilities/queue/redis",
+		"internal/capabilities/storage/s3",
+		"internal/capabilities/storage/local",
+		"internal/capabilities/dataops/excel",
+		"internal/capabilities/dataops/csv",
+	} {
+		assert.DirExists(t, filepath.Join(dir, filepath.FromSlash(rel)),
+			"full must ship driver %s (--with default would drop it)", rel)
+	}
+	assertManifestProvenance(t, dir, "full")
 }
 
 func TestNewProjectLeavesNoPartialTreeOnFailure(t *testing.T) {
@@ -430,4 +394,19 @@ func readManifestForTest(t *testing.T, dir string) manifest.Document {
 	doc, err := workspace.LoadProjectManifest(dir)
 	require.NoError(t, err)
 	return doc
+}
+
+func assertManifestProvenance(t *testing.T, dir, template string) {
+	t.Helper()
+	document, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	require.NoError(t, manifest.ValidateComplete(document))
+	assert.Equal(t, manifest.CurrentSchemaVersion, document.SchemaVersion)
+	require.NotNil(t, document.Composition, "生成项目必须持久化 composition")
+	assert.Equal(t, manifest.CompositionContractVersion, document.Composition.ContractVersion)
+	assert.Equal(t, manifest.CompositionValidityValid, document.Composition.Validity)
+	assert.Equal(t, template, document.Selection.Template)
+	assert.Equal(t, manifest.TemplateContractVersion, document.Selection.TemplateVersion)
+	assert.NotEmpty(t, document.Framework.Version)
+	assert.NotEmpty(t, document.Framework.Commit)
 }

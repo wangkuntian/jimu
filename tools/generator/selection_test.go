@@ -282,27 +282,15 @@ func TestSeed(t *testing.T) { _ = catalog.All() }
 	assert.FileExists(t, filepath.Join(dir, "internal/app/seed_test.go"))
 }
 
-// TestGeneratedTestTreePruningFallsBackToWholeTestPackage 钉住裁剪口径的**包回退**一半：
-// 同一测试包里若保留文件引用了被裁文件的顶层符号，逐文件保留会留下 `undefined: xxx` ——
-// internal/e2e 正是这个形态（admin_routes_parity_test.go 引用被裁文件里的 newTestAppWithDB），
-// 因此该测试包必须整组丢弃。
-func TestGeneratedTestTreePruningFallsBackToWholeTestPackage(t *testing.T) {
+// TestGeneratedTestTreePruningDropsCrossCapabilityE2E 钉住裁剪口径在真实生成树上的效果：
+// internal/e2e 的测试全部依赖跨能力装配（admin_routes_parity_test.go 引用被裁文件里的
+// newTestAppWithDB），内核闭包裁剪后整个目录都不再进入 minimal 产物。
+func TestGeneratedTestTreePruningDropsCrossCapabilityE2E(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
-	// e2e 的测试包被整组丢弃：目录里不得残留任何 _test.go，且每个原文件都在丢弃清单里。
-	entries, rerr := os.ReadDir(filepath.Join(dir, "internal", "e2e"))
-	require.NoError(t, rerr)
-	for _, e := range entries {
-		assert.False(t, strings.HasSuffix(e.Name(), "_test.go"), "e2e 测试包应整组丢弃，残留 %s", e.Name())
-	}
-	for _, rel := range []string{
-		"internal/e2e/helpers_test.go",
-		"internal/e2e/api_contract_test.go",
-		"internal/e2e/admin_routes_parity_test.go",
-	} {
-		assert.NoFileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "%s 应随测试包整组丢弃", rel)
-	}
+	assert.NoDirExists(t, filepath.Join(dir, "internal", "e2e"),
+		"跨能力 e2e 测试包不属于 minimal 闭包")
 }
 
 // TestPruneUnsatisfiableTestsPerFileWithPackageFallback 用**人造树**把新口径的两条分支钉成单元

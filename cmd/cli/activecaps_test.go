@@ -99,9 +99,10 @@ func TestResolveActiveRejectsProfileWithoutMigrations(t *testing.T) {
 	require.ErrorContains(t, err, "has no capability with migrations")
 }
 
-// 空声明集必须 fail-closed（静默「迁移零个能力」比报错危险）。
-func TestResolveActiveRejectsEmptyDeclared(t *testing.T) {
-	_, err := resolveActive("ghost", map[string]bool{})
-	require.ErrorContains(t, err, "declares no catalog capabilities")
-	require.ErrorContains(t, err, `"ghost"`)
+// 空声明集是合法状态：0 能力项目（minimal 预设）没有任何要迁移的表，
+// migrate/seed 应当是 no-op 而不是报错 —— 否则最小项目连 make migrate 都跑不了。
+func TestResolveActiveAllowsEmptySelection(t *testing.T) {
+	caps, err := resolveActive("minimal", map[string]bool{})
+	require.NoError(t, err, "a 0-capability project has nothing to migrate; that is not an error")
+	require.Empty(t, caps)
 }

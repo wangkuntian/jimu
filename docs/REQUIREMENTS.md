@@ -10,9 +10,9 @@
 
 ### 0.1 结论
 
-- 路线 A（Go 后端脚手架/工程基线）仍是产品主线；`basic-api` / `auth-api` 保持 certified。
-- 路线 B 只做一个 **8 周实验性 full-stack demo**，目标版本 `v0.9.0`；它使用 `full` profile + 当前 `jimu-web`，不证明 `jimu new` 生成全栈项目。
-- 8 周后按 gate 决定继续或停止；没有外部试用证据就停止，不把 demo 包装成产品承诺。
+- 路线 A（Go 后端脚手架/工程基线）仍是产品主线；`minimal` / `auth` 是 certified 预设，`full` 是 validated。
+- 路线 B 的 **8 周实验性 full-stack demo** 已在 `v0.9.0` 交付；它使用 `full` profile + 当前 `jimu-web`，不证明 `jimu new` 生成全栈项目。
+- 2026-11-06 因无外部试用证据，路线 B 停止（见 C1）；`jimu-web` 保留为独立前端，用 `make compose-up` 从源码构建后端。
 - 实际容量是 **1 人 + 2 条 agent 工作流**；只对最近 8 周做硬承诺，不承诺 18 人月。
 
 ### 0.2 六个月需求列表
@@ -25,17 +25,19 @@
 | B1 | P0 | `jimu-web` 契约同步 | 已完成 | 结构化 lockfile 固定到 `v0.8.1`；`check_contract_pin.sh` 与 `bun run check` 通过 | `v0.9.0` |
 | B2 | P0 | `make demo` 全栈环境 | 已完成 | 一条命令启动 `full` server + `jimu-web`；`/readyz`、UI 和 admin 登录通过；Ctrl-C 清理 demo 栈并保留数据卷 | `v0.9.0` |
 | B3 | P0 | Demo 流程与 E2E | 已完成 | 真实后端 Playwright 覆盖 admin 登录 → 租户/套餐 → 角色/用户 → 账号安全；全链路用例创建的租户/角色/用户通过 API 清理；`make demo-e2e` 连跑两次通过。账号安全当前为占位页，只验证路由与占位状态 | `v0.9.0` |
-| B4 | P0 | CLI-only `jimu new` smoke | 已完成 | `make clean-room-e2e`：本地构建 Release CLI，在临时目录生成 `basic-api`/`auth-api`，`auth-api` 通过 `make up` + `make verify`；`PASS: clean-room basic-api and auth-api` | `v0.9.0` |
+| B4 | P0 | CLI-only `jimu new` smoke | 已完成 | `make clean-room-e2e`：本地构建 Release CLI，在临时目录生成 `minimal`/`auth`，验证 `/livez`、`/readyz`、`/api/v1/ping` | `v0.9.0` |
 | B5 | P0 | 8 周 gate 证据 | 未启动 | 3 个外部试用/明确反馈；至少 1 个团队愿意进入下一步；试用清单与台账：`docs/experiments/v0.9.0-trial.md`、`docs/experiments/v0.9.0-gate.md`（尚无记录） | 2027-01 |
-| C1 | P1 | Gate 决策 | 未启动（条件项） | 继续或停止路线 B；更新路线图和非目标 | `v0.10.0` |
+| C1 | P1 | Gate 决策 | 已完成 | 2026-11-06 决定停止路线 B（无外部试用证据）；`jimu-web` 转为 `make compose-up` 从源码构建的独立前端 | `v0.10.0` |
 | C2 | P1 | 条件项：fullstack 预览设计 | 未启动（条件项） | 仅当 gate 通过：时间盒 4 周，评估 generated full-stack 的契约与模板边界；不承诺 certified | `v0.10.0+` |
 | C3 | P1 | 条件项：回到路线 A | 未启动（条件项） | 仅当 gate 停止：设计伙伴/真实升级证据或质量加固 | `v0.10.0+` |
 | C4 | P1 | v1.0 评审 | 未启动（条件项） | 路线 A 的真实项目证据满足才发 `v1.0.0`；否则停在 `v0.12.x` | 2027-05 |
+| D2 | P0 | 按裁剪生成项目（三预设） | 已完成 | `minimal`（0 能力 + 闭包裁剪内核）/ `auth`（certified）/ `full`（validated）；`basic-api`、`auth-api` 退役，旧项目 upgrade 硬失败；`make test-scaffold-official` 覆盖三预设 | `v0.10.0` |
+| D3 | P1 | Release 只发 CLI | 已完成 | 删除 server 二进制构建；资产 = 4 个平台 CLI + `template-bundle.json` + checksums | `v0.10.0` |
 | D1 | P1 | 每月发布与维护 | 持续 | `make release-check`、安全修复、文档、契约同步；占 20–25% 容量 | 持续 |
 
 完成情况使用：`已完成`、`部分完成`、`未启动`、`持续`。条件项只有 gate 触发后才进入执行。
 
-截至 2026-11-06：A1–A3、B1–B4 已完成；B5 未启动；C1–C4 条件项未启动；D1 持续。
+截至 2026-11-06：A1–A3、B1–B4、C1、D2 已完成；B5 停在无外部证据；C2/C3 随 C1 停止而取消；C4 条件项未启动；D1 持续。
 
 ### 0.3 里程碑与容量
 
@@ -115,7 +117,7 @@ v0.8.1–v1.0 窗口内，路线 B 只做 8 周实验性 full-stack demo（`v0.9
 ### 2.1 目标
 
 - 新用户无需 clone Jimu 仓库即可安装 CLI、生成并运行项目。
-- `basic-api` 和 `auth-api` 两个 certified 模板达到可上线质量，而不是只在示例环境可用。
+- `minimal` 和 `auth` 两个 certified 预设达到可上线质量，而不是只在示例环境可用。
 - `jimu check` / `jimu upgrade` 在生成项目上提供一致、可重复的生命周期诊断。
 - 对外表述与产品能力一致：实验组合不包装成稳定承诺。
 
@@ -124,7 +126,7 @@ v0.8.1–v1.0 窗口内，路线 B 只做 8 周实验性 full-stack demo（`v0.9
 - 不做要求业务代码依赖 Jimu SDK 的运行时框架。
 - 不做低代码、PaaS、控制面、应用托管或 Kubernetes Operator。
 - 不承诺任意能力组合的兼容性、预算、E2E 或升级兼容。
-- 不把 `auth-api` 扩展成开箱即用的多租户 SaaS。
+- 不把 `auth` 预设扩展成开箱即用的多租户 SaaS。
 - `jimu-web` 只作为 `v0.9.0` experimental full-stack demo 的一部分，不是 certified 产品；不承诺 full-stack 模板。
 - 当前不验证真实项目跨版本升级，也不对外声称已有真实项目采用证据。
 - 当前不提供存量项目接入、自动迁移业务代码或原地改造能力。
@@ -142,8 +144,8 @@ v0.8.1–v1.0 窗口内，路线 B 只做 8 周实验性 full-stack demo（`v0.9
 | P0-02 | P0 | 发布 CLI 二进制 | 已完成 | v0.7.0 Release 已发布 4 个 CLI target、`template-bundle.json` 和 checksums；实际资产下载、SHA-256 校验和 clean-room 已验证 |
 | P0-03 | P0 | 重写 README 首屏与快速开始 | 已完成 | README 首屏、3/5 条快速开始、六个文档入口和比较文档均落地 |
 | P0-04 | P0 | 干净机器端到端门禁 | 已完成 | GitHub Actions 无 checkout clean-room job 在 PR #189 通过；v0.7.0 实际资产在 fresh volumes 上的 basic/auth 冒烟通过 |
-| P1-01 | P1 | 两个 certified 模板生产级质量 | 已完成（认证口径） | 两个模板有预算、E2E 和发布阻断门禁；真实项目验证不在当前路线 |
-| P1-02 | P1 | 生产上线检查清单 | 已完成 | `docs/production/{basic-api,auth-api}.md` 三段式清单；`docs/PRODUCTION.md` 提供完整部署走查 |
+| P1-01 | P1 | 两个 certified 预设生产级质量 | 已完成（认证口径） | `minimal`/`auth` 有预算、E2E 和发布阻断门禁；真实项目验证不在当前路线 |
+| P1-02 | P1 | 生产上线检查清单 | 已完成 | `docs/production/{minimal,auth}.md` 三段式清单；`docs/PRODUCTION.md` 提供完整部署走查 |
 | P1-03 | P1 | 安全修复进入生成项目的策略 | 已完成 | 安全修复流程、支持窗口与 v0.5 fixture 升级演练已落地；见 `docs/SECURITY.md` |
 | P1-05 | P1 | 升级兼容策略与用户 CI 配方 | 已完成 | 支持窗口、五类处理方式和 GitHub Actions / Makefile 示例已补齐 |
 | P1-06 | P1 | 组合诊断与 experimental 边界 | 已完成 | `--with` 标记 experimental，`jimu check` 和 `fix` 诊断已落地 |

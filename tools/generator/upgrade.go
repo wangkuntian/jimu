@@ -53,6 +53,10 @@ type UpgradeApplyResult struct {
 // resolution.
 var ErrUpgradeConflicts = errors.New("upgrade plan has conflicts")
 
+// ErrRetiredTemplate 表示项目由已退役的模板生成，无法再重建目标树。
+// 旧模板的渲染路径已删除（v0.10.0），保留只读副本会长期维护死代码。
+var ErrRetiredTemplate = errors.New("template is retired")
+
 // upgradeVerify is replaceable in package tests; the CLI always uses the
 // workspace build/test gate.
 var upgradeVerify = workspace.Verify
@@ -243,6 +247,13 @@ func upgradeInstallPaths(report upgradeplan.Report) []string {
 }
 
 func upgradeRequest(previous manifest.Document, root, projectDir string, framework *manifest.Framework) (frameworkmanifest.Request, error) {
+	switch previous.Selection.Template {
+	case "basic-api", "auth-api":
+		return frameworkmanifest.Request{}, fmt.Errorf(
+			"%w: project was generated with retired template %q and cannot be upgraded. "+
+				"Regenerate with --template=minimal|auth|full (or --with) and merge your application code",
+			ErrRetiredTemplate, previous.Selection.Template)
+	}
 	module := moduleFromManifest(previous)
 	if module == "" {
 		module, _ = moduleOf(filepath.Join(projectDir, "go.mod"))

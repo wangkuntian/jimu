@@ -121,7 +121,7 @@ func TestReportRerunIsByteIdentical(t *testing.T) {
 	second, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, string(first), string(second), "独立重跑必须逐字节幂等")
-	// --with=queue 会把 access/tenant/user 只作 domain 携带，重跑后该行不得退化成 `-`。
+	// v0.10.0 起内核不再携带能力 domain，该行恒为 `-`（保留列以兼容旧报告）。
 	qdir := filepath.Join(t.TempDir(), "projq")
 	_, err = newProjectForTest(t, NewOptions{Dir: qdir, With: withProtectedProvider("queue"), Module: "example.com/proj", NoTidy: true, Report: true})
 	require.NoError(t, err)
@@ -130,7 +130,7 @@ func TestReportRerunIsByteIdentical(t *testing.T) {
 	require.NoError(t, WriteReport(qdir, *m, CapabilitySet{}))
 	content, err := os.ReadFile(filepath.Join(qdir, filepath.FromSlash(reportRelPath)))
 	require.NoError(t, err)
-	assert.Contains(t, string(content), "| 只带 domain 的能力（内核编译期依赖） | access, tenant, user |")
+	assert.Contains(t, string(content), "| 只带 domain 的能力（内核编译期依赖） | - |")
 }
 
 // TestReportRejectsForeignDirectory 未生成的目录没有 manifest → 明确报错（fail-closed），

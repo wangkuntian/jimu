@@ -292,3 +292,36 @@ func TestStructuralSeedUsesAdminPasswordFile(t *testing.T) {
 	require.NoError(t, db.Where("username = ?", "admin").First(&admin).Error)
 	require.NoError(t, bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte("secret-from-file")))
 }
+
+// 0 能力项目没有数据库：StructuralSeed 必须在 nil DB 上安全返回，
+// 无论 ADMIN_PASSWORD 是否设置。此前设置密码会直接 nil pointer dereference。
+func TestStructuralSeedSkipsWithoutDatabase(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		withSecret bool
+	}{
+		{"without admin secret", false},
+		{"with admin secret", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.withSecret {
+				t.Setenv("ADMIN_PASSWORD", "probepass")
+				t.Setenv("ADMIN_PASSWORD_FILE", "")
+			} else {
+				t.Setenv("ADMIN_PASSWORD", "")
+				t.Setenv("ADMIN_PASSWORD_FILE", "")
+			}
+			logPath := filepath.Join(t.TempDir(), "server.log")
+			log := logger.New(config.LogConfig{Output: logPath})
+			ctx, _, err := assembly.WireFor(
+				&app.Container{Config: &config.Config{}, DB: nil, Logger: log},
+				nil, nil, assembly.Assembly{Name: "no-db"}, nil,
+			)
+			require.NoError(t, err)
+			require.NoError(t, profiles.StructuralSeed(ctx), "nil DB must not panic")
+			out, err := os.ReadFile(logPath)
+			require.NoError(t, err)
+			require.Contains(t, string(out), "structural seed skipped")
+		})
+	}
+}

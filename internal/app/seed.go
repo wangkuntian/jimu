@@ -4,11 +4,9 @@ import (
 	stderrors "errors"
 	"fmt"
 
-	"jimu/internal/capabilities/access/domain"
-	tenantDomain "jimu/internal/capabilities/tenant/domain"
-	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/access"
+	"jimu/internal/kernel/seedmodel"
 	"jimu/internal/kernel/tenant"
 
 	"github.com/casbin/casbin/v3"
@@ -28,22 +26,22 @@ func RunSeed(db *gorm.DB, caps []contract.Descriptor) error {
 
 	return db.Transaction(func(tx *gorm.DB) error {
 		// 0. 确保默认租户存在（迁移 005 已写入；此处兜底，如跳过迁移直接 seed）
-		defaultTenant := tenantDomain.Tenant{ID: tenant.DefaultTenantID, Code: "default", Name: "默认租户", Status: 1}
+		defaultTenant := seedmodel.Tenant{ID: tenant.DefaultTenantID, Code: "default", Name: "默认租户", Status: 1}
 		if err := tx.Where("code = ?", defaultTenant.Code).FirstOrCreate(&defaultTenant).Error; err != nil {
 			return fmt.Errorf("seed default tenant failed: %w", err)
 		}
 
 		// 1. 内置套餐示例（不自动分配给任何租户，需平台管理员显式分配才生效）
-		freePlan := tenantDomain.Plan{Code: "free", Name: "免费版", MaxUsers: 10, MaxRoles: 5, MaxAPIKeys: 2}
+		freePlan := seedmodel.Plan{Code: "free", Name: "免费版", MaxUsers: 10, MaxRoles: 5, MaxAPIKeys: 2}
 		if err := tx.Where("code = ?", freePlan.Code).FirstOrCreate(&freePlan).Error; err != nil {
 			return fmt.Errorf("seed free plan failed: %w", err)
 		}
 
 		// 2. 创建权限（聚合自启用集各能力的 Descriptor.Permissions）
-		var permissions []domain.Permission
+		var permissions []seedmodel.Permission
 		for _, d := range caps {
 			for _, p := range d.Permissions {
-				permissions = append(permissions, domain.Permission{Name: p.Name, Resource: p.Resource, Action: p.Action})
+				permissions = append(permissions, seedmodel.Permission{Name: p.Name, Resource: p.Resource, Action: p.Action})
 			}
 		}
 
@@ -60,7 +58,7 @@ func RunSeed(db *gorm.DB, caps []contract.Descriptor) error {
 		}
 
 		// 3. 幂等创建平台系统角色。
-		platformRoles := make(map[string]*domain.Role, len(contract.PlatformSystemRoles()))
+		platformRoles := make(map[string]*seedmodel.Role, len(contract.PlatformSystemRoles()))
 		for _, spec := range contract.PlatformSystemRoles() {
 			role, err := ensureSystemRole(tx, tenant.DefaultTenantID, spec)
 			if err != nil {
@@ -87,14 +85,14 @@ func RunSeed(db *gorm.DB, caps []contract.Descriptor) error {
 		}
 
 		// 5. 创建默认管理员用户
-		var adminUser userdomain.User
+		var adminUser seedmodel.User
 		result := tx.Unscoped().Where("username = ?", "admin").First(&adminUser)
 		if stderrors.Is(result.Error, gorm.ErrRecordNotFound) {
 			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
 			if err != nil {
 				return fmt.Errorf("hash password failed: %w", err)
 			}
-			adminUser = userdomain.User{
+			adminUser = seedmodel.User{
 				Username: "admin",
 				Password: string(hashedPassword),
 				Status:   1,
@@ -123,14 +121,14 @@ func RunSeed(db *gorm.DB, caps []contract.Descriptor) error {
 	})
 }
 
-func ensureSystemRole(tx *gorm.DB, tenantID uint64, spec contract.SystemRoleSpec) (*domain.Role, error) {
-	var role domain.Role
+func ensureSystemRole(tx *gorm.DB, tenantID uint64, spec contract.SystemRoleSpec) (*seedmodel.Role, error) {
+	var role seedmodel.Role
 	err := tx.Where("tenant_id = ? AND code = ?", tenantID, spec.Code).First(&role).Error
 	if err != nil && !stderrors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
 	if stderrors.Is(err, gorm.ErrRecordNotFound) {
-		role = domain.Role{
+		role = seedmodel.Role{
 			TenantID: tenantID,
 			Name:     spec.Name,
 			Code:     spec.Code,
@@ -257,11 +255,11 @@ func WarnIfNoAccounts(db *gorm.DB, log NoAccountLogger) bool {
 		return false
 	}
 	probe := db.Session(&gorm.Session{Logger: gormlogger.Discard})
-	if !probe.Migrator().HasTable(&userdomain.User{}) {
+	if !probe.Migrator().HasTable(&seedmodel.User{}) {
 		return false
 	}
 	var count int64
-	if err := probe.Model(&userdomain.User{}).Count(&count).Error; err != nil {
+	if err := probe.Model(&seedmodel.User{}).Count(&count).Error; err != nil {
 		return false
 	}
 	if count > 0 {

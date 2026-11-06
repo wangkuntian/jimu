@@ -146,6 +146,12 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 		})
 	}
 
+	// 业务冒烟入口：内核路由，不属于任何能力，因此 0 能力项目也有。
+	// 只回常量，不读 DB/Redis，也不泄漏配置。
+	r.GET("/api/v1/ping", func(c *gin.Context) {
+		response.OK(c, gin.H{"message": "pong"})
+	})
+
 	return r
 }
 

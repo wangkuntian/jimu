@@ -15,7 +15,7 @@ import (
 var (
 	errScaffoldSelectors        = errors.New("--template, --profile and --with are mutually exclusive")
 	errFrameworkInternalProfile = errors.New("is framework-internal; use --template or --with")
-	errMinimalProfileRemoved    = errors.New("was removed; use --template=auth-api")
+	errMinimalProfileRemoved    = errors.New("is framework-internal; use --template=minimal")
 	errShapeRequiresWith        = errors.New("--shape is only valid with --with")
 )
 
@@ -43,10 +43,11 @@ func NewCommand(resolve templatesource.Resolver) *cobra.Command {
 		Long: `Scaffold a new project from selected capabilities.
 
 选择器（互斥）：
-  --template=<name>     官方模板：basic-api（默认）或 auth-api
+  --template=<name>     官方预设：minimal（默认）、auth 或 full
   --with=<cap>[:<drv>]  专家模式（experimental），按能力名解析硬依赖与驱动
 
---profile 只用于拒绝内部形态；--profile=minimal 已移除，请改用 --template=auth-api。
+预设是裁剪起点：minimal 只含最小内核，auth 额外带用户/权限/认证，full 是全部能力。
+生成后仍可用 capability add 继续组合能力。--profile 只用于拒绝框架内部形态。
 
 生成顺序：复制/渲染 → go mod tidy → 自检（生成项目内 go build ./... 与
 生成项目测试都必须绿）→ 原子换上 <dir>。产物先写 <dir>.tmp-<rand>，
@@ -96,8 +97,8 @@ func NewCommand(resolve templatesource.Resolver) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().String("template", "", "official template: basic-api (default) or auth-api (mutually exclusive with --profile/--with)")
-	cmd.Flags().String("profile", "", "framework-internal profile selector; rejected by the CLI (use --template=auth-api instead of --profile=minimal)")
+	cmd.Flags().String("template", "", "official preset: minimal (default), auth or full (mutually exclusive with --profile/--with)")
+	cmd.Flags().String("profile", "", "framework-internal profile selector; rejected by the CLI (presets are selected with --template)")
 	cmd.Flags().String("with", "", "comma-separated capabilities, optionally <cap>:<driver> (mutually exclusive with --profile)")
 	cmd.Flags().String("shape", "", "shape name for --with (default \"app\")")
 	cmd.Flags().String("module", "", "Go module path (default: derived from <dir>)")
