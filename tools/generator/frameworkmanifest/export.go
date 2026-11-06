@@ -234,6 +234,14 @@ func buildDocument(root, module string, selected selection, frameworkOverride *m
 	if err != nil {
 		return manifest.Document{}, err
 	}
+	copyActionsValue, err := copyActions(root, selected)
+	if err != nil {
+		return manifest.Document{}, err
+	}
+	generatedFilesValue, err := generatedFiles(root, selected)
+	if err != nil {
+		return manifest.Document{}, err
+	}
 	doc := manifest.Document{
 		SchemaVersion: manifest.CurrentSchemaVersion,
 		Framework:     framework,
@@ -244,13 +252,13 @@ func buildDocument(root, module string, selected selection, frameworkOverride *m
 		},
 		Composition:    compositionFor(selected),
 		Capabilities:   capabilityFacts(root, selected),
-		Copy:           copyActions(root, selected),
+		Copy:           copyActionsValue,
 		Templates:      templateActions(root, selected),
 		Merges:         mergeActions(root, selected),
 		Rewrites:       rewriteActions(module),
 		Assets:         assetActions(root, selected),
 		Prune:          []manifest.PruneRule{{Kind: "test-import", Path: "**/*_test.go", Reason: pruneReason}},
-		GeneratedFiles: generatedFiles(root, selected),
+		GeneratedFiles: generatedFilesValue,
 	}
 	routes, err := routeCount(root, selected.assemblies)
 	if err != nil {

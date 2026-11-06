@@ -297,14 +297,6 @@ func CapabilityRoots(root string, set CapabilitySet) (CapabilitySet, error) {
 		covered[name] = true
 	}
 	domainOnly := map[string]bool{}
-	for _, entry := range kernelRequiredDomains {
-		name, _, _ := strings.Cut(entry, "/")
-		if covered[name] {
-			continue // 该能力的 domain/ 已经在完整复制或迁移携带里
-		}
-		domainOnly[name] = true
-		copySet[name] = true
-	}
 	set.MigrationOnly = slices.Sorted(maps.Keys(only))
 	set.DomainOnly = slices.Sorted(maps.Keys(domainOnly))
 	set.Copy = slices.Sorted(maps.Keys(copySet))
@@ -312,19 +304,6 @@ func CapabilityRoots(root string, set CapabilitySet) (CapabilitySet, error) {
 }
 
 const capabilityDirPrefix = "internal/capabilities"
-
-// kernelRequiredDomains 是**内核编译期 domain 依赖**（裁定 ④）：`internal/app`（`seed.go`）
-// 在编译期直接 import 的能力 domain 叶子包 —— 实测来源（`go list -deps` 交叉核对）：
-//
-//	internal/app/seed.go → internal/capabilities/{access,tenant,user}/domain
-//
-// 「app → 能力 domain 叶子包」是仓内既已记录并接受的偏差，与 S1 的编译闭包**同性质**：
-// 无论是否选中对应能力，这三个 `domain/` 子树都必须复制，否则生成项目编译失败
-// （`--with=queue` 曾经因此坏掉）。只复制 `domain/`（模型），不复制这三个能力的其它子包。
-//
-// 防漂移：`TestKernelRequiredDomainsCoverAppImports` 解析 `internal/app/*.go` 的 import 与本表
-// 比对 —— 将来有人往 app 里再加一个能力 domain 而没同步本表，该测试会红。
-var kernelRequiredDomains = []string{"access/domain", "tenant/domain", "user/domain"}
 
 // capabilityDescriptors 返回**框架全量能力描述符**：catalog 清单与 Ungated 能力的声明。
 // `--with` 的能力名解析用这一份全量集合（Important 3）：Ungated 仍不受 `capabilities.enabled`

@@ -1,6 +1,7 @@
 package frameworkmanifest
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -13,6 +14,8 @@ import (
 	"jimu/internal/capabilities/catalog"
 	"jimu/internal/config"
 	"jimu/tools/generator/manifest"
+
+	"golang.org/x/tools/go/packages"
 )
 
 var kernelDirs = []string{
@@ -63,14 +66,13 @@ var kernelExcludes = []string{
 	"cmd/cli/source.go",
 }
 
-func copyActions(root string, selected selection) []manifest.CopyAction {
+func copyActions(root string, selected selection) ([]manifest.CopyAction, error) {
 	actions := make([]manifest.CopyAction, 0, len(kernelDirs)+len(kernelFiles)+len(selected.copy)+len(copiedTools)+len(selected.migration)+len(selected.domain))
-	for _, source := range kernelDirs {
-		actions = append(actions, manifest.CopyAction{Source: source, Destination: source, Include: []string{}, Exclude: kernelExcludesFor(source)})
+	kernelActions, err := kernelCopyActions(root, selected)
+	if err != nil {
+		return nil, err
 	}
-	for _, source := range kernelFiles {
-		actions = append(actions, manifest.CopyAction{Source: source, Destination: source, Include: []string{}, Exclude: []string{}})
-	}
+	actions = append(actions, kernelActions...)
 	descriptors, _ := allDescriptors()
 	byName := descriptorByName(descriptors)
 	for _, name := range selected.copy {
@@ -113,7 +115,7 @@ func copyActions(root string, selected selection) []manifest.CopyAction {
 		}
 		actions = append(actions, manifest.CopyAction{Source: source, Destination: source, Include: []string{}, Exclude: exclude})
 	}
-	return actions
+	return actions, nil
 }
 
 func kernelExcludesFor(root string) []string {
@@ -354,9 +356,13 @@ func rewriteActions(module string) []manifest.RewriteAction {
 	}
 }
 
-func generatedFiles(root string, selected selection) []string {
+func generatedFiles(root string, selected selection) ([]string, error) {
 	seen := map[string]bool{}
-	for _, action := range copyActions(root, selected) {
+	actions, err := copyActions(root, selected)
+	if err != nil {
+		return nil, err
+	}
+	for _, action := range actions {
 		collectFiles(root, action.Source, action.Exclude, seen)
 	}
 	for _, action := range templateActions(root, selected) {
@@ -368,7 +374,7 @@ func generatedFiles(root string, selected selection) []string {
 	for _, action := range assetActions(root, selected) {
 		collectFiles(root, action.Source, action.Exclude, seen)
 	}
-	return sortedStrings(mapsKeys(seen))
+	return sortedStrings(mapsKeys(seen)), nil
 }
 
 func collectFiles(root, source string, excluded []string, seen map[string]bool) {
@@ -449,5 +455,122 @@ func sortedStrings(values []string) []string {
 	}
 	out := slices.Clone(values)
 	sort.Strings(out)
+	return out
+}
+
+// kernelCopyActions 只复制真正会被编译进本项目的内核包。
+//
+// 种子不是 cmd/server/cmd/cli：那条路会经 internal/profiles/active → profiles/full
+// 把全部 23 个能力拉进闭包（实测 83 个能力包），裁剪等于没做。生成器会重写
+// active 与 cli 的 import，复制它们本身不需要闭包判断。正确种子是内核入口 +
+// 已选能力根包：
+//   - internal/assembly 拉进 kernel/app/config/contract/shared 的真实子集
+//   - internal/capability 拉进组合算法叶子
+//   - 每个 selected.copy 能力根包拉进该能力的全部子包
+//
+// internal/e2e 只有测试文件，Tests=false 下永远不可达，因此 0 能力项目会自动丢掉它。
+func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, error) {
+	seeds := []string{"./internal/assembly", "./internal/capability"}
+	for _, name := range selected.copy {
+		seeds = append(seeds, "./internal/capabilities/"+name)
+	}
+	reachable, err := kernelPackages(root, seeds)
+	if err != nil {
+		return nil, err
+	}
+	actions := make([]manifest.CopyAction, 0, len(kernelDirs)+len(kernelFiles))
+	for _, dir := range kernelDirs {
+		if !kernelDirRequired(dir, reachable) {
+			continue
+		}
+		exclude := kernelExcludesFor(dir)
+		// internal/kernel 是聚合目录：整目录复制会把不可达的子包也带上。
+		// 只排除闭包里不存在的 kernel 子包（保留目录下非包文件）。
+		if dir == "internal/kernel" {
+			exclude = append(exclude, unreachableKernelSubdirs(root, dir, reachable)...)
+		}
+		actions = append(actions, manifest.CopyAction{
+			Source: dir, Destination: dir, Include: []string{}, Exclude: exclude,
+		})
+	}
+	for _, file := range kernelFiles {
+		actions = append(actions, manifest.CopyAction{Source: file, Destination: file, Include: []string{}, Exclude: []string{}})
+	}
+	return actions, nil
+}
+
+// kernelPackages 返回 seeds 的 import 闭包里属于本仓的相对目录集合。
+// 前缀固定为 jimu/：闭包在框架仓内计算，与目标项目模块名无关。
+func kernelPackages(root string, seeds []string) (map[string]bool, error) {
+	pkgs, err := packages.Load(&packages.Config{
+		Mode:  packages.NeedName | packages.NeedImports | packages.NeedDeps,
+		Dir:   root,
+		Tests: false,
+	}, seeds...)
+	if err != nil {
+		return nil, fmt.Errorf("load kernel packages: %w", err)
+	}
+	reachable := map[string]bool{}
+	var loadErrors []string
+	packages.Visit(pkgs, nil, func(pkg *packages.Package) {
+		for _, e := range pkg.Errors {
+			loadErrors = append(loadErrors, e.Error())
+		}
+		if rel, ok := strings.CutPrefix(pkg.PkgPath, "jimu/"); ok {
+			reachable[rel] = true
+		}
+	})
+	if len(loadErrors) > 0 {
+		return nil, fmt.Errorf("kernel package load errors: %s", strings.Join(loadErrors, "; "))
+	}
+	return reachable, nil
+}
+
+func anyPackageUnder(reachable map[string]bool, dir string) bool {
+	if reachable[dir] {
+		return true
+	}
+	prefix := dir + "/"
+	for pkg := range reachable {
+		if strings.HasPrefix(pkg, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// kernelDirRequired 判定一个内核目录是否要复制。
+//
+// 三类无条件复制：
+//   - conf/：数据目录（RBAC 模型），不是 Go 包
+//   - cmd/server、cmd/cli：手写入口，生成器会重写其 import，闭包算不到它们
+//
+// 其余按 import 闭包判定。
+func kernelDirRequired(dir string, reachable map[string]bool) bool {
+	switch dir {
+	case "conf", "cmd/server", "cmd/cli":
+		return true
+	default:
+		return anyPackageUnder(reachable, dir)
+	}
+}
+
+// unreachableKernelSubdirs 列出 internal/kernel 下没有任何可达包的子目录。
+// 用于把聚合目录的复制收缩到实际编译的部分。
+func unreachableKernelSubdirs(root, dir string, reachable map[string]bool) []string {
+	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(dir)))
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, entry := range entries {
+		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		if !anyPackageUnder(reachable, dir+"/"+entry.Name()) {
+			out = append(out, entry.Name())
+		}
+	}
+	slices.Sort(out)
 	return out
 }

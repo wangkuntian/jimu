@@ -217,13 +217,6 @@ func completeSelection(root string, selected selection, all []contract.Descripto
 		copySet[name] = true
 		covered[name] = true
 	}
-	for _, entry := range []string{"access/domain", "tenant/domain", "user/domain"} {
-		name := strings.SplitN(entry, "/", 2)[0]
-		if !covered[name] {
-			selected.domain = append(selected.domain, name)
-			copySet[name] = true
-		}
-	}
 	selected.migration = slices.Clone(carriers)
 	selected.domain = uniqueSorted(selected.domain)
 	selected.copy = make([]string, 0, len(copySet))
