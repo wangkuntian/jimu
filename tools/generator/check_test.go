@@ -107,6 +107,9 @@ func TestCheckProjectDeepFailureIsReadOnly(t *testing.T) {
 func TestCheckProjectDeepSupportsCertifiedTemplates(t *testing.T) {
 	for _, template := range []string{"minimal", "auth"} {
 		t.Run(template, func(t *testing.T) {
+			// 两个子用例各自生成独立临时目录、独立 go build/test，没有共享状态；
+			// 串行时这条用例是 generator 包里最重的一条（~66s），并行后减半。
+			t.Parallel()
 			dir := filepath.Join(t.TempDir(), "proj")
 			_, err := newProjectForTest(t, NewOptions{
 				Dir: dir, Template: template, Module: "example.com/proj",
