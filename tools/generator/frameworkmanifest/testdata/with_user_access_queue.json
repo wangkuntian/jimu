@@ -1513,6 +1513,8 @@
     "internal/kernel/scheduler/scheduler_store_test.go",
     "internal/kernel/scheduler/store.go",
     "internal/kernel/scheduler/store_test.go",
+    "internal/kernel/seedmodel/seedmodel.go",
+    "internal/kernel/seedmodel/seedmodel_test.go",
     "internal/kernel/tenant/tenant.go",
     "internal/kernel/tenant/tenant_test.go",
     "internal/kernel/tlsconf/tlsconf.go",
@@ -1570,5 +1572,5 @@
     "tools/profileoverlay/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:7fdf8f33f090d72dd809f36e0a95406678b4cc6ed5b4a63bab4d89838e296f54"
+  "digest": "sha256:5c0da870a3d860945c62370b296f0748521cf8506a4f99275cf450e0f796e42c"
 }

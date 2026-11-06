@@ -88,10 +88,15 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 	}
 	var doc manifest.Document
 	var selected selection
-	if req.Template == "auth-api" {
-		doc, err = authAPIDocument(root, req.Module, req.Framework)
-	} else if req.Template != "" {
-		doc, err = basicAPIDocument(root, req.Module, req.Template, req.Framework)
+	if req.Template != "" {
+		var preset Preset
+		preset, err = LookupPreset(req.Template)
+		if err == nil {
+			selected, err = resolvePresetSelection(root, preset)
+			if err == nil {
+				doc, err = buildDocument(root, req.Module, selected, req.Framework)
+			}
+		}
 	} else {
 		selected, err = resolveSelection(root, req)
 		if err == nil {
