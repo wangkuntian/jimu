@@ -43,6 +43,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
+server_bin() {
+  # 生成项目的二进制名由 module 末段决定（<name>-server），从 Makefile 读实际值，
+  # 不要硬编码 ./bin/server。
+  awk '/^SERVER_BIN[[:space:]]*(:=|=)/ { sub(/^SERVER_BIN[[:space:]]*(:=|=)[[:space:]]*/, ""); gsub(/\$\(BIN_DIR\)/, "bin"); print; exit }' Makefile
+}
+
 wait_http() {
   local url="$1"
   local attempts="${2:-120}"
@@ -64,7 +70,8 @@ cd "$min_dir/demo"
 "$JIMU_BIN" check .
 "$JIMU_BIN" upgrade . --check
 make build
-HTTP_PORT=18080 MANAGEMENT_PORT=19090 ./bin/server >"$min_dir/server.log" 2>&1 &
+bin="$(server_bin)"
+HTTP_PORT=18080 MANAGEMENT_PORT=19090 "$bin" >"$min_dir/server.log" 2>&1 &
 min_pid=$!
 if ! wait_http "http://127.0.0.1:19090/livez"; then
   cat "$min_dir/server.log" >&2
@@ -94,9 +101,10 @@ cd "$auth_dir/demo"
 "$JIMU_BIN" upgrade . --check
 make build
 auth_started=1
+bin="$(server_bin)"
 DB_HOST=127.0.0.1 DB_PORT=13306 DB_USER=jimu DB_PASSWORD=jimu DB_NAME=jimu \
   REDIS_ADDR=127.0.0.1:16379 \
-  APP_ENV=dev HTTP_PORT=18081 MANAGEMENT_PORT=19091 ./bin/server >"$auth_dir/server.log" 2>&1 &
+  APP_ENV=dev HTTP_PORT=18081 MANAGEMENT_PORT=19091 "$bin" >"$auth_dir/server.log" 2>&1 &
 auth_pid=$!
 wait_http "http://127.0.0.1:19091/livez" || fail "auth did not become ready"
 curl -fsS "http://127.0.0.1:18081/api/v1/ping" >/dev/null || fail "auth ping failed"
