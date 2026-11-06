@@ -218,6 +218,20 @@ func TestAuthPresetEmptyDatabaseEndToEnd(t *testing.T) {
 	buildOutput, err := build.CombinedOutput()
 	require.NoError(t, err, "generated auth server must build:\n%s", buildOutput)
 
+	cliBinary := filepath.Join(t.TempDir(), "cli")
+	buildCLI := exec.Command("go", "build", "-o", cliBinary, "./cmd/cli")
+	buildCLI.Dir = dir
+	buildCLI.Env = env
+	buildOutput, err = buildCLI.CombinedOutput()
+	require.NoError(t, err, "generated auth CLI must build:\n%s", buildOutput)
+	for _, args := range [][]string{{"migrate", "up"}, {"seed"}} {
+		cli := exec.Command(cliBinary, args...)
+		cli.Dir = dir
+		cli.Env = env
+		cliOutput, err := cli.CombinedOutput()
+		require.NoError(t, err, "auth %s failed:\n%s", strings.Join(args, " "), cliOutput)
+	}
+
 	logPath := filepath.Join(t.TempDir(), "server.log")
 	logFile, err := os.Create(logPath)
 	require.NoError(t, err)
