@@ -52,12 +52,12 @@ _Avoid_：用户、客户、尝鲜者
 只在用户或维护者控制的文件与流程中记录和汇总产品指标的方式；数据默认不上传。
 _Avoid_：产品遥测、埋点
 
-**Official template**：
-`basic-api` 和 `auth-api` 两个 certified 模板，受发布阻断门禁保护。
-_Avoid_：预设项目、样例
+**Official preset**：
+`minimal`、`auth`（certified）与 `full`（validated）三个预设，受发布阻断门禁保护。
+_Avoid_：模板、样例项目
 
 **Profile**：
-Jimu 服务二进制的编译期组成形态；不是 `jimu new` 模板，也不是对外产品契约。
+Jimu 服务二进制的编译期组成形态；不是 `jimu new` 预设，也不是对外产品契约。
 _Avoid_：模板、模板源、运行形态
 
 **Frozen profile**：

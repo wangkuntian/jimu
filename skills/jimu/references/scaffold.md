@@ -14,9 +14,10 @@
 ## `jimu new <dir>`
 
 ```bash
-./bin/jimu-cli new ./myapp --module=example.com/myapp --report                   # 默认 basic-api
-./bin/jimu-cli new ./myapp --template=basic-api --module=example.com/myapp       # 官方模板
-./bin/jimu-cli new ./myapp --template=auth-api --module=example.com/myapp        # 单租户认证模板
+./bin/jimu-cli new ./myapp --module=example.com/myapp --report                   # 默认 minimal
+./bin/jimu-cli new ./myapp --template=minimal --module=example.com/myapp         # 零能力、无外部依赖
+./bin/jimu-cli new ./myapp --template=auth --module=example.com/myapp            # user/access/auth（certified）
+./bin/jimu-cli new ./myapp --template=full --module=example.com/myapp            # 全部 23 能力（validated）
 ./bin/jimu-cli new ./myapp --with=user,access,auth,queue --shape=app              # 能力名（硬依赖闭包 + 拓扑序）
 ./bin/jimu-cli new ./myapp --with=auth,queue:kafka --dry-run                      # 只打印计划，不落盘
 ./bin/jimu-cli check ./myapp                                                      # fast 生命周期检查
@@ -30,8 +31,8 @@
 
 | 参数 | 说明 |
 |---|---|
-| `--template=basic-api\|auth-api` | 官方模板；省略选择器时默认 `basic-api` |
-| `--profile=minimal` | 已移除的兼容别名；传入即报错并提示改用 `--template=auth-api`，其他内部 profile 由 CLI 拒绝 |
+| `--template=minimal\|auth\|full` | 官方预设；省略选择器时默认 `minimal`。`basic-api`/`auth-api` 已在 v0.10.0 退役 |
+| `--profile` | 只用于拒绝框架内部形态；预设请用 `--template` |
 | `--with=<cap>[:<drv>][,…]` | experimental 专家模式；名字取自 catalog 与 Ungated 能力，驱动默认取 `Descriptor.Drivers` 首项，用 `<cap>:<drv>` 覆盖。受保护能力需要同时选择 middleware provider（如 `auth`） |
 | `--shape=<name>` | 仅用于 `--with` 的形态名（默认 `app`） |
 | `--module=<path>` | 重写 `go.mod` 的 module 指令与文本里的 `jimu/` 前缀；**不改**框架运行期名字 / CLI 名 / 镜像名 / protobuf 描述符 |
@@ -54,11 +55,11 @@
 
 **生成物是子集**：内核目录原样复制；能力按复制集（声明集 ∪ 编译闭包 ∪ schema 依赖的迁移携带目录 ∪ 内核 domain 依赖）落地；`internal/profiles/{registry,<shape>,active}`、`internal/capabilities/catalog/*`、`configs/*.yaml`、`Makefile`/`Dockerfile`/`scripts/check_profiles.sh` 按能力集**渲染**（单形态，无 `PROFILE=`、无 overlay）；测试树按「逐文件 import 可满足性 + 资产依赖」裁剪（规则写入 `.jimu/manifest.json` 的 `prune` 段，文件清单写入 `generated_files`）。manifest 只支持 JSON，路径必须为相对路径。
 
-`basic-api` 是独立的零外部服务模板：只生成 HTTP/配置/日志/健康检查/示例路由，不包含能力目录、Compose 或数据库/Redis 配置。v0.4.0 已移除受跟踪的 `.env.example`，basic-api 不重新引入它；配置与 `HTTP_*`/`MANAGEMENT_*`/`LOG_LEVEL` 环境变量写在生成项目 README。
+三个预设都从当前主仓库按 import 闭包裁剪，不维护独立模板树。`minimal` 是 0 能力 + 闭包裁剪内核：只保留被 `cmd/server`/`cmd/cli` 实际引用的内核包，不含 `internal/e2e`、`docker-compose.yml` 或 `db`/`redis` 配置段；内核提供 `/livez`、`/readyz`、`/api/v1/ping`。`auth` 带 `user`/`access`/`auth` 与 `tenant` 闭包（certified），`full` 带全部 23 能力与完整驱动集（validated）。预设均不生成 Compose：数据库/Redis 由使用者提供，连接信息走 `DB_*`/`REDIS_*` 环境变量。
 
 ## `jimu capability add <name>`
 
-在 **`--with` 生成的 experimental 项目**上增量追加能力：确定性重渲染、幂等（同一集合重跑逐字节等价）；写前复用与 `jimu new` / `jimu check` 相同的 resolver/preflight，缺失硬依赖、冲突、端口、驱动、迁移/配置/中间件问题都在写盘前失败；保留既有驱动选择与 auto-added 语义，并写回 schema v3 的 `composition`。`configs/*.yaml` 与 `deploy/helm/values.yaml` 以项目现有文件为底补齐新增段，**不覆盖**用户手改的值。落盘复用 `jimu upgrade` 的 manifest 事务（备份、manifest 最后写、失败按原字节回滚），但不执行 tidy/build 自检；支持级别保持 `experimental`。官方模板 `basic-api` / `auth-api` 不接受 `capability add`，扩展需用 `--with`。若项目里已有 `--report` 产物，成功后同批重算刷新（本来没有则不创建）。
+在 **`--with` 生成的 experimental 项目**上增量追加能力：确定性重渲染、幂等（同一集合重跑逐字节等价）；写前复用与 `jimu new` / `jimu check` 相同的 resolver/preflight，缺失硬依赖、冲突、端口、驱动、迁移/配置/中间件问题都在写盘前失败；保留既有驱动选择与 auto-added 语义，并写回 schema v3 的 `composition`。`configs/*.yaml` 与 `deploy/helm/values.yaml` 以项目现有文件为底补齐新增段，**不覆盖**用户手改的值。落盘复用 `jimu upgrade` 的 manifest 事务（备份、manifest 最后写、失败按原字节回滚），但不执行 tidy/build 自检；支持级别保持 `experimental`。预设项目（`minimal`/`auth`/`full`）可以 `capability add`；只有已退役的 `basic-api`/`auth-api` 项目被拒绝。若项目里已有 `--report` 产物，成功后同批重算刷新（本来没有则不创建）。
 
 ## `jimu capability create <name>`
 
@@ -67,13 +68,13 @@
 ## 生成项目与本仓的门禁关系
 
 - 生成项目的 `Makefile`/`Dockerfile`/`scripts/check_profiles.sh` 由 `templates/project/*.tmpl` 渲染，**不受框架 Makefile 改动影响**
-- 本仓的模板漂移门禁是 `make check-templates`（生成最小项目并真构建 + 跑生成项目门禁），真实生成项目的重型用例由 `JIMU_HEAVY_MATRIX=1` 门控（本地 `make test-scaffold-matrix`）；重型入口同时执行 `budgets.json` 预算检查、`basic-api` smoke 和 `auth-api` 新空库 Compose 端到端（需 Docker Compose）
+- 本仓的模板漂移门禁是 `make check-templates`（生成最小项目并真构建 + 跑生成项目门禁），真实生成项目的重型用例由 `JIMU_HEAVY_MATRIX=1` 门控（本地 `make test-scaffold-matrix`）；重型入口同时执行 `budgets.json` 三预设预算检查、`minimal` 无依赖 smoke 和 `auth` 新空库端到端（bare docker，需 Docker daemon）
 
 ## 验收命令与期望输出
 
 ```bash
-./bin/jimu-cli new /tmp/sk-demo --template=basic-api --module=example.com/demo --dry-run   # 只打印计划
-./bin/jimu-cli new /tmp/sk-demo --template=auth-api --module=example.com/demo --report     # 单租户认证模板
+./bin/jimu-cli new /tmp/sk-demo --template=minimal --module=example.com/demo --dry-run     # 只打印计划
+./bin/jimu-cli new /tmp/sk-demo --template=auth --module=example.com/demo --report         # user/access/auth 预设
 ./bin/jimu-cli check /tmp/sk-demo                                                          # 只读组合检查（退出 0）
 cd /tmp/sk-demo && go build ./... && go run ./tools/checkcapabilities && go test ./... -count=1
 grep -rn '"jimu/' /tmp/sk-demo --include='*.go'      # 期望 0 命中（module 已重写）

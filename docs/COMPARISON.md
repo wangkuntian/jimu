@@ -10,7 +10,7 @@ Jimu 是 Go 后端项目的脚手架/工程基线：从一个可运行项目开�
 
 | 方案 | 它主要解决什么 | 与 Jimu 的关系 |
 |---|---|---|
-| [Gin](https://gin-gonic.com/) / [Echo](https://echo.labstack.com/) | HTTP 路由、中间件和请求上下文 | 它们是 Web 框架；Jimu 生成的 `basic-api` 使用 Gin，但 Jimu 不是它们的替代品 |
+| [Gin](https://gin-gonic.com/) / [Echo](https://echo.labstack.com/) | HTTP 路由、中间件和请求上下文 | 它们是 Web 框架；Jimu 生成的 `minimal` 使用 Gin，但 Jimu 不是它们的替代品 |
 | [go-zero](https://go-zero.dev/) | 微服务开发框架、代码生成和治理能力 | Jimu 提供独立项目基线、模板和显式升级；不承诺等价的微服务治理全家桶 |
 | [Kratos](https://go-kratos.dev/) | 微服务框架和工程布局 | Jimu 不替换 Kratos；选择 Jimu 意味着接受更窄的脚手架边界 |
 | 整仓模板/示例仓库 | 复制一套示例代码开始 | Jimu 生成独立 module，并记录 manifest、支持 `jimu check` / `jimu upgrade`；不是复制后无来源信息的模板 |

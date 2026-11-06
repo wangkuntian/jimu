@@ -2,14 +2,17 @@
 
 Jimu 交付的是**独立 Go 项目**，不是运行时插件系统。生成项目只包含所选模板或 experimental 组合真正需要的代码、迁移、配置段和资产；未选择的代码不会进入项目。
 
-## 官方模板
+## 官方预设
 
-| 模板 | 适用场景 | 主要能力 |
-|---|---|---|
-| `basic-api` | 零外部依赖的 HTTP API、BFF、轻量服务 | HTTP 路由、配置加载、结构化日志、统一错误、健康检查、优雅停机、Docker 启动 |
-| `auth-api` | 单租户后台 API、需要登录和权限的业务服务 | 用户、JWT access/refresh、RBAC、MySQL、Redis、迁移、seed、管理员初始化、Compose、`make verify` |
+| 预设 | 支持级别 | 适用场景 | 主要能力 |
+|---|---|---|---|
+| `minimal` | `certified` | 零外部依赖的 HTTP API、BFF、轻量服务 | 最小内核、`/livez`/`/readyz`、`/api/v1/ping`、结构化日志、优雅停机 |
+| `auth` | `certified` | 需要登录和权限的业务服务 | `user`/`access`/`auth`，MySQL、Redis、迁移、seed、管理员初始化 |
+| `full` | `validated` | 完整能力集的起点 | 全部 23 个能力与完整驱动集 |
 
-模板的预算、兼容窗口和发布阻断规则见[模板契约 v0.1](templates/v1/README.md)；生成流程与 manifest 规则见[形态与项目生成](design/profiles-and-project-generation.md)。
+预设是裁剪起点，生成后可用 `jimu capability add` 继续组合。`basic-api` 与 `auth-api` 已在 v0.10.0 退役。
+
+预设的预算、兼容窗口和发布阻断规则见[模板契约 v0.1](templates/v1/README.md)；生成流程与 manifest 规则见[形态与项目生成](design/profiles-and-project-generation.md)。
 
 ## experimental 组合
 
@@ -41,4 +44,4 @@ Jimu 交付的是**独立 Go 项目**，不是运行时插件系统。生成项�
 http://localhost:8080/swagger/index.html
 ```
 
-生成项目只包含其模板需要的 API；`auth-api` 的端点、迁移和验证方式见生成项目自己的 `README.md` 和 `QUICKSTART.md`。
+生成项目只包含其预设需要的 API；`auth` 预设的端点、迁移和验证方式见生成项目自己的 `README.md`。
