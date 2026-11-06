@@ -351,4 +351,10 @@ for needle in \
   assert_contains "$RELEASE_WORKFLOW" "$needle" "release workflow 缺少 $needle"
 done
 
+# v0.10.0：交付物是代码，release 不再发布 server 二进制（用户用 `jimu new` 拿工程自行构建）。
+# 这三样一旦回来，说明有人把"下载即用"又写回了发布链路。
+for needle in './cmd/server' 'matrix.profile' 'jimu-${PROFILE}'; do
+  assert_not_contains "$RELEASE_WORKFLOW" "$needle" "release workflow 仍含已退役的 $needle"
+done
+
 echo "✅ Makefile contract passed"
