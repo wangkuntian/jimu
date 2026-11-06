@@ -22,7 +22,14 @@ SERVER_CMD := cmd/server/main.go
 CLI_PKG := ./cmd/cli
 
 # official 档只覆盖两个官方模板；full 仍由 test-scaffold-matrix 运行全部生成器用例。
-SCAFFOLD_OFFICIAL_TESTS := ^(TestPresetBudgets|TestMinimalPresetStartsWithoutDependencies|TestAuthPresetEmptyDatabaseEndToEnd)$
+# 只放「race 分片跑不到」的用例：
+#   - TestAuthPresetEmptyDatabaseEndToEnd 需要 Docker（bare MySQL/Redis 容器），
+#     race 分片里 requireHeavyMatrix 会直接 skip，所以只能在 official 跑；
+#   - TestPresetBudgets 与 TestMinimalPresetStartsWithoutDependencies 不需要 Docker，
+#     已在 CI (PR) 的 race 分片里全量跑过，这里再跑一遍是纯重复（实测 +44s）。
+# 普通 feature/* PR 不触发本 workflow，因此这两条必须留在 race 分片里 —— 这正是
+# 它们不属于 official 的原因，不是遗漏。
+SCAFFOLD_OFFICIAL_TESTS := ^(TestAuthPresetEmptyDatabaseEndToEnd)$
 SCAFFOLD_UPGRADE_TESTS := ^(TestUpgradeFixtures|TestUpgradeRejectsRetiredTemplates)$
 SCAFFOLD_COMPOSITION_TESTS := ^(TestRepresentativeCompositionMatrix|TestCompositionMatrixBudget|TestCompositionNegativeMatrix)$
 

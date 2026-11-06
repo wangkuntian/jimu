@@ -193,9 +193,15 @@ jimu upgrade <dir>                     # 显式升级事务
 
 生成文件数包含 `.jimu/manifest.json`；依赖与闭包按生成项目的 `go list` / `go/packages` 口径统计。内核路由（`/livez`、`/readyz`、`/api/v1/ping`）不计入 `report.routes`，该字段只统计能力注册的业务路由。
 
-v0.5.1 起 `Scaffold Gate` 分为 official 与 full 两档：official 是 `release/*` 和 `dependabot/*` → `master` PR 的必需检查，只跑三个预设的预算、minimal 无依赖 smoke 和 auth 空库 E2E；full 只在 `workflow_dispatch` 或夜间定时运行，覆盖全部 `--with`、内部 profile 和重型生成器用例。这样普通 PR 不必等待全矩阵，同时保留夜间/发布前的完整回归。
+v0.5.1 起 `Scaffold Gate` 分为 official 与 full 两档：official 是 `release/*` 和 `dependabot/*` → `master` PR 的必需检查，只跑需要 Docker 的 auth 空库 E2E；full 只在 `workflow_dispatch` 或夜间定时运行，覆盖全部 `--with`、内部 profile 和重型生成器用例。这样普通 PR 不必等待全矩阵，同时保留夜间/发布前的完整回归。
 
-预设的自动门禁由 `make test-scaffold-official` 执行（`auth` 用例需要可用的 Docker daemon）；full 生成器矩阵由 `make test-scaffold-matrix` 在手动触发或夜间定时运行。v0.6.0 在 full 中新增固定 pairwise 组合矩阵，official 的选择集和行为不变：
+门禁按「需不需要 Docker」分工，同一条用例不在两个 workflow 各跑一遍：
+
+- `CI (PR)` 的 race 分片跑 `TestPresetBudgets` 与 `TestMinimalPresetStartsWithoutDependencies`。它们不需要 Docker，所以每个 PR 都有覆盖，包括不触发 `CI (Scaffold)` 的 `feature/*`。
+- `make test-scaffold-official` 只跑 `TestAuthPresetEmptyDatabaseEndToEnd`（需要 Docker daemon，race 分片里会 skip）。
+- full 生成器矩阵由 `make test-scaffold-matrix` 在手动触发或夜间定时运行。v0.6.0 在 full 中新增固定 pairwise 组合矩阵。
+
+各条用例的职责：
 
 - `TestPresetBudgets` 直接读取 `budgets.json`，生成 minimal/auth/full 后实测文件数、直接依赖、Go 闭包、外部服务、路由、表、迁移和非代码资产，任一指标超限即失败。
 - `TestMinimalPresetStartsWithoutDependencies` 不启动任何容器，构建并运行生成项目的 server 二进制，在「设置」与「不设置」`ADMIN_PASSWORD` 两种 env 下都验证 `/livez`、`/readyz` 和 `/api/v1/ping`。第二种 env 是空能力集种子的回归钉子：0 能力时 DB 为 nil，种子必须被跳过而不是 panic。

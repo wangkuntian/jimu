@@ -1,8 +1,9 @@
 name: CI (Scaffold)
 
 # 两层脚手架门禁：
-#   official：三个预设的预算、minimal 无依赖 smoke 与 auth 空库 E2E；release/* 与
-#             dependabot/* → master PR 运行，本地等价命令 `make test-scaffold-official`。
+#   official：只跑需要 Docker 的 auth 空库 E2E；release/* 与 dependabot/* → master PR 运行，
+#             本地等价命令 `make test-scaffold-official`。预设预算与 minimal 无依赖 smoke
+#             不需要 Docker，已在 ci.yml 的 race 分片里每个 PR 都跑 —— 放在这里只会重复一遍。
 #   full：全能力/全 profile 生成器矩阵；只在 schedule 与 workflow_dispatch 运行，
 #         本地等价命令 `make test-scaffold-matrix`。
 # **普通开发 PR 不跑** —— feature/fix → release 不触发本 workflow。

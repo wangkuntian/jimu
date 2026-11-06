@@ -53,7 +53,12 @@ flowchart LR
 
 预设只是裁剪起点：manifest 记录 `selection.template`，但 `jimu capability add` 只拒绝已退役的 `basic-api`/`auth-api`，预设项目可以继续加能力。由已退役模板生成的项目执行 `jimu upgrade` 直接硬失败（`ErrRetiredTemplate`），不提供迁移命令。
 
-预设的发布门禁由 `make test-scaffold-official` 承载：`TestPresetBudgets` 读取 `docs/templates/v1/budgets.json` 并实测 minimal/auth/full 三份生成树，`TestMinimalPresetStartsWithoutDependencies` 在设置与不设置 `ADMIN_PASSWORD` 两种 env 下起真实进程并验 `/livez`、`/readyz`、`/api/v1/ping`，`TestAuthPresetEmptyDatabaseEndToEnd` 用裸 MySQL/Redis 容器验迁移、seed 与管理员登录。`make test-scaffold-matrix` 保留为 full 档，继续覆盖全部 `--with` 与内部 profile 的生成/构建/测试选区，在手动触发或夜间定时运行。
+预设的门禁按「需不需要 Docker」分工，避免重复执行：
+
+- `CI (PR)` 的 race 分片跑 `TestPresetBudgets`（读 `budgets.json` 实测 minimal/auth/full 三份生成树）与 `TestMinimalPresetStartsWithoutDependencies`（两种 env 下起真实进程验 `/livez`、`/readyz`、`/api/v1/ping`）。它们不需要 Docker，因此每个 PR 都有覆盖 —— 包括不触发 `CI (Scaffold)` 的 `feature/*`。
+- `make test-scaffold-official`（`CI (Scaffold)` 的 official 档）**只跑** `TestAuthPresetEmptyDatabaseEndToEnd`：它需要裸 MySQL/Redis 容器，race 分片里 `requireHeavyMatrix` 会直接 skip，只能在这里跑。把前两条也放进来会让同一条用例在两个 workflow 各跑一遍（实测 +44s，CI 放大后约 +170s）。
+
+`make test-scaffold-matrix` 保留为 full 档，继续覆盖全部 `--with` 与内部 profile 的生成/构建/测试选区，在手动触发或夜间定时运行。
 
 官方门禁仍是 `release/*` 与 `dependabot/*` → `master` PR 的必需检查；full 只允许 `workflow_dispatch` 与夜间定时，不回到每个 PR。full 在全部 `--with`/内部 profile 选区之外增加固定、代表性的 pairwise 组合清单和 v0.5 upgrade fixtures。组合清单不遍历全幂集：每个用例最多请求两个代表性能力加必要的受保护中间件提供方，预算最多 10 个生成项目、2 个 CI shard，每个项目只做 build/vet，不承诺组合级 E2E；清单与上限的唯一事实源是 [`composition_matrix_test.go`](../../tools/generator/composition_matrix_test.go)。CI 的每个 shard 把耗时写入 step summary；显式运行时测试必须报告 `PASS`，`SKIP` 视为门禁失败，避免 full 在 CI 中静默跳过。
 
