@@ -151,9 +151,12 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 	if err := manifest.Validate(previous); err != nil {
 		return manifest.Document{}, fmt.Errorf("validate previous manifest: %w", err)
 	}
-	if previous.Selection.Template != "" {
+	// 旧模板已退役，其渲染路径不存在，无法在其产物上增量。
+	// 预设项目（minimal/auth/full）是允许扩展的：它们只是能力集的起点。
+	switch previous.Selection.Template {
+	case "basic-api", "auth-api":
 		return manifest.Document{}, fmt.Errorf(
-			"capability add does not extend official template projects (%s); regenerate with --with to use an experimental composition",
+			"template %q is retired and cannot be extended; regenerate with --template=minimal|auth|full or --with",
 			previous.Selection.Template,
 		)
 	}
