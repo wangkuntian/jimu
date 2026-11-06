@@ -277,3 +277,19 @@ func freeAddr(t *testing.T) string {
 	require.NoError(t, ln.Close())
 	return addr
 }
+
+// /api/v1/ping 是内核路由（不是能力路由），必须在所有 http.mode 下都存在：
+// 极小项目（0 能力）没有任何能力模块，业务入口只能靠它。
+func TestPingRouteServedInAllModes(t *testing.T) {
+	for _, mode := range []string{config.HTTPModeDebug, config.HTTPModeRelease} {
+		t.Run(mode, func(t *testing.T) {
+			router := SetupRouter(testLogger(),
+				config.HTTPConfig{Mode: mode}, config.ServerConfig{}, config.SecurityConfig{},
+				observability.TracingConfig{})
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest(stdhttp.MethodGet, "/api/v1/ping", nil))
+			require.Equal(t, stdhttp.StatusOK, rec.Code)
+			require.Contains(t, rec.Body.String(), "pong")
+		})
+	}
+}
