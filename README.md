@@ -119,6 +119,12 @@ make up
 make check
 ```
 
+验证发布 CLI 的仓库外生成链路（需要 Docker）：
+
+```bash
+make clean-room-e2e
+```
+
 贡献流程见[CONTRIBUTING](docs/CONTRIBUTING.md)；默认分支、发布分支和 tag 规则以该文档为准。
 
 ## License

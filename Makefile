@@ -6,7 +6,7 @@
 .PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race check-makefile check-config
 .PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates bundle-check bundle-meta test-scaffold-official test-scaffold-matrix test-scaffold-upgrade test-scaffold-composition
 .PHONY: profiles-check compose-report compose-report-check check-skills skills-install
-.PHONY: swagger swagger-check smoke-check compose-check govulncheck check ci ci-full release-check release-check-fast
+.PHONY: swagger swagger-check smoke-check compose-check govulncheck check ci ci-full release-check release-check-fast clean-room-e2e
 .PHONY: proto bench bench-ci loadtest cli all hooks
 
 .DEFAULT_GOAL := help
@@ -250,6 +250,13 @@ test-scaffold-upgrade: ## 运行 v0.5 upgrade fixtures 的升级场景门禁
 
 test-scaffold-composition: ## 运行固定 pairwise 组合与冲突负例门禁
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 30m -v -run '$(SCAFFOLD_COMPOSITION_TESTS)'
+
+clean-room-e2e: ## 用本地 Release CLI 在临时目录验证 basic-api/auth-api（需 Docker）
+	@set -euo pipefail; \
+	work="$$(mktemp -d "$${TMPDIR:-/tmp}/jimu-clean-room.XXXXXX")"; \
+	trap 'chmod -R u+w "$$work" 2>/dev/null || true; rm -rf "$$work"' EXIT; \
+	CGO_ENABLED=0 go build -o "$$work/jimu" ./cmd/jimu; \
+	JIMU_BIN="$$work/jimu" WORKDIR="$$work/projects" bash scripts/clean_room_e2e.sh
 
 profiles-check: ## 构建全部形态并检查依赖闭包
 	@bash scripts/check_profiles.sh

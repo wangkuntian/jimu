@@ -25,7 +25,7 @@
 | B1 | P0 | `jimu-web` 契约同步 | 已完成 | 结构化 lockfile 固定到 `v0.8.1`；`check_contract_pin.sh` 与 `bun run check` 通过 | `v0.9.0` |
 | B2 | P0 | `make demo` 全栈环境 | 已完成 | 一条命令启动 `full` server + `jimu-web`；`/readyz`、UI 和 admin 登录通过；Ctrl-C 清理 demo 栈并保留数据卷 | `v0.9.0` |
 | B3 | P0 | Demo 流程与 E2E | 已完成 | 真实后端 Playwright 覆盖 admin 登录 → 租户/套餐 → 角色/用户 → 账号安全；全链路用例创建的租户/角色/用户通过 API 清理；`make demo-e2e` 连跑两次通过。账号安全当前为占位页，只验证路由与占位状态 | `v0.9.0` |
-| B4 | P0 | CLI-only `jimu new` smoke | 未启动 | `jimu new --template=auth-api` + `make up` + `make verify`；不接前端 | `v0.9.0` |
+| B4 | P0 | CLI-only `jimu new` smoke | 已完成 | `make clean-room-e2e`：本地构建 Release CLI，在临时目录生成 `basic-api`/`auth-api`，`auth-api` 通过 `make up` + `make verify`；`PASS: clean-room basic-api and auth-api` | `v0.9.0` |
 | B5 | P0 | 8 周 gate 证据 | 未启动 | 3 个外部试用/明确反馈；至少 1 个团队愿意进入下一步 | 2027-01 |
 | C1 | P1 | Gate 决策 | 未启动（条件项） | 继续或停止路线 B；更新路线图和非目标 | `v0.10.0` |
 | C2 | P1 | 条件项：fullstack 预览设计 | 未启动（条件项） | 仅当 gate 通过：时间盒 4 周，评估 generated full-stack 的契约与模板边界；不承诺 certified | `v0.10.0+` |
@@ -35,7 +35,7 @@
 
 完成情况使用：`已完成`、`部分完成`、`未启动`、`持续`。条件项只有 gate 触发后才进入执行。
 
-截至 2026-11-05：A1–A3、B1–B3 已完成；B4–B5 未启动；C1–C4 条件项未启动；D1 持续。
+截至 2026-11-06：A1–A3、B1–B4 已完成；B5 未启动；C1–C4 条件项未启动；D1 持续。
 
 ### 0.3 里程碑与容量
 
