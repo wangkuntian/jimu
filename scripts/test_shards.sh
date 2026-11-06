@@ -38,13 +38,16 @@
 # 是 121/121/121/121s（误差 <1s）。
 #
 # 用法：
-#   scripts/test_shards.sh shards-json            # workflow 矩阵用的 JSON 数组（如 ["core",…]）
+#   scripts/test_shards.sh shards-json [all|db|nodb]
+#                                                # workflow 矩阵用的 JSON 数组；db/nodb 按
+#                                                # 是否真的连库拆成两个 job（nodb 不挂容器）
 #   scripts/test_shards.sh shards                 # 分片名逐行列出
 #   scripts/test_shards.sh list <shard>           # 打印该分片覆盖的包
 #   scripts/test_shards.sh run <shard> [--cover]  # 执行该分片；--cover 同时产出 cover-<shard>.out
 #   scripts/test_shards.sh merge-cover <dir> <out> # 合并分片覆盖率 profile（表头 + 正文拼接）
 #   scripts/test_shards.sh verify                 # 守卫：包/用例/形态的并集 == 全集、且互不重叠
 #   scripts/test_shards.sh shard-weights run      # 实测 generator 用例耗时，刷新权重表（入库）
+#   scripts/test_shards.sh plan                    # 打印 generator 分片计划与各片负载（秒）
 #
 # 本脚本同时服务两件事：竞争检测（`-race`）与覆盖率（`-covermode=atomic -coverprofile`）。
 # 两者可以同跑（`go test -race -covermode=atomic`），因此 CI 只跑一遍测试套件：
@@ -53,6 +56,9 @@
 #
 # `run` 开跑前会自己跑一次守卫（fail-closed）：分片清单落后于代码树（新增包没人覆盖、
 # 用例切分漏了用例、形态切片漏了形态）会直接失败，而不是静默少测。
+#
+# 按是否连库拆两个 job：`tools` 与 `composereport-*` 不碰数据库，ci.yml 让它们跑在
+# `shards-nodb`（无 service container）。三个容器会和 `-race` 抢 4 vCPU runner 的 CPU。
 
 set -euo pipefail
 
@@ -340,6 +346,41 @@ _verify_composereport_shards() {
   return "$rc"
 }
 
+# 打印分片计划与各片负载：排查配平问题的入口（CI 日志里也用它对照）。
+cmd_plan() {
+  local plan median="n/a" planfile weightsfile
+  plan=$(generator_shard_plan)
+  weightsfile="$GENERATOR_WEIGHTS_FILE"
+  [ -f "$weightsfile" ] || weightsfile=/dev/null
+  median=$(grep -vE '^[[:space:]]*(#|$)' "$weightsfile" \
+    | awk -F'\t' 'NF>=2 {print $1}' | sort -n \
+    | awk '{a[NR]=$1} END { if (NR==0) print "n/a"; else print a[int((NR+1)/2)] }')
+  printf 'generator 分片计划（%s 片，权重表 %s，中位数 %ss）\n' \
+    "$GENERATOR_SHARDS" "$GENERATOR_WEIGHTS_FILE" "$median"
+
+  # 把权重 join 到计划上，按分片汇总条数与耗时。
+  planfile=$(mktemp)
+  trap 'rm -f "$planfile"' RETURN
+  printf '%s\n' "$plan" >"$planfile"
+  awk -F'\t' -v n="$GENERATOR_SHARDS" -v wf="$weightsfile" -v pf="$planfile" '
+    BEGIN {
+      while ((getline line < wf) > 0) {
+        if (line ~ /^[[:space:]]*(#|$)/) continue
+        split(line, f, "\t")
+        if (f[2] != "") weight[f[2]] = f[1] + 0
+      }
+      while ((getline line < pf) > 0) {
+        split(line, g, "\t")
+        count[g[1]]++
+        load[g[1]] += weight[g[2]]
+      }
+      for (i = 1; i <= n; i++) {
+        s = "generator-" i
+        printf "  %-13s %3d tests  %6.1fs\n", s, count[s], load[s]
+      }
+    }'
+}
+
 cmd_verify() {
   _verify_packages
   _verify_composereport_shards
@@ -405,9 +446,37 @@ cmd_shards() {
   shard_names
 }
 
+# 需要 service container（MySQL/Postgres/Redis）的分片。
+#
+# 不是所有分片都连库：`tools`（纯静态工具与框架 manifest）与 `composereport`
+# （只做依赖图度量）完全不碰数据库，给它们挂三个容器纯属浪费 —— 在 4 vCPU runner 上
+# 容器会和 `-race` 抢 CPU，实测让同一批用例慢 4 倍（本地 154s vs CI 612s）。
+# 判定依据是这些包内是否有 `testutil.SkipUnless{Mysql,Redis,Postgres}` 的调用点；
+# 新增能力包时它会自动落进 caps-*，无需改这里。
+shard_needs_db() {
+  case "$1" in
+    tools | composereport-*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+# <which> = all | db | nodb：给 workflow 的矩阵用（两个 job 各自一份矩阵）。
 cmd_shards_json() {
-  local out="" s
-  for s in $(shard_names); do out+="\"$s\","; done
+  local which="${1:-all}" out="" s want
+  for s in $(shard_names); do
+    case "$which" in
+      all) want=1 ;;
+      db) shard_needs_db "$s" && want=1 || want=0 ;;
+      nodb) shard_needs_db "$s" && want=0 || want=1 ;;
+      *) echo "❌ 未知过滤: $which" >&2; exit 2 ;;
+    esac
+    [ "$want" -eq 1 ] && out+="\"$s\","
+  done
+  # 空集合要输出 `[]` 而不是 `[,]`：GitHub 的 fromJSON 对后者直接报错。
+  [ -n "$out" ] || {
+    printf '[]\n'
+    return 0
+  }
   printf '[%s]\n' "${out%,}"
 }
 
@@ -527,11 +596,12 @@ usage() {
 
 case "${1:-}" in
   shards) cmd_shards ;;
-  shards-json) cmd_shards_json ;;
+  shards-json) shift; cmd_shards_json "${1:-all}" ;;
   list) shift; cmd_list "$@" ;;
   run) shift; cmd_run "$@" ;;
   merge-cover) shift; cmd_merge_cover "$@" ;;
   shard-weights) shift; cmd_shard_weights "$@" ;;
+  plan) cmd_plan ;;
   verify) cmd_verify ;;
   "" | -h | --help) usage ;;
   *)
