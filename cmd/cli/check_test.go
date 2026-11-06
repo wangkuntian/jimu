@@ -48,7 +48,7 @@ func TestCheckCmdAcceptsValidProject(t *testing.T) {
 func TestCheckCmdJSONReportsLifecycleAndKeepsFailuresMachineReadable(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := generator.NewProject(generator.NewOptions{
-		Dir: dir, Template: "basic-api", Module: "example.com/proj", NoSelfCheck: true,
+		Dir: dir, Template: "minimal", Module: "example.com/proj", NoSelfCheck: true,
 	})
 	require.NoError(t, err)
 	before := upgradeTreeDigest(t, dir)
@@ -113,7 +113,7 @@ func TestCheckCmdJSONReportsLifecycleAndKeepsFailuresMachineReadable(t *testing.
 func TestCheckCmdDeepJSONIsDeterministic(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := generator.NewProject(generator.NewOptions{
-		Dir: dir, Template: "basic-api", Module: "example.com/proj", NoSelfCheck: true,
+		Dir: dir, Template: "minimal", Module: "example.com/proj", NoSelfCheck: true,
 	})
 	require.NoError(t, err)
 

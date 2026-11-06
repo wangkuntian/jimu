@@ -108,7 +108,7 @@ func TestExportRejectsInvalidSelection(t *testing.T) {
 	root := repositoryRoot(t)
 	for name, req := range map[string]Request{
 		"both profile and with": {Root: root, Profile: "minimal", With: "user", Module: "example.com/x"},
-		"template and profile":  {Root: root, Template: "basic-api", Profile: "minimal", Module: "example.com/x"},
+		"template and profile":  {Root: root, Template: "minimal", Profile: "minimal", Module: "example.com/x"},
 		"unknown template":      {Root: root, Template: "ghost", Module: "example.com/x"},
 		"invalid shape":         {Root: root, With: "user", Shape: "../bad", Module: "example.com/x"},
 	} {
@@ -155,31 +155,31 @@ func TestExportCarriesPreflightFacts(t *testing.T) {
 	}
 }
 
-func TestExportDefaultsToOfficialBasicAPI(t *testing.T) {
+func TestExportDefaultsToMinimalPreset(t *testing.T) {
 	doc, err := Export(Request{Root: repositoryRoot(t), Module: "example.com/basic"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.Selection.Template != "basic-api" || doc.Selection.TemplateVersion != manifest.TemplateContractVersion || doc.Selection.Support != "official" {
-		t.Fatalf("selection = %#v, want official basic-api", doc.Selection)
+	if doc.Selection.Template != "minimal" || doc.Selection.TemplateVersion != manifest.TemplateContractVersion || doc.Selection.Support != "official" {
+		t.Fatalf("selection = %#v, want official minimal preset", doc.Selection)
 	}
 	if doc.Composition == nil || doc.Composition.Support != manifest.CompositionSupportCertified {
-		t.Fatalf("composition = %#v, want certified basic-api", doc.Composition)
+		t.Fatalf("composition = %#v, want certified minimal preset", doc.Composition)
 	}
 	if len(doc.Composition.Requested) != 0 || len(doc.Composition.Resolved) != 0 {
-		t.Fatalf("basic-api composition = %#v, want empty selection", doc.Composition)
+		t.Fatalf("minimal composition = %#v, want empty selection", doc.Composition)
 	}
 	if doc.Framework.Commit == "" {
-		t.Fatal("basic-api manifest has an empty framework commit")
+		t.Fatal("minimal manifest has an empty framework commit")
 	}
 }
 
 func TestExportAuthAPITemplateIsOfficialStandaloneSelection(t *testing.T) {
-	doc, err := Export(Request{Root: repositoryRoot(t), Template: "auth-api", Module: "example.com/auth"})
+	doc, err := Export(Request{Root: repositoryRoot(t), Template: "auth", Module: "example.com/auth"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.Selection.Template != "auth-api" || doc.Selection.TemplateVersion != manifest.TemplateContractVersion || doc.Selection.Support != "official" {
+	if doc.Selection.Template != "auth" || doc.Selection.TemplateVersion != manifest.TemplateContractVersion || doc.Selection.Support != "official" {
 		t.Fatalf("selection = %#v, want official auth-api", doc.Selection)
 	}
 	if doc.Composition == nil || doc.Composition.Support != manifest.CompositionSupportCertified {

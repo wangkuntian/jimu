@@ -19,7 +19,7 @@ import (
 )
 
 func TestPlanUpgradeCleanProjectIsUpToDate(t *testing.T) {
-	dir := generateForTest(t, NewOptions{Template: "basic-api"})
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
 	result, err := PlanUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot(), NoTidy: true})
 	require.NoError(t, err)
 
@@ -32,14 +32,14 @@ func TestPlanUpgradeCleanProjectIsUpToDate(t *testing.T) {
 	assert.Zero(t, result.Report.Count(upgradeplan.Deleted))
 	assert.Equal(t, dir, result.Dir)
 	assert.Equal(t, "example.com/proj", result.Module)
-	assert.Equal(t, "basic-api", result.Target.Selection.Template)
+	assert.Equal(t, "minimal", result.Target.Selection.Template)
 	assert.NoError(t, manifest.ValidateComplete(result.Target))
 }
 
 func TestPlanUpgradeDefaultTidyKeepsGeneratedProjectUpToDate(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := NewProject(NewOptions{
-		Dir: dir, Template: "basic-api", Module: "example.com/proj", NoSelfCheck: true,
+		Dir: dir, Template: "minimal", Module: "example.com/proj", NoSelfCheck: true,
 	})
 	require.NoError(t, err)
 
@@ -49,14 +49,14 @@ func TestPlanUpgradeDefaultTidyKeepsGeneratedProjectUpToDate(t *testing.T) {
 }
 
 func TestPlanUpgradeUserEditIsConflictAndDoesNotWrite(t *testing.T) {
-	dir := generateForTest(t, NewOptions{Template: "basic-api"})
-	readme := filepath.Join(dir, "README.md")
-	require.NoError(t, os.WriteFile(readme, []byte("user-owned README\n"), 0o644))
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	managedFile := filepath.Join(dir, "Makefile")
+	require.NoError(t, os.WriteFile(managedFile, []byte("# user-owned Makefile\n"), 0o644))
 	before := hashTree(t, dir)
 
 	result, err := PlanUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot(), NoTidy: true})
 	require.NoError(t, err)
-	entry := upgradeEntry(t, result.Report, "README.md")
+	entry := upgradeEntry(t, result.Report, "Makefile")
 	assert.Equal(t, upgradeplan.Conflict, entry.Category)
 	assert.Equal(t, upgradeplan.ActionKeep, entry.Action)
 	assert.Contains(t, entry.Reason, "target template is unchanged")
@@ -65,25 +65,25 @@ func TestPlanUpgradeUserEditIsConflictAndDoesNotWrite(t *testing.T) {
 }
 
 func TestApplyUpgradeInstallsModifiedFileAndIsIdempotent(t *testing.T) {
-	dir := generateForTest(t, NewOptions{Template: "basic-api"})
-	readme := filepath.Join(dir, "README.md")
-	targetContent, err := os.ReadFile(readme)
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	managedFile := filepath.Join(dir, "Makefile")
+	targetContent, err := os.ReadFile(managedFile)
 	require.NoError(t, err)
-	previousContent := []byte("v0.5 baseline README\n")
-	require.NoError(t, os.WriteFile(readme, previousContent, 0o644))
-	rewriteBaselineHash(t, dir, "README.md", previousContent)
+	previousContent := []byte("# v0.9 baseline Makefile\n")
+	require.NoError(t, os.WriteFile(managedFile, previousContent, 0o644))
+	rewriteBaselineHash(t, dir, "Makefile", previousContent)
 	stubUpgradeVerify(t, nil)
 
 	result, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot(), NoTidy: true})
 	require.NoError(t, err)
-	assert.Contains(t, result.Changed, "README.md")
+	assert.Contains(t, result.Changed, "Makefile")
 	assert.True(t, result.ManifestUpdated)
 	assert.True(t, result.Verified)
-	assert.Equal(t, targetContent, readFileForTest(t, readme))
+	assert.Equal(t, targetContent, readFileForTest(t, managedFile))
 
 	loaded, err := workspace.LoadProjectManifest(dir)
 	require.NoError(t, err)
-	assert.Equal(t, hashBytes(targetContent), loaded.GeneratedFileSHA256["README.md"])
+	assert.Equal(t, hashBytes(targetContent), loaded.GeneratedFileSHA256["Makefile"])
 
 	repeated, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot(), NoTidy: true})
 	require.NoError(t, err)
@@ -93,8 +93,8 @@ func TestApplyUpgradeInstallsModifiedFileAndIsIdempotent(t *testing.T) {
 }
 
 func TestApplyUpgradeConflictLeavesProjectByteIdentical(t *testing.T) {
-	dir := generateForTest(t, NewOptions{Template: "basic-api"})
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("user-owned README\n"), 0o644))
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Makefile"), []byte("user-owned README\n"), 0o644))
 	before := hashTree(t, dir)
 
 	result, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot(), NoTidy: true})
@@ -105,8 +105,8 @@ func TestApplyUpgradeConflictLeavesProjectByteIdentical(t *testing.T) {
 }
 
 func TestApplyUpgradeVerifyFailureRollsBackByteForByte(t *testing.T) {
-	dir := generateForTest(t, NewOptions{Template: "basic-api"})
-	induceModifiedFile(t, dir, "README.md")
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	induceModifiedFile(t, dir, "Makefile")
 	before := hashTree(t, dir)
 	stubUpgradeVerify(t, errors.New("generated test failed"))
 
@@ -117,9 +117,9 @@ func TestApplyUpgradeVerifyFailureRollsBackByteForByte(t *testing.T) {
 }
 
 func TestApplyUpgradeInstallFailureRestoresEveryFile(t *testing.T) {
-	dir := generateForTest(t, NewOptions{Template: "basic-api"})
-	induceModifiedFile(t, dir, "README.md")
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
 	induceModifiedFile(t, dir, "Makefile")
+	induceModifiedFile(t, dir, "Dockerfile")
 	before := hashTree(t, dir)
 	stubUpgradeVerify(t, nil)
 	original := workspace.UpgradeInstallFile
@@ -139,7 +139,7 @@ func TestApplyUpgradeInstallFailureRestoresEveryFile(t *testing.T) {
 }
 
 func TestApplyUpgradeUpdatesManifestWithoutFileChanges(t *testing.T) {
-	dir := generateForTest(t, NewOptions{Template: "basic-api"})
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
 	doc, err := workspace.LoadProjectManifest(dir)
 	require.NoError(t, err)
 	doc.Framework.Version = "v0.5.0-test"
@@ -219,7 +219,7 @@ func TestApplyUpgradeRefreshesExistingGeneratedReport(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, repeated.Changed, "a refreshed report must be idempotent")
 
-	plain := generateForTest(t, NewOptions{Template: "basic-api"})
+	plain := generateForTest(t, NewOptions{Template: "minimal"})
 	stubUpgradeVerify(t, nil)
 	applied, err = ApplyUpgrade(UpgradeOptions{Dir: plain, From: FrameworkRoot(), NoTidy: true})
 	require.NoError(t, err)
@@ -244,7 +244,7 @@ func TestPlanUpgradeMergedConfigIsReadOnly(t *testing.T) {
 }
 
 func TestApplyUpgradeMigratesV2ManifestForOfficialTemplates(t *testing.T) {
-	for _, template := range []string{"basic-api", "auth-api"} {
+	for _, template := range []string{"minimal", "auth"} {
 		t.Run(template, func(t *testing.T) {
 			dir := generateForTest(t, NewOptions{Template: template})
 			downgradeManifestToV2(t, dir)
@@ -331,4 +331,18 @@ func upgradeEntry(t *testing.T, report upgradeplan.Report, path string) upgradep
 	})
 	require.NotEqual(t, -1, index, "report has no entry for %s", path)
 	return report.Entries[index]
+}
+
+func TestUpgradeRejectsRetiredTemplates(t *testing.T) {
+	for _, template := range []string{"basic-api", "auth-api"} {
+		t.Run(template, func(t *testing.T) {
+			dir := writeManifestWithTemplate(t, template)
+			before := hashTree(t, dir)
+			_, err := PlanUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot()})
+			require.ErrorIs(t, err, ErrRetiredTemplate)
+			require.Contains(t, err.Error(), template)
+			require.Contains(t, err.Error(), "--template=")
+			require.Equal(t, before, hashTree(t, dir), "retired template must not write")
+		})
+	}
 }

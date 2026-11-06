@@ -325,7 +325,9 @@
       "destination": "internal/kernel",
       "optional": false,
       "include": [],
-      "exclude": []
+      "exclude": [
+        "cache"
+      ]
     },
     {
       "source": "internal/app",
@@ -365,13 +367,6 @@
     {
       "source": "internal/shared",
       "destination": "internal/shared",
-      "optional": false,
-      "include": [],
-      "exclude": []
-    },
-    {
-      "source": "internal/e2e",
-      "destination": "internal/e2e",
       "optional": false,
       "include": [],
       "exclude": []
@@ -1362,15 +1357,6 @@
     "internal/contract/ports.go",
     "internal/contract/systemroles.go",
     "internal/contract/systemroles_test.go",
-    "internal/e2e/admin_routes_parity_test.go",
-    "internal/e2e/api_contract_test.go",
-    "internal/e2e/auth_me_test.go",
-    "internal/e2e/auth_routes_parity_test.go",
-    "internal/e2e/grpc_contract_test.go",
-    "internal/e2e/helpers_test.go",
-    "internal/e2e/tenant_delete_roles_test.go",
-    "internal/e2e/tenant_provisioning_test.go",
-    "internal/e2e/user_delete_roles_test.go",
     "internal/kernel/access/casbin.go",
     "internal/kernel/access/permission_middleware.go",
     "internal/kernel/access/roles.go",
@@ -1393,8 +1379,6 @@
     "internal/kernel/breaker/breaker_test.go",
     "internal/kernel/breaker/db_plugin.go",
     "internal/kernel/breaker/db_plugin_test.go",
-    "internal/kernel/cache/cache.go",
-    "internal/kernel/cache/cache_test.go",
     "internal/kernel/db/adopt_test.go",
     "internal/kernel/db/concurrency.go",
     "internal/kernel/db/concurrency_test.go",
@@ -1572,5 +1556,5 @@
     "tools/profileoverlay/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:5c0da870a3d860945c62370b296f0748521cf8506a4f99275cf450e0f796e42c"
+  "digest": "sha256:4a515b3b5e9c854fdade054e4383effa47c75d1888537d1ed49ef7ec4aa546ce"
 }

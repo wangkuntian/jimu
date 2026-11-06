@@ -1,11 +1,14 @@
 package generator
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"jimu/tools/generator/manifest"
+
+	"github.com/stretchr/testify/require"
 )
 
 // withProtectedProvider returns a selectable capability expression that satisfies the
@@ -65,4 +68,13 @@ func writeManifestWithTemplate(t *testing.T, template string) string {
 		t.Fatal(err)
 	}
 	return dir
+}
+
+// freePort 返回一个当前空闲的本地端口（关闭监听后可能被抢占，测试内即用）。
+func freePort(t *testing.T) int {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer listener.Close()
+	return listener.Addr().(*net.TCPAddr).Port
 }

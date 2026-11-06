@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"jimu/tools/generator/manifest"
@@ -16,11 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	upgradeFixtureRoot    = "testdata/upgrade/v0.5"
-	upgradeFixtureVersion = "v0.5.0"
-	upgradeFixtureCommit  = "13cdc2a2519ed5f776e2c2a9c7e3fb36abfdedc0"
-)
+// 升级事务测试不再依赖 v0.5 快照：旧模板（basic-api/auth-api）已在 v0.10.0 退役，
+// 其渲染路径与 fixture 一并删除。改为现场生成 auth 预设项目，再验证同一套事务语义
+// （备份 / 逐文件安装 / 失败回滚 / 冲突检测）。
+const upgradeFixturePreset = "auth"
 
 type upgradeFixtureCase struct {
 	template           string
@@ -30,94 +28,21 @@ type upgradeFixtureCase struct {
 	securityRouterPath string
 }
 
+// upgradeFixtureCases 只保留 auth 预设：它是事务测试的代表形态（有迁移、有中间件）。
 var upgradeFixtureCases = []upgradeFixtureCase{
-	{
-		template:       "basic-api",
-		module:         "example.com/upgrade-basic-api",
-		generatedFiles: 22,
-		securityChanges: []string{
-			"internal/app/app.go",
-			"internal/app/router.go",
-			"internal/app/router_test.go",
-			"internal/config/config.go",
-			"internal/platform/http/middleware.go",
-		},
-		securityRouterPath: "internal/app/router.go",
-	},
-	{
-		template:       "auth-api",
-		module:         "example.com/upgrade-auth-api",
-		generatedFiles: 49,
-		securityChanges: []string{
-			"internal/api/v1/routes.go",
-			"internal/api/v1/routes_test.go",
-			"internal/app/app.go",
-			"internal/config/config.go",
-			"internal/platform/http/middleware.go",
-		},
-		securityRouterPath: "internal/api/v1/routes.go",
-	},
+	{template: upgradeFixturePreset, module: "example.com/upgrade-auth"},
 }
 
-// TestUpgradeFixturesMatchV050 钉住 fixture 的固定来源和内容完整性。这是轻量测试，
-// 不执行真实升级；升级场景在 TestUpgradeFixtures 中由重型门禁覆盖。
-func TestUpgradeFixturesMatchV050(t *testing.T) {
-	for _, fixture := range upgradeFixtureCases {
-		fixture := fixture
-		t.Run(fixture.template, func(t *testing.T) {
-			root := filepath.Join(upgradeFixtureRoot, fixture.template)
-			manifestPath := filepath.Join(root, ".jimu", "manifest.json")
-			content, err := os.ReadFile(manifestPath)
-			require.NoError(t, err)
-
-			var raw struct {
-				SchemaVersion int                `json:"schema_version"`
-				Framework     manifest.Framework `json:"framework"`
-				Selection     manifest.Selection `json:"selection"`
-				Composition   json.RawMessage    `json:"composition"`
-			}
-			require.NoError(t, json.Unmarshal(content, &raw))
-			assert.Equal(t, manifest.LegacySchemaVersion, raw.SchemaVersion)
-			assert.Empty(t, raw.Composition, "v0.5 fixture must stay schema v2 without composition")
-			assert.Equal(t, upgradeFixtureVersion, raw.Framework.Version)
-			assert.Equal(t, upgradeFixtureCommit, raw.Framework.Commit)
-			assert.False(t, raw.Framework.Dirty)
-			assert.Equal(t, fixture.template, raw.Selection.Template)
-
-			doc, err := manifest.Load(manifestPath)
-			require.NoError(t, err, "fixture manifest digest must verify")
-			assert.Equal(t, fixture.template, doc.Selection.Template)
-			assert.Equal(t, manifest.CompositionSupportCertified, doc.Composition.Support)
-			assert.Len(t, doc.GeneratedFiles, fixture.generatedFiles)
-
-			hashes, err := manifest.HashFiles(root, doc.GeneratedFiles)
-			require.NoError(t, err)
-			assert.Equal(t, doc.GeneratedFileSHA256, hashes, "fixture files must match the manifest baseline")
-
-			gomod, err := os.ReadFile(filepath.Join(root, "go.mod"))
-			require.NoError(t, err)
-			firstLine, _, _ := strings.Cut(string(gomod), "\n")
-			assert.Equal(t, "module "+fixture.module, strings.TrimSpace(firstLine))
-
-			expected := append([]string{".jimu/manifest.json"}, doc.GeneratedFiles...)
-			var actual []string
-			require.NoError(t, filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-				if walkErr != nil {
-					return walkErr
-				}
-				if entry.IsDir() {
-					return nil
-				}
-				rel, err := filepath.Rel(root, path)
-				if err != nil {
-					return err
-				}
-				actual = append(actual, filepath.ToSlash(rel))
-				return nil
-			}))
-			assert.ElementsMatch(t, expected, actual, "fixture must contain exactly the managed files and manifest")
-		})
-	}
+// prepareUpgradeFixture 现场生成一个预设项目作为升级基线。
+func prepareUpgradeFixture(t *testing.T, fixture upgradeFixtureCase, scenario string) string {
+	t.Helper()
+	t.Logf("upgrade fixture: preset=%s scenario=%s", fixture.template, scenario)
+	dir := filepath.Join(t.TempDir(), fixture.template)
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: fixture.template, Module: fixture.module, NoTidy: true,
+	})
+	require.NoError(t, err, "preset=%s scenario=%s generate", fixture.template, scenario)
+	return dir
 }
 
 // TestUpgradeFixtures 是 v0.5 -> 当前版本的发布门禁。每个子测试先复制固定 fixture，
@@ -308,18 +233,6 @@ func testUpgradeFixtureRollback(t *testing.T, fixture upgradeFixtureCase) {
 	require.NoError(t, readErr)
 	require.NoError(t, json.Unmarshal(content, &raw))
 	assert.Equal(t, manifest.LegacySchemaVersion, raw.SchemaVersion, "rollback must restore the v2 manifest")
-}
-
-func prepareUpgradeFixture(t *testing.T, fixture upgradeFixtureCase, scenario string) string {
-	t.Helper()
-	t.Logf("upgrade fixture: project=%s scenario=%s source=%s", fixture.template, scenario, upgradeFixtureRoot)
-	src := filepath.Join(upgradeFixtureRoot, fixture.template)
-	dir := filepath.Join(t.TempDir(), fixture.template)
-	copied, skipped, err := CopyTree(src, dir, nil)
-	require.NoError(t, err, "project=%s scenario=%s copy fixture", fixture.template, scenario)
-	require.Empty(t, skipped, "project=%s scenario=%s fixture must not contain symlinks", fixture.template, scenario)
-	require.Equal(t, fixture.generatedFiles+1, copied, "project=%s scenario=%s fixture file count", fixture.template, scenario)
-	return dir
 }
 
 func assertUpgradeManifestHashes(t *testing.T, dir string, doc manifest.Document) {

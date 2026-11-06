@@ -78,7 +78,7 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 		return manifest.Document{}, Resolution{}, fmt.Errorf("module is required")
 	}
 	if req.Template == "" && req.Profile == "" && req.With == "" {
-		req.Template = "basic-api"
+		req.Template = "minimal"
 	}
 	if req.Template != "" && (req.Profile != "" || req.With != "") {
 		return manifest.Document{}, Resolution{}, fmt.Errorf("--template must not be combined with --profile or --with")

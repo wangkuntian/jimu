@@ -42,7 +42,7 @@ manifest 事务，任一失败按原字节回滚，不留半成品。
 
 硬依赖必须已在项目里 —— 缺依赖直接报错并提示先加依赖，不会自动补全。既有驱动选择与
 auto-added 语义会保留，支持级别保持 experimental。
-能力已在 catalog entries 里时用 --force 才允许重建。官方模板（basic-api/auth-api）是认证基线，
+能力已在 catalog entries 里时用 --force 才允许重建。预设（minimal/auth/full）是裁剪起点，
 不接受 capability add；需要扩展时用 --with 生成 experimental 项目。`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

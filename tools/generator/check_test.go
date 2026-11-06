@@ -16,7 +16,7 @@ import (
 func TestCheckProjectFastReportsHealthyLifecycleAndIsReadOnly(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	_, err := newProjectForTest(t, NewOptions{
-		Dir: dir, Template: "basic-api", Module: "example.com/proj",
+		Dir: dir, Template: "minimal", Module: "example.com/proj",
 	})
 	require.NoError(t, err)
 	before := hashTree(t, dir)
@@ -39,7 +39,7 @@ func TestCheckProjectFastReportsHealthyLifecycleAndIsReadOnly(t *testing.T) {
 }
 
 func TestCheckProjectFastWarnsOnManagedDriftWithoutFailing(t *testing.T) {
-	dir := generateForTest(t, NewOptions{Template: "basic-api"})
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("local change\n"), 0o644))
 	require.NoError(t, os.Remove(filepath.Join(dir, "Makefile")))
 	before := hashTree(t, dir)
@@ -89,7 +89,7 @@ func TestCheckProjectReturnsStructuredManifestFailure(t *testing.T) {
 }
 
 func TestCheckProjectDeepFailureIsReadOnly(t *testing.T) {
-	dir := generateForTest(t, NewOptions{Template: "basic-api"})
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
 	testPath := filepath.Join(dir, "internal", "api", "v1", "user_check_failure_test.go")
 	require.NoError(t, os.WriteFile(testPath, []byte("package v1\n\nimport \"testing\"\n\nfunc TestUserFailure(t *testing.T) { t.Fatal(\"intentional deep failure\") }\n"), 0o644))
 	before := hashTree(t, dir)
@@ -105,7 +105,7 @@ func TestCheckProjectDeepFailureIsReadOnly(t *testing.T) {
 }
 
 func TestCheckProjectDeepSupportsCertifiedTemplates(t *testing.T) {
-	for _, template := range []string{"basic-api", "auth-api"} {
+	for _, template := range []string{"minimal", "auth"} {
 		t.Run(template, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "proj")
 			_, err := newProjectForTest(t, NewOptions{

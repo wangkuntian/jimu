@@ -13,6 +13,7 @@ import (
 
 	"jimu/internal/capabilities/catalog"
 	"jimu/internal/config"
+	"jimu/internal/contract"
 	"jimu/tools/generator/manifest"
 
 	"golang.org/x/tools/go/packages"
@@ -205,6 +206,31 @@ func configSections(selected selection) []string {
 		for _, section := range sections {
 			keep[section] = true
 		}
+	}
+	// db/redis 段跟随运行时服务需求：0 能力项目不连库，配置里也不该出现。
+	// 否则 minimal 的 app.yaml 会声称需要 MySQL/Redis，与"无外部依赖"自相矛盾。
+	services := map[contract.RuntimeService]bool{}
+	for _, descriptor := range all {
+		if !selectedNames[descriptor.Name] {
+			continue
+		}
+		for _, service := range descriptor.RuntimeServices {
+			services[service] = true
+		}
+		for _, spec := range descriptor.DriverSpecs {
+			if !slices.Contains(selected.drivers[descriptor.Name], spec.Name) {
+				continue
+			}
+			for _, service := range spec.RuntimeServices {
+				services[service] = true
+			}
+		}
+	}
+	if !services[contract.RuntimeServiceMySQL] {
+		delete(keep, "db")
+	}
+	if !services[contract.RuntimeServiceRedis] {
+		delete(keep, "redis")
 	}
 	return sortedStrings(mapsKeys(keep))
 }

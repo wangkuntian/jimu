@@ -34,7 +34,7 @@ func TestOfficialTemplateBudgets(t *testing.T) {
 	budgets := loadTemplateBudgets(t)
 	assert.Equal(t, 1, budgets.SchemaVersion)
 
-	for _, template := range []string{"basic-api", "auth-api"} {
+	for _, template := range []string{"minimal", "auth"} {
 		t.Run(template, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), template)
 			result, err := newProjectForTest(t, NewOptions{
@@ -80,7 +80,7 @@ func TestAuthAPIEmptyDatabaseEndToEnd(t *testing.T) {
 	cache := newTestGoCache(t)
 	dir := filepath.Join(t.TempDir(), "auth")
 	_, err := newProjectForTest(t, NewOptions{
-		Dir: dir, Template: "auth-api", Module: "example.com/auth",
+		Dir: dir, Template: "auth", Module: "example.com/auth",
 	})
 	require.NoError(t, err)
 
@@ -108,7 +108,7 @@ func TestAuthAPIEmptyDatabaseEndToEnd(t *testing.T) {
 	require.Equal(t, 1, strings.Count(firstUp, "Administrator password:"),
 		"first make up must print the generated administrator password exactly once:\n%s", firstUp)
 	budgets := loadTemplateBudgets(t)
-	limit := budgets.Templates["auth-api"].ReadinessSeconds["cold_images"]
+	limit := budgets.Templates["auth"].ReadinessSeconds["cold_images"]
 	require.Positive(t, limit)
 	require.LessOrEqual(t, time.Since(started), time.Duration(limit)*time.Second,
 		"auth-api cold generate/up exceeded the %ds contract budget", limit)
@@ -274,7 +274,7 @@ func externalServiceCount(document manifest.Document) int {
 
 func healthRouteCount(t *testing.T, dir string) int {
 	t.Helper()
-	content, err := os.ReadFile(filepath.Join(dir, "internal", "platform", "health", "health.go"))
+	content, err := os.ReadFile(filepath.Join(dir, "internal", "kernel", "observability", "health.go"))
 	require.NoError(t, err)
 	source := string(content)
 	if strings.Contains(source, `HandleFunc("/livez"`) && strings.Contains(source, `HandleFunc("/readyz"`) {

@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "contract_version": "v0.1",
-  "target_product_version": "v0.5.0",
+  "target_product_version": "v0.10.0",
   "enforcement": "release-blocking",
   "measurement": {
-    "generated_files": "all files in the generated tree except .jimu/manifest.json and docs/profiles/generated-report.md",
+    "generated_files": "all files in the generated tree, including .jimu/manifest.json",
     "direct_dependencies": "non-indirect modules reported by go list -m",
     "go_closure_files": "non-test Go files in the package closure of ./cmd/server",
     "go_closure_lines": "non-test Go source lines in the package closure of ./cmd/server",
@@ -13,36 +13,36 @@
     "readiness": "4 vCPU / 8 GB, local images; warm means Go build cache and local images are present, cold means the documented first-run path"
   },
   "templates": {
-    "basic-api": {
+    "minimal": {
       "limits": {
-        "generated_files": 40,
-        "direct_dependencies": 8,
-        "go_closure_files": 25,
-        "go_closure_lines": 2200,
+        "generated_files": 300,
+        "direct_dependencies": 44,
+        "go_closure_files": 95,
+        "go_closure_lines": 11650,
         "external_services": 0,
-        "business_routes": 1,
+        "business_routes": 0,
         "health_routes": 2,
         "tables": 0,
         "migrations": 0,
-        "non_code_assets": 12
+        "non_code_assets": 9
       },
       "readiness_seconds": {
         "warm_build": 10,
         "cold_generate_and_start": 60
       }
     },
-    "auth-api": {
+    "auth": {
       "limits": {
-        "generated_files": 160,
-        "direct_dependencies": 20,
-        "go_closure_files": 70,
-        "go_closure_lines": 9000,
+        "generated_files": 420,
+        "direct_dependencies": 44,
+        "go_closure_files": 150,
+        "go_closure_lines": 17150,
         "external_services": 2,
-        "business_routes": 24,
+        "business_routes": 31,
         "health_routes": 2,
-        "tables": 8,
-        "migrations": 10,
-        "non_code_assets": 20
+        "tables": 9,
+        "migrations": 11,
+        "non_code_assets": 9
       },
       "readiness_seconds": {
         "warm_build": 120,
