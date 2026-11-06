@@ -110,16 +110,15 @@ func (c *Config) validateCommon() error {
 }
 
 func (c DBConfig) configured() bool {
-	return c.Driver != "" || c.Host != "" || c.Port != 0 || c.User != "" || c.Password != "" ||
-		c.Database != "" || c.MaxOpen != 0 || c.MaxIdle != 0 || c.MaxRetries != 0 ||
-		c.RetryIntervalSec != 0 || len(c.ReadHosts) > 0 || c.Breaker.Enabled
+	// 只设置 DB_PASSWORD（或 Secret 文件）不等于"配置了数据库"：0 能力项目不生成 db 段，
+	// 但部署环境仍可能注入 DB_PASSWORD；若把它当作已配置，就会拿全零池参数去校验并失败。
+	// 真正标志一段可用配置的是连接目标。
+	return c.Driver != "" || c.Host != "" || c.Port != 0 || c.User != "" || c.Database != ""
 }
 
 func (c RedisConfig) configured() bool {
-	return c.Mode != "" || c.Addr != "" || c.Password != "" || c.PoolSize != 0 ||
-		c.MinIdleConns != 0 || c.ReadTimeoutSec != 0 || c.WriteTimeoutSec != 0 ||
-		c.MaxRetries != 0 || c.RetryIntervalSec != 0 || c.MasterName != "" ||
-		len(c.SentinelAddrs) > 0 || len(c.ClusterAddrs) > 0 || c.Breaker.Enabled
+	return c.Mode != "" || c.Addr != "" || c.MasterName != "" ||
+		len(c.SentinelAddrs) > 0 || len(c.ClusterAddrs) > 0
 }
 
 // validateCIDRs 校验 IP 白名单条目（CIDR 或单个 IP），非法值启动即报错

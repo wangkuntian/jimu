@@ -6,7 +6,7 @@
 .PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race check-makefile check-config
 .PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates bundle-check bundle-meta test-scaffold-official test-scaffold-matrix test-scaffold-upgrade test-scaffold-composition
 .PHONY: profiles-check compose-report compose-report-check check-skills skills-install
-.PHONY: swagger swagger-check smoke-check compose-check govulncheck check ci ci-full release-check release-check-fast clean-room-e2e
+.PHONY: check-gate-selectors swagger swagger-check smoke-check compose-check govulncheck check ci ci-full release-check release-check-fast clean-room-e2e
 .PHONY: proto bench bench-ci loadtest cli all hooks
 
 .DEFAULT_GOAL := help
@@ -22,8 +22,8 @@ SERVER_CMD := cmd/server/main.go
 CLI_PKG := ./cmd/cli
 
 # official 档只覆盖两个官方模板；full 仍由 test-scaffold-matrix 运行全部生成器用例。
-SCAFFOLD_OFFICIAL_TESTS := ^(TestOfficialTemplateBudgets|TestNewProjectBasicAPIHasNoExternalRuntimeDependencies|TestNewProjectAuthAPIIsCompactSingleTenantTemplate|TestBasicAPIStartsWithoutExternalServices|TestAuthAPIComposeConfigIsValid|TestAuthAPIComposeUsesHostUIDForSecrets|TestAuthAPIEmptyDatabaseEndToEnd)$
-SCAFFOLD_UPGRADE_TESTS := ^(TestUpgradeFixtures|TestUpgradeFixturesMatchV050)$
+SCAFFOLD_OFFICIAL_TESTS := ^(TestPresetBudgets|TestMinimalPresetStartsWithoutDependencies|TestAuthPresetEmptyDatabaseEndToEnd)$
+SCAFFOLD_UPGRADE_TESTS := ^(TestUpgradeFixtures|TestUpgradeRejectsRetiredTemplates)$
 SCAFFOLD_COMPOSITION_TESTS := ^(TestRepresentativeCompositionMatrix|TestCompositionMatrixBudget|TestCompositionNegativeMatrix)$
 
 ENV ?= dev
@@ -311,14 +311,17 @@ govulncheck: ## 扫描可达依赖漏洞
 check-makefile: ## 校验 Makefile 生命周期、镜像缓存与 Secret 接线
 	@./scripts/test_makefile_contract.sh
 
+check-gate-selectors: ## 校验 SCAFFOLD_*_TESTS 选择器至少匹配一个真实测试
+	@go run ./tools/checkgateselectors
+
 check-config: ## 校验 Secret、Compose、observability 与部署 manifest 契约
 	@./scripts/test_init_secrets.sh
 	@./scripts/test_config_contracts.sh all
 
-check: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-config test ## 运行开发质量门禁
+check: fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-gate-selectors check-config test ## 运行开发质量门禁
 	@echo "✅ All checks passed"
 
-CI_CHECKS := fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-config test-cover test-coverage-check-local test-race swagger-check smoke-check build govulncheck
+CI_CHECKS := fmt-check vet lint check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-gate-selectors check-config test-cover test-coverage-check-local test-race swagger-check smoke-check build govulncheck
 
 ci: $(CI_CHECKS) test-scaffold-official ## 运行本地 CI（官方模板门禁）
 	@echo "✅ All local CI checks passed (official)"
@@ -326,7 +329,7 @@ ci: $(CI_CHECKS) test-scaffold-official ## 运行本地 CI（官方模板门禁�
 ci-full: $(CI_CHECKS) test-scaffold-matrix ## 运行完整本地 CI（含 full 脚手架矩阵）
 	@echo "✅ All local CI checks passed (full)"
 
-release-check-fast: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-config bundle-check test govulncheck compose-check ## 运行发布前快速检查（不含完整脚手架矩阵）
+release-check-fast: fmt-check vet check-log-usage check-capabilities profiles-check compose-report-check check-makefile check-gate-selectors check-config bundle-check test govulncheck compose-check ## 运行发布前快速检查（不含完整脚手架矩阵）
 	@echo "Fast release checks passed (full scaffold matrix skipped)"
 
 release-check: release-check-fast test-scaffold-matrix ## 运行发布前检查（含完整脚手架矩阵）

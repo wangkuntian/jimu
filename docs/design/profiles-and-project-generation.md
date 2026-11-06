@@ -41,15 +41,19 @@ flowchart LR
 
 `jimu new <dir>` 按 `--template` 或 `--with` 选择能力并生成独立 Go module。生成器会根据声明闭包和必要的 schema/编译依赖，复制或渲染源码、配置、驱动与资产，随后整理生成项目的 module 依赖。profile 只改变框架二进制组成；生成项目拥有自己的 `go.mod`，因此可以随选择收缩依赖。
 
-对外产品入口只保留模板：`--template=basic-api|auth-api` 是正式选择器，不传选择器时默认 `basic-api`；`--with` 只提供 experimental 专家组合，manifest 记录 `support: experimental`；`--profile=minimal` 已移除，传入会报错并提示改用 `--template=auth-api`。保留的内部 profile 只有 `full`（开发、测试和 demo 的全量形态）与 `minimal`（冻结，仅保持构建和闭包门禁）；`enterprise`、`machine`、`saas` 已按 [ADR 0007](../adr/0007-profiles-are-internal-build-shapes.md) 退役。内部 profile 不等于官方模板矩阵。模板、预算、支持级别和兼容窗口的机器可读事实源是 [`docs/templates/v1`](../templates/v1/README.md)，实现门禁和生成器不得另建第二份选择集定义。
+对外产品入口只保留预设：`--template=minimal|auth|full` 是正式选择器，不传选择器时默认 `minimal`；`--with` 只提供 experimental 专家组合，manifest 记录 `support: experimental`；`--profile` 只用于拒绝框架内部形态，预设请用 `--template`。保留的内部 profile 只有 `full`（开发、测试和 demo 的全量形态）与 `minimal`（冻结，仅保持构建和闭包门禁）；`enterprise`、`machine`、`saas` 已按 [ADR 0007](../adr/0007-profiles-are-internal-build-shapes.md) 退役。内部 profile 不等于产品预设。预设、预算、支持级别和兼容窗口的机器可读事实源是 [`docs/templates/v1`](../templates/v1/README.md)，实现门禁和生成器不得另建第二份选择集定义。
 
 官方模板是可再生成一次的起始基线，不是持续管理的投影。生成后的工程归用户所有；`.jimu/manifest.json` 只记录来源、选择集和摘要，不授予 Jimu 覆盖用户文件的权利。v0.5.0 不提供隐式升级；v0.6.0 起提供显式 `jimu upgrade`，只在无冲突时修改生成器管理文件，并在备份后执行 tidy/build/test，失败按原字节回滚。schema v1 仍 fail-closed，也不提供自动项目/存量数据库迁移；v0.4.x 生成项目仍只支持“重新生成 + 人工迁移”，v0.5 的 schema v2 项目可通过显式 `jimu upgrade` 升级。升级支持窗口固定为 `v0.5.0` 起的 certified 模板，安全修复只保证当前 0.7.x 的最新 patch；决策见 [ADR 0003](../adr/0003-upgrade-support-window.md)。
 
-`basic-api` 使用独立的零外部服务生成路径：只渲染 HTTP、配置、日志、统一错误、健康检查和示例路由所需文件，不复制能力目录或完整框架内核。生成项目没有数据库/Redis 客户端、Compose、Kubernetes/Helm 与 OpenAPI 资产，`go build`、`go test`、`go run` 均不需要外部服务。框架运行时的容器构造也已按 `Descriptor.RuntimeServices` 决定是否连接 MySQL/Redis，未声明服务的装配不会创建对应客户端。
+三个预设都从**当前主代码仓库**按 import 闭包裁剪，而不是维护独立的模板树：
 
-`auth-api` 使用独立单租户模板：只渲染用户、JWT 会话、RBAC、MySQL 持久化、Redis 会话、8 张业务表和 10 个迁移，并生成项目自己的 Compose、初始化与验证脚本。管理员密码首次由 `make up` 生成到 gitignored 本地 secret，迁移和 seed 幂等；生成树不携带未启用的数据库之外能力或观测资产。
+- `minimal` — 0 能力，只保留最小内核。`internal/kernel`/`internal/shared`/`config`/`contract` 都不依赖能力，唯一耦合点曾是与能力 domain 共享的种子模型，现已抽到 `internal/kernel/seedmodel`。生成项目不含数据库/Redis 客户端、`internal/e2e` 与 `docker-compose.yml`，配置也不含 `db`/`redis` 段；`go build`、`go test`、`go run` 都不需要外部服务，`GET /api/v1/ping` 由内核提供。
+- `auth` — `user` + `access` + `auth`（含 `tenant` 编译闭包），支持级别 `certified`。生成 MySQL/Redis 客户端与迁移，但不生成 Compose：数据库由使用者提供，连接信息走 `DB_*`/`REDIS_*` 环境变量。
+- `full` — 全部 23 个能力 + 完整驱动集（`s3`/`local`、`kafka`/`rabbitmq`/`redis`、`excel`/`csv`），支持级别 `validated`。`--with` 的缺省驱动只取首个，无法表达完整驱动集，因此 `full` 改成从 `internal/profiles/full/assembly.go` 派生。
 
-官方模板的发布门禁由 `make test-scaffold-official` 承载：预算测试读取 `docs/templates/v1/budgets.json` 并实测生成树，`basic-api` smoke 不依赖容器，`auth-api` 使用独立 Compose 项目和新数据卷执行两次 `make up` / `make verify`、数据库计数及缺失服务快速失败检查。生成项目的端口可用 `AUTH_API_PORT` / `AUTH_API_MANAGEMENT_PORT` 隔离，Compose 就绪检查使用 `/readyz` 而非仅进程存活。`make test-scaffold-matrix` 保留为 full 档，继续覆盖全部 `--with` 与内部 profile 的生成/构建/测试选区，在手动触发或夜间定时运行。
+预设只是裁剪起点：manifest 记录 `selection.template`，但 `jimu capability add` 只拒绝已退役的 `basic-api`/`auth-api`，预设项目可以继续加能力。由已退役模板生成的项目执行 `jimu upgrade` 直接硬失败（`ErrRetiredTemplate`），不提供迁移命令。
+
+预设的发布门禁由 `make test-scaffold-official` 承载：`TestPresetBudgets` 读取 `docs/templates/v1/budgets.json` 并实测 minimal/auth/full 三份生成树，`TestMinimalPresetStartsWithoutDependencies` 在设置与不设置 `ADMIN_PASSWORD` 两种 env 下起真实进程并验 `/livez`、`/readyz`、`/api/v1/ping`，`TestAuthPresetEmptyDatabaseEndToEnd` 用裸 MySQL/Redis 容器验迁移、seed 与管理员登录。`make test-scaffold-matrix` 保留为 full 档，继续覆盖全部 `--with` 与内部 profile 的生成/构建/测试选区，在手动触发或夜间定时运行。
 
 官方门禁仍是 `release/*` 与 `dependabot/*` → `master` PR 的必需检查；full 只允许 `workflow_dispatch` 与夜间定时，不回到每个 PR。full 在全部 `--with`/内部 profile 选区之外增加固定、代表性的 pairwise 组合清单和 v0.5 upgrade fixtures。组合清单不遍历全幂集：每个用例最多请求两个代表性能力加必要的受保护中间件提供方，预算最多 10 个生成项目、2 个 CI shard，每个项目只做 build/vet，不承诺组合级 E2E；清单与上限的唯一事实源是 [`composition_matrix_test.go`](../../tools/generator/composition_matrix_test.go)。CI 的每个 shard 把耗时写入 step summary；显式运行时测试必须报告 `PASS`，`SKIP` 视为门禁失败，避免 full 在 CI 中静默跳过。
 
@@ -114,7 +118,7 @@ flowchart TD
 
 验证通过后才写入新 manifest：重新计算 `generated_files` 的最终哈希（覆盖 tidy 产生的变化），记录当前框架 provenance 与组合块，并重新计算 digest。文件与 manifest 都没变化时事务不做任何写入，也不重复跑验证。`conflict` 绝不静默覆盖；`deleted` 不自动删除用户目录中的文件，只从后续 manifest 基线中移除。
 
-升级发布门禁使用 `tools/generator/testdata/upgrade/v0.5` 下两个固定项目快照：`basic-api` 与 `auth-api` 均由 v0.5.0 tag 按默认 `jimu new`（含 tidy）生成，manifest 保持 schema v2、`framework.version=v0.5.0` 与真实 tag commit。测试先校验 snapshot 的 digest、文件哈希和 provenance，再逐场景复制到临时目录，覆盖 untouched（无用户修改，但会安装模板安全修复并迁移 manifest）、用户修改生成文件判冲突、用户自有文件保留、用户删除、模板删除、重复升级和验证失败回滚；场景在 `go test` 中按模板与场景命名，失败日志同时带 project/scenario。`make test-scaffold-upgrade` 单独运行该门禁，完整 `make test-scaffold-matrix` 也包含它；`make test-scaffold-official` 的选择集不变。
+升级发布门禁不再依赖固定的 v0.5 快照：模板退役后无法再用旧模板渲染目标树，`tools/generator/upgrade_fixture_test.go` 改为现场生成 `auth` 预设作为 fixture，覆盖 untouched、用户修改判冲突、用户自有文件保留、用户删除、模板删除、重复升级和验证失败回滚。`TestUpgradeRejectsRetiredTemplates` 单独钉住旧模板的硬失败路径。`make test-scaffold-upgrade` 运行该门禁，完整 `make test-scaffold-matrix` 也包含它。
 
 ## 关键决策
 

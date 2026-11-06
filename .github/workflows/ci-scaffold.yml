@@ -1,7 +1,7 @@
 name: CI (Scaffold)
 
 # 两层脚手架门禁：
-#   official：两个官方模板的预算、basic smoke 与 auth 空库 Compose E2E；release/* 与
+#   official：三个预设的预算、minimal 无依赖 smoke 与 auth 空库 E2E；release/* 与
 #             dependabot/* → master PR 运行，本地等价命令 `make test-scaffold-official`。
 #   full：全能力/全 profile 生成器矩阵；只在 schedule 与 workflow_dispatch 运行，
 #         本地等价命令 `make test-scaffold-matrix`。
@@ -247,6 +247,24 @@ jobs:
     if: needs.changes.outputs.heavy == 'true' && github.event_name == 'pull_request' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'dependabot/'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: jimu
+          MYSQL_USER: jimu
+          MYSQL_PASSWORD: jimu
+        ports: ["13306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h127.0.0.1 -uroot -proot"
+          --health-interval=3s --health-timeout=3s --health-retries=30
+      redis:
+        image: redis:7-alpine
+        ports: ["16379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=3s --health-timeout=2s --health-retries=30
     steps:
       - name: "📥 Download clean-room assets"
         uses: actions/download-artifact@v8
@@ -259,7 +277,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: "🧪 Run clean-room basic-api and auth-api"
+      - name: "🧪 Run clean-room minimal and auth presets"
         run: |
           set -euo pipefail
           script="$(find "$RUNNER_TEMP/clean-room" -type f -name clean_room_e2e.sh -print -quit)"

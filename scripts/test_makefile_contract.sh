@@ -333,4 +333,22 @@ air_line="$(line_number 'air-env ')"
 [ "$migrate_line" -lt "$seed_line" ] || fail "dev.sh 必须先迁移再 seed"
 [ "$seed_line" -lt "$air_line" ] || fail "dev.sh 必须完成 seed 后才执行 air"
 
+# release 资产契约（原 scripts/test_release_workflow.sh，该孤儿脚本已删除）：
+# Jimu 交付物是代码，release 只发 CLI + 模板 bundle + 校验和。
+RELEASE_WORKFLOW="$(cat "$ROOT/.github/workflows/release.yml")"
+for needle in \
+  'build-cli:' \
+  './cmd/jimu' \
+  'jimu.BundleVersion' \
+  'template-bundle.json' \
+  'sha256sum' \
+  'jimu-${GITHUB_REF_NAME}-checksums.txt' \
+  '--repo "$GITHUB_REPOSITORY"' \
+  'goos: linux' \
+  'goarch: amd64' \
+  'goos: darwin' \
+  'goarch: arm64'; do
+  assert_contains "$RELEASE_WORKFLOW" "$needle" "release workflow 缺少 $needle"
+done
+
 echo "✅ Makefile contract passed"

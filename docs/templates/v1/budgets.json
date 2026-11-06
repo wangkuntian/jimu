@@ -48,6 +48,24 @@
         "warm_build": 120,
         "cold_images": 480
       }
+    },
+    "full": {
+      "limits": {
+        "generated_files": 800,
+        "direct_dependencies": 64,
+        "go_closure_files": 350,
+        "go_closure_lines": 39000,
+        "external_services": 4,
+        "business_routes": 94,
+        "health_routes": 2,
+        "tables": 23,
+        "migrations": 26,
+        "non_code_assets": 10
+      },
+      "readiness_seconds": {
+        "warm_build": 180,
+        "cold_images": 600
+      }
     }
   }
 }
