@@ -92,3 +92,9 @@ Compose 项目名和数据卷也可用 `JIMU_DEMO_PROJECT`、`JIMU_DEMO_MARIADB_
 - 端口被占用：脚本会在启动前报出冲突端口和对应变量，用上面的 `JIMU_DEMO_*` 变量换端口。
 - 前端仍请求 8080：确认 `jimu-web` 已包含 `JIMU_API_PROXY_TARGET` 支持。
 - 后端未就绪：查看 `make logs`，或手动访问 `http://127.0.0.1:19090/readyz`。
+
+## 外部试用
+
+面向外部试用者的操作清单见 [v0.9.0 全栈 demo 试用清单](experiments/v0.9.0-trial.md)，gate 证据记录见 [v0.9.0 8 周 gate 证据台账](experiments/v0.9.0-gate.md)。
+
+B5 要求至少 3 个外部试用或明确反馈，且至少 1 个团队愿意进入下一步；当前有效记录数为 0。
