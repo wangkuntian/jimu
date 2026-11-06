@@ -1,12 +1,12 @@
 .PHONY: help build build-server build-cli clean dev
 .PHONY: image ensure-image init prepare-secrets prepare-observability-secrets
-.PHONY: up up-observability down restart status logs adminer
+.PHONY: up up-observability demo demo-e2e down restart status logs adminer
 .PHONY: migrate migrate-down migrate-status seed
 .PHONY: backup restore build-backup-image compose-db-backup compose-db-restore test-backup-restore
 .PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race check-makefile check-config
 .PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates bundle-check bundle-meta test-scaffold-official test-scaffold-matrix test-scaffold-upgrade test-scaffold-composition
 .PHONY: profiles-check compose-report compose-report-check check-skills skills-install
-.PHONY: swagger swagger-check smoke-check compose-check govulncheck check ci ci-full release-check release-check-fast
+.PHONY: swagger swagger-check smoke-check compose-check govulncheck check ci ci-full release-check release-check-fast clean-room-e2e
 .PHONY: proto bench bench-ci loadtest cli all hooks
 
 .DEFAULT_GOAL := help
@@ -107,6 +107,12 @@ ensure-image:
 
 up: prepare-secrets ensure-image ## 初始化 Secret、按需构建镜像并启动核心栈
 	$(COMPOSE_ENV) $(COMPOSE) up -d --no-build
+
+demo: ## 启动 full server + jimu-web 全栈 demo
+	@./scripts/demo.sh
+
+demo-e2e: ## 启动 full server 并运行真实后端 demo E2E
+	@JIMU_DEMO_E2E=1 ./scripts/demo.sh
 
 up-observability: prepare-observability-secrets ensure-image ## 启动观测栈并初始化 dashboard（配置 webhook 时同步告警）
 	$(COMPOSE_ENV) $(COMPOSE_ALL) up -d --no-build
@@ -244,6 +250,13 @@ test-scaffold-upgrade: ## 运行 v0.5 upgrade fixtures 的升级场景门禁
 
 test-scaffold-composition: ## 运行固定 pairwise 组合与冲突负例门禁
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 30m -v -run '$(SCAFFOLD_COMPOSITION_TESTS)'
+
+clean-room-e2e: ## 用本地 Release CLI 在临时目录验证 basic-api/auth-api（需 Docker）
+	@set -euo pipefail; \
+	work="$$(mktemp -d "$${TMPDIR:-/tmp}/jimu-clean-room.XXXXXX")"; \
+	trap 'chmod -R u+w "$$work" 2>/dev/null || true; rm -rf "$$work"' EXIT; \
+	CGO_ENABLED=0 go build -o "$$work/jimu" ./cmd/jimu; \
+	JIMU_BIN="$$work/jimu" WORKDIR="$$work/projects" bash scripts/clean_room_e2e.sh
 
 profiles-check: ## 构建全部形态并检查依赖闭包
 	@bash scripts/check_profiles.sh

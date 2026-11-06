@@ -102,6 +102,7 @@ make verify
 - [运维](docs/OPERATIONS.md)
 - [升级](docs/UPGRADING.md)
 - [本地实验指标](docs/EXPERIMENTS.md)
+- [本地全栈 demo](docs/DEMO.md)
 - [真实项目升级验证](docs/UPGRADE-VALIDATION.md)
 - [与常见方案的区别](docs/COMPARISON.md)
 - [生产上线与模板检查清单](docs/PRODUCTION.md)
@@ -116,6 +117,12 @@ make verify
 make init
 make up
 make check
+```
+
+验证发布 CLI 的仓库外生成链路（需要 Docker）：
+
+```bash
+make clean-room-e2e
 ```
 
 贡献流程见[CONTRIBUTING](docs/CONTRIBUTING.md)；默认分支、发布分支和 tag 规则以该文档为准。
