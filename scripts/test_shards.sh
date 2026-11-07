@@ -181,7 +181,10 @@ generator_shard_plan() {
     local w
     w=$(generator_weight_of "$name" "$weights")
     [ -n "$w" ] || w="$median"
-    printf '%s\t%s\n' "$w" "$name"
+    # 加上每条用例的框架开销：见 GENERATOR_PER_TEST_OVERHEAD 的说明。
+    awk -v a="$w" -v b="$GENERATOR_PER_TEST_OVERHEAD" 'BEGIN { printf "%.2f", a + b }' \
+      | tr -d '\n'
+    printf '\t%s\n' "$name"
   done | sort -t$'\t' -k1,1nr -k2,2 | awk -F'\t' \
     -v n="$GENERATOR_SHARDS" '
       {
@@ -346,6 +349,12 @@ _verify_composereport_shards() {
   fi
   return "$rc"
 }
+
+# 每条用例的固定成本（秒）。`go test -v` 报告的 `--- PASS: X (0.16s)` 只含用例体内时间，
+# 不含测试框架的建/拆开销；实测一条 0.16s 的用例单独跑，包耗时是 0.72–0.94s。
+# 不补这一项，LPT 会把上百条「0.16s」的小用例全堆进同一片 —— 那片实际要比预测慢 4 倍
+# （CI 实测：90 条用例的片 467s，而 27 条用例的片只要 300s）。
+GENERATOR_PER_TEST_OVERHEAD=0.6
 
 # 打印分片计划与各片负载：排查配平问题的入口（CI 日志里也用它对照）。
 cmd_plan() {

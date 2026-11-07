@@ -101,7 +101,23 @@ func TestPresetBudgets(t *testing.T) {
 // TestMinimalPresetStartsWithoutDependencies 是 minimal 的产品承诺：0 能力、0 外部服务，
 // `go run ./cmd/server` 直接可用。两种 env 都要起得来：不设 ADMIN_PASSWORD（跳过种子），
 // 以及设置 ADMIN_PASSWORD（0 能力时 DB 为 nil，种子必须被护栏跳过而不是 panic）。
+//
+// 项目生成与 `go build` 只做一次，两个子用例复用同一个二进制：这是本包里最重的用例
+// （CI 实测 140s），重复生成+编译会让它翻倍。两次真正的启动仍然独立，覆盖不变。
 func TestMinimalPresetStartsWithoutDependencies(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "minimal")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: "minimal", Module: "example.com/minimal", NoTidy: true,
+	})
+	require.NoError(t, err)
+
+	binary := filepath.Join(t.TempDir(), "server")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/server")
+	build.Dir = dir
+	build.Env = append(serverEnvBaseForTest(newTestGoCache(t)), "APP_ENV=dev")
+	buildOutput, err := build.CombinedOutput()
+	require.NoError(t, err, "generated server must build:\n%s", buildOutput)
+
 	for _, tc := range []struct {
 		name string
 		env  []string
@@ -110,12 +126,6 @@ func TestMinimalPresetStartsWithoutDependencies(t *testing.T) {
 		{"with-admin-password", []string{"ADMIN_PASSWORD=minimal-smoke-password"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := filepath.Join(t.TempDir(), "minimal")
-			_, err := newProjectForTest(t, NewOptions{
-				Dir: dir, Template: "minimal", Module: "example.com/minimal", NoTidy: true,
-			})
-			require.NoError(t, err)
-
 			publicPort, managementPort := freePort(t), freePort(t)
 			for managementPort == publicPort {
 				managementPort = freePort(t)
@@ -126,13 +136,6 @@ func TestMinimalPresetStartsWithoutDependencies(t *testing.T) {
 				fmt.Sprintf("MANAGEMENT_PORT=%d", managementPort),
 			)
 			env = append(env, tc.env...)
-
-			binary := filepath.Join(t.TempDir(), "server")
-			build := exec.Command("go", "build", "-o", binary, "./cmd/server")
-			build.Dir = dir
-			build.Env = env
-			buildOutput, err := build.CombinedOutput()
-			require.NoError(t, err, "generated server must build:\n%s", buildOutput)
 
 			logPath := filepath.Join(t.TempDir(), "server.log")
 			logFile, err := os.Create(logPath)

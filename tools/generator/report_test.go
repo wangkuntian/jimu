@@ -88,8 +88,14 @@ func TestNewProjectReportWritesFileAndKeepsItOutOfTheFileList(t *testing.T) {
 //
 // 不构建产物：只走 packages.Load 的 import 图，因此每个选区的成本 ≈ 一次项目复制 + 一次闭包度量。
 func TestReportSucceedsForEverySelection(t *testing.T) {
+	// 每个选区各自生成独立项目，互不共享状态；串行要 49s（本机 race 实测），
+	// 是 generator 包里最大的单条。并发度与其它重型矩阵一致。
+	buildSem := make(chan struct{}, heavyBuildConcurrency)
 	for _, name := range allCapabilityNames(t) {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			buildSem <- struct{}{}
+			defer func() { <-buildSem }()
 			dir := filepath.Join(t.TempDir(), "proj")
 			_, err := newProjectForTest(t, NewOptions{Dir: dir, With: withProtectedProvider(name), Module: "example.com/proj", NoTidy: true})
 			require.NoError(t, err)
