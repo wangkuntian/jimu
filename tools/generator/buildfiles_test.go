@@ -326,13 +326,20 @@ func TestCheckProfilesGoldenMatchesTheGeneratedClosure(t *testing.T) {
 	for _, name := range registry.Names() {
 		cases = append(cases, tc{name: "profile " + name, shape: name, opts: NewOptions{Profile: name}})
 	}
+	buildSem := make(chan struct{}, heavyBuildConcurrency)
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			// 30 个选区各自独立生成 + go list，串行要 97s（CI 实测）。每个子用例
+			// 只读自己的临时目录、只写自己的 GOCACHE 键，因此可以安全并行；
+			// 并发度由 heavyBuildConcurrency 限制，避免 4 vCPU runner 上互相抢 CPU。
+			t.Parallel()
 			dir := filepath.Join(t.TempDir(), "proj")
 			opts := c.opts
 			opts.Dir = dir
 			opts.Module = "example.com/proj"
 			opts.NoTidy = true
+			buildSem <- struct{}{}
+			defer func() { <-buildSem }()
 			_, err := newProjectForTest(t, opts)
 			require.NoError(t, err)
 			scripts, err := os.ReadFile(filepath.Join(dir, "scripts", "check_profiles.sh"))
