@@ -1,5 +1,5 @@
 .PHONY: help build build-server build-cli dev image test vet fmt fmt-check lint clean ci
-.PHONY: check-log-usage check-capabilities profiles-check compose-report
+.PHONY: check-log-usage check-capabilities
 .PHONY: migrate migrate-down migrate-status seed
 {{if .HasAPIdocs}}.PHONY: swagger swagger-check
 {{end}}
@@ -20,7 +20,7 @@ ENV ?= dev
 # VERSION 只用于镜像标签；本机二进制版本由 APP_VERSION 注入。
 VERSION ?= dev
 APP_VERSION ?= dev
-LDFLAGS := -X main.version=$(APP_VERSION)
+LDFLAGS := -X main.version=$(APP_VERSION) -w -s
 IMAGE_REPO ?= jimu
 IMAGE_TAG = $(IMAGE_REPO):$(VERSION)
 LATEST_TAG = $(IMAGE_REPO):latest
@@ -125,18 +125,6 @@ check-log-usage:
 ##                      （可用集目录存在、核心零驱动、唯一形态选中集==import 闭包、驱动归属）
 check-capabilities:
 	@go run ./tools/checkcapabilities
-
-## profiles-check: 构建本项目唯一形态 + golden 依赖闭包门禁，构建或门禁失败即非零退出。
-##                 设置 JIMU_PROFILES_SMOKE=1 后额外以 APP_ENV=dev 启动并轮询 /readyz
-##                 （需 DB+Redis）；未设置时打印 SKIP，不静默跳过。
-profiles-check:
-	@bash scripts/check_profiles.sh
-
-## compose-report: 生成本项目唯一形态的编译面报告（docs/profiles/compose-report.md，入库）。
-##                 指标：二进制大小 / 路由数 / 迁移数 / 表数 / 闭包代码量与文件数 /
-##                 重型依赖 / go.mod 直接依赖数；不连库、不启动监听。
-compose-report:
-	@go run ./tools/composereport
 
 ## clean: 清理构建产物
 clean:

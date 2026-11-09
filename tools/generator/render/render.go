@@ -64,6 +64,16 @@ func Execute(ctx Context) ([]string, error) {
 			return nil, err
 		}
 	}
+	// 部署资产在模块重写之后复制（上面的 /opt/jimu 等框架路径必须保持字面量），
+	// 因此项目标识的重写必须单独放在资产复制之后。
+	for _, action := range ctx.Plan.Rewrites {
+		if action.Kind != "deploy" {
+			continue
+		}
+		if err := applyRewrite(ctx.Destination, ctx.Module, action); err != nil {
+			return nil, err
+		}
+	}
 	if err := pruneTests(ctx.Destination, ctx.Module, ctx.Plan.Prune); err != nil {
 		return nil, err
 	}

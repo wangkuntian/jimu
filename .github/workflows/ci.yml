@@ -494,20 +494,33 @@ jobs:
           path: .
       - name: "📦 Load Docker image"
         run: docker load -i jimu-image.tar
+      # 用官方 Trivy 镜像而不是 trivy-action：action 每次都要下载二进制 + 校验 checksum，
+      # 该环节在 runner 上会静默失败（install.sh 的 set -e 吞掉错误，只留 exit 1）。
+      # 镜像里的 trivy 已就绪，没有下载环节。
       - name: "🔐 Trivy image scan"
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: jimu:${{ github.sha }}
-          format: table
-          exit-code: '1'
-          ignore-unfixed: true
-          severity: CRITICAL,HIGH
+        env:
+          TRIVY_VERSION: "0.76.2"
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            "aquasec/trivy:${TRIVY_VERSION}" image \
+            --format table \
+            --exit-code 1 \
+            --ignore-unfixed \
+            --severity CRITICAL,HIGH \
+            "jimu:${{ github.sha }}"
       - name: "📋 Generate SBOM"
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: jimu:${{ github.sha }}
-          format: cyclonedx
-          output: jimu-sbom.json
+        env:
+          TRIVY_VERSION: "0.76.2"
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/out" \
+            "aquasec/trivy:${TRIVY_VERSION}" image \
+            --format cyclonedx \
+            --scanners vuln \
+            --output /out/jimu-sbom.json \
+            "jimu:${{ github.sha }}"
       - name: "📤 Upload SBOM artifact"
         uses: actions/upload-artifact@v7
         with:

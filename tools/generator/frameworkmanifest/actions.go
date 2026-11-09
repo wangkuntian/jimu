@@ -42,14 +42,10 @@ var kernelFiles = []string{
 }
 
 var copiedTools = []string{
-	"tools/internal/profileoverlay",
 	"tools/internal/profileassets",
 	"tools/internal/heavydeps",
 	"tools/internal/projectmetrics",
-	"tools/profileoverlay",
-	"tools/profileassets",
 	"tools/checkcapabilities",
-	"tools/composereport",
 	"tools/logcheck",
 }
 
@@ -108,13 +104,7 @@ func copyActions(root string, selected selection) ([]manifest.CopyAction, error)
 		actions = append(actions, manifest.CopyAction{Source: base, Destination: base, Include: []string{}, Exclude: []string{}})
 	}
 	for _, source := range copiedTools {
-		exclude := []string{"*_test.go"}
-		if source == "tools/composereport" {
-			// The framework-only adapter imports frameworkmanifest. Generated projects
-			// read their persisted manifest through the generated spec instead.
-			exclude = append(exclude, "framework_spec.go")
-		}
-		actions = append(actions, manifest.CopyAction{Source: source, Destination: source, Include: []string{}, Exclude: exclude})
+		actions = append(actions, manifest.CopyAction{Source: source, Destination: source, Include: []string{}, Exclude: []string{"*_test.go"}})
 	}
 	return actions, nil
 }
@@ -144,14 +134,12 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 	actions := []manifest.TemplateAction{
 		{Source: "tools/generator/render/templates/project/Makefile.tmpl", Destination: "Makefile", Kind: "build", Data: buildData},
 		{Source: "tools/generator/render/templates/project/Dockerfile.tmpl", Destination: "Dockerfile", Kind: "build", Data: buildData},
-		{Source: "tools/generator/render/templates/project/check_profiles.sh.tmpl", Destination: "scripts/check_profiles.sh", Kind: "build", Data: buildData},
 		{Source: "tools/generator/render/templates/project/registry.go.tmpl", Destination: "internal/profiles/registry/registry.go", Kind: "shape", Data: shapeData},
 		{Source: "tools/generator/render/templates/project/assembly.go.tmpl", Destination: filepath.ToSlash(filepath.Join("internal/profiles", selected.shape, "assembly.go")), Kind: "shape", Data: shapeData},
 		{Source: "tools/generator/render/templates/project/drivers.go.tmpl", Destination: filepath.ToSlash(filepath.Join("internal/profiles", selected.shape, "drivers.go")), Kind: "shape", Data: shapeData},
 		{Source: "tools/generator/render/templates/project/active.go.tmpl", Destination: "internal/profiles/active/assembly.go", Kind: "shape", Data: map[string]any{"Shape": selected.shape}},
 		{Source: "tools/generator/render/templates/project/catalog.go.tmpl", Destination: "internal/capabilities/catalog/catalog.go", Kind: "catalog", Data: catalogData},
 		{Source: "tools/generator/render/templates/project/catalog_migration.go.tmpl", Destination: "internal/capabilities/catalog/migration.go", Kind: "catalog", Data: catalogData},
-		{Source: "tools/generator/render/templates/project/compose_spec.go.tmpl", Destination: "tools/composereport/manifest_spec.go", Kind: "report"},
 		{Source: "cmd/cli/main.go", Destination: "cmd/cli/main.go", Kind: "cli", Data: cliData},
 	}
 	all, _ := allDescriptors()
@@ -371,14 +359,31 @@ func mergeActions(root string, selected selection) []manifest.MergeAction {
 func rewriteActions(module string) []manifest.RewriteAction {
 	return []manifest.RewriteAction{
 		{Kind: "module", From: "jimu", To: module, Files: []string{}},
-		{Kind: "file-patch", From: `const modulePath = "jimu"`, To: `const modulePath = "` + module + `"`, Files: []string{"tools/checkcapabilities/drivers.go", "tools/composereport/main.go"}},
+		{Kind: "file-patch", From: `const modulePath = "jimu"`, To: `const modulePath = "` + module + `"`, Files: []string{"tools/checkcapabilities/drivers.go"}},
 		{Kind: "file-patch", From: `"jimu/tools/logcheck"`, To: `"` + module + `/tools/logcheck"`, Files: []string{"tools/logcheck/main.go"}},
-		{Kind: "file-patch", From: `"jimu/internal/assembly"`, To: `"` + module + `/internal/assembly"`, Files: []string{"tools/internal/profileoverlay/profileoverlay.go"}},
-		{Kind: "file-patch", From: `"jimu/internal/profiles/%s"`, To: `"` + module + `/internal/profiles/%s"`, Files: []string{"tools/internal/profileoverlay/profileoverlay.go"}},
-		{Kind: "file-patch", From: "// Command composereport 生成各形态（profile）的「编译面」报告。", To: "// Command composereport 生成本项目唯一形态的「编译面」报告。", Files: []string{"tools/composereport/main.go"}},
-		{Kind: "file-patch", From: "报告回答「层②（形态选点）究竟改变了什么」", To: "报告回答「本项目编进了什么」", Files: []string{"tools/composereport/main.go"}},
-		{Kind: "file-patch", From: "数在各形态间**完全相同**", To: "数不再随形态变化", Files: []string{"tools/composereport/main.go"}},
-		{Kind: "file-patch", From: "（`jimu/...`）", To: "（`" + module + "/...`）", Files: []string{"tools/composereport/main.go"}},
+		{Kind: "file-patch", From: `Use:   "jimu",`, To: `Use:   "` + projectName(module) + `",`, Files: []string{"cmd/cli/main.go"}},
+		{Kind: "file-patch", From: `Short: "Jimu backend framework CLI",`, To: `Short: "` + projectName(module) + ` backend CLI",`, Files: []string{"cmd/cli/main.go"}},
+		{Kind: "deploy", From: "jimu", To: projectName(module), Files: deployFiles()},
+	}
+}
+
+// deployFiles 是部署清单（k8s / helm / backup）里需要换项目标识的文件。
+// OpenObserve 资产与告警规则不在内：它们的 jimu_ 前缀是运行期协议名，改名会断开既有仪表盘。
+func deployFiles() []string {
+	return []string{
+		"deploy/k8s/deployment.yaml",
+		"deploy/k8s/service.yaml",
+		"deploy/k8s/configmap.yaml",
+		"deploy/k8s/config-files.yaml",
+		"deploy/k8s/secret.yaml",
+		"deploy/k8s/ingress.yaml",
+		"deploy/k8s/hpa.yaml",
+		"deploy/k8s/pdb.yaml",
+		"deploy/k8s/networkpolicy.yaml",
+		"deploy/k8s/backup-cronjob.yaml",
+		"deploy/helm/Chart.yaml",
+		"deploy/helm/values.yaml",
+		"deploy/backup/Dockerfile",
 	}
 }
 
@@ -482,6 +487,31 @@ func sortedStrings(values []string) []string {
 	out := slices.Clone(values)
 	sort.Strings(out)
 	return out
+}
+
+// projectName 从 module path 派生项目名：取最后一段并做 Helm/K8s 合法化
+// （小写、非字母数字折叠为 "-"、去首尾 "-"）。与 render.artifactName 同口径。
+func projectName(module string) string {
+	base := module
+	if index := strings.LastIndex(module, "/"); index >= 0 {
+		base = module[index+1:]
+	}
+	var builder strings.Builder
+	for _, value := range strings.ToLower(base) {
+		if (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') || value == '-' {
+			builder.WriteRune(value)
+		} else {
+			builder.WriteByte('-')
+		}
+	}
+	name := strings.Trim(builder.String(), "-")
+	if name == "" {
+		return "app"
+	}
+	if len(name) > 53 {
+		name = strings.TrimRight(name[:53], "-")
+	}
+	return name
 }
 
 // kernelCopyActions 只复制真正会被编译进本项目的内核包。

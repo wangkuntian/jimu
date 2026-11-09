@@ -29,6 +29,9 @@ func applyRewrite(root, module string, action manifest.RewriteAction) error {
 		}
 		content, err := os.ReadFile(path)
 		if err != nil {
+			if action.Kind == "deploy" && os.IsNotExist(err) {
+				continue
+			}
 			return fmt.Errorf("read rewrite target %s: %w", rel, err)
 		}
 		if !utf8.Valid(content) {
@@ -58,6 +61,19 @@ func applyRewrite(root, module string, action manifest.RewriteAction) error {
 				return fmt.Errorf("rewrite %s: %w", rel, err)
 			}
 			if changed {
+				info, err := os.Stat(path)
+				if err != nil {
+					return err
+				}
+				if err := os.WriteFile(path, []byte(updated), info.Mode().Perm()); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if action.Kind == "deploy" {
+			updated := rewriteDeployIdentifiers(string(content), to)
+			if updated != string(content) {
 				info, err := os.Stat(path)
 				if err != nil {
 					return err
@@ -125,7 +141,49 @@ func rewriteModuleFile(base, content, from, module string) (string, bool, error)
 	updated := strings.ReplaceAll(content, from+"/", module+"/")
 	updated = strings.ReplaceAll(updated, "module="+from, "module="+module)
 	updated = strings.ReplaceAll(updated, "$(BIN_DIR)/jimu-", "$(BIN_DIR)/"+artifactName(module)+"-")
+	// 镜像仓库名与镜像内 CLI 产物名沿用生成项目的 artifact 名，
+	// 避免生成项目仍以框架名发布镜像（k8s 里两个项目会撞名）。
+	if base == "Makefile" {
+		updated = strings.ReplaceAll(updated, "IMAGE_REPO ?= jimu", "IMAGE_REPO ?= "+artifactName(module))
+	}
+	if base == "Dockerfile" {
+		updated = strings.ReplaceAll(updated, "-o jimu ./cmd/cli", "-o "+artifactName(module)+" ./cmd/cli")
+		updated = strings.ReplaceAll(updated, "/app/jimu .", "/app/"+artifactName(module)+" .")
+	}
 	return updated, updated != content, nil
+}
+
+// rewriteDeployIdentifiers 把部署清单里的框架名换成生成项目的 artifact 名。
+// 只替换「项目标识」的位置：namespace、资源名与 app 标签、镜像仓库、secret/config 名。
+// 指标名、OpenObserve stream 名与告警规则的 jimu_ 前缀属于运行期协议，保持不动。
+func rewriteDeployIdentifiers(content, name string) string {
+	replacements := [][2]string{
+		{"name: jimu\n", "name: " + name + "\n"},
+		{"repository: jimu\n", "repository: " + name + "\n"},
+		{"repository: jimu-backup", "repository: " + name + "-backup"},
+		{"prefix: jimu", "prefix: " + name},
+		{"serviceName: jimu", "serviceName: " + name},
+		{"user: jimu\n", "user: " + name + "\n"},
+		{"mysqlUser: jimu", "mysqlUser: " + name},
+		{"namespace: jimu", "namespace: " + name},
+		{"app: jimu-server", "app: " + name + "-server"},
+		{"name: jimu-server", "name: " + name + "-server"},
+		{"app: jimu-db-backup", "app: " + name + "-db-backup"},
+		{"name: jimu-db-backup", "name: " + name + "-db-backup"},
+		{"app: jimu-config", "app: " + name + "-config"},
+		{"name: jimu-config", "name: " + name + "-config"},
+		{"name: jimu-secrets", "name: " + name + "-secrets"},
+		{"secretName: jimu-tls", "secretName: " + name + "-tls"},
+		{"registry.example.com/jimu:", "registry.example.com/" + name + ":"},
+		{"registry.example.com/jimu-backup:", "registry.example.com/" + name + "-backup:"},
+		{"mariadb.jimu.svc.cluster.local", "mariadb." + name + ".svc.cluster.local"},
+		{"redis.jimu.svc.cluster.local", "redis." + name + ".svc.cluster.local"},
+		{"registry.example.com/jimu:1.0.0", "registry.example.com/" + name + ":1.0.0"},
+	}
+	for _, pair := range replacements {
+		content = strings.ReplaceAll(content, pair[0], pair[1])
+	}
+	return content
 }
 
 func rewriteGoModDirective(content, from, module string) (string, bool) {
