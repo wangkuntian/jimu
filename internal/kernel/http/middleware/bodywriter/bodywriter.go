@@ -1,4 +1,4 @@
-package middleware
+package bodywriter
 
 import (
 	"bytes"
@@ -7,23 +7,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// responseBodyWriter 包装 gin.ResponseWriter 以捕获响应体
-type responseBodyWriter struct {
+// Writer 包装 gin.ResponseWriter 以捕获响应体
+type Writer struct {
 	gin.ResponseWriter
 	body      *bytes.Buffer
 	maxSize   int
 	truncated bool
 }
 
-func newResponseBodyWriter(w gin.ResponseWriter, maxSize int) *responseBodyWriter {
-	return &responseBodyWriter{
+func New(w gin.ResponseWriter, maxSize int) *Writer {
+	return &Writer{
 		ResponseWriter: w,
 		body:           &bytes.Buffer{},
 		maxSize:        maxSize,
 	}
 }
 
-func (w *responseBodyWriter) Write(b []byte) (int, error) {
+func (w *Writer) Write(b []byte) (int, error) {
 	// 只捕获到限制大小，超出后标记截断
 	if w.body.Len() < w.maxSize {
 		remaining := w.maxSize - w.body.Len()
@@ -39,22 +39,22 @@ func (w *responseBodyWriter) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 
-func (w *responseBodyWriter) WriteHeader(code int) {
+func (w *Writer) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-// capturedBody 返回捕获的响应体字符串
-func (w *responseBodyWriter) capturedBody() string {
+// CapturedBody 返回捕获的响应体字符串
+func (w *Writer) CapturedBody() string {
 	return w.body.String()
 }
 
-// isTruncated 返回响应体是否被截断
-func (w *responseBodyWriter) isTruncated() bool {
+// IsTruncated 返回响应体是否被截断
+func (w *Writer) IsTruncated() bool {
 	return w.truncated
 }
 
-// sanitizeBody 脱敏敏感字段
-func sanitizeBody(body string) string {
+// Sanitize 脱敏敏感字段
+func Sanitize(body string) string {
 	if body == "" {
 		return ""
 	}

@@ -1,4 +1,4 @@
-package middleware
+package ratelimit
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"jimu/internal/kernel/auth"
+	"jimu/internal/kernel/http/ctxkeys"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
@@ -63,8 +63,8 @@ func defaultKeyFunc(c *gin.Context) string {
 	if userID, exists := c.Get("user_id"); exists {
 		return fmt.Sprintf("user:%v", userID)
 	}
-	if apiKey, ok := auth.APIKeyFromContext(c.Request.Context()); ok && apiKey != nil {
-		return fmt.Sprintf("apikey:%d", apiKey.ID)
+	if id, ok := c.Request.Context().Value(ctxkeys.APIKeyID{}).(uint64); ok {
+		return fmt.Sprintf("apikey:%d", id)
 	}
 	return fmt.Sprintf("ip:%s", c.ClientIP())
 }

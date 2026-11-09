@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"time"
+
+	"jimu/internal/kernel/http/ctxkeys"
 )
 
 // APIKey 已认证 API Key 的机制视图（纯身份信息，不含 gorm 标签；
@@ -29,20 +31,28 @@ func (k *APIKey) HasScope(scope string) bool {
 	return false
 }
 
-// APIKeyContextKey context 中存储 API Key 的 key
-type APIKeyContextKey struct{}
-
 // ContextWithAPIKey 将 API Key 存入 context
 func ContextWithAPIKey(ctx context.Context, key *APIKey) context.Context {
-	return context.WithValue(ctx, APIKeyContextKey{}, key)
+	ctx = context.WithValue(ctx, ctxkeys.APIKeyID{}, key.ID)
+	return context.WithValue(ctx, apiKeyContextKey{}, key)
 }
 
 // APIKeyFromContext 从 context 获取已验证的 API Key
 func APIKeyFromContext(ctx context.Context) (*APIKey, bool) {
-	val := ctx.Value(APIKeyContextKey{})
+	val := ctx.Value(apiKeyContextKey{})
 	if val == nil {
 		return nil, false
 	}
 	key, ok := val.(*APIKey)
 	return key, ok
 }
+
+// APIKeyIDFromContext 从 context 取已认证 API Key 的 ID。
+// 中间件用它分桶限流，无需 import auth 包。
+func APIKeyIDFromContext(ctx context.Context) (uint64, bool) {
+	id, ok := ctx.Value(ctxkeys.APIKeyID{}).(uint64)
+	return id, ok
+}
+
+// apiKeyContextKey 是完整 API Key 机制视图在 context 中的键，仅 auth 包内部使用。
+type apiKeyContextKey struct{}

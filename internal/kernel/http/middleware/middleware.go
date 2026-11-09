@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"jimu/internal/kernel/http/middleware/bodywriter"
 	"jimu/internal/kernel/logger"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
@@ -59,9 +60,9 @@ func Logger(log *logger.Logger, cfg LogConfig) gin.HandlerFunc {
 				// 重新设置 body 以便后续 handler 可以读取
 				c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 				if len(body) > cfg.MaxBodyLogSize {
-					requestBody = sanitizeBody(string(body[:cfg.MaxBodyLogSize])) + "...[truncated]"
+					requestBody = bodywriter.Sanitize(string(body[:cfg.MaxBodyLogSize])) + "...[truncated]"
 				} else {
-					requestBody = sanitizeBody(string(body))
+					requestBody = bodywriter.Sanitize(string(body))
 				}
 			}
 		}
@@ -70,7 +71,7 @@ func Logger(log *logger.Logger, cfg LogConfig) gin.HandlerFunc {
 		var responseBody string
 		var truncated bool
 		if cfg.LogResponseBody {
-			w := newResponseBodyWriter(c.Writer, cfg.MaxBodyLogSize)
+			w := bodywriter.New(c.Writer, cfg.MaxBodyLogSize)
 			c.Writer = w
 		}
 
@@ -81,9 +82,9 @@ func Logger(log *logger.Logger, cfg LogConfig) gin.HandlerFunc {
 
 		// 获取捕获的响应体
 		if cfg.LogResponseBody {
-			if w, ok := c.Writer.(*responseBodyWriter); ok {
-				responseBody = w.capturedBody()
-				truncated = w.isTruncated()
+			if w, ok := c.Writer.(*bodywriter.Writer); ok {
+				responseBody = w.CapturedBody()
+				truncated = w.IsTruncated()
 			}
 		}
 

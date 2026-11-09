@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 
+	"jimu/internal/kernel/http/ctxkeys"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -32,17 +34,16 @@ func ValidCode(code string) bool {
 	return len(code) <= 64 && tenantCodePattern.MatchString(code)
 }
 
-type ctxKey struct{}
 type platformScopeKey struct{}
 
 // WithTenant 将租户 ID 注入 context。
 func WithTenant(ctx context.Context, tenantID uint64) context.Context {
-	return context.WithValue(ctx, ctxKey{}, tenantID)
+	return context.WithValue(ctx, ctxkeys.TenantID{}, tenantID)
 }
 
 // FromContext 从 context 提取租户 ID；不存在时返回 0（未隔离，视为平台级访问）。
 func FromContext(ctx context.Context) uint64 {
-	if v, ok := ctx.Value(ctxKey{}).(uint64); ok {
+	if v, ok := ctx.Value(ctxkeys.TenantID{}).(uint64); ok {
 		return v
 	}
 	return 0

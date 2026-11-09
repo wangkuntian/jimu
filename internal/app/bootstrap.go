@@ -11,7 +11,8 @@ import (
 	"jimu/internal/capability"
 	"jimu/internal/contract"
 	platformhttp "jimu/internal/kernel/http"
-	"jimu/internal/kernel/http/middleware"
+	middlewareidem "jimu/internal/kernel/http/middleware/idempotency"
+	middlewarerate "jimu/internal/kernel/http/middleware/ratelimit"
 	"jimu/internal/kernel/logger"
 	"jimu/internal/kernel/observability"
 	"jimu/internal/kernel/scheduler"
@@ -78,7 +79,7 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 	// 租户维度限流（Redis 滑动窗口）：挂在受保护中间件之后，平台级视角跳过
 	var extraProtected []gin.HandlerFunc
 	if container.Redis != nil && cfg.RateLimit.Tenant.Enabled && cfg.RateLimit.Tenant.Limit > 0 {
-		extraProtected = append(extraProtected, middleware.TenantRateLimitMiddleware(
+		extraProtected = append(extraProtected, middlewarerate.TenantRateLimitMiddleware(
 			container.Redis,
 			cfg.RateLimit.Tenant.Limit,
 			time.Duration(cfg.RateLimit.Tenant.WindowSec)*time.Second,
@@ -86,7 +87,7 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 	}
 	// 幂等中间件：挂在认证/租户注入之后，键按租户+用户+方法+路径绑定
 	if container.Redis != nil && cfg.Security.IdempotencyEnabled {
-		extraProtected = append(extraProtected, middleware.IdempotencyMiddleware(
+		extraProtected = append(extraProtected, middlewareidem.IdempotencyMiddleware(
 			container.Redis,
 			time.Duration(cfg.Security.IdempotencyTTLSec)*time.Second,
 		))

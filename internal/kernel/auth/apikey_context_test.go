@@ -4,8 +4,20 @@ import (
 	"context"
 	"testing"
 
+	"jimu/internal/kernel/http/ctxkeys"
 	"jimu/internal/kernel/tenant"
 )
+
+// TestA2_3_APIKeyIDIsVisibleToMiddlewares 钉住跨包契约：auth 注入的 Key ID
+// 必须能被只 import ctxkeys 的 HTTP 中间件读到（否则限流分桶会退化成按 IP）。
+func TestA2_3_APIKeyIDIsVisibleToMiddlewares(t *testing.T) {
+	key := &APIKey{ID: 42, Enabled: true}
+	ctx := ContextWithAPIKey(context.Background(), key)
+	id, ok := ctx.Value(ctxkeys.APIKeyID{}).(uint64)
+	if !ok || id != 42 {
+		t.Fatalf("ctxkeys.APIKeyID = %v, %v; want 42, true", id, ok)
+	}
+}
 
 // A2.2 已校验的 Key 经 ContextWithAPIKey 注入后能被原样读回（机制视图的往返）。
 func TestA2_2_VerifiedKeyRoundTripsThroughContext(t *testing.T) {
@@ -28,7 +40,7 @@ func TestA2_1_UnverifiedKeyContributesNoTenant(t *testing.T) {
 		t.Fatal("没有 Key 的 context 不得被判为已认证")
 	}
 	// 类型不符的值放在正确 key 下也不得被当成 Key
-	if _, ok := APIKeyFromContext(context.WithValue(base, APIKeyContextKey{}, "not-a-key")); ok {
+	if _, ok := APIKeyFromContext(context.WithValue(base, apiKeyContextKey{}, "not-a-key")); ok {
 		t.Fatal("类型不符的 context 值不得被当作已认证 Key")
 	}
 	// 反向对照：显式注入后才算已认证，但租户仍不由本函数内联归属
