@@ -20,7 +20,7 @@ ENV ?= dev
 # VERSION 只用于镜像标签；本机二进制版本由 APP_VERSION 注入。
 VERSION ?= dev
 APP_VERSION ?= dev
-LDFLAGS := -X main.version=$(APP_VERSION)
+LDFLAGS := -X main.version=$(APP_VERSION) -w -s
 IMAGE_REPO ?= jimu
 IMAGE_TAG = $(IMAGE_REPO):$(VERSION)
 LATEST_TAG = $(IMAGE_REPO):latest

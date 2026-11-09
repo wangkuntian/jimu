@@ -30,6 +30,7 @@ func TestGeneratedMakefileHasNoProfileBranch(t *testing.T) {
 	assert.NotContains(t, src, "profileoverlay")
 	assert.NotContains(t, src, "-overlay=")
 	assert.Contains(t, src, "go build -ldflags", "普通 go build")
+	assert.Contains(t, src, "-w -s", "生成项目默认剥离符号表")
 	assert.Contains(t, src, "\ncheck-capabilities:")
 	assert.Contains(t, src, "\nprofiles-check:")
 	assert.Contains(t, src, "\ncompose-report:")
