@@ -361,6 +361,29 @@ func rewriteActions(module string) []manifest.RewriteAction {
 		{Kind: "module", From: "jimu", To: module, Files: []string{}},
 		{Kind: "file-patch", From: `const modulePath = "jimu"`, To: `const modulePath = "` + module + `"`, Files: []string{"tools/checkcapabilities/drivers.go"}},
 		{Kind: "file-patch", From: `"jimu/tools/logcheck"`, To: `"` + module + `/tools/logcheck"`, Files: []string{"tools/logcheck/main.go"}},
+		{Kind: "file-patch", From: `Use:   "jimu",`, To: `Use:   "` + projectName(module) + `",`, Files: []string{"cmd/cli/main.go"}},
+		{Kind: "file-patch", From: `Short: "Jimu backend framework CLI",`, To: `Short: "` + projectName(module) + ` backend CLI",`, Files: []string{"cmd/cli/main.go"}},
+		{Kind: "deploy", From: "jimu", To: projectName(module), Files: deployFiles()},
+	}
+}
+
+// deployFiles 是部署清单（k8s / helm / backup）里需要换项目标识的文件。
+// OpenObserve 资产与告警规则不在内：它们的 jimu_ 前缀是运行期协议名，改名会断开既有仪表盘。
+func deployFiles() []string {
+	return []string{
+		"deploy/k8s/deployment.yaml",
+		"deploy/k8s/service.yaml",
+		"deploy/k8s/configmap.yaml",
+		"deploy/k8s/config-files.yaml",
+		"deploy/k8s/secret.yaml",
+		"deploy/k8s/ingress.yaml",
+		"deploy/k8s/hpa.yaml",
+		"deploy/k8s/pdb.yaml",
+		"deploy/k8s/networkpolicy.yaml",
+		"deploy/k8s/backup-cronjob.yaml",
+		"deploy/helm/Chart.yaml",
+		"deploy/helm/values.yaml",
+		"deploy/backup/Dockerfile",
 	}
 }
 
@@ -464,6 +487,31 @@ func sortedStrings(values []string) []string {
 	out := slices.Clone(values)
 	sort.Strings(out)
 	return out
+}
+
+// projectName 从 module path 派生项目名：取最后一段并做 Helm/K8s 合法化
+// （小写、非字母数字折叠为 "-"、去首尾 "-"）。与 render.artifactName 同口径。
+func projectName(module string) string {
+	base := module
+	if index := strings.LastIndex(module, "/"); index >= 0 {
+		base = module[index+1:]
+	}
+	var builder strings.Builder
+	for _, value := range strings.ToLower(base) {
+		if (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') || value == '-' {
+			builder.WriteRune(value)
+		} else {
+			builder.WriteByte('-')
+		}
+	}
+	name := strings.Trim(builder.String(), "-")
+	if name == "" {
+		return "app"
+	}
+	if len(name) > 53 {
+		name = strings.TrimRight(name[:53], "-")
+	}
+	return name
 }
 
 // kernelCopyActions 只复制真正会被编译进本项目的内核包。

@@ -1036,6 +1036,42 @@
       "files": [
         "tools/logcheck/main.go"
       ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "Use:   \"jimu\",",
+      "to": "Use:   \"minimal\",",
+      "files": [
+        "cmd/cli/main.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "Short: \"Jimu backend framework CLI\",",
+      "to": "Short: \"minimal backend CLI\",",
+      "files": [
+        "cmd/cli/main.go"
+      ]
+    },
+    {
+      "kind": "deploy",
+      "from": "jimu",
+      "to": "minimal",
+      "files": [
+        "deploy/k8s/deployment.yaml",
+        "deploy/k8s/service.yaml",
+        "deploy/k8s/configmap.yaml",
+        "deploy/k8s/config-files.yaml",
+        "deploy/k8s/secret.yaml",
+        "deploy/k8s/ingress.yaml",
+        "deploy/k8s/hpa.yaml",
+        "deploy/k8s/pdb.yaml",
+        "deploy/k8s/networkpolicy.yaml",
+        "deploy/k8s/backup-cronjob.yaml",
+        "deploy/helm/Chart.yaml",
+        "deploy/helm/values.yaml",
+        "deploy/backup/Dockerfile"
+      ]
     }
   ],
   "assets": [
@@ -1582,5 +1618,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:0fa9b183287309a7c0583aafca13d93bc788bfb837abe5b1ce790579a81c098b"
+  "digest": "sha256:acfc18e1ea5da057714f4b8d4b4f01d4b85217d731ced6da188a1e2b4d88c2e6"
 }
