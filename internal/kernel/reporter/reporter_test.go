@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewReporter_DisabledReturnsEmpty(t *testing.T) {
-	r := NewReporter(ReporterConfig{Enabled: false}, nil)
+	r := NewReporter(false, nil)
 	r.Report(context.Background(), errors.New("boom"), "k", "v")
 	if !r.Flush(100 * time.Millisecond) {
 		t.Fatal("Flush() should succeed for empty reporter")
@@ -17,7 +17,7 @@ func TestNewReporter_DisabledReturnsEmpty(t *testing.T) {
 }
 
 func TestNewReporter_EnabledReturnsLogReporter(t *testing.T) {
-	r := NewReporter(ReporterConfig{Enabled: true}, nil)
+	r := NewReporter(true, nil)
 	if _, ok := r.(*logReporter); !ok {
 		t.Fatalf("expected *logReporter, got %T", r)
 	}
@@ -73,9 +73,12 @@ func TestToPairs(t *testing.T) {
 	}
 }
 
-func TestDefaultReporterConfig(t *testing.T) {
-	cfg := DefaultReporterConfig()
-	if !cfg.Enabled {
-		t.Fatalf("default enabled = %v", cfg.Enabled)
+func TestNewReporterDisabledIsNoop(t *testing.T) {
+	r := NewReporter(false, func(string, ...interface{}) {
+		t.Fatal("disabled reporter must not log")
+	})
+	r.Report(context.Background(), nil)
+	if !r.Flush(0) {
+		t.Fatal("disabled reporter Flush = false, want true")
 	}
 }

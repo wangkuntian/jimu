@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"jimu/internal/kernel/observability"
-	"jimu/internal/kernel/reporter"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
@@ -99,7 +98,7 @@ type Config struct {
 	Cache        CacheConfig                 `mapstructure:"cache"`
 	Security     SecurityConfig              `mapstructure:"security"`
 	OTEL         observability.TracingConfig `mapstructure:"otel"`
-	ErrorReport  reporter.ReporterConfig     `mapstructure:"error_reporting"`
+	ErrorReport  ErrorReportConfig           `mapstructure:"error_reporting"`
 	HTTPClient   HTTPClientConfig            `mapstructure:"http_client"`
 	GRPC         GRPCConfig                  `mapstructure:"grpc"`
 	Capabilities CapabilitiesConfig          `mapstructure:"capabilities"`
@@ -109,6 +108,14 @@ type Config struct {
 }
 
 // HTTPClientConfig 出站 HTTP client 配置
+// ErrorReportConfig 错误上报配置。
+// 定义在 config 包而非 kernel/reporter：配置结构归配置层，
+// 内核件只接受它需要的值，避免 config 反向依赖内核实现。
+type ErrorReportConfig struct {
+	// Enabled 是否启用错误上报（false 时 Reporter 为空实现，零开销）
+	Enabled bool `mapstructure:"enabled"`
+}
+
 type HTTPClientConfig struct {
 	TimeoutSec      int `mapstructure:"timeout_sec"`       // 单次请求超时（秒），0 用默认 10
 	MaxRetries      int `mapstructure:"max_retries"`       // 失败重试次数，0 用默认 2

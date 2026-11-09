@@ -12,17 +12,6 @@ import (
 // 由调用方注入（如 logger.Logger.Errorw），reporter 包不依赖日志实现，避免 import 循环。
 type LogFunc func(msg string, keysAndValues ...interface{})
 
-// ReporterConfig 错误上报配置
-type ReporterConfig struct {
-	// 是否启用错误上报（false 时 Reporter 为空实现，零开销）
-	Enabled bool `mapstructure:"enabled"`
-}
-
-// DefaultReporterConfig 返回默认错误上报配置
-func DefaultReporterConfig() ReporterConfig {
-	return ReporterConfig{Enabled: true}
-}
-
 // Reporter 错误上报接口：捕获业务错误与未恢复 panic 到聚合平台。
 // 实现通过结构化错误日志输出（含 trace_id），日志链路接入 OpenObserve 后
 // 错误自然进入可观测平台，配合 OpenObserve 告警覆盖错误监控场景。
@@ -74,8 +63,11 @@ func toPairs(attrs []string) []interface{} {
 // NewReporter 按配置创建错误上报器：
 //   - 未启用：空实现（零开销）
 //   - 启用：本地结构化日志（日志链路接入 OpenObserve 后错误自动汇聚）
-func NewReporter(cfg ReporterConfig, logf LogFunc) Reporter {
-	if !cfg.Enabled {
+//
+// NewReporter 按是否启用返回具体实现。配置结构由 config 包拥有，
+// 本包只接受一个 bool，避免内核件反向依赖配置层。
+func NewReporter(enabled bool, logf LogFunc) Reporter {
+	if !enabled {
 		return emptyReporter{}
 	}
 	return &logReporter{logf: logf}

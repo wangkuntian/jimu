@@ -177,7 +177,7 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 
 	// 错误上报：启用时输出结构化错误日志（日志链路接入 OpenObserve 后自动汇聚）
 	// gRPC 服务端 panic 也经此上报（server recovery 拦截器）
-	errorReporter := reporter.NewReporter(cfg.ErrorReport, log.Errorw)
+	errorReporter := reporter.NewReporter(cfg.ErrorReport.Enabled, log.Errorw)
 
 	return &Container{
 		Config:            cfg,

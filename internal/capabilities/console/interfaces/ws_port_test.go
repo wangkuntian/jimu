@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
 
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +20,9 @@ type fakeAdminWebSocket struct {
 	users       []uint64
 }
 
-func (f *fakeAdminWebSocket) Handler(_ *auth.JWT) http.HandlerFunc { return f.handler }
+func (f *fakeAdminWebSocket) Handler() contract.AdminWSFactory {
+	return func() http.HandlerFunc { return f.handler }
+}
 
 func (f *fakeAdminWebSocket) SendToUser(userID uint64, message contract.AdminWebSocketMessage) error {
 	f.sendMode, f.sendUser, f.message = "user", userID, message
