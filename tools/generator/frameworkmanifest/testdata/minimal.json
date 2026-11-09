@@ -524,15 +524,6 @@
       "exclude": []
     },
     {
-      "source": "tools/internal/profileoverlay",
-      "destination": "tools/internal/profileoverlay",
-      "optional": false,
-      "include": [],
-      "exclude": [
-        "*_test.go"
-      ]
-    },
-    {
       "source": "tools/internal/profileassets",
       "destination": "tools/internal/profileassets",
       "optional": false,
@@ -560,40 +551,12 @@
       ]
     },
     {
-      "source": "tools/profileoverlay",
-      "destination": "tools/profileoverlay",
-      "optional": false,
-      "include": [],
-      "exclude": [
-        "*_test.go"
-      ]
-    },
-    {
-      "source": "tools/profileassets",
-      "destination": "tools/profileassets",
-      "optional": false,
-      "include": [],
-      "exclude": [
-        "*_test.go"
-      ]
-    },
-    {
       "source": "tools/checkcapabilities",
       "destination": "tools/checkcapabilities",
       "optional": false,
       "include": [],
       "exclude": [
         "*_test.go"
-      ]
-    },
-    {
-      "source": "tools/composereport",
-      "destination": "tools/composereport",
-      "optional": false,
-      "include": [],
-      "exclude": [
-        "*_test.go",
-        "framework_spec.go"
       ]
     },
     {
@@ -620,16 +583,6 @@
     {
       "source": "tools/generator/render/templates/project/Dockerfile.tmpl",
       "destination": "Dockerfile",
-      "kind": "build",
-      "data": {
-        "Expected": "access auth encryption notification user",
-        "HasAPIdocs": false,
-        "Shape": "minimal"
-      }
-    },
-    {
-      "source": "tools/generator/render/templates/project/check_profiles.sh.tmpl",
-      "destination": "scripts/check_profiles.sh",
       "kind": "build",
       "data": {
         "Expected": "access auth encryption notification user",
@@ -958,12 +911,6 @@
       }
     },
     {
-      "source": "tools/generator/render/templates/project/compose_spec.go.tmpl",
-      "destination": "tools/composereport/manifest_spec.go",
-      "kind": "report",
-      "data": null
-    },
-    {
       "source": "cmd/cli/main.go",
       "destination": "cmd/cli/main.go",
       "kind": "cli",
@@ -1079,8 +1026,7 @@
       "from": "const modulePath = \"jimu\"",
       "to": "const modulePath = \"example.com/minimal\"",
       "files": [
-        "tools/checkcapabilities/drivers.go",
-        "tools/composereport/main.go"
+        "tools/checkcapabilities/drivers.go"
       ]
     },
     {
@@ -1089,54 +1035,6 @@
       "to": "\"example.com/minimal/tools/logcheck\"",
       "files": [
         "tools/logcheck/main.go"
-      ]
-    },
-    {
-      "kind": "file-patch",
-      "from": "\"jimu/internal/assembly\"",
-      "to": "\"example.com/minimal/internal/assembly\"",
-      "files": [
-        "tools/internal/profileoverlay/profileoverlay.go"
-      ]
-    },
-    {
-      "kind": "file-patch",
-      "from": "\"jimu/internal/profiles/%s\"",
-      "to": "\"example.com/minimal/internal/profiles/%s\"",
-      "files": [
-        "tools/internal/profileoverlay/profileoverlay.go"
-      ]
-    },
-    {
-      "kind": "file-patch",
-      "from": "// Command composereport 生成各形态（profile）的「编译面」报告。",
-      "to": "// Command composereport 生成本项目唯一形态的「编译面」报告。",
-      "files": [
-        "tools/composereport/main.go"
-      ]
-    },
-    {
-      "kind": "file-patch",
-      "from": "报告回答「层②（形态选点）究竟改变了什么」",
-      "to": "报告回答「本项目编进了什么」",
-      "files": [
-        "tools/composereport/main.go"
-      ]
-    },
-    {
-      "kind": "file-patch",
-      "from": "数在各形态间**完全相同**",
-      "to": "数不再随形态变化",
-      "files": [
-        "tools/composereport/main.go"
-      ]
-    },
-    {
-      "kind": "file-patch",
-      "from": "（`jimu/...`）",
-      "to": "（`example.com/minimal/...`）",
-      "files": [
-        "tools/composereport/main.go"
       ]
     }
   ],
@@ -1670,7 +1568,6 @@
     "internal/shared/validator/fuzz_test.go",
     "internal/shared/validator/validator.go",
     "internal/shared/validator/validator_test.go",
-    "scripts/check_profiles.sh",
     "tools/checkcapabilities/assets.go",
     "tools/checkcapabilities/composition.go",
     "tools/checkcapabilities/drivers.go",
@@ -1678,17 +1575,12 @@
     "tools/checkcapabilities/imports.go",
     "tools/checkcapabilities/main.go",
     "tools/checkcapabilities/structure.go",
-    "tools/composereport/main.go",
-    "tools/composereport/manifest_spec.go",
     "tools/internal/heavydeps/heavydeps.go",
     "tools/internal/profileassets/profileassets.go",
-    "tools/internal/profileoverlay/profileoverlay.go",
     "tools/internal/projectmetrics/projectmetrics.go",
     "tools/internal/projectmetrics/spec.go",
-    "tools/logcheck/main.go",
-    "tools/profileassets/main.go",
-    "tools/profileoverlay/main.go"
+    "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:956c28e271b3f8260d54622d54730c43e0bdcfc1a11dba18c3d763ab4ff47111"
+  "digest": "sha256:0fa9b183287309a7c0583aafca13d93bc788bfb837abe5b1ce790579a81c098b"
 }

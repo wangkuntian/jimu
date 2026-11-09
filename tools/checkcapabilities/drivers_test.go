@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"jimu/internal/profiles/registry"
-	"jimu/tools/internal/profileoverlay"
 
 	"github.com/stretchr/testify/require"
 )
@@ -93,23 +92,8 @@ func TestEntryPackageMustNotImportRegistryOrOtherProfiles(t *testing.T) {
 	require.ErrorContains(t, checkEntryImports([]string{}), "no imports")
 }
 
-// TestOverlayForProfileMatchesTheSharedPackage 门禁驱动闭包用的 overlay 必须与共享包
-// tools/internal/profileoverlay 的输出逐字节相同：门禁若再长出模板副本，它度量的就不再是
-// 出货二进制（而门禁仍会全绿）。
-func TestOverlayForProfileMatchesTheSharedPackage(t *testing.T) {
-	root := repoRoot(t)
-	shared, err := profileoverlay.ReplaceMap(root, "minimal")
-	require.NoError(t, err)
-	got, err := overlayForProfile(root, "minimal")
-	require.NoError(t, err)
-	require.Equal(t, shared, got)
-
-	_, err = overlayForProfile(root, "ghost")
-	require.ErrorContains(t, err, `unknown profile "ghost"`)
-}
-
-// TestProfileClosureLoadsTheUniqueEntry 形态闭包的根是唯一入口 ./cmd/server（`-overlay` 下），
-// 不再是 profiles/<name>：T5 删除 5 个入口后这条口径不变，闭包里必须出现 cmd/server 包。
+// TestProfileClosureLoadsTheUniqueEntry 形态闭包的根是唯一入口 ./cmd/server：
+// 闭包里必须出现 cmd/server 包与该形态包（未生效的选点会让闭包缺少该形态）。
 func TestProfileClosureLoadsTheUniqueEntry(t *testing.T) {
 	for _, name := range registry.Names() {
 		closure, err := profileClosure(repoRoot(t), name)
