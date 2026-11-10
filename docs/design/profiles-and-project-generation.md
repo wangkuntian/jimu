@@ -101,7 +101,7 @@ flowchart TD
 
 新增能力复用与 `jimu new` / `jimu check` 相同的组合 resolver 和 preflight：硬依赖必须已经在项目装配集中，不会静默追加依赖；冲突、端口、驱动、迁移、运行时配置和中间件问题都在创建暂存目录或写目标文件前失败。组合结果保留既有 `requested` / `auto_added` 与驱动选择，并以 schema v3 `composition` 写回。未使用 `--force` 且项目 manifest 摘要已变化时，追加操作拒绝继续。
 
-更新仅安装生成器管理的差异文件，并保留现有配置值；落盘复用 `jimu upgrade` 的 manifest 事务：先备份所有受影响文件，逐文件安装，manifest 最后写入，任一失败按原字节恢复。该增量追加流程不执行新建项目使用的 `go mod tidy` 和构建自检，支持级别保持 `experimental`。官方模板是认证基线，不接受 `capability add`；需要扩展时用 `--with` 生成 experimental 组合。
+更新仅安装生成器管理的差异文件，并保留现有配置值；落盘复用 `jimu upgrade` 的 manifest 事务：先备份所有受影响文件，逐文件安装，manifest 最后写入，任一失败按原字节恢复。该增量追加流程不执行新建项目使用的 `go mod tidy` 和构建自检，支持级别保持 `experimental`。预设项目是裁剪起点，可以继续 `capability add`；只有已退役的 `basic-api` / `auth-api` 项目会被拒绝。
 
 ### 显式升级规划
 

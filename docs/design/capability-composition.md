@@ -51,8 +51,8 @@ Jimu 的脚手架只从固定 catalog 选择能力，不接入第三方能力或
 
 | 级别 | 适用范围 | 承诺 |
 |---|---|---|
-| `certified` | `basic-api`、`auth-api` 两个官方模板预设 | 固定契约、硬预算、端到端验收和发布阻断门禁。 |
-| `validated` | 固定 catalog 中通过完整发布门禁的子集（保留级别） | 用于未来推广；v0.6.0 没有选择器产出该级别，pairwise 构建矩阵不自动提升支持级别。 |
+| `certified` | `minimal`、`auth` 两个官方预设 | 固定契约、硬预算、端到端验收和发布阻断门禁。 |
+| `validated` | `full` 预设 | 通过完整发布门禁，但不承诺与 `certified` 相同的组合级稳定性。 |
 | `experimental` | 所有 `--with` 生成项目与 `capability add` 项目 | 允许生成/追加并通过组合预检，但不承诺组合稳定性、预算、E2E 或升级兼容。 |
 
 非法组合仍可携带支持级别用于报告；合法组合也不一定是 `certified`。内部 profile 只服务 Jimu 自身构建，其 manifest 的 `selection.support` 保持 `internal`，`composition.support` 映射为 `experimental`。
@@ -117,7 +117,7 @@ manifest 校验保证：
 | `jimu upgrade` | manifest 的 template/profile/`composition.requested` | 模板按预设重建，profile / `--with` 重新解析；执行 preflight 和 plan | `--dry-run` / `--check` 只读；默认事务备份、安装、验证并在失败时回滚。 |
 | `jimu capability add` | 已有 `--with` 项目的声明集 + 新能力 | 严格依赖闭包（不自动补依赖）、resolver、preflight | 复用 upgrade 的 manifest 事务；`--driver` 可指定新增能力的驱动，省略取首个声明驱动；不执行 tidy/build；支持级别保持 `experimental`。 |
 
-`jimu capability add` 拒绝官方模板项目；官方模板需要扩展时用 `--with` 重新生成 experimental 组合。`jimu check` 是框架仓命令，不复制进生成项目。
+预设项目可以继续用 `jimu capability add` 追加能力；只有已退役的 `basic-api` / `auth-api` 项目会被拒绝。`jimu check` 是框架仓命令，不复制进生成项目。
 
 ### 升级语义
 
