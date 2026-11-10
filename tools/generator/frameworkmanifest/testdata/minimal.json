@@ -1247,6 +1247,7 @@
     "internal/app/container.go",
     "internal/app/container_http_only_test.go",
     "internal/app/seed.go",
+    "internal/app/seed_casbin.go",
     "internal/app/seed_test.go",
     "internal/assembly/assembly.go",
     "internal/assembly/assembly_test.go",
@@ -1623,5 +1624,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:8577bf24fbce9153c804bad8ed7e0a95efb0006b1e0ab41d888a29dff5794c75"
+  "digest": "sha256:d97772f505b475261756db3ccdb7a10f66fba9809e67d6b836009ac38434dead"
 }

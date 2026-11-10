@@ -545,6 +545,11 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 		if len(selected.copy) == 0 {
 			exclude = append(exclude, "bootstrap_otel.go")
 		}
+		// 只有内核对 Casbin 的引用来自种子同步：未选 access 时整份排除，
+		// 避免把 Casbin 与 gorm-adapter（约 3.6 MB）编进二进制。
+		if !contains(selected.copy, "access") {
+			exclude = append(exclude, "seed_casbin.go")
+		}
 		// internal/kernel 是聚合目录：整目录复制会把不可达的子包也带上。
 		// 只排除闭包里不存在的 kernel 子包（保留目录下非包文件）。
 		if dir == "internal/kernel" {

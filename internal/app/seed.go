@@ -5,11 +5,9 @@ import (
 	"fmt"
 
 	"jimu/internal/contract"
-	"jimu/internal/kernel/access"
 	"jimu/internal/kernel/seedmodel"
 	"jimu/internal/kernel/tenant"
 
-	"github.com/casbin/casbin/v3"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -190,43 +188,14 @@ func hasActivePlatformSuperAdmin(tx *gorm.DB) (bool, error) {
 	return count > 0, err
 }
 
+// seedCasbinPolicies 由 seed_casbin.go 的 init() 替换为真实实现。
+// 生成器在未启用 access 能力时排除那个文件，这里保留的空实现保证仍能编译，
+// 同时不让 Casbin（约 3.6 MB）进入 0 能力的二进制。
+var seedCasbinPolicies = func(*gorm.DB) error { return nil }
+
 // SeedCasbinPolicies 同步数据库中的角色-权限关系到 Casbin
 // 应在 RunSeed 之后调用
-func SeedCasbinPolicies(db *gorm.DB) error {
-	enforcer, err := access.NewEnforcer(db)
-	if err != nil {
-		return fmt.Errorf("create enforcer: %w", err)
-	}
-
-	// 清空现有策略
-	enforcer.ClearPolicy()
-
-	// 从数据库加载角色-权限关系
-	var policies []struct {
-		RoleID   uint64 `gorm:"column:role_id"`
-		Resource string `gorm:"column:resource"`
-		Action   string `gorm:"column:action"`
-	}
-
-	err = db.Table("roles").
-		Select("roles.id AS role_id, permissions.resource, permissions.action").
-		Joins("JOIN role_permissions rp ON rp.role_id = roles.id").
-		Joins("JOIN permissions ON permissions.id = rp.permission_id").
-		Scan(&policies).Error
-	if err != nil {
-		return fmt.Errorf("load role permissions: %w", err)
-	}
-
-	// 批量添加策略
-	for _, p := range policies {
-		_, err := enforcer.AddPolicy(access.RoleSubject(p.RoleID), p.Resource, p.Action)
-		if err != nil {
-			return fmt.Errorf("add policy (%d, %s, %s): %w", p.RoleID, p.Resource, p.Action, err)
-		}
-	}
-
-	return enforcer.SavePolicy()
-}
+func SeedCasbinPolicies(db *gorm.DB) error { return seedCasbinPolicies(db) }
 
 // RunSeedWithCasbin 执行完整种子（含 Casbin 策略）
 func RunSeedWithCasbin(db *gorm.DB, caps []contract.Descriptor) error {
@@ -269,6 +238,3 @@ func WarnIfNoAccounts(db *gorm.DB, log NoAccountLogger) bool {
 		"hint", "set ADMIN_PASSWORD or ADMIN_PASSWORD_FILE and restart the server, or enable auth.public_registration")
 	return true
 }
-
-// 确保接口实现
-var _ = func() *casbin.Enforcer { return nil }
