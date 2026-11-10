@@ -9,6 +9,7 @@ import (
 	oauthplatform "jimu/internal/capabilities/oauth/provider"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
+	authredis "jimu/internal/kernel/auth/redisstore"
 	"jimu/internal/kernel/httpclient"
 
 	redistore "jimu/internal/kernel/redis"
@@ -25,7 +26,7 @@ type Module struct {
 func New(db *gorm.DB, rdb redistore.Client, oauthCfg Config, authCfg contract.AuthConfig, httpClient *httpclient.Client, users contract.AccountRepository, tenants ...contract.TenantStateSource) *Module {
 	bindingRepo := oauthinfra.NewMySQLBindingRepository(db)
 	jwtUtil := auth.NewWithRotation(authCfg.JWTSecret, authCfg.JWTPreviousSecret, authCfg.Issuer, authCfg.AccessExpireMin, authCfg.RefreshExpireDay)
-	sessionStore := auth.NewRedisSessionStore(rdb)
+	sessionStore := authredis.NewSessionStore(rdb)
 	service := oauthapp.NewOAuthService(bindingRepo, jwtUtil, sessionStore, buildProviders(oauthCfg, httpClient), rdb, db, authCfg.AccessExpireMin, users, tenants...)
 	return &Module{service: service}
 }
