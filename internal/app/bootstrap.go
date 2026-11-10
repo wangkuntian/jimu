@@ -10,6 +10,7 @@ import (
 
 	"jimu/internal/capability"
 	"jimu/internal/contract"
+	"jimu/internal/kernel/health"
 	platformhttp "jimu/internal/kernel/http"
 	middlewareidem "jimu/internal/kernel/http/middleware/idempotency"
 	middlewarerate "jimu/internal/kernel/http/middleware/ratelimit"
@@ -19,7 +20,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	gormotel "gorm.io/plugin/opentelemetry/tracing"
 )
 
@@ -71,7 +74,7 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 		}
 	}
 
-	router := platformhttp.SetupRouter(container.Logger, cfg.HTTP, cfg.Server, cfg.Security, cfg.OTEL, container.Reporter)
+	router := platformhttp.SetupRouter(container.Logger, cfg.HTTP, cfg.Server, cfg.Security, cfg.OTEL, platformhttp.TracingMiddleware(func(serviceName string) gin.HandlerFunc { return otelgin.Middleware(serviceName) }), container.Reporter)
 	if err := platformhttp.ConfigureTrustedProxies(router, cfg.HTTP.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
@@ -114,24 +117,26 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 		container.Logger.Warnw("capability degraded", "name", d.Capability, "missing", strings.Join(d.Missing, ","))
 	}
 
-	checkers := make([]observability.Checker, 0, 2)
+	checkers := make([]health.Checker, 0, 2)
 	if container.DB != nil {
 		sqlDB, err := container.DB.DB()
 		if err != nil {
 			return nil, fmt.Errorf("get database pool: %w", err)
 		}
-		checkers = append(checkers, observability.NewSQLChecker(sqlDB))
+		checkers = append(checkers, health.NewSQLChecker(sqlDB))
 	}
 	if container.Redis != nil {
-		checkers = append(checkers, observability.NewRedisChecker(container.Redis))
+		checkers = append(checkers, health.CheckerFunc(func(ctx context.Context) error {
+			return container.Redis.Ping(ctx).Err()
+		}))
 	}
-	readiness := observability.NewReadiness(
+	readiness := health.NewReadiness(
 		time.Duration(cfg.Management.ProbeTimeoutSec)*time.Second,
 		checkers...,
 	)
 	management := platformhttp.NewManagementServer(
 		cfg.Management,
-		platformhttp.HealthRouter(readiness, cfg.Management.EnablePprof, func(mux *http.ServeMux) {
+		platformhttp.HealthRouter(readiness, promhttp.Handler, cfg.Management.EnablePprof, func(mux *http.ServeMux) {
 			mux.HandleFunc("/capabilities", capabilitiesHandler(container.Capabilities))
 		}),
 	)

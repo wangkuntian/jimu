@@ -21,7 +21,6 @@ import (
 
 	"jimu/internal/config"
 	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/observability"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -122,7 +121,8 @@ func TestSetupRouterRootPathDebugOnly(t *testing.T) {
 		config.HTTPConfig{Mode: config.HTTPModeDebug},
 		config.ServerConfig{},
 		config.SecurityConfig{},
-		observability.TracingConfig{ServiceVersion: "2.3.4"},
+		config.OTELConfig{ServiceVersion: "2.3.4"},
+		nil,
 	)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(stdhttp.MethodGet, "/", nil))
@@ -137,7 +137,8 @@ func TestSetupRouterRootPathDebugOnly(t *testing.T) {
 		config.HTTPConfig{Mode: config.HTTPModeRelease},
 		config.ServerConfig{},
 		config.SecurityConfig{},
-		observability.TracingConfig{ServiceVersion: "9.9.9"},
+		config.OTELConfig{ServiceVersion: "9.9.9"},
+		nil,
 	)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(stdhttp.MethodGet, "/", nil))
@@ -149,7 +150,8 @@ func TestSetupRouterWiresGlobalMiddleware(t *testing.T) {
 		config.HTTPConfig{Mode: config.HTTPModeTest, AllowedOrigins: []string{"*"}},
 		config.ServerConfig{TimeoutSec: 30, RateLimitRate: 100, RateLimitBurst: 200},
 		config.SecurityConfig{},
-		observability.TracingConfig{Enabled: false},
+		config.OTELConfig{Enabled: false},
+		nil,
 	)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(stdhttp.MethodGet, "/nope", nil))
@@ -165,7 +167,8 @@ func TestSetupRouterCSRFDisabledByDefault(t *testing.T) {
 		config.HTTPConfig{Mode: config.HTTPModeTest},
 		config.ServerConfig{},
 		config.SecurityConfig{},
-		observability.TracingConfig{},
+		config.OTELConfig{},
+		nil,
 	)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(stdhttp.MethodPost, "/nope", nil))
@@ -178,7 +181,8 @@ func TestSetupRouterEnablesCSRFWhenSecretSet(t *testing.T) {
 		config.HTTPConfig{Mode: config.HTTPModeTest},
 		config.ServerConfig{},
 		secCfg,
-		observability.TracingConfig{},
+		config.OTELConfig{},
+		nil,
 	)
 
 	// 无 cookie 的 POST 被 CSRF 拦截
@@ -199,7 +203,8 @@ func TestSetupRouterOTELEnabled(t *testing.T) {
 		config.HTTPConfig{Mode: config.HTTPModeTest},
 		config.ServerConfig{},
 		config.SecurityConfig{},
-		observability.TracingConfig{Enabled: true, ServiceName: "test-svc"},
+		config.OTELConfig{Enabled: true, ServiceName: "test-svc"},
+		nil,
 	)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(stdhttp.MethodGet, "/x", nil))
@@ -285,7 +290,7 @@ func TestPingRouteServedInAllModes(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			router := SetupRouter(testLogger(),
 				config.HTTPConfig{Mode: mode}, config.ServerConfig{}, config.SecurityConfig{},
-				observability.TracingConfig{})
+				config.OTELConfig{}, nil)
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, httptest.NewRequest(stdhttp.MethodGet, "/api/v1/ping", nil))
 			require.Equal(t, stdhttp.StatusOK, rec.Code)
