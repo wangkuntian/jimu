@@ -8,9 +8,9 @@ import (
 	authinfra "jimu/internal/capabilities/auth/infrastructure"
 	"jimu/internal/capabilities/auth/interfaces"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/access"
-	"jimu/internal/kernel/auth"
-	authredis "jimu/internal/kernel/auth/redisstore"
+	"jimu/internal/platform/authz"
+	"jimu/internal/platform/identity"
+	authredis "jimu/internal/platform/identity/redisstore"
 
 	redistore "jimu/internal/kernel/redis"
 
@@ -24,8 +24,8 @@ const PortName = "auth"
 type Module struct {
 	cfg                 Config
 	service             *application.AuthService
-	jwtUtil             *auth.JWT
-	limiter             *auth.Limiter
+	jwtUtil             *identity.JWT
+	limiter             *identity.Limiter
 	db                  *gorm.DB
 	captcha             contract.CaptchaVerifier
 	outbox              contract.EventWriter
@@ -49,17 +49,17 @@ func New(db *gorm.DB, rdb redistore.Client, cfg Config, failClosed bool, captcha
 			provisioningEnabled = true
 		}
 	}
-	jwtUtil := auth.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
+	jwtUtil := identity.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
 	sessionStore := authredis.NewSessionStore(rdb)
-	limiter := auth.NewLimiter(authredis.NewRateCounter(rdb), failClosed)
-	lockoutTracker := auth.NewLoginFailureTracker(authredis.NewFailureStore(rdb), auth.DefaultLockoutConfig())
+	limiter := identity.NewLimiter(authredis.NewRateCounter(rdb), failClosed)
+	lockoutTracker := identity.NewLoginFailureTracker(authredis.NewFailureStore(rdb), identity.DefaultLockoutConfig())
 	// 密码重置验证码存储：redis 一次性码，TTL 取配置
 	resetStore := application.NewResetStore(rdb, time.Duration(cfg.ResetCodeTTLMin)*time.Minute)
 	loginHistoryRepo := authinfra.NewMysqlLoginHistoryRepository(db)
 	passwordHistoryRepo := authinfra.NewMysqlPasswordHistoryRepository(db)
 	allDeps := append([]interface{}{}, deps...)
 	allDeps = append(allDeps, resetStore, application.WithPasswordHistory(cfg.PasswordHistoryCount),
-		loginHistoryRepo, passwordHistoryRepo, access.NewDBAuthorizationStore(db))
+		loginHistoryRepo, passwordHistoryRepo, authz.NewDBAuthorizationStore(db))
 	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin, allDeps...)
 	m := &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaVerifier,
 		provisioningEnabled: provisioningEnabled}
@@ -135,16 +135,16 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 		LoginRateWindowSec:    m.cfg.LoginRateWindowSec,
 		RegisterRateLimit:     m.cfg.RegisterRateLimit,
 		RegisterRateWindowSec: m.cfg.RegisterRateWindowSec,
-	}, m.limiter, m.captcha, auth.StateCheckers{Tenant: m.tenants, User: m.users})
+	}, m.limiter, m.captcha, identity.StateCheckers{Tenant: m.tenants, User: m.users})
 }
 
 func (m *Module) ProtectedHTTPMiddleware() ([]gin.HandlerFunc, error) {
-	enforcer, err := access.NewPathEnforcer()
+	enforcer, err := authz.NewPathEnforcer()
 	if err != nil {
 		return nil, err
 	}
-	return interfaces.ProtectedMiddleware(m.jwtUtil, access.NewDBAuthorizationStore(m.db), enforcer,
-		auth.StateCheckers{Tenant: m.tenants, User: m.users}), nil
+	return interfaces.ProtectedMiddleware(m.jwtUtil, authz.NewDBAuthorizationStore(m.db), enforcer,
+		identity.StateCheckers{Tenant: m.tenants, User: m.users}), nil
 }
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}

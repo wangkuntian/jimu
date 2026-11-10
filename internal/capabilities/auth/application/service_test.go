@@ -8,7 +8,7 @@ import (
 
 	authdomain "jimu/internal/capabilities/auth/domain"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -19,7 +19,7 @@ import (
 
 func TestLoginHidesCredentialFailures(t *testing.T) {
 	ctx := context.Background()
-	jwtUtil := auth.New("01234567890123456789012345678901", "jimu", 30, 7)
+	jwtUtil := identity.New("01234567890123456789012345678901", "jimu", 30, 7)
 	store := newFakeSessionStore()
 	repo := &fakeUserRepo{users: map[string]*contract.Account{
 		"alice": userWithPassword(t, 42, "alice", "correct", 1),
@@ -87,11 +87,11 @@ func TestLoginCreatesRefreshSession(t *testing.T) {
 	if len(store.created) != 1 {
 		t.Fatalf("created sessions = %d, want 1", len(store.created))
 	}
-	accessClaims, err := service.jwtUtil.Parse(pair.AccessToken, auth.TokenTypeAccess)
+	accessClaims, err := service.jwtUtil.Parse(pair.AccessToken, identity.TokenTypeAccess)
 	if err != nil {
 		t.Fatal(err)
 	}
-	refreshClaims, err := service.jwtUtil.Parse(pair.RefreshToken, auth.TokenTypeRefresh)
+	refreshClaims, err := service.jwtUtil.Parse(pair.RefreshToken, identity.TokenTypeRefresh)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestRegisterRejectsDuplicateUsername(t *testing.T) {
 	repo := &fakeUserRepo{users: map[string]*contract.Account{
 		"alice": userWithPassword(t, 42, "alice", "correct", 1),
 	}}
-	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30)
+	service := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30)
 
 	_, err := service.Register(context.Background(), " Alice ", "secret123", "", "")
 	if appCode(err) != apperrors.CodeUserExists {
@@ -125,7 +125,7 @@ func TestRegisterRejectsDuplicateEmail(t *testing.T) {
 	repo.findByEmailHash = func(_ context.Context, hash string) (*contract.Account, error) {
 		return repo.users["alice"], nil
 	}
-	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, testIndexer{})
+	service := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, testIndexer{})
 	_, err := service.Register(context.Background(), "bob", "secret123", "alice@example.com", "")
 	if appCode(err) != apperrors.CodeUserExists {
 		t.Fatalf("code = %d, want %d", appCode(err), apperrors.CodeUserExists)
@@ -201,7 +201,7 @@ func TestRefreshRejectsInactiveUserBeforeRotation(t *testing.T) {
 			repo := &fakeUserRepo{users: map[string]*contract.Account{
 				"alice": userWithPassword(t, 42, "alice", "correct", 1),
 			}}
-			service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), store, nil, 30)
+			service := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), store, nil, 30)
 			pair, err := service.Login(context.Background(), "alice", "correct")
 			require.NoError(t, err)
 
@@ -238,7 +238,7 @@ func TestLogoutRevokesSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims, err := service.jwtUtil.Parse(pair.AccessToken, auth.TokenTypeAccess)
+	claims, err := service.jwtUtil.Parse(pair.AccessToken, identity.TokenTypeAccess)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func TestLogoutRevokesSessions(t *testing.T) {
 
 func TestRegisterProvisionedRequiresProvisioner(t *testing.T) {
 	repo := &fakeUserRepo{users: map[string]*contract.Account{}}
-	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30)
+	service := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30)
 
 	_, err := service.RegisterProvisioned(context.Background(), RegisterTenantRequest{
 		Username: "alice", Password: "secret123", TenantName: "Acme",
@@ -271,7 +271,7 @@ func TestRegisterProvisionedRequiresProvisioner(t *testing.T) {
 func TestRegisterProvisionedDelegatesToProvisioner(t *testing.T) {
 	repo := &fakeUserRepo{users: map[string]*contract.Account{}}
 	fake := &fakeTenantProvisioner{result: &contract.ProvisionResult{}}
-	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, fake)
+	service := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, fake)
 
 	res, err := service.RegisterProvisioned(context.Background(), RegisterTenantRequest{
 		Username:   " Alice ",
@@ -297,7 +297,7 @@ func TestRegisterProvisionedDelegatesToProvisioner(t *testing.T) {
 func TestRegisterProvisionedRejectsMissingTenantName(t *testing.T) {
 	repo := &fakeUserRepo{users: map[string]*contract.Account{}}
 	fake := &fakeTenantProvisioner{result: &contract.ProvisionResult{}}
-	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, fake)
+	service := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, fake)
 
 	_, err := service.RegisterProvisioned(context.Background(), RegisterTenantRequest{
 		Username: "alice", Password: "secret123",
@@ -448,10 +448,10 @@ func (s *fakeSessionStore) Create(_ context.Context, userID uint64, sessionID, t
 func (s *fakeSessionStore) Rotate(_ context.Context, userID uint64, sessionID, oldTokenID, newTokenID string, _ time.Duration) error {
 	record, ok := s.sessions[sessionID]
 	if !ok || record.userID != userID {
-		return auth.ErrSessionNotFound
+		return identity.ErrSessionNotFound
 	}
 	if record.tokenID != oldTokenID {
-		return auth.ErrTokenReuse
+		return identity.ErrTokenReuse
 	}
 	record.tokenID = newTokenID
 	s.sessions[sessionID] = record
@@ -475,9 +475,9 @@ func (s *fakeSessionStore) RevokeAll(_ context.Context, userID uint64) error {
 	return nil
 }
 
-func newTestService(t *testing.T, users map[string]*contract.Account, store auth.SessionStore, deps ...interface{}) *AuthService {
+func newTestService(t *testing.T, users map[string]*contract.Account, store identity.SessionStore, deps ...interface{}) *AuthService {
 	t.Helper()
-	return NewAuthService(&fakeUserRepo{users: users}, auth.New("01234567890123456789012345678901", "jimu", 30, 7), store, nil, 30, deps...)
+	return NewAuthService(&fakeUserRepo{users: users}, identity.New("01234567890123456789012345678901", "jimu", 30, 7), store, nil, 30, deps...)
 }
 
 func userWithPassword(t *testing.T, id uint64, username, password string, status int8) *contract.Account {
@@ -521,7 +521,7 @@ func TestLoginRecordsHistory(t *testing.T) {
 	alice := userWithPassword(t, 42, "alice", "correct", 1)
 	alice.TenantID = 7
 	repo := &fakeUserRepo{users: map[string]*contract.Account{"alice": alice}}
-	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, history)
+	service := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, history)
 	ctx := contract.WithClientInfo(context.Background(), "203.0.113.7", "curl/8.0")
 
 	// 成功
@@ -566,7 +566,7 @@ func TestLoginHistoryRecordFailureDoesNotBreakLogin(t *testing.T) {
 	repo := &fakeUserRepo{users: map[string]*contract.Account{
 		"alice": userWithPassword(t, 42, "alice", "correct", 1),
 	}}
-	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, history)
+	service := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, history)
 
 	// 审计旁路失败不应影响登录
 	if _, err := service.LoginWithTOTP(context.Background(), "alice", "correct", ""); err != nil {
@@ -576,7 +576,7 @@ func TestLoginHistoryRecordFailureDoesNotBreakLogin(t *testing.T) {
 
 func TestListLoginHistory(t *testing.T) {
 	history := &fakeLoginHistoryRepo{records: []authdomain.LoginHistory{{ID: 1, UserID: 42, Status: authdomain.LoginStatusSuccess}}}
-	service := NewAuthService(&fakeUserRepo{}, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, history)
+	service := NewAuthService(&fakeUserRepo{}, identity.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, history)
 
 	records, total, err := service.ListLoginHistory(context.Background(), 42, pagination.Pagination{Page: 1, PageSize: 20})
 	if err != nil {
@@ -588,7 +588,7 @@ func TestListLoginHistory(t *testing.T) {
 }
 
 func TestListLoginHistoryWithoutRepository(t *testing.T) {
-	service := NewAuthService(&fakeUserRepo{}, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30)
+	service := NewAuthService(&fakeUserRepo{}, identity.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30)
 	if _, _, err := service.ListLoginHistory(context.Background(), 42, pagination.Pagination{Page: 1, PageSize: 20}); err == nil {
 		t.Fatal("expected error when login history repo is not configured")
 	}
@@ -619,7 +619,7 @@ func newPasswordHistoryService(t *testing.T, repo *fakeUserRepo, history authdom
 	t.Helper()
 	_, rclient := newResetRedis(t)
 	resetStore := NewResetStore(rclient, 15*time.Minute)
-	svc := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30,
+	svc := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30,
 		testIndexer{}, resetStore, &fakeDispatcher{}, history, WithPasswordHistory(count))
 	svc.resetGen = func() string { return "123456" }
 	return svc

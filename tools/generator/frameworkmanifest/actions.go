@@ -21,6 +21,7 @@ import (
 
 var kernelDirs = []string{
 	"internal/kernel",
+	"internal/platform",
 	"internal/app",
 	"internal/assembly",
 	"internal/capability",
@@ -560,7 +561,7 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 		seeds = append(seeds, "./internal/capabilities/"+name)
 	}
 	// 可选文件必须先于闭包计算剔除：internal/assembly 引用 internal/app，
-	// 若 seed_casbin.go 仍在，闭包会把 kernel/access 与 Casbin 算成可达，
+	// 若 seed_casbin.go 仍在，闭包会把 platform/authz 与 Casbin 算成可达，
 	// 之后再排除文件就来不及了。overlay 让这些文件对 packages.Load 不可见。
 	pruned := optionalKernelFiles(selected)
 	reachable, err := kernelPackages(root, seeds, pruned)
@@ -576,7 +577,8 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 		exclude = append(exclude, prunedInDir(pruned, dir)...)
 		// internal/kernel 是聚合目录：整目录复制会把不可达的子包也带上。
 		// 只排除闭包里不存在的 kernel 子包（保留目录下非包文件）。
-		if dir == "internal/kernel" {
+		// 聚合目录：整目录复制会把不可达的子包也带上，只保留闭包里有的。
+		if dir == "internal/kernel" || dir == "internal/platform" {
 			exclude = append(exclude, unreachableKernelSubdirs(root, dir, reachable)...)
 		}
 		actions = append(actions, manifest.CopyAction{

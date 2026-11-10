@@ -2,7 +2,7 @@ package redisstore
 
 import (
 	"context"
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 	"testing"
 	"time"
 )
@@ -18,14 +18,14 @@ func TestSessionRotateRevokeAndRevokeAll(t *testing.T) {
 	if err := store.Rotate(ctx, 42, "session-1", "token-a", "token-b", time.Minute); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Rotate(ctx, 42, "session-1", "token-a", "token-c", time.Minute); err != auth.ErrTokenReuse {
-		t.Fatalf("rotate reuse err = %v, want %v", err, auth.ErrTokenReuse)
+	if err := store.Rotate(ctx, 42, "session-1", "token-a", "token-c", time.Minute); err != identity.ErrTokenReuse {
+		t.Fatalf("rotate reuse err = %v, want %v", err, identity.ErrTokenReuse)
 	}
 	if err := store.Revoke(ctx, 42, "session-1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Rotate(ctx, 42, "session-1", "token-b", "token-d", time.Minute); err != auth.ErrSessionNotFound {
-		t.Fatalf("rotate after revoke err = %v, want %v", err, auth.ErrSessionNotFound)
+	if err := store.Rotate(ctx, 42, "session-1", "token-b", "token-d", time.Minute); err != identity.ErrSessionNotFound {
+		t.Fatalf("rotate after revoke err = %v, want %v", err, identity.ErrSessionNotFound)
 	}
 
 	if err := store.Create(ctx, 42, "session-2", "token-x", time.Minute); err != nil {
@@ -37,8 +37,8 @@ func TestSessionRotateRevokeAndRevokeAll(t *testing.T) {
 	if err := store.RevokeAll(ctx, 42); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Rotate(ctx, 42, "session-2", "token-x", "token-z", time.Minute); err != auth.ErrSessionNotFound {
-		t.Fatalf("user revoke-all err = %v, want %v", err, auth.ErrSessionNotFound)
+	if err := store.Rotate(ctx, 42, "session-2", "token-x", "token-z", time.Minute); err != identity.ErrSessionNotFound {
+		t.Fatalf("user revoke-all err = %v, want %v", err, identity.ErrSessionNotFound)
 	}
 	if err := store.Rotate(ctx, 7, "session-9", "token-y", "token-z", time.Minute); err != nil {
 		t.Fatalf("other user session broken: %v", err)

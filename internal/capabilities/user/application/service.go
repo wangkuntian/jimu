@@ -11,9 +11,9 @@ import (
 
 	"jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
-	kernelaccess "jimu/internal/kernel/access"
 	dbutil "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
+	authz "jimu/internal/platform/authz"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -38,7 +38,7 @@ type TenantQuota interface {
 	CheckUserQuota(ctx context.Context, tenantID uint64) error
 }
 
-// SessionRevoker 吊销用户全部登录会话（由 kernel/auth 的 SessionStore 实现）。
+// SessionRevoker 吊销用户全部登录会话（由 platform/identity 的 SessionStore 实现）。
 type SessionRevoker interface {
 	RevokeAll(ctx context.Context, userID uint64) error
 }
@@ -365,7 +365,7 @@ func (s *UserService) Delete(ctx context.Context, id uint64) error {
 		return errors.Wrap(errors.CodeInternalError, "failed to delete user", err)
 	}
 	if s.roles != nil {
-		kernelaccess.InvalidatePolicyCache()
+		authz.InvalidatePolicyCache()
 	}
 	if err := s.revokeSessions(ctx, id); err != nil {
 		return err

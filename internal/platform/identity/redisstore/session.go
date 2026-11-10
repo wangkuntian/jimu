@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"jimu/internal/kernel/auth"
 	redistore "jimu/internal/kernel/redis"
+	"jimu/internal/platform/identity"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -16,11 +16,11 @@ type RedisSessionStore struct {
 	client sessionRedis
 }
 
-func NewRedisSessionStore(client redistore.Client) auth.SessionStore {
+func NewRedisSessionStore(client redistore.Client) identity.SessionStore {
 	return newRedisSessionStore(redisClientAdapter{Client: client})
 }
 
-func newRedisSessionStore(client sessionRedis) auth.SessionStore {
+func newRedisSessionStore(client sessionRedis) identity.SessionStore {
 	return &RedisSessionStore{client: client}
 }
 
@@ -94,9 +94,9 @@ return 1
 	case 1:
 		return nil
 	case 0:
-		return auth.ErrSessionNotFound
+		return identity.ErrSessionNotFound
 	case -1:
-		return auth.ErrTokenReuse
+		return identity.ErrTokenReuse
 	default:
 		return fmt.Errorf("unexpected rotate result: %d", res)
 	}

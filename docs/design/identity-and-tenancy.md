@@ -30,7 +30,7 @@
 | `passkey` | WebAuthn 注册、无密码登录和凭证管理 |
 | `apikey` | API Key 签发、校验、撤销和 scope |
 
-能力包与同名内核包属于不同层次：[`internal/kernel/access`](../../internal/kernel/access) 提供 Casbin 强制器、策略加载和权限中间件；[`internal/capabilities/access`](../../internal/capabilities/access) 管理 RBAC 数据和角色分配。`internal/kernel/auth` 提供 JWT、Session、限流和登录失败锁定机制；`internal/capabilities/auth` 实现认证用例。
+能力包与同名内核包属于不同层次：[`internal/platform/authz`](../../internal/platform/authz) 提供 Casbin 强制器、策略加载和权限中间件；[`internal/capabilities/access`](../../internal/capabilities/access) 管理 RBAC 数据和角色分配。`internal/platform/identity` 提供 JWT、Session、限流和登录失败锁定机制；`internal/capabilities/auth` 实现认证用例。
 
 ### 能力间协作
 
@@ -76,7 +76,7 @@ flowchart LR
 `GET /api/v1/auth/me` 是自助端点，挂在 auth 的**认证-only 子组**（只有 `auth.AuthMiddleware`，不套授权与租户中间件），它的身份与权限来源有明确口径：
 
 - **身份取自已验签的凭证，不取数据库、也不取请求参数。** `user_id` 与 `tenant_id` 均读 `auth.AuthMiddleware` 写入 gin context 的值（`c.Set("user_id", …)`/`c.Set("tenant_id", …)`），其中 `tenant_id` 就是已验签 token 的 `tid` claim，与审计中间件读同一处。**不读账号行的 `tenant_id`** —— 数据库里的归属可能滞后于签发时的凭证归属；也**不能用 `tenant.FromContext`** —— 该子组不套 `tenant.Middleware()`，`FromContext` 在这里恒返回 `0`。
-- **权限点由 `kernel/access` 的角色与策略查询派生、原样透出。** `roles` 来自 `DBAuthorizationStore.RolesForUser`；`permissions` 由同一 store 的 `Policies` 取到「角色 × (resource, action)」全量后，在 auth 的 application 层**按用户角色过滤、去重、按 `(resource, action)` 排序**再下发，不翻译成额外权限码。判定语义与 `conf/rbac_model.conf` 的 matcher 完全一致，因此客户端复刻 `keyMatch(请求路径, resource)` 与 `action == "*"` 即可得到与后端相同的结论。
+- **权限点由 `platform/authz` 的角色与策略查询派生、原样透出。** `roles` 来自 `DBAuthorizationStore.RolesForUser`；`permissions` 由同一 store 的 `Policies` 取到「角色 × (resource, action)」全量后，在 auth 的 application 层**按用户角色过滤、去重、按 `(resource, action)` 排序**再下发，不翻译成额外权限码。判定语义与 `conf/rbac_model.conf` 的 matcher 完全一致，因此客户端复刻 `keyMatch(请求路径, resource)` 与 `action == "*"` 即可得到与后端相同的结论。
 - **零角色不是错误。** 无任何角色的用户（如公开注册的账号）返回 `200` 与两个空数组；`roles` 仅供展示，授权判定一律用 `permissions`。
 
 ### 租户数据规则
@@ -90,7 +90,7 @@ flowchart LR
 
 - **用户主体与账户用例归 `user`。** 自助面与管理面是同一用户主体的不同用例，共用仓储和配额校验，避免形成两个用户数据所有者。
 - **套餐与配额保留在 `tenant`。** 套餐、配额、用量及开通式注册都属于租户业务；内核只提供租户上下文机制。
-- **认证与授权机制、业务数据分开。** `kernel/auth`、`kernel/access` 提供请求机制；`capabilities/auth`、`capabilities/access` 持有业务流程和 RBAC 数据。
+- **认证与授权机制、业务数据分开。** `platform/identity`、`platform/authz` 提供请求机制；`capabilities/auth`、`capabilities/access` 持有业务流程和 RBAC 数据。
 - **租户身份不接受客户端自由指定。** JWT 和 API Key 分别使用已验证凭证中的租户归属，避免 header/query 成为租户边界的信任来源。
 - **内核只负责机制。** 租户 context helper 与默认 ID 常量放在 kernel，租户实体和套餐业务属于 `tenant`；不装配租户管理用例时，其他能力仍能传递和检查租户上下文。
 - **`0` 与默认租户分开。** `0` 表示调用上下文没有租户过滤的平台注册视角；默认租户有固定持久化 ID。把二者等同会让平台管理视角和普通默认租户用户共享同一安全语义。
@@ -117,6 +117,6 @@ JWT 认证路径从已验签 token 的 `tid` claim 取得租户身份；API Key 
 
 - 身份与端口：[internal/capabilities/user](../../internal/capabilities/user)、[internal/capabilities/auth](../../internal/capabilities/auth)、[internal/capabilities/mfa](../../internal/capabilities/mfa)、[internal/capabilities/passkey](../../internal/capabilities/passkey)、[internal/contract](../../internal/contract)
 - API Key 认证：[internal/capabilities/apikey](../../internal/capabilities/apikey)
-- 租户上下文：[internal/kernel/tenant](../../internal/kernel/tenant)、[JWT 与认证中间件](../../internal/kernel/auth)
+- 租户上下文：[internal/kernel/tenant](../../internal/kernel/tenant)、[JWT 与认证中间件](../../internal/platform/identity)
 - 验证：JWT/API Key 中间件测试、tenant context 测试、能力 import 与声明门禁 `make check-capabilities`
 - 相关设计：[能力架构](capability-architecture.md)、[配置与数据生命周期](configuration-and-data-lifecycle.md)

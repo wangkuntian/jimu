@@ -3,7 +3,7 @@ package application
 import (
 	"sort"
 
-	"jimu/internal/kernel/access"
+	"jimu/internal/platform/authz"
 )
 
 // PermissionPoint 一个有效权限点：与 Casbin 策略同形（resource 支持 keyMatch 通配）。
@@ -15,10 +15,10 @@ type PermissionPoint struct {
 
 // EffectivePermissions 由「用户角色」与「全量角色策略」推导有效权限点。
 //
-// 语义与 kernel/access 的判定保持一致：用户命中某角色即拥有该角色的全部策略点；
+// 语义与 platform/authz 的判定保持一致：用户命中某角色即拥有该角色的全部策略点；
 // 去重后按 (resource, action) 排序，保证同一输入永远得到同一顺序（便于断言与 diff）。
 // 无有效权限时返回**空切片而非 nil**：响应的 permissions 必须是 [] 而不是 null。
-func EffectivePermissions(roles []string, policies []access.Policy) []PermissionPoint {
+func EffectivePermissions(roles []string, policies []authz.Policy) []PermissionPoint {
 	owned := make(map[string]bool, len(roles))
 	for _, role := range roles {
 		owned[role] = true

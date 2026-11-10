@@ -12,7 +12,7 @@ import (
 	"jimu/internal/capabilities/passkey/application"
 	passkeydomain "jimu/internal/capabilities/passkey/domain"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/alicebob/miniredis/v2"
@@ -262,7 +262,7 @@ func TestWebAuthnLoginBeginWithoutCredential(t *testing.T) {
 
 func TestWebAuthnLoginBeginRateLimited(t *testing.T) {
 	handler, _, _ := newWebAuthnHandler(t)
-	handler.limiter = auth.NewLimiter(auth.NewMemoryRateCounter(), true)
+	handler.limiter = identity.NewLimiter(identity.NewMemoryRateCounter(), true)
 	handler.cfg = contract.AuthConfig{LoginRateLimit: 1, LoginRateWindowSec: 60}
 	gin.SetMode(gin.TestMode)
 

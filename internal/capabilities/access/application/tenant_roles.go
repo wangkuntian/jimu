@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"jimu/internal/capabilities/access/domain"
-	kernelaccess "jimu/internal/kernel/access"
 	dbutil "jimu/internal/kernel/db"
+	authz "jimu/internal/platform/authz"
 	apperrors "jimu/internal/shared/errors"
 
 	"gorm.io/gorm"
@@ -55,7 +55,7 @@ func (s *TenantRoleService) DeleteTenantRoles(ctx context.Context, tenantID uint
 		return nil
 	})
 	if err == nil && !externalTx {
-		kernelaccess.InvalidatePolicyCache()
+		authz.InvalidatePolicyCache()
 	}
 	return err
 }

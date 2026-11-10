@@ -6,9 +6,9 @@ import (
 
 	"jimu/internal/capabilities/tenant/domain"
 	"jimu/internal/contract"
-	kernelaccess "jimu/internal/kernel/access"
 	dbutil "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
+	authz "jimu/internal/platform/authz"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -90,7 +90,7 @@ func (s *TenantService) Create(ctx context.Context, req CreateTenantRequest) (*T
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to create tenant", err)
 	}
 	if s.roles != nil {
-		kernelaccess.InvalidatePolicyCache()
+		authz.InvalidatePolicyCache()
 	}
 	resp := ToTenantResponse(*t)
 	return &resp, nil
@@ -181,7 +181,7 @@ func (s *TenantService) Delete(ctx context.Context, id uint64) error {
 		return errors.Wrap(errors.CodeInternalError, "failed to delete tenant", err)
 	}
 	if s.roleLifecycle != nil {
-		kernelaccess.InvalidatePolicyCache()
+		authz.InvalidatePolicyCache()
 	}
 	return nil
 }

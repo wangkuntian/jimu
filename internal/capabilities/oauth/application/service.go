@@ -10,9 +10,9 @@ import (
 	oauthdomain "jimu/internal/capabilities/oauth/domain"
 	oauthplatform "jimu/internal/capabilities/oauth/provider"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
 	dbctx "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/identity"
 	"jimu/internal/shared/errors"
 
 	redistore "jimu/internal/kernel/redis"
@@ -32,8 +32,8 @@ func oauthStateKey(state string) string { return "jimu:oauth:state:" + state }
 // OAuthService OAuth 登录服务
 type OAuthService struct {
 	bindingRepo oauthdomain.BindingRepository
-	jwtUtil     *auth.JWT
-	sessions    auth.SessionStore
+	jwtUtil     *identity.JWT
+	sessions    identity.SessionStore
 	providers   map[string]oauthplatform.Provider
 	rdb         redistore.Client
 	db          *gorm.DB
@@ -43,7 +43,7 @@ type OAuthService struct {
 }
 
 // NewOAuthService 创建 OAuth 服务
-func NewOAuthService(bindingRepo oauthdomain.BindingRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, providers map[string]oauthplatform.Provider, rdb redistore.Client, db *gorm.DB, accessMin int, users contract.AccountRepository, tenants ...contract.TenantStateSource) *OAuthService {
+func NewOAuthService(bindingRepo oauthdomain.BindingRepository, jwtUtil *identity.JWT, sessions identity.SessionStore, providers map[string]oauthplatform.Provider, rdb redistore.Client, db *gorm.DB, accessMin int, users contract.AccountRepository, tenants ...contract.TenantStateSource) *OAuthService {
 	s := &OAuthService{
 		bindingRepo: bindingRepo,
 		jwtUtil:     jwtUtil,
@@ -201,7 +201,7 @@ func (s *OAuthService) createUserWithBinding(ctx context.Context, providerName s
 }
 
 // refreshTTL 计算 refresh token 剩余有效期（与 auth 模块一致）
-func refreshTTL(claims auth.Claims) time.Duration {
+func refreshTTL(claims identity.Claims) time.Duration {
 	if claims.ExpiresAt == nil {
 		return 0
 	}

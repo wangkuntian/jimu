@@ -7,16 +7,16 @@ import (
 	"strings"
 	"testing"
 
-	"jimu/internal/kernel/access"
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/authz"
+	"jimu/internal/platform/identity"
 
 	"github.com/gin-gonic/gin"
 )
 
 func TestProtectedMiddlewareRequiresAccessToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	jwtUtil := auth.New(strings.Repeat("s", 32), "jimu", 30, 7)
-	enforcer, err := access.NewPathEnforcer()
+	jwtUtil := identity.New(strings.Repeat("s", 32), "jimu", 30, 7)
+	enforcer, err := authz.NewPathEnforcer()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,18 +33,18 @@ func TestProtectedMiddlewareRequiresAccessToken(t *testing.T) {
 
 func TestProtectedMiddlewareRejectsInactiveTenant(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	jwtUtil := auth.New(strings.Repeat("s", 32), "jimu", 30, 7)
+	jwtUtil := identity.New(strings.Repeat("s", 32), "jimu", 30, 7)
 	token, err := jwtUtil.GenerateAccess(42, 7, "sid-7")
 	if err != nil {
 		t.Fatal(err)
 	}
-	enforcer, err := access.NewPathEnforcer()
+	enforcer, err := authz.NewPathEnforcer()
 	if err != nil {
 		t.Fatal(err)
 	}
 	r := gin.New()
 	r.Use(ProtectedMiddleware(jwtUtil, &fakeAuthzStore{}, enforcer,
-		auth.StateCheckers{Tenant: fakeTenantStateChecker(false)})...)
+		identity.StateCheckers{Tenant: fakeTenantStateChecker(false)})...)
 	r.GET("/api/v1/users", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
@@ -59,18 +59,18 @@ func TestProtectedMiddlewareRejectsInactiveTenant(t *testing.T) {
 
 func TestProtectedMiddlewareRejectsInactiveUser(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	jwtUtil := auth.New(strings.Repeat("s", 32), "jimu", 30, 7)
+	jwtUtil := identity.New(strings.Repeat("s", 32), "jimu", 30, 7)
 	token, err := jwtUtil.GenerateAccess(42, 7, "sid-7")
 	if err != nil {
 		t.Fatal(err)
 	}
-	enforcer, err := access.NewPathEnforcer()
+	enforcer, err := authz.NewPathEnforcer()
 	if err != nil {
 		t.Fatal(err)
 	}
 	r := gin.New()
 	r.Use(ProtectedMiddleware(jwtUtil, &fakeAuthzStore{}, enforcer,
-		auth.StateCheckers{User: fakeUserStateChecker(false)})...)
+		identity.StateCheckers{User: fakeUserStateChecker(false)})...)
 	r.GET("/api/v1/users", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
@@ -85,12 +85,12 @@ func TestProtectedMiddlewareRejectsInactiveUser(t *testing.T) {
 
 type fakeAuthzStore struct{}
 
-func (s *fakeAuthzStore) RolesForUser(context.Context, uint64) ([]access.RoleIdentity, error) {
-	return []access.RoleIdentity{{ID: 1, Name: "admin", Scope: "tenant"}}, nil
+func (s *fakeAuthzStore) RolesForUser(context.Context, uint64) ([]authz.RoleIdentity, error) {
+	return []authz.RoleIdentity{{ID: 1, Name: "admin", Scope: "tenant"}}, nil
 }
 
-func (s *fakeAuthzStore) Policies(context.Context) ([]access.Policy, error) {
-	return []access.Policy{{Role: access.RoleSubject(1), Resource: "/api/v1/users", Action: http.MethodGet}}, nil
+func (s *fakeAuthzStore) Policies(context.Context) ([]authz.Policy, error) {
+	return []authz.Policy{{Role: authz.RoleSubject(1), Resource: "/api/v1/users", Action: http.MethodGet}}, nil
 }
 
 type fakeTenantStateChecker bool

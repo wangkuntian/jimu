@@ -13,7 +13,7 @@ import (
 	"jimu/internal/capabilities/oauth/application"
 	oauthdomain "jimu/internal/capabilities/oauth/domain"
 	oauthplatform "jimu/internal/capabilities/oauth/provider"
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/alicebob/miniredis/v2"
@@ -68,7 +68,7 @@ func newTestHandler(t *testing.T, providers map[string]oauthplatform.Provider) *
 	client := redis.NewClient(&redis.Options{Addr: mrs.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 
-	jwtUtil := auth.New("01234567890123456789012345678901", "jimu", 30, 7)
+	jwtUtil := identity.New("01234567890123456789012345678901", "jimu", 30, 7)
 	svc := application.NewOAuthService(
 		&fakeBindingRepo{binding: &oauthdomain.OAuthBinding{UserID: 42, Provider: "github", Subject: "sub123"}},
 		jwtUtil,

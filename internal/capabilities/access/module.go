@@ -1,5 +1,5 @@
 // Package access 访问控制能力：角色 + 权限 + 用户角色分配（user_roles 表所有者）。
-// Casbin RBAC 机制在 kernel/access，本能力负责实体、用例与管理端点。
+// Casbin RBAC 机制在 platform/authz，本能力负责实体、用例与管理端点。
 package access
 
 import (

@@ -10,14 +10,14 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/apikey/domain"
-	auth "jimu/internal/kernel/auth"
+	identity "jimu/internal/platform/identity"
 
 	"gorm.io/gorm"
 )
 
-// APIKey 为 kernel/auth 机制视图的别名：本能力负责验证与存储，
-// context 注入/读取的中间件两侧共享同一机制类型（见 kernel/auth/apikey_context.go）。
-type APIKey = auth.APIKey
+// APIKey 为 platform/identity 机制视图的别名：本能力负责验证与存储，
+// context 注入/读取的中间件两侧共享同一机制类型（见 platform/identity/apikey_context.go）。
+type APIKey = identity.APIKey
 
 // apiKeyPrefix API Key 前缀
 const apiKeyPrefix = "jimu_"
@@ -100,7 +100,7 @@ func (s *dbAPIKeyStore) UpdateLastUsed(ctx context.Context, id uint64, t time.Ti
 		Update("last_used", t).Error
 }
 
-// rowToAPIKey 将 api_keys 表实体转换为 auth.APIKey 机制视图
+// rowToAPIKey 将 api_keys 表实体转换为 identity.APIKey 机制视图
 func rowToAPIKey(row *domain.APIKey) *APIKey {
 	key := &APIKey{
 		ID:        row.ID,

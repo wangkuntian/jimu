@@ -8,37 +8,37 @@ import (
 	"time"
 
 	"jimu/internal/contract"
-	"jimu/internal/kernel/access"
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/authz"
+	"jimu/internal/platform/identity"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/stretchr/testify/require"
 )
 
-// fakeAuthorizationStore 内存版 access.AuthorizationStore：分别可注入角色/策略错误。
+// fakeAuthorizationStore 内存版 authz.AuthorizationStore：分别可注入角色/策略错误。
 type fakeAuthorizationStore struct {
-	roles    []access.RoleIdentity
-	policies []access.Policy
+	roles    []authz.RoleIdentity
+	policies []authz.Policy
 	rolesErr error
 	polErr   error
 }
 
-func (s *fakeAuthorizationStore) RolesForUser(context.Context, uint64) ([]access.RoleIdentity, error) {
+func (s *fakeAuthorizationStore) RolesForUser(context.Context, uint64) ([]authz.RoleIdentity, error) {
 	if s.rolesErr != nil {
 		return nil, s.rolesErr
 	}
 	return s.roles, nil
 }
 
-func (s *fakeAuthorizationStore) Policies(context.Context) ([]access.Policy, error) {
+func (s *fakeAuthorizationStore) Policies(context.Context) ([]authz.Policy, error) {
 	if s.polErr != nil {
 		return nil, s.polErr
 	}
 	return s.policies, nil
 }
 
-func newMeService(repo contract.AccountRepository, authz access.AuthorizationStore) *AuthService {
-	return NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, authz)
+func newMeService(repo contract.AccountRepository, authz authz.AuthorizationStore) *AuthService {
+	return NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, authz)
 }
 
 func TestMeFailsWhenUserMissing(t *testing.T) {
@@ -107,8 +107,8 @@ func TestMeSerializesNilRolesAsEmptyArray(t *testing.T) {
 	}}
 	authz := &fakeAuthorizationStore{
 		roles: nil,
-		policies: []access.Policy{
-			{Role: access.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
+		policies: []authz.Policy{
+			{Role: authz.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
 		},
 	}
 	service := newMeService(repo, authz)
@@ -133,11 +133,11 @@ func TestMeReturnsClaimTenantAndEffectivePermissions(t *testing.T) {
 		"alice": {ID: 42, Username: "alice", Status: 1, TenantID: 99, CreatedAt: created},
 	}}
 	authz := &fakeAuthorizationStore{
-		roles: []access.RoleIdentity{{ID: 1, Name: "超级管理员", Scope: contract.RoleScopePlatform}},
-		policies: []access.Policy{
-			{Role: access.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
-			{Role: access.RoleSubject(1), Resource: "/api/v1/users", Action: "GET"},
-			{Role: access.RoleSubject(2), Resource: "/api/v1/audits", Action: "GET"},
+		roles: []authz.RoleIdentity{{ID: 1, Name: "超级管理员", Scope: contract.RoleScopePlatform}},
+		policies: []authz.Policy{
+			{Role: authz.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
+			{Role: authz.RoleSubject(1), Resource: "/api/v1/users", Action: "GET"},
+			{Role: authz.RoleSubject(2), Resource: "/api/v1/audits", Action: "GET"},
 		},
 	}
 	service := newMeService(repo, authz)

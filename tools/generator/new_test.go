@@ -57,7 +57,7 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 	for _, rel := range []string{
 		"internal/e2e",
 		"internal/kernel/cache",
-		"internal/kernel/access",
+		"internal/platform/authz",
 		"internal/capabilities/user",
 		"docker-compose.yml",
 	} {

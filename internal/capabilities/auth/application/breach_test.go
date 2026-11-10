@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/identity"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/stretchr/testify/assert"
@@ -54,7 +54,7 @@ func (f *fakeProvisioner) called() []contract.ProvisionRequest {
 func newBreachService(t *testing.T, checker *fakeBreachChecker) (*AuthService, *fakeUserRepo) {
 	t.Helper()
 	repo := &fakeUserRepo{users: map[string]*contract.Account{}}
-	svc := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, checker)
+	svc := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30, checker)
 	return svc, repo
 }
 
@@ -80,7 +80,7 @@ func TestRegisterProvisionedRejectsBreachedPassword(t *testing.T) {
 	checker := &fakeBreachChecker{breached: map[string]bool{"password123": true}}
 	provisioner := &fakeProvisioner{}
 	repo := &fakeUserRepo{users: map[string]*contract.Account{}}
-	svc := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7),
+	svc := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7),
 		newFakeSessionStore(), nil, 30, checker, provisioner)
 
 	_, err := svc.RegisterProvisioned(ctx, RegisterTenantRequest{
@@ -132,7 +132,7 @@ func TestResetPasswordRejectsBreachedPassword(t *testing.T) {
 		return alice, nil
 	}
 	checker := &fakeBreachChecker{breached: map[string]bool{"password123": true}}
-	svc := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7),
+	svc := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7),
 		newFakeSessionStore(), nil, 30, cipher, &fakeDispatcher{}, resetStore, checker)
 	svc.resetGen = func() string { return "123456" }
 

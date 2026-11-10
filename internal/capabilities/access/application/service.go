@@ -7,9 +7,9 @@ import (
 
 	"jimu/internal/capabilities/access/domain"
 	"jimu/internal/contract"
-	kernelaccess "jimu/internal/kernel/access"
 	dbutil "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
+	authz "jimu/internal/platform/authz"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -194,7 +194,7 @@ func (s *RoleService) Update(ctx context.Context, id uint64, req UpdateRoleReque
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to update role", err)
 	}
-	kernelaccess.InvalidatePolicyCache()
+	authz.InvalidatePolicyCache()
 	return nil
 }
 
@@ -221,7 +221,7 @@ func (s *RoleService) Delete(ctx context.Context, id uint64) error {
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to delete role", err)
 	}
-	kernelaccess.InvalidatePolicyCache()
+	authz.InvalidatePolicyCache()
 	return nil
 }
 
@@ -260,7 +260,7 @@ func (s *RoleService) AssignPermissions(ctx context.Context, roleID uint64, perm
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to assign permissions", err)
 	}
-	kernelaccess.InvalidatePolicyCache()
+	authz.InvalidatePolicyCache()
 	return nil
 }
 

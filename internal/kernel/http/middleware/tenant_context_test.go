@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/identity"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -21,14 +21,14 @@ type tenantProbeState struct {
 }
 
 // newJWTChainRouter 复刻 internal/capabilities/auth/interfaces/protected.go 的租户相关链路：
-// auth.AuthMiddleware（验签并把 claim 注入 gin context）→ tenant.Middleware（写入 request context）。
-func newJWTChainRouter(t *testing.T) (*gin.Engine, *auth.JWT, *tenantProbeState) {
+// identity.AuthMiddleware（验签并把 claim 注入 gin context）→ tenant.Middleware（写入 request context）。
+func newJWTChainRouter(t *testing.T) (*gin.Engine, *identity.JWT, *tenantProbeState) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	j := auth.New(strings.Repeat("k", 32), "jimu", 30, 7)
+	j := identity.New(strings.Repeat("k", 32), "jimu", 30, 7)
 	state := &tenantProbeState{}
 	r := gin.New()
-	r.Use(auth.AuthMiddleware(j))
+	r.Use(identity.AuthMiddleware(j))
 	r.Use(tenant.Middleware())
 	r.GET("/probe", func(c *gin.Context) {
 		state.reached = true

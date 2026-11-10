@@ -12,7 +12,7 @@ import (
 	"jimu/internal/app"
 	"jimu/internal/assembly"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
@@ -52,7 +52,7 @@ func TestAdminWebSocketPortPresence(t *testing.T) {
 }
 
 func TestAdminWebSocketPortHandler(t *testing.T) {
-	jwt := auth.New("test-secret", "test-issuer", 60, 7)
+	jwt := identity.New("test-secret", "test-issuer", 60, 7)
 	port := newAdminWebSocket(jwt)
 	h := port.Handler()()
 	w := httptest.NewRecorder()

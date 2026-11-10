@@ -8,7 +8,7 @@ import (
 	"jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/capabilities/user/interfaces"
 	"jimu/internal/contract"
-	authredis "jimu/internal/kernel/auth/redisstore"
+	authredis "jimu/internal/platform/identity/redisstore"
 
 	redistore "jimu/internal/kernel/redis"
 

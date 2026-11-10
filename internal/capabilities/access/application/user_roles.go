@@ -7,9 +7,9 @@ import (
 
 	"jimu/internal/capabilities/access/domain"
 	"jimu/internal/contract"
-	kernelaccess "jimu/internal/kernel/access"
 	dbutil "jimu/internal/kernel/db"
 	"jimu/internal/kernel/tenant"
+	authz "jimu/internal/platform/authz"
 	apperrors "jimu/internal/shared/errors"
 
 	"gorm.io/gorm"
@@ -147,7 +147,7 @@ func (s *UserRoleService) RemoveUserRoles(ctx context.Context, userID uint64) er
 		return nil
 	})
 	if err == nil && !externalTx {
-		kernelaccess.InvalidatePolicyCache()
+		authz.InvalidatePolicyCache()
 	}
 	return err
 }

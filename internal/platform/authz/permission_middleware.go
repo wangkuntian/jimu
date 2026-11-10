@@ -1,4 +1,4 @@
-package access
+package authz
 
 import (
 	"jimu/internal/shared/errors"

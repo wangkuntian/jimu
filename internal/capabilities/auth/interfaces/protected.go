@@ -1,18 +1,18 @@
 package interfaces
 
 import (
-	"jimu/internal/kernel/access"
-	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/authz"
+	"jimu/internal/platform/identity"
 
 	"github.com/casbin/casbin/v3"
 	"github.com/gin-gonic/gin"
 )
 
-func ProtectedMiddleware(jwtUtil *auth.JWT, store access.AuthorizationStore, enforcer *casbin.Enforcer, stateCheckers ...auth.StateCheckers) []gin.HandlerFunc {
+func ProtectedMiddleware(jwtUtil *identity.JWT, store authz.AuthorizationStore, enforcer *casbin.Enforcer, stateCheckers ...identity.StateCheckers) []gin.HandlerFunc {
 	return []gin.HandlerFunc{
-		auth.AuthMiddleware(jwtUtil, stateCheckers...),
-		access.AuthorizationMiddleware(store, enforcer),
+		identity.AuthMiddleware(jwtUtil, stateCheckers...),
+		authz.AuthorizationMiddleware(store, enforcer),
 		tenant.Middleware(),
 	}
 }

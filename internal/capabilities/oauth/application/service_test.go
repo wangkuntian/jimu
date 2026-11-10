@@ -11,8 +11,8 @@ import (
 	oauthdomain "jimu/internal/capabilities/oauth/domain"
 	oauthplatform "jimu/internal/capabilities/oauth/provider"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
 	dbctx "jimu/internal/kernel/db"
+	"jimu/internal/platform/identity"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/alicebob/miniredis/v2"
@@ -161,13 +161,13 @@ func newTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func newService(t *testing.T, repo oauthdomain.BindingRepository, providers map[string]oauthplatform.Provider, rdb *redis.Client, db *gorm.DB, sessions auth.SessionStore) *OAuthService {
+func newService(t *testing.T, repo oauthdomain.BindingRepository, providers map[string]oauthplatform.Provider, rdb *redis.Client, db *gorm.DB, sessions identity.SessionStore) *OAuthService {
 	t.Helper()
 	var users contract.AccountRepository
 	if db != nil {
 		users = testAccounts{db: db}
 	}
-	return NewOAuthService(repo, auth.New(testJWTSecret, "jimu", 30, 7), sessions, providers, rdb, db, 30, users)
+	return NewOAuthService(repo, identity.New(testJWTSecret, "jimu", 30, 7), sessions, providers, rdb, db, 30, users)
 }
 
 type fakeTenantStateSource struct {
@@ -348,7 +348,7 @@ func TestLoginExistingBinding(t *testing.T) {
 	require.Len(t, sessions.created, 1)
 	assert.Equal(t, uint64(42), sessions.created[0].userID)
 
-	refreshClaims, err := svc.jwtUtil.Parse(pair.RefreshToken, auth.TokenTypeRefresh)
+	refreshClaims, err := svc.jwtUtil.Parse(pair.RefreshToken, identity.TokenTypeRefresh)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(42), refreshClaims.UserID)
 	assert.Equal(t, sessions.created[0].sessionID, refreshClaims.SessionID)
@@ -368,7 +368,7 @@ func TestLoginRejectsDisabledTenant(t *testing.T) {
 		newRepoResult(&oauthdomain.OAuthBinding{UserID: 42, Provider: "github", Subject: "sub123"}, nil),
 	}}
 	tenants := &fakeTenantStateSource{active: map[uint64]bool{7: false}}
-	svc := NewOAuthService(repo, auth.New(testJWTSecret, "jimu", 30, 7), sessions, githubProviders(), client, db, 30, testAccounts{db: db}, tenants)
+	svc := NewOAuthService(repo, identity.New(testJWTSecret, "jimu", 30, 7), sessions, githubProviders(), client, db, 30, testAccounts{db: db}, tenants)
 
 	_, err := svc.Login(context.Background(), "github", "code", "state-1")
 	require.Error(t, err)
@@ -421,7 +421,7 @@ func TestLoginCreateConflictFallsBackToExistingBinding(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, pair.AccessToken)
 
-	refreshClaims, err := svc.jwtUtil.Parse(pair.RefreshToken, auth.TokenTypeRefresh)
+	refreshClaims, err := svc.jwtUtil.Parse(pair.RefreshToken, identity.TokenTypeRefresh)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(42), refreshClaims.UserID, "创建冲突后应回退重查绑定")
 }
@@ -516,12 +516,12 @@ func TestCreateUserWithBindingRollsBackUserWhenBindingFails(t *testing.T) {
 }
 
 func TestRefreshTTLNilExpiry(t *testing.T) {
-	assert.Equal(t, time.Duration(0), refreshTTL(auth.Claims{}))
+	assert.Equal(t, time.Duration(0), refreshTTL(identity.Claims{}))
 }
 
 func TestRefreshTTLPositive(t *testing.T) {
 	exp := time.Now().Add(time.Hour)
-	d := refreshTTL(auth.Claims{RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(exp)}})
+	d := refreshTTL(identity.Claims{RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(exp)}})
 	assert.Greater(t, d, time.Duration(0))
 	assert.Less(t, d, time.Hour)
 }

@@ -3,7 +3,7 @@ package app
 import (
 	"fmt"
 
-	"jimu/internal/kernel/access"
+	"jimu/internal/platform/authz"
 
 	"gorm.io/gorm"
 )
@@ -14,7 +14,7 @@ import (
 func init() { seedCasbinPolicies = syncCasbinPolicies }
 
 func syncCasbinPolicies(db *gorm.DB) error {
-	enforcer, err := access.NewEnforcer(db)
+	enforcer, err := authz.NewEnforcer(db)
 	if err != nil {
 		return fmt.Errorf("create enforcer: %w", err)
 	}
@@ -40,7 +40,7 @@ func syncCasbinPolicies(db *gorm.DB) error {
 
 	// 批量添加策略
 	for _, p := range policies {
-		_, err := enforcer.AddPolicy(access.RoleSubject(p.RoleID), p.Resource, p.Action)
+		_, err := enforcer.AddPolicy(authz.RoleSubject(p.RoleID), p.Resource, p.Action)
 		if err != nil {
 			return fmt.Errorf("add policy (%d, %s, %s): %w", p.RoleID, p.Resource, p.Action, err)
 		}

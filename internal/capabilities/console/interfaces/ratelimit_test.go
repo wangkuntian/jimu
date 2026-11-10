@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"jimu/internal/kernel/auth"
-	authredis "jimu/internal/kernel/auth/redisstore"
+	"jimu/internal/platform/identity"
+	authredis "jimu/internal/platform/identity/redisstore"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
@@ -73,7 +73,7 @@ func TestAdminRateLimitAuthPeek_ExistingCount(t *testing.T) {
 	ctx := context.Background()
 
 	// 用真实 Limiter 触发 3 次登录限流（limit=5, window=1m）
-	limiter := auth.NewLimiter(authredis.NewRateCounter(client), true)
+	limiter := identity.NewLimiter(authredis.NewRateCounter(client), true)
 	for i := 0; i < 3; i++ {
 		ok, err := limiter.Allow(ctx, "login", "ip:10.0.0.1", 5, time.Minute)
 		require.NoError(t, err)
@@ -96,5 +96,5 @@ func TestAdminRateLimitAuthPeek_ExistingCount(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	assert.Equal(t, int64(3), body.Data.Count, "peek 应读到已消费的 3 次计数")
 	assert.Greater(t, body.Data.TTLms, int64(0), "存在 key 应有剩余 TTL")
-	assert.Equal(t, auth.LimitKey("login", "ip:10.0.0.1"), body.Data.RedisKey)
+	assert.Equal(t, identity.LimitKey("login", "ip:10.0.0.1"), body.Data.RedisKey)
 }

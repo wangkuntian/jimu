@@ -29,11 +29,11 @@ import (
 	userinfra "jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/access"
 	"jimu/internal/kernel/db"
 	"jimu/internal/kernel/event"
 	"jimu/internal/kernel/httpclient"
 	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/authz"
 	"jimu/internal/profiles/active"
 
 	"github.com/alicebob/miniredis/v2"
@@ -278,12 +278,12 @@ func TestAuthRefreshLogout(t *testing.T) {
 func TestRoleAssignmentAndRBAC(t *testing.T) {
 	requireCapabilities(t, "auth", "user", "access")
 	// 使用较长缓存 TTL，验证授权写操作会主动让策略缓存失效。
-	oldTTL := access.PolicyCacheTTL
-	access.PolicyCacheTTL = time.Hour
-	access.InvalidatePolicyCache()
+	oldTTL := authz.PolicyCacheTTL
+	authz.PolicyCacheTTL = time.Hour
+	authz.InvalidatePolicyCache()
 	t.Cleanup(func() {
-		access.PolicyCacheTTL = oldTTL
-		access.InvalidatePolicyCache()
+		authz.PolicyCacheTTL = oldTTL
+		authz.InvalidatePolicyCache()
 	})
 
 	app := newTestAppWithDB(t)
