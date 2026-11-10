@@ -70,23 +70,6 @@ func (r *fakeRedis) SMembers(ctx context.Context, key string) *redis.StringSlice
 	return redis.NewStringSliceResult(members, r.err)
 }
 
-func (r *fakeRedis) keys() []string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	keys := make([]string, 0, len(r.limitCount)+len(r.hashes)+len(r.sets))
-	for key := range r.limitCount {
-		keys = append(keys, key)
-	}
-	for key := range r.hashes {
-		keys = append(keys, key)
-	}
-	for key := range r.sets {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
 func (r *fakeRedis) eval(keys []string, args ...interface{}) *redis.Cmd {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -105,7 +105,6 @@ type Config struct {
 	Environment string `mapstructure:"-"`
 }
 
-// HTTPClientConfig 出站 HTTP client 配置
 // OTELConfig OpenTelemetry 可观测性配置（追踪/指标/日志统一走 OTLP gRPC）
 type OTELConfig struct {
 	Enabled        bool    `mapstructure:"enabled"`
@@ -157,6 +156,7 @@ type ErrorReportConfig struct {
 	Enabled bool `mapstructure:"enabled"`
 }
 
+// HTTPClientConfig 出站 HTTP client 配置
 type HTTPClientConfig struct {
 	TimeoutSec      int `mapstructure:"timeout_sec"`       // 单次请求超时（秒），0 用默认 10
 	MaxRetries      int `mapstructure:"max_retries"`       // 失败重试次数，0 用默认 2

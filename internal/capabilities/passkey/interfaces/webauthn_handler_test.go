@@ -3,7 +3,6 @@ package interfaces
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -360,14 +359,3 @@ func TestWebAuthnHandlersWithoutConfiguration(t *testing.T) {
 }
 
 // ---- 限流 Redis 替身（redis.Scripter） ----
-
-func routerLimiterInt(v interface{}) (int, error) {
-	switch n := v.(type) {
-	case int:
-		return n, nil
-	case int64:
-		return int(n), nil
-	default:
-		return 0, fmt.Errorf("unexpected arg type %T", v)
-	}
-}

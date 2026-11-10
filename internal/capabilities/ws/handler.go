@@ -495,7 +495,6 @@ func mustEncode(msg *WSMessage) []byte {
 	return data
 }
 
-// WSHandler 创建 WebSocket HTTP 处理函数
 // TokenParser 是 WebSocket 握手所需的令牌校验能力（只有 Parse 一个方法）。
 // 用接口而不是 *auth.JWT：contract.AdminWebSocket 的签名因此不必携带 auth 类型。
 type TokenParser interface {
@@ -514,6 +513,7 @@ func (p JWTTokenParser) Parse(tokenString, expectedType string) (uint64, uint64,
 	return claims.UserID, claims.TenantID, nil
 }
 
+// WSHandler 创建 WebSocket HTTP 处理函数
 func WSHandler(hub *ClientHub, jwtUtil TokenParser, presence *PresenceManager, channels *ChannelManager, stateCheckers ...auth.StateCheckers) http.HandlerFunc {
 	var states auth.StateCheckers
 	if len(stateCheckers) > 0 {
