@@ -27,7 +27,7 @@ func TestMinimalPresetDropsUnreachableKernelPackages(t *testing.T) {
 		"a 0-capability project must not ship capability packages")
 	for _, kept := range []string{
 		"internal/kernel/http",
-		"internal/kernel/observability",
+		"internal/kernel/metrics",
 		"internal/assembly",
 		"cmd/server",
 		"cmd/cli",

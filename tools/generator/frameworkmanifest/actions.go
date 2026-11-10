@@ -384,6 +384,14 @@ func rewriteActions(module string, selected selection) []manifest.RewriteAction 
 				Kind: "file-patch", From: "//go:build jimu_noredis", To: "// 未启用 Redis 的构建：由生成器去掉 build tag", Files: []string{file},
 			})
 		}
+		for _, file := range []string{
+			"internal/app/bootstrap_otel_empty.go",
+			"internal/app/container_otel_empty.go",
+		} {
+			actions = append(actions, manifest.RewriteAction{
+				Kind: "file-patch", From: "//go:build jimu_no_otel", To: "// 未启用 OTel 的构建：由生成器去掉 build tag", Files: []string{file},
+			})
+		}
 	}
 	return actions
 }
@@ -608,7 +616,9 @@ func prunedInDir(pruned map[string][]string, dir string) []string {
 func optionalKernelFiles(selected selection) map[string][]string {
 	pruned := map[string][]string{}
 	if len(selected.copy) == 0 {
-		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel.go")
+		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel.go", "container_otel.go")
+	} else {
+		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel_empty.go", "container_otel_empty.go")
 	}
 	if !contains(selected.copy, "access") {
 		pruned["internal/app"] = append(pruned["internal/app"], "seed_casbin.go")

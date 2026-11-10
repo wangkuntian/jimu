@@ -13,7 +13,6 @@ import (
 	"jimu/internal/kernel/health"
 	platformhttp "jimu/internal/kernel/http"
 	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/observability"
 	"jimu/internal/kernel/scheduler"
 
 	"github.com/gin-gonic/gin"
@@ -122,10 +121,9 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 		}
 
 		jobFns := map[string]scheduler.Job{}
-		if container.DBCollector != nil {
+		if container.HasMetricsCollector() {
 			jobFns["metrics_collect"] = scheduler.Job{ID: "metrics_collect", Name: "Collect DB Metrics", Spec: "@every 15s", Run: func() {
-				container.DBCollector.Collect()
-				observability.CollectRuntime()
+				container.CollectMetrics()
 			}}
 		}
 		// 能力贡献的定时任务（outbox_process、cleanup、retention 等）

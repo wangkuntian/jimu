@@ -1,3 +1,5 @@
+//go:build !jimu_no_otel
+
 package app
 
 import (
@@ -21,7 +23,7 @@ func setupObservability(container *Container) error {
 	if err != nil {
 		return err
 	}
-	container.TracerProvider = tp
+	container.otel.tracerProvider = tp
 
 	// 指标推送（OTLP/gRPC → OpenObserve）：基于 Prometheus 默认 registry。
 	if cfg.OTEL.Enabled && cfg.OTEL.MetricsEnabled {
@@ -34,7 +36,7 @@ func setupObservability(container *Container) error {
 				container.Logger.Errorw("openobserve metrics pusher init failed", "error", err.Error())
 			} else {
 				pusher.Start()
-				container.MetricsPusher = pusher
+				container.otel.metricsPusher = pusher
 			}
 		}
 	}

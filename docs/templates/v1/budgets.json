@@ -15,10 +15,10 @@
   "templates": {
     "minimal": {
       "limits": {
-        "generated_files": 300,
-        "direct_dependencies": 40,
-        "go_closure_files": 90,
-        "go_closure_lines": 10500,
+        "generated_files": 280,
+        "direct_dependencies": 32,
+        "go_closure_files": 86,
+        "go_closure_lines": 9700,
         "external_services": 0,
         "business_routes": 0,
         "health_routes": 2,
@@ -35,8 +35,8 @@
       "limits": {
         "generated_files": 420,
         "direct_dependencies": 44,
-        "go_closure_files": 158,
-        "go_closure_lines": 17450,
+        "go_closure_files": 160,
+        "go_closure_lines": 17500,
         "external_services": 2,
         "business_routes": 31,
         "health_routes": 2,
@@ -53,8 +53,8 @@
       "limits": {
         "generated_files": 800,
         "direct_dependencies": 64,
-        "go_closure_files": 356,
-        "go_closure_lines": 39300,
+        "go_closure_files": 358,
+        "go_closure_lines": 39350,
         "external_services": 4,
         "business_routes": 94,
         "health_routes": 2,

@@ -337,7 +337,9 @@
       "optional": false,
       "include": [],
       "exclude": [
+        "bootstrap_otel_empty.go",
         "bootstrap_redis_empty.go",
+        "container_otel_empty.go",
         "container_redis_empty.go"
       ]
     },
@@ -1143,6 +1145,7 @@
     "internal/app/capconfig_test.go",
     "internal/app/container.go",
     "internal/app/container_http_only_test.go",
+    "internal/app/container_otel.go",
     "internal/app/container_redis.go",
     "internal/app/seed.go",
     "internal/app/seed_casbin.go",
@@ -1418,13 +1421,14 @@
     "internal/kernel/mask/keymask.go",
     "internal/kernel/mask/mask.go",
     "internal/kernel/mask/mask_test.go",
+    "internal/kernel/metrics/metrics.go",
+    "internal/kernel/metrics/metrics_test.go",
     "internal/kernel/observability/logs.go",
     "internal/kernel/observability/logs_test.go",
-    "internal/kernel/observability/metrics.go",
     "internal/kernel/observability/metrics_push.go",
     "internal/kernel/observability/metrics_push_test.go",
-    "internal/kernel/observability/metrics_test.go",
     "internal/kernel/observability/tracing.go",
+    "internal/kernel/observability/tracing_exporters.go",
     "internal/kernel/observability/tracing_headers_test.go",
     "internal/kernel/observability/tracing_test.go",
     "internal/kernel/redis/breaker.go",
@@ -1498,5 +1502,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:e94c3f83e2daf88f4587c47c3740d8255b3fbeb1cab617fde1689eef87438fc3"
+  "digest": "sha256:634971f64fde55b0fd1f53a32277700d7a40096a83f46498a92d67e08593c0ff"
 }
