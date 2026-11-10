@@ -32,6 +32,9 @@ Jimu 不是运行时框架，也不要求业务代码依赖 Jimu SDK。`jimu new
 预设只是裁剪起点：生成后可用 `jimu capability add` 继续组合能力。
 `--with` 是 experimental 专家模式，不承诺组合级生产兼容。
 
+生成时按需编译底层组件：`--db=mysql|postgres`（默认 `mysql`）只带所选数据库驱动；
+`minimal` 产物不含 Redis、Casbin 与 OTel 导出器，server 二进制约 27 MB。
+
 > `basic-api` 与 `auth-api` 已在 v0.10.0 退役。由它们生成的项目执行 `jimu upgrade` 会硬失败，
 > 需要按 `minimal`/`auth` 重新生成。
 
