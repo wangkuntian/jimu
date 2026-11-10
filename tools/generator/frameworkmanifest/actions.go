@@ -530,7 +530,11 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 	for _, name := range selected.copy {
 		seeds = append(seeds, "./internal/capabilities/"+name)
 	}
-	reachable, err := kernelPackages(root, seeds)
+	// 可选文件必须先于闭包计算剔除：internal/assembly 引用 internal/app，
+	// 若 seed_casbin.go 仍在，闭包会把 kernel/access 与 Casbin 算成可达，
+	// 之后再排除文件就来不及了。overlay 让这些文件对 packages.Load 不可见。
+	pruned := optionalKernelFiles(selected)
+	reachable, err := kernelPackages(root, seeds, pruned)
 	if err != nil {
 		return nil, err
 	}
@@ -540,16 +544,7 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 			continue
 		}
 		exclude := kernelExcludesFor(dir)
-		// 0 能力项目没有任何组件产出指标/日志/trace，排除 OTel 初始化文件，
-		// 避免把 OTel 与 Prometheus 推送链编进二进制。
-		if len(selected.copy) == 0 {
-			exclude = append(exclude, "bootstrap_otel.go")
-		}
-		// 只有内核对 Casbin 的引用来自种子同步：未选 access 时整份排除，
-		// 避免把 Casbin 与 gorm-adapter（约 3.6 MB）编进二进制。
-		if !contains(selected.copy, "access") {
-			exclude = append(exclude, "seed_casbin.go")
-		}
+		exclude = append(exclude, pruned[dir]...)
 		// internal/kernel 是聚合目录：整目录复制会把不可达的子包也带上。
 		// 只排除闭包里不存在的 kernel 子包（保留目录下非包文件）。
 		if dir == "internal/kernel" {
@@ -565,13 +560,38 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 	return actions, nil
 }
 
+// optionalKernelFiles 返回未启用对应能力时应从复制结果中剔除的、按目录索引的文件名。
+//
+// 这些文件是「一个文件决定一整条重依赖」的裁剪点；它们也必须在闭包计算前通过
+// overlay 隐藏，否则依赖链会经 internal/assembly → internal/app 提前成立。
+func optionalKernelFiles(selected selection) map[string][]string {
+	pruned := map[string][]string{}
+	if len(selected.copy) == 0 {
+		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel.go")
+	}
+	if !contains(selected.copy, "access") {
+		pruned["internal/app"] = append(pruned["internal/app"], "seed_casbin.go")
+	}
+	return pruned
+}
+
 // kernelPackages 返回 seeds 的 import 闭包里属于本仓的相对目录集合。
 // 前缀固定为 jimu/：闭包在框架仓内计算，与目标项目模块名无关。
-func kernelPackages(root string, seeds []string) (map[string]bool, error) {
+// pruned 中的文件对 go/packages 不可见（overlay 为空内容），用于在闭包层面
+// 模拟「该文件不参与编译」，而不是只从复制结果里删掉。
+func kernelPackages(root string, seeds []string, pruned map[string][]string) (map[string]bool, error) {
+	overlay := map[string][]byte{}
+	for dir, files := range pruned {
+		for _, name := range files {
+			// 覆写为空包而不是空内容：空内容会被 Go 判为语法错误。
+			overlay[filepath.Join(root, filepath.FromSlash(dir), name)] = []byte("package app\n")
+		}
+	}
 	pkgs, err := packages.Load(&packages.Config{
-		Mode:  packages.NeedName | packages.NeedImports | packages.NeedDeps,
-		Dir:   root,
-		Tests: false,
+		Mode:    packages.NeedName | packages.NeedImports | packages.NeedDeps,
+		Dir:     root,
+		Tests:   false,
+		Overlay: overlay,
 	}, seeds...)
 	if err != nil {
 		return nil, fmt.Errorf("load kernel packages: %w", err)
