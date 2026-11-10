@@ -30,6 +30,7 @@ Jimu 不是运行时框架，也不要求业务代码依赖 Jimu SDK。`jimu new
 
 默认预设是 `minimal`。`full` 首发支持级别是 `validated`，不是 `certified`。
 预设只是裁剪起点：生成后可用 `jimu capability add` 继续组合能力。
+追加带驱动的能力时用 `--driver=<name>` 指定实现；省略则取该能力声明的首个驱动。
 `--with` 是 experimental 专家模式，不承诺组合级生产兼容。
 
 生成时按需编译底层组件：`--db=mysql|postgres`（默认 `mysql`）只带所选数据库驱动；

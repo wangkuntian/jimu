@@ -169,7 +169,7 @@ func resolutionFor(doc manifest.Document, selected selection) Resolution {
 }
 
 // ExportForAdd 在原有声明集上增加一个能力。硬依赖必须已经存在，避免 add 静默改变用户选择。
-func ExportForAdd(root string, previous manifest.Document, name string, force bool, framework *manifest.Framework) (manifest.Document, error) {
+func ExportForAdd(root string, previous manifest.Document, name, driver string, force bool, framework *manifest.Framework) (manifest.Document, error) {
 	if err := manifest.Validate(previous); err != nil {
 		return manifest.Document{}, fmt.Errorf("validate previous manifest: %w", err)
 	}
@@ -207,9 +207,32 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 			}
 		}
 	}
+	drivers := cloneDrivers(previous.Composition.Drivers)
+	if driver != "" {
+		var descriptor contract.Descriptor
+		found := false
+		for _, candidate := range all {
+			if candidate.Name == name {
+				descriptor = candidate
+				found = true
+				break
+			}
+		}
+		if !found {
+			return manifest.Document{}, fmt.Errorf("unknown capability %q", name)
+		}
+		if len(descriptor.Drivers) == 0 {
+			return manifest.Document{}, fmt.Errorf("capability %q has no drivers", name)
+		}
+		if !slices.Contains(descriptor.Drivers, driver) {
+			return manifest.Document{}, fmt.Errorf("unknown driver %q for capability %q (available: %s)",
+				driver, name, strings.Join(descriptor.Drivers, ", "))
+		}
+		drivers[name] = []string{driver}
+	}
 	composed := capability.Compose(all, capability.ComposeRequest{
 		Capabilities:   selected,
-		Drivers:        previous.Composition.Drivers,
+		Drivers:        drivers,
 		DefaultDrivers: true,
 		// 已生成项目的装配集必须是闭包；严格模式阻止 resolver 自动补依赖。
 		RequireResolvedSelection: true,
@@ -239,7 +262,7 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 		profile = previous.Selection.Profile
 	}
 	if profile != "" {
-		return Export(Request{Root: root, Profile: profile, Module: module, Framework: framework})
+		return Export(Request{Root: root, Profile: profile, Module: module, Drivers: composed.Drivers, Framework: framework})
 	}
 	return Export(Request{
 		Root: root, Profile: profile, With: with, Shape: previous.Selection.Shape, Module: module, Drivers: composed.Drivers,

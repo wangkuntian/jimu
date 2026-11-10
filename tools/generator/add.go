@@ -25,6 +25,7 @@ import (
 // AddOptions 是 `jimu capability add` 的全部输入。
 type AddOptions struct {
 	Name      string // 要加入的能力名（框架全量集合）
+	Driver    string // 新增能力的驱动；空则取 Descriptor.Drivers 首项
 	From      string // 框架源根；空则从当前 jimu checkout 解析
 	Dir       string // 生成项目根
 	Module    string // 覆盖 manifest 里的 module（默认取 manifest rewrite）
@@ -64,7 +65,7 @@ func AddCapability(opts AddOptions) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("framework source root is unavailable for capability add: pass --from=<jimu checkout>: %w", err)
 	}
-	next, err := frameworkmanifest.ExportForAdd(root, previous, name, opts.Force, opts.Framework)
+	next, err := frameworkmanifest.ExportForAdd(root, previous, name, opts.Driver, opts.Force, opts.Framework)
 	if err != nil {
 		return nil, err
 	}

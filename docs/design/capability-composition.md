@@ -115,7 +115,7 @@ manifest 校验保证：
 | `jimu new` | `--template` 或 `--with` | `--with` 走 resolver，模板使用 certified 预设；两者都执行 preflight + 生成项目 tidy/build/自检 | 通过后才发布目标目录；`--with` 标记 `experimental`。 |
 | `jimu check` | 已有 `.jimu/manifest.json` | 执行组合 preflight/plan，并以同一 upgrade planner 检查受管文件、目标版本和 conflict | fast 只读；受管文件漂移/升级/conflict 为 warning，非法组合退出非 0；`--deep` 只在临时副本运行配置、build、test。 |
 | `jimu upgrade` | manifest 的 template/profile/`composition.requested` | 模板按预设重建，profile / `--with` 重新解析；执行 preflight 和 plan | `--dry-run` / `--check` 只读；默认事务备份、安装、验证并在失败时回滚。 |
-| `jimu capability add` | 已有 `--with` 项目的声明集 + 新能力 | 严格依赖闭包（不自动补依赖）、resolver、preflight | 复用 upgrade 的 manifest 事务；不执行 tidy/build；支持级别保持 `experimental`。 |
+| `jimu capability add` | 已有 `--with` 项目的声明集 + 新能力 | 严格依赖闭包（不自动补依赖）、resolver、preflight | 复用 upgrade 的 manifest 事务；`--driver` 可指定新增能力的驱动，省略取首个声明驱动；不执行 tidy/build；支持级别保持 `experimental`。 |
 
 `jimu capability add` 拒绝官方模板项目；官方模板需要扩展时用 `--with` 重新生成 experimental 组合。`jimu check` 是框架仓命令，不复制进生成项目。
 
