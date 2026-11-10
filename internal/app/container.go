@@ -14,7 +14,6 @@ import (
 	"jimu/internal/kernel/httpclient"
 	"jimu/internal/kernel/logger"
 	"jimu/internal/kernel/observability"
-	redistore "jimu/internal/kernel/redis"
 	"jimu/internal/kernel/reporter"
 	"jimu/internal/kernel/scheduler"
 
@@ -36,12 +35,10 @@ type Container struct {
 	// Capabilities 已解析启用集的能力描述符（含依赖闭包，按清单顺序）
 	Capabilities   []contract.Descriptor
 	DB             *gorm.DB
-	Redis          redistore.Client
 	Logger         *logger.Logger
 	TracerProvider *sdktrace.TracerProvider
 	JobRegistry    contract.JobRegistry
 	Scheduler      *scheduler.CronScheduler
-	Lock           *redistore.Lock
 	EventBus       *event.EventBus
 	DBCollector    *observability.DBCollector
 	HTTPClient     *httpclient.Client
@@ -49,15 +46,16 @@ type Container struct {
 	// 观测出口（OTLP → OpenObserve；未启用时为 nil）
 	MetricsPusher *observability.MetricsPusher
 	LogExporter   *observability.LogExporter
+	// redis 持有 Redis 客户端与分布式锁。类型与构造由两个同名的 build-tag 文件提供：
+	// 启用 Redis 的构建引用 go-redis，0 能力构建为空实现。
+	redis redisState
 }
 
 func (c *Container) Start(context.Context) error { return nil }
 
 func (c *Container) Stop(ctx context.Context) error {
 	var result error
-	if c.Redis != nil {
-		result = errors.Join(result, c.Redis.Close())
-	}
+	result = errors.Join(result, c.redis.close())
 	if c.DB != nil {
 		sqlDB, err := c.DB.DB()
 		if err != nil {
@@ -115,18 +113,10 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 			return nil, err
 		}
 	}
-	var rdb redistore.Client
-	if requiredServices[contract.RuntimeServiceRedis] {
-		rdb, err = redistore.ConnectWithRetry(cfg.Redis, log)
-		if err != nil {
-			closeGormDB(dbConn)
-			return nil, err
-		}
-	}
-
-	var lock *redistore.Lock
-	if rdb != nil {
-		lock = redistore.NewLock(rdb, "lock")
+	redis, err := newRedisState(cfg, log, requiredServices[contract.RuntimeServiceRedis])
+	if err != nil {
+		closeGormDB(dbConn)
+		return nil, err
 	}
 
 	// 调度器是内核件：其配置段由 queue 能力声明并已按启用集解码；未启用时取零值
@@ -144,7 +134,7 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 	}
 	var sched *scheduler.CronScheduler
 	if schedulerCfg.Store == scheduler.StoreMySQL {
-		sched = scheduler.NewWithStore(log, schedStore, lock)
+		sched = scheduler.NewWithStore(log, schedStore, redis.locker())
 	} else {
 		sched = scheduler.NewWithStore(log, schedStore, nil)
 	}
@@ -167,9 +157,7 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 		sqlDB, err := dbConn.DB()
 		if err != nil {
 			closeGormDB(dbConn)
-			if rdb != nil {
-				_ = rdb.Close()
-			}
+			_ = redis.close()
 			return nil, fmt.Errorf("get database pool: %w", err)
 		}
 		dbCollector = observability.NewDBCollector(sqlDB, "primary")
@@ -186,12 +174,11 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 		Enabled:           enabled,
 		Capabilities:      caps,
 		DB:                dbConn,
-		Redis:             rdb,
+		redis:             redis,
 		Logger:            log,
 		Reporter:          errorReporter,
 		JobRegistry:       sched,
 		Scheduler:         sched,
-		Lock:              lock,
 		EventBus:          eventBus,
 		DBCollector:       dbCollector,
 		HTTPClient:        httpClient,
@@ -217,3 +204,6 @@ func closeGormDB(db *gorm.DB) {
 		_ = sqlDB.Close()
 	}
 }
+
+// HasRedis 报告容器是否持有 Redis 客户端（未编译 Redis 的构建恒为 false）。
+func (c *Container) HasRedis() bool { return c.redis.hasClient() }

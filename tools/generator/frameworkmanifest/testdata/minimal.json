@@ -371,14 +371,19 @@
       "destination": "internal/app",
       "optional": false,
       "include": [],
-      "exclude": []
+      "exclude": [
+        "bootstrap_redis_empty.go",
+        "container_redis_empty.go"
+      ]
     },
     {
       "source": "internal/assembly",
       "destination": "internal/assembly",
       "optional": false,
       "include": [],
-      "exclude": []
+      "exclude": [
+        "context_redis_empty.go"
+      ]
     },
     {
       "source": "internal/capability",
@@ -1245,17 +1250,20 @@
     "internal/app/bootstrap.go",
     "internal/app/bootstrap_http_test.go",
     "internal/app/bootstrap_otel.go",
+    "internal/app/bootstrap_redis.go",
     "internal/app/capabilities_handler_test.go",
     "internal/app/capconfig.go",
     "internal/app/capconfig_test.go",
     "internal/app/container.go",
     "internal/app/container_http_only_test.go",
+    "internal/app/container_redis.go",
     "internal/app/seed.go",
     "internal/app/seed_casbin.go",
     "internal/app/seed_test.go",
     "internal/assembly/assembly.go",
     "internal/assembly/assembly_test.go",
     "internal/assembly/context.go",
+    "internal/assembly/context_redis.go",
     "internal/assembly/context_test.go",
     "internal/assembly/portflow.go",
     "internal/assembly/wirefor_test.go",
@@ -1536,6 +1544,7 @@
     "internal/kernel/http/server_test.go",
     "internal/kernel/httpclient/client.go",
     "internal/kernel/httpclient/client_test.go",
+    "internal/kernel/lock/lock.go",
     "internal/kernel/logger/mask_core.go",
     "internal/kernel/logger/mask_core_test.go",
     "internal/kernel/logger/zap.go",
@@ -1623,5 +1632,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:72fce75afde6650347f61c8b521617d2f6db2afa0ea888970728f5c3cdf85cc2"
+  "digest": "sha256:1b4ebb78f02bdd1bc18581dfc11040f638c92557dc6e0563507112a74aec5b8d"
 }

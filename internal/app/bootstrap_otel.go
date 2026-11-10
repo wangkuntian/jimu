@@ -6,7 +6,6 @@ import (
 	"jimu/internal/kernel/observability"
 
 	"github.com/prometheus/client_golang/prometheus"
-	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
 	gormotel "gorm.io/plugin/opentelemetry/tracing"
 )
 
@@ -48,10 +47,8 @@ func setupObservability(container *Container) error {
 				return err
 			}
 		}
-		if container.Redis != nil {
-			if err := redisotel.InstrumentTracing(container.Redis); err != nil {
-				return err
-			}
+		if err := instrumentRedisTracing(container); err != nil {
+			return err
 		}
 	}
 	return nil

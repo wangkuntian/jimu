@@ -277,7 +277,7 @@ func buildDocument(root, module string, selected selection, frameworkOverride *m
 		Copy:           copyActionsValue,
 		Templates:      templateActions(root, selected),
 		Merges:         mergeActions(root, selected),
-		Rewrites:       rewriteActions(module),
+		Rewrites:       rewriteActions(module, selected),
 		Assets:         assetActions(root, selected),
 		Prune:          []manifest.PruneRule{{Kind: "test-import", Path: "**/*_test.go", Reason: pruneReason}},
 		GeneratedFiles: generatedFilesValue,

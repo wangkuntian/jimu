@@ -121,11 +121,11 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 		Sections:          sections,
 		CapabilityConfigs: capCfgs,
 		DB:                gdb,
-		Redis:             rdb,
 		Logger:            log,
 		EventBus:          event.New(),
 		HTTPClient:        httpclient.New(httpclient.Config{}),
 	}
+	container.WithRedisForTest(rdb)
 	ctx, modules, err := assembly.WireFor(container, sections, capCfgs, asm, caps)
 	require.NoError(t, err)
 

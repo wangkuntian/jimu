@@ -364,8 +364,8 @@ func mergeActions(root string, selected selection) []manifest.MergeAction {
 	}
 }
 
-func rewriteActions(module string) []manifest.RewriteAction {
-	return []manifest.RewriteAction{
+func rewriteActions(module string, selected selection) []manifest.RewriteAction {
+	actions := []manifest.RewriteAction{
 		{Kind: "module", From: "jimu", To: module, Files: []string{}},
 		{Kind: "file-patch", From: `const modulePath = "jimu"`, To: `const modulePath = "` + module + `"`, Files: []string{"tools/checkcapabilities/drivers.go"}},
 		{Kind: "file-patch", From: `"jimu/tools/logcheck"`, To: `"` + module + `/tools/logcheck"`, Files: []string{"tools/logcheck/main.go"}},
@@ -373,6 +373,19 @@ func rewriteActions(module string) []manifest.RewriteAction {
 		{Kind: "file-patch", From: `Short: "Jimu backend framework CLI",`, To: `Short: "` + projectName(module) + ` backend CLI",`, Files: []string{"cmd/cli/main.go"}},
 		{Kind: "deploy", From: "jimu", To: projectName(module), Files: deployFiles()},
 	}
+	// 0 能力项目只剩空实现的 Redis 文件，去掉它们的 build tag 才能参与编译。
+	if len(selected.copy) == 0 {
+		for _, file := range []string{
+			"internal/app/bootstrap_redis_empty.go",
+			"internal/app/container_redis_empty.go",
+			"internal/assembly/context_redis_empty.go",
+		} {
+			actions = append(actions, manifest.RewriteAction{
+				Kind: "file-patch", From: "//go:build jimu_noredis", To: "// 未启用 Redis 的构建：由生成器去掉 build tag", Files: []string{file},
+			})
+		}
+	}
+	return actions
 }
 
 // deployFiles 是部署清单（k8s / helm / backup）里需要换项目标识的文件。
@@ -605,6 +618,18 @@ func optionalKernelFiles(selected selection) map[string][]string {
 	if selected.dbDriver != "postgres" {
 		pruned["internal/kernel/db"] = append(pruned["internal/kernel/db"], "postgres.go", "postgres_test.go")
 	}
+	// 0 能力项目不连 Redis：去掉引用 go-redis 的那一份，保留空实现的 _
+	// empty 版本（rewriteActions 会去掉它的 build tag）。
+	if len(selected.copy) == 0 {
+		pruned["internal/app"] = append(pruned["internal/app"],
+			"bootstrap_redis.go", "container_redis.go")
+		pruned["internal/assembly"] = append(pruned["internal/assembly"], "context_redis.go")
+	} else {
+		// 需要 Redis 的项目不需要空实现文件。
+		pruned["internal/app"] = append(pruned["internal/app"],
+			"bootstrap_redis_empty.go", "container_redis_empty.go")
+		pruned["internal/assembly"] = append(pruned["internal/assembly"], "context_redis_empty.go")
+	}
 	return pruned
 }
 
@@ -679,18 +704,28 @@ func kernelDirRequired(dir string, reachable map[string]bool) bool {
 // unreachableKernelSubdirs 列出 internal/kernel 下没有任何可达包的子目录。
 // 用于把聚合目录的复制收缩到实际编译的部分。
 func unreachableKernelSubdirs(root, dir string, reachable map[string]bool) []string {
+	return unreachableSubdirs(root, dir, dir, reachable)
+}
+
+// unreachableSubdirs 递归收集 base 下没有任何可达包的子目录（相对 base 的路径）。
+// 递归是必需的：http/middleware 本身可达，但它的 idempotency/ratelimit 子包
+// 只在启用对应能力时才可达，必须逐个目录判断。
+func unreachableSubdirs(root, base, dir string, reachable map[string]bool) []string {
 	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(dir)))
 	if err != nil {
 		return nil
 	}
 	var out []string
 	for _, entry := range entries {
-		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") || entry.Name() == "testdata" {
 			continue
 		}
-		if !anyPackageUnder(reachable, dir+"/"+entry.Name()) {
-			out = append(out, entry.Name())
+		full := dir + "/" + entry.Name()
+		if !anyPackageUnder(reachable, full) {
+			out = append(out, strings.TrimPrefix(full, base+"/"))
+			continue
 		}
+		out = append(out, unreachableSubdirs(root, base, full, reachable)...)
 	}
 	slices.Sort(out)
 	return out

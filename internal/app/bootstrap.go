@@ -12,8 +12,6 @@ import (
 	"jimu/internal/contract"
 	"jimu/internal/kernel/health"
 	platformhttp "jimu/internal/kernel/http"
-	middlewareidem "jimu/internal/kernel/http/middleware/idempotency"
-	middlewarerate "jimu/internal/kernel/http/middleware/ratelimit"
 	"jimu/internal/kernel/logger"
 	"jimu/internal/kernel/observability"
 	"jimu/internal/kernel/scheduler"
@@ -46,21 +44,7 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 	}
 
 	// 租户维度限流（Redis 滑动窗口）：挂在受保护中间件之后，平台级视角跳过
-	var extraProtected []gin.HandlerFunc
-	if container.Redis != nil && cfg.RateLimit.Tenant.Enabled && cfg.RateLimit.Tenant.Limit > 0 {
-		extraProtected = append(extraProtected, middlewarerate.TenantRateLimitMiddleware(
-			container.Redis,
-			cfg.RateLimit.Tenant.Limit,
-			time.Duration(cfg.RateLimit.Tenant.WindowSec)*time.Second,
-		))
-	}
-	// 幂等中间件：挂在认证/租户注入之后，键按租户+用户+方法+路径绑定
-	if container.Redis != nil && cfg.Security.IdempotencyEnabled {
-		extraProtected = append(extraProtected, middlewareidem.IdempotencyMiddleware(
-			container.Redis,
-			time.Duration(cfg.Security.IdempotencyTTLSec)*time.Second,
-		))
-	}
+	extraProtected := redisMiddlewares(container, cfg)
 	if err := registerHTTP(router, container.Logger, extraProtected, modules...); err != nil {
 		return nil, err
 	}
@@ -91,11 +75,7 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 		}
 		checkers = append(checkers, health.NewSQLChecker(sqlDB))
 	}
-	if container.Redis != nil {
-		checkers = append(checkers, health.CheckerFunc(func(ctx context.Context) error {
-			return container.Redis.Ping(ctx).Err()
-		}))
-	}
+	checkers = append(checkers, redisHealthCheck(container)...)
 	readiness := health.NewReadiness(
 		time.Duration(cfg.Management.ProbeTimeoutSec)*time.Second,
 		checkers...,
