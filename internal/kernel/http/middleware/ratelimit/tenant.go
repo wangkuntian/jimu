@@ -1,11 +1,11 @@
-package middleware
+package ratelimit
 
 import (
 	"fmt"
 	"time"
 
+	"jimu/internal/kernel/http/ctxkeys"
 	redistore "jimu/internal/kernel/redis"
-	"jimu/internal/kernel/tenant"
 
 	"github.com/gin-gonic/gin"
 )
@@ -20,7 +20,7 @@ func TenantRateLimitMiddleware(client redistore.Client, limit int, window time.D
 	return NewUserRateLimiter(client, limit, window,
 		WithKeyPrefix("ratelimit:tenant"),
 		WithKeyFunc(func(c *gin.Context) string {
-			if tid := tenant.FromContext(c.Request.Context()); tid != 0 {
+			if tid, ok := c.Request.Context().Value(ctxkeys.TenantID{}).(uint64); ok && tid != 0 {
 				return fmt.Sprintf("tenant:%d", tid)
 			}
 			return ""

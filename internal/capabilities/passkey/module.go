@@ -9,6 +9,7 @@ import (
 	"jimu/internal/capabilities/passkey/interfaces"
 	"jimu/internal/contract"
 	"jimu/internal/kernel/auth"
+	authredis "jimu/internal/kernel/auth/redisstore"
 
 	redistore "jimu/internal/kernel/redis"
 
@@ -64,7 +65,7 @@ func New(deps Deps) *Module {
 	jwtUtil := auth.NewWithRotation(deps.AuthCfg.JWTSecret, deps.AuthCfg.JWTPreviousSecret, deps.AuthCfg.Issuer, deps.AuthCfg.AccessExpireMin, deps.AuthCfg.RefreshExpireDay)
 	var limiter *auth.Limiter
 	if deps.Redis != nil {
-		limiter = auth.NewLimiter(deps.Redis, deps.FailClosed)
+		limiter = auth.NewLimiter(authredis.NewRateCounter(deps.Redis), deps.FailClosed)
 	}
 	users, _ := deps.Users.(contract.UserStateSource)
 	return &Module{service: svc, jwtUtil: jwtUtil, limiter: limiter, cfg: deps.AuthCfg, tenants: deps.Tenants, users: users}

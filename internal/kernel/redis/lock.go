@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"jimu/internal/kernel/lock"
 )
 
 // Lock 基于 Redis 的分布式锁
@@ -26,12 +28,9 @@ func NewLock(client Client, prefix string) *Lock {
 	}
 }
 
-// AcquireResult 锁获取结果
-type AcquireResult struct {
-	Key     string // 锁的 Redis key
-	Token   string // 锁的唯一标识（用于释放）
-	Expires time.Time
-}
+// AcquireResult 锁获取结果。
+// 与 kernel/lock.Result 是同一类型，使 *Lock 满足 lock.Locker（scheduler 只依赖接口）。
+type AcquireResult = lock.Result
 
 // Acquire 获取锁
 // key: 锁名称

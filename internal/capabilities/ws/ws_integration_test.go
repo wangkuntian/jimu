@@ -44,7 +44,7 @@ func newWSFixtureWithCheckers(t *testing.T, stateCheckers ...auth.StateCheckers)
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 
-	srv := httptest.NewServer(WSHandler(hub, jwt, pm, cm, stateCheckers...))
+	srv := httptest.NewServer(WSHandler(hub, JWTTokenParser{JWT: jwt}, pm, cm, stateCheckers...))
 	t.Cleanup(func() {
 		cancel()
 		srv.Close()

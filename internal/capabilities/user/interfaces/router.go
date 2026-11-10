@@ -5,6 +5,8 @@ import (
 
 	"jimu/internal/capabilities/user/application"
 	"jimu/internal/kernel/http/middleware"
+	middlewareidem "jimu/internal/kernel/http/middleware/idempotency"
+	middlewarerate "jimu/internal/kernel/http/middleware/ratelimit"
 	"jimu/internal/shared/pagination"
 
 	redistore "jimu/internal/kernel/redis"
@@ -22,8 +24,8 @@ func RegisterUserRoutes(r *gin.RouterGroup, service *application.UserService, rd
 		if len(rdb) > 0 && rdb[0] != nil {
 			users.POST(
 				"",
-				middleware.IdempotencyMiddleware(rdb[0], 5),
-				middleware.UserRateLimitMiddleware(rdb[0], 60, time.Minute),
+				middlewareidem.IdempotencyMiddleware(rdb[0], 5),
+				middlewarerate.UserRateLimitMiddleware(rdb[0], 60, time.Minute),
 				middleware.ValidateJSON(&application.CreateUserRequest{}),
 				handler.Create,
 			)
@@ -35,7 +37,7 @@ func RegisterUserRoutes(r *gin.RouterGroup, service *application.UserService, rd
 		users.GET("/export.csv", middleware.ValidateQuery(&pagination.Pagination{}), handler.ExportCSV)
 		// 写操作用户维度限流（key 取 AuthMiddleware 注入的 user_id，默认 60 次/分钟）
 		if len(rdb) > 0 && rdb[0] != nil {
-			userWriteLimit := middleware.UserRateLimitMiddleware(rdb[0], 60, time.Minute)
+			userWriteLimit := middlewarerate.UserRateLimitMiddleware(rdb[0], 60, time.Minute)
 			users.POST("/batch-delete", middleware.ValidateJSON(&application.BatchDeleteRequest{}), userWriteLimit, handler.BatchDelete)
 			users.PUT("/:id", middleware.ValidateJSON(&application.UpdateUserRequest{}), userWriteLimit, handler.Update)
 			users.DELETE("/:id", userWriteLimit, handler.Delete)

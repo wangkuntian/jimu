@@ -94,7 +94,15 @@ func copyActions(root string, selected selection) ([]manifest.CopyAction, error)
 	}
 	for _, name := range selected.migration {
 		base := filepath.ToSlash(filepath.Join("internal/capabilities", name))
-		actions = append(actions, manifest.CopyAction{Source: base + "/migrations", Destination: base + "/migrations", Include: []string{}, Exclude: []string{}})
+		// 迁移按方言分子目录：只复制选中的驱动方言，避免另一方言的 SQL 进入产物。
+		exclude := []string{}
+		if selected.dbDriver != "postgres" {
+			exclude = append(exclude, "postgres")
+		}
+		if selected.dbDriver != "mysql" {
+			exclude = append(exclude, "mysql")
+		}
+		actions = append(actions, manifest.CopyAction{Source: base + "/migrations", Destination: base + "/migrations", Include: []string{}, Exclude: exclude})
 		if directoryExists(root, filepath.FromSlash(base+"/domain")) {
 			actions = append(actions, manifest.CopyAction{Source: base + "/domain", Destination: base + "/domain", Include: []string{}, Exclude: []string{}})
 		}
@@ -356,8 +364,8 @@ func mergeActions(root string, selected selection) []manifest.MergeAction {
 	}
 }
 
-func rewriteActions(module string) []manifest.RewriteAction {
-	return []manifest.RewriteAction{
+func rewriteActions(module string, selected selection) []manifest.RewriteAction {
+	actions := []manifest.RewriteAction{
 		{Kind: "module", From: "jimu", To: module, Files: []string{}},
 		{Kind: "file-patch", From: `const modulePath = "jimu"`, To: `const modulePath = "` + module + `"`, Files: []string{"tools/checkcapabilities/drivers.go"}},
 		{Kind: "file-patch", From: `"jimu/tools/logcheck"`, To: `"` + module + `/tools/logcheck"`, Files: []string{"tools/logcheck/main.go"}},
@@ -365,6 +373,27 @@ func rewriteActions(module string) []manifest.RewriteAction {
 		{Kind: "file-patch", From: `Short: "Jimu backend framework CLI",`, To: `Short: "` + projectName(module) + ` backend CLI",`, Files: []string{"cmd/cli/main.go"}},
 		{Kind: "deploy", From: "jimu", To: projectName(module), Files: deployFiles()},
 	}
+	// 0 能力项目只剩空实现的 Redis 文件，去掉它们的 build tag 才能参与编译。
+	if len(selected.copy) == 0 {
+		for _, file := range []string{
+			"internal/app/bootstrap_redis_empty.go",
+			"internal/app/container_redis_empty.go",
+			"internal/assembly/context_redis_empty.go",
+		} {
+			actions = append(actions, manifest.RewriteAction{
+				Kind: "file-patch", From: "//go:build jimu_noredis", To: "// 未启用 Redis 的构建：由生成器去掉 build tag", Files: []string{file},
+			})
+		}
+		for _, file := range []string{
+			"internal/app/bootstrap_otel_empty.go",
+			"internal/app/container_otel_empty.go",
+		} {
+			actions = append(actions, manifest.RewriteAction{
+				Kind: "file-patch", From: "//go:build jimu_no_otel", To: "// 未启用 OTel 的构建：由生成器去掉 build tag", Files: []string{file},
+			})
+		}
+	}
+	return actions
 }
 
 // deployFiles 是部署清单（k8s / helm / backup）里需要换项目标识的文件。
@@ -530,7 +559,11 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 	for _, name := range selected.copy {
 		seeds = append(seeds, "./internal/capabilities/"+name)
 	}
-	reachable, err := kernelPackages(root, seeds)
+	// 可选文件必须先于闭包计算剔除：internal/assembly 引用 internal/app，
+	// 若 seed_casbin.go 仍在，闭包会把 kernel/access 与 Casbin 算成可达，
+	// 之后再排除文件就来不及了。overlay 让这些文件对 packages.Load 不可见。
+	pruned := optionalKernelFiles(selected)
+	reachable, err := kernelPackages(root, seeds, pruned)
 	if err != nil {
 		return nil, err
 	}
@@ -540,6 +573,7 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 			continue
 		}
 		exclude := kernelExcludesFor(dir)
+		exclude = append(exclude, prunedInDir(pruned, dir)...)
 		// internal/kernel 是聚合目录：整目录复制会把不可达的子包也带上。
 		// 只排除闭包里不存在的 kernel 子包（保留目录下非包文件）。
 		if dir == "internal/kernel" {
@@ -555,13 +589,79 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 	return actions, nil
 }
 
+// prunedInDir 把按绝对目录记录的裁剪项转换为相对于复制根目录的路径。
+// 例如 dir="internal/kernel" 时，pruned["internal/kernel/db"] 里的
+// "postgres.go" 要转成 "db/postgres.go"，才能被 excludedPath 匹配到。
+func prunedInDir(pruned map[string][]string, dir string) []string {
+	var out []string
+	for pruneDir, files := range pruned {
+		if pruneDir == dir {
+			out = append(out, files...)
+			continue
+		}
+		if rel, ok := strings.CutPrefix(pruneDir, dir+"/"); ok {
+			for _, name := range files {
+				out = append(out, rel+"/"+name)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// optionalKernelFiles 返回未启用对应能力时应从复制结果中剔除的、按目录索引的文件名。
+//
+// 这些文件是「一个文件决定一整条重依赖」的裁剪点；它们也必须在闭包计算前通过
+// overlay 隐藏，否则依赖链会经 internal/assembly → internal/app 提前成立。
+func optionalKernelFiles(selected selection) map[string][]string {
+	pruned := map[string][]string{}
+	if len(selected.copy) == 0 {
+		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel.go", "container_otel.go")
+	} else {
+		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel_empty.go", "container_otel_empty.go")
+	}
+	if !contains(selected.copy, "access") {
+		pruned["internal/app"] = append(pruned["internal/app"], "seed_casbin.go")
+	}
+	// Postgres 驱动只在显式选择 db.driver=postgres 时编译；默认 MySQL 项目
+	// 不带 gorm postgres driver 与 pgx（约 1.9 MB）。
+	if selected.dbDriver != "postgres" {
+		pruned["internal/kernel/db"] = append(pruned["internal/kernel/db"], "postgres.go", "postgres_test.go")
+	}
+	// 0 能力项目不连 Redis：去掉引用 go-redis 的那一份，保留空实现的 _
+	// empty 版本（rewriteActions 会去掉它的 build tag）。
+	if len(selected.copy) == 0 {
+		pruned["internal/app"] = append(pruned["internal/app"],
+			"bootstrap_redis.go", "container_redis.go")
+		pruned["internal/assembly"] = append(pruned["internal/assembly"], "context_redis.go")
+	} else {
+		// 需要 Redis 的项目不需要空实现文件。
+		pruned["internal/app"] = append(pruned["internal/app"],
+			"bootstrap_redis_empty.go", "container_redis_empty.go")
+		pruned["internal/assembly"] = append(pruned["internal/assembly"], "context_redis_empty.go")
+	}
+	return pruned
+}
+
 // kernelPackages 返回 seeds 的 import 闭包里属于本仓的相对目录集合。
 // 前缀固定为 jimu/：闭包在框架仓内计算，与目标项目模块名无关。
-func kernelPackages(root string, seeds []string) (map[string]bool, error) {
+// pruned 中的文件对 go/packages 不可见（overlay 为空内容），用于在闭包层面
+// 模拟「该文件不参与编译」，而不是只从复制结果里删掉。
+func kernelPackages(root string, seeds []string, pruned map[string][]string) (map[string]bool, error) {
+	overlay := map[string][]byte{}
+	for dir, files := range pruned {
+		// 覆写为空包而不是空内容：空内容会被 Go 判为语法错误。
+		// 包名取目录 basename，保证与被替换文件所在包的声明一致。
+		pkg := filepath.Base(dir)
+		for _, name := range files {
+			overlay[filepath.Join(root, filepath.FromSlash(dir), name)] = []byte("package " + pkg + "\n")
+		}
+	}
 	pkgs, err := packages.Load(&packages.Config{
-		Mode:  packages.NeedName | packages.NeedImports | packages.NeedDeps,
-		Dir:   root,
-		Tests: false,
+		Mode:    packages.NeedName | packages.NeedImports | packages.NeedDeps,
+		Dir:     root,
+		Tests:   false,
+		Overlay: overlay,
 	}, seeds...)
 	if err != nil {
 		return nil, fmt.Errorf("load kernel packages: %w", err)
@@ -614,18 +714,28 @@ func kernelDirRequired(dir string, reachable map[string]bool) bool {
 // unreachableKernelSubdirs 列出 internal/kernel 下没有任何可达包的子目录。
 // 用于把聚合目录的复制收缩到实际编译的部分。
 func unreachableKernelSubdirs(root, dir string, reachable map[string]bool) []string {
+	return unreachableSubdirs(root, dir, dir, reachable)
+}
+
+// unreachableSubdirs 递归收集 base 下没有任何可达包的子目录（相对 base 的路径）。
+// 递归是必需的：http/middleware 本身可达，但它的 idempotency/ratelimit 子包
+// 只在启用对应能力时才可达，必须逐个目录判断。
+func unreachableSubdirs(root, base, dir string, reachable map[string]bool) []string {
 	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(dir)))
 	if err != nil {
 		return nil
 	}
 	var out []string
 	for _, entry := range entries {
-		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") || entry.Name() == "testdata" {
 			continue
 		}
-		if !anyPackageUnder(reachable, dir+"/"+entry.Name()) {
-			out = append(out, entry.Name())
+		full := dir + "/" + entry.Name()
+		if !anyPackageUnder(reachable, full) {
+			out = append(out, strings.TrimPrefix(full, base+"/"))
+			continue
 		}
+		out = append(out, unreachableSubdirs(root, base, full, reachable)...)
 	}
 	slices.Sort(out)
 	return out

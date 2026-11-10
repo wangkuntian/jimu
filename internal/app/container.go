@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"jimu/internal/config"
@@ -13,13 +12,10 @@ import (
 	"jimu/internal/kernel/event"
 	"jimu/internal/kernel/httpclient"
 	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/observability"
-	redistore "jimu/internal/kernel/redis"
+	"jimu/internal/kernel/metrics"
 	"jimu/internal/kernel/reporter"
 	"jimu/internal/kernel/scheduler"
 
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.uber.org/zap/zapcore"
 	"gorm.io/gorm"
 )
 
@@ -34,30 +30,40 @@ type Container struct {
 	// Enabled 已启用能力名集合（含依赖闭包）
 	Enabled map[string]bool
 	// Capabilities 已解析启用集的能力描述符（含依赖闭包，按清单顺序）
-	Capabilities   []contract.Descriptor
-	DB             *gorm.DB
-	Redis          redistore.Client
-	Logger         *logger.Logger
-	TracerProvider *sdktrace.TracerProvider
-	JobRegistry    contract.JobRegistry
-	Scheduler      *scheduler.CronScheduler
-	Lock           *redistore.Lock
-	EventBus       *event.EventBus
-	DBCollector    *observability.DBCollector
-	HTTPClient     *httpclient.Client
-	Reporter       reporter.Reporter
-	// 观测出口（OTLP → OpenObserve；未启用时为 nil）
-	MetricsPusher *observability.MetricsPusher
-	LogExporter   *observability.LogExporter
+	Capabilities []contract.Descriptor
+	DB           *gorm.DB
+	Logger       *logger.Logger
+	JobRegistry  contract.JobRegistry
+	Scheduler    *scheduler.CronScheduler
+	EventBus     *event.EventBus
+	HTTPClient   *httpclient.Client
+	Reporter     reporter.Reporter
+	DBCollector  *metrics.DBCollector
+	// otel 持有 OTel 追踪/指标/日志出口。类型与构造由两个同名 build-tag 文件提供：
+	// 启用 OTel 的构建引用 OTel SDK 与导出器，0 能力构建为空实现。
+	otel otelState
+	// redis 持有 Redis 客户端与分布式锁。类型与构造由两个同名的 build-tag 文件提供：
+	// 启用 Redis 的构建引用 go-redis，0 能力构建为空实现。
+	redis redisState
 }
 
 func (c *Container) Start(context.Context) error { return nil }
 
+// CollectMetrics 采集 DB 连接池与运行时指标（Prometheus 口径）。
+// 未连库时是 no-op。
+func (c *Container) CollectMetrics() {
+	if c.DBCollector != nil {
+		c.DBCollector.Collect()
+	}
+	metrics.CollectRuntime()
+}
+
+// HasMetricsCollector 报告是否已连库因而需要采集 DB 指标。
+func (c *Container) HasMetricsCollector() bool { return c.DBCollector != nil }
+
 func (c *Container) Stop(ctx context.Context) error {
 	var result error
-	if c.Redis != nil {
-		result = errors.Join(result, c.Redis.Close())
-	}
+	result = errors.Join(result, c.redis.close())
 	if c.DB != nil {
 		sqlDB, err := c.DB.DB()
 		if err != nil {
@@ -66,15 +72,7 @@ func (c *Container) Stop(ctx context.Context) error {
 			result = errors.Join(result, sqlDB.Close())
 		}
 	}
-	if c.TracerProvider != nil {
-		result = errors.Join(result, observability.ShutdownTracing(ctx, c.TracerProvider))
-	}
-	if c.MetricsPusher != nil {
-		result = errors.Join(result, c.MetricsPusher.Shutdown(ctx))
-	}
-	if c.LogExporter != nil {
-		result = errors.Join(result, c.LogExporter.Shutdown(ctx))
-	}
+	result = errors.Join(result, c.otel.shutdown(ctx))
 	if c.Reporter != nil {
 		// 优雅停机：给在途错误上报一个发送窗口
 		c.Reporter.Flush(5 * time.Second)
@@ -87,20 +85,8 @@ func (c *Container) Stop(ctx context.Context) error {
 
 func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *CapabilityConfigs, caps []contract.Descriptor, enabled map[string]bool) (*Container, error) {
 	// OpenObserve 日志通道：otel 启用时附加到 zap（初始化失败仅告警，不阻断启动）
-	var (
-		logExporter *observability.LogExporter
-		extraCores  []zapcore.Core
-	)
-	if cfg.OTEL.Enabled && cfg.OTEL.LogsEnabled {
-		var err error
-		logExporter, err = observability.NewLogExporter(context.Background(), cfg.OTEL)
-		if err != nil {
-			log.Printf("openobserve logs exporter init failed: %v", err)
-		} else {
-			extraCores = append(extraCores, logExporter.ZapCore(zapcore.DebugLevel))
-		}
-	}
-	log := logger.New(cfg.Log, extraCores...)
+	otel := newOTELState(cfg)
+	log := logger.New(cfg.Log, otel.extraCores()...)
 
 	// 雪花 ID：初始化全局生成器后再连库（hook 在 open 时注册）
 	if err := db.InitSnowflake(cfg.ID.WorkerID); err != nil {
@@ -115,18 +101,10 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 			return nil, err
 		}
 	}
-	var rdb redistore.Client
-	if requiredServices[contract.RuntimeServiceRedis] {
-		rdb, err = redistore.ConnectWithRetry(cfg.Redis, log)
-		if err != nil {
-			closeGormDB(dbConn)
-			return nil, err
-		}
-	}
-
-	var lock *redistore.Lock
-	if rdb != nil {
-		lock = redistore.NewLock(rdb, "lock")
+	redis, err := newRedisState(cfg, log, requiredServices[contract.RuntimeServiceRedis])
+	if err != nil {
+		closeGormDB(dbConn)
+		return nil, err
 	}
 
 	// 调度器是内核件：其配置段由 queue 能力声明并已按启用集解码；未启用时取零值
@@ -144,7 +122,7 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 	}
 	var sched *scheduler.CronScheduler
 	if schedulerCfg.Store == scheduler.StoreMySQL {
-		sched = scheduler.NewWithStore(log, schedStore, lock)
+		sched = scheduler.NewWithStore(log, schedStore, redis.locker())
 	} else {
 		sched = scheduler.NewWithStore(log, schedStore, nil)
 	}
@@ -162,22 +140,20 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 	eventBus := event.New()
 
 	// DB Metrics Collector
-	var dbCollector *observability.DBCollector
+	var dbCollector *metrics.DBCollector
 	if dbConn != nil {
 		sqlDB, err := dbConn.DB()
 		if err != nil {
 			closeGormDB(dbConn)
-			if rdb != nil {
-				_ = rdb.Close()
-			}
+			_ = redis.close()
 			return nil, fmt.Errorf("get database pool: %w", err)
 		}
-		dbCollector = observability.NewDBCollector(sqlDB, "primary")
+		dbCollector = metrics.NewDBCollector(sqlDB, "primary")
 	}
 
 	// 错误上报：启用时输出结构化错误日志（日志链路接入 OpenObserve 后自动汇聚）
 	// gRPC 服务端 panic 也经此上报（server recovery 拦截器）
-	errorReporter := reporter.NewReporter(cfg.ErrorReport, log.Errorw)
+	errorReporter := reporter.NewReporter(cfg.ErrorReport.Enabled, log.Errorw)
 
 	return &Container{
 		Config:            cfg,
@@ -186,16 +162,15 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 		Enabled:           enabled,
 		Capabilities:      caps,
 		DB:                dbConn,
-		Redis:             rdb,
+		redis:             redis,
 		Logger:            log,
 		Reporter:          errorReporter,
 		JobRegistry:       sched,
 		Scheduler:         sched,
-		Lock:              lock,
 		EventBus:          eventBus,
 		DBCollector:       dbCollector,
 		HTTPClient:        httpClient,
-		LogExporter:       logExporter,
+		otel:              otel,
 	}, nil
 }
 
@@ -217,3 +192,6 @@ func closeGormDB(db *gorm.DB) {
 		_ = sqlDB.Close()
 	}
 }
+
+// HasRedis 报告容器是否持有 Redis 客户端（未编译 Redis 的构建恒为 false）。
+func (c *Container) HasRedis() bool { return c.redis.hasClient() }

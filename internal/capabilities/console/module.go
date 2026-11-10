@@ -11,7 +11,6 @@ import (
 	"jimu/internal/capabilities/console/application"
 	"jimu/internal/capabilities/console/interfaces"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
 	"jimu/internal/kernel/http/middleware"
 
 	redistore "jimu/internal/kernel/redis"
@@ -25,20 +24,18 @@ type Module struct {
 	service     *application.Service
 	rdb         redistore.Client
 	eventBus    contract.EventBus
-	jwt         *auth.JWT
 	ipAllowlist gin.HandlerFunc
 	db          *gorm.DB
 
 	ws contract.AdminWebSocket
 }
 
-// New 创建 console 模块。jwt 用于 WebSocket 认证；ipAllowlist 为空时不挂载白名单。
-func New(version, env string, rdb redistore.Client, db *gorm.DB, jwt *auth.JWT, eventBus contract.EventBus, deps ...interface{}) *Module {
+// New 创建 console 模块。ipAllowlist 为空时不挂载白名单。
+func New(version, env string, rdb redistore.Client, db *gorm.DB, eventBus contract.EventBus, deps ...interface{}) *Module {
 	m := &Module{
 		service:  application.NewService(version, env, rdb),
 		rdb:      rdb,
 		db:       db,
-		jwt:      jwt,
 		eventBus: eventBus,
 	}
 	for _, dep := range deps {
@@ -116,14 +113,14 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 	admin.GET("/ws/online", wsAdmin.OnlineUsers)
 }
 
-// wsHandler 创建 WebSocket 处理器；JWT 或 ws 端口未注入时返回 500 处理器。
+// wsHandler 创建 WebSocket 处理器；ws 端口未注入时返回 500 处理器。
 func (m *Module) wsHandler() http.HandlerFunc {
-	if m.jwt == nil || m.ws == nil {
+	if m.ws == nil {
 		return func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "websocket not configured", http.StatusInternalServerError)
 		}
 	}
-	return m.ws.Handler(m.jwt)
+	return m.ws.Handler()()
 }
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}

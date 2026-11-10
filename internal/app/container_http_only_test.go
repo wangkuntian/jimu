@@ -22,7 +22,7 @@ func TestHTTPSOnlyContainerSkipsDatabaseAndRedis(t *testing.T) {
 	container, err := NewContainer(cfg, nil, &CapabilityConfigs{}, nil, map[string]bool{})
 	require.NoError(t, err)
 	require.Nil(t, container.DB)
-	require.Nil(t, container.Redis)
+	require.False(t, container.HasRedis())
 
 	application, err := Bootstrap(container, nil, nil)
 	require.NoError(t, err)

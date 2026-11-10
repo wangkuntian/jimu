@@ -9,7 +9,6 @@ import (
 	"jimu/internal/kernel/event"
 	"jimu/internal/kernel/httpclient"
 	"jimu/internal/kernel/logger"
-	redistore "jimu/internal/kernel/redis"
 	"jimu/internal/kernel/reporter"
 	"jimu/internal/kernel/scheduler"
 
@@ -67,9 +66,6 @@ func (c *Context) Logger() *logger.Logger { return c.container.Logger }
 // DB gorm 句柄。
 func (c *Context) DB() *gorm.DB { return c.container.DB }
 
-// Redis 缓存客户端。
-func (c *Context) Redis() redistore.Client { return c.container.Redis }
-
 // Sections 按 YAML 点分键解码配置段。
 func (c *Context) Sections() config.SectionDecoder { return c.sections }
 
@@ -89,9 +85,6 @@ func (c *Context) HTTPClient() *httpclient.Client { return c.container.HTTPClien
 
 // Scheduler 定时任务调度器。
 func (c *Context) Scheduler() *scheduler.CronScheduler { return c.container.Scheduler }
-
-// Lock 分布式锁（多实例协调）。
-func (c *Context) Lock() *redistore.Lock { return c.container.Lock }
 
 // Reporter 错误上报器。
 func (c *Context) Reporter() reporter.Reporter { return c.container.Reporter }

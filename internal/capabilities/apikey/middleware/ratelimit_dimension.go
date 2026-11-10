@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"jimu/internal/kernel/auth"
-	httpmw "jimu/internal/kernel/http/middleware"
+	"jimu/internal/kernel/http/ctxkeys"
+	httpmw "jimu/internal/kernel/http/middleware/ratelimit"
 	redistore "jimu/internal/kernel/redis"
 
 	"github.com/gin-gonic/gin"
@@ -18,8 +18,8 @@ func APIKeyRateLimitMiddleware(client redistore.Client, limit int, window time.D
 	return httpmw.NewUserRateLimiter(client, limit, window,
 		httpmw.WithKeyPrefix("ratelimit:apikey"),
 		httpmw.WithKeyFunc(func(c *gin.Context) string {
-			if apiKey, ok := auth.APIKeyFromContext(c.Request.Context()); ok && apiKey != nil {
-				return fmt.Sprintf("apikey:%d", apiKey.ID)
+			if id, ok := c.Request.Context().Value(ctxkeys.APIKeyID{}).(uint64); ok {
+				return fmt.Sprintf("apikey:%d", id)
 			}
 			return ""
 		}),

@@ -35,6 +35,7 @@ type NewOptions struct {
 	With       string
 	Shape      string
 	Module     string
+	DBDriver   string
 	NoTidy     bool
 	DryRun     bool
 	Force      bool
@@ -84,6 +85,7 @@ func NewProject(opts NewOptions) (*Result, error) {
 	}
 	doc, resolution, err := frameworkmanifest.ExportDetailed(frameworkmanifest.Request{
 		Root: root, Template: opts.Template, Profile: opts.Profile, With: opts.With, Shape: opts.Shape, Module: module,
+		DBDriver:  opts.DBDriver,
 		Framework: opts.Framework,
 	})
 	if err != nil {

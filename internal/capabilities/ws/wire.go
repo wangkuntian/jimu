@@ -14,7 +14,9 @@ const PortName = "ws"
 func Wire(ctx *assembly.Context) (contract.Module, error) {
 	tenants, _ := ctx.Port(contract.TenantInfoPortName).(contract.TenantStateSource)
 	users, _ := ctx.Port(contract.UserinfoPortName).(contract.UserStateSource)
-	port := newAdminWebSocket(auth.StateCheckers{Tenant: tenants, User: users})
+	authCfg := ctx.AuthConfig()
+	jwt := auth.NewWithRotation(authCfg.JWTSecret, authCfg.JWTPreviousSecret, authCfg.Issuer, authCfg.AccessExpireMin, authCfg.RefreshExpireDay)
+	port := newAdminWebSocket(jwt, auth.StateCheckers{Tenant: tenants, User: users})
 	if err := ctx.Provide(PortName, port); err != nil {
 		return nil, fmt.Errorf("provide ws port: %w", err)
 	}

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -8,11 +9,24 @@ import (
 	"jimu/internal/kernel/breaker"
 	"jimu/internal/kernel/logger"
 
+	"github.com/jackc/pgx/v5/pgconn"
+	_ "github.com/jackc/pgx/v5/stdlib" // 注册 pgx driver，供 goose postgres 迁移使用
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 	"gorm.io/plugin/dbresolver"
 )
+
+func init() {
+	openPostgresDriver = openPostgres
+	postgresDialect = func(cfg config.DBConfig) (string, string, error) {
+		return "pgx", pgDSN(cfg), nil
+	}
+	isPostgresNoSuchTable = func(err error) bool {
+		var pgErr *pgconn.PgError
+		return errors.As(err, &pgErr) && pgErr.Code == "42P01"
+	}
+}
 
 func pgDSN(cfg config.DBConfig) string {
 	return pgDSNHost(cfg, "", 0)

@@ -9,9 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"jimu/internal/kernel/observability"
-	"jimu/internal/kernel/reporter"
-
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 )
@@ -88,24 +85,75 @@ type IDConfig struct {
 }
 
 type Config struct {
-	HTTP         HTTPConfig                  `mapstructure:"http"`
-	Management   ManagementConfig            `mapstructure:"management"`
-	DB           DBConfig                    `mapstructure:"db"`
-	Redis        RedisConfig                 `mapstructure:"redis"`
-	RateLimit    RateLimitConfig             `mapstructure:"ratelimit"`
-	Log          LogConfig                   `mapstructure:"log"`
-	Server       ServerConfig                `mapstructure:"server"`
-	ID           IDConfig                    `mapstructure:"id"`
-	Cache        CacheConfig                 `mapstructure:"cache"`
-	Security     SecurityConfig              `mapstructure:"security"`
-	OTEL         observability.TracingConfig `mapstructure:"otel"`
-	ErrorReport  reporter.ReporterConfig     `mapstructure:"error_reporting"`
-	HTTPClient   HTTPClientConfig            `mapstructure:"http_client"`
-	GRPC         GRPCConfig                  `mapstructure:"grpc"`
-	Capabilities CapabilitiesConfig          `mapstructure:"capabilities"`
+	HTTP         HTTPConfig         `mapstructure:"http"`
+	Management   ManagementConfig   `mapstructure:"management"`
+	DB           DBConfig           `mapstructure:"db"`
+	Redis        RedisConfig        `mapstructure:"redis"`
+	RateLimit    RateLimitConfig    `mapstructure:"ratelimit"`
+	Log          LogConfig          `mapstructure:"log"`
+	Server       ServerConfig       `mapstructure:"server"`
+	ID           IDConfig           `mapstructure:"id"`
+	Cache        CacheConfig        `mapstructure:"cache"`
+	Security     SecurityConfig     `mapstructure:"security"`
+	OTEL         OTELConfig         `mapstructure:"otel"`
+	ErrorReport  ErrorReportConfig  `mapstructure:"error_reporting"`
+	HTTPClient   HTTPClientConfig   `mapstructure:"http_client"`
+	GRPC         GRPCConfig         `mapstructure:"grpc"`
+	Capabilities CapabilitiesConfig `mapstructure:"capabilities"`
 	// 元数据（非 YAML 配置，运行时注入）
 	Version     string `mapstructure:"-"`
 	Environment string `mapstructure:"-"`
+}
+
+// OTELConfig OpenTelemetry 可观测性配置（追踪/指标/日志统一走 OTLP gRPC）
+type OTELConfig struct {
+	Enabled        bool    `mapstructure:"enabled"`
+	Endpoint       string  `mapstructure:"endpoint"`
+	ServiceName    string  `mapstructure:"service_name"`
+	ServiceVersion string  `mapstructure:"service_version"`
+	SampleRate     float64 `mapstructure:"sample_rate"`
+	// MetricsEnabled 是否将 Prometheus 指标转换为 OTLP 推送到 OpenObserve
+	MetricsEnabled bool `mapstructure:"metrics_enabled"`
+	// LogsEnabled 是否将结构化日志推送到 OpenObserve
+	LogsEnabled bool `mapstructure:"logs_enabled"`
+	// MetricsInterval 指标推送间隔（秒），<=0 默认 15
+	MetricsInterval int `mapstructure:"metrics_interval_sec"`
+	// AuthEmail / AuthPassword OpenObserve 账号凭据（Basic Auth，gRPC metadata authorization）。
+	// AuthEmail 为空则不携带凭据（OpenObserve 默认拒绝匿名 OTLP 写入）。
+	AuthEmail    string `mapstructure:"auth_email"`
+	AuthPassword string `mapstructure:"auth_password"`
+	// OrgID OpenObserve 组织（gRPC metadata organization；OpenObserve OTLP 默认组织 default）
+	OrgID string `mapstructure:"org_id"`
+	// LogsStreamName OpenObserve 日志 stream 名（gRPC metadata stream-name；
+	// 空则不携带 header，落 OpenObserve 默认流 default）
+	LogsStreamName string `mapstructure:"logs_stream_name"`
+	// TracesStreamName OpenObserve 追踪 stream 名（同上，空则落默认流 default）
+	TracesStreamName string `mapstructure:"traces_stream_name"`
+}
+
+// DefaultOTELConfig 返回默认可观测性配置
+func DefaultOTELConfig() OTELConfig {
+	return OTELConfig{
+		Enabled:          false,
+		Endpoint:         "localhost:4317",
+		ServiceName:      "jimu",
+		ServiceVersion:   "dev",
+		SampleRate:       1.0,
+		MetricsEnabled:   true,
+		LogsEnabled:      true,
+		MetricsInterval:  15,
+		OrgID:            "default",
+		LogsStreamName:   "jimu_logs",
+		TracesStreamName: "jimu_traces",
+	}
+}
+
+// ErrorReportConfig 错误上报配置。
+// 定义在 config 包而非 kernel/reporter：配置结构归配置层，
+// 内核件只接受它需要的值，避免 config 反向依赖内核实现。
+type ErrorReportConfig struct {
+	// Enabled 是否启用错误上报（false 时 Reporter 为空实现，零开销）
+	Enabled bool `mapstructure:"enabled"`
 }
 
 // HTTPClientConfig 出站 HTTP client 配置

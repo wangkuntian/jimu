@@ -1,4 +1,4 @@
-package observability
+package health
 
 import (
 	"context"

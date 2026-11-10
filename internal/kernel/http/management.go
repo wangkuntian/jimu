@@ -6,17 +6,21 @@ import (
 	"time"
 
 	"jimu/internal/config"
-	"jimu/internal/kernel/observability"
-
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"jimu/internal/kernel/health"
 )
+
+// MetricsHandler 返回 /metrics 路由的处理器；由组合根注入 Prometheus registry，
+// 使 kernel/http 不必 import prometheus/promhttp。返回 nil 表示不暴露指标。
+type MetricsHandler func() http.Handler
 
 // HealthRouter 组装管理端口路由。extra 用于注入能力清单等由组合根提供的路由，
 // 避免 kernel 反向 import capabilities。
-func HealthRouter(readiness *observability.Readiness, enablePprof bool, extra ...func(*http.ServeMux)) http.Handler {
+func HealthRouter(readiness *health.Readiness, metrics MetricsHandler, enablePprof bool, extra ...func(*http.ServeMux)) http.Handler {
 	mux := http.NewServeMux()
-	observability.RegisterHealth(mux, readiness)
-	mux.Handle("/metrics", promhttp.Handler())
+	health.RegisterHealth(mux, readiness)
+	if metrics != nil {
+		mux.Handle("/metrics", metrics())
+	}
 	for _, register := range extra {
 		register(mux)
 	}

@@ -1,38 +1,26 @@
-package auth
+package redisstore
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
+	"jimu/internal/kernel/auth"
 	redistore "jimu/internal/kernel/redis"
 
 	"github.com/redis/go-redis/v9"
 )
 
-var (
-	ErrSessionNotFound = errors.New("session not found")
-	ErrTokenReuse      = errors.New("refresh token reuse detected")
-)
-
-type SessionStore interface {
-	Create(ctx context.Context, userID uint64, sessionID, tokenID string, ttl time.Duration) error
-	Rotate(ctx context.Context, userID uint64, sessionID, oldTokenID, newTokenID string, ttl time.Duration) error
-	Revoke(ctx context.Context, userID uint64, sessionID string) error
-	RevokeAll(ctx context.Context, userID uint64) error
-}
-
 type RedisSessionStore struct {
 	client sessionRedis
 }
 
-func NewRedisSessionStore(client redistore.Client) SessionStore {
+func NewRedisSessionStore(client redistore.Client) auth.SessionStore {
 	return newRedisSessionStore(redisClientAdapter{Client: client})
 }
 
-func newRedisSessionStore(client sessionRedis) SessionStore {
+func newRedisSessionStore(client sessionRedis) auth.SessionStore {
 	return &RedisSessionStore{client: client}
 }
 
@@ -106,9 +94,9 @@ return 1
 	case 1:
 		return nil
 	case 0:
-		return ErrSessionNotFound
+		return auth.ErrSessionNotFound
 	case -1:
-		return ErrTokenReuse
+		return auth.ErrTokenReuse
 	default:
 		return fmt.Errorf("unexpected rotate result: %d", res)
 	}

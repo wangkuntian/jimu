@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"jimu/internal/kernel/auth"
+	authredis "jimu/internal/kernel/auth/redisstore"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
@@ -72,7 +73,7 @@ func TestAdminRateLimitAuthPeek_ExistingCount(t *testing.T) {
 	ctx := context.Background()
 
 	// 用真实 Limiter 触发 3 次登录限流（limit=5, window=1m）
-	limiter := auth.NewLimiter(client, true)
+	limiter := auth.NewLimiter(authredis.NewRateCounter(client), true)
 	for i := 0; i < 3; i++ {
 		ok, err := limiter.Allow(ctx, "login", "ip:10.0.0.1", 5, time.Minute)
 		require.NoError(t, err)

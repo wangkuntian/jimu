@@ -10,6 +10,7 @@ import (
 	"jimu/internal/contract"
 	"jimu/internal/kernel/access"
 	"jimu/internal/kernel/auth"
+	authredis "jimu/internal/kernel/auth/redisstore"
 
 	redistore "jimu/internal/kernel/redis"
 
@@ -49,9 +50,9 @@ func New(db *gorm.DB, rdb redistore.Client, cfg Config, failClosed bool, captcha
 		}
 	}
 	jwtUtil := auth.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
-	sessionStore := auth.NewRedisSessionStore(rdb)
-	limiter := auth.NewLimiter(rdb, failClosed)
-	lockoutTracker := auth.NewLoginFailureTracker(rdb, auth.DefaultLockoutConfig())
+	sessionStore := authredis.NewSessionStore(rdb)
+	limiter := auth.NewLimiter(authredis.NewRateCounter(rdb), failClosed)
+	lockoutTracker := auth.NewLoginFailureTracker(authredis.NewFailureStore(rdb), auth.DefaultLockoutConfig())
 	// 密码重置验证码存储：redis 一次性码，TTL 取配置
 	resetStore := application.NewResetStore(rdb, time.Duration(cfg.ResetCodeTTLMin)*time.Minute)
 	loginHistoryRepo := authinfra.NewMysqlLoginHistoryRepository(db)

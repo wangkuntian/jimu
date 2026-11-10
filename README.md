@@ -32,6 +32,9 @@ Jimu 不是运行时框架，也不要求业务代码依赖 Jimu SDK。`jimu new
 预设只是裁剪起点：生成后可用 `jimu capability add` 继续组合能力。
 `--with` 是 experimental 专家模式，不承诺组合级生产兼容。
 
+生成时按需编译底层组件：`--db=mysql|postgres`（默认 `mysql`）只带所选数据库驱动；
+`minimal` 产物不含 Redis、Casbin 与 OTel 导出器，server 二进制约 27 MB。
+
 > `basic-api` 与 `auth-api` 已在 v0.10.0 退役。由它们生成的项目执行 `jimu upgrade` 会硬失败，
 > 需要按 `minimal`/`auth` 重新生成。
 
@@ -69,6 +72,13 @@ cd demo && make dev
 - `GET http://127.0.0.1:9090/readyz`
 
 `minimal` 生成项目不需要数据库、Redis 或其他外部服务。
+
+生成项目默认编译 MySQL 驱动。需要 PostgreSQL 时加 `--db=postgres`：
+只编译所选驱动与对应方言的迁移，另一套驱动不会进入产物。
+
+```bash
+./jimu new demo --template=auth --db=postgres
+```
 
 ## 快速开始：auth
 

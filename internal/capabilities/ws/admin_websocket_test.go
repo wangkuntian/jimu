@@ -20,7 +20,7 @@ import (
 )
 
 func TestAdminWebSocketPortRoutesAndMessages(t *testing.T) {
-	port := newAdminWebSocket()
+	port := newAdminWebSocket(nil)
 	message := contract.AdminWebSocketMessage{
 		Type: "notification", Channel: "room:1", Payload: json.RawMessage(`{"title":"hi"}`),
 	}
@@ -40,7 +40,7 @@ func TestAdminWebSocketPortRoutesAndMessages(t *testing.T) {
 }
 
 func TestAdminWebSocketPortPresence(t *testing.T) {
-	port := newAdminWebSocket()
+	port := newAdminWebSocket(nil)
 	_, ok := port.Presence(9)
 	assert.False(t, ok)
 	port.presence.Online(9, "conn-1")
@@ -52,9 +52,9 @@ func TestAdminWebSocketPortPresence(t *testing.T) {
 }
 
 func TestAdminWebSocketPortHandler(t *testing.T) {
-	port := newAdminWebSocket()
 	jwt := auth.New("test-secret", "test-issuer", 60, 7)
-	h := port.Handler(jwt)
+	port := newAdminWebSocket(jwt)
+	h := port.Handler()()
 	w := httptest.NewRecorder()
 	h(w, httptest.NewRequest(http.MethodGet, "/ws", nil))
 	assert.Equal(t, http.StatusUnauthorized, w.Code)

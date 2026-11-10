@@ -55,7 +55,7 @@ type Client struct {
 }
 
 // ReadPump 处理来自客户端的消息
-func (c *Client) ReadPump(ctx context.Context, jwtUtil *auth.JWT, presence *PresenceManager, channels *ChannelManager, onRegister func(*Client)) {
+func (c *Client) ReadPump(ctx context.Context, jwtUtil TokenParser, presence *PresenceManager, channels *ChannelManager, onRegister func(*Client)) {
 	defer func() {
 		c.hub.safeUnregister(c)
 		_ = c.conn.Close()
@@ -98,7 +98,7 @@ func (c *Client) ReadPump(ctx context.Context, jwtUtil *auth.JWT, presence *Pres
 }
 
 // handleMessage 处理单条消息
-func (c *Client) handleMessage(ctx context.Context, jwtUtil *auth.JWT, presence *PresenceManager, channels *ChannelManager, msg *WSMessage) {
+func (c *Client) handleMessage(ctx context.Context, jwtUtil TokenParser, presence *PresenceManager, channels *ChannelManager, msg *WSMessage) {
 	switch msg.Type {
 	case TypePing:
 		ping := &WSMessage{
@@ -495,8 +495,26 @@ func mustEncode(msg *WSMessage) []byte {
 	return data
 }
 
+// TokenParser 是 WebSocket 握手所需的令牌校验能力（只有 Parse 一个方法）。
+// 用接口而不是 *auth.JWT：contract.AdminWebSocket 的签名因此不必携带 auth 类型。
+type TokenParser interface {
+	Parse(tokenString, expectedType string) (userID, tenantID uint64, err error)
+}
+
+// JWTTokenParser 把 *auth.JWT 适配成 TokenParser。
+type JWTTokenParser struct{ JWT *auth.JWT }
+
+// Parse 实现 TokenParser。
+func (p JWTTokenParser) Parse(tokenString, expectedType string) (uint64, uint64, error) {
+	claims, err := p.JWT.Parse(tokenString, expectedType)
+	if err != nil {
+		return 0, 0, err
+	}
+	return claims.UserID, claims.TenantID, nil
+}
+
 // WSHandler 创建 WebSocket HTTP 处理函数
-func WSHandler(hub *ClientHub, jwtUtil *auth.JWT, presence *PresenceManager, channels *ChannelManager, stateCheckers ...auth.StateCheckers) http.HandlerFunc {
+func WSHandler(hub *ClientHub, jwtUtil TokenParser, presence *PresenceManager, channels *ChannelManager, stateCheckers ...auth.StateCheckers) http.HandlerFunc {
 	var states auth.StateCheckers
 	if len(stateCheckers) > 0 {
 		states = stateCheckers[0]
@@ -510,7 +528,7 @@ func WSHandler(hub *ClientHub, jwtUtil *auth.JWT, presence *PresenceManager, cha
 		}
 
 		// 2. 验证 JWT token
-		claims, err := jwtUtil.Parse(token, auth.TokenTypeAccess)
+		userID, tenantID, err := jwtUtil.Parse(token, auth.TokenTypeAccess)
 		if err != nil {
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
@@ -518,7 +536,7 @@ func WSHandler(hub *ClientHub, jwtUtil *auth.JWT, presence *PresenceManager, cha
 
 		// 3. 在升级前校验实时身份状态，避免已停用/删除的用户或租户建立新连接。
 		if states.User != nil {
-			active, err := states.User.UserActive(r.Context(), claims.UserID)
+			active, err := states.User.UserActive(r.Context(), userID)
 			if err != nil {
 				http.Error(w, "failed to check user state", http.StatusInternalServerError)
 				return
@@ -528,8 +546,8 @@ func WSHandler(hub *ClientHub, jwtUtil *auth.JWT, presence *PresenceManager, cha
 				return
 			}
 		}
-		if states.Tenant != nil && claims.TenantID != 0 {
-			active, err := states.Tenant.TenantActive(r.Context(), claims.TenantID)
+		if states.Tenant != nil && tenantID != 0 {
+			active, err := states.Tenant.TenantActive(r.Context(), tenantID)
 			if err != nil {
 				http.Error(w, "failed to check tenant state", http.StatusInternalServerError)
 				return
@@ -552,8 +570,8 @@ func WSHandler(hub *ClientHub, jwtUtil *auth.JWT, presence *PresenceManager, cha
 			hub:        hub,
 			conn:       conn,
 			send:       make(chan []byte, sendBufferSize),
-			userID:     claims.UserID,
-			connID:     strconv.FormatUint(claims.UserID, 10) + ":" + strconv.FormatInt(time.Now().UnixNano(), 10),
+			userID:     userID,
+			connID:     strconv.FormatUint(userID, 10) + ":" + strconv.FormatInt(time.Now().UnixNano(), 10),
 			channels:   make(map[string]bool),
 			lastActive: time.Now(),
 		}

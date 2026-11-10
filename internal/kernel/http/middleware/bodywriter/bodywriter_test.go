@@ -1,4 +1,4 @@
-package middleware
+package bodywriter
 
 import (
 	"net/http"
@@ -15,24 +15,24 @@ func TestResponseBodyWriterCapturesAndTruncates(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(w)
 
-	bw := newResponseBodyWriter(c.Writer, 8)
+	bw := New(c.Writer, 8)
 	require.NotNil(t, bw)
 
 	_, err := bw.Write([]byte("hello"))
 	require.NoError(t, err)
-	assert.Equal(t, "hello", bw.capturedBody())
-	assert.False(t, bw.isTruncated())
+	assert.Equal(t, "hello", bw.CapturedBody())
+	assert.False(t, bw.IsTruncated())
 
 	// 超过 maxSize 的部分被截断但标记
 	_, err = bw.Write([]byte("world-extra"))
 	require.NoError(t, err)
-	assert.Equal(t, "hellowor", bw.capturedBody())
-	assert.True(t, bw.isTruncated())
+	assert.Equal(t, "hellowor", bw.CapturedBody())
+	assert.True(t, bw.IsTruncated())
 
 	// 已满后再写仍标记截断
 	_, err = bw.Write([]byte("x"))
 	require.NoError(t, err)
-	assert.True(t, bw.isTruncated())
+	assert.True(t, bw.IsTruncated())
 
 	// 底层响应体完整透传
 	assert.Equal(t, "helloworld-extrax", w.Body.String())
@@ -43,7 +43,7 @@ func TestResponseBodyWriterWriteHeaderPassthrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(w)
 
-	bw := newResponseBodyWriter(c.Writer, 1024)
+	bw := New(c.Writer, 1024)
 	bw.WriteHeader(http.StatusCreated)
 	// gin 的 responseWriter 延迟写头：状态记录在 writer，写 body 后落到 recorder
 	assert.Equal(t, http.StatusCreated, c.Writer.Status())
@@ -68,7 +68,7 @@ func TestSanitizeBody(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, sanitizeBody(tt.in))
+			assert.Equal(t, tt.want, Sanitize(tt.in))
 		})
 	}
 }

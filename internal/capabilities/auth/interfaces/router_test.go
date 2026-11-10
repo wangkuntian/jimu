@@ -3,10 +3,8 @@ package interfaces
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,7 +12,6 @@ import (
 	"jimu/internal/kernel/auth"
 
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 )
 
 func TestRegisterRouteDependsOnPublicRegistration(t *testing.T) {
@@ -171,65 +168,5 @@ func testAuthConfig() Config {
 
 func newRouterLimiter(t *testing.T) (*auth.Limiter, func()) {
 	t.Helper()
-	return auth.NewLimiter(&routerLimiterRedis{counts: make(map[string]int)}, true), func() {}
-}
-
-type routerLimiterRedis struct {
-	counts map[string]int
-}
-
-func (r *routerLimiterRedis) Eval(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd {
-	return r.eval(keys, args...)
-}
-
-func (r *routerLimiterRedis) EvalSha(ctx context.Context, sha1 string, keys []string, args ...interface{}) *redis.Cmd {
-	return r.eval(keys, args...)
-}
-
-func (r *routerLimiterRedis) EvalRO(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd {
-	return r.eval(keys, args...)
-}
-
-func (r *routerLimiterRedis) EvalShaRO(ctx context.Context, sha1 string, keys []string, args ...interface{}) *redis.Cmd {
-	return r.eval(keys, args...)
-}
-
-func (r *routerLimiterRedis) ScriptExists(ctx context.Context, hashes ...string) *redis.BoolSliceCmd {
-	exists := make([]bool, len(hashes))
-	for i := range exists {
-		exists[i] = true
-	}
-	return redis.NewBoolSliceResult(exists, nil)
-}
-
-func (r *routerLimiterRedis) ScriptLoad(ctx context.Context, script string) *redis.StringCmd {
-	return redis.NewStringResult("fake-script", nil)
-}
-
-func (r *routerLimiterRedis) eval(keys []string, args ...interface{}) *redis.Cmd {
-	if len(keys) != 1 || len(args) != 2 {
-		return redis.NewCmdResult(nil, fmt.Errorf("unexpected limiter call"))
-	}
-	limit, err := routerLimiterInt(args[1])
-	if err != nil {
-		return redis.NewCmdResult(nil, err)
-	}
-	r.counts[keys[0]]++
-	if r.counts[keys[0]] > limit {
-		return redis.NewCmdResult(int64(0), nil)
-	}
-	return redis.NewCmdResult(int64(1), nil)
-}
-
-func routerLimiterInt(value interface{}) (int, error) {
-	switch v := value.(type) {
-	case int:
-		return v, nil
-	case int64:
-		return int(v), nil
-	case string:
-		return strconv.Atoi(v)
-	default:
-		return strconv.Atoi(fmt.Sprint(value))
-	}
+	return auth.NewLimiter(auth.NewMemoryRateCounter(), true), func() {}
 }

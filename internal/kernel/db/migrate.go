@@ -18,8 +18,6 @@ import (
 	"jimu/internal/kernel/logger"
 
 	mysqldb "github.com/go-sql-driver/mysql"
-	"github.com/jackc/pgx/v5/pgconn"
-	_ "github.com/jackc/pgx/v5/stdlib" // 注册 pgx driver，供 goose postgres 迁移使用
 	"github.com/pressly/goose/v3"
 	"gorm.io/gorm"
 )
@@ -171,12 +169,21 @@ func MigrateWithRetry(cfg config.DBConfig, caps []contract.Descriptor, log *logg
 	return fmt.Errorf("migration %s failed after %d attempts: %w", direction, maxRetries, lastErr)
 }
 
+// postgresDialect 由 postgres.go 的 init() 替换为真实实现。
+// 生成器可以整份裁掉 postgres.go，这里保留的错误实现保证仍能编译。
+var postgresDialect = func(config.DBConfig) (string, string, error) {
+	return "", "", fmt.Errorf("db driver postgres is not compiled into this build")
+}
+
+// isPostgresNoSuchTable 由 postgres.go 的 init() 替换为真实实现。
+var isPostgresNoSuchTable = func(error) bool { return false }
+
 // sqlDriverAndDSN 根据 Driver 配置返回 database/sql driver 名与 DSN
 func sqlDriverAndDSN(cfg config.DBConfig) (string, string, error) {
 	dialect := strings.ToLower(cfg.Driver)
 	switch dialect {
 	case "postgres", "postgresql":
-		return "pgx", pgDSN(cfg), nil
+		return postgresDialect(cfg)
 	case "", "mysql", "mariadb":
 		return "mysql", mysqlDSN(cfg), nil
 	default:
@@ -340,8 +347,7 @@ func isNoSuchTableErr(err error) bool {
 	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1146 {
 		return true
 	}
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "42P01"
+	return isPostgresNoSuchTable(err)
 }
 
 // adoptEmptyFS 为每个要登记的版本生成一个同名空迁移文件（仅 -- +goose Up/Down

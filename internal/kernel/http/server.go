@@ -11,12 +11,10 @@ import (
 	"jimu/internal/config"
 	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/observability"
 	"jimu/internal/kernel/tlsconf"
 	"jimu/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 type Server struct {
@@ -79,7 +77,11 @@ func (s *Server) Errors() <-chan error {
 	return s.errors
 }
 
-func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.ServerConfig, securityCfg config.SecurityConfig, otelCfg observability.TracingConfig, reporters ...middleware.Reporter) *gin.Engine {
+// TracingMiddleware 构造 HTTP 追踪中间件；由组合根注入，使 kernel/http 不必 import otelgin。
+// 返回 nil 表示不启用追踪。
+type TracingMiddleware func(serviceName string) gin.HandlerFunc
+
+func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.ServerConfig, securityCfg config.SecurityConfig, otelCfg config.OTELConfig, tracing TracingMiddleware, reporters ...middleware.Reporter) *gin.Engine {
 	switch cfg.Mode {
 	case config.HTTPModeRelease:
 		gin.SetMode(gin.ReleaseMode)
@@ -99,13 +101,10 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 	r.Use(middleware.Locale())
 	// HTTP 指标中间件（在路由处理前注册，测量完整延迟）
 	r.Use(middleware.Metrics())
-	// OpenTelemetry 追踪中间件（在 Logger 之前，确保 span 可记录到日志）
-	if otelCfg.Enabled {
-		serviceName := otelCfg.ServiceName
-		if serviceName == "" {
-			serviceName = "jimu"
-		}
-		r.Use(otelgin.Middleware(serviceName))
+	// OpenTelemetry 追踪中间件由调用方注入：kernel/http 不 import otelgin，
+	// 未启用可观测性的项目因此不会把 OTel 依赖链编进二进制。
+	if otelCfg.Enabled && tracing != nil {
+		r.Use(tracing(otelCfg.ServiceName))
 	}
 	r.Use(
 		middleware.CORSMiddleware(middleware.CORSConfig{

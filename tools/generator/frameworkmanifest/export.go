@@ -21,12 +21,14 @@ import (
 )
 
 type Request struct {
-	Root      string
-	Template  string
-	Profile   string
-	With      string
-	Shape     string
-	Module    string
+	Root     string
+	Template string
+	Profile  string
+	With     string
+	Shape    string
+	Module   string
+	// DBDriver 选择编译进项目的数据库驱动（mysql 默认，postgres 可选）。
+	DBDriver  string
 	Framework *manifest.Framework
 	// Drivers 保留既有项目的驱动选择；未列出的能力由默认驱动规则补齐。
 	Drivers map[string][]string
@@ -37,6 +39,7 @@ type selection struct {
 	template   string
 	profile    string
 	support    string
+	dbDriver   string
 	requested  []string
 	autoAdded  []string
 	declared   []string
@@ -86,19 +89,26 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 	if req.Template != "" && req.Shape != "" {
 		return manifest.Document{}, Resolution{}, fmt.Errorf("--shape is only valid with --with")
 	}
+	dbDriver, err := normalizeDBDriver(req.DBDriver)
+	if err != nil {
+		return manifest.Document{}, Resolution{}, err
+	}
 	var doc manifest.Document
 	var selected selection
+	selected.dbDriver = dbDriver
 	if req.Template != "" {
 		var preset Preset
 		preset, err = LookupPreset(req.Template)
 		if err == nil {
 			selected, err = resolvePresetSelection(root, preset)
+			selected.dbDriver = dbDriver
 			if err == nil {
 				doc, err = buildDocument(root, req.Module, selected, req.Framework)
 			}
 		}
 	} else {
 		selected, err = resolveSelection(root, req)
+		selected.dbDriver = dbDriver
 		if err == nil {
 			doc, err = buildDocument(root, req.Module, selected, req.Framework)
 		}
@@ -112,6 +122,18 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 	}
 	doc.Digest = digest
 	return doc, resolutionFor(doc, selected), nil
+}
+
+// normalizeDBDriver 归一化 --db 取值：空值等价 mysql（与 config 默认一致）。
+func normalizeDBDriver(value string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "mysql", "mariadb":
+		return "mysql", nil
+	case "postgres", "postgresql":
+		return "postgres", nil
+	default:
+		return "", fmt.Errorf("unsupported --db %q: must be mysql or postgres", value)
+	}
 }
 
 func resolutionFor(doc manifest.Document, selected selection) Resolution {
@@ -255,7 +277,7 @@ func buildDocument(root, module string, selected selection, frameworkOverride *m
 		Copy:           copyActionsValue,
 		Templates:      templateActions(root, selected),
 		Merges:         mergeActions(root, selected),
-		Rewrites:       rewriteActions(module),
+		Rewrites:       rewriteActions(module, selected),
 		Assets:         assetActions(root, selected),
 		Prune:          []manifest.PruneRule{{Kind: "test-import", Path: "**/*_test.go", Reason: pruneReason}},
 		GeneratedFiles: generatedFilesValue,

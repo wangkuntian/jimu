@@ -1,4 +1,4 @@
-package middleware
+package idempotency
 
 import (
 	"crypto/sha256"
@@ -8,7 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/kernel/http/ctxkeys"
+	"jimu/internal/kernel/http/middleware/bodywriter"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
@@ -88,14 +89,14 @@ func IdempotencyMiddleware(redis redistore.Client, ttl time.Duration) gin.Handle
 			return
 		}
 
-		w := newResponseBodyWriter(c.Writer, idempotencyMaxBody)
+		w := bodywriter.New(c.Writer, idempotencyMaxBody)
 		c.Writer = w
 
 		c.Next()
 		status := c.Writer.Status()
 
 		// 只缓存成功响应；失败或响应过大时释放占位，允许同键重试
-		if status < 200 || status >= 300 || w.isTruncated() {
+		if status < 200 || status >= 300 || w.IsTruncated() {
 			_ = redis.Del(ctx, cacheKey).Err()
 			return
 		}
@@ -103,7 +104,7 @@ func IdempotencyMiddleware(redis redistore.Client, ttl time.Duration) gin.Handle
 			State:   idempotencyDone,
 			Status:  status,
 			Headers: map[string]string{"Content-Type": w.Header().Get("Content-Type")},
-			Body:    w.capturedBody(),
+			Body:    w.CapturedBody(),
 		}
 		if data, err := json.Marshal(cached); err == nil {
 			_ = redis.Set(ctx, cacheKey, data, ttl).Err()
@@ -114,7 +115,7 @@ func IdempotencyMiddleware(redis redistore.Client, ttl time.Duration) gin.Handle
 // idempotencyCacheKey 生成幂等缓存键：绑定租户、用户、方法与路径，避免跨上下文互相命中
 func idempotencyCacheKey(c *gin.Context, key string) string {
 	scope := strings.Join([]string{
-		strconv.FormatUint(tenant.FromContext(c.Request.Context()), 10),
+		strconv.FormatUint(tenantID(c), 10),
 		strconv.FormatUint(ginUserID(c), 10),
 		c.Request.Method,
 		c.Request.URL.Path,
@@ -132,6 +133,12 @@ func ginUserID(c *gin.Context) uint64 {
 		}
 	}
 	return 0
+}
+
+// tenantID 从请求 context 读租户 ID；不存在时返回 0（平台级视角）。
+func tenantID(c *gin.Context) uint64 {
+	id, _ := c.Request.Context().Value(ctxkeys.TenantID{}).(uint64)
+	return id
 }
 
 // replayCachedResponse 重放已完成的响应；仍在处理中时返回冲突，避免重复执行

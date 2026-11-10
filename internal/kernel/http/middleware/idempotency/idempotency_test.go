@@ -1,4 +1,4 @@
-package middleware
+package idempotency
 
 import (
 	"bytes"

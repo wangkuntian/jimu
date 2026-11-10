@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-
-	redistore "jimu/internal/kernel/redis"
 )
 
 // LockoutConfig 账号锁定配置
@@ -24,15 +22,16 @@ func DefaultLockoutConfig() LockoutConfig {
 	}
 }
 
-// LoginFailureTracker 基于 Redis 的登录失败追踪与账号锁定
+// LoginFailureTracker 登录失败追踪与账号锁定。
+// 存储由 FailureStore 抽象：Redis 支持跨实例共享锁定状态，内存实现只在单实例内有效。
 type LoginFailureTracker struct {
-	client redistore.Client
-	cfg    LockoutConfig
+	store FailureStore
+	cfg   LockoutConfig
 }
 
 // NewLoginFailureTracker 创建登录失败追踪器
-func NewLoginFailureTracker(client redistore.Client, cfg LockoutConfig) *LoginFailureTracker {
-	return &LoginFailureTracker{client: client, cfg: cfg}
+func NewLoginFailureTracker(store FailureStore, cfg LockoutConfig) *LoginFailureTracker {
+	return &LoginFailureTracker{store: store, cfg: cfg}
 }
 
 // CheckLocked 检查账号是否被锁定
@@ -41,7 +40,7 @@ func (t *LoginFailureTracker) CheckLocked(ctx context.Context, username string) 
 		return false, 0, nil
 	}
 	key := lockKey(username)
-	ttl, err := t.client.TTL(ctx, key).Result()
+	ttl, err := t.store.TTL(ctx, key)
 	if err != nil {
 		return false, 0, err
 	}
@@ -58,18 +57,9 @@ func (t *LoginFailureTracker) RecordFailure(ctx context.Context, username string
 		return 0, nil
 	}
 	key := lockKey(username)
-	count, err := t.client.Incr(ctx, key).Result()
+	count, err := t.store.Incr(ctx, key, t.cfg.WindowSize, t.cfg.MaxFailures, t.cfg.LockoutDuration)
 	if err != nil {
 		return 0, err
-	}
-	if count == 1 {
-		_ = t.client.Expire(ctx, key, t.cfg.WindowSize)
-	}
-	// 达到阈值，延长锁定时间为 LockoutDuration
-	if int(count) >= t.cfg.MaxFailures {
-		if err := t.client.Expire(ctx, key, t.cfg.LockoutDuration).Err(); err != nil {
-			return int(count), err
-		}
 	}
 	return int(count), nil
 }
@@ -79,7 +69,7 @@ func (t *LoginFailureTracker) Reset(ctx context.Context, username string) error 
 	if t.cfg.MaxFailures <= 0 {
 		return nil
 	}
-	return t.client.Del(ctx, lockKey(username)).Err()
+	return t.store.Del(ctx, lockKey(username))
 }
 
 func lockKey(username string) string {

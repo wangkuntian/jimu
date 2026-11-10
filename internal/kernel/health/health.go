@@ -1,4 +1,4 @@
-package observability
+package health
 
 import (
 	"context"
@@ -6,13 +6,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
 type Checker interface {
 	Ping(context.Context) error
 }
+
+// CheckerFunc 把普通函数适配成 Checker，供调用方在不 import 具体驱动包时构造检查器。
+type CheckerFunc func(context.Context) error
+
+// Ping 实现 Checker。
+func (f CheckerFunc) Ping(ctx context.Context) error { return f(ctx) }
 
 type Readiness struct {
 	timeout  time.Duration
@@ -42,12 +46,6 @@ type sqlChecker struct{ db *sql.DB }
 func NewSQLChecker(db *sql.DB) Checker { return sqlChecker{db: db} }
 
 func (c sqlChecker) Ping(ctx context.Context) error { return c.db.PingContext(ctx) }
-
-type redisChecker struct{ client redis.Cmdable }
-
-func NewRedisChecker(client redis.Cmdable) Checker { return redisChecker{client: client} }
-
-func (c redisChecker) Ping(ctx context.Context) error { return c.client.Ping(ctx).Err() }
 
 func RegisterHealth(mux *http.ServeMux, readiness *Readiness) {
 	mux.HandleFunc("/livez", func(w http.ResponseWriter, _ *http.Request) {

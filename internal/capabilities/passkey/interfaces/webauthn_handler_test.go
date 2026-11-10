@@ -3,7 +3,6 @@ package interfaces
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -263,7 +262,7 @@ func TestWebAuthnLoginBeginWithoutCredential(t *testing.T) {
 
 func TestWebAuthnLoginBeginRateLimited(t *testing.T) {
 	handler, _, _ := newWebAuthnHandler(t)
-	handler.limiter = auth.NewLimiter(&routerLimiterRedis{counts: map[string]int{}}, true)
+	handler.limiter = auth.NewLimiter(auth.NewMemoryRateCounter(), true)
 	handler.cfg = contract.AuthConfig{LoginRateLimit: 1, LoginRateWindowSec: 60}
 	gin.SetMode(gin.TestMode)
 
@@ -360,61 +359,3 @@ func TestWebAuthnHandlersWithoutConfiguration(t *testing.T) {
 }
 
 // ---- 限流 Redis 替身（redis.Scripter） ----
-
-type routerLimiterRedis struct {
-	counts map[string]int
-}
-
-func (r *routerLimiterRedis) Eval(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd {
-	return r.eval(keys, args...)
-}
-
-func (r *routerLimiterRedis) EvalSha(ctx context.Context, sha1 string, keys []string, args ...interface{}) *redis.Cmd {
-	return r.eval(keys, args...)
-}
-
-func (r *routerLimiterRedis) EvalRO(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd {
-	return r.eval(keys, args...)
-}
-
-func (r *routerLimiterRedis) EvalShaRO(ctx context.Context, sha1 string, keys []string, args ...interface{}) *redis.Cmd {
-	return r.eval(keys, args...)
-}
-
-func (r *routerLimiterRedis) ScriptExists(ctx context.Context, hashes ...string) *redis.BoolSliceCmd {
-	exists := make([]bool, len(hashes))
-	for i := range exists {
-		exists[i] = true
-	}
-	return redis.NewBoolSliceResult(exists, nil)
-}
-
-func (r *routerLimiterRedis) ScriptLoad(ctx context.Context, script string) *redis.StringCmd {
-	return redis.NewStringResult("fake-script", nil)
-}
-
-func (r *routerLimiterRedis) eval(keys []string, args ...interface{}) *redis.Cmd {
-	if len(keys) != 1 || len(args) != 2 {
-		return redis.NewCmdResult(nil, fmt.Errorf("unexpected limiter call"))
-	}
-	limit, err := routerLimiterInt(args[1])
-	if err != nil {
-		return redis.NewCmdResult(nil, err)
-	}
-	r.counts[keys[0]]++
-	if r.counts[keys[0]] > limit {
-		return redis.NewCmdResult(int64(0), nil)
-	}
-	return redis.NewCmdResult(int64(1), nil)
-}
-
-func routerLimiterInt(v interface{}) (int, error) {
-	switch n := v.(type) {
-	case int:
-		return n, nil
-	case int64:
-		return int(n), nil
-	default:
-		return 0, fmt.Errorf("unexpected arg type %T", v)
-	}
-}

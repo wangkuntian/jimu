@@ -8,7 +8,7 @@ import (
 	"jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/capabilities/user/interfaces"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
+	authredis "jimu/internal/kernel/auth/redisstore"
 
 	redistore "jimu/internal/kernel/redis"
 
@@ -50,7 +50,7 @@ func New(db *gorm.DB, deps ...interface{}) *Module {
 		}
 	}
 	if m.rdb != nil {
-		m.service.WithSessionRevoker(auth.NewRedisSessionStore(m.rdb))
+		m.service.WithSessionRevoker(authredis.NewSessionStore(m.rdb))
 	}
 	return m
 }

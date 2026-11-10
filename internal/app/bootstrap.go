@@ -10,16 +10,14 @@ import (
 
 	"jimu/internal/capability"
 	"jimu/internal/contract"
+	"jimu/internal/kernel/health"
 	platformhttp "jimu/internal/kernel/http"
-	"jimu/internal/kernel/http/middleware"
 	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/observability"
 	"jimu/internal/kernel/scheduler"
 
 	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus"
-	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
-	gormotel "gorm.io/plugin/opentelemetry/tracing"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 // Bootstrap 在全部能力装配完成后接管生命周期：初始化观测、路由、事件与定时任务。
@@ -27,70 +25,25 @@ import (
 //   - modules 经 contract.Module 注册 HTTP/事件/任务；
 //   - components 是能力贡献的 contract.Component（如 worker pool、WS Hub、gRPC server）；
 //   - jobs 是能力贡献的定时任务定义（如 outbox_process、retention）。
+//
+// initObservability 由 bootstrap_otel.go 的 init() 替换为真实实现。
+// 生成器在不需要可观测性时排除那个文件，这里保留的空实现保证仍能编译。
+var initObservability = func(*Container) error { return nil }
+
 func Bootstrap(container *Container, components []contract.Component, jobs []scheduler.Job, modules ...contract.Module) (*Application, error) {
 	cfg := container.Config
 
-	// 初始化 OpenTelemetry 追踪
-	tp, err := observability.InitTracing(context.Background(), cfg.OTEL)
-	if err != nil {
-		return nil, fmt.Errorf("init tracing: %w", err)
-	}
-	container.TracerProvider = tp
-
-	// 指标推送（OTLP/gRPC → OpenObserve）：基于 Prometheus 默认 registry，
-	// 现有 promauto 采集逻辑不变，/metrics 端点继续可用。
-	if cfg.OTEL.Enabled && cfg.OTEL.MetricsEnabled {
-		reg, ok := prometheus.DefaultRegisterer.(*prometheus.Registry)
-		if !ok {
-			container.Logger.Errorw("openobserve metrics pusher init failed", "error", "default registerer type mismatch")
-		} else {
-			pusher, err := observability.NewMetricsPusher(context.Background(), cfg.OTEL, reg)
-			if err != nil {
-				container.Logger.Errorw("openobserve metrics pusher init failed", "error", err.Error())
-			} else {
-				pusher.Start()
-				container.MetricsPusher = pusher
-			}
-		}
+	if err := initObservability(container); err != nil {
+		return nil, fmt.Errorf("init observability: %w", err)
 	}
 
-	// 启用 OTel 时插桩 DB/Redis，捕获查询子 span。
-	// 必须在 InitTracing 之后：插件创建时固化全局 TracerProvider，
-	// 提前实例化会绑定 NoOp provider 导致 span 永不产生。
-	if cfg.OTEL.Enabled {
-		if container.DB != nil {
-			if err := container.DB.Use(gormotel.NewPlugin()); err != nil {
-				return nil, fmt.Errorf("init gorm otel plugin: %w", err)
-			}
-		}
-		if container.Redis != nil {
-			if err := redisotel.InstrumentTracing(container.Redis); err != nil {
-				return nil, fmt.Errorf("init redis otel tracing: %w", err)
-			}
-		}
-	}
-
-	router := platformhttp.SetupRouter(container.Logger, cfg.HTTP, cfg.Server, cfg.Security, cfg.OTEL, container.Reporter)
+	router := platformhttp.SetupRouter(container.Logger, cfg.HTTP, cfg.Server, cfg.Security, cfg.OTEL, platformhttp.TracingMiddleware(func(serviceName string) gin.HandlerFunc { return otelgin.Middleware(serviceName) }), container.Reporter)
 	if err := platformhttp.ConfigureTrustedProxies(router, cfg.HTTP.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
 
 	// 租户维度限流（Redis 滑动窗口）：挂在受保护中间件之后，平台级视角跳过
-	var extraProtected []gin.HandlerFunc
-	if container.Redis != nil && cfg.RateLimit.Tenant.Enabled && cfg.RateLimit.Tenant.Limit > 0 {
-		extraProtected = append(extraProtected, middleware.TenantRateLimitMiddleware(
-			container.Redis,
-			cfg.RateLimit.Tenant.Limit,
-			time.Duration(cfg.RateLimit.Tenant.WindowSec)*time.Second,
-		))
-	}
-	// 幂等中间件：挂在认证/租户注入之后，键按租户+用户+方法+路径绑定
-	if container.Redis != nil && cfg.Security.IdempotencyEnabled {
-		extraProtected = append(extraProtected, middleware.IdempotencyMiddleware(
-			container.Redis,
-			time.Duration(cfg.Security.IdempotencyTTLSec)*time.Second,
-		))
-	}
+	extraProtected := redisMiddlewares(container, cfg)
 	if err := registerHTTP(router, container.Logger, extraProtected, modules...); err != nil {
 		return nil, err
 	}
@@ -113,24 +66,22 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 		container.Logger.Warnw("capability degraded", "name", d.Capability, "missing", strings.Join(d.Missing, ","))
 	}
 
-	checkers := make([]observability.Checker, 0, 2)
+	checkers := make([]health.Checker, 0, 2)
 	if container.DB != nil {
 		sqlDB, err := container.DB.DB()
 		if err != nil {
 			return nil, fmt.Errorf("get database pool: %w", err)
 		}
-		checkers = append(checkers, observability.NewSQLChecker(sqlDB))
+		checkers = append(checkers, health.NewSQLChecker(sqlDB))
 	}
-	if container.Redis != nil {
-		checkers = append(checkers, observability.NewRedisChecker(container.Redis))
-	}
-	readiness := observability.NewReadiness(
+	checkers = append(checkers, redisHealthCheck(container)...)
+	readiness := health.NewReadiness(
 		time.Duration(cfg.Management.ProbeTimeoutSec)*time.Second,
 		checkers...,
 	)
 	management := platformhttp.NewManagementServer(
 		cfg.Management,
-		platformhttp.HealthRouter(readiness, cfg.Management.EnablePprof, func(mux *http.ServeMux) {
+		platformhttp.HealthRouter(readiness, promhttp.Handler, cfg.Management.EnablePprof, func(mux *http.ServeMux) {
 			mux.HandleFunc("/capabilities", capabilitiesHandler(container.Capabilities))
 		}),
 	)
@@ -170,10 +121,9 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 		}
 
 		jobFns := map[string]scheduler.Job{}
-		if container.DBCollector != nil {
+		if container.HasMetricsCollector() {
 			jobFns["metrics_collect"] = scheduler.Job{ID: "metrics_collect", Name: "Collect DB Metrics", Spec: "@every 15s", Run: func() {
-				container.DBCollector.Collect()
-				observability.CollectRuntime()
+				container.CollectMetrics()
 			}}
 		}
 		// 能力贡献的定时任务（outbox_process、cleanup、retention 等）
