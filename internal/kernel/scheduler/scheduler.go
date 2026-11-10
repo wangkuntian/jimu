@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"jimu/internal/contract"
+	"jimu/internal/kernel/lock"
 	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/redis"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -53,7 +53,7 @@ type CronScheduler struct {
 	errors  chan error
 	entries []cron.EntryID
 	store   Store
-	lock    *redis.Lock // 多实例协调（可选）
+	lock    lock.Locker // 多实例协调（可选）
 
 	mu        sync.RWMutex
 	jobs      map[string]*JobInfo // id -> job info
@@ -63,7 +63,7 @@ type CronScheduler struct {
 }
 
 // NewWithStore 创建调度器，指定任务定义存储与分布式锁（锁可选，nil 时不加锁）
-func NewWithStore(log *logger.Logger, store Store, lock *redis.Lock) *CronScheduler {
+func NewWithStore(log *logger.Logger, store Store, locker lock.Locker) *CronScheduler {
 	c := cron.New(cron.WithChain(
 		cron.Recover(cron.DefaultLogger),
 		cron.SkipIfStillRunning(cron.DefaultLogger),
@@ -78,7 +78,7 @@ func NewWithStore(log *logger.Logger, store Store, lock *redis.Lock) *CronSchedu
 		cmdByID:   make(map[string]func()),
 		entryByID: make(map[string]cron.EntryID),
 		store:     store,
-		lock:      lock,
+		lock:      locker,
 	}
 }
 
