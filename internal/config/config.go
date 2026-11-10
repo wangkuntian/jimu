@@ -93,7 +93,6 @@ type Config struct {
 	Log          LogConfig          `mapstructure:"log"`
 	Server       ServerConfig       `mapstructure:"server"`
 	ID           IDConfig           `mapstructure:"id"`
-	Cache        CacheConfig        `mapstructure:"cache"`
 	Security     SecurityConfig     `mapstructure:"security"`
 	OTEL         OTELConfig         `mapstructure:"otel"`
 	ErrorReport  ErrorReportConfig  `mapstructure:"error_reporting"`
@@ -231,11 +230,6 @@ func DefaultSecurityConfig() SecurityConfig {
 		ReferrerPolicy:        "strict-origin-when-cross-origin",
 		PermissionsPolicy:     "camera=(), microphone=(), geolocation=()",
 	}
-}
-
-// CacheConfig 缓存配置
-type CacheConfig struct {
-	Prefix string `mapstructure:"prefix"` // 缓存 key 前缀，用于多实例隔离
 }
 
 type ManagementConfig struct {

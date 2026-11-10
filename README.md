@@ -26,7 +26,7 @@ Jimu 不是运行时框架，也不要求业务代码依赖 Jimu SDK。`jimu new
 |---|---|---|
 | `minimal` | 0 能力，只含最小内核 | 无数据库、Redis 或消息队列 |
 | `auth` | user + access + auth（含 tenant 闭包） | MySQL 8.4、Redis 7 |
-| `full` | 全部 23 个能力 | MySQL 8.4、Redis 7、Kafka、RabbitMQ 或 S3（按驱动） |
+| `full` | 全部 24 个能力 | MySQL 8.4、Redis 7、Kafka、RabbitMQ 或 S3（按驱动） |
 
 默认预设是 `minimal`。`full` 首发支持级别是 `validated`，不是 `certified`。
 预设只是裁剪起点：生成后可用 `jimu capability add` 继续组合能力。

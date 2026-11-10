@@ -84,17 +84,17 @@ done
 # ---------------------------------------------------------------------------
 
 # 全量能力根包清单；新增能力请同步此表与 EXPECTED_*。
-ALL_CAPS="access apidocs apikey audit auth breach captcha console dataops encryption grpc mfa notification oauth outbox passkey queue search storage tenant uploadsec user ws"
+ALL_CAPS="access apidocs apikey audit auth breach cache captcha console dataops encryption grpc mfa notification oauth outbox passkey queue search storage tenant uploadsec user ws"
 
 # EXPECTED_<profile>：该形态二进制依赖闭包里允许出现的**能力根包**，逐值锁定（golden）。
 # 来源＝ internal/profiles/<profile>/assembly.go 的清单 + 传递必需的编译期依赖。
-EXPECTED_full="access apidocs apikey audit auth breach captcha console dataops encryption grpc mfa notification oauth outbox passkey queue search storage tenant uploadsec user ws"
+EXPECTED_full="access apidocs apikey audit auth breach cache captcha console dataops encryption grpc mfa notification oauth outbox passkey queue search storage tenant uploadsec user ws"
 EXPECTED_minimal="access auth encryption notification user"
 
 # FORBIDDEN_<profile>：该形态闭包里明确禁止出现的能力（本次修复的逐形态「不得包含」清单）。
 # 未列出的形态按「ALL_CAPS − EXPECTED」即全部非预期能力处理（见下方 FORBIDDEN_* 逐条列明）。
 FORBIDDEN_full=""
-FORBIDDEN_minimal="tenant passkey oauth dataops audit console grpc storage queue outbox search uploadsec breach apidocs ws"
+FORBIDDEN_minimal="tenant passkey oauth dataops audit console grpc storage queue outbox search uploadsec breach apidocs ws cache"
 
 # ALLOWED_<profile>：从 FORBIDDEN 中显式豁免的既有类型级传递残留（见文件头注释），
 # 它们仍是 EXPECTED 的成员，只豁免「禁止」不改「锁定」。

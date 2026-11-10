@@ -51,10 +51,10 @@
     },
     "full": {
       "limits": {
-        "generated_files": 800,
+        "generated_files": 820,
         "direct_dependencies": 64,
-        "go_closure_files": 358,
-        "go_closure_lines": 39350,
+        "go_closure_files": 370,
+        "go_closure_lines": 39900,
         "external_services": 4,
         "business_routes": 94,
         "health_routes": 2,

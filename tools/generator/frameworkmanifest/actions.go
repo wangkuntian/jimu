@@ -242,7 +242,7 @@ func valuesSections(root string, selected selection) []string {
 	for _, name := range selected.declared {
 		selectedNames[name] = true
 	}
-	capabilityKeys := map[string]string{"audit": "audit", "storage": "storage", "auth": "auth"}
+	capabilityKeys := map[string]string{"audit": "audit", "storage": "storage", "auth": "auth", "cache": "cache"}
 	var sections []string
 	for _, line := range strings.Split(string(content), "\n") {
 		if line == "" || strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") || strings.HasPrefix(line, "#") {

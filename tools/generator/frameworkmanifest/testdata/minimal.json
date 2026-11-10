@@ -362,8 +362,7 @@
       "include": [],
       "exclude": [
         "db/postgres.go",
-        "db/postgres_test.go",
-        "cache"
+        "db/postgres_test.go"
       ]
     },
     {
@@ -804,6 +803,7 @@
           }
         ],
         "KnownNames": [
+          "cache",
           "user",
           "access",
           "tenant",
@@ -885,6 +885,7 @@
           }
         ],
         "KnownNames": [
+          "cache",
           "user",
           "access",
           "tenant",
@@ -956,7 +957,6 @@
       "strategy": "sections",
       "sections": [
         "auth",
-        "cache",
         "capabilities",
         "db",
         "email",
@@ -982,7 +982,6 @@
       "strategy": "sections",
       "sections": [
         "auth",
-        "cache",
         "capabilities",
         "db",
         "email",
@@ -1020,7 +1019,6 @@
         "management",
         "security",
         "server",
-        "cache",
         "log",
         "auth",
         "otel",
@@ -1643,5 +1641,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:cf4159ade5cc3986063702112fb84f24b8ff88246810e72a96a0bba2ceea7481"
+  "digest": "sha256:62be3e5dbe0db8af4a95109f27731711bd0c7851de75d15d0ddd81b071d391c2"
 }

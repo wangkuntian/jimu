@@ -25,6 +25,13 @@ func withEntries(t *testing.T, ds ...contract.Descriptor) {
 // TestCatalogMigrationsShape 单独按"有无迁移"钉住。
 func fixture() []contract.Descriptor {
 	return []contract.Descriptor{
+		{Name: "cache", Mount: contract.MountProtected,
+			Drivers:  []string{"redis", "memory"},
+			Provides: []contract.ProvidedPort{{Name: "cache"}},
+			DriverSpecs: []contract.DriverSpec{
+				{Name: "redis", RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis}},
+				{Name: "memory"},
+			}},
 		{Name: "user", SoftRequires: []string{"access", "tenant"},
 			Owns: []string{"users"}, Mount: contract.MountProtected,
 			MigrationSchemaDeps: []string{"tenant"},
@@ -307,6 +314,7 @@ func TestCatalogMigrationsShape(t *testing.T) {
 		"console": false,
 		"captcha": false, "breach": false, "uploadsec": false,
 		"apikey": true, "queue": true, "outbox": true, "dataops": true, "search": true,
+		"cache": false,
 	}
 	if got := migrationsOf(All()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("catalog Migrations shape drifted:\n got %v\nwant %v", got, want)
@@ -368,6 +376,7 @@ func TestCatalogDriversShape(t *testing.T) {
 	want := map[string][]string{
 		"queue":   {"redis", "kafka", "rabbitmq"},
 		"dataops": {"csv", "excel"},
+		"cache":   {"redis", "memory"},
 	}
 	got := map[string][]string{}
 	for _, d := range All() {
@@ -471,6 +480,7 @@ func TestCatalogConfigSectionsShape(t *testing.T) {
 		"outbox":    {"outbox"},
 		"tenant":    {"tenant"},
 		"uploadsec": {"upload"},
+		"cache":     {"cache"},
 	}
 	got := make(map[string][]string, len(want))
 	for _, d := range All() {

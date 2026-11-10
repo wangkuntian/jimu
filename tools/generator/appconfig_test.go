@@ -448,7 +448,7 @@ func TestValuesCapabilityKeysMatchRepo(t *testing.T) {
 			repoCapabilityKeys = append(repoCapabilityKeys, key)
 		}
 	}
-	assert.ElementsMatch(t, []string{"audit", "storage", "auth"}, repoCapabilityKeys)
+	assert.ElementsMatch(t, []string{"audit", "storage", "auth", "cache"}, repoCapabilityKeys)
 	assert.ElementsMatch(t, repoCapabilityKeys, slices.Collect(maps.Keys(valuesCapabilityKeys)))
 }
 
@@ -465,7 +465,7 @@ func TestValuesSectionsKeepKernelKeysAndSelectedCapabilityKeys(t *testing.T) {
 	assert.Contains(t, keep, "auth")
 	assert.NotContains(t, keep, "audit")
 	assert.NotContains(t, keep, "storage")
-	assert.Equal(t, slices.DeleteFunc(slices.Clone(keys), func(k string) bool { return k == "audit" || k == "storage" }), keep)
+	assert.Equal(t, slices.DeleteFunc(slices.Clone(keys), func(k string) bool { return k == "audit" || k == "storage" || k == "cache" }), keep)
 
 	full, err := ParseCapabilitySet("full", "", "")
 	require.NoError(t, err)

@@ -10,6 +10,7 @@ import (
 	auditmodule "jimu/internal/capabilities/audit"
 	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/breach"
+	cachemodule "jimu/internal/capabilities/cache"
 	"jimu/internal/capabilities/captcha"
 	consolemodule "jimu/internal/capabilities/console"
 	"jimu/internal/capabilities/dataops"
@@ -44,6 +45,8 @@ func Assembly() assembly.Assembly {
 		Name:    "full",
 		Version: profiles.Version,
 		Capabilities: []assembly.Capability{
+			{Descriptor: cachemodule.Descriptor, Wire: cachemodule.Wire,
+				Drivers: []string{"redis", "memory"}},
 			{Descriptor: encryption.Descriptor, Wire: encryption.Wire, Ungated: true},
 			{Descriptor: storage.Descriptor, Wire: storage.Wire, Ungated: true,
 				Drivers: []string{"local", "s3"}},

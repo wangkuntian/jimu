@@ -1,4 +1,4 @@
-package cache
+package redis
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func setupTestCache(t *testing.T) *RedisCache {
+func setupTestCache(t *testing.T) *Cache {
 	mr, err := miniredis.Run()
 	if err != nil {
 		t.Fatalf("miniredis.Run failed: %v", err)
@@ -21,7 +21,7 @@ func setupTestCache(t *testing.T) *RedisCache {
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 
-	return NewRedisCache(client, "test")
+	return newCache(client, "test")
 }
 
 func TestRedisCache_SetAndGet(t *testing.T) {

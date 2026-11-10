@@ -49,7 +49,7 @@ flowchart LR
 
 - `minimal` — 0 能力，只保留最小内核。`internal/kernel`/`internal/shared`/`config`/`contract` 都不依赖能力，唯一耦合点曾是与能力 domain 共享的种子模型，现已抽到 `internal/kernel/seedmodel`。生成项目不含数据库/Redis 客户端、`internal/e2e` 与 `docker-compose.yml`，配置也不含 `db`/`redis` 段；`go build`、`go test`、`go run` 都不需要外部服务，`GET /api/v1/ping` 由内核提供。
 - `auth` — `user` + `access` + `auth`（含 `tenant` 编译闭包），支持级别 `certified`。生成 MySQL/Redis 客户端与迁移，但不生成 Compose：数据库由使用者提供，连接信息走 `DB_*`/`REDIS_*` 环境变量。
-- `full` — 全部 23 个能力 + 完整驱动集（`s3`/`local`、`kafka`/`rabbitmq`/`redis`、`excel`/`csv`），支持级别 `validated`。`--with` 的缺省驱动只取首个，无法表达完整驱动集，因此 `full` 改成从 `internal/profiles/full/assembly.go` 派生。
+- `full` — 全部 24 个能力 + 完整驱动集（`s3`/`local`、`kafka`/`rabbitmq`/`redis`、`cache:redis`/`cache:memory`、`excel`/`csv`），支持级别 `validated`。`--with` 的缺省驱动只取首个，无法表达完整驱动集，因此 `full` 改成从 `internal/profiles/full/assembly.go` 派生。
 
 预设只是裁剪起点：manifest 记录 `selection.template`，但 `jimu capability add` 只拒绝已退役的 `basic-api`/`auth-api`，预设项目可以继续加能力。由已退役模板生成的项目执行 `jimu upgrade` 直接硬失败（`ErrRetiredTemplate`），不提供迁移命令。
 

@@ -127,6 +127,7 @@ var fullRoutesGolden = []string{
 // Descriptor.Normalized() 折叠为 MountProtected（fail-closed），因此误分类只可能表现为
 // 期望 public/self-managed 的条目落回 protected —— 本表逐条钉住。
 var fullMountsGolden = map[string]contract.MountPoint{
+	"cache":        contract.MountProtected,
 	"encryption":   contract.MountProtected,
 	"storage":      contract.MountProtected,
 	"notification": contract.MountProtected,

@@ -116,10 +116,6 @@ server:
 id:
   worker_id: 0           # worker 编号（0-1023）；本地单实例用默认 0，多实例部署时每个副本需唯一
 
-# 缓存配置
-cache:
-  prefix: "jimu_dev"     # 缓存 key 前缀（开发环境隔离）
-
 # 邮件通知配置
 email:
   enabled: false           # 是否启用真实 SMTP 发送；false 时回退日志渠道

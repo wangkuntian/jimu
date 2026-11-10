@@ -4,6 +4,8 @@ package full
 // 这份清单必须与 assembly.go 里对应能力的 Drivers 声明逐值一致
 // （make check-capabilities 静态校验；裁剪形态沿用同一写法）。
 import (
+	_ "jimu/internal/capabilities/cache/memory"
+	_ "jimu/internal/capabilities/cache/redis"
 	_ "jimu/internal/capabilities/dataops/csv"
 	_ "jimu/internal/capabilities/dataops/excel"
 	_ "jimu/internal/capabilities/queue/kafka"

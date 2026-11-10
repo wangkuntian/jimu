@@ -28,6 +28,7 @@ var entries = []contract.Descriptor{
 // ValidateDeclarations 用它做 SoftRequires 错别字检查 —— 子集清单上指向缺席能力的软依赖
 // 是**合法降级**（user→tenant、auth→mfa/captcha/breach），不是笔误。
 var knownNames = []string{
+	"cache",
 	"user",
 	"access",
 	"tenant",

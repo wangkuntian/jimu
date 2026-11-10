@@ -168,7 +168,7 @@ jimu upgrade <dir>                     # 显式升级事务
 
 适用场景：需要完整能力集的起点，或据此继续裁剪。
 
-- 全部 23 个能力，支持级别 `validated`。
+- 全部 24 个能力，支持级别 `validated`。
 - 完整驱动集：`storage` 的 `s3`/`local`、`queue` 的 `kafka`/`rabbitmq`/`redis`、`dataops` 的 `excel`/`csv`。
   `--with` 的缺省只取每个能力的首个驱动，无法表达完整集，因此 `full` 从 `internal/profiles/full/assembly.go` 派生。
 - 首发是 `validated` 而不是 `certified`：预算与构建门禁已就位，但缺完整的组合级 E2E。
@@ -227,7 +227,7 @@ v0.5.1 起 `Scaffold Gate` 分为 official 与 full 两档：official 是 `relea
 
 `full` 验收：
 
-- 23 个能力与完整驱动集（`s3`/`local`、`kafka`/`rabbitmq`/`redis`、`excel`/`csv`）齐全；
+- 24 个能力与完整驱动集（`s3`/`local`、`kafka`/`rabbitmq`/`redis`、`cache:redis`/`cache:memory`、`excel`/`csv`）齐全；
 - `go build ./...` 通过，自动报告不超过全部预算；
 - 支持级别是 `validated`，不是 `certified`。
 

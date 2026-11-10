@@ -107,7 +107,7 @@ func TestNewProjectFullPresetCarriesEveryCapability(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "full", result.Template)
 	assert.Equal(t, "validated", result.Support)
-	assert.Len(t, result.Resolved, 23, "full must resolve every framework capability")
+	assert.Len(t, result.Resolved, 24, "full must resolve every framework capability")
 
 	for _, rel := range []string{
 		"internal/capabilities/queue/kafka",

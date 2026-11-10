@@ -79,6 +79,7 @@ func TestFullDriverSelection(t *testing.T) {
 		"storage": {"local", "s3"},
 		"queue":   {"redis", "kafka", "rabbitmq"},
 		"dataops": {"csv", "excel"},
+		"cache":   {"redis", "memory"},
 	}, driverSelection(Assembly()))
 }
 

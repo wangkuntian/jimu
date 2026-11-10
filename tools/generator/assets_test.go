@@ -157,7 +157,7 @@ func TestAssetsForRejectsUnknownCapability(t *testing.T) {
 
 // TestValuesSectionsPrunesUnselectedCapabilityKeys 是 T4 裁定 ⑫ 的接线验收：values.yaml 的
 // 键裁剪必须复用 T4 的 ValuesSections/RenderValuesYAML（不新增第二套实现），且实测
-// minimal 22 键（24 - audit - storage）、full 24 键。
+// minimal 21 键（24 - audit - storage - cache）、full 24 键。
 func TestValuesSectionsPrunesUnselectedCapabilityKeys(t *testing.T) {
 	src := readRepoFile(t, "deploy/helm/values.yaml")
 
@@ -165,10 +165,11 @@ func TestValuesSectionsPrunesUnselectedCapabilityKeys(t *testing.T) {
 	require.NoError(t, err)
 	keep, err := ValuesSections(src, minimal)
 	require.NoError(t, err)
-	assert.Len(t, keep, 22)
+	assert.Len(t, keep, 21)
 	assert.Contains(t, keep, "auth") // 选中 → 与能力同名的键保留
 	assert.NotContains(t, keep, "audit")
 	assert.NotContains(t, keep, "storage")
+	assert.NotContains(t, keep, "cache")
 
 	out, err := RenderValuesYAML(src, keep)
 	require.NoError(t, err)
@@ -182,7 +183,7 @@ func TestValuesSectionsPrunesUnselectedCapabilityKeys(t *testing.T) {
 	fullKeys, err := ValuesSections(src, full)
 	require.NoError(t, err)
 	assert.Len(t, fullKeys, 24)
-	assert.Equal(t, keep, slices.DeleteFunc(slices.Clone(fullKeys), func(k string) bool { return k == "audit" || k == "storage" }))
+	assert.Equal(t, keep, slices.DeleteFunc(slices.Clone(fullKeys), func(k string) bool { return k == "audit" || k == "storage" || k == "cache" }))
 }
 
 // TestCopiedAssetsKeepFrameworkNames 钉住资产复制的执行落点：必须在 RewriteModule **之后**，
