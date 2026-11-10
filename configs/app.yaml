@@ -142,6 +142,7 @@ id:
 
 # 缓存配置
 cache:
+  driver: "redis"        # 缓存驱动：redis（跨实例）/ memory（进程内）
   prefix: "jimu_dev"     # 缓存 key 前缀（开发环境隔离）
 
 audit:

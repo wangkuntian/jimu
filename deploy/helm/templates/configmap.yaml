@@ -65,6 +65,7 @@ data:
       rate_limit_burst: {{ .Values.server.rateLimitBurst }}
 
     cache:
+      driver: {{ .Values.cache.driver | quote }}
       prefix: {{ .Values.cache.prefix | quote }}
 
     audit:
