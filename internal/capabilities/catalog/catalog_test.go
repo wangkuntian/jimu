@@ -140,8 +140,9 @@ func fixture() []contract.Descriptor {
 		{Name: "search", Owns: []string{"search_documents"}, Mount: contract.MountProtected,
 			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
 		{Name: "captcha", Mount: contract.MountPublic,
-			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis},
-			Provides:        []contract.ProvidedPort{{Name: "captcha"}}},
+			SoftRequires: []string{"cache"},
+			Provides:     []contract.ProvidedPort{{Name: "captcha"}},
+			Consumes:     []contract.ConsumedPort{{Name: "cache"}}},
 		{Name: "uploadsec", Mount: contract.MountProtected,
 			Consumes: []contract.ConsumedPort{{Name: "storage"}}},
 		{Name: "breach", Mount: contract.MountProtected,
@@ -352,12 +353,13 @@ func TestCatalogOwnsShape(t *testing.T) {
 // TestCatalogSoftRequiresShape 钉住可选依赖（只登记代码里真实可降级的耦合）。
 func TestCatalogSoftRequiresShape(t *testing.T) {
 	want := map[string][]string{
-		"user":   {"access", "tenant"},
-		"access": {"tenant"},
-		"mfa":    {"auth"},
-		"auth":   {"tenant", "mfa", "captcha", "breach"},
-		"apikey": {"tenant"},
-		"outbox": {"queue"},
+		"user":    {"access", "tenant"},
+		"access":  {"tenant"},
+		"mfa":     {"auth"},
+		"auth":    {"tenant", "mfa", "captcha", "breach"},
+		"captcha": {"cache"},
+		"apikey":  {"tenant"},
+		"outbox":  {"queue"},
 	}
 	got := map[string][]string{}
 	for _, d := range All() {

@@ -8,13 +8,14 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"jimu/internal/contract"
 )
 
-// Cache 缓存接口：能力层只依赖它，不关心底层是 Redis 还是进程内。
+// Cache 是缓存能力的完整接口：在能力间共享的 contract.Cache 之上扩展缓存专属操作。
+// 跨能力消费方只依赖 contract.Cache，能力内部和驱动才用完整接口。
 type Cache interface {
-	Get(ctx context.Context, key string, dest interface{}) (bool, error)
-	Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error
-	Delete(ctx context.Context, key string) error
+	contract.Cache
 	DeletePattern(ctx context.Context, pattern string) error
 	Exists(ctx context.Context, key string) (bool, error)
 	GetOrSet(ctx context.Context, key string, dest interface{}, ttl time.Duration, fetch func() (interface{}, error)) error

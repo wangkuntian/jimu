@@ -2,8 +2,8 @@ package cache
 
 import "jimu/internal/contract"
 
-// PortName 缓存能力对外提供的端口名。
-const PortName = "cache"
+// PortName 缓存能力对外提供的端口名：contract.Cache。
+const PortName = contract.CachePortName
 
 // Descriptor 声明缓存能力的静态描述（非 catalog 条目，由 profile 显式列出）。
 //

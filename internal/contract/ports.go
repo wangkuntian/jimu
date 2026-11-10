@@ -76,9 +76,21 @@ type TenantProvisionerFactory interface {
 
 const (
 	StoragePortName    = "storage"
+	CachePortName      = "cache"
 	TenantInfoPortName = "tenant.info" // TenantInfoSource；同一实现同时提供 TenantStateSource
 	UserinfoPortName   = "user.info"   // UserinfoSource；同一实现同时提供 UserStateSource
 )
+
+// Cache 是能力间共享的缓存端口视图：只覆盖「能放进缓存的一次性状态」，
+// 不含限流计数、队列等 Redis 原语。能力间只经本接口调用，不直接 import cache 能力。
+type Cache interface {
+	// Get 读取并反序列化到 dest；未命中返回 false, nil。
+	Get(ctx context.Context, key string, dest any) (bool, error)
+	// Set 序列化 value 并按 ttl 过期（ttl <= 0 表示不过期）。
+	Set(ctx context.Context, key string, value any, ttl time.Duration) error
+	// Delete 删除单个 key。
+	Delete(ctx context.Context, key string) error
+}
 
 type AuthConfig struct {
 	JWTSecret, JWTPreviousSecret, Issuer     string

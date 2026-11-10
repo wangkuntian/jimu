@@ -335,7 +335,9 @@
       "destination": "internal/platform",
       "optional": false,
       "include": [],
-      "exclude": []
+      "exclude": [
+        "cachemem"
+      ]
     },
     {
       "source": "internal/app",
@@ -1507,5 +1509,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:e724330616e48c716100399d9aa029a84c406a626986e9c02fb336d70f8cbfed"
+  "digest": "sha256:362135d017c721d5dd2429d89e313fe1061d30bedfae74b2e03e8928bcd85679"
 }

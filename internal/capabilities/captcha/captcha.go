@@ -5,65 +5,69 @@ import (
 	"fmt"
 	"time"
 
-	redistore "jimu/internal/platform/redisclient"
+	"jimu/internal/contract"
 
 	"github.com/mojocn/base64Captcha"
 )
 
-// RedisStore 基于 go-redis 的验证码存储，实现 base64Captcha.Store 接口
-type RedisStore struct {
-	client redistore.Client
-	ttl    time.Duration
+// Store 是验证码存储：实现 base64Captcha.Store 接口，底层用 cache 端口。
+//
+// 不直接依赖 Redis：缓存能力已把「跨实例」与「进程内」抽象成驱动，
+// 验证码只需要 Get/Set/Delete 三种语义。
+type Store struct {
+	cache contract.Cache
+	ttl   time.Duration
 }
 
-// NewRedisStore 创建 Redis 验证码存储
-func NewRedisStore(client redistore.Client, ttl time.Duration) *RedisStore {
-	return &RedisStore{client: client, ttl: ttl}
+// NewStore 创建验证码存储。
+func NewStore(cache contract.Cache, ttl time.Duration) *Store {
+	return &Store{cache: cache, ttl: ttl}
 }
 
 // Set 存储验证码，写入 jimu:captcha:{id}，带 TTL
-func (s *RedisStore) Set(id, value string) error {
+func (s *Store) Set(id, value string) error {
 	key := fmt.Sprintf("jimu:captcha:%s", id)
-	return s.client.Set(context.Background(), key, value, s.ttl).Err()
+	return s.cache.Set(context.Background(), key, value, s.ttl)
 }
 
 // Get 读取验证码，clear 为 true 时读取后删除（一次性）
-func (s *RedisStore) Get(id string, clear bool) string {
+func (s *Store) Get(id string, clear bool) string {
 	key := fmt.Sprintf("jimu:captcha:%s", id)
-	stored, err := s.client.Get(context.Background(), key).Result()
-	if err != nil {
+	var stored string
+	found, err := s.cache.Get(context.Background(), key, &stored)
+	if err != nil || !found {
 		return ""
 	}
 	if clear {
-		_ = s.client.Del(context.Background(), key).Err()
+		_ = s.cache.Delete(context.Background(), key)
 	}
 	return stored
 }
 
 // Verify 校验验证码，clear 为 true 时无论成败都删除
-func (s *RedisStore) Verify(id, answer string, clear bool) bool {
+func (s *Store) Verify(id, answer string, clear bool) bool {
 	return s.Get(id, clear) == answer
 }
 
-// Service 验证码服务（生成 + Redis 存储 + 校验）
+// Service 验证码服务（生成 + 缓存存储 + 校验）
 type Service struct {
-	store   *RedisStore
+	store   *Store
 	enabled bool
 }
 
 // NewService 创建验证码服务（默认启用）。
-func NewService(client redistore.Client, ttl time.Duration) *Service {
+func NewService(cache contract.Cache, ttl time.Duration) *Service {
 	return &Service{
-		store:   NewRedisStore(client, ttl),
+		store:   NewStore(cache, ttl),
 		enabled: true,
 	}
 }
 
 // NewServiceWithEnabled 创建验证码服务并显式指定启用状态。
 // enabled=false 时 Verify 直接放行（未启用验证码的站点不校验）。
-func NewServiceWithEnabled(client redistore.Client, ttl time.Duration, enabled bool) *Service {
+func NewServiceWithEnabled(cache contract.Cache, ttl time.Duration, enabled bool) *Service {
 	return &Service{
-		store:   NewRedisStore(client, ttl),
+		store:   NewStore(cache, ttl),
 		enabled: enabled,
 	}
 }

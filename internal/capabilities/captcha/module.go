@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"jimu/internal/contract"
-	redistore "jimu/internal/platform/redisclient"
 
 	"github.com/gin-gonic/gin"
 )
@@ -15,8 +14,8 @@ type Module struct {
 }
 
 // New 创建验证码模块。
-func New(rdb redistore.Client, ttl time.Duration, enabled bool) *Module {
-	return &Module{svc: NewServiceWithEnabled(rdb, ttl, enabled)}
+func New(cache contract.Cache, ttl time.Duration, enabled bool) *Module {
+	return &Module{svc: NewServiceWithEnabled(cache, ttl, enabled)}
 }
 
 // Name 模块名。
@@ -26,11 +25,14 @@ func (m *Module) Name() string { return "captcha" }
 func (m *Module) Service() *Service { return m.svc }
 
 // Descriptor 声明验证码能力的静态描述（公开挂载，无迁移、无权限点）。
+// cache 是软依赖：有 cache 端口时用共享缓存（跨实例有效），没有时降级到进程内，
+// 与 auth 的存储降级同口径 —— 缺可选组件不该让能力无法组合。
 var Descriptor = contract.Descriptor{
-	Name:            "captcha",
-	Mount:           contract.MountPublic,
-	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis},
-	Provides:        []contract.ProvidedPort{{Name: PortName}},
+	Name:         "captcha",
+	SoftRequires: []string{"cache"},
+	Mount:        contract.MountPublic,
+	Provides:     []contract.ProvidedPort{{Name: PortName}},
+	Consumes:     []contract.ConsumedPort{{Name: contract.CachePortName}},
 	Configs: []contract.ConfigSpec{
 		{Section: ConfigKey, New: func() any { return &Config{} }},
 	},
