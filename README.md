@@ -70,6 +70,13 @@ cd demo && make dev
 
 `minimal` 生成项目不需要数据库、Redis 或其他外部服务。
 
+生成项目默认编译 MySQL 驱动。需要 PostgreSQL 时加 `--db=postgres`：
+只编译所选驱动与对应方言的迁移，另一套驱动不会进入产物。
+
+```bash
+./jimu new demo --template=auth --db=postgres
+```
+
 ## 快速开始：auth
 
 ```bash

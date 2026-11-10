@@ -79,12 +79,18 @@ func dsn(cfg config.DBConfig, host string, port int) string {
 func openByDriver(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {
 	switch cfg.Driver {
 	case "postgres", "postgresql":
-		return openPostgres(cfg, log)
+		return openPostgresDriver(cfg, log)
 	case "", "mysql":
 		return openMySQL(cfg, log)
 	default:
 		return nil, fmt.Errorf("unsupported db driver: %s", cfg.Driver)
 	}
+}
+
+// openPostgresDriver 由 postgres.go 的 init() 替换为真实实现。
+// 生成器可以整份裁掉 postgres.go，这里保留的错误实现保证仍能编译。
+var openPostgresDriver = func(config.DBConfig, *logger.Logger) (*gorm.DB, error) {
+	return nil, fmt.Errorf("db driver postgres is not compiled into this build")
 }
 
 func openMySQL(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {

@@ -361,6 +361,8 @@
       "optional": false,
       "include": [],
       "exclude": [
+        "db/postgres.go",
+        "db/postgres_test.go",
         "cache"
       ]
     },
@@ -514,7 +516,9 @@
       "destination": "internal/capabilities/tenant/migrations",
       "optional": false,
       "include": [],
-      "exclude": []
+      "exclude": [
+        "postgres"
+      ]
     },
     {
       "source": "internal/capabilities/tenant/domain",
@@ -1372,9 +1376,6 @@
     "internal/capabilities/tenant/migrations/mysql/005_tenants.sql",
     "internal/capabilities/tenant/migrations/mysql/008_tenant_version.sql",
     "internal/capabilities/tenant/migrations/mysql/014_tenant_plans.sql",
-    "internal/capabilities/tenant/migrations/postgres/005_tenants.sql",
-    "internal/capabilities/tenant/migrations/postgres/008_tenant_version.sql",
-    "internal/capabilities/tenant/migrations/postgres/014_tenant_plans.sql",
     "internal/capabilities/tenant/module.go",
     "internal/capabilities/user/account_port.go",
     "internal/capabilities/user/application/dto.go",
@@ -1455,7 +1456,6 @@
     "internal/kernel/db/adopt_test.go",
     "internal/kernel/db/concurrency.go",
     "internal/kernel/db/concurrency_test.go",
-    "internal/kernel/db/dsn_test.go",
     "internal/kernel/db/export_test.go",
     "internal/kernel/db/gorm_logger.go",
     "internal/kernel/db/gorm_logger_test.go",
@@ -1466,7 +1466,6 @@
     "internal/kernel/db/mysql.go",
     "internal/kernel/db/mysql_test.go",
     "internal/kernel/db/p17_access_migration_integration_test.go",
-    "internal/kernel/db/postgres.go",
     "internal/kernel/db/snowflake.go",
     "internal/kernel/db/snowflake_ext_test.go",
     "internal/kernel/db/snowflake_test.go",
@@ -1624,5 +1623,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:d97772f505b475261756db3ccdb7a10f66fba9809e67d6b836009ac38434dead"
+  "digest": "sha256:72fce75afde6650347f61c8b521617d2f6db2afa0ea888970728f5c3cdf85cc2"
 }

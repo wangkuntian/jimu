@@ -94,7 +94,15 @@ func copyActions(root string, selected selection) ([]manifest.CopyAction, error)
 	}
 	for _, name := range selected.migration {
 		base := filepath.ToSlash(filepath.Join("internal/capabilities", name))
-		actions = append(actions, manifest.CopyAction{Source: base + "/migrations", Destination: base + "/migrations", Include: []string{}, Exclude: []string{}})
+		// 迁移按方言分子目录：只复制选中的驱动方言，避免另一方言的 SQL 进入产物。
+		exclude := []string{}
+		if selected.dbDriver != "postgres" {
+			exclude = append(exclude, "postgres")
+		}
+		if selected.dbDriver != "mysql" {
+			exclude = append(exclude, "mysql")
+		}
+		actions = append(actions, manifest.CopyAction{Source: base + "/migrations", Destination: base + "/migrations", Include: []string{}, Exclude: exclude})
 		if directoryExists(root, filepath.FromSlash(base+"/domain")) {
 			actions = append(actions, manifest.CopyAction{Source: base + "/domain", Destination: base + "/domain", Include: []string{}, Exclude: []string{}})
 		}
@@ -544,7 +552,7 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 			continue
 		}
 		exclude := kernelExcludesFor(dir)
-		exclude = append(exclude, pruned[dir]...)
+		exclude = append(exclude, prunedInDir(pruned, dir)...)
 		// internal/kernel 是聚合目录：整目录复制会把不可达的子包也带上。
 		// 只排除闭包里不存在的 kernel 子包（保留目录下非包文件）。
 		if dir == "internal/kernel" {
@@ -560,6 +568,26 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 	return actions, nil
 }
 
+// prunedInDir 把按绝对目录记录的裁剪项转换为相对于复制根目录的路径。
+// 例如 dir="internal/kernel" 时，pruned["internal/kernel/db"] 里的
+// "postgres.go" 要转成 "db/postgres.go"，才能被 excludedPath 匹配到。
+func prunedInDir(pruned map[string][]string, dir string) []string {
+	var out []string
+	for pruneDir, files := range pruned {
+		if pruneDir == dir {
+			out = append(out, files...)
+			continue
+		}
+		if rel, ok := strings.CutPrefix(pruneDir, dir+"/"); ok {
+			for _, name := range files {
+				out = append(out, rel+"/"+name)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
 // optionalKernelFiles 返回未启用对应能力时应从复制结果中剔除的、按目录索引的文件名。
 //
 // 这些文件是「一个文件决定一整条重依赖」的裁剪点；它们也必须在闭包计算前通过
@@ -572,6 +600,11 @@ func optionalKernelFiles(selected selection) map[string][]string {
 	if !contains(selected.copy, "access") {
 		pruned["internal/app"] = append(pruned["internal/app"], "seed_casbin.go")
 	}
+	// Postgres 驱动只在显式选择 db.driver=postgres 时编译；默认 MySQL 项目
+	// 不带 gorm postgres driver 与 pgx（约 1.9 MB）。
+	if selected.dbDriver != "postgres" {
+		pruned["internal/kernel/db"] = append(pruned["internal/kernel/db"], "postgres.go", "postgres_test.go")
+	}
 	return pruned
 }
 
@@ -582,9 +615,11 @@ func optionalKernelFiles(selected selection) map[string][]string {
 func kernelPackages(root string, seeds []string, pruned map[string][]string) (map[string]bool, error) {
 	overlay := map[string][]byte{}
 	for dir, files := range pruned {
+		// 覆写为空包而不是空内容：空内容会被 Go 判为语法错误。
+		// 包名取目录 basename，保证与被替换文件所在包的声明一致。
+		pkg := filepath.Base(dir)
 		for _, name := range files {
-			// 覆写为空包而不是空内容：空内容会被 Go 判为语法错误。
-			overlay[filepath.Join(root, filepath.FromSlash(dir), name)] = []byte("package app\n")
+			overlay[filepath.Join(root, filepath.FromSlash(dir), name)] = []byte("package " + pkg + "\n")
 		}
 	}
 	pkgs, err := packages.Load(&packages.Config{
