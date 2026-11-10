@@ -540,6 +540,11 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 			continue
 		}
 		exclude := kernelExcludesFor(dir)
+		// 0 能力项目没有任何组件产出指标/日志/trace，排除 OTel 初始化文件，
+		// 避免把 OTel 与 Prometheus 推送链编进二进制。
+		if len(selected.copy) == 0 {
+			exclude = append(exclude, "bootstrap_otel.go")
+		}
 		// internal/kernel 是聚合目录：整目录复制会把不可达的子包也带上。
 		// 只排除闭包里不存在的 kernel 子包（保留目录下非包文件）。
 		if dir == "internal/kernel" {

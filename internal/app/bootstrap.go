@@ -19,11 +19,8 @@ import (
 	"jimu/internal/kernel/scheduler"
 
 	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	gormotel "gorm.io/plugin/opentelemetry/tracing"
 )
 
 // Bootstrap 在全部能力装配完成后接管生命周期：初始化观测、路由、事件与定时任务。
@@ -31,47 +28,16 @@ import (
 //   - modules 经 contract.Module 注册 HTTP/事件/任务；
 //   - components 是能力贡献的 contract.Component（如 worker pool、WS Hub、gRPC server）；
 //   - jobs 是能力贡献的定时任务定义（如 outbox_process、retention）。
+//
+// initObservability 由 bootstrap_otel.go 的 init() 替换为真实实现。
+// 生成器在不需要可观测性时排除那个文件，这里保留的空实现保证仍能编译。
+var initObservability = func(*Container) error { return nil }
+
 func Bootstrap(container *Container, components []contract.Component, jobs []scheduler.Job, modules ...contract.Module) (*Application, error) {
 	cfg := container.Config
 
-	// 初始化 OpenTelemetry 追踪
-	tp, err := observability.InitTracing(context.Background(), cfg.OTEL)
-	if err != nil {
-		return nil, fmt.Errorf("init tracing: %w", err)
-	}
-	container.TracerProvider = tp
-
-	// 指标推送（OTLP/gRPC → OpenObserve）：基于 Prometheus 默认 registry，
-	// 现有 promauto 采集逻辑不变，/metrics 端点继续可用。
-	if cfg.OTEL.Enabled && cfg.OTEL.MetricsEnabled {
-		reg, ok := prometheus.DefaultRegisterer.(*prometheus.Registry)
-		if !ok {
-			container.Logger.Errorw("openobserve metrics pusher init failed", "error", "default registerer type mismatch")
-		} else {
-			pusher, err := observability.NewMetricsPusher(context.Background(), cfg.OTEL, reg)
-			if err != nil {
-				container.Logger.Errorw("openobserve metrics pusher init failed", "error", err.Error())
-			} else {
-				pusher.Start()
-				container.MetricsPusher = pusher
-			}
-		}
-	}
-
-	// 启用 OTel 时插桩 DB/Redis，捕获查询子 span。
-	// 必须在 InitTracing 之后：插件创建时固化全局 TracerProvider，
-	// 提前实例化会绑定 NoOp provider 导致 span 永不产生。
-	if cfg.OTEL.Enabled {
-		if container.DB != nil {
-			if err := container.DB.Use(gormotel.NewPlugin()); err != nil {
-				return nil, fmt.Errorf("init gorm otel plugin: %w", err)
-			}
-		}
-		if container.Redis != nil {
-			if err := redisotel.InstrumentTracing(container.Redis); err != nil {
-				return nil, fmt.Errorf("init redis otel tracing: %w", err)
-			}
-		}
+	if err := initObservability(container); err != nil {
+		return nil, fmt.Errorf("init observability: %w", err)
 	}
 
 	router := platformhttp.SetupRouter(container.Logger, cfg.HTTP, cfg.Server, cfg.Security, cfg.OTEL, platformhttp.TracingMiddleware(func(serviceName string) gin.HandlerFunc { return otelgin.Middleware(serviceName) }), container.Reporter)
