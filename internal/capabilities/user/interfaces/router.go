@@ -9,7 +9,7 @@ import (
 	middlewarerate "jimu/internal/kernel/http/middleware/ratelimit"
 	"jimu/internal/shared/pagination"
 
-	redistore "jimu/internal/kernel/redis"
+	redistore "jimu/internal/platform/redisclient"
 
 	"github.com/gin-gonic/gin"
 )

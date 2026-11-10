@@ -12,8 +12,8 @@ import (
 
 	passkeydomain "jimu/internal/capabilities/passkey/domain"
 	"jimu/internal/contract"
-	redistore "jimu/internal/kernel/redis"
 	"jimu/internal/kernel/tenant"
+	redistore "jimu/internal/platform/redisclient"
 	"jimu/internal/shared/errors"
 
 	"github.com/go-webauthn/webauthn/protocol"

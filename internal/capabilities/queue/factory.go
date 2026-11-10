@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	redistore "jimu/internal/kernel/redis"
+	redistore "jimu/internal/platform/redisclient"
 )
 
 // Type 队列类型

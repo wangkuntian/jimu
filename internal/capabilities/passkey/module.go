@@ -11,7 +11,7 @@ import (
 	"jimu/internal/platform/identity"
 	authredis "jimu/internal/platform/identity/redisstore"
 
-	redistore "jimu/internal/kernel/redis"
+	redistore "jimu/internal/platform/redisclient"
 
 	"github.com/go-webauthn/webauthn/webauthn"
 	"gorm.io/gorm"

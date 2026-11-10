@@ -1,5 +1,5 @@
-// internal/kernel/redis/redis_test.go
-package redis
+// internal/platform/redisclient/redis_test.go
+package redisclient
 
 import (
 	"context"

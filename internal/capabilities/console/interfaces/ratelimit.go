@@ -8,7 +8,7 @@ import (
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
-	redistore "jimu/internal/kernel/redis"
+	redistore "jimu/internal/platform/redisclient"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"

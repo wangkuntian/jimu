@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/cache"
-	redistore "jimu/internal/kernel/redis"
+	redistore "jimu/internal/platform/redisclient"
 
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/singleflight"

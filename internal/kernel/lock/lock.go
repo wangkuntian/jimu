@@ -1,7 +1,7 @@
 // Package lock 定义进程间互斥锁的最小接口。
 //
-// 单独成包是为了让 scheduler 不 import kernel/redis：只要 scheduler 直接引用
-// redis.Lock，0 能力项目也会把整个 go-redis 编进二进制。
+// 单独成包是为了让 scheduler 不 import platform/redisclient：只要 scheduler 直接引用
+// redisclient.Lock，0 能力项目也会把整个 go-redis 编进二进制。
 package lock
 
 import (

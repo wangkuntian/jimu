@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"jimu/internal/kernel/http/ctxkeys"
-	redistore "jimu/internal/kernel/redis"
+	redistore "jimu/internal/platform/redisclient"
 
 	"github.com/gin-gonic/gin"
 )

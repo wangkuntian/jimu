@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	redistore "jimu/internal/kernel/redis"
 	"jimu/internal/platform/identity"
+	redistore "jimu/internal/platform/redisclient"
 
 	"github.com/redis/go-redis/v9"
 )

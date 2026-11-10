@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"jimu/internal/contract"
-	redistore "jimu/internal/kernel/redis"
+	redistore "jimu/internal/platform/redisclient"
 
 	"github.com/gin-gonic/gin"
 )

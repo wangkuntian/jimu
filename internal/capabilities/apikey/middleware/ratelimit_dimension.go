@@ -6,7 +6,7 @@ import (
 
 	"jimu/internal/kernel/http/ctxkeys"
 	httpmw "jimu/internal/kernel/http/middleware/ratelimit"
-	redistore "jimu/internal/kernel/redis"
+	redistore "jimu/internal/platform/redisclient"
 
 	"github.com/gin-gonic/gin"
 )

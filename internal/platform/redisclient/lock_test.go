@@ -1,5 +1,5 @@
-// internal/kernel/redis/lock_test.go
-package redis
+// internal/platform/redisclient/lock_test.go
+package redisclient
 
 import (
 	"context"

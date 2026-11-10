@@ -8,8 +8,8 @@ import (
 	"context"
 	"time"
 
-	redistore "jimu/internal/kernel/redis"
 	"jimu/internal/platform/identity"
+	redistore "jimu/internal/platform/redisclient"
 )
 
 // RateCounter 基于 Redis 的限流计数器（跨实例精确）。

@@ -10,7 +10,7 @@ import (
 	"jimu/internal/contract"
 	authredis "jimu/internal/platform/identity/redisstore"
 
-	redistore "jimu/internal/kernel/redis"
+	redistore "jimu/internal/platform/redisclient"
 
 	"gorm.io/gorm"
 )

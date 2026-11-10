@@ -1415,12 +1415,6 @@
     "internal/kernel/observability/tracing_exporters.go",
     "internal/kernel/observability/tracing_headers_test.go",
     "internal/kernel/observability/tracing_test.go",
-    "internal/kernel/redis/breaker.go",
-    "internal/kernel/redis/breaker_test.go",
-    "internal/kernel/redis/lock.go",
-    "internal/kernel/redis/lock_test.go",
-    "internal/kernel/redis/redis.go",
-    "internal/kernel/redis/redis_test.go",
     "internal/kernel/reporter/reporter.go",
     "internal/kernel/reporter/reporter_test.go",
     "internal/kernel/scheduler/job.go",
@@ -1460,6 +1454,12 @@
     "internal/platform/identity/redisstore/session_test.go",
     "internal/platform/identity/store.go",
     "internal/platform/identity/store_test.go",
+    "internal/platform/redisclient/breaker.go",
+    "internal/platform/redisclient/breaker_test.go",
+    "internal/platform/redisclient/lock.go",
+    "internal/platform/redisclient/lock_test.go",
+    "internal/platform/redisclient/redis.go",
+    "internal/platform/redisclient/redis_test.go",
     "internal/profiles/active/assembly.go",
     "internal/profiles/app/assembly.go",
     "internal/profiles/app/drivers.go",
@@ -1507,5 +1507,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:4bfc302ba89defb758c66355a20f8cbebfaabae8fced6b65495d29bfaa6e9aa9"
+  "digest": "sha256:e724330616e48c716100399d9aa029a84c406a626986e9c02fb336d70f8cbfed"
 }
