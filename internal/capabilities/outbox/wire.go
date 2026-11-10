@@ -6,9 +6,9 @@ import (
 
 	"jimu/internal/assembly"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/event"
-	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/scheduler"
+	"jimu/internal/platform/event"
+	"jimu/internal/platform/logger"
+	"jimu/internal/platform/scheduler"
 )
 
 // Wire 装配 outbox 能力：构造事件存储与发布器，把 *Outbox 暴露为端口供 user/auth 写入

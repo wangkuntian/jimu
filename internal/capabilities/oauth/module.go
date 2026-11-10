@@ -8,7 +8,7 @@ import (
 	"jimu/internal/capabilities/oauth/interfaces"
 	oauthplatform "jimu/internal/capabilities/oauth/provider"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/httpclient"
+	"jimu/internal/platform/httpclient"
 	"jimu/internal/platform/identity"
 	authredis "jimu/internal/platform/identity/redisstore"
 

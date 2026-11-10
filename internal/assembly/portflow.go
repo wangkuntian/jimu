@@ -9,9 +9,9 @@ import (
 	"jimu/internal/app"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/event"
-	"jimu/internal/kernel/httpclient"
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/event"
+	"jimu/internal/platform/httpclient"
+	"jimu/internal/platform/logger"
 )
 
 // ProbeResult 是一次装配试运行的观测结果（零值内核件，不连库/Redis、不启动监听）。

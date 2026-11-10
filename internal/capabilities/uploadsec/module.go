@@ -2,7 +2,7 @@ package uploadsec
 
 import (
 	"jimu/internal/contract"
-	"jimu/internal/kernel/http/middleware"
+	"jimu/internal/platform/http/middleware"
 )
 
 // Module 上传安全能力的模块实例：注册 /api/v1/admin/files 上传与删除端点。

@@ -19,7 +19,7 @@
 | CORS | 只允许明确的前端来源；`*` 会在启动时被拒绝 | `http.allowed_origins` |
 | 可信代理 | 只信任实际反向代理的 IP/CIDR；直连部署设为空列表 | `http.trusted_proxies` |
 | 管理端口 | `/livez`、`/readyz` 仅对内网/探针开放 | `management.host`、`management.port` |
-| 安全 Header | 模板已内置安全 Header，并由反向代理保留/补充 | `internal/kernel/http/middleware/` |
+| 安全 Header | 模板已内置安全 Header，并由反向代理保留/补充 | `internal/platform/http/middleware/` |
 | 请求体上限 | 登录、用户和角色接口都不应无界读取 | `http.max_body_bytes` |
 | 限流 | 模板不内置限流；必须在反向代理/网关至少限制登录、刷新和公开接口 | 反向代理/网关；见[运维](../OPERATIONS.md) |
 | 日志 | JSON 输出到 stdout；不得记录密码、token、验证码或未脱敏 PII | `log.format`、`log.level`、`log.output` |

@@ -20,7 +20,6 @@ import (
 )
 
 var kernelDirs = []string{
-	"internal/kernel",
 	"internal/platform",
 	"internal/app",
 	"internal/assembly",
@@ -575,10 +574,10 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 		}
 		exclude := kernelExcludesFor(dir)
 		exclude = append(exclude, prunedInDir(pruned, dir)...)
-		// internal/kernel 是聚合目录：整目录复制会把不可达的子包也带上。
+		// internal/platform 是聚合目录：整目录复制会把不可达的子包也带上。
 		// 只排除闭包里不存在的 kernel 子包（保留目录下非包文件）。
 		// 聚合目录：整目录复制会把不可达的子包也带上，只保留闭包里有的。
-		if dir == "internal/kernel" || dir == "internal/platform" {
+		if dir == "internal/platform" {
 			exclude = append(exclude, unreachableKernelSubdirs(root, dir, reachable)...)
 		}
 		actions = append(actions, manifest.CopyAction{
@@ -592,7 +591,7 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 }
 
 // prunedInDir 把按绝对目录记录的裁剪项转换为相对于复制根目录的路径。
-// 例如 dir="internal/kernel" 时，pruned["internal/kernel/db"] 里的
+// 例如 dir="internal/platform" 时，pruned["internal/platform/db"] 里的
 // "postgres.go" 要转成 "db/postgres.go"，才能被 excludedPath 匹配到。
 func prunedInDir(pruned map[string][]string, dir string) []string {
 	var out []string
@@ -628,7 +627,7 @@ func optionalKernelFiles(selected selection) map[string][]string {
 	// Postgres 驱动只在显式选择 db.driver=postgres 时编译；默认 MySQL 项目
 	// 不带 gorm postgres driver 与 pgx（约 1.9 MB）。
 	if selected.dbDriver != "postgres" {
-		pruned["internal/kernel/db"] = append(pruned["internal/kernel/db"], "postgres.go", "postgres_test.go")
+		pruned["internal/platform/db"] = append(pruned["internal/platform/db"], "postgres.go", "postgres_test.go")
 	}
 	// 0 能力项目不连 Redis：去掉引用 go-redis 的那一份，保留空实现的 _
 	// empty 版本（rewriteActions 会去掉它的 build tag）。
@@ -713,7 +712,7 @@ func kernelDirRequired(dir string, reachable map[string]bool) bool {
 	}
 }
 
-// unreachableKernelSubdirs 列出 internal/kernel 下没有任何可达包的子目录。
+// unreachableKernelSubdirs 列出 internal/platform 下没有任何可达包的子目录。
 // 用于把聚合目录的复制收缩到实际编译的部分。
 func unreachableKernelSubdirs(root, dir string, reachable map[string]bool) []string {
 	return unreachableSubdirs(root, dir, dir, reachable)

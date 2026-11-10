@@ -6,7 +6,7 @@ import (
 
 	oauthplatform "jimu/internal/capabilities/oauth/provider"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/httpclient"
+	"jimu/internal/platform/httpclient"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"

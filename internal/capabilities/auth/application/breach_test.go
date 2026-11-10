@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"jimu/internal/contract"
-	"jimu/internal/kernel/tenant"
 	"jimu/internal/platform/identity"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/stretchr/testify/assert"

@@ -11,7 +11,7 @@ import (
 	"jimu/internal/capabilities/console/application"
 	"jimu/internal/capabilities/console/interfaces"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/http/middleware"
+	"jimu/internal/platform/http/middleware"
 
 	redistore "jimu/internal/platform/redisclient"
 

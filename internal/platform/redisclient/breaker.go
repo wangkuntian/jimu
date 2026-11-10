@@ -7,7 +7,7 @@ import (
 	"net"
 	"strings"
 
-	"jimu/internal/kernel/breaker"
+	"jimu/internal/platform/breaker"
 
 	"github.com/redis/go-redis/v9"
 )

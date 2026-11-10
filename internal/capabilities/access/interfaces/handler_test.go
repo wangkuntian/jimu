@@ -12,8 +12,8 @@ import (
 	"jimu/internal/capabilities/access/application"
 	"jimu/internal/capabilities/access/domain"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/http/middleware"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/http/middleware"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"

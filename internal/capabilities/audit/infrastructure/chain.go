@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/audit/domain"
-	dbutil "jimu/internal/kernel/db"
+	dbutil "jimu/internal/platform/db"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

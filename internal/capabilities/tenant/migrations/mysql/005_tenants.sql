@@ -23,7 +23,7 @@ CREATE INDEX idx_roles_tenant_id ON roles (tenant_id);
 ALTER TABLE roles DROP INDEX name;
 CREATE UNIQUE INDEX idx_roles_tenant_name ON roles (tenant_id, `name`);
 
--- 存量数据迁入默认租户（id=1，与 kernel/tenant.DefaultTenantID 保持一致）
+-- 存量数据迁入默认租户（id=1，与 platform/tenant.DefaultTenantID 保持一致）
 INSERT IGNORE INTO tenants (id, code, name, status, created_at, updated_at)
 VALUES (1, 'default', '默认租户', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 

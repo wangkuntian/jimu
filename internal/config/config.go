@@ -148,7 +148,7 @@ func DefaultOTELConfig() OTELConfig {
 }
 
 // ErrorReportConfig 错误上报配置。
-// 定义在 config 包而非 kernel/reporter：配置结构归配置层，
+// 定义在 config 包而非 platform/reporter：配置结构归配置层，
 // 内核件只接受它需要的值，避免 config 反向依赖内核实现。
 type ErrorReportConfig struct {
 	// Enabled 是否启用错误上报（false 时 Reporter 为空实现，零开销）

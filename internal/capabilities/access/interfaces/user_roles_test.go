@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"jimu/internal/capabilities/access/application"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/gin-gonic/gin"

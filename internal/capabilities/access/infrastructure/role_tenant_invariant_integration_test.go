@@ -9,7 +9,7 @@ import (
 
 	"jimu/internal/capabilities/access/application"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/testutil"
 

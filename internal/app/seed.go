@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"jimu/internal/contract"
-	"jimu/internal/kernel/seedmodel"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/seedmodel"
+	"jimu/internal/platform/tenant"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -217,7 +217,7 @@ type NoAccountLogger interface {
 // 表不存在或查询失败一律静默降级：容器启动早于 CLI 迁移是已知且允许的时序，
 // 服务启动不得因为缺 ADMIN_PASSWORD 或表未建而失败。
 // 探针走 Discard 会话并先做建表预检：生产 GORM logger 会把每条报错语句打成 error
-// （kernel/db/gorm_logger.go 的 Trace），若直接查询缺失的 users 表，容器每次启动都会
+// （platform/db/gorm_logger.go 的 Trace），若直接查询缺失的 users 表，容器每次启动都会
 // 多出一行 "db query failed" —— 那是把允许的时序渲染成故障。
 func WarnIfNoAccounts(db *gorm.DB, log NoAccountLogger) bool {
 	if db == nil || log == nil {

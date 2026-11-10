@@ -1,6 +1,6 @@
 // Package assembly 是组合根驱动：把「形态（profile）」声明的能力清单装配成运行中的应用。
 //
-// 依赖方向（防环）：assembly → app → kernel；能力 wire.go → assembly + kernel + contract；
+// 依赖方向（防环）：assembly → app → platform；能力 wire.go → assembly + platform + contract；
 // assembly 本身不 import 任何能力包，能力件经 Context 的端口注册表互相消费。
 package assembly
 

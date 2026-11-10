@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/audit/domain"
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/logger"
 )
 
 const flushTimeout = 5 * time.Second

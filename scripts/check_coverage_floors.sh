@@ -52,9 +52,9 @@ jimu/internal/capabilities/user|61.4
 jimu/internal/capabilities/access|69.2
 jimu/internal/capabilities/audit|70.7
 jimu/internal/capabilities/apikey|79.6
-jimu/internal/kernel/tenant|91.1
-jimu/internal/kernel/auth|51.4
-jimu/internal/kernel/http/middleware|91.3
+jimu/internal/platform/tenant|91.1
+jimu/internal/platform/identity|51.4
+jimu/internal/platform/http/middleware|91.3
 '
 
 floors="${COVERAGE_FLOORS:-$FLOORS}"

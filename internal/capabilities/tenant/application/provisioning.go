@@ -10,9 +10,9 @@ import (
 
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	"jimu/internal/contract"
-	dbctx "jimu/internal/kernel/db"
-	"jimu/internal/kernel/tenant"
 	authz "jimu/internal/platform/authz"
+	dbctx "jimu/internal/platform/db"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 
 	mysqlerr "github.com/go-sql-driver/mysql"

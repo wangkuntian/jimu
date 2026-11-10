@@ -8,13 +8,13 @@ import (
 
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/db"
-	"jimu/internal/kernel/event"
-	"jimu/internal/kernel/httpclient"
-	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/metrics"
-	"jimu/internal/kernel/reporter"
-	"jimu/internal/kernel/scheduler"
+	"jimu/internal/platform/db"
+	"jimu/internal/platform/event"
+	"jimu/internal/platform/httpclient"
+	"jimu/internal/platform/logger"
+	"jimu/internal/platform/metrics"
+	"jimu/internal/platform/reporter"
+	"jimu/internal/platform/scheduler"
 
 	"gorm.io/gorm"
 )

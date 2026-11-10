@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"jimu/internal/kernel/event"
+	"jimu/internal/platform/event"
 )
 
 // EventBusPublisher 基于内存事件总线的发布器

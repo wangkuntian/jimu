@@ -606,7 +606,7 @@ func TestWarnIfNoAccounts(t *testing.T) {
 		require.Empty(t, log.messages)
 	})
 
-	// 生产 GORM logger 把**每条**报错语句都打到 error 级（kernel/db/gorm_logger.go 的 Trace），
+	// 生产 GORM logger 把**每条**报错语句都打到 error 级（platform/db/gorm_logger.go 的 Trace），
 	// 因此探针在表未建时必须连语句都不发，否则每次启动都会多一行 "db query failed"。
 	t.Run("unmigrated database issues no gorm error line", func(t *testing.T) {
 		var buf bytes.Buffer

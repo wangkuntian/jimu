@@ -21,7 +21,7 @@ description: 在 jimu 框架仓内改动时使用：新增/删除能力、新增
 
 | 路径 | 是什么 |
 |---|---|
-| `internal/kernel/` | 内核（不可勾选）：JWT/Session/限流机制、db、租户上下文、Casbin 强制器、logger 等 |
+| `internal/platform/` | 平台基建（不可勾选）：JWT/Session/限流机制、db、租户上下文、Casbin 强制器、logger 等 |
 | `internal/capabilities/<name>/` | 能力实现：静态 `Descriptor` + `Wire` 入口，按职责实现 `contract.Module` 与分层目录 |
 | `internal/capabilities/catalog/` | 能力清单（唯一真源；非 catalog 条目在形态清单中标 `Ungated`） |
 | `internal/capability/` | 描述符解析与组合算法叶子包（`Resolve` / `ValidateDeclarations` / `Degraded` / `Compose` / 结构化诊断） |

@@ -3,7 +3,7 @@ package interfaces
 import (
 	"jimu/internal/capabilities/auth/application"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/http/middleware"
+	"jimu/internal/platform/http/middleware"
 	"jimu/internal/platform/identity"
 	"jimu/internal/shared/pagination"
 

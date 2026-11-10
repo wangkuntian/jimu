@@ -7,8 +7,8 @@ import (
 
 	"jimu/internal/capabilities/queue/application"
 	"jimu/internal/config"
-	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/scheduler"
+	"jimu/internal/platform/logger"
+	"jimu/internal/platform/scheduler"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"

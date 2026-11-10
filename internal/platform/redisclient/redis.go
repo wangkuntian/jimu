@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"jimu/internal/config"
-	"jimu/internal/kernel/breaker"
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/breaker"
+	"jimu/internal/platform/logger"
 
 	"github.com/redis/go-redis/v9"
 )

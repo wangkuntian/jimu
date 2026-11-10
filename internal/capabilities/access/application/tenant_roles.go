@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"jimu/internal/capabilities/access/domain"
-	dbutil "jimu/internal/kernel/db"
 	authz "jimu/internal/platform/authz"
+	dbutil "jimu/internal/platform/db"
 	apperrors "jimu/internal/shared/errors"
 
 	"gorm.io/gorm"

@@ -11,9 +11,9 @@ import (
 
 	"jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
-	dbutil "jimu/internal/kernel/db"
-	"jimu/internal/kernel/tenant"
 	authz "jimu/internal/platform/authz"
+	dbutil "jimu/internal/platform/db"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 

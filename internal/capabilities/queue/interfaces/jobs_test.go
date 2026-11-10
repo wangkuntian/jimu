@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	qdomain "jimu/internal/capabilities/queue/domain"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"

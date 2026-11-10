@@ -84,7 +84,7 @@ func checkProfileCoreCoverage(names []string, forProfile func(string) ([]string,
 	}
 	slices.Sort(missing)
 	if len(missing) > 0 {
-		return fmt.Errorf("profiles missing kernel asset groups: %s", strings.Join(missing, ", "))
+		return fmt.Errorf("profiles missing core asset groups: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }

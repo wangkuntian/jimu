@@ -1,9 +1,9 @@
 package interfaces
 
 import (
-	"jimu/internal/kernel/tenant"
 	"jimu/internal/platform/authz"
 	"jimu/internal/platform/identity"
+	"jimu/internal/platform/tenant"
 
 	"github.com/casbin/casbin/v3"
 	"github.com/gin-gonic/gin"

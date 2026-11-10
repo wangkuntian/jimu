@@ -13,7 +13,7 @@ import (
 	"math"
 	"time"
 
-	"jimu/internal/kernel/breaker"
+	"jimu/internal/platform/breaker"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"

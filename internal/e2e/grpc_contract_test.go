@@ -6,7 +6,7 @@ import (
 
 	grpcpkg "jimu/internal/capabilities/grpc"
 	"jimu/internal/config"
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/logger"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

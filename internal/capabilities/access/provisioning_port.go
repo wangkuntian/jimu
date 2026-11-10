@@ -6,7 +6,7 @@ import (
 
 	"jimu/internal/capabilities/access/domain"
 	"jimu/internal/contract"
-	dbctx "jimu/internal/kernel/db"
+	dbctx "jimu/internal/platform/db"
 
 	"gorm.io/gorm"
 )

@@ -447,7 +447,7 @@ jobs:
           DB_USER: postgres
           DB_PASSWORD: postgres
           DB_NAME: jimu_test
-        run: go test ./internal/kernel/db/... -run TestMigrationIntegration -v
+        run: go test ./internal/platform/db/... -run TestMigrationIntegration -v
 
   # ── 镜像域：compose 校验 + 构建（原 ci-docker.yml 的 compose-config 并入此处）────
   docker:

@@ -114,7 +114,7 @@ func TestParseCapabilitySetRejectsUnknownProfile(t *testing.T) {
 //   - `<cap>/domain…` 子包**忽略**（由裁定 ④/S2 决定只带 domain/，否则 tenant/auth 链会被拖进来）；
 //   - 完整复制成员再传递补齐 Requires。
 //
-// v0.10.0 起 internal/app 不再 import 能力 domain（seed 模型下沉到 kernel/seedmodel），
+// v0.10.0 起 internal/app 不再 import 能力 domain（seed 模型下沉到 platform/seedmodel），
 // 因此没有"内核编译期 domain 依赖"这一层，queue 就是唯一成员。
 func TestCapabilityRootsClosureOfQueueOnly(t *testing.T) {
 	set, err := ParseCapabilitySet("", "queue", "app")

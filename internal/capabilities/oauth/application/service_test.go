@@ -11,7 +11,7 @@ import (
 	oauthdomain "jimu/internal/capabilities/oauth/domain"
 	oauthplatform "jimu/internal/capabilities/oauth/provider"
 	"jimu/internal/contract"
-	dbctx "jimu/internal/kernel/db"
+	dbctx "jimu/internal/platform/db"
 	"jimu/internal/platform/identity"
 	apperrors "jimu/internal/shared/errors"
 

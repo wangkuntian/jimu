@@ -6,7 +6,7 @@ import (
 
 	"jimu/internal/capabilities/access/domain"
 	"jimu/internal/contract"
-	dbutil "jimu/internal/kernel/db"
+	dbutil "jimu/internal/platform/db"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"

@@ -5,7 +5,7 @@ package app
 import (
 	"context"
 
-	"jimu/internal/kernel/observability"
+	"jimu/internal/platform/observability"
 
 	"github.com/prometheus/client_golang/prometheus"
 	gormotel "gorm.io/plugin/opentelemetry/tracing"

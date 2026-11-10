@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/audit/domain"
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/logger"
 
 	"go.uber.org/zap"
 )

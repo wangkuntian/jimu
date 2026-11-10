@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 
 	"github.com/gin-gonic/gin"
 )

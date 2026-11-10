@@ -10,7 +10,7 @@ import (
 	"jimu/internal/capabilities/user/application"
 	"jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/testutil"
 
 	"github.com/stretchr/testify/assert"

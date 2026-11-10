@@ -6,8 +6,8 @@ import (
 	"jimu/internal/capabilities/queue/infrastructure"
 	"jimu/internal/capabilities/queue/interfaces"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/http/middleware"
-	"jimu/internal/kernel/scheduler"
+	"jimu/internal/platform/http/middleware"
+	"jimu/internal/platform/scheduler"
 
 	"gorm.io/gorm"
 )

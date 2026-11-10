@@ -1,8 +1,8 @@
 package apikey
 
 import (
-	"jimu/internal/kernel/tenant"
 	identity "jimu/internal/platform/identity"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 

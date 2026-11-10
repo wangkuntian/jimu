@@ -2,7 +2,7 @@ package apidocs
 
 import (
 	_ "jimu/docs/openapi"
-	"jimu/internal/kernel/http/middleware"
+	"jimu/internal/platform/http/middleware"
 	"time"
 
 	"github.com/gin-gonic/gin"

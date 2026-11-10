@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"jimu/internal/kernel/http/ctxkeys"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/http/ctxkeys"
+	"jimu/internal/platform/tenant"
 )
 
 // TestA2_3_APIKeyIDIsVisibleToMiddlewares 钉住跨包契约：auth 注入的 Key ID

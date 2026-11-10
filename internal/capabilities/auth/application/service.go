@@ -12,9 +12,9 @@ import (
 
 	authdomain "jimu/internal/capabilities/auth/domain"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/tenant"
 	"jimu/internal/platform/authz"
 	"jimu/internal/platform/identity"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 
 	"github.com/google/uuid"

@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/user/application"
-	"jimu/internal/kernel/http/middleware"
-	middlewareidem "jimu/internal/kernel/http/middleware/idempotency"
-	middlewarerate "jimu/internal/kernel/http/middleware/ratelimit"
+	"jimu/internal/platform/http/middleware"
+	middlewareidem "jimu/internal/platform/http/middleware/idempotency"
+	middlewarerate "jimu/internal/platform/http/middleware/ratelimit"
 	"jimu/internal/shared/pagination"
 
 	redistore "jimu/internal/platform/redisclient"

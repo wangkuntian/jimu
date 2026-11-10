@@ -20,7 +20,7 @@
 #      user/auth 的生产代码直接 import capabilities/outbox（*outbox.Outbox / outbox.Event）
 #      与 capabilities/notification（notification.Message / Dispatcher），outbox 又 import
 #      capabilities/queue —— 这是软依赖在编译期的类型残留，去除需要把共享类型迁到
-#      contract/kernel（另一次改动，见 AGENTS.md「能力边界」），不在本次种子修复范围内。
+#      contract/platform（另一次改动，见 AGENTS.md「能力边界」），不在本次种子修复范围内。
 #      这些能力仍被 (2) 的 golden 锁定：不会再无声明地增减。
 #   4) 产物必须真的编入该形态包 —— 构建后 `strings` 产物必须出现
 #      `jimu/internal/profiles/<profile>`。若 overlay 未生效（典型是构建入口被改回

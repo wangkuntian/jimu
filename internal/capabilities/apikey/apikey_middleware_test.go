@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	domain "jimu/internal/capabilities/apikey/domain"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"

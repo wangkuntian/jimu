@@ -5,7 +5,7 @@ import (
 
 	auditdomain "jimu/internal/capabilities/audit/domain"
 	auditinfra "jimu/internal/capabilities/audit/infrastructure"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"
 

@@ -41,9 +41,9 @@
 多租户为正式能力，以下不变量修改时不得偏离（设计见[身份与租户](docs/design/identity-and-tenancy.md)）：
 
 - **单归属** — 用户/角色/审计日志归属唯一租户（`tenant_id` 列）；角色名租户内唯一，用户名/邮箱全局唯一。
-- **上下文来源** — JWT 路径从已验签 claim（`tid`）读取租户；API Key 路径从已校验 Key 的归属读取租户。中间件将身份注入 request context，业务层从 `internal/kernel/tenant.FromContext(ctx)` 读取；**禁止**从 header/query 接受租户标识。
-- **默认租户** — `id=1`、`code=default`（`internal/kernel/tenant.DefaultTenantID`），不可删除；上下文无租户（tid=0）时创建资源归默认租户、查询不过滤（平台级视角）。
-- **编码** — 校验与归一化（统一小写）只在 `internal/kernel/tenant`（`ValidCode`/`NormalizeCode`）；编码不可变。
+- **上下文来源** — JWT 路径从已验签 claim（`tid`）读取租户；API Key 路径从已校验 Key 的归属读取租户。中间件将身份注入 request context，业务层从 `internal/platform/tenant.FromContext(ctx)` 读取；**禁止**从 header/query 接受租户标识。
+- **默认租户** — `id=1`、`code=default`（`internal/platform/tenant.DefaultTenantID`），不可删除；上下文无租户（tid=0）时创建资源归默认租户、查询不过滤（平台级视角）。
+- **编码** — 校验与归一化（统一小写）只在 `internal/platform/tenant`（`ValidCode`/`NormalizeCode`）；编码不可变。
 
 ## 编码约束
 

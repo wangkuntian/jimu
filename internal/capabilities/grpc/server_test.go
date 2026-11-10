@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"jimu/internal/config"
-	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/tlsconf"
+	"jimu/internal/platform/logger"
+	"jimu/internal/platform/tlsconf"
 	"jimu/internal/shared/testutil"
 
 	"github.com/stretchr/testify/assert"

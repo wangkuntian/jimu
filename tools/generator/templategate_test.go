@@ -412,7 +412,7 @@ func externalServiceCount(document manifest.Document) int {
 
 func healthRouteCount(t *testing.T, dir string) int {
 	t.Helper()
-	content, err := os.ReadFile(filepath.Join(dir, "internal", "kernel", "health", "health.go"))
+	content, err := os.ReadFile(filepath.Join(dir, "internal", "platform", "health", "health.go"))
 	require.NoError(t, err)
 	source := string(content)
 	if strings.Contains(source, `HandleFunc("/livez"`) && strings.Contains(source, `HandleFunc("/readyz"`) {

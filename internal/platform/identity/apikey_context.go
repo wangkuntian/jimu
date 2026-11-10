@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"jimu/internal/kernel/http/ctxkeys"
+	"jimu/internal/platform/http/ctxkeys"
 )
 
 // APIKey 已认证 API Key 的机制视图（纯身份信息，不含 gorm 标签；

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	apikeydomain "jimu/internal/capabilities/apikey/domain"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 
 	"github.com/stretchr/testify/assert"
 )

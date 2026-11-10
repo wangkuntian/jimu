@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"jimu/internal/contract"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/glebarez/sqlite"

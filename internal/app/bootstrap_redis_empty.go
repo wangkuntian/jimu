@@ -4,7 +4,7 @@ package app
 
 import (
 	"jimu/internal/config"
-	"jimu/internal/kernel/health"
+	"jimu/internal/platform/health"
 
 	"github.com/gin-gonic/gin"
 )

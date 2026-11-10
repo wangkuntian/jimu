@@ -92,12 +92,12 @@ flowchart LR
 - **套餐与配额保留在 `tenant`。** 套餐、配额、用量及开通式注册都属于租户业务；内核只提供租户上下文机制。
 - **认证与授权机制、业务数据分开。** `platform/identity`、`platform/authz` 提供请求机制；`capabilities/auth`、`capabilities/access` 持有业务流程和 RBAC 数据。
 - **租户身份不接受客户端自由指定。** JWT 和 API Key 分别使用已验证凭证中的租户归属，避免 header/query 成为租户边界的信任来源。
-- **内核只负责机制。** 租户 context helper 与默认 ID 常量放在 kernel，租户实体和套餐业务属于 `tenant`；不装配租户管理用例时，其他能力仍能传递和检查租户上下文。
+- **内核只负责机制。** 租户 context helper 与默认 ID 常量放在 platform 层，租户实体和套餐业务属于 `tenant`；不装配租户管理用例时，其他能力仍能传递和检查租户上下文。
 - **`0` 与默认租户分开。** `0` 表示调用上下文没有租户过滤的平台注册视角；默认租户有固定持久化 ID。把二者等同会让平台管理视角和普通默认租户用户共享同一安全语义。
 
 ## 约束与不变量
 
-JWT 认证路径从已验签 token 的 `tid` claim 取得租户身份；API Key 路径从已校验 Key 的归属取得租户身份。对应中间件将其写入请求上下文，业务代码通过 [`internal/kernel/tenant`](../../internal/kernel/tenant) 读取。客户端不能通过 header 或 query 参数指定租户身份。
+JWT 认证路径从已验签 token 的 `tid` claim 取得租户身份；API Key 路径从已校验 Key 的归属取得租户身份。对应中间件将其写入请求上下文，业务代码通过 [`internal/platform/tenant`](../../internal/platform/tenant) 读取。客户端不能通过 header 或 query 参数指定租户身份。
 
 装配 `tenant` 能力时，密码登录、Passkey/OAuth 登录收尾、refresh 和受保护 JWT 请求都经 `contract.TenantStateSource` 校验 `tid` 对应租户存在、启用且未软删除。租户停用或删除后，新登录与 refresh 失败，已有 access token 也在下一次请求被拒绝；租户状态查询失败按内部错误 fail-closed。`tid=0` 是已验签的平台级上下文，没有具体租户可校验，保持原有语义；未装配 `tenant` 能力的形态不启用该校验。
 
@@ -117,6 +117,6 @@ JWT 认证路径从已验签 token 的 `tid` claim 取得租户身份；API Key 
 
 - 身份与端口：[internal/capabilities/user](../../internal/capabilities/user)、[internal/capabilities/auth](../../internal/capabilities/auth)、[internal/capabilities/mfa](../../internal/capabilities/mfa)、[internal/capabilities/passkey](../../internal/capabilities/passkey)、[internal/contract](../../internal/contract)
 - API Key 认证：[internal/capabilities/apikey](../../internal/capabilities/apikey)
-- 租户上下文：[internal/kernel/tenant](../../internal/kernel/tenant)、[JWT 与认证中间件](../../internal/platform/identity)
+- 租户上下文：[internal/platform/tenant](../../internal/platform/tenant)、[JWT 与认证中间件](../../internal/platform/identity)
 - 验证：JWT/API Key 中间件测试、tenant context 测试、能力 import 与声明门禁 `make check-capabilities`
 - 相关设计：[能力架构](capability-architecture.md)、[配置与数据生命周期](configuration-and-data-lifecycle.md)

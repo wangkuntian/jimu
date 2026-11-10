@@ -5,7 +5,7 @@ import (
 
 	"jimu/internal/capabilities/access/application"
 	"jimu/internal/capabilities/access/domain"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 

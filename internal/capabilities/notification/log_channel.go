@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/logger"
 )
 
 // LogChannel 日志型通知渠道

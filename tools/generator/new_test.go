@@ -44,7 +44,7 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 	for _, rel := range []string{
 		"cmd/server/main.go",
 		"cmd/cli/main.go",
-		"internal/kernel/http/server.go",
+		"internal/platform/http/server.go",
 		"internal/assembly/assembly.go",
 		"internal/capabilities/catalog/catalog.go",
 		"Dockerfile",
@@ -56,7 +56,7 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 	}
 	for _, rel := range []string{
 		"internal/e2e",
-		"internal/kernel/cache",
+		"internal/platform/cache",
 		"internal/platform/authz",
 		"internal/capabilities/user",
 		"docker-compose.yml",
@@ -186,7 +186,7 @@ func TestNewProjectCopiesKernelAndSelectedCapabilities(t *testing.T) {
 
 	for _, p := range []string{
 		"go.mod", ".golangci.yml", ".gitignore", "conf/rbac_model.conf",
-		"internal/kernel/tenant/tenant.go", "internal/contract/module.go",
+		"internal/platform/tenant/tenant.go", "internal/contract/module.go",
 		"internal/capability/resolve.go", "internal/assembly/assembly.go",
 		"internal/profiles/profiles.go", "cmd/server/main.go", "cmd/cli/main.go",
 		"internal/profiles/registry/registry.go",

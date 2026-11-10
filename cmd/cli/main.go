@@ -7,8 +7,8 @@ import (
 	"jimu/internal/app"
 	apikeycli "jimu/internal/capabilities/apikey/cli"
 	"jimu/internal/config"
-	"jimu/internal/kernel/db"
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/db"
+	"jimu/internal/platform/logger"
 	"jimu/internal/profiles"
 
 	"github.com/spf13/cobra"

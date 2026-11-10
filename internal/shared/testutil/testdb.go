@@ -13,7 +13,7 @@ import (
 
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/db"
+	"jimu/internal/platform/db"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"

@@ -10,10 +10,10 @@ import (
 
 	"jimu/internal/capability"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/health"
-	platformhttp "jimu/internal/kernel/http"
-	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/scheduler"
+	"jimu/internal/platform/health"
+	platformhttp "jimu/internal/platform/http"
+	"jimu/internal/platform/logger"
+	"jimu/internal/platform/scheduler"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"

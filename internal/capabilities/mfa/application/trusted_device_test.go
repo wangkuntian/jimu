@@ -8,7 +8,7 @@ import (
 
 	mfadomain "jimu/internal/capabilities/mfa/domain"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/stretchr/testify/assert"

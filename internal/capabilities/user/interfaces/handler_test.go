@@ -11,7 +11,7 @@ import (
 
 	"jimu/internal/capabilities/user/application"
 	"jimu/internal/capabilities/user/domain"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/pagination"
 
 	"github.com/gin-gonic/gin"

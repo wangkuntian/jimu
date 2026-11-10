@@ -6,11 +6,11 @@ import (
 	"jimu/internal/app"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/event"
-	"jimu/internal/kernel/httpclient"
-	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/reporter"
-	"jimu/internal/kernel/scheduler"
+	"jimu/internal/platform/event"
+	"jimu/internal/platform/httpclient"
+	"jimu/internal/platform/logger"
+	"jimu/internal/platform/reporter"
+	"jimu/internal/platform/scheduler"
 
 	"gorm.io/gorm"
 )

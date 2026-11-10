@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"jimu/internal/kernel/httpclient"
+	"jimu/internal/platform/httpclient"
 )
 
 func BenchmarkWebhookSend(b *testing.B) {

@@ -13,7 +13,7 @@
 #   各分片重复支付的编译时间。
 #
 # 分片：
-#   core             所有非 internal/capabilities、非 tools 的包（kernel/shared/contract/config/
+#   core             所有非 internal/capabilities、非 tools 的包（platform/shared/contract/config/
 #                    assembly/app/profiles/e2e/cmd …）—— 用「排除法」派生，新增顶层包自动归位
 #   caps-a/caps-b    internal/capabilities 下按能力名排序对半切 —— 不写死能力名，新增能力自动归位
 #   composereport-N  tools/composereport 整包，但把它那条重型用例按**形态**再切 N 片（见下）

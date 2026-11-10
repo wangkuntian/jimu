@@ -90,7 +90,7 @@ func TestCheckProjectReturnsStructuredManifestFailure(t *testing.T) {
 
 func TestCheckProjectDeepFailureIsReadOnly(t *testing.T) {
 	dir := generateForTest(t, NewOptions{Template: "minimal"})
-	testPath := filepath.Join(dir, "internal", "kernel", "metrics", "health_deep_failure_test.go")
+	testPath := filepath.Join(dir, "internal", "platform", "metrics", "health_deep_failure_test.go")
 	require.NoError(t, os.WriteFile(testPath, []byte("package metrics\n\nimport \"testing\"\n\nfunc TestHealthDeepFailure(t *testing.T) { t.Fatal(\"intentional deep failure\") }\n"), 0o644))
 	before := hashTree(t, dir)
 

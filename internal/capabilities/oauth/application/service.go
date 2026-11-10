@@ -10,9 +10,9 @@ import (
 	oauthdomain "jimu/internal/capabilities/oauth/domain"
 	oauthplatform "jimu/internal/capabilities/oauth/provider"
 	"jimu/internal/contract"
-	dbctx "jimu/internal/kernel/db"
-	"jimu/internal/kernel/tenant"
+	dbctx "jimu/internal/platform/db"
 	"jimu/internal/platform/identity"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 
 	redistore "jimu/internal/platform/redisclient"

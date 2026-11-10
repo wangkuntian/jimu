@@ -13,7 +13,7 @@ import (
 	userdomain "jimu/internal/capabilities/user/domain"
 	userinfra "jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
