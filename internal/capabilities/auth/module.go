@@ -2,17 +2,14 @@ package authmodule
 
 import (
 	"embed"
-	"time"
 
 	"jimu/internal/capabilities/auth/application"
+	"jimu/internal/capabilities/auth/authstore"
 	authinfra "jimu/internal/capabilities/auth/infrastructure"
 	"jimu/internal/capabilities/auth/interfaces"
 	"jimu/internal/contract"
 	"jimu/internal/platform/authz"
 	"jimu/internal/platform/identity"
-	authredis "jimu/internal/platform/identity/redisstore"
-
-	redistore "jimu/internal/platform/redisclient"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -37,8 +34,8 @@ type Module struct {
 // New 创建 auth 模块。
 // deps 接受：*outbox.Outbox、notification.Dispatcher、*encryption.Cipher、
 // application.TenantQuota、contract.MFAVerifier、contract.TenantProvisioner、
-// contract.BreachChecker、*application.ResetStore。
-func New(db *gorm.DB, rdb redistore.Client, cfg Config, failClosed bool, captchaVerifier contract.CaptchaVerifier, deps ...interface{}) *Module {
+// contract.BreachChecker、ResetCodeStore。
+func New(db *gorm.DB, stores authstore.Stores, cfg Config, failClosed bool, captchaVerifier contract.CaptchaVerifier, deps ...interface{}) *Module {
 	var userRepo contract.AccountRepository
 	var provisioningEnabled bool
 	for _, dep := range deps {
@@ -50,17 +47,14 @@ func New(db *gorm.DB, rdb redistore.Client, cfg Config, failClosed bool, captcha
 		}
 	}
 	jwtUtil := identity.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
-	sessionStore := authredis.NewSessionStore(rdb)
-	limiter := identity.NewLimiter(authredis.NewRateCounter(rdb), failClosed)
-	lockoutTracker := identity.NewLoginFailureTracker(authredis.NewFailureStore(rdb), identity.DefaultLockoutConfig())
-	// 密码重置验证码存储：redis 一次性码，TTL 取配置
-	resetStore := application.NewResetStore(rdb, time.Duration(cfg.ResetCodeTTLMin)*time.Minute)
+	limiter := identity.NewLimiter(stores.RateCounter, failClosed)
+	lockoutTracker := identity.NewLoginFailureTracker(stores.Failures, identity.DefaultLockoutConfig())
 	loginHistoryRepo := authinfra.NewMysqlLoginHistoryRepository(db)
 	passwordHistoryRepo := authinfra.NewMysqlPasswordHistoryRepository(db)
 	allDeps := append([]interface{}{}, deps...)
-	allDeps = append(allDeps, resetStore, application.WithPasswordHistory(cfg.PasswordHistoryCount),
+	allDeps = append(allDeps, stores.ResetCodes, application.WithPasswordHistory(cfg.PasswordHistoryCount),
 		loginHistoryRepo, passwordHistoryRepo, authz.NewDBAuthorizationStore(db))
-	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin, allDeps...)
+	service := application.NewAuthService(userRepo, jwtUtil, stores.Sessions, lockoutTracker, cfg.AccessExpireMin, allDeps...)
 	m := &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaVerifier,
 		provisioningEnabled: provisioningEnabled}
 	for _, dep := range deps {
@@ -95,11 +89,13 @@ var Descriptor = contract.Descriptor{
 	SoftRequires: []string{"tenant", "mfa", "captcha", "breach"},
 	Owns:         []string{"login_histories", "password_histories"},
 	Mount:        contract.MountSelfManaged,
-	RuntimeServices: []contract.RuntimeService{
-		contract.RuntimeServiceMySQL,
-		contract.RuntimeServiceRedis,
+	Drivers:      []string{"redis", "memory"},
+	DriverSpecs: []contract.DriverSpec{
+		{Name: "redis", RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis}},
+		{Name: "memory"},
 	},
-	Provides: []contract.ProvidedPort{{Name: PortName}},
+	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+	Provides:        []contract.ProvidedPort{{Name: PortName}},
 	Consumes: []contract.ConsumedPort{
 		{Name: "user.account", Required: true},
 		{Name: "access.provisioning"},

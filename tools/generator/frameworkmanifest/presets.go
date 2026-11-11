@@ -35,6 +35,7 @@ func LookupPreset(name string) (Preset, error) {
 		return Preset{
 			Name:         "auth",
 			Capabilities: []string{"user", "access", "auth"},
+			Drivers:      map[string][]string{"auth": {"redis"}},
 			Support:      "official",
 		}, nil
 	case "full":

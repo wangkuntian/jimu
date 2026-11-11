@@ -25,7 +25,8 @@ func Assembly() assembly.Assembly {
 			{Descriptor: notification.Descriptor, Wire: notification.Wire, Ungated: true},
 			{Descriptor: accessmodule.Descriptor, Wire: accessmodule.Wire},
 			{Descriptor: user.Descriptor, Wire: user.Wire},
-			{Descriptor: authmodule.Descriptor, Wire: authmodule.Wire},
+			{Descriptor: authmodule.Descriptor, Wire: authmodule.Wire,
+				Drivers: []string{"redis", "memory"}},
 		},
 		Seed: profiles.StructuralSeed,
 	}

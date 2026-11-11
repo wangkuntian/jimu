@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/auth/application"
+	authredis "jimu/internal/capabilities/auth/redis"
 	"jimu/internal/contract"
 	"jimu/internal/platform/identity"
 	apperrors "jimu/internal/shared/errors"
@@ -83,7 +84,7 @@ func newHandlerService(t *testing.T) *application.AuthService {
 		nil, 30,
 		handlerIndexer{},
 		&handlerNotifier{},
-		application.NewResetStore(rc, 15*time.Minute),
+		authredis.NewResetStore(rc, 15*time.Minute),
 	)
 }
 

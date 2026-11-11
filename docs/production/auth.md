@@ -4,6 +4,9 @@
 
 `auth` 预设携带 `user`/`access`/`auth` 及其 `tenant` 编译闭包。生产环境必须使用独立 MySQL 和 Redis；预设不生成 Compose，本地与生产都通过 `DB_*`/`REDIS_*` 环境变量指定连接。
 
+需要单实例或无 Redis 运行时，可用 `jimu new <dir> --with=auth:memory` 生成内存驱动版本。
+内存驱动只在本进程内保存会话、限流和重置码，重启即丢失，多实例之间不共享；生产多实例仍必须使用 Redis 驱动。
+
 ## 必须配置
 
 | 项目 | 要求 | 对应位置 / 验证 |

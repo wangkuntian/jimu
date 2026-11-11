@@ -74,11 +74,13 @@ func fixture() []contract.Descriptor {
 			SoftRequires: []string{"tenant", "mfa", "captcha", "breach"},
 			Owns:         []string{"login_histories", "password_histories"},
 			Mount:        contract.MountSelfManaged,
-			RuntimeServices: []contract.RuntimeService{
-				contract.RuntimeServiceMySQL,
-				contract.RuntimeServiceRedis,
+			Drivers:      []string{"redis", "memory"},
+			DriverSpecs: []contract.DriverSpec{
+				{Name: "redis", RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis}},
+				{Name: "memory"},
 			},
-			Provides: []contract.ProvidedPort{{Name: "auth"}},
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+			Provides:        []contract.ProvidedPort{{Name: "auth"}},
 			Consumes: []contract.ConsumedPort{
 				{Name: "user.account", Required: true},
 				{Name: "access.provisioning"},
@@ -376,6 +378,7 @@ func TestCatalogSoftRequiresShape(t *testing.T) {
 // 驱动目录是否存在、形态选中集是否与 import 闭包一致，由 make check-capabilities 校验。
 func TestCatalogDriversShape(t *testing.T) {
 	want := map[string][]string{
+		"auth":    {"redis", "memory"},
 		"queue":   {"redis", "kafka", "rabbitmq"},
 		"dataops": {"csv", "excel"},
 		"cache":   {"redis", "memory"},

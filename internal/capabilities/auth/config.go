@@ -21,6 +21,8 @@ const ConfigKey = "auth"
 
 // Config 认证能力配置段。
 type Config struct {
+	// Driver 选择 auth 存储驱动；空值按构建内已注册驱动自动选择（优先 redis）。
+	Driver                string `mapstructure:"driver"`
 	JWTSecret             string `mapstructure:"jwt_secret"`
 	JWTPreviousSecret     string `mapstructure:"jwt_previous_secret"`
 	Issuer                string `mapstructure:"issuer"`

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	authdomain "jimu/internal/capabilities/auth/domain"
+	authredis "jimu/internal/capabilities/auth/redis"
 	"jimu/internal/contract"
 	"jimu/internal/platform/identity"
 	apperrors "jimu/internal/shared/errors"
@@ -618,7 +619,7 @@ func (r *fakePasswordHistoryRepo) Trim(_ context.Context, _ uint64, keep int) er
 func newPasswordHistoryService(t *testing.T, repo *fakeUserRepo, history authdomain.PasswordHistoryRepository, count int) *AuthService {
 	t.Helper()
 	_, rclient := newResetRedis(t)
-	resetStore := NewResetStore(rclient, 15*time.Minute)
+	resetStore := authredis.NewResetStore(rclient, 15*time.Minute)
 	svc := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30,
 		testIndexer{}, resetStore, &fakeDispatcher{}, history, WithPasswordHistory(count))
 	svc.resetGen = func() string { return "123456" }

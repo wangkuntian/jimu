@@ -91,6 +91,7 @@ log:
 
 # 认证配置
 auth:
+  # driver: redis            # 可选：redis（默认）或 memory；留空按编译进项目的驱动自动选择
   jwt_secret: "dev-secret-do-not-use-in-production"  # JWT 密钥（可通过 JWT_SECRET 覆盖）
   issuer: "jimu"
   access_expire_min: 60  # Access Token 有效期（分钟，开发环境较长方便调试）

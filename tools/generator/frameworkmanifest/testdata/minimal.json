@@ -19,7 +19,12 @@
       "encryption",
       "notification"
     ],
-    "drivers": {}
+    "drivers": {
+      "auth": [
+        "redis",
+        "memory"
+      ]
+    }
   },
   "composition": {
     "contract_version": "v0.1",
@@ -38,7 +43,12 @@
       "user"
     ],
     "auto_added": [],
-    "drivers": {},
+    "drivers": {
+      "auth": [
+        "redis",
+        "memory"
+      ]
+    },
     "validity": "valid",
     "support": "experimental"
   },
@@ -308,7 +318,10 @@
         "internal/capabilities/auth/migrations/mysql/011_login_histories.sql",
         "internal/capabilities/auth/migrations/mysql/012_password_histories.sql"
       ],
-      "drivers": null,
+      "drivers": [
+        "redis",
+        "memory"
+      ],
       "assets": null,
       "protected_http_middleware": "primary",
       "migration_schema_deps": [],
@@ -642,8 +655,11 @@
           {
             "Alias": "authmodule",
             "Capability": "auth",
-            "Drivers": null,
-            "HasDrivers": false,
+            "Drivers": [
+              "memory",
+              "redis"
+            ],
+            "HasDrivers": true,
             "Path": "jimu/internal/capabilities/auth",
             "Ungated": false
           }
@@ -692,8 +708,11 @@
           {
             "Alias": "authmodule",
             "Capability": "auth",
-            "Drivers": null,
-            "HasDrivers": false,
+            "Drivers": [
+              "memory",
+              "redis"
+            ],
+            "HasDrivers": true,
             "Path": "jimu/internal/capabilities/auth",
             "Ungated": false
           }
@@ -742,8 +761,11 @@
           {
             "Alias": "authmodule",
             "Capability": "auth",
-            "Drivers": null,
-            "HasDrivers": false,
+            "Drivers": [
+              "memory",
+              "redis"
+            ],
+            "HasDrivers": true,
             "Path": "jimu/internal/capabilities/auth",
             "Ungated": false
           }
@@ -1328,6 +1350,7 @@
     "internal/capabilities/auth/application/reset_test.go",
     "internal/capabilities/auth/application/service.go",
     "internal/capabilities/auth/application/service_test.go",
+    "internal/capabilities/auth/authstore/store.go",
     "internal/capabilities/auth/config.go",
     "internal/capabilities/auth/config_test.go",
     "internal/capabilities/auth/domain/auth.go",
@@ -1346,12 +1369,19 @@
     "internal/capabilities/auth/interfaces/request.go",
     "internal/capabilities/auth/interfaces/router.go",
     "internal/capabilities/auth/interfaces/router_test.go",
+    "internal/capabilities/auth/memory/driver.go",
+    "internal/capabilities/auth/memory/driver_test.go",
+    "internal/capabilities/auth/memory/reset_store.go",
+    "internal/capabilities/auth/memory/session.go",
     "internal/capabilities/auth/migrations/mysql/011_login_histories.sql",
     "internal/capabilities/auth/migrations/mysql/012_password_histories.sql",
     "internal/capabilities/auth/migrations/postgres/011_login_histories.sql",
     "internal/capabilities/auth/migrations/postgres/012_password_histories.sql",
     "internal/capabilities/auth/module.go",
     "internal/capabilities/auth/module_test.go",
+    "internal/capabilities/auth/redis/driver.go",
+    "internal/capabilities/auth/redis/driver_test.go",
+    "internal/capabilities/auth/redis/reset_store.go",
     "internal/capabilities/auth/wire.go",
     "internal/capabilities/auth/wire_test.go",
     "internal/capabilities/catalog/catalog.go",
@@ -1635,5 +1665,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:7caabcaf5eb59ddbde315ba631ca813a9968e25ce3968c3b246df9cd1d529cfb"
+  "digest": "sha256:8723177c98d1231b64d3f9ca9e774beaa41442deb6c0b81ea57f3a9ab62f124a"
 }

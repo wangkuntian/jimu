@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	authredis "jimu/internal/capabilities/auth/redis"
 	"jimu/internal/contract"
 	"jimu/internal/platform/identity"
 	"jimu/internal/platform/tenant"
@@ -119,7 +120,7 @@ func TestRegisterSkipsCheckWhenDisabled(t *testing.T) {
 func TestResetPasswordRejectsBreachedPassword(t *testing.T) {
 	ctx := context.Background()
 	_, rclient := newResetRedis(t)
-	resetStore := NewResetStore(rclient, 15*time.Minute)
+	resetStore := authredis.NewResetStore(rclient, 15*time.Minute)
 	cipher := testIndexer{}
 
 	repo := &fakeUserRepo{users: map[string]*contract.Account{}}

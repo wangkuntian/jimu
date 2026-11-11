@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	authredis "jimu/internal/capabilities/auth/redis"
 	"jimu/internal/contract"
 	"jimu/internal/platform/identity"
 	apperrors "jimu/internal/shared/errors"
@@ -51,10 +52,10 @@ func (f *fakeDispatcher) sent() []contract.NotificationMessage {
 	return append([]contract.NotificationMessage{}, f.messages...)
 }
 
-func newResetService(t *testing.T, repo *fakeUserRepo, notifier *fakeDispatcher) (*AuthService, *ResetStore, *fakeSessionStore) {
+func newResetService(t *testing.T, repo *fakeUserRepo, notifier *fakeDispatcher) (*AuthService, *authredis.ResetStore, *fakeSessionStore) {
 	t.Helper()
 	_, rclient := newResetRedis(t)
-	resetStore := NewResetStore(rclient, 15*time.Minute)
+	resetStore := authredis.NewResetStore(rclient, 15*time.Minute)
 	store := newFakeSessionStore()
 	svc := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), store, nil, 30,
 		testIndexer{}, notifier, resetStore)

@@ -86,10 +86,12 @@ func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 	for _, rel := range []string{
 		"internal/capabilities/user",
 		"internal/capabilities/access",
-		"internal/capabilities/auth",
+		"internal/capabilities/auth/redis",
 	} {
 		assert.DirExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "missing auth artifact %s", rel)
 	}
+	assert.NoDirExists(t, filepath.Join(dir, "internal/capabilities/auth/memory"),
+		"auth preset selects redis only; memory fallback is not compiled")
 	for _, rel := range []string{
 		"internal/capabilities/catalog/catalog.go",
 		"cmd/server/main.go",
@@ -97,6 +99,17 @@ func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "missing auth artifact %s", rel)
 	}
 	assertManifestProvenance(t, dir, "auth")
+}
+
+func TestNewProjectAuthMemoryDriverNeedsNoRedis(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "auth-memory")
+	result, err := newProjectForTest(t, NewOptions{
+		Dir: dir, With: "auth:memory", Shape: "app", Module: "example.com/auth-memory", NoTidy: true,
+	})
+	require.NoError(t, err)
+	assert.NotContains(t, result.Services, "redis")
+	assert.DirExists(t, filepath.Join(dir, "internal/capabilities/auth/memory"))
+	assert.NoDirExists(t, filepath.Join(dir, "internal/capabilities/auth/redis"))
 }
 
 func TestNewProjectFullPresetCarriesEveryCapability(t *testing.T) {
@@ -110,6 +123,8 @@ func TestNewProjectFullPresetCarriesEveryCapability(t *testing.T) {
 	assert.Len(t, result.Resolved, 24, "full must resolve every framework capability")
 
 	for _, rel := range []string{
+		"internal/capabilities/auth/redis",
+		"internal/capabilities/auth/memory",
 		"internal/capabilities/queue/kafka",
 		"internal/capabilities/queue/rabbitmq",
 		"internal/capabilities/queue/redis",

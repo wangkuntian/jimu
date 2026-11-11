@@ -35,8 +35,8 @@
       "limits": {
         "generated_files": 420,
         "direct_dependencies": 44,
-        "go_closure_files": 160,
-        "go_closure_lines": 17500,
+        "go_closure_files": 165,
+        "go_closure_lines": 17800,
         "external_services": 2,
         "business_routes": 31,
         "health_routes": 2,
@@ -53,8 +53,8 @@
       "limits": {
         "generated_files": 820,
         "direct_dependencies": 64,
-        "go_closure_files": 372,
-        "go_closure_lines": 40050,
+        "go_closure_files": 374,
+        "go_closure_lines": 40400,
         "external_services": 4,
         "business_routes": 94,
         "health_routes": 2,

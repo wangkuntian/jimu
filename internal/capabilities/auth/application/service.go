@@ -31,7 +31,7 @@ type AuthService struct {
 	outbox               contract.EventWriter
 	cipher               contract.BlindIndexer
 	notifier             contract.Notifier
-	resetStore           *ResetStore
+	resetStore           ResetCodeStore
 	loginHistory         authdomain.LoginHistoryRepository    // 登录历史（nil=不记录）
 	passwordHistory      authdomain.PasswordHistoryRepository // 密码历史（nil=不做防复用检查）
 	passwordHistoryCount int
@@ -59,7 +59,7 @@ func NewAuthService(userRepo contract.AccountRepository, jwtUtil *identity.JWT, 
 			s.cipher = d
 		case contract.Notifier:
 			s.notifier = d
-		case *ResetStore:
+		case ResetCodeStore:
 			s.resetStore = d
 		case contract.TenantProvisioner:
 			s.provisioner = d
@@ -330,7 +330,7 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email string) error {
 		Channel: "email",
 		To:      email,
 		Subject: "密码重置验证码",
-		Body:    fmt.Sprintf("你的验证码：%s，%d 分钟内有效。若非本人操作请忽略。", code, int(s.resetStore.ttl.Minutes())),
+		Body:    fmt.Sprintf("你的验证码：%s，%d 分钟内有效。若非本人操作请忽略。", code, int(s.resetStore.TTL().Minutes())),
 	}); err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to send reset email", err)
 	}

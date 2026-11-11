@@ -33,6 +33,9 @@ Jimu 不是运行时框架，也不要求业务代码依赖 Jimu SDK。`jimu new
 追加带驱动的能力时用 `--driver=<name>` 指定实现；省略则取该能力声明的首个驱动。
 `--with` 是 experimental 专家模式，不承诺组合级生产兼容。
 
+`auth` 默认用 Redis 保存会话、限流、失败计数和密码重置码；单实例或无 Redis 场景可用
+`jimu new demo --with=auth:memory`，运行时若选 Redis 但客户端不可用会告警并降级到内存。
+
 生成时按需编译底层组件：`--db=mysql|postgres`（默认 `mysql`）只带所选数据库驱动；
 `minimal` 产物不含 Redis、Casbin 与 OTel 导出器，server 二进制约 27 MB。
 

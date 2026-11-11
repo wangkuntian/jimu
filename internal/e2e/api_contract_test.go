@@ -20,6 +20,7 @@ import (
 	auditdomain "jimu/internal/capabilities/audit/domain"
 	authmodule "jimu/internal/capabilities/auth"
 	authdomain "jimu/internal/capabilities/auth/domain"
+	authredis "jimu/internal/capabilities/auth/redis"
 	"jimu/internal/capabilities/catalog"
 	mfadomain "jimu/internal/capabilities/mfa/domain"
 	passkeydomain "jimu/internal/capabilities/passkey/domain"
@@ -689,7 +690,7 @@ func TestAuthRateLimit(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	authMod := authmodule.New(gdb, rdb, authmodule.Config{
+	authMod := authmodule.New(gdb, authredis.NewStores(rdb, 15*time.Minute), authmodule.Config{
 		JWTSecret:          "0123456789abcdef0123456789abcdef",
 		Issuer:             "jimu-e2e",
 		AccessExpireMin:    30,
