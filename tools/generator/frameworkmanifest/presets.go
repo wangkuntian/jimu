@@ -41,7 +41,7 @@ func LookupPreset(name string) (Preset, error) {
 	case "full":
 		return fullPreset(), nil
 	default:
-		return Preset{}, fmt.Errorf("unknown template %q (available: %s)", name, joinNames(PresetNames()))
+		return Preset{}, fmt.Errorf("unknown profile %q (available: %s)", name, joinNames(PresetNames()))
 	}
 }
 

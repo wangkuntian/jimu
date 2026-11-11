@@ -1,6 +1,6 @@
 # auth 生产上线检查清单
 
-适用对象：由 `jimu new <dir> --template=auth` 生成、需要用户、JWT、RBAC、MySQL 和 Redis 的单租户后台 API。
+适用对象：由 `jimu new <dir> --profile=auth` 生成、需要用户、JWT、RBAC、MySQL 和 Redis 的单租户后台 API。
 
 `auth` 预设携带 `user`/`access`/`auth` 及其 `tenant` 编译闭包。生产环境必须使用独立 MySQL 和 Redis；预设不生成 Compose，本地与生产都通过 `DB_*`/`REDIS_*` 环境变量指定连接。
 

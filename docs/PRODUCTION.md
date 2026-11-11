@@ -30,7 +30,7 @@
 1. 生成并检查项目：
 
 ```bash
-jimu new minimal-demo --template=minimal
+jimu new minimal-demo --profile=minimal
 cd minimal-demo
 jimu check .
 jimu upgrade . --check
@@ -72,7 +72,7 @@ curl -fsSI https://api.example.com/livez
 
 ```bash
 export ADMIN_PASSWORD='<initial-admin-password>'
-jimu new auth-demo --template=auth
+jimu new auth-demo --profile=auth
 cd auth-demo
 make migrate
 make seed

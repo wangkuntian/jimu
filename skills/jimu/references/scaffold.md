@@ -15,9 +15,9 @@
 
 ```bash
 ./bin/jimu-cli new ./myapp --module=example.com/myapp --report                   # 默认 minimal
-./bin/jimu-cli new ./myapp --template=minimal --module=example.com/myapp         # 零能力、无外部依赖
-./bin/jimu-cli new ./myapp --template=auth --module=example.com/myapp            # user/access/auth（certified）
-./bin/jimu-cli new ./myapp --template=full --module=example.com/myapp            # 全部 23 能力（validated）
+./bin/jimu-cli new ./myapp --profile=minimal --module=example.com/myapp          # 零能力、无外部依赖
+./bin/jimu-cli new ./myapp --profile=auth --module=example.com/myapp             # user/access/auth（certified）
+./bin/jimu-cli new ./myapp --profile=full --module=example.com/myapp             # 全部 23 能力（validated）
 ./bin/jimu-cli new ./myapp --with=user,access,auth,queue --shape=app              # 能力名（硬依赖闭包 + 拓扑序）
 ./bin/jimu-cli new ./myapp --with=auth,queue:kafka --dry-run                      # 只打印计划，不落盘
 ./bin/jimu-cli check ./myapp                                                      # fast 生命周期检查
@@ -31,8 +31,7 @@
 
 | 参数 | 说明 |
 |---|---|
-| `--template=minimal\|auth\|full` | 官方预设；省略选择器时默认 `minimal`。`basic-api`/`auth-api` 已在 v0.10.0 退役 |
-| `--profile` | 只用于拒绝框架内部形态；预设请用 `--template` |
+| `--profile=minimal\|auth\|full` | 官方预设；省略选择器时默认 `minimal`。`basic-api`/`auth-api` 已在 v0.10.0 退役 |
 | `--with=<cap>[:<drv>][,…]` | experimental 专家模式；名字取自 catalog 与 Ungated 能力，驱动默认取 `Descriptor.Drivers` 首项，用 `<cap>:<drv>` 覆盖。受保护能力需要同时选择 middleware provider（如 `auth`） |
 | `--shape=<name>` | 仅用于 `--with` 的形态名（默认 `app`） |
 | `--module=<path>` | 重写 `go.mod` 的 module 指令与文本里的 `jimu/` 前缀；**不改**框架运行期名字 / CLI 名 / 镜像名 / protobuf 描述符 |
@@ -73,8 +72,8 @@
 ## 验收命令与期望输出
 
 ```bash
-./bin/jimu-cli new /tmp/sk-demo --template=minimal --module=example.com/demo --dry-run     # 只打印计划
-./bin/jimu-cli new /tmp/sk-demo --template=auth --module=example.com/demo --report         # user/access/auth 预设
+./bin/jimu-cli new /tmp/sk-demo --profile=minimal --module=example.com/demo --dry-run      # 只打印计划
+./bin/jimu-cli new /tmp/sk-demo --profile=auth --module=example.com/demo --report          # user/access/auth 预设
 ./bin/jimu-cli check /tmp/sk-demo                                                          # 只读组合检查（退出 0）
 cd /tmp/sk-demo && go build ./... && go run ./tools/checkcapabilities && go test ./... -count=1
 grep -rn '"jimu/' /tmp/sk-demo --include='*.go'      # 期望 0 命中（module 已重写）

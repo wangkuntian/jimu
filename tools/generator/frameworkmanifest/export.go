@@ -84,7 +84,7 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 		req.Template = "minimal"
 	}
 	if req.Template != "" && (req.Profile != "" || req.With != "") {
-		return manifest.Document{}, Resolution{}, fmt.Errorf("--template must not be combined with --profile or --with")
+		return manifest.Document{}, Resolution{}, fmt.Errorf("preset selection cannot be combined with another selector")
 	}
 	if req.Template != "" && req.Shape != "" {
 		return manifest.Document{}, Resolution{}, fmt.Errorf("--shape is only valid with --with")
@@ -192,7 +192,7 @@ func ExportForAdd(root string, previous manifest.Document, name, driver string, 
 	switch previous.Selection.Template {
 	case "basic-api", "auth-api":
 		return manifest.Document{}, fmt.Errorf(
-			"template %q is retired and cannot be extended; regenerate with --template=minimal|auth|full or --with",
+			"template %q is retired and cannot be extended; regenerate with --profile=minimal|auth|full or --with",
 			previous.Selection.Template,
 		)
 	}

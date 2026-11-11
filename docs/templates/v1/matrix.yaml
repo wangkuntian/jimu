@@ -1,23 +1,16 @@
 schema_version: 1
 contract_version: v0.1
 target_product_version: v0.5.0
-default_template: basic-api
+default_profile: minimal
 
 selection:
-  official_flag: --template
+  official_flag: --profile
   expert_flag: --with
   selectors_mutually_exclusive:
-    - --template
     - --profile
     - --with
   dry_run_flag: --dry-run
-  compatibility:
-    - flag: --profile=minimal
-      maps_to: auth-api
-      replacement: --template=auth-api
-      status: removed
-      removed_in: v0.6.0
-      warning_required: false
+  compatibility: []
   other_profiles:
     public: false
     purpose: framework-internal-build-only

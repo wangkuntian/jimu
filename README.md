@@ -66,7 +66,7 @@ Release 同时提供 `template-bundle.json` 和 SHA-256 checksum 文件。需要
 
 ```bash
 OS=linux ARCH=amd64; curl -fL "https://github.com/wangkuntian/jimu/releases/download/v0.7.1/jimu-${OS}-${ARCH}" -o jimu && chmod +x jimu
-./jimu new demo --template=minimal
+./jimu new demo --profile=minimal
 cd demo && make dev
 ```
 
@@ -82,14 +82,14 @@ cd demo && make dev
 只编译所选驱动与对应方言的迁移，另一套驱动不会进入产物。
 
 ```bash
-./jimu new demo --template=auth --db=postgres
+./jimu new demo --profile=auth --db=postgres
 ```
 
 ## 快速开始：auth
 
 ```bash
 OS=linux ARCH=amd64; curl -fL "https://github.com/wangkuntian/jimu/releases/download/v0.7.1/jimu-${OS}-${ARCH}" -o jimu && chmod +x jimu
-./jimu new demo --template=auth
+./jimu new demo --profile=auth
 cd demo
 make migrate
 make seed

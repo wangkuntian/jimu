@@ -64,7 +64,7 @@ wait_http() {
 mkdir -p "$min_dir"
 (
   cd "$min_dir"
-  "$JIMU_BIN" new demo --template=minimal
+  "$JIMU_BIN" new demo --profile=minimal
 )
 cd "$min_dir/demo"
 "$JIMU_BIN" check .
@@ -94,7 +94,7 @@ min_pid=""
 mkdir -p "$auth_dir"
 (
   cd "$auth_dir"
-  "$JIMU_BIN" new demo --template=auth
+  "$JIMU_BIN" new demo --profile=auth
 )
 cd "$auth_dir/demo"
 "$JIMU_BIN" check .

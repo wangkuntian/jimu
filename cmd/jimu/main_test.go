@@ -50,10 +50,10 @@ func TestReleaseCLINewOutsideCheckoutDryRun(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"new", "demo", "--template=minimal", "--dry-run"})
+	cmd.SetArgs([]string{"new", "demo", "--profile=minimal", "--dry-run"})
 
 	require.NoError(t, cmd.Execute())
-	assert.Contains(t, out.String(), "template     minimal")
+	assert.Contains(t, out.String(), "profile      minimal")
 	_, err := os.Stat("demo")
 	assert.True(t, os.IsNotExist(err))
 }

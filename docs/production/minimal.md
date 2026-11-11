@@ -1,6 +1,6 @@
 # minimal 生产上线检查清单
 
-适用对象：由 `jimu new <dir> --template=minimal` 生成、需要不依赖数据库/Redis/消息队列的 HTTP API、BFF、Webhook 或内部服务。
+适用对象：由 `jimu new <dir> --profile=minimal` 生成、需要不依赖数据库/Redis/消息队列的 HTTP API、BFF、Webhook 或内部服务。
 
 生成项目自己的配置文件是 `configs/app.yaml`。生产值应通过 `configs/app.<env>.yaml` 或环境变量覆盖；不要修改 `.jimu/manifest.json`。
 
