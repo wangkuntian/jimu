@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 
 	"jimu/internal/app"
@@ -81,7 +82,11 @@ func Run(a Assembly) error {
 		return fmt.Errorf("load capability configs: %w", err)
 	}
 
-	container, err := app.NewContainer(cfg, sections, capCfgs, caps, enabled)
+	drivers := make(map[string][]string, len(a.Capabilities))
+	for _, capability := range a.Capabilities {
+		drivers[capability.Descriptor.Name] = slices.Clone(capability.Drivers)
+	}
+	container, err := app.NewContainer(cfg, sections, capCfgs, caps, enabled, drivers)
 	if err != nil {
 		return fmt.Errorf("create container: %w", err)
 	}

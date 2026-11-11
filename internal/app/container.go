@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"jimu/internal/config"
@@ -74,12 +75,12 @@ func (c *Container) Stop(ctx context.Context) error {
 	return result
 }
 
-func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *CapabilityConfigs, caps []contract.Descriptor, enabled map[string]bool) (*Container, error) {
+func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *CapabilityConfigs, caps []contract.Descriptor, enabled map[string]bool, drivers map[string][]string) (*Container, error) {
 	// OpenObserve 日志通道：otel 启用时附加到 zap（初始化失败仅告警，不阻断启动）
 	otel := newOTELState(cfg)
 	log := logger.New(cfg.Log, otel.extraCores()...)
 
-	requiredServices := requiredRuntimeServices(caps)
+	requiredServices := requiredRuntimeServices(caps, drivers)
 	database, err := newDBState(cfg, log, requiredServices)
 	if err != nil {
 		return nil, err
@@ -156,11 +157,20 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 	}, nil
 }
 
-func requiredRuntimeServices(caps []contract.Descriptor) map[contract.RuntimeService]bool {
+func requiredRuntimeServices(caps []contract.Descriptor, drivers map[string][]string) map[contract.RuntimeService]bool {
 	required := map[contract.RuntimeService]bool{}
 	for _, capability := range caps {
 		for _, service := range capability.RuntimeServices {
 			required[service] = true
+		}
+		selected := drivers[capability.Name]
+		for _, spec := range capability.DriverSpecs {
+			if !slices.Contains(selected, spec.Name) {
+				continue
+			}
+			for _, service := range spec.RuntimeServices {
+				required[service] = true
+			}
 		}
 	}
 	return required
