@@ -157,6 +157,16 @@ func TestCheckCmdRejectsInvalidProject(t *testing.T) {
 			doc.Composition.Requested = slices.Clone(test.capabilities)
 			doc.Composition.Resolved = slices.Clone(test.capabilities)
 			doc.Composition.AutoAdded = []string{}
+			for name := range doc.Selection.Drivers {
+				if !slices.Contains(test.capabilities, name) {
+					delete(doc.Selection.Drivers, name)
+				}
+			}
+			for name := range doc.Composition.Drivers {
+				if !slices.Contains(test.capabilities, name) {
+					delete(doc.Composition.Drivers, name)
+				}
+			}
 			require.NoError(t, manifest.Write(path, doc))
 
 			var out bytes.Buffer
