@@ -29,11 +29,13 @@ func RenderShape(root, dst string, set CapabilitySet) error {
 	_ = root
 	caps := make([]shapeCapability, 0, len(set.Declared))
 	for _, name := range set.Declared {
+		drivers := slices.Clone(set.Drivers[name])
+		slices.Sort(drivers)
 		caps = append(caps, shapeCapability{
 			Alias:   name + "module",
 			Path:    frameworkModule + "/" + capabilityDirPrefix + "/" + name,
 			Ungated: slices.Contains(set.Ungated, name),
-			Drivers: set.Drivers[name],
+			Drivers: drivers,
 		})
 	}
 	data := struct {

@@ -264,6 +264,7 @@ func shapeCapabilities(selected selection) []map[string]any {
 	for _, item := range selected.assemblies {
 		name := item.Descriptor.Name
 		drivers := slices.Clone(selected.drivers[name])
+		slices.Sort(drivers)
 		capabilities = append(capabilities, map[string]any{
 			"Alias":      name + "module",
 			"Path":       "jimu/internal/capabilities/" + name,
