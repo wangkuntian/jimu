@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"jimu/internal/kernel/httpclient"
+	"jimu/internal/platform/httpclient"
 
 	"github.com/stretchr/testify/assert"
 )

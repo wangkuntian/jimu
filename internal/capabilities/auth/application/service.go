@@ -12,9 +12,9 @@ import (
 
 	authdomain "jimu/internal/capabilities/auth/domain"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/access"
-	"jimu/internal/kernel/auth"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/authz"
+	"jimu/internal/platform/identity"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 
 	"github.com/google/uuid"
@@ -23,15 +23,15 @@ import (
 
 type AuthService struct {
 	userRepo             contract.AccountRepository
-	authz                access.AuthorizationStore
-	jwtUtil              *auth.JWT
-	sessions             auth.SessionStore
-	lockout              *auth.LoginFailureTracker
+	authz                authz.AuthorizationStore
+	jwtUtil              *identity.JWT
+	sessions             identity.SessionStore
+	lockout              *identity.LoginFailureTracker
 	accessMin            int
 	outbox               contract.EventWriter
 	cipher               contract.BlindIndexer
 	notifier             contract.Notifier
-	resetStore           *ResetStore
+	resetStore           ResetCodeStore
 	loginHistory         authdomain.LoginHistoryRepository    // 登录历史（nil=不记录）
 	passwordHistory      authdomain.PasswordHistoryRepository // 密码历史（nil=不做防复用检查）
 	passwordHistoryCount int
@@ -43,7 +43,7 @@ type AuthService struct {
 	tenants              contract.TenantStateSource // 租户状态（nil = 未装配租户能力）
 }
 
-func NewAuthService(userRepo contract.AccountRepository, jwtUtil *auth.JWT, sessions auth.SessionStore, lockout *auth.LoginFailureTracker, accessMin int, deps ...interface{}) *AuthService {
+func NewAuthService(userRepo contract.AccountRepository, jwtUtil *identity.JWT, sessions identity.SessionStore, lockout *identity.LoginFailureTracker, accessMin int, deps ...interface{}) *AuthService {
 	s := &AuthService{
 		userRepo:  userRepo,
 		jwtUtil:   jwtUtil,
@@ -59,7 +59,7 @@ func NewAuthService(userRepo contract.AccountRepository, jwtUtil *auth.JWT, sess
 			s.cipher = d
 		case contract.Notifier:
 			s.notifier = d
-		case *ResetStore:
+		case ResetCodeStore:
 			s.resetStore = d
 		case contract.TenantProvisioner:
 			s.provisioner = d
@@ -77,7 +77,7 @@ func NewAuthService(userRepo contract.AccountRepository, jwtUtil *auth.JWT, sess
 			s.passwordHistory = d
 		case passwordHistoryCount:
 			s.passwordHistoryCount = int(d)
-		case access.AuthorizationStore:
+		case authz.AuthorizationStore:
 			s.authz = d
 		}
 	}
@@ -330,7 +330,7 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email string) error {
 		Channel: "email",
 		To:      email,
 		Subject: "密码重置验证码",
-		Body:    fmt.Sprintf("你的验证码：%s，%d 分钟内有效。若非本人操作请忽略。", code, int(s.resetStore.ttl.Minutes())),
+		Body:    fmt.Sprintf("你的验证码：%s，%d 分钟内有效。若非本人操作请忽略。", code, int(s.resetStore.TTL().Minutes())),
 	}); err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to send reset email", err)
 	}
@@ -459,7 +459,7 @@ func (s *AuthService) generateResetCode() string {
 }
 
 func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*authdomain.TokenPair, error) {
-	claims, err := s.jwtUtil.Parse(refreshToken, auth.TokenTypeRefresh)
+	claims, err := s.jwtUtil.Parse(refreshToken, identity.TokenTypeRefresh)
 	if err != nil {
 		return nil, errors.New(errors.CodeUnauthorized, "invalid refresh token")
 	}
@@ -487,7 +487,7 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*authdo
 	}
 	err = s.sessions.Rotate(ctx, claims.UserID, claims.SessionID, claims.ID, newRefreshClaims.ID, refreshTTL(newRefreshClaims))
 	if err != nil {
-		if stderrors.Is(err, auth.ErrSessionNotFound) || stderrors.Is(err, auth.ErrTokenReuse) {
+		if stderrors.Is(err, identity.ErrSessionNotFound) || stderrors.Is(err, identity.ErrTokenReuse) {
 			return nil, errors.New(errors.CodeUnauthorized, "invalid refresh token")
 		}
 		return nil, errors.Wrap(errors.CodeInternalError, "failed to rotate session", err)
@@ -521,14 +521,14 @@ func (s *AuthService) LogoutAll(ctx context.Context, userID uint64) error {
 	return nil
 }
 
-func (s *AuthService) issueTokenPair(userID, tenantID uint64, sessionID string) (string, string, auth.Claims, error) {
+func (s *AuthService) issueTokenPair(userID, tenantID uint64, sessionID string) (string, string, identity.Claims, error) {
 	accessToken, err := s.jwtUtil.GenerateAccess(userID, tenantID, sessionID)
 	if err != nil {
-		return "", "", auth.Claims{}, errors.Wrap(errors.CodeInternalError, "failed to generate access token", err)
+		return "", "", identity.Claims{}, errors.Wrap(errors.CodeInternalError, "failed to generate access token", err)
 	}
 	refreshToken, refreshClaims, err := s.jwtUtil.GenerateRefresh(userID, tenantID, sessionID)
 	if err != nil {
-		return "", "", auth.Claims{}, errors.Wrap(errors.CodeInternalError, "failed to generate refresh token", err)
+		return "", "", identity.Claims{}, errors.Wrap(errors.CodeInternalError, "failed to generate refresh token", err)
 	}
 	return accessToken, refreshToken, refreshClaims, nil
 }
@@ -549,7 +549,7 @@ func (s *AuthService) tenantActive(ctx context.Context, tenantID uint64) (bool, 
 	return s.tenants.TenantActive(ctx, tenantID)
 }
 
-func refreshTTL(claims auth.Claims) time.Duration {
+func refreshTTL(claims identity.Claims) time.Duration {
 	if claims.ExpiresAt == nil {
 		return 0
 	}

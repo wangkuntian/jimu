@@ -311,7 +311,7 @@ func WriteReport(root, module string, doc manifest.Document) error {
 		Capabilities:  slices.Clone(doc.Selection.Capabilities),
 		MigrationOnly: capabilityNames(doc, true, false),
 		DomainOnly:    capabilityNames(doc, false, true),
-		Drivers:       driverNames(doc.Selection.Drivers),
+		Drivers:       report.FormatDrivers(doc.Selection.Drivers),
 		Assets:        assetNames(doc),
 	}
 	_, err = report.Write(root, metrics, metadata, assetRoots(doc))
@@ -329,18 +329,6 @@ func capabilityNames(doc manifest.Document, migrationOnly, domainOnly bool) []st
 	}
 	sort.Strings(values)
 	return values
-}
-
-func driverNames(drivers map[string][]string) []string {
-	names := make([]string, 0, len(drivers))
-	for name, values := range drivers {
-		if len(values) == 0 {
-			continue
-		}
-		names = append(names, name+"="+strings.Join(values, ","))
-	}
-	sort.Strings(names)
-	return names
 }
 
 func assetNames(doc manifest.Document) []string {

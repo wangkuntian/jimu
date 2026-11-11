@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/queue/domain"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 
 	"gorm.io/gorm"
 )

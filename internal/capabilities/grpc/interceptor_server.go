@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/logger"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// Reporter 错误上报接口（避免反向依赖 kernel/reporter 包，与 HTTP Recovery 同构）
+// Reporter 错误上报接口（避免反向依赖 platform/reporter 包，与 HTTP Recovery 同构）
 type Reporter interface {
 	Report(ctx context.Context, err error, attrs ...string)
 }

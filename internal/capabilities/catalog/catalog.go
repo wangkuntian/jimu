@@ -13,6 +13,7 @@ import (
 	auditmodule "jimu/internal/capabilities/audit"
 	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/breach"
+	"jimu/internal/capabilities/cache"
 	"jimu/internal/capabilities/captcha"
 	consolemodule "jimu/internal/capabilities/console"
 	"jimu/internal/capabilities/dataops"
@@ -33,6 +34,7 @@ import (
 // 尾部基础设施能力（breach/captcha 等）无 Requires；breach 无 Module 实例，
 // 仅携带声明与端口实现；captcha 本轮起有实例并自挂公开路由。
 var entries = []contract.Descriptor{
+	cache.Descriptor,
 	user.Descriptor,
 	accessmodule.Descriptor,
 	tenantmodule.Descriptor,

@@ -10,9 +10,9 @@ import (
 
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	"jimu/internal/contract"
-	kernelaccess "jimu/internal/kernel/access"
-	dbctx "jimu/internal/kernel/db"
-	"jimu/internal/kernel/tenant"
+	authz "jimu/internal/platform/authz"
+	dbctx "jimu/internal/platform/db"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 
 	mysqlerr "github.com/go-sql-driver/mysql"
@@ -212,7 +212,7 @@ func (p *GormTenantProvisioner) Provision(ctx context.Context, params contract.P
 	if err != nil {
 		return nil, err
 	}
-	kernelaccess.InvalidatePolicyCache()
+	authz.InvalidatePolicyCache()
 	return result, nil
 }
 

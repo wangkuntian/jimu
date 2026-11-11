@@ -2,17 +2,14 @@ package authmodule
 
 import (
 	"embed"
-	"time"
 
 	"jimu/internal/capabilities/auth/application"
+	"jimu/internal/capabilities/auth/authstore"
 	authinfra "jimu/internal/capabilities/auth/infrastructure"
 	"jimu/internal/capabilities/auth/interfaces"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/access"
-	"jimu/internal/kernel/auth"
-	authredis "jimu/internal/kernel/auth/redisstore"
-
-	redistore "jimu/internal/kernel/redis"
+	"jimu/internal/platform/authz"
+	"jimu/internal/platform/identity"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -24,8 +21,8 @@ const PortName = "auth"
 type Module struct {
 	cfg                 Config
 	service             *application.AuthService
-	jwtUtil             *auth.JWT
-	limiter             *auth.Limiter
+	jwtUtil             *identity.JWT
+	limiter             *identity.Limiter
 	db                  *gorm.DB
 	captcha             contract.CaptchaVerifier
 	outbox              contract.EventWriter
@@ -37,8 +34,8 @@ type Module struct {
 // New 创建 auth 模块。
 // deps 接受：*outbox.Outbox、notification.Dispatcher、*encryption.Cipher、
 // application.TenantQuota、contract.MFAVerifier、contract.TenantProvisioner、
-// contract.BreachChecker、*application.ResetStore。
-func New(db *gorm.DB, rdb redistore.Client, cfg Config, failClosed bool, captchaVerifier contract.CaptchaVerifier, deps ...interface{}) *Module {
+// contract.BreachChecker、ResetCodeStore。
+func New(db *gorm.DB, stores authstore.Stores, cfg Config, failClosed bool, captchaVerifier contract.CaptchaVerifier, deps ...interface{}) *Module {
 	var userRepo contract.AccountRepository
 	var provisioningEnabled bool
 	for _, dep := range deps {
@@ -49,18 +46,15 @@ func New(db *gorm.DB, rdb redistore.Client, cfg Config, failClosed bool, captcha
 			provisioningEnabled = true
 		}
 	}
-	jwtUtil := auth.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
-	sessionStore := authredis.NewSessionStore(rdb)
-	limiter := auth.NewLimiter(authredis.NewRateCounter(rdb), failClosed)
-	lockoutTracker := auth.NewLoginFailureTracker(authredis.NewFailureStore(rdb), auth.DefaultLockoutConfig())
-	// 密码重置验证码存储：redis 一次性码，TTL 取配置
-	resetStore := application.NewResetStore(rdb, time.Duration(cfg.ResetCodeTTLMin)*time.Minute)
+	jwtUtil := identity.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
+	limiter := identity.NewLimiter(stores.RateCounter, failClosed)
+	lockoutTracker := identity.NewLoginFailureTracker(stores.Failures, identity.DefaultLockoutConfig())
 	loginHistoryRepo := authinfra.NewMysqlLoginHistoryRepository(db)
 	passwordHistoryRepo := authinfra.NewMysqlPasswordHistoryRepository(db)
 	allDeps := append([]interface{}{}, deps...)
-	allDeps = append(allDeps, resetStore, application.WithPasswordHistory(cfg.PasswordHistoryCount),
-		loginHistoryRepo, passwordHistoryRepo, access.NewDBAuthorizationStore(db))
-	service := application.NewAuthService(userRepo, jwtUtil, sessionStore, lockoutTracker, cfg.AccessExpireMin, allDeps...)
+	allDeps = append(allDeps, stores.ResetCodes, application.WithPasswordHistory(cfg.PasswordHistoryCount),
+		loginHistoryRepo, passwordHistoryRepo, authz.NewDBAuthorizationStore(db))
+	service := application.NewAuthService(userRepo, jwtUtil, stores.Sessions, lockoutTracker, cfg.AccessExpireMin, allDeps...)
 	m := &Module{cfg: cfg, service: service, jwtUtil: jwtUtil, limiter: limiter, db: db, captcha: captchaVerifier,
 		provisioningEnabled: provisioningEnabled}
 	for _, dep := range deps {
@@ -95,11 +89,13 @@ var Descriptor = contract.Descriptor{
 	SoftRequires: []string{"tenant", "mfa", "captcha", "breach"},
 	Owns:         []string{"login_histories", "password_histories"},
 	Mount:        contract.MountSelfManaged,
-	RuntimeServices: []contract.RuntimeService{
-		contract.RuntimeServiceMySQL,
-		contract.RuntimeServiceRedis,
+	Drivers:      []string{"redis", "memory"},
+	DriverSpecs: []contract.DriverSpec{
+		{Name: "redis", RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis}},
+		{Name: "memory"},
 	},
-	Provides: []contract.ProvidedPort{{Name: PortName}},
+	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+	Provides:        []contract.ProvidedPort{{Name: PortName}},
 	Consumes: []contract.ConsumedPort{
 		{Name: "user.account", Required: true},
 		{Name: "access.provisioning"},
@@ -135,16 +131,16 @@ func (m *Module) RegisterHTTP(r contract.Router) {
 		LoginRateWindowSec:    m.cfg.LoginRateWindowSec,
 		RegisterRateLimit:     m.cfg.RegisterRateLimit,
 		RegisterRateWindowSec: m.cfg.RegisterRateWindowSec,
-	}, m.limiter, m.captcha, auth.StateCheckers{Tenant: m.tenants, User: m.users})
+	}, m.limiter, m.captcha, identity.StateCheckers{Tenant: m.tenants, User: m.users})
 }
 
 func (m *Module) ProtectedHTTPMiddleware() ([]gin.HandlerFunc, error) {
-	enforcer, err := access.NewPathEnforcer()
+	enforcer, err := authz.NewPathEnforcer()
 	if err != nil {
 		return nil, err
 	}
-	return interfaces.ProtectedMiddleware(m.jwtUtil, access.NewDBAuthorizationStore(m.db), enforcer,
-		auth.StateCheckers{Tenant: m.tenants, User: m.users}), nil
+	return interfaces.ProtectedMiddleware(m.jwtUtil, authz.NewDBAuthorizationStore(m.db), enforcer,
+		identity.StateCheckers{Tenant: m.tenants, User: m.users}), nil
 }
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}

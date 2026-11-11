@@ -354,7 +354,7 @@ proto: ## 重新生成 gRPC 代码
 	@echo "gRPC 代码已重新生成"
 
 bench: ## 运行性能基准测试
-	go test -bench=. -benchmem -run='^$$' ./internal/shared/id/... ./internal/capabilities/auth/application/... ./internal/capabilities/notification/... ./internal/kernel/http/... ./internal/capabilities/queue/...
+	go test -bench=. -benchmem -run='^$$' ./internal/shared/id/... ./internal/capabilities/auth/application/... ./internal/capabilities/notification/... ./internal/platform/http/... ./internal/capabilities/queue/...
 
 bench-ci: ## 运行性能回归门禁
 	@./scripts/bench_ci.sh --absolute

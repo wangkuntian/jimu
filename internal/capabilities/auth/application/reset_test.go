@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
+	authredis "jimu/internal/capabilities/auth/redis"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/alicebob/miniredis/v2"
@@ -51,12 +52,12 @@ func (f *fakeDispatcher) sent() []contract.NotificationMessage {
 	return append([]contract.NotificationMessage{}, f.messages...)
 }
 
-func newResetService(t *testing.T, repo *fakeUserRepo, notifier *fakeDispatcher) (*AuthService, *ResetStore, *fakeSessionStore) {
+func newResetService(t *testing.T, repo *fakeUserRepo, notifier *fakeDispatcher) (*AuthService, *authredis.ResetStore, *fakeSessionStore) {
 	t.Helper()
 	_, rclient := newResetRedis(t)
-	resetStore := NewResetStore(rclient, 15*time.Minute)
+	resetStore := authredis.NewResetStore(rclient, 15*time.Minute)
 	store := newFakeSessionStore()
-	svc := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), store, nil, 30,
+	svc := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), store, nil, 30,
 		testIndexer{}, notifier, resetStore)
 	svc.resetGen = func() string { return "123456" }
 	return svc, resetStore, store
@@ -149,7 +150,7 @@ func TestResetPasswordWrongCode(t *testing.T) {
 
 func TestForgotPasswordNotConfigured(t *testing.T) {
 	ctx := context.Background()
-	svc := NewAuthService(&fakeUserRepo{users: map[string]*contract.Account{}}, auth.New(resetTestKey, "jimu", 30, 7), newFakeSessionStore(), nil, 30)
+	svc := NewAuthService(&fakeUserRepo{users: map[string]*contract.Account{}}, identity.New(resetTestKey, "jimu", 30, 7), newFakeSessionStore(), nil, 30)
 	err := svc.ForgotPassword(ctx, "a@example.com")
 	if appCode(err) != apperrors.CodeInternalError {
 		t.Fatalf("code = %d, want %d", appCode(err), apperrors.CodeInternalError)

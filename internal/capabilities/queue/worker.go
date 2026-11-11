@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/queue/domain"
-	"jimu/internal/kernel/observability"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/observability"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/prometheus/client_golang/prometheus"

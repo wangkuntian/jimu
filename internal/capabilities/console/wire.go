@@ -3,7 +3,7 @@ package console
 import (
 	"jimu/internal/assembly"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/http/middleware"
+	"jimu/internal/platform/http/middleware"
 )
 
 // Wire 装配管理控制台能力：提供平台级视图与 /api/v1/admin/* 准入中间件，

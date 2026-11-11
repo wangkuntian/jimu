@@ -4,8 +4,8 @@ package app
 
 import (
 	"jimu/internal/config"
-	"jimu/internal/kernel/lock"
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/lock"
+	"jimu/internal/platform/logger"
 )
 
 // redisState 是未启用 Redis 的构建的空实现：不引用 go-redis。

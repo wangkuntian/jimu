@@ -1,6 +1,6 @@
 // Command checkcapabilities 校验能力声明、驱动与形态闭包、资产归属、
 // Descriptor/Wire 入口，以及能力树内的跨能力 import。
-// 其余门禁（internal 越界、kernel→capabilities 反向依赖）留待后续。
+// 其余门禁（internal 越界、platform→capabilities 反向依赖）留待后续。
 package main
 
 import (

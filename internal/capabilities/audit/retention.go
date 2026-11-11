@@ -5,8 +5,8 @@ import (
 	"time"
 
 	auditdomain "jimu/internal/capabilities/audit/domain"
-	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/scheduler"
+	"jimu/internal/platform/logger"
+	"jimu/internal/platform/scheduler"
 	"jimu/internal/shared/dbpurge"
 
 	"gorm.io/gorm"

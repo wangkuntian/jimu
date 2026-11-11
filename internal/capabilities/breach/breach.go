@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"strings"
 
-	"jimu/internal/kernel/httpclient"
+	"jimu/internal/platform/httpclient"
 )
 
 // rangeURL 官方范围查询地址，k-匿名协议的固定入口

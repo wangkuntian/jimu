@@ -198,8 +198,8 @@ func TestGeneratedTestTreePruningKeepsSatisfiableTestFiles(t *testing.T) {
 	// 时 seed_test.go 的 TestRunSeed_* 会因全量 permissions 期望落空而红，故按逐文件裁掉。
 	for _, rel := range []string{
 		"internal/app/seed_test.go",
-		"internal/kernel/db/p17_access_migration_integration_test.go",
-		"internal/kernel/db/user_mfa_migration_integration_test.go",
+		"internal/platform/db/p17_access_migration_integration_test.go",
+		"internal/platform/db/user_mfa_migration_integration_test.go",
 	} {
 		assert.NoFileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "组成依赖的测试应被裁掉：%s", rel)
 	}
@@ -214,8 +214,8 @@ func TestGeneratedTestTreePruningKeepsSatisfiableTestFiles(t *testing.T) {
 func TestFullProfileKeepsCompositionDependentTests(t *testing.T) {
 	compositionDeps := []string{
 		"internal/app/seed_test.go",
-		"internal/kernel/db/p17_access_migration_integration_test.go",
-		"internal/kernel/db/user_mfa_migration_integration_test.go",
+		"internal/platform/db/p17_access_migration_integration_test.go",
+		"internal/platform/db/user_mfa_migration_integration_test.go",
 	}
 
 	full := filepath.Join(t.TempDir(), "full")

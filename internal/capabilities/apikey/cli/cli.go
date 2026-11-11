@@ -16,8 +16,8 @@ import (
 	"jimu/internal/capabilities/apikey/domain"
 	"jimu/internal/capabilities/apikey/infrastructure"
 	"jimu/internal/config"
-	"jimu/internal/kernel/db"
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/db"
+	"jimu/internal/platform/logger"
 
 	"github.com/spf13/cobra"
 	"gorm.io/gorm"

@@ -8,7 +8,7 @@ import (
 
 	domain "jimu/internal/capabilities/apikey/domain"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"

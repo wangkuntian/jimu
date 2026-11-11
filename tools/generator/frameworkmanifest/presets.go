@@ -35,12 +35,13 @@ func LookupPreset(name string) (Preset, error) {
 		return Preset{
 			Name:         "auth",
 			Capabilities: []string{"user", "access", "auth"},
+			Drivers:      map[string][]string{"auth": {"redis"}},
 			Support:      "official",
 		}, nil
 	case "full":
 		return fullPreset(), nil
 	default:
-		return Preset{}, fmt.Errorf("unknown template %q (available: %s)", name, joinNames(PresetNames()))
+		return Preset{}, fmt.Errorf("unknown profile %q (available: %s)", name, joinNames(PresetNames()))
 	}
 }
 

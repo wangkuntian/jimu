@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"jimu/internal/config"
-	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/scheduler"
+	"jimu/internal/platform/logger"
+	"jimu/internal/platform/scheduler"
 
 	"github.com/stretchr/testify/assert"
 )

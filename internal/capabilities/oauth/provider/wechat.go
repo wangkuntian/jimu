@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"jimu/internal/kernel/httpclient"
+	"jimu/internal/platform/httpclient"
 
 	"golang.org/x/oauth2"
 )

@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"time"
 
-	"jimu/internal/kernel/httpclient"
+	"jimu/internal/platform/httpclient"
 )
 
 // WebhookConfig Webhook 配置

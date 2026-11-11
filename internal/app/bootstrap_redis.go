@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"jimu/internal/config"
-	"jimu/internal/kernel/health"
-	middlewareidem "jimu/internal/kernel/http/middleware/idempotency"
-	middlewarerate "jimu/internal/kernel/http/middleware/ratelimit"
+	"jimu/internal/platform/health"
+	middlewareidem "jimu/internal/platform/http/middleware/idempotency"
+	middlewarerate "jimu/internal/platform/http/middleware/ratelimit"
 
 	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
 

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,7 +28,7 @@ func TestRegisterRouteDependsOnPublicRegistration(t *testing.T) {
 			r := testRouter(false)
 			cfg := testAuthConfig()
 			cfg.PublicRegistration = tt.publicRegistration
-			RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, nil, nil)
+			RegisterAuthRoutes(r.Group("/api/v1"), nil, identity.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, nil, nil)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader("{}")))
 			if w.Code != tt.want {
@@ -40,7 +40,7 @@ func TestRegisterRouteDependsOnPublicRegistration(t *testing.T) {
 
 func TestLogoutRouteRequiresAccessToken(t *testing.T) {
 	r := testRouter(false)
-	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), testAuthConfig(), nil, nil)
+	RegisterAuthRoutes(r.Group("/api/v1"), nil, identity.New(strings.Repeat("s", 32), "jimu", 30, 7), testAuthConfig(), nil, nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil))
 	if w.Code != http.StatusUnauthorized {
@@ -50,7 +50,7 @@ func TestLogoutRouteRequiresAccessToken(t *testing.T) {
 
 func TestRefreshRouteStaysPublic(t *testing.T) {
 	r := testRouter(false)
-	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), testAuthConfig(), nil, nil)
+	RegisterAuthRoutes(r.Group("/api/v1"), nil, identity.New(strings.Repeat("s", 32), "jimu", 30, 7), testAuthConfig(), nil, nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", strings.NewReader("{}")))
 	if w.Code != http.StatusBadRequest {
@@ -67,7 +67,7 @@ func TestLoginRateLimitUsesIPScope(t *testing.T) {
 	}
 
 	r := testRouter(false)
-	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter, nil)
+	RegisterAuthRoutes(r.Group("/api/v1"), nil, identity.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter, nil)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":"alice","password":"secret1234"}`))
 	req.RemoteAddr = "127.0.0.1:1234"
@@ -86,7 +86,7 @@ func TestLoginRateLimitUsesNormalizedUsernameScope(t *testing.T) {
 	}
 
 	r := testRouter(false)
-	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter, nil)
+	RegisterAuthRoutes(r.Group("/api/v1"), nil, identity.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter, nil)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":" Alice ","password":"secret1234"}`))
 	req.RemoteAddr = "127.0.0.1:1234"
@@ -106,7 +106,7 @@ func TestRegisterRateLimitUsesIPScope(t *testing.T) {
 	}
 
 	r := testRouter(false)
-	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter, nil)
+	RegisterAuthRoutes(r.Group("/api/v1"), nil, identity.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, limiter, nil)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(`{"username":"alice","password":"secret1234"}`))
 	req.RemoteAddr = "127.0.0.1:1234"
@@ -123,7 +123,7 @@ func TestAuthConfigRouteIgnoresPublicRegistration(t *testing.T) {
 	cfg := testAuthConfig()
 	cfg.PublicRegistration = false
 	cfg.ProvisioningEnabled = true
-	RegisterAuthRoutes(r.Group("/api/v1"), nil, auth.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, nil, nil)
+	RegisterAuthRoutes(r.Group("/api/v1"), nil, identity.New(strings.Repeat("s", 32), "jimu", 30, 7), cfg, nil, nil)
 
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/auth/config", nil))
@@ -166,7 +166,7 @@ func testAuthConfig() Config {
 	}
 }
 
-func newRouterLimiter(t *testing.T) (*auth.Limiter, func()) {
+func newRouterLimiter(t *testing.T) (*identity.Limiter, func()) {
 	t.Helper()
-	return auth.NewLimiter(auth.NewMemoryRateCounter(), true), func() {}
+	return identity.NewLimiter(identity.NewMemoryRateCounter(), true), func() {}
 }

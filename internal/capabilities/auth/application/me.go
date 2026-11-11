@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"jimu/internal/contract"
-	"jimu/internal/kernel/access"
+	"jimu/internal/platform/authz"
 	"jimu/internal/shared/errors"
 )
 
@@ -30,7 +30,7 @@ type MeView struct {
 //
 // tenantID 来自已验签 claim（gin context，由 auth.AuthMiddleware 写入），
 // 不取账号行里的 tenant_id —— 后者可能滞后于签发时的归属。
-// 权限点经 kernel/access 的既有查询（角色 + 策略）由 EffectivePermissions 聚合。
+// 权限点经 platform/authz 的既有查询（角色 + 策略）由 EffectivePermissions 聚合。
 func (s *AuthService) Me(ctx context.Context, userID, tenantID uint64) (*MeView, error) {
 	account, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
@@ -45,7 +45,7 @@ func (s *AuthService) Me(ctx context.Context, userID, tenantID uint64) (*MeView,
 	// 两个切片都初始化为空切片：响应的 roles/permissions 必须是 [] 而不是 null
 	roles := []string{}
 	roleSubjects := []string{}
-	policies := []access.Policy{}
+	policies := []authz.Policy{}
 	if s.authz != nil {
 		identities, err := s.authz.RolesForUser(ctx, userID)
 		if err != nil {
@@ -53,7 +53,7 @@ func (s *AuthService) Me(ctx context.Context, userID, tenantID uint64) (*MeView,
 		}
 		for _, identity := range identities {
 			roles = append(roles, identity.Name)
-			roleSubjects = append(roleSubjects, access.RoleSubject(identity.ID))
+			roleSubjects = append(roleSubjects, authz.RoleSubject(identity.ID))
 		}
 		if policies, err = s.authz.Policies(ctx); err != nil {
 			return nil, errors.Wrap(errors.CodeInternalError, "failed to load policies", err)

@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"jimu/internal/contract"
-	"jimu/internal/kernel/event"
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/event"
+	"jimu/internal/platform/logger"
 )
 
 // PortName outbox 能力对外提供的端口名：*Outbox（user/auth 写入事件经它落库）。

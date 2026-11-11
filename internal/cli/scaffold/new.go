@@ -13,15 +13,13 @@ import (
 )
 
 var (
-	errScaffoldSelectors        = errors.New("--template, --profile and --with are mutually exclusive")
-	errFrameworkInternalProfile = errors.New("is framework-internal; use --template or --with")
-	errMinimalProfileRemoved    = errors.New("is framework-internal; use --template=minimal")
-	errShapeRequiresWith        = errors.New("--shape is only valid with --with")
+	errScaffoldSelectors = errors.New("--profile and --with are mutually exclusive")
+	errShapeRequiresWith = errors.New("--shape is only valid with --with")
 )
 
 func printScaffoldPlan(w io.Writer, res *generator.Result) {
-	plan := fmt.Sprintf("dry-run: %s\n  module       %s\n  template     %s\n  support      %s\n  shape        %s\n  requested    %s\n  resolved     %s\n  auto-added   %s\n  capabilities %s (装配集)\n  copy set     %s (复制集：装配集 + 编译闭包 + 迁移携带)\n  drivers      %s\n  services     %s\n  migrations   %s\n  status       %s\n  files        %d (复制 + 渲染的上界；未减去按 import/资产/组成可满足性裁剪的测试文件)\n  assets       %d\n",
-		res.Dir, res.Module, res.Template, res.Support, res.Shape,
+	plan := fmt.Sprintf("dry-run: %s\n  module       %s\n  profile      %s\n  support      %s\n  shape        %s\n  requested    %s\n  resolved     %s\n  auto-added   %s\n  capabilities %s (装配集)\n  copy set     %s (复制集：装配集 + 编译闭包 + 迁移携带)\n  drivers      %s\n  services     %s\n  migrations   %s\n  status       %s\n  files        %d (复制 + 渲染的上界；未减去按 import/资产/组成可满足性裁剪的测试文件)\n  assets       %d\n",
+		res.Dir, res.Module, selectionLabel(res.Template), res.Support, res.Shape,
 		joinOrNone(res.Requested), joinOrNone(res.Resolved), joinOrNone(res.AutoAdded),
 		strings.Join(res.Capabilities, ", "), strings.Join(res.CopySet, ", "),
 		joinOrNone(res.Drivers), joinOrNone(res.Services), joinOrNone(res.Migrations),
@@ -43,11 +41,11 @@ func NewCommand(resolve templatesource.Resolver) *cobra.Command {
 		Long: `Scaffold a new project from selected capabilities.
 
 选择器（互斥）：
-  --template=<name>     官方预设：minimal（默认）、auth 或 full
+  --profile=<name>      官方预设：minimal（默认）、auth 或 full
   --with=<cap>[:<drv>]  专家模式（experimental），按能力名解析硬依赖与驱动
 
 预设是裁剪起点：minimal 只含最小内核，auth 额外带用户/权限/认证，full 是全部能力。
-生成后仍可用 capability add 继续组合能力。--profile 只用于拒绝框架内部形态。
+生成后仍可用 capability add 继续组合能力。
 
 生成顺序：复制/渲染 → go mod tidy → 自检（生成项目内 go build ./... 与
 生成项目测试都必须绿）→ 原子换上 <dir>。产物先写 <dir>.tmp-<rand>，
@@ -56,8 +54,7 @@ func NewCommand(resolve templatesource.Resolver) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var opts generator.NewOptions
 			opts.Dir = args[0]
-			opts.Template, _ = cmd.Flags().GetString("template")
-			opts.Profile, _ = cmd.Flags().GetString("profile")
+			opts.Template, _ = cmd.Flags().GetString("profile")
 			opts.With, _ = cmd.Flags().GetString("with")
 			opts.Shape, _ = cmd.Flags().GetString("shape")
 			opts.Module, _ = cmd.Flags().GetString("module")
@@ -66,17 +63,8 @@ func NewCommand(resolve templatesource.Resolver) *cobra.Command {
 			opts.DryRun, _ = cmd.Flags().GetBool("dry-run")
 			opts.Force, _ = cmd.Flags().GetBool("force")
 			opts.Report, _ = cmd.Flags().GetBool("report")
-			if opts.Template != "" && (opts.Profile != "" || opts.With != "") {
+			if opts.Template != "" && opts.With != "" {
 				return errScaffoldSelectors
-			}
-			if opts.Profile != "" {
-				if opts.With != "" {
-					return errScaffoldSelectors
-				}
-				if opts.Profile == "minimal" {
-					return fmt.Errorf("profile %q %w", opts.Profile, errMinimalProfileRemoved)
-				}
-				return fmt.Errorf("profile %q %w", opts.Profile, errFrameworkInternalProfile)
 			}
 			if cmd.Flags().Changed("shape") && opts.Template != "" {
 				return errShapeRequiresWith
@@ -98,8 +86,7 @@ func NewCommand(resolve templatesource.Resolver) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().String("template", "", "official preset: minimal (default), auth or full (mutually exclusive with --profile/--with)")
-	cmd.Flags().String("profile", "", "framework-internal profile selector; rejected by the CLI (presets are selected with --template)")
+	cmd.Flags().String("profile", "", "official preset: minimal (default), auth or full (mutually exclusive with --with)")
 	cmd.Flags().String("with", "", "comma-separated capabilities, optionally <cap>:<driver> (mutually exclusive with --profile)")
 	cmd.Flags().String("shape", "", "shape name for --with (default \"app\")")
 	cmd.Flags().String("module", "", "Go module path (default: derived from <dir>)")

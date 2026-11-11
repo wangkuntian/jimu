@@ -341,7 +341,7 @@ func TestUpgradeRejectsRetiredTemplates(t *testing.T) {
 			_, err := PlanUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot()})
 			require.ErrorIs(t, err, ErrRetiredTemplate)
 			require.Contains(t, err.Error(), template)
-			require.Contains(t, err.Error(), "--template=")
+			require.Contains(t, err.Error(), "--profile=")
 			require.Equal(t, before, hashTree(t, dir), "retired template must not write")
 		})
 	}

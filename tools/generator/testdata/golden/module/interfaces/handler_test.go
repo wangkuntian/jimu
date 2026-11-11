@@ -9,7 +9,7 @@ import (
 
 	"jimu/internal/capabilities/product/application"
 	"jimu/internal/capabilities/product/domain"
-	"jimu/internal/kernel/http/middleware"
+	"jimu/internal/platform/http/middleware"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

@@ -10,8 +10,9 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/auth/application"
+	authredis "jimu/internal/capabilities/auth/redis"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/alicebob/miniredis/v2"
@@ -78,12 +79,12 @@ func newHandlerService(t *testing.T) *application.AuthService {
 	t.Cleanup(func() { _ = rc.Close() })
 	return application.NewAuthService(
 		&handlerUserRepo{},
-		auth.New(handlerTestKey, "jimu", 30, 7),
+		identity.New(handlerTestKey, "jimu", 30, 7),
 		&handlerSessionStore{},
 		nil, 30,
 		handlerIndexer{},
 		&handlerNotifier{},
-		application.NewResetStore(rc, 15*time.Minute),
+		authredis.NewResetStore(rc, 15*time.Minute),
 	)
 }
 

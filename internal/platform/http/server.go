@@ -1,0 +1,162 @@
+package http
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"time"
+
+	"jimu/internal/config"
+	"jimu/internal/platform/http/middleware"
+	"jimu/internal/platform/logger"
+	"jimu/internal/platform/tlsconf"
+	"jimu/internal/shared/response"
+
+	"github.com/gin-gonic/gin"
+)
+
+type Server struct {
+	*http.Server
+	errors chan error
+}
+
+func NewServer(cfg config.HTTPConfig, r *gin.Engine) (*Server, error) {
+	srv := &http.Server{
+		Addr:              formatAddr(cfg.Host, cfg.Port),
+		Handler:           r,
+		ReadHeaderTimeout: time.Duration(cfg.ReadHeaderTimeoutSec) * time.Second,
+		ReadTimeout:       time.Duration(cfg.ReadTimeoutSec) * time.Second,
+		WriteTimeout:      time.Duration(cfg.WriteTimeoutSec) * time.Second,
+		IdleTimeout:       time.Duration(cfg.IdleTimeoutSec) * time.Second,
+	}
+	if cfg.TLS.Enabled {
+		tlsCfg, err := tlsconf.ServerConfig(cfg.TLS)
+		if err != nil {
+			return nil, err
+		}
+		srv.TLSConfig = tlsCfg
+	}
+	return newServer(srv), nil
+}
+
+func newServer(server *http.Server) *Server {
+	return &Server{Server: server, errors: make(chan error, 1)}
+}
+
+func formatAddr(host string, port int) string {
+	return fmt.Sprintf("%s:%d", host, port)
+}
+
+func (s *Server) Start(ctx context.Context) error {
+	var listener net.ListenConfig
+	ln, err := listener.Listen(ctx, "tcp", s.Addr)
+	if err != nil {
+		return err
+	}
+	go func() {
+		var serveErr error
+		if s.TLSConfig != nil {
+			serveErr = s.ServeTLS(ln, "", "")
+		} else {
+			serveErr = s.Serve(ln)
+		}
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			s.errors <- serveErr
+		}
+	}()
+	return nil
+}
+
+func (s *Server) Stop(ctx context.Context) error {
+	return s.Shutdown(ctx)
+}
+
+func (s *Server) Errors() <-chan error {
+	return s.errors
+}
+
+// TracingMiddleware 构造 HTTP 追踪中间件；由组合根注入，使 platform/http 不必 import otelgin。
+// 返回 nil 表示不启用追踪。
+type TracingMiddleware func(serviceName string) gin.HandlerFunc
+
+func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.ServerConfig, securityCfg config.SecurityConfig, otelCfg config.OTELConfig, tracing TracingMiddleware, reporters ...middleware.Reporter) *gin.Engine {
+	switch cfg.Mode {
+	case config.HTTPModeRelease:
+		gin.SetMode(gin.ReleaseMode)
+	case config.HTTPModeTest:
+		gin.SetMode(gin.TestMode)
+	}
+
+	r := gin.New()
+	r.Use(
+		middleware.RequestID(),
+	)
+	// IP 白名单：非空时仅放行列表内来源（管理端另有 AdminIPAllowlist）
+	if len(securityCfg.IPAllowlist) > 0 {
+		r.Use(middleware.IPAllowlist(securityCfg.IPAllowlist))
+	}
+	// 语言解析：从 Accept-Language 注入 locale，供响应与校验翻译使用
+	r.Use(middleware.Locale())
+	// HTTP 指标中间件（在路由处理前注册，测量完整延迟）
+	r.Use(middleware.Metrics())
+	// OpenTelemetry 追踪中间件由调用方注入：platform/http 不 import otelgin，
+	// 未启用可观测性的项目因此不会把 OTel 依赖链编进二进制。
+	if otelCfg.Enabled && tracing != nil {
+		r.Use(tracing(otelCfg.ServiceName))
+	}
+	r.Use(
+		middleware.CORSMiddleware(middleware.CORSConfig{
+			AllowedOrigins: cfg.AllowedOrigins,
+			MaxAge:         86400,
+		}),
+		middleware.SecurityHeadersFromConfig(securityCfg),
+		middleware.GzipCompression(),
+		middleware.Logger(log, middleware.DefaultLogConfig()),
+		middleware.Security(cfg),
+		middleware.Recovery(reporters...),
+		middleware.Timeout(time.Duration(serverCfg.TimeoutSec)*time.Second),
+		middleware.ConcurrencyLimit(serverCfg.MaxConcurrency, time.Duration(serverCfg.ConcurrencyWaitMs)*time.Millisecond),
+		middleware.GlobalRateLimit(serverCfg.RateLimitRate, serverCfg.RateLimitBurst),
+	)
+
+	// CSRF 防护：配置了密钥才启用。Bearer 认证请求自动跳过，不影响 JWT API。
+	if securityCfg.CSRFSecret != "" {
+		r.Use(middleware.CSRF(middleware.DefaultCSRFConfig([]byte(securityCfg.CSRFSecret))))
+	}
+
+	// 根路径服务信息（替代裸 404）：仅开发模式（debug）注册，生产保持 404
+	if cfg.Mode == config.HTTPModeDebug {
+		serviceVersion := otelCfg.ServiceVersion
+		if serviceVersion == "" {
+			serviceVersion = "dev"
+		}
+		r.GET("/", func(c *gin.Context) {
+			response.OK(c, gin.H{
+				"service":          "jimu",
+				"version":          serviceVersion,
+				"api_docs":         "/swagger/index.html",
+				"api_base":         "/api/v1",
+				"health":           "management 端口 /livez、/readyz（默认 9090）",
+				"metrics":          "management 端口 /metrics（默认 9090）",
+				"observability_ui": "OpenObserve http://localhost:5080（make up-observability 后可用）",
+			})
+		})
+	}
+
+	// 业务冒烟入口：内核路由，不属于任何能力，因此 0 能力项目也有。
+	// 只回常量，不读 DB/Redis，也不泄漏配置。
+	r.GET("/api/v1/ping", func(c *gin.Context) {
+		response.OK(c, gin.H{"message": "pong"})
+	})
+
+	return r
+}
+
+func ConfigureTrustedProxies(engine *gin.Engine, proxies []string) error {
+	if len(proxies) == 0 {
+		proxies = nil
+	}
+	return engine.SetTrustedProxies(proxies)
+}

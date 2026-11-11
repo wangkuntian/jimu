@@ -7,12 +7,16 @@ metadata:
     {{- include "jimu.labels" . | nindent 4 }}
 data:
   APP_ENV: {{ .Values.environment | quote }}
+  {{- if .Values.db }}
   DB_HOST: {{ .Values.db.host | quote }}
   DB_PORT: {{ .Values.db.port | quote }}
   DB_USER: {{ .Values.db.user | quote }}
   DB_NAME: {{ .Values.db.database | quote }}
+  {{- end }}
+  {{- if .Values.redis }}
   REDIS_ADDR: {{ .Values.redis.addr | quote }}
   REDIS_DB: {{ .Values.redis.db | quote }}
+  {{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -64,18 +68,25 @@ data:
       rate_limit_rate: {{ .Values.server.rateLimitRate }}
       rate_limit_burst: {{ .Values.server.rateLimitBurst }}
 
+    {{- if .Values.cache }}
     cache:
+      driver: {{ .Values.cache.driver | quote }}
       prefix: {{ .Values.cache.prefix | quote }}
+    {{- end }}
 
+    {{- if .Values.audit }}
     audit:
       queue_size: {{ .Values.audit.queueSize }}
       batch_size: {{ .Values.audit.batchSize }}
       flush_interval_ms: {{ .Values.audit.flushIntervalMs }}
+    {{- end }}
 
+    {{- if .Values.storage }}
     storage:
       type: {{ .Values.storage.type | quote }}
       base_dir: {{ .Values.storage.baseDir | quote }}
       base_url: {{ .Values.storage.baseUrl | quote }}
+    {{- end }}
 
     log:
       level: {{ .Values.log.level | quote }}
@@ -86,6 +97,7 @@ data:
       max_age: {{ .Values.log.maxAge }}
       compress: {{ .Values.log.compress }}
 
+    {{- if .Values.auth }}
     auth:
       issuer: {{ .Values.auth.issuer | quote }}
       access_expire_min: {{ .Values.auth.accessExpireMin }}
@@ -95,7 +107,9 @@ data:
       login_rate_window_sec: {{ .Values.auth.loginRateWindowSec }}
       register_rate_limit: {{ .Values.auth.registerRateLimit }}
       register_rate_window_sec: {{ .Values.auth.registerRateWindowSec }}
+    {{- end }}
 
+    {{- if .Values.otel }}
     otel:
       enabled: {{ .Values.otel.enabled }}
       endpoint: {{ .Values.otel.endpoint | quote }}
@@ -114,7 +128,9 @@ data:
       org_id: {{ .Values.otel.orgID | quote }}
       logs_stream_name: {{ .Values.otel.logsStreamName | quote }}
       traces_stream_name: {{ .Values.otel.tracesStreamName | quote }}
+    {{- end }}
 
+    {{- if .Values.db }}
     db:
       host: {{ .Values.db.host | quote }}
       port: {{ .Values.db.port }}
@@ -126,7 +142,9 @@ data:
       conn_max_idle_time_sec: {{ .Values.db.connMaxIdleTimeSec }}
       max_retries: {{ .Values.db.maxRetries }}
       retry_interval_sec: {{ .Values.db.retryIntervalSec }}
+    {{- end }}
 
+    {{- if .Values.redis }}
     redis:
       addr: {{ .Values.redis.addr | quote }}
       db: {{ .Values.redis.db }}
@@ -136,3 +154,4 @@ data:
       write_timeout_sec: {{ .Values.redis.writeTimeoutSec }}
       max_retries: {{ .Values.redis.maxRetries }}
       retry_interval_sec: {{ .Values.redis.retryIntervalSec }}
+    {{- end }}

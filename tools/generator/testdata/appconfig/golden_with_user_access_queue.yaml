@@ -101,10 +101,6 @@ server:
 id:
   worker_id: 0           # worker 编号（0-1023）；本地单实例用默认 0，多实例部署时每个副本需唯一
 
-# 缓存配置
-cache:
-  prefix: "jimu_dev"     # 缓存 key 前缀（开发环境隔离）
-
 queue:
   type: "redis"           # 队列类型：redis, kafka, rabbitmq
   # Kafka 队列配置（type=kafka 时使用；容器接线由后续 Plan 2 实现）

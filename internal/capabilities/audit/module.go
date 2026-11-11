@@ -6,8 +6,8 @@ import (
 	"jimu/internal/capabilities/audit/infrastructure"
 	"jimu/internal/capabilities/audit/interfaces"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/http/middleware"
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/http/middleware"
+	"jimu/internal/platform/logger"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

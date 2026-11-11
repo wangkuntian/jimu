@@ -25,6 +25,13 @@ func withEntries(t *testing.T, ds ...contract.Descriptor) {
 // TestCatalogMigrationsShape 单独按"有无迁移"钉住。
 func fixture() []contract.Descriptor {
 	return []contract.Descriptor{
+		{Name: "cache", Mount: contract.MountProtected,
+			Drivers:  []string{"redis", "memory"},
+			Provides: []contract.ProvidedPort{{Name: "cache"}},
+			DriverSpecs: []contract.DriverSpec{
+				{Name: "redis", RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis}},
+				{Name: "memory"},
+			}},
 		{Name: "user", SoftRequires: []string{"access", "tenant"},
 			Owns: []string{"users"}, Mount: contract.MountProtected,
 			MigrationSchemaDeps: []string{"tenant"},
@@ -67,11 +74,13 @@ func fixture() []contract.Descriptor {
 			SoftRequires: []string{"tenant", "mfa", "captcha", "breach"},
 			Owns:         []string{"login_histories", "password_histories"},
 			Mount:        contract.MountSelfManaged,
-			RuntimeServices: []contract.RuntimeService{
-				contract.RuntimeServiceMySQL,
-				contract.RuntimeServiceRedis,
+			Drivers:      []string{"redis", "memory"},
+			DriverSpecs: []contract.DriverSpec{
+				{Name: "redis", RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis}},
+				{Name: "memory"},
 			},
-			Provides: []contract.ProvidedPort{{Name: "auth"}},
+			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
+			Provides:        []contract.ProvidedPort{{Name: "auth"}},
 			Consumes: []contract.ConsumedPort{
 				{Name: "user.account", Required: true},
 				{Name: "access.provisioning"},
@@ -131,10 +140,13 @@ func fixture() []contract.Descriptor {
 			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
 			DriverSpecs:     []contract.DriverSpec{{Name: "csv"}, {Name: "excel"}}},
 		{Name: "search", Owns: []string{"search_documents"}, Mount: contract.MountProtected,
+			Drivers:         []string{"mysql", "postgres"},
+			DriverSpecs:     []contract.DriverSpec{{Name: "mysql"}, {Name: "postgres"}},
 			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
 		{Name: "captcha", Mount: contract.MountPublic,
-			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceRedis},
-			Provides:        []contract.ProvidedPort{{Name: "captcha"}}},
+			SoftRequires: []string{"cache"},
+			Provides:     []contract.ProvidedPort{{Name: "captcha"}},
+			Consumes:     []contract.ConsumedPort{{Name: "cache"}}},
 		{Name: "uploadsec", Mount: contract.MountProtected,
 			Consumes: []contract.ConsumedPort{{Name: "storage"}}},
 		{Name: "breach", Mount: contract.MountProtected,
@@ -307,6 +319,7 @@ func TestCatalogMigrationsShape(t *testing.T) {
 		"console": false,
 		"captcha": false, "breach": false, "uploadsec": false,
 		"apikey": true, "queue": true, "outbox": true, "dataops": true, "search": true,
+		"cache": false,
 	}
 	if got := migrationsOf(All()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("catalog Migrations shape drifted:\n got %v\nwant %v", got, want)
@@ -344,12 +357,13 @@ func TestCatalogOwnsShape(t *testing.T) {
 // TestCatalogSoftRequiresShape 钉住可选依赖（只登记代码里真实可降级的耦合）。
 func TestCatalogSoftRequiresShape(t *testing.T) {
 	want := map[string][]string{
-		"user":   {"access", "tenant"},
-		"access": {"tenant"},
-		"mfa":    {"auth"},
-		"auth":   {"tenant", "mfa", "captcha", "breach"},
-		"apikey": {"tenant"},
-		"outbox": {"queue"},
+		"user":    {"access", "tenant"},
+		"access":  {"tenant"},
+		"mfa":     {"auth"},
+		"auth":    {"tenant", "mfa", "captcha", "breach"},
+		"captcha": {"cache"},
+		"apikey":  {"tenant"},
+		"outbox":  {"queue"},
 	}
 	got := map[string][]string{}
 	for _, d := range All() {
@@ -366,8 +380,11 @@ func TestCatalogSoftRequiresShape(t *testing.T) {
 // 驱动目录是否存在、形态选中集是否与 import 闭包一致，由 make check-capabilities 校验。
 func TestCatalogDriversShape(t *testing.T) {
 	want := map[string][]string{
+		"auth":    {"redis", "memory"},
 		"queue":   {"redis", "kafka", "rabbitmq"},
 		"dataops": {"csv", "excel"},
+		"cache":   {"redis", "memory"},
+		"search":  {"mysql", "postgres"},
 	}
 	got := map[string][]string{}
 	for _, d := range All() {
@@ -471,6 +488,7 @@ func TestCatalogConfigSectionsShape(t *testing.T) {
 		"outbox":    {"outbox"},
 		"tenant":    {"tenant"},
 		"uploadsec": {"upload"},
+		"cache":     {"cache"},
 	}
 	got := make(map[string][]string, len(want))
 	for _, d := range All() {

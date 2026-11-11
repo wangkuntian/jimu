@@ -91,6 +91,7 @@ log:
 
 # 认证配置
 auth:
+  # driver: redis            # 可选：redis（默认）或 memory；留空按编译进项目的驱动自动选择
   jwt_secret: "dev-secret-do-not-use-in-production"  # JWT 密钥（可通过 JWT_SECRET 覆盖）
   issuer: "jimu"
   access_expire_min: 60  # Access Token 有效期（分钟，开发环境较长方便调试）
@@ -115,10 +116,6 @@ server:
 # 雪花 ID 配置
 id:
   worker_id: 0           # worker 编号（0-1023）；本地单实例用默认 0，多实例部署时每个副本需唯一
-
-# 缓存配置
-cache:
-  prefix: "jimu_dev"     # 缓存 key 前缀（开发环境隔离）
 
 # 邮件通知配置
 email:

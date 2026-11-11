@@ -39,7 +39,7 @@ PROFILE=minimal make migrate-status      # make 目标同样叠加形态 overlay
 ## 验收命令与期望输出
 
 ```bash
-go test ./internal/kernel/db/... -count=1     # 真实库集成用例；无库时按设计 SKIP
+go test ./internal/platform/db/... -count=1     # 真实库集成用例；无库时按设计 SKIP
 make migrate-status                           # 各能力版本表状态正常
 PROFILE=minimal make migrate-status           # 轻形态只看得到该形态（+ schema 依赖）的表
 make check-capabilities                       # ① 号断言：Owns ↔ 迁移「单表唯一归属、无孤儿表、无未声明建表」

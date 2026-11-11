@@ -20,7 +20,7 @@
 #      user/auth 的生产代码直接 import capabilities/outbox（*outbox.Outbox / outbox.Event）
 #      与 capabilities/notification（notification.Message / Dispatcher），outbox 又 import
 #      capabilities/queue —— 这是软依赖在编译期的类型残留，去除需要把共享类型迁到
-#      contract/kernel（另一次改动，见 AGENTS.md「能力边界」），不在本次种子修复范围内。
+#      contract/platform（另一次改动，见 AGENTS.md「能力边界」），不在本次种子修复范围内。
 #      这些能力仍被 (2) 的 golden 锁定：不会再无声明地增减。
 #   4) 产物必须真的编入该形态包 —— 构建后 `strings` 产物必须出现
 #      `jimu/internal/profiles/<profile>`。若 overlay 未生效（典型是构建入口被改回
@@ -84,17 +84,17 @@ done
 # ---------------------------------------------------------------------------
 
 # 全量能力根包清单；新增能力请同步此表与 EXPECTED_*。
-ALL_CAPS="access apidocs apikey audit auth breach captcha console dataops encryption grpc mfa notification oauth outbox passkey queue search storage tenant uploadsec user ws"
+ALL_CAPS="access apidocs apikey audit auth breach cache captcha console dataops encryption grpc mfa notification oauth outbox passkey queue search storage tenant uploadsec user ws"
 
 # EXPECTED_<profile>：该形态二进制依赖闭包里允许出现的**能力根包**，逐值锁定（golden）。
 # 来源＝ internal/profiles/<profile>/assembly.go 的清单 + 传递必需的编译期依赖。
-EXPECTED_full="access apidocs apikey audit auth breach captcha console dataops encryption grpc mfa notification oauth outbox passkey queue search storage tenant uploadsec user ws"
+EXPECTED_full="access apidocs apikey audit auth breach cache captcha console dataops encryption grpc mfa notification oauth outbox passkey queue search storage tenant uploadsec user ws"
 EXPECTED_minimal="access auth encryption notification user"
 
 # FORBIDDEN_<profile>：该形态闭包里明确禁止出现的能力（本次修复的逐形态「不得包含」清单）。
 # 未列出的形态按「ALL_CAPS − EXPECTED」即全部非预期能力处理（见下方 FORBIDDEN_* 逐条列明）。
 FORBIDDEN_full=""
-FORBIDDEN_minimal="tenant passkey oauth dataops audit console grpc storage queue outbox search uploadsec breach apidocs ws"
+FORBIDDEN_minimal="tenant passkey oauth dataops audit console grpc storage queue outbox search uploadsec breach apidocs ws cache"
 
 # ALLOWED_<profile>：从 FORBIDDEN 中显式豁免的既有类型级传递残留（见文件头注释），
 # 它们仍是 EXPECTED 的成员，只豁免「禁止」不改「锁定」。

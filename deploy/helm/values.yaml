@@ -109,6 +109,7 @@ server:
 
 # 缓存配置
 cache:
+  driver: redis
   prefix: jimu
 
 # 审计配置

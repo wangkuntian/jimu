@@ -3,7 +3,7 @@
 package assembly
 
 import (
-	redistore "jimu/internal/kernel/redis"
+	redistore "jimu/internal/platform/redisclient"
 )
 
 // Redis 缓存客户端。

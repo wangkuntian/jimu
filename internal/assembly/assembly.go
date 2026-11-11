@@ -1,6 +1,6 @@
 // Package assembly 是组合根驱动：把「形态（profile）」声明的能力清单装配成运行中的应用。
 //
-// 依赖方向（防环）：assembly → app → kernel；能力 wire.go → assembly + kernel + contract；
+// 依赖方向（防环）：assembly → app → platform；能力 wire.go → assembly + platform + contract；
 // assembly 本身不 import 任何能力包，能力件经 Context 的端口注册表互相消费。
 package assembly
 
@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 
 	"jimu/internal/app"
@@ -81,7 +82,11 @@ func Run(a Assembly) error {
 		return fmt.Errorf("load capability configs: %w", err)
 	}
 
-	container, err := app.NewContainer(cfg, sections, capCfgs, caps, enabled)
+	drivers := make(map[string][]string, len(a.Capabilities))
+	for _, capability := range a.Capabilities {
+		drivers[capability.Descriptor.Name] = slices.Clone(capability.Drivers)
+	}
+	container, err := app.NewContainer(cfg, sections, capCfgs, caps, enabled, drivers)
 	if err != nil {
 		return fmt.Errorf("create container: %w", err)
 	}

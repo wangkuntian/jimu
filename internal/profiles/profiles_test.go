@@ -17,7 +17,7 @@ import (
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/logger"
 	"jimu/internal/profiles"
 	"jimu/internal/profiles/full"
 	"jimu/internal/profiles/minimal"

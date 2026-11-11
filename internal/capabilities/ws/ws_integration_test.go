@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
@@ -25,7 +25,7 @@ import (
 type wsFixture struct {
 	server   *httptest.Server
 	hub      *ClientHub
-	jwt      *auth.JWT
+	jwt      *identity.JWT
 	presence *PresenceManager
 	channels *ChannelManager
 }
@@ -34,9 +34,9 @@ func newWSFixture(t *testing.T) *wsFixture {
 	return newWSFixtureWithCheckers(t)
 }
 
-func newWSFixtureWithCheckers(t *testing.T, stateCheckers ...auth.StateCheckers) *wsFixture {
+func newWSFixtureWithCheckers(t *testing.T, stateCheckers ...identity.StateCheckers) *wsFixture {
 	t.Helper()
-	jwt := auth.New("test-secret", "test-issuer", 60, 7)
+	jwt := identity.New("test-secret", "test-issuer", 60, 7)
 	pm := NewPresenceManager()
 	cm := NewChannelManager()
 	hub := NewClientHub(pm, cm)
@@ -275,7 +275,7 @@ func (f *wsFixture) handshakeStatus(t *testing.T, userID, tenantID uint64) int {
 
 func TestWSHandlerChecksIdentityStateBeforeUpgrade(t *testing.T) {
 	t.Run("启用用户和租户允许握手", func(t *testing.T) {
-		f := newWSFixtureWithCheckers(t, auth.StateCheckers{
+		f := newWSFixtureWithCheckers(t, identity.StateCheckers{
 			User:   fakeUserStateChecker{active: true},
 			Tenant: fakeTenantStateChecker{active: true},
 		})
@@ -289,14 +289,14 @@ func TestWSHandlerChecksIdentityStateBeforeUpgrade(t *testing.T) {
 	})
 
 	t.Run("停用用户拒绝握手", func(t *testing.T) {
-		f := newWSFixtureWithCheckers(t, auth.StateCheckers{
+		f := newWSFixtureWithCheckers(t, identity.StateCheckers{
 			User: fakeUserStateChecker{active: false},
 		})
 		assert.Equal(t, http.StatusUnauthorized, f.handshakeStatus(t, 42, 0))
 	})
 
 	t.Run("停用租户拒绝握手", func(t *testing.T) {
-		f := newWSFixtureWithCheckers(t, auth.StateCheckers{
+		f := newWSFixtureWithCheckers(t, identity.StateCheckers{
 			User:   fakeUserStateChecker{active: true},
 			Tenant: fakeTenantStateChecker{active: false},
 		})
@@ -304,7 +304,7 @@ func TestWSHandlerChecksIdentityStateBeforeUpgrade(t *testing.T) {
 	})
 
 	t.Run("删除租户拒绝握手", func(t *testing.T) {
-		f := newWSFixtureWithCheckers(t, auth.StateCheckers{
+		f := newWSFixtureWithCheckers(t, identity.StateCheckers{
 			User:   fakeUserStateChecker{active: true},
 			Tenant: fakeTenantStateChecker{active: false},
 		})

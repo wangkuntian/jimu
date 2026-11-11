@@ -39,17 +39,17 @@ flowchart LR
 
 ### `jimu new`：独立 Go 项目
 
-`jimu new <dir>` 按 `--template` 或 `--with` 选择能力并生成独立 Go module。生成器会根据声明闭包和必要的 schema/编译依赖，复制或渲染源码、配置、驱动与资产，随后整理生成项目的 module 依赖。profile 只改变框架二进制组成；生成项目拥有自己的 `go.mod`，因此可以随选择收缩依赖。
+`jimu new <dir>` 按 `--profile` 或 `--with` 选择能力并生成独立 Go module。生成器会根据声明闭包和必要的 schema/编译依赖，复制或渲染源码、配置、驱动与资产，随后整理生成项目的 module 依赖。这里的 `--profile` 是生成预设（`minimal`/`auth`/`full`），不是框架内部构建形态；生成项目拥有自己的 `go.mod`，因此可以随选择收缩依赖。
 
-对外产品入口只保留预设：`--template=minimal|auth|full` 是正式选择器，不传选择器时默认 `minimal`；`--with` 只提供 experimental 专家组合，manifest 记录 `support: experimental`；`--profile` 只用于拒绝框架内部形态，预设请用 `--template`。保留的内部 profile 只有 `full`（开发、测试和 demo 的全量形态）与 `minimal`（冻结，仅保持构建和闭包门禁）；`enterprise`、`machine`、`saas` 已按 [ADR 0007](../adr/0007-profiles-are-internal-build-shapes.md) 退役。内部 profile 不等于产品预设。预设、预算、支持级别和兼容窗口的机器可读事实源是 [`docs/templates/v1`](../templates/v1/README.md)，实现门禁和生成器不得另建第二份选择集定义。
+对外产品入口只保留预设：`--profile=minimal|auth|full` 是正式选择器，不传选择器时默认 `minimal`；`--with` 只提供 experimental 专家组合，manifest 记录 `support: experimental`。脚手架 CLI 不再暴露框架内部 profile；`minimal`/`full` 同名值按官方预设解释，不选择内部 profile。保留的内部 profile 只有 `full`（开发、测试和 demo 的全量形态）与 `minimal`（冻结，仅保持构建和闭包门禁）；`enterprise`、`machine`、`saas` 已按 [ADR 0007](../adr/0007-profiles-are-internal-build-shapes.md) 退役。内部 profile 不等于产品预设。预设、预算、支持级别和兼容窗口的机器可读事实源是 [`docs/templates/v1`](../templates/v1/README.md)，实现门禁和生成器不得另建第二份选择集定义。
 
 官方模板是可再生成一次的起始基线，不是持续管理的投影。生成后的工程归用户所有；`.jimu/manifest.json` 只记录来源、选择集和摘要，不授予 Jimu 覆盖用户文件的权利。v0.5.0 不提供隐式升级；v0.6.0 起提供显式 `jimu upgrade`，只在无冲突时修改生成器管理文件，并在备份后执行 tidy/build/test，失败按原字节回滚。schema v1 仍 fail-closed，也不提供自动项目/存量数据库迁移；v0.4.x 生成项目仍只支持“重新生成 + 人工迁移”，v0.5 的 schema v2 项目可通过显式 `jimu upgrade` 升级。升级支持窗口固定为 `v0.5.0` 起的 certified 模板，安全修复只保证当前 0.7.x 的最新 patch；决策见 [ADR 0003](../adr/0003-upgrade-support-window.md)。
 
 三个预设都从**当前主代码仓库**按 import 闭包裁剪，而不是维护独立的模板树：
 
-- `minimal` — 0 能力，只保留最小内核。`internal/kernel`/`internal/shared`/`config`/`contract` 都不依赖能力，唯一耦合点曾是与能力 domain 共享的种子模型，现已抽到 `internal/kernel/seedmodel`。生成项目不含数据库/Redis 客户端、`internal/e2e` 与 `docker-compose.yml`，配置也不含 `db`/`redis` 段；`go build`、`go test`、`go run` 都不需要外部服务，`GET /api/v1/ping` 由内核提供。
+- `minimal` — 0 能力，只保留最小内核。`internal/platform`/`internal/shared`/`config`/`contract` 都不依赖能力，唯一耦合点曾是与能力 domain 共享的种子模型，现已抽到 `internal/platform/seedmodel`。生成项目不含数据库/Redis 客户端、`internal/e2e` 与 `docker-compose.yml`，配置也不含 `db`/`redis` 段；`go build`、`go test`、`go run` 都不需要外部服务，`GET /api/v1/ping` 由内核提供。
 - `auth` — `user` + `access` + `auth`（含 `tenant` 编译闭包），支持级别 `certified`。生成 MySQL/Redis 客户端与迁移，但不生成 Compose：数据库由使用者提供，连接信息走 `DB_*`/`REDIS_*` 环境变量。
-- `full` — 全部 23 个能力 + 完整驱动集（`s3`/`local`、`kafka`/`rabbitmq`/`redis`、`excel`/`csv`），支持级别 `validated`。`--with` 的缺省驱动只取首个，无法表达完整驱动集，因此 `full` 改成从 `internal/profiles/full/assembly.go` 派生。
+- `full` — 全部 24 个能力 + 完整驱动集（`s3`/`local`、`kafka`/`rabbitmq`/`redis`、`cache:redis`/`cache:memory`、`excel`/`csv`），支持级别 `validated`。`--with` 的缺省驱动只取首个，无法表达完整驱动集，因此 `full` 改成从 `internal/profiles/full/assembly.go` 派生。
 
 预设只是裁剪起点：manifest 记录 `selection.template`，但 `jimu capability add` 只拒绝已退役的 `basic-api`/`auth-api`，预设项目可以继续加能力。由已退役模板生成的项目执行 `jimu upgrade` 直接硬失败（`ErrRetiredTemplate`），不提供迁移命令。
 
@@ -101,7 +101,7 @@ flowchart TD
 
 新增能力复用与 `jimu new` / `jimu check` 相同的组合 resolver 和 preflight：硬依赖必须已经在项目装配集中，不会静默追加依赖；冲突、端口、驱动、迁移、运行时配置和中间件问题都在创建暂存目录或写目标文件前失败。组合结果保留既有 `requested` / `auto_added` 与驱动选择，并以 schema v3 `composition` 写回。未使用 `--force` 且项目 manifest 摘要已变化时，追加操作拒绝继续。
 
-更新仅安装生成器管理的差异文件，并保留现有配置值；落盘复用 `jimu upgrade` 的 manifest 事务：先备份所有受影响文件，逐文件安装，manifest 最后写入，任一失败按原字节恢复。该增量追加流程不执行新建项目使用的 `go mod tidy` 和构建自检，支持级别保持 `experimental`。官方模板是认证基线，不接受 `capability add`；需要扩展时用 `--with` 生成 experimental 组合。
+更新仅安装生成器管理的差异文件，并保留现有配置值；落盘复用 `jimu upgrade` 的 manifest 事务：先备份所有受影响文件，逐文件安装，manifest 最后写入，任一失败按原字节恢复。该增量追加流程不执行新建项目使用的 `go mod tidy` 和构建自检，支持级别保持 `experimental`。预设项目是裁剪起点，可以继续 `capability add`；只有已退役的 `basic-api` / `auth-api` 项目会被拒绝。
 
 ### 显式升级规划
 

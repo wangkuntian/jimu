@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 )
 
 // adminWebSocket 持有管理端实时连接的唯一 hub、频道和在线状态。
@@ -16,12 +16,12 @@ type adminWebSocket struct {
 	hub      *ClientHub
 	presence *PresenceManager
 	channels *ChannelManager
-	states   auth.StateCheckers
-	jwt      *auth.JWT
+	states   identity.StateCheckers
+	jwt      *identity.JWT
 	cancel   context.CancelFunc
 }
 
-func newAdminWebSocket(jwt *auth.JWT, stateCheckers ...auth.StateCheckers) *adminWebSocket {
+func newAdminWebSocket(jwt *identity.JWT, stateCheckers ...identity.StateCheckers) *adminWebSocket {
 	presence := NewPresenceManager()
 	channels := NewChannelManager()
 	port := &adminWebSocket{

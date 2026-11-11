@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"jimu/internal/contract"
-	"jimu/internal/kernel/observability"
+	"jimu/internal/platform/observability"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"

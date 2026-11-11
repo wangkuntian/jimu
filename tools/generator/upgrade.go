@@ -251,7 +251,7 @@ func upgradeRequest(previous manifest.Document, root, projectDir string, framewo
 	case "basic-api", "auth-api":
 		return frameworkmanifest.Request{}, fmt.Errorf(
 			"%w: project was generated with retired template %q and cannot be upgraded. "+
-				"Regenerate with --template=minimal|auth|full (or --with) and merge your application code",
+				"Regenerate with --profile=minimal|auth|full (or --with) and merge your application code",
 			ErrRetiredTemplate, previous.Selection.Template)
 	}
 	module := moduleFromManifest(previous)

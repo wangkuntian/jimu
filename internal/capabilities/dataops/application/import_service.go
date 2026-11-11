@@ -8,7 +8,7 @@ import (
 
 	"jimu/internal/capabilities/dataops/domain"
 	"jimu/internal/capabilities/dataops/importer"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"golang.org/x/crypto/bcrypt"

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 	"jimu/internal/shared/errors"
 
 	"github.com/gorilla/websocket"
@@ -496,13 +496,13 @@ func mustEncode(msg *WSMessage) []byte {
 }
 
 // TokenParser 是 WebSocket 握手所需的令牌校验能力（只有 Parse 一个方法）。
-// 用接口而不是 *auth.JWT：contract.AdminWebSocket 的签名因此不必携带 auth 类型。
+// 用接口而不是 *identity.JWT：contract.AdminWebSocket 的签名因此不必携带 auth 类型。
 type TokenParser interface {
 	Parse(tokenString, expectedType string) (userID, tenantID uint64, err error)
 }
 
-// JWTTokenParser 把 *auth.JWT 适配成 TokenParser。
-type JWTTokenParser struct{ JWT *auth.JWT }
+// JWTTokenParser 把 *identity.JWT 适配成 TokenParser。
+type JWTTokenParser struct{ JWT *identity.JWT }
 
 // Parse 实现 TokenParser。
 func (p JWTTokenParser) Parse(tokenString, expectedType string) (uint64, uint64, error) {
@@ -514,8 +514,8 @@ func (p JWTTokenParser) Parse(tokenString, expectedType string) (uint64, uint64,
 }
 
 // WSHandler 创建 WebSocket HTTP 处理函数
-func WSHandler(hub *ClientHub, jwtUtil TokenParser, presence *PresenceManager, channels *ChannelManager, stateCheckers ...auth.StateCheckers) http.HandlerFunc {
-	var states auth.StateCheckers
+func WSHandler(hub *ClientHub, jwtUtil TokenParser, presence *PresenceManager, channels *ChannelManager, stateCheckers ...identity.StateCheckers) http.HandlerFunc {
+	var states identity.StateCheckers
 	if len(stateCheckers) > 0 {
 		states = stateCheckers[0]
 	}
@@ -528,7 +528,7 @@ func WSHandler(hub *ClientHub, jwtUtil TokenParser, presence *PresenceManager, c
 		}
 
 		// 2. 验证 JWT token
-		userID, tenantID, err := jwtUtil.Parse(token, auth.TokenTypeAccess)
+		userID, tenantID, err := jwtUtil.Parse(token, identity.TokenTypeAccess)
 		if err != nil {
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return

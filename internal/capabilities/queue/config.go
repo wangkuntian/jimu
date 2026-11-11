@@ -3,7 +3,7 @@ package queue
 import (
 	"fmt"
 
-	"jimu/internal/kernel/scheduler"
+	"jimu/internal/platform/scheduler"
 )
 
 // ConfigKey 本能力在 app.yaml 中的配置段键。

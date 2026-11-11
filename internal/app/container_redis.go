@@ -4,9 +4,9 @@ package app
 
 import (
 	"jimu/internal/config"
-	"jimu/internal/kernel/lock"
-	"jimu/internal/kernel/logger"
-	redistore "jimu/internal/kernel/redis"
+	"jimu/internal/platform/lock"
+	"jimu/internal/platform/logger"
+	redistore "jimu/internal/platform/redisclient"
 )
 
 // redisState 持有 Redis 客户端与分布式锁。

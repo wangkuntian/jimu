@@ -7,7 +7,7 @@ import (
 
 	"jimu/internal/capabilities/auth/application"
 	"jimu/internal/contract"
-	platformauth "jimu/internal/kernel/auth"
+	identity "jimu/internal/platform/identity"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"
@@ -21,11 +21,11 @@ const DeviceTokenHeader = "X-Device-Token"
 type AuthHandler struct {
 	service *application.AuthService
 	cfg     Config
-	limiter *platformauth.Limiter
+	limiter *identity.Limiter
 	captcha contract.CaptchaVerifier
 }
 
-func NewAuthHandler(service *application.AuthService, cfg Config, limiter *platformauth.Limiter, captchaVerifier contract.CaptchaVerifier) *AuthHandler {
+func NewAuthHandler(service *application.AuthService, cfg Config, limiter *identity.Limiter, captchaVerifier contract.CaptchaVerifier) *AuthHandler {
 	return &AuthHandler{service: service, cfg: cfg, limiter: limiter, captcha: captchaVerifier}
 }
 

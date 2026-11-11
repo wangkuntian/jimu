@@ -53,6 +53,27 @@ func resolveSelection(root string, req Request) (selection, error) {
 				selected.declared = append(selected.declared, name)
 			}
 		}
+		for name, values := range req.Drivers {
+			var descriptor contract.Descriptor
+			found := false
+			for _, candidate := range all {
+				if candidate.Name == name {
+					descriptor = candidate
+					found = true
+					break
+				}
+			}
+			if !found {
+				return selection{}, fmt.Errorf("unknown capability %q", name)
+			}
+			for _, driver := range values {
+				if !slices.Contains(descriptor.Drivers, driver) {
+					return selection{}, fmt.Errorf("unknown driver %q for capability %q (available: %s)",
+						driver, name, strings.Join(descriptor.Drivers, ", "))
+				}
+			}
+			selected.drivers[name] = slices.Clone(values)
+		}
 		selected.assemblies = slices.Clone(assemblyValue.Capabilities)
 	} else {
 		selected.support = "experimental"

@@ -9,9 +9,9 @@ import (
 	"jimu/internal/assembly"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/event"
-	"jimu/internal/kernel/httpclient"
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/event"
+	"jimu/internal/platform/httpclient"
+	"jimu/internal/platform/logger"
 	"jimu/internal/profiles/full"
 	"jimu/internal/shared/testutil"
 

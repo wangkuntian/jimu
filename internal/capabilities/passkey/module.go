@@ -8,10 +8,10 @@ import (
 	passkeyinfra "jimu/internal/capabilities/passkey/infrastructure"
 	"jimu/internal/capabilities/passkey/interfaces"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
-	authredis "jimu/internal/kernel/auth/redisstore"
+	"jimu/internal/platform/identity"
+	authredis "jimu/internal/platform/identity/redisstore"
 
-	redistore "jimu/internal/kernel/redis"
+	redistore "jimu/internal/platform/redisclient"
 
 	"github.com/go-webauthn/webauthn/webauthn"
 	"gorm.io/gorm"
@@ -20,8 +20,8 @@ import (
 // Module 通行密钥（WebAuthn）能力。
 type Module struct {
 	service *passkeyapp.PasskeyService
-	jwtUtil *auth.JWT
-	limiter *auth.Limiter
+	jwtUtil *identity.JWT
+	limiter *identity.Limiter
 	cfg     contract.AuthConfig
 	tenants contract.TenantStateSource
 	users   contract.UserStateSource
@@ -62,10 +62,10 @@ func New(deps Deps) *Module {
 		SessionTTL:  time.Duration(deps.Config.SessionTTLMin) * time.Minute,
 		Finalizer:   deps.Finalizer,
 	})
-	jwtUtil := auth.NewWithRotation(deps.AuthCfg.JWTSecret, deps.AuthCfg.JWTPreviousSecret, deps.AuthCfg.Issuer, deps.AuthCfg.AccessExpireMin, deps.AuthCfg.RefreshExpireDay)
-	var limiter *auth.Limiter
+	jwtUtil := identity.NewWithRotation(deps.AuthCfg.JWTSecret, deps.AuthCfg.JWTPreviousSecret, deps.AuthCfg.Issuer, deps.AuthCfg.AccessExpireMin, deps.AuthCfg.RefreshExpireDay)
+	var limiter *identity.Limiter
 	if deps.Redis != nil {
-		limiter = auth.NewLimiter(authredis.NewRateCounter(deps.Redis), deps.FailClosed)
+		limiter = identity.NewLimiter(authredis.NewRateCounter(deps.Redis), deps.FailClosed)
 	}
 	users, _ := deps.Users.(contract.UserStateSource)
 	return &Module{service: svc, jwtUtil: jwtUtil, limiter: limiter, cfg: deps.AuthCfg, tenants: deps.Tenants, users: users}
@@ -111,7 +111,7 @@ func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
 func (m *Module) RegisterHTTP(r contract.Router) {
 	rg := r.Group("/api/v1")
 	interfaces.RegisterPasskeyRoutes(rg, m.service, m.cfg, m.limiter, m.jwtUtil,
-		auth.StateCheckers{Tenant: m.tenants, User: m.users})
+		identity.StateCheckers{Tenant: m.tenants, User: m.users})
 }
 
 func (m *Module) RegisterJobs(j contract.JobRegistry) {}

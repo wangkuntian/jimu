@@ -4,11 +4,11 @@ import (
 	"strings"
 	"time"
 
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 
-	redistore "jimu/internal/kernel/redis"
+	redistore "jimu/internal/platform/redisclient"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -46,7 +46,7 @@ func (h *AdminRateLimitHandler) AuthPeek(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	redisKey := auth.LimitKey(scope, key)
+	redisKey := identity.LimitKey(scope, key)
 
 	count, err := h.rdb.Get(ctx, redisKey).Int64()
 	if err != nil && err != redis.Nil {

@@ -7,7 +7,7 @@ import (
 	mfainfra "jimu/internal/capabilities/mfa/infrastructure"
 	"jimu/internal/capabilities/mfa/interfaces"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 
 	"gorm.io/gorm"
 )
@@ -15,7 +15,7 @@ import (
 // Module TOTP 二次验证 + 可信设备能力。
 type Module struct {
 	service *mfaapp.MFAService
-	jwtUtil *auth.JWT
+	jwtUtil *identity.JWT
 	tenants contract.TenantStateSource
 	users   contract.UserStateSource
 }
@@ -29,7 +29,7 @@ func New(db *gorm.DB, cfg Config, users contract.UserinfoSource, tenants ...cont
 	repo := mfainfra.NewMysqlMFARepository(db)
 	trustedRepo := mfainfra.NewMysqlTrustedDeviceRepository(db)
 	svc := mfaapp.NewMFAService(repo, users, trustedRepo, cfg.TrustedDeviceDays, cfg.Issuer)
-	jwtUtil := auth.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
+	jwtUtil := identity.NewWithRotation(cfg.JWTSecret, cfg.JWTPreviousSecret, cfg.Issuer, cfg.AccessExpireMin, cfg.RefreshExpireDay)
 	m := &Module{service: svc, jwtUtil: jwtUtil}
 	if len(tenants) > 0 {
 		m.tenants = tenants[0]
@@ -83,7 +83,7 @@ func (m *Module) Descriptor() contract.Descriptor { return Descriptor }
 func (m *Module) RegisterHTTP(r contract.Router) {
 	rg := r.Group("/api/v1")
 	protected := rg.Group("/auth")
-	protected.Use(auth.AuthMiddleware(m.jwtUtil, auth.StateCheckers{Tenant: m.tenants, User: m.users}))
+	protected.Use(identity.AuthMiddleware(m.jwtUtil, identity.StateCheckers{Tenant: m.tenants, User: m.users}))
 	interfaces.RegisterMFARoutes(protected, m.service)
 }
 

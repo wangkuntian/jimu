@@ -60,13 +60,13 @@ v0.5.0 未提供自动升级，也不承诺框架安全修复自动进入已生�
 
 ## CLI 与版本语义
 
-正式入口（v0.5.0 起；v0.6.0 保持同一选择器）：
+正式入口（当前版本）：
 
 ```bash
 jimu new <dir>                         # 默认 minimal
-jimu new <dir> --template=minimal
-jimu new <dir> --template=auth
-jimu new <dir> --template=full
+jimu new <dir> --profile=minimal
+jimu new <dir> --profile=auth
+jimu new <dir> --profile=full
 jimu new <dir> --with=user,access,auth # 专家模式，标记 experimental
 jimu check <dir>                       # 只读检查 manifest 与组合一致性
 jimu upgrade <dir> --dry-run           # 只读三方 diff
@@ -76,11 +76,11 @@ jimu upgrade <dir>                     # 显式升级事务
 规则：
 
 - `<dir>` 必填；`--module` 继续显式推荐，无法可靠推导时拒绝生成。
-- `--template` 只接受 `minimal`、`auth` 或 `full`；`basic-api`/`auth-api` 已退役。
-- `--template`、`--profile`、`--with` 三者互斥。
+- `--profile` 只接受官方预设 `minimal`、`auth` 或 `full`；`basic-api`/`auth-api` 已退役。
+- `--profile` 与 `--with` 互斥。
 - 不传选择器时默认 `minimal`。
 - `--with` 允许生成，但 manifest 必须标记 `support: experimental`，并执行全部硬预检。
-- `--profile` 只用于拒绝框架内部形态；预设请用 `--template`。其他 profile 名称只供 Jimu 自身构建使用，不是对外预设。
+- 脚手架 CLI 不再暴露框架内部形态；同名 `minimal`/`full` 按官方预设解释。其他 profile 名称只供 Jimu 自身构建使用，不是对外预设。
 - `--dry-run` 打印 requested/resolved/auto-added、驱动、迁移、外部服务、合法性/支持级别（status）、预检和预算结果，不写文件。
 - 所有生成先写暂存目录；预检、tidy、build、test 和生成项目自检通过后才原子发布。失败不得留下半成品。
 - `jimu check` 只读校验已有项目；`jimu upgrade` 不带 `--dry-run` / `--check` 时执行显式写入事务，冲突在写盘前中止，失败按原字节回滚。
@@ -135,7 +135,7 @@ jimu upgrade <dir>                     # 显式升级事务
    - `auth` 必须同时声明 MySQL 与 Redis，缺少任一服务时 fail fast。
 4. **硬拒绝，不提供绕过**
    - 未知能力或驱动、空能力名、重复能力；
-   - `--template`、`--profile`、`--with` 冲突；
+   - `--profile`、`--with` 冲突；
    - 受保护路由没有唯一提供者，或迁移 schema 依赖不完整；
    - 重复表所有权，或服务声明与配置不一致；
    - framework commit 无法解析；
@@ -168,7 +168,7 @@ jimu upgrade <dir>                     # 显式升级事务
 
 适用场景：需要完整能力集的起点，或据此继续裁剪。
 
-- 全部 23 个能力，支持级别 `validated`。
+- 全部 24 个能力，支持级别 `validated`。
 - 完整驱动集：`storage` 的 `s3`/`local`、`queue` 的 `kafka`/`rabbitmq`/`redis`、`dataops` 的 `excel`/`csv`。
   `--with` 的缺省只取每个能力的首个驱动，无法表达完整集，因此 `full` 从 `internal/profiles/full/assembly.go` 派生。
 - 首发是 `validated` 而不是 `certified`：预算与构建门禁已就位，但缺完整的组合级 E2E。
@@ -227,7 +227,7 @@ v0.5.1 起 `Scaffold Gate` 分为 official 与 full 两档：official 是 `relea
 
 `full` 验收：
 
-- 23 个能力与完整驱动集（`s3`/`local`、`kafka`/`rabbitmq`/`redis`、`excel`/`csv`）齐全；
+- 24 个能力与完整驱动集（`s3`/`local`、`kafka`/`rabbitmq`/`redis`、`cache:redis`/`cache:memory`、`excel`/`csv`）齐全；
 - `go build ./...` 通过，自动报告不超过全部预算；
 - 支持级别是 `validated`，不是 `certified`。
 
@@ -238,8 +238,8 @@ v0.5.1 起 `Scaffold Gate` 分为 official 与 full 两档：official 是 `relea
 1. 固化预设契约、支持矩阵和预算基线。
 2. 为 Descriptor 补齐认证中间件提供者、迁移 schema 依赖和 runtime services，实现生成前预检。
 3. 把种子模型从能力 domain 抽到内核，解除内核与能力的唯一耦合。
-4. 实现 `--template=minimal`：0 能力 + 闭包裁剪内核 + 内核 `/api/v1/ping`。
-5. 实现 `--template=auth`（`user`/`access`/`auth`，certified）与 `--template=full`（全部能力，validated）。
+4. 实现 `--profile=minimal`：0 能力 + 闭包裁剪内核 + 内核 `/api/v1/ping`。
+5. 实现 `--profile=auth`（`user`/`access`/`auth`，certified）与 `--profile=full`（全部能力，validated）。
 6. 建立三预设预算、minimal 无依赖 smoke 和 auth 空库端到端门禁。
 7. 退役 `basic-api`/`auth-api` 模板，旧项目 upgrade 硬失败。
 8. 完成 v0.10.0 发布说明与不兼容变更说明。

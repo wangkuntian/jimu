@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"jimu/internal/kernel/scheduler"
+	"jimu/internal/platform/scheduler"
 	apperrors "jimu/internal/shared/errors"
 )
 

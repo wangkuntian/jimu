@@ -20,6 +20,7 @@ import (
 	auditdomain "jimu/internal/capabilities/audit/domain"
 	authmodule "jimu/internal/capabilities/auth"
 	authdomain "jimu/internal/capabilities/auth/domain"
+	authredis "jimu/internal/capabilities/auth/redis"
 	"jimu/internal/capabilities/catalog"
 	mfadomain "jimu/internal/capabilities/mfa/domain"
 	passkeydomain "jimu/internal/capabilities/passkey/domain"
@@ -29,11 +30,12 @@ import (
 	userinfra "jimu/internal/capabilities/user/infrastructure"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/access"
-	"jimu/internal/kernel/db"
-	"jimu/internal/kernel/event"
-	"jimu/internal/kernel/httpclient"
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/authz"
+	"jimu/internal/platform/db"
+	"jimu/internal/platform/event"
+	"jimu/internal/platform/httpclient"
+	"jimu/internal/platform/logger"
+	"jimu/internal/platform/seeding"
 	"jimu/internal/profiles/active"
 
 	"github.com/alicebob/miniredis/v2"
@@ -96,7 +98,7 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 	// 种子：admin 用户 + 超级管理员角色 + 权限（含 /users、/audits 策略）
 	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "admin123")
-	require.NoError(t, app.RunSeed(gdb, catalog.All()))
+	require.NoError(t, seeding.RunSeed(gdb, catalog.All()))
 
 	mr, err := miniredis.Run()
 	require.NoError(t, err)
@@ -278,12 +280,12 @@ func TestAuthRefreshLogout(t *testing.T) {
 func TestRoleAssignmentAndRBAC(t *testing.T) {
 	requireCapabilities(t, "auth", "user", "access")
 	// 使用较长缓存 TTL，验证授权写操作会主动让策略缓存失效。
-	oldTTL := access.PolicyCacheTTL
-	access.PolicyCacheTTL = time.Hour
-	access.InvalidatePolicyCache()
+	oldTTL := authz.PolicyCacheTTL
+	authz.PolicyCacheTTL = time.Hour
+	authz.InvalidatePolicyCache()
 	t.Cleanup(func() {
-		access.PolicyCacheTTL = oldTTL
-		access.InvalidatePolicyCache()
+		authz.PolicyCacheTTL = oldTTL
+		authz.InvalidatePolicyCache()
 	})
 
 	app := newTestAppWithDB(t)
@@ -681,7 +683,7 @@ func TestAuthRateLimit(t *testing.T) {
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS role_permissions (role_id INTEGER NOT NULL, permission_id INTEGER NOT NULL)`).Error)
 	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "admin123")
-	require.NoError(t, app.RunSeed(gdb, catalog.All()))
+	require.NoError(t, seeding.RunSeed(gdb, catalog.All()))
 
 	mr, err := miniredis.Run()
 	require.NoError(t, err)
@@ -689,7 +691,7 @@ func TestAuthRateLimit(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	authMod := authmodule.New(gdb, rdb, authmodule.Config{
+	authMod := authmodule.New(gdb, authredis.NewStores(rdb, 15*time.Minute), authmodule.Config{
 		JWTSecret:          "0123456789abcdef0123456789abcdef",
 		Issuer:             "jimu-e2e",
 		AccessExpireMin:    30,

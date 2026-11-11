@@ -10,7 +10,7 @@ import (
 )
 
 // 内核解耦的钉子：internal/app 不得再 import 任何能力 domain 包。
-// seed 所需模型已下沉到 internal/kernel/seedmodel（见 Task 1）。
+// seed 所需模型已下沉到 internal/platform/seedmodel（见 Task 1）。
 func TestAppDoesNotImportCapabilityDomains(t *testing.T) {
 	deps := goListDeps(t, "./internal/app")
 	for _, dep := range deps {
@@ -26,8 +26,8 @@ func TestMinimalPresetDropsUnreachableKernelPackages(t *testing.T) {
 	require.NoDirExists(t, filepath.Join(dir, "internal/capabilities", "user"),
 		"a 0-capability project must not ship capability packages")
 	for _, kept := range []string{
-		"internal/kernel/http",
-		"internal/kernel/metrics",
+		"internal/platform/http",
+		"internal/platform/metrics",
 		"internal/assembly",
 		"cmd/server",
 		"cmd/cli",
@@ -38,15 +38,15 @@ func TestMinimalPresetDropsUnreachableKernelPackages(t *testing.T) {
 
 func TestMinimalPresetDropsOnlyUnreachableKernelSubpackages(t *testing.T) {
 	dir := generateForTest(t, NewOptions{Template: "minimal"})
-	require.NoDirExists(t, filepath.Join(dir, "internal/kernel", "cache"),
-		"internal/kernel/cache is only reachable through capabilities")
-	require.DirExists(t, filepath.Join(dir, "internal/kernel", "http"))
-	require.DirExists(t, filepath.Join(dir, "internal/kernel", "db"))
+	require.NoDirExists(t, filepath.Join(dir, "internal/platform", "cache"),
+		"internal/platform/cache is only reachable through capabilities")
+	require.DirExists(t, filepath.Join(dir, "internal/platform", "http"))
+	require.DirExists(t, filepath.Join(dir, "internal/platform", "db"))
 }
 
 func TestFullPresetKeepsEveryKernelPackage(t *testing.T) {
 	dir := generateForTest(t, NewOptions{Template: "full"})
-	for _, kept := range []string{"internal/kernel/http", "internal/kernel/db", "internal/shared"} {
+	for _, kept := range []string{"internal/platform/http", "internal/platform/db", "internal/shared"} {
 		require.DirExists(t, filepath.Join(dir, kept))
 	}
 }

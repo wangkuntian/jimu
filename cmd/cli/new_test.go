@@ -7,24 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"jimu/internal/profiles"
-
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestCLIVersionIsSharedWithGenerator(t *testing.T) {
-	oldVersion, oldProfileVersion := version, profiles.Version
-	t.Cleanup(func() {
-		version, profiles.Version = oldVersion, oldProfileVersion
-	})
-	version = "v0.5.0-test"
-	applyVersion()
-	assert.Equal(t, version, profiles.Version)
-}
-
-// TestNewCmdRejectsBothProfileAndWith 钉住 --profile 与 --with 的互斥优先于 profile 拒绝：
+// TestNewCmdRejectsBothProfileAndWith 钉住 --profile 与 --with 互斥：
 // 用户同时给了两个选择器时应先看到互斥错误。
 func TestNewCmdRejectsBothProfileAndWith(t *testing.T) {
 	c := newCommandForTest(&bytes.Buffer{})
@@ -39,7 +27,7 @@ func TestNewCmdWiresEveryFlag(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
 	var out bytes.Buffer
 	c := newCommandForTest(&out)
-	c.SetArgs([]string{"new", dir, "--template=minimal", "--module=example.com/proj", "--dry-run"})
+	c.SetArgs([]string{"new", dir, "--profile=minimal", "--module=example.com/proj", "--dry-run"})
 	require.NoError(t, c.Execute())
 
 	_, statErr := os.Stat(dir)
@@ -90,46 +78,40 @@ func TestNewCmdDefaultsToMinimalPreset(t *testing.T) {
 	c := newCommandForTest(&out)
 	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--dry-run"})
 	require.NoError(t, c.Execute())
-	assert.Contains(t, out.String(), "template     minimal")
+	assert.Contains(t, out.String(), "profile      minimal")
 	assert.Contains(t, out.String(), "support      certified")
 }
 
-func TestNewCmdRejectsRemovedMinimalProfile(t *testing.T) {
+func TestNewCmdAcceptsMinimalProfile(t *testing.T) {
 	var out bytes.Buffer
 	c := newCommandForTest(&out)
 	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=minimal", "--dry-run"})
-	err := c.Execute()
-	require.ErrorContains(t, err, `profile "minimal"`)
-	require.ErrorContains(t, err, "--template=minimal")
-	assert.NotContains(t, out.String(), "warning:")
-	assert.NotContains(t, out.String(), "template     minimal", "不得静默把 --profile 映射成预设")
+	require.NoError(t, c.Execute())
+	assert.Contains(t, out.String(), "profile      minimal")
 }
 
 func TestNewCmdAcceptsAuthPreset(t *testing.T) {
 	var out bytes.Buffer
 	c := newCommandForTest(&out)
-	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--template=auth", "--dry-run"})
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=auth", "--dry-run"})
 	require.NoError(t, c.Execute())
-	assert.Contains(t, out.String(), "template     auth")
+	assert.Contains(t, out.String(), "profile      auth")
 	assert.Contains(t, out.String(), "support      certified")
 }
 
-func TestNewCmdRejectsUnknownTemplate(t *testing.T) {
+func TestNewCmdRejectsUnknownProfile(t *testing.T) {
 	c := newCommandForTest(&bytes.Buffer{})
-	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--template=ghost", "--dry-run"})
-	require.ErrorContains(t, c.Execute(), "unknown template")
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=ghost", "--dry-run"})
+	require.ErrorContains(t, c.Execute(), "unknown profile")
 }
 
-func TestNewCmdRejectsInternalProfile(t *testing.T) {
-	for _, profile := range []string{"full"} {
-		t.Run(profile, func(t *testing.T) {
-			c := newCommandForTest(&bytes.Buffer{})
-			c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=" + profile, "--dry-run"})
-			err := c.Execute()
-			require.ErrorContains(t, err, "framework-internal")
-			require.ErrorContains(t, err, "--template")
-		})
-	}
+func TestNewCmdAcceptsFullProfile(t *testing.T) {
+	var out bytes.Buffer
+	c := newCommandForTest(&out)
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=full", "--dry-run"})
+	require.NoError(t, c.Execute())
+	assert.Contains(t, out.String(), "profile      full")
+	assert.Contains(t, out.String(), "support      validated")
 }
 
 func TestNewCmdMarksWithAsExperimental(t *testing.T) {
@@ -171,10 +153,10 @@ func TestNewCmdInvalidCompositionDoesNotWriteTarget(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "非法组合不得写目标目录")
 }
 
-func TestNewCmdRejectsTemplateSelectorsTogether(t *testing.T) {
+func TestNewCmdRejectsProfileAndWithTogether(t *testing.T) {
 	for _, args := range [][]string{
-		{"--template=minimal", "--profile=full"},
-		{"--template=minimal", "--with=apidocs"},
+		{"--profile=minimal", "--with=apidocs"},
+		{"--profile=auth", "--with=user"},
 	} {
 		c := newCommandForTest(&bytes.Buffer{})
 		c.SetArgs(append([]string{"new", filepath.Join(t.TempDir(), "proj"), "--dry-run"}, args...))
@@ -182,9 +164,15 @@ func TestNewCmdRejectsTemplateSelectorsTogether(t *testing.T) {
 	}
 }
 
+func TestNewCmdRejectsRemovedTemplateFlag(t *testing.T) {
+	c := newCommandForTest(&bytes.Buffer{})
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--template=minimal", "--dry-run"})
+	require.ErrorContains(t, c.Execute(), "unknown flag: --template")
+}
+
 func TestNewCmdRejectsShapeWithoutWith(t *testing.T) {
 	c := newCommandForTest(&bytes.Buffer{})
-	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--template=minimal", "--shape=app", "--dry-run"})
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=minimal", "--shape=app", "--dry-run"})
 	require.ErrorContains(t, c.Execute(), "--shape is only valid with --with")
 }
 

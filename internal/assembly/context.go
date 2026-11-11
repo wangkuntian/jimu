@@ -6,13 +6,11 @@ import (
 	"jimu/internal/app"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/event"
-	"jimu/internal/kernel/httpclient"
-	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/reporter"
-	"jimu/internal/kernel/scheduler"
-
-	"gorm.io/gorm"
+	"jimu/internal/platform/event"
+	"jimu/internal/platform/httpclient"
+	"jimu/internal/platform/logger"
+	"jimu/internal/platform/reporter"
+	"jimu/internal/platform/scheduler"
 )
 
 // AuthConfig returns the validated auth section through its contract projection.
@@ -63,8 +61,8 @@ func (c *Context) Config() *config.Config { return c.container.Config }
 // Logger 内核日志器。
 func (c *Context) Logger() *logger.Logger { return c.container.Logger }
 
-// DB gorm 句柄。
-func (c *Context) DB() *gorm.DB { return c.container.DB }
+// DB gorm 句柄（jimu_nodb 构建中为 nil）。
+func (c *Context) DB() app.DBHandle { return c.container.DB }
 
 // Sections 按 YAML 点分键解码配置段。
 func (c *Context) Sections() config.SectionDecoder { return c.sections }

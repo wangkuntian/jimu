@@ -1,8 +1,11 @@
 # auth 生产上线检查清单
 
-适用对象：由 `jimu new <dir> --template=auth` 生成、需要用户、JWT、RBAC、MySQL 和 Redis 的单租户后台 API。
+适用对象：由 `jimu new <dir> --profile=auth` 生成、需要用户、JWT、RBAC、MySQL 和 Redis 的单租户后台 API。
 
 `auth` 预设携带 `user`/`access`/`auth` 及其 `tenant` 编译闭包。生产环境必须使用独立 MySQL 和 Redis；预设不生成 Compose，本地与生产都通过 `DB_*`/`REDIS_*` 环境变量指定连接。
+
+需要单实例或无 Redis 运行时，可用 `jimu new <dir> --with=auth:memory` 生成内存驱动版本。
+内存驱动只在本进程内保存会话、限流和重置码，重启即丢失，多实例之间不共享；生产多实例仍必须使用 Redis 驱动。
 
 ## 必须配置
 
@@ -19,7 +22,7 @@
 | CORS | 只允许明确的前端来源；`*` 会在启动时被拒绝 | `http.allowed_origins` |
 | 可信代理 | 只信任实际反向代理的 IP/CIDR；直连部署设为空列表 | `http.trusted_proxies` |
 | 管理端口 | `/livez`、`/readyz` 仅对内网/探针开放 | `management.host`、`management.port` |
-| 安全 Header | 模板已内置安全 Header，并由反向代理保留/补充 | `internal/kernel/http/middleware/` |
+| 安全 Header | 模板已内置安全 Header，并由反向代理保留/补充 | `internal/platform/http/middleware/` |
 | 请求体上限 | 登录、用户和角色接口都不应无界读取 | `http.max_body_bytes` |
 | 限流 | 模板不内置限流；必须在反向代理/网关至少限制登录、刷新和公开接口 | 反向代理/网关；见[运维](../OPERATIONS.md) |
 | 日志 | JSON 输出到 stdout；不得记录密码、token、验证码或未脱敏 PII | `log.format`、`log.level`、`log.output` |

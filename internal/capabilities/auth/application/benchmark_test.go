@@ -5,7 +5,7 @@ import (
 	"jimu/internal/contract"
 	"testing"
 
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -23,7 +23,7 @@ func BenchmarkLogin(b *testing.B) {
 	repo := &fakeUserRepo{users: map[string]*contract.Account{
 		"alice": benchUser(42, "alice", "correct"),
 	}}
-	service := NewAuthService(repo, auth.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30)
+	service := NewAuthService(repo, identity.New("01234567890123456789012345678901", "jimu", 30, 7), newFakeSessionStore(), nil, 30)
 	ctx := context.Background()
 
 	b.ReportAllocs()

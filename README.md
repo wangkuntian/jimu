@@ -26,13 +26,18 @@ Jimu 不是运行时框架，也不要求业务代码依赖 Jimu SDK。`jimu new
 |---|---|---|
 | `minimal` | 0 能力，只含最小内核 | 无数据库、Redis 或消息队列 |
 | `auth` | user + access + auth（含 tenant 闭包） | MySQL 8.4、Redis 7 |
-| `full` | 全部 23 个能力 | MySQL 8.4、Redis 7、Kafka、RabbitMQ 或 S3（按驱动） |
+| `full` | 全部 24 个能力 | MySQL 8.4、Redis 7、Kafka、RabbitMQ 或 S3（按驱动） |
 
 默认预设是 `minimal`。`full` 首发支持级别是 `validated`，不是 `certified`。
 预设只是裁剪起点：生成后可用 `jimu capability add` 继续组合能力。
+追加带驱动的能力时用 `--driver=<name>` 指定实现；省略则取该能力声明的首个驱动。
 `--with` 是 experimental 专家模式，不承诺组合级生产兼容。
 
-生成时按需编译底层组件：`--db=mysql|postgres`（默认 `mysql`）只带所选数据库驱动；
+`auth` 默认用 Redis 保存会话、限流、失败计数和密码重置码；单实例或无 Redis 场景可用
+`jimu new demo --with=auth:memory`，运行时若选 Redis 但客户端不可用会告警并降级到内存。
+
+生成时按需编译底层组件：`--db=mysql|postgres`（默认 `mysql`）只带所选数据库驱动，
+`search` 也自动跟随该方言；
 `minimal` 产物不含 Redis、Casbin 与 OTel 导出器，server 二进制约 27 MB。
 
 > `basic-api` 与 `auth-api` 已在 v0.10.0 退役。由它们生成的项目执行 `jimu upgrade` 会硬失败，
@@ -61,7 +66,7 @@ Release 同时提供 `template-bundle.json` 和 SHA-256 checksum 文件。需要
 
 ```bash
 OS=linux ARCH=amd64; curl -fL "https://github.com/wangkuntian/jimu/releases/download/v0.7.1/jimu-${OS}-${ARCH}" -o jimu && chmod +x jimu
-./jimu new demo --template=minimal
+./jimu new demo --profile=minimal
 cd demo && make dev
 ```
 
@@ -77,14 +82,14 @@ cd demo && make dev
 只编译所选驱动与对应方言的迁移，另一套驱动不会进入产物。
 
 ```bash
-./jimu new demo --template=auth --db=postgres
+./jimu new demo --profile=auth --db=postgres
 ```
 
 ## 快速开始：auth
 
 ```bash
 OS=linux ARCH=amd64; curl -fL "https://github.com/wangkuntian/jimu/releases/download/v0.7.1/jimu-${OS}-${ARCH}" -o jimu && chmod +x jimu
-./jimu new demo --template=auth
+./jimu new demo --profile=auth
 cd demo
 make migrate
 make seed

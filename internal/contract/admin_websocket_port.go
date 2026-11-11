@@ -8,7 +8,7 @@ import (
 // AdminWSFactory 构造管理端 WebSocket 的 HTTP handler。
 //
 // 用不透明构造函数而不是带认证对象参数的接口：contract 包因此不必
-// import kernel/auth，否则 0 能力项目也会被拖入 JWT、会话与 Redis。
+// import platform/identity，否则 0 能力项目也会被拖入 JWT、会话与 Redis。
 // ws 能力在 wire 时把自己的 JWT 实例闭包进这个函数。
 type AdminWSFactory func() http.HandlerFunc
 

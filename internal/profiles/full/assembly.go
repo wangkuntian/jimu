@@ -10,6 +10,7 @@ import (
 	auditmodule "jimu/internal/capabilities/audit"
 	authmodule "jimu/internal/capabilities/auth"
 	"jimu/internal/capabilities/breach"
+	cachemodule "jimu/internal/capabilities/cache"
 	"jimu/internal/capabilities/captcha"
 	consolemodule "jimu/internal/capabilities/console"
 	"jimu/internal/capabilities/dataops"
@@ -44,6 +45,8 @@ func Assembly() assembly.Assembly {
 		Name:    "full",
 		Version: profiles.Version,
 		Capabilities: []assembly.Capability{
+			{Descriptor: cachemodule.Descriptor, Wire: cachemodule.Wire,
+				Drivers: []string{"redis", "memory"}},
 			{Descriptor: encryption.Descriptor, Wire: encryption.Wire, Ungated: true},
 			{Descriptor: storage.Descriptor, Wire: storage.Wire, Ungated: true,
 				Drivers: []string{"local", "s3"}},
@@ -57,7 +60,8 @@ func Assembly() assembly.Assembly {
 			{Descriptor: user.Descriptor, Wire: user.Wire},
 			{Descriptor: captcha.Descriptor, Wire: captcha.Wire},
 			{Descriptor: mfamodule.Descriptor, Wire: mfamodule.Wire},
-			{Descriptor: authmodule.Descriptor, Wire: authmodule.Wire},
+			{Descriptor: authmodule.Descriptor, Wire: authmodule.Wire,
+				Drivers: []string{"redis", "memory"}},
 			{Descriptor: passkeymodule.Descriptor, Wire: passkeymodule.Wire},
 			{Descriptor: auditmodule.Descriptor, Wire: auditmodule.Wire},
 			{Descriptor: ws.Descriptor, Wire: ws.Wire, Ungated: true},
@@ -67,7 +71,8 @@ func Assembly() assembly.Assembly {
 			{Descriptor: dataops.Descriptor, Wire: dataops.Wire,
 				Drivers: []string{"csv", "excel"}},
 			{Descriptor: uploadsec.Descriptor, Wire: uploadsec.Wire},
-			{Descriptor: search.Descriptor, Wire: search.Wire},
+			{Descriptor: search.Descriptor, Wire: search.Wire,
+				Drivers: []string{"mysql", "postgres"}},
 			{Descriptor: apidocs.Descriptor, Wire: apidocs.Wire, Ungated: true},
 			{Descriptor: grpcpkg.Descriptor, Wire: grpcpkg.Wire, Ungated: true},
 		},

@@ -9,7 +9,7 @@ import (
 	"jimu/internal/capabilities/access/domain"
 	accessinfra "jimu/internal/capabilities/access/infrastructure"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/stretchr/testify/require"

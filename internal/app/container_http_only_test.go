@@ -19,7 +19,7 @@ func TestHTTPSOnlyContainerSkipsDatabaseAndRedis(t *testing.T) {
 		Log:        config.LogConfig{Level: config.LogLevelInfo, Format: config.LogFormatConsole, Output: "stdout"},
 	}
 
-	container, err := NewContainer(cfg, nil, &CapabilityConfigs{}, nil, map[string]bool{})
+	container, err := NewContainer(cfg, nil, &CapabilityConfigs{}, nil, map[string]bool{}, nil)
 	require.NoError(t, err)
 	require.Nil(t, container.DB)
 	require.False(t, container.HasRedis())

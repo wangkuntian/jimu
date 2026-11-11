@@ -407,6 +407,33 @@ func TestAddCapabilitySelectsFirstDriverAndFiltersDirectories(t *testing.T) {
 	assert.Less(t, slices.Index(entries, "user"), slices.Index(entries, "auth"))
 }
 
+func TestAddCapabilitySelectsExplicitDriver(t *testing.T) {
+	root := frameworkRootForTest(t)
+	dir := generateForTest(t, NewOptions{Profile: "minimal"})
+
+	_, err := AddCapability(AddOptions{Dir: dir, Name: "queue", Driver: "kafka", From: root})
+	require.NoError(t, err)
+
+	assert.FileExists(t, filepath.Join(dir, "internal/capabilities/queue/kafka/kafka_queue.go"))
+	for _, drv := range []string{"redis", "rabbitmq"} {
+		_, statErr := os.Stat(filepath.Join(dir, "internal/capabilities/queue", drv))
+		assert.True(t, os.IsNotExist(statErr), "未选中驱动 queue/%s 不应出现", drv)
+	}
+	m, err := LoadMarker(dir)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"kafka"}, m.Drivers["queue"])
+}
+
+func TestAddCapabilityRejectsUnknownDriver(t *testing.T) {
+	root := frameworkRootForTest(t)
+	dir := generateForTest(t, NewOptions{Profile: "minimal"})
+
+	_, err := AddCapability(AddOptions{Dir: dir, Name: "queue", Driver: "nats", From: root})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unknown driver "nats" for capability "queue"`)
+	assert.Contains(t, err.Error(), "redis, kafka, rabbitmq")
+}
+
 // TestAddCapabilityDryRunWritesNothing 钉住 --dry-run：只报计划、绝不落盘、不留暂存目录。
 func TestAddCapabilityDryRunWritesNothing(t *testing.T) {
 	root := frameworkRootForTest(t)

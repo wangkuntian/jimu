@@ -12,7 +12,7 @@ import (
 	"jimu/internal/capabilities/access/domain"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/testutil"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"

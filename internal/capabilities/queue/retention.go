@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/queue/domain"
-	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/scheduler"
+	"jimu/internal/platform/logger"
+	"jimu/internal/platform/scheduler"
 	"jimu/internal/shared/dbpurge"
 
 	"gorm.io/gorm"

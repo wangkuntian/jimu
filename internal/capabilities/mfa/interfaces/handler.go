@@ -4,7 +4,7 @@ import (
 	"strconv"
 
 	"jimu/internal/capabilities/mfa/application"
-	"jimu/internal/kernel/http/middleware"
+	"jimu/internal/platform/http/middleware"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 

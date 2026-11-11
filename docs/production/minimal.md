@@ -1,6 +1,6 @@
 # minimal 生产上线检查清单
 
-适用对象：由 `jimu new <dir> --template=minimal` 生成、需要不依赖数据库/Redis/消息队列的 HTTP API、BFF、Webhook 或内部服务。
+适用对象：由 `jimu new <dir> --profile=minimal` 生成、需要不依赖数据库/Redis/消息队列的 HTTP API、BFF、Webhook 或内部服务。
 
 生成项目自己的配置文件是 `configs/app.yaml`。生产值应通过 `configs/app.<env>.yaml` 或环境变量覆盖；不要修改 `.jimu/manifest.json`。
 
@@ -14,7 +14,7 @@
 | CORS | 只允许明确的前端来源；`*` 会在启动时被拒绝 | `http.allowed_origins` |
 | 可信代理 | 只信任实际反向代理的 IP/CIDR；直连部署设为空列表 | `http.trusted_proxies` |
 | 管理端口 | `/livez`、`/readyz` 仅对内网/探针开放，不要暴露到公网 | `management.host`、`management.port` |
-| 安全 Header | 模板已内置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`、`Permissions-Policy`、CSP 和 HSTS | `internal/kernel/http/middleware/`；上线前用 `curl -i` 验证 |
+| 安全 Header | 模板已内置 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`、`Permissions-Policy`、CSP 和 HSTS | `internal/platform/http/middleware/`；上线前用 `curl -i` 验证 |
 | 请求体上限 | 按业务最大值设置，避免无界读取 | `http.max_body_bytes` |
 | 超时 | 保留读取、写入、空闲和优雅停机预算，并与代理超时对齐 | `http.read_header_timeout_sec`、`http.read_timeout_sec`、`http.write_timeout_sec`、`http.idle_timeout_sec`、`http.shutdown_timeout_sec` |
 | 限流 | 模板不内置限流；必须在反向代理、网关或项目代码中配置，至少覆盖单 IP 和突发流量 | 反向代理/网关；见[运维](../OPERATIONS.md) |

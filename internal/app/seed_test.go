@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"jimu/internal/app"
 	roledomain "jimu/internal/capabilities/access/domain"
 	"jimu/internal/capabilities/catalog"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
+	app "jimu/internal/platform/seeding"
 	"jimu/internal/shared/testutil"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -203,11 +203,11 @@ func TestRunSeed_UsesAdminPasswordFile(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestRunSeed_MissingAdminPassword(t *testing.T) {
+func TestRunSeed_NoCapabilitiesIsNoOp(t *testing.T) {
 	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "")
 	err := app.RunSeed(nil, nil)
-	require.ErrorContains(t, err, "ADMIN_PASSWORD or ADMIN_PASSWORD_FILE is required")
+	require.NoError(t, err)
 }
 
 func TestRunSeed_PermissionQueryError(t *testing.T) {
@@ -368,11 +368,11 @@ func TestSeedCasbinPolicies_CreateEnforcerError(t *testing.T) {
 	require.ErrorContains(t, err, "create enforcer")
 }
 
-func TestRunSeedWithCasbin_SeedError(t *testing.T) {
+func TestRunSeedWithCasbin_NoCapabilitiesIsNoOp(t *testing.T) {
 	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "")
 	err := app.RunSeedWithCasbin(nil, nil)
-	require.ErrorContains(t, err, "ADMIN_PASSWORD or ADMIN_PASSWORD_FILE is required")
+	require.NoError(t, err)
 }
 
 // TestRunSeedWithCasbin 用 sqlite 内存库端到端跑完整种子（含 casbin 策略）。
@@ -606,7 +606,7 @@ func TestWarnIfNoAccounts(t *testing.T) {
 		require.Empty(t, log.messages)
 	})
 
-	// 生产 GORM logger 把**每条**报错语句都打到 error 级（kernel/db/gorm_logger.go 的 Trace），
+	// 生产 GORM logger 把**每条**报错语句都打到 error 级（platform/db/gorm_logger.go 的 Trace），
 	// 因此探针在表未建时必须连语句都不发，否则每次启动都会多一行 "db query failed"。
 	t.Run("unmigrated database issues no gorm error line", func(t *testing.T) {
 		var buf bytes.Buffer

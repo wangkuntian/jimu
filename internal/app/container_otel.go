@@ -8,7 +8,7 @@ import (
 	"log"
 
 	"jimu/internal/config"
-	"jimu/internal/kernel/observability"
+	"jimu/internal/platform/observability"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.uber.org/zap/zapcore"

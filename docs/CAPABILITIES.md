@@ -8,7 +8,7 @@ Jimu 交付的是**独立 Go 项目**，不是运行时插件系统。生成项�
 |---|---|---|---|
 | `minimal` | `certified` | 零外部依赖的 HTTP API、BFF、轻量服务 | 最小内核、`/livez`/`/readyz`、`/api/v1/ping`、结构化日志、优雅停机 |
 | `auth` | `certified` | 需要登录和权限的业务服务 | `user`/`access`/`auth`，MySQL、Redis、迁移、seed、管理员初始化 |
-| `full` | `validated` | 完整能力集的起点 | 全部 23 个能力与完整驱动集 |
+| `full` | `validated` | 完整能力集的起点 | 全部 24 个能力与完整驱动集 |
 
 预设是裁剪起点，生成后可用 `jimu capability add` 继续组合。`basic-api` 与 `auth-api` 已在 v0.10.0 退役。
 
@@ -21,7 +21,7 @@ Jimu 交付的是**独立 Go 项目**，不是运行时插件系统。生成项�
 | 领域 | 能力 |
 |---|---|
 | 身份与租户 | `user`、`access`、`auth`、`tenant`、`apikey`、`oauth`、`mfa`、`passkey` |
-| 数据与异步 | `queue`、`outbox`、`scheduler`、`dataops`、`search` |
+| 数据与异步 | `queue`、`outbox`、`scheduler`、`dataops`、`search`、`cache` |
 | 安全与通信 | `encryption`、`captcha`、`uploadsec`、`notification`、`ws`、`grpc` |
 | 运维与观测 | `audit`、`console`、`apidocs`、`storage` |
 

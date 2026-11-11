@@ -7,8 +7,8 @@ import (
 
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/event"
-	"jimu/internal/kernel/logger"
+	"jimu/internal/platform/event"
+	"jimu/internal/platform/logger"
 
 	"github.com/stretchr/testify/assert"
 )

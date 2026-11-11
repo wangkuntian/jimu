@@ -54,7 +54,7 @@ func WriteReport(dir string, metrics projectmetrics.Metrics, _ CapabilitySet) er
 		Module:       module,
 		Shape:        doc.Selection.Shape,
 		Capabilities: doc.Selection.Capabilities,
-		Drivers:      flattenDrivers(doc.Selection.Drivers),
+		Drivers:      report.FormatDrivers(doc.Selection.Drivers),
 		Assets:       manifestAssetNames(doc),
 	}
 	for _, capability := range doc.Capabilities {

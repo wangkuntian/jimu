@@ -15,7 +15,7 @@ import (
 
 	passkeydomain "jimu/internal/capabilities/passkey/domain"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/alicebob/miniredis/v2"

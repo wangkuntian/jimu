@@ -5,7 +5,7 @@ import (
 	stderrors "errors"
 
 	"jimu/internal/capabilities/access/domain"
-	kernelaccess "jimu/internal/kernel/access"
+	authz "jimu/internal/platform/authz"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 
@@ -69,7 +69,7 @@ func (s *PermissionService) Update(ctx context.Context, id uint64, req UpdatePer
 		}
 		return errors.Wrap(errors.CodeInternalError, "failed to update permission", err)
 	}
-	kernelaccess.InvalidatePolicyCache()
+	authz.InvalidatePolicyCache()
 	return nil
 }
 
@@ -77,6 +77,6 @@ func (s *PermissionService) Delete(ctx context.Context, id uint64) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return errors.Wrap(errors.CodeInternalError, "failed to delete permission", err)
 	}
-	kernelaccess.InvalidatePolicyCache()
+	authz.InvalidatePolicyCache()
 	return nil
 }

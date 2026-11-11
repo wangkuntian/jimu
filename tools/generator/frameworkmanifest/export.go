@@ -84,7 +84,7 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 		req.Template = "minimal"
 	}
 	if req.Template != "" && (req.Profile != "" || req.With != "") {
-		return manifest.Document{}, Resolution{}, fmt.Errorf("--template must not be combined with --profile or --with")
+		return manifest.Document{}, Resolution{}, fmt.Errorf("preset selection cannot be combined with another selector")
 	}
 	if req.Template != "" && req.Shape != "" {
 		return manifest.Document{}, Resolution{}, fmt.Errorf("--shape is only valid with --with")
@@ -102,6 +102,7 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 		if err == nil {
 			selected, err = resolvePresetSelection(root, preset)
 			selected.dbDriver = dbDriver
+			applyDBDriverToSearch(&selected)
 			if err == nil {
 				doc, err = buildDocument(root, req.Module, selected, req.Framework)
 			}
@@ -109,6 +110,7 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 	} else {
 		selected, err = resolveSelection(root, req)
 		selected.dbDriver = dbDriver
+		applyDBDriverToSearch(&selected)
 		if err == nil {
 			doc, err = buildDocument(root, req.Module, selected, req.Framework)
 		}
@@ -122,6 +124,18 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 	}
 	doc.Digest = digest
 	return doc, resolutionFor(doc, selected), nil
+}
+
+// applyDBDriverToSearch 让 search 的方言跟随数据库驱动，避免 --db=postgres 项目
+// 编入 MySQL FULLTEXT 实现，或反之。
+func applyDBDriverToSearch(selected *selection) {
+	if !slices.Contains(selected.declared, "search") {
+		return
+	}
+	if selected.drivers == nil {
+		selected.drivers = map[string][]string{}
+	}
+	selected.drivers["search"] = []string{selected.dbDriver}
 }
 
 // normalizeDBDriver 归一化 --db 取值：空值等价 mysql（与 config 默认一致）。
@@ -169,7 +183,7 @@ func resolutionFor(doc manifest.Document, selected selection) Resolution {
 }
 
 // ExportForAdd 在原有声明集上增加一个能力。硬依赖必须已经存在，避免 add 静默改变用户选择。
-func ExportForAdd(root string, previous manifest.Document, name string, force bool, framework *manifest.Framework) (manifest.Document, error) {
+func ExportForAdd(root string, previous manifest.Document, name, driver string, force bool, framework *manifest.Framework) (manifest.Document, error) {
 	if err := manifest.Validate(previous); err != nil {
 		return manifest.Document{}, fmt.Errorf("validate previous manifest: %w", err)
 	}
@@ -178,7 +192,7 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 	switch previous.Selection.Template {
 	case "basic-api", "auth-api":
 		return manifest.Document{}, fmt.Errorf(
-			"template %q is retired and cannot be extended; regenerate with --template=minimal|auth|full or --with",
+			"template %q is retired and cannot be extended; regenerate with --profile=minimal|auth|full or --with",
 			previous.Selection.Template,
 		)
 	}
@@ -207,9 +221,32 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 			}
 		}
 	}
+	drivers := cloneDrivers(previous.Composition.Drivers)
+	if driver != "" {
+		var descriptor contract.Descriptor
+		found := false
+		for _, candidate := range all {
+			if candidate.Name == name {
+				descriptor = candidate
+				found = true
+				break
+			}
+		}
+		if !found {
+			return manifest.Document{}, fmt.Errorf("unknown capability %q", name)
+		}
+		if len(descriptor.Drivers) == 0 {
+			return manifest.Document{}, fmt.Errorf("capability %q has no drivers", name)
+		}
+		if !slices.Contains(descriptor.Drivers, driver) {
+			return manifest.Document{}, fmt.Errorf("unknown driver %q for capability %q (available: %s)",
+				driver, name, strings.Join(descriptor.Drivers, ", "))
+		}
+		drivers[name] = []string{driver}
+	}
 	composed := capability.Compose(all, capability.ComposeRequest{
 		Capabilities:   selected,
-		Drivers:        previous.Composition.Drivers,
+		Drivers:        drivers,
 		DefaultDrivers: true,
 		// 已生成项目的装配集必须是闭包；严格模式阻止 resolver 自动补依赖。
 		RequireResolvedSelection: true,
@@ -239,7 +276,7 @@ func ExportForAdd(root string, previous manifest.Document, name string, force bo
 		profile = previous.Selection.Profile
 	}
 	if profile != "" {
-		return Export(Request{Root: root, Profile: profile, Module: module, Framework: framework})
+		return Export(Request{Root: root, Profile: profile, Module: module, Drivers: composed.Drivers, Framework: framework})
 	}
 	return Export(Request{
 		Root: root, Profile: profile, With: with, Shape: previous.Selection.Shape, Module: module, Drivers: composed.Drivers,

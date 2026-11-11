@@ -22,7 +22,7 @@ func validDocument() Document {
 			Validity:        CompositionValidityValid,
 			Support:         CompositionSupportExperimental,
 		},
-		Copy:   []CopyAction{{Source: "internal/kernel", Destination: "internal/kernel", Include: []string{}, Exclude: []string{}}},
+		Copy:   []CopyAction{{Source: "internal/platform", Destination: "internal/platform", Include: []string{}, Exclude: []string{}}},
 		Report: ReportSpec{Name: "minimal", Capabilities: []string{"tenant", "user"}},
 	}
 }
@@ -114,7 +114,7 @@ func TestValidateRejectsInvalidDocuments(t *testing.T) {
 		{
 			name: "duplicate destinations",
 			edit: func(doc *Document) {
-				doc.Copy = append(doc.Copy, CopyAction{Source: "internal/config", Destination: "internal/kernel"})
+				doc.Copy = append(doc.Copy, CopyAction{Source: "internal/config", Destination: "internal/platform"})
 			},
 			want: "duplicate destination",
 		},

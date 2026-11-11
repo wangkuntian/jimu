@@ -3,8 +3,10 @@ package authmodule
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"jimu/internal/assembly"
+	"jimu/internal/capabilities/auth/authstore"
 	"jimu/internal/config"
 	"jimu/internal/contract"
 )
@@ -42,7 +44,24 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 		}
 		provisioner = factory.Build(users, roles)
 	}
-	mod := New(ctx.DB(), ctx.Redis(), *cfg,
+	driver := cfg.Driver
+	if driver == "" {
+		driver = authstore.DefaultDriver()
+	}
+	stores, err := authstore.New(driver, authstore.Options{
+		RedisClient:  ctx.Redis(),
+		ResetCodeTTL: time.Duration(cfg.ResetCodeTTLMin) * time.Minute,
+	})
+	if err != nil && driver == "redis" {
+		ctx.Logger().Warnw("auth driver redis is unavailable; falling back to memory", "error", err)
+		stores, err = authstore.New("memory", authstore.Options{
+			ResetCodeTTL: time.Duration(cfg.ResetCodeTTLMin) * time.Minute,
+		})
+	}
+	if err != nil {
+		return nil, fmt.Errorf("init auth stores: %w", err)
+	}
+	mod := New(ctx.DB(), stores, *cfg,
 		ctx.Config().HTTP.Mode == config.HTTPModeRelease,
 		captchaVerifier,
 		ctx.Port("outbox"), ctx.Port("notification"), ctx.Port("encryption"),

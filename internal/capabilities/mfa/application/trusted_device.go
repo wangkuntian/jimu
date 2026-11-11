@@ -10,7 +10,7 @@ import (
 
 	mfadomain "jimu/internal/capabilities/mfa/domain"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 )
 

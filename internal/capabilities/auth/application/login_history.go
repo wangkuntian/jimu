@@ -6,7 +6,7 @@ import (
 
 	authdomain "jimu/internal/capabilities/auth/domain"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 )

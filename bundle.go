@@ -17,6 +17,10 @@ var BundleRoots = []string{
 	"deploy",
 	"proto",
 	"docs/openapi",
+	"scripts/backup.sh",
+	"scripts/restore.sh",
+	"scripts/db_common.sh",
+	"scripts/install_db_clients.sh",
 	"tools/generator/render/templates",
 	"tools/internal",
 	"tools/profileoverlay",
@@ -28,7 +32,7 @@ var BundleRoots = []string{
 
 // TemplateBundle is the source set used by the release CLI to generate projects.
 //
-//go:embed go.mod go.sum .golangci.yml .gitignore all:internal all:cmd/server all:cmd/cli all:conf all:configs all:deploy all:proto all:docs/openapi all:tools/generator/render/templates all:tools/internal all:tools/profileoverlay all:tools/profileassets all:tools/checkcapabilities all:tools/composereport all:tools/logcheck
+//go:embed go.mod go.sum .golangci.yml .gitignore all:internal all:cmd/server all:cmd/cli all:conf all:configs all:deploy all:proto all:docs/openapi scripts/backup.sh scripts/restore.sh scripts/db_common.sh scripts/install_db_clients.sh all:tools/generator/render/templates all:tools/internal all:tools/profileoverlay all:tools/profileassets all:tools/checkcapabilities all:tools/composereport all:tools/logcheck
 var TemplateBundle embed.FS
 
 // Build metadata is injected by the release workflow through -ldflags.

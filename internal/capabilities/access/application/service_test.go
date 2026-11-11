@@ -7,8 +7,8 @@ import (
 
 	"jimu/internal/capabilities/access/domain"
 	"jimu/internal/contract"
-	dbutil "jimu/internal/kernel/db"
-	"jimu/internal/kernel/tenant"
+	dbutil "jimu/internal/platform/db"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 

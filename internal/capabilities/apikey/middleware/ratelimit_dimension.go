@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"jimu/internal/kernel/http/ctxkeys"
-	httpmw "jimu/internal/kernel/http/middleware/ratelimit"
-	redistore "jimu/internal/kernel/redis"
+	"jimu/internal/platform/http/ctxkeys"
+	httpmw "jimu/internal/platform/http/middleware/ratelimit"
+	redistore "jimu/internal/platform/redisclient"
 
 	"github.com/gin-gonic/gin"
 )

@@ -5,7 +5,7 @@ import (
 
 	"jimu/internal/capabilities/tenant/application"
 	"jimu/internal/capabilities/tenant/domain"
-	"jimu/internal/kernel/http/middleware"
+	"jimu/internal/platform/http/middleware"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/pagination"
 	"jimu/internal/shared/response"

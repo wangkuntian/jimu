@@ -46,7 +46,7 @@
 
 ## 安全修复进入生成项目
 
-适用对象：由 `jimu new` 生成的 `basic-api` / `auth-api` 项目，以及使用 `jimu upgrade` 的 certified 项目。
+适用对象：由 `jimu new` 生成的 `minimal` / `auth` / `full` 预设项目，以及使用 `jimu upgrade` 的 certified 项目。
 
 ### 处理流程
 

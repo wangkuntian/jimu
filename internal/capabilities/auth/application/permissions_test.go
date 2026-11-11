@@ -3,17 +3,17 @@ package application
 import (
 	"testing"
 
-	"jimu/internal/kernel/access"
+	"jimu/internal/platform/authz"
 )
 
 func TestEffectivePermissionsFiltersByRole(t *testing.T) {
-	policies := []access.Policy{
-		{Role: access.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
-		{Role: access.RoleSubject(2), Resource: "/api/v1/audits", Action: "GET"},
-		{Role: access.RoleSubject(1), Resource: "/api/v1/admin/*", Action: "*"},
+	policies := []authz.Policy{
+		{Role: authz.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
+		{Role: authz.RoleSubject(2), Resource: "/api/v1/audits", Action: "GET"},
+		{Role: authz.RoleSubject(1), Resource: "/api/v1/admin/*", Action: "*"},
 	}
 
-	got := EffectivePermissions([]string{access.RoleSubject(1)}, policies)
+	got := EffectivePermissions([]string{authz.RoleSubject(1)}, policies)
 
 	want := []PermissionPoint{
 		{Resource: "/api/v1/admin/*", Action: "*"},
@@ -30,12 +30,12 @@ func TestEffectivePermissionsFiltersByRole(t *testing.T) {
 }
 
 func TestEffectivePermissionsDeduplicatesAcrossRoles(t *testing.T) {
-	policies := []access.Policy{
-		{Role: access.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
-		{Role: access.RoleSubject(2), Resource: "/api/v1/tenants", Action: "GET"},
+	policies := []authz.Policy{
+		{Role: authz.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
+		{Role: authz.RoleSubject(2), Resource: "/api/v1/tenants", Action: "GET"},
 	}
 
-	got := EffectivePermissions([]string{access.RoleSubject(1), access.RoleSubject(2)}, policies)
+	got := EffectivePermissions([]string{authz.RoleSubject(1), authz.RoleSubject(2)}, policies)
 
 	want := PermissionPoint{Resource: "/api/v1/tenants", Action: "GET"}
 	if len(got) != 1 || got[0] != want {
@@ -44,13 +44,13 @@ func TestEffectivePermissionsDeduplicatesAcrossRoles(t *testing.T) {
 }
 
 func TestEffectivePermissionsSortsDeterministically(t *testing.T) {
-	policies := []access.Policy{
-		{Role: access.RoleSubject(1), Resource: "/api/v1/tenants", Action: "POST"},
-		{Role: access.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
-		{Role: access.RoleSubject(1), Resource: "/api/v1/audits", Action: "GET"},
+	policies := []authz.Policy{
+		{Role: authz.RoleSubject(1), Resource: "/api/v1/tenants", Action: "POST"},
+		{Role: authz.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
+		{Role: authz.RoleSubject(1), Resource: "/api/v1/audits", Action: "GET"},
 	}
 
-	got := EffectivePermissions([]string{access.RoleSubject(1)}, policies)
+	got := EffectivePermissions([]string{authz.RoleSubject(1)}, policies)
 
 	want := []PermissionPoint{
 		{Resource: "/api/v1/audits", Action: "GET"},
@@ -68,8 +68,8 @@ func TestEffectivePermissionsSortsDeterministically(t *testing.T) {
 }
 
 func TestEffectivePermissionsWithoutRolesIsEmptyNotNil(t *testing.T) {
-	got := EffectivePermissions(nil, []access.Policy{
-		{Role: access.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
+	got := EffectivePermissions(nil, []authz.Policy{
+		{Role: authz.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
 	})
 
 	if got == nil {
@@ -81,8 +81,8 @@ func TestEffectivePermissionsWithoutRolesIsEmptyNotNil(t *testing.T) {
 }
 
 func TestEffectivePermissionsIgnoresUnknownRoles(t *testing.T) {
-	got := EffectivePermissions([]string{access.RoleSubject(99)}, []access.Policy{
-		{Role: access.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
+	got := EffectivePermissions([]string{authz.RoleSubject(99)}, []authz.Policy{
+		{Role: authz.RoleSubject(1), Resource: "/api/v1/tenants", Action: "GET"},
 	})
 
 	if len(got) != 0 {

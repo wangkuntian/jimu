@@ -5,7 +5,7 @@ import (
 
 	"jimu/internal/assembly"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/auth"
+	"jimu/internal/platform/identity"
 )
 
 const PortName = "ws"
@@ -15,8 +15,8 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	tenants, _ := ctx.Port(contract.TenantInfoPortName).(contract.TenantStateSource)
 	users, _ := ctx.Port(contract.UserinfoPortName).(contract.UserStateSource)
 	authCfg := ctx.AuthConfig()
-	jwt := auth.NewWithRotation(authCfg.JWTSecret, authCfg.JWTPreviousSecret, authCfg.Issuer, authCfg.AccessExpireMin, authCfg.RefreshExpireDay)
-	port := newAdminWebSocket(jwt, auth.StateCheckers{Tenant: tenants, User: users})
+	jwt := identity.NewWithRotation(authCfg.JWTSecret, authCfg.JWTPreviousSecret, authCfg.Issuer, authCfg.AccessExpireMin, authCfg.RefreshExpireDay)
+	port := newAdminWebSocket(jwt, identity.StateCheckers{Tenant: tenants, User: users})
 	if err := ctx.Provide(PortName, port); err != nil {
 		return nil, fmt.Errorf("provide ws port: %w", err)
 	}

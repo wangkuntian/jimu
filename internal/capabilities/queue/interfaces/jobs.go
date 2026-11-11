@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"jimu/internal/capabilities/queue/domain"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	"jimu/internal/shared/errors"
 	"jimu/internal/shared/response"
 

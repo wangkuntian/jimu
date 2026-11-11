@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"jimu/internal/kernel/httpclient"
+	"jimu/internal/platform/httpclient"
 )
 
 // defaultOIDCScopes OIDC 登录所需的最小 scope（未配置 scopes 时使用）

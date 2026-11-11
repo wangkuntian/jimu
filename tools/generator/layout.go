@@ -72,7 +72,7 @@ const frameworkModule = "jimu"
 // kernelDirs 是内核必需目录（S1 的原样复制集）：不含任何能力目录，也不含 profiles 的形态目录
 // （registry/<shape>/active 由 RenderShape 生成，profiles.go 单列在 kernelFiles）。
 var kernelDirs = []string{
-	"internal/kernel",
+	"internal/platform",
 	"internal/app",
 	"internal/assembly",
 	"internal/capability",

@@ -32,10 +32,7 @@ spec:
                 name: jimu-config
             - secretRef:
                 name: jimu-secrets
-          volumeMounts:
-            - name: configs
-              mountPath: /app/configs
-              readOnly: true
+                optional: true
           resources:
             requests:
               cpu: 50m
@@ -58,6 +55,7 @@ spec:
                 name: jimu-config
             - secretRef:
                 name: jimu-secrets
+                optional: true
           resources:
             requests:
               cpu: 100m
@@ -77,11 +75,3 @@ spec:
               port: management
             initialDelaySeconds: 5
             periodSeconds: 10
-          volumeMounts:
-            - name: configs
-              mountPath: /app/configs
-              readOnly: true
-      volumes:
-        - name: configs
-          configMap:
-            name: jimu-config-files

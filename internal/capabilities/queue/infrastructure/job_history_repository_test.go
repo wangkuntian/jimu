@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"jimu/internal/capabilities/queue/domain"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"

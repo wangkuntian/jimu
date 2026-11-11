@@ -43,11 +43,12 @@ manifest 事务，任一失败按原字节回滚，不留半成品。
 硬依赖必须已在项目里 —— 缺依赖直接报错并提示先加依赖，不会自动补全。既有驱动选择与
 auto-added 语义会保留，支持级别保持 experimental。
 能力已在 catalog entries 里时用 --force 才允许重建。预设（minimal/auth/full）是裁剪起点，
-不接受 capability add；需要扩展时用 --with 生成 experimental 项目。`,
+可以继续追加能力；带驱动的能力用 --driver 指定实现。`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var opts generator.AddOptions
 			opts.Name = args[0]
+			opts.Driver, _ = cmd.Flags().GetString("driver")
 			opts.Dir, _ = cmd.Flags().GetString("dir")
 			opts.Module, _ = cmd.Flags().GetString("module")
 			opts.Force, _ = cmd.Flags().GetBool("force")
@@ -68,6 +69,7 @@ auto-added 语义会保留，支持级别保持 experimental。
 		},
 	}
 	cmd.Flags().String("dir", ".", "generated project root (must contain .jimu/manifest.json)")
+	cmd.Flags().String("driver", "", "driver for the added capability (default: the first declared driver)")
 	cmd.Flags().String("module", "", "override the module path recorded in .jimu/manifest.json")
 	cmd.Flags().Bool("force", false, "rebuild the capability even if it is already present")
 	cmd.Flags().Bool("dry-run", false, "print the files that would change without writing anything")

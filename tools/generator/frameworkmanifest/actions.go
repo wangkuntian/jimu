@@ -20,7 +20,7 @@ import (
 )
 
 var kernelDirs = []string{
-	"internal/kernel",
+	"internal/platform",
 	"internal/app",
 	"internal/assembly",
 	"internal/capability",
@@ -35,6 +35,8 @@ var kernelDirs = []string{
 
 var kernelFiles = []string{
 	"internal/profiles/profiles.go",
+	"internal/profiles/seed_db.go",
+	"internal/profiles/seed_nodb.go",
 	"go.mod",
 	"go.sum",
 	".golangci.yml",
@@ -59,6 +61,7 @@ var kernelExcludes = []string{
 	"cmd/cli/upgrade_test.go",
 	"cmd/cli/capability.go",
 	"cmd/cli/capability_test.go",
+	"cmd/cli/activecaps.go",
 	"cmd/cli/activecaps_test.go",
 	"cmd/cli/source.go",
 }
@@ -114,6 +117,14 @@ func copyActions(root string, selected selection) ([]manifest.CopyAction, error)
 	for _, source := range copiedTools {
 		actions = append(actions, manifest.CopyAction{Source: source, Destination: source, Include: []string{}, Exclude: []string{"*_test.go"}})
 	}
+	if includeBackup(selected) {
+		actions = append(actions, manifest.CopyAction{
+			Source:      "scripts",
+			Destination: "scripts",
+			Include:     []string{"backup.sh", "restore.sh", "db_common.sh", "install_db_clients.sh"},
+			Exclude:     []string{},
+		})
+	}
 	return actions, nil
 }
 
@@ -138,7 +149,12 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 		"Expected":   strings.Join(selected.roots, " "),
 	}
 	catalogData := catalogTemplateData(selected)
-	cliData := map[string]any{"CLIImports": cliImports(root, selected)}
+	cliImportsData := cliImports(root, selected)
+	cliData := map[string]any{"CLIImports": cliImportsData}
+	cliSource := "cmd/cli/main.go"
+	if !includeDatabase(selected) && len(cliImportsData) == 0 {
+		cliSource = "tools/generator/render/templates/project/cli_main_nodb.go.tmpl"
+	}
 	actions := []manifest.TemplateAction{
 		{Source: "tools/generator/render/templates/project/Makefile.tmpl", Destination: "Makefile", Kind: "build", Data: buildData},
 		{Source: "tools/generator/render/templates/project/Dockerfile.tmpl", Destination: "Dockerfile", Kind: "build", Data: buildData},
@@ -148,7 +164,14 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 		{Source: "tools/generator/render/templates/project/active.go.tmpl", Destination: "internal/profiles/active/assembly.go", Kind: "shape", Data: map[string]any{"Shape": selected.shape}},
 		{Source: "tools/generator/render/templates/project/catalog.go.tmpl", Destination: "internal/capabilities/catalog/catalog.go", Kind: "catalog", Data: catalogData},
 		{Source: "tools/generator/render/templates/project/catalog_migration.go.tmpl", Destination: "internal/capabilities/catalog/migration.go", Kind: "catalog", Data: catalogData},
-		{Source: "cmd/cli/main.go", Destination: "cmd/cli/main.go", Kind: "cli", Data: cliData},
+		{Source: cliSource, Destination: "cmd/cli/main.go", Kind: "cli", Data: cliData},
+		{Source: "tools/generator/render/templates/project/assets_selection.go.tmpl", Destination: "tools/internal/profileassets/selection.go", Kind: "assets", Data: map[string]any{"Files": selectedAssetFiles(root, selected)}},
+	}
+	if includeDatabase(selected) {
+		actions = append(actions,
+			manifest.TemplateAction{Source: "tools/generator/render/templates/project/activecaps.go.tmpl", Destination: "cmd/cli/activecaps.go", Kind: "activecaps"},
+			manifest.TemplateAction{Source: "tools/generator/render/templates/project/selected.go.tmpl", Destination: "internal/profiles/selected/selected.go", Kind: "selected", Data: map[string]any{"Name": selected.shape, "Declared": slices.Clone(selected.declared)}},
+		)
 	}
 	all, _ := allDescriptors()
 	byName := descriptorByName(all)
@@ -205,7 +228,29 @@ func configSections(selected selection) []string {
 	}
 	// db/redis 段跟随运行时服务需求：0 能力项目不连库，配置里也不该出现。
 	// 否则 minimal 的 app.yaml 会声称需要 MySQL/Redis，与"无外部依赖"自相矛盾。
+	services := selectionRuntimeServices(selected)
+	if !services[contract.RuntimeServiceMySQL] {
+		delete(keep, "db")
+	}
+	if !services[contract.RuntimeServiceRedis] {
+		delete(keep, "redis")
+	}
+	if !includeObservability(selected) {
+		delete(keep, "otel")
+	}
+	if !selectedNames["grpc"] {
+		delete(keep, "grpc")
+	}
+	return sortedStrings(mapsKeys(keep))
+}
+
+func selectionRuntimeServices(selected selection) map[contract.RuntimeService]bool {
 	services := map[contract.RuntimeService]bool{}
+	all, _ := allDescriptors()
+	selectedNames := make(map[string]bool, len(selected.declared))
+	for _, name := range selected.declared {
+		selectedNames[name] = true
+	}
 	for _, descriptor := range all {
 		if !selectedNames[descriptor.Name] {
 			continue
@@ -222,13 +267,18 @@ func configSections(selected selection) []string {
 			}
 		}
 	}
-	if !services[contract.RuntimeServiceMySQL] {
-		delete(keep, "db")
-	}
-	if !services[contract.RuntimeServiceRedis] {
-		delete(keep, "redis")
-	}
-	return sortedStrings(mapsKeys(keep))
+	return services
+}
+
+// includeObservability 决定部署资产是否携带观测栈。当前没有独立的 observability
+// 能力；只有 full 预设携带完整观测栈，minimal/auth 不生成 OpenObserve/OTel
+// 相关清单，避免默认带上一套与所选能力无关的基础设施。
+func includeObservability(selected selection) bool {
+	return selected.template == "full" || selected.profile == "full"
+}
+
+func includeDatabase(selected selection) bool {
+	return selectionRuntimeServices(selected)[contract.RuntimeServiceMySQL]
 }
 
 func valuesSections(root string, selected selection) []string {
@@ -241,7 +291,8 @@ func valuesSections(root string, selected selection) []string {
 	for _, name := range selected.declared {
 		selectedNames[name] = true
 	}
-	capabilityKeys := map[string]string{"audit": "audit", "storage": "storage", "auth": "auth"}
+	services := selectionRuntimeServices(selected)
+	capabilityKeys := map[string]string{"audit": "audit", "storage": "storage", "auth": "auth", "cache": "cache"}
 	var sections []string
 	for _, line := range strings.Split(string(content), "\n") {
 		if line == "" || strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") || strings.HasPrefix(line, "#") {
@@ -251,10 +302,29 @@ func valuesSections(root string, selected selection) []string {
 		if !ok || key == "" {
 			continue
 		}
+		key = strings.TrimSpace(key)
+		switch key {
+		case "db":
+			if !services[contract.RuntimeServiceMySQL] {
+				continue
+			}
+		case "redis":
+			if !services[contract.RuntimeServiceRedis] {
+				continue
+			}
+		case "backup":
+			if !services[contract.RuntimeServiceMySQL] {
+				continue
+			}
+		case "otel", "openobserve", "otelCollector":
+			if !includeObservability(selected) {
+				continue
+			}
+		}
 		if capability, ok := capabilityKeys[strings.TrimSpace(key)]; ok && !selectedNames[capability] {
 			continue
 		}
-		sections = append(sections, strings.TrimSpace(key))
+		sections = append(sections, key)
 	}
 	return sections
 }
@@ -264,6 +334,7 @@ func shapeCapabilities(selected selection) []map[string]any {
 	for _, item := range selected.assemblies {
 		name := item.Descriptor.Name
 		drivers := slices.Clone(selected.drivers[name])
+		slices.Sort(drivers)
 		capabilities = append(capabilities, map[string]any{
 			"Alias":      name + "module",
 			"Path":       "jimu/internal/capabilities/" + name,
@@ -384,12 +455,25 @@ func rewriteActions(module string, selected selection) []manifest.RewriteAction 
 				Kind: "file-patch", From: "//go:build jimu_noredis", To: "// 未启用 Redis 的构建：由生成器去掉 build tag", Files: []string{file},
 			})
 		}
+	}
+	if !includeObservability(selected) {
 		for _, file := range []string{
 			"internal/app/bootstrap_otel_empty.go",
 			"internal/app/container_otel_empty.go",
+			"internal/app/tracing_empty.go",
 		} {
 			actions = append(actions, manifest.RewriteAction{
 				Kind: "file-patch", From: "//go:build jimu_no_otel", To: "// 未启用 OTel 的构建：由生成器去掉 build tag", Files: []string{file},
+			})
+		}
+	}
+	if !includeDatabase(selected) {
+		for _, file := range []string{
+			"internal/app/container_nodb.go",
+			"internal/profiles/seed_nodb.go",
+		} {
+			actions = append(actions, manifest.RewriteAction{
+				Kind: "file-patch", From: "//go:build jimu_nodb", To: "// 未启用数据库的构建：由生成器去掉 build tag", Files: []string{file},
 			})
 		}
 	}
@@ -410,8 +494,11 @@ func deployFiles() []string {
 		"deploy/k8s/pdb.yaml",
 		"deploy/k8s/networkpolicy.yaml",
 		"deploy/k8s/backup-cronjob.yaml",
+		"deploy/k8s/openobserve.yaml",
+		"deploy/k8s/otel-collector.yaml",
 		"deploy/helm/Chart.yaml",
 		"deploy/helm/values.yaml",
+		"deploy/helm/templates/service.yaml",
 		"deploy/backup/Dockerfile",
 	}
 }
@@ -555,12 +642,17 @@ func projectName(module string) string {
 //
 // internal/e2e 只有测试文件，Tests=false 下永远不可达，因此 0 能力项目会自动丢掉它。
 func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, error) {
-	seeds := []string{"./internal/assembly", "./internal/capability"}
+	seeds := []string{"./internal/assembly", "./internal/capability", "./internal/platform/db"}
+	if includeDatabase(selected) {
+		// CLI 的 migrate/seed 仍需要数据库连接与种子实现；它们不是 server 依赖，
+		// 但不加入闭包会让 internal/platform 的聚合复制把这两个包漏掉。
+		seeds = append(seeds, "./internal/platform/seeding")
+	}
 	for _, name := range selected.copy {
 		seeds = append(seeds, "./internal/capabilities/"+name)
 	}
 	// 可选文件必须先于闭包计算剔除：internal/assembly 引用 internal/app，
-	// 若 seed_casbin.go 仍在，闭包会把 kernel/access 与 Casbin 算成可达，
+	// 若 seed_casbin.go 仍在，闭包会把 platform/authz 与 Casbin 算成可达，
 	// 之后再排除文件就来不及了。overlay 让这些文件对 packages.Load 不可见。
 	pruned := optionalKernelFiles(selected)
 	reachable, err := kernelPackages(root, seeds, pruned)
@@ -574,9 +666,10 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 		}
 		exclude := kernelExcludesFor(dir)
 		exclude = append(exclude, prunedInDir(pruned, dir)...)
-		// internal/kernel 是聚合目录：整目录复制会把不可达的子包也带上。
+		// internal/platform 是聚合目录：整目录复制会把不可达的子包也带上。
 		// 只排除闭包里不存在的 kernel 子包（保留目录下非包文件）。
-		if dir == "internal/kernel" {
+		// 聚合目录：整目录复制会把不可达的子包也带上，只保留闭包里有的。
+		if dir == "internal/platform" {
 			exclude = append(exclude, unreachableKernelSubdirs(root, dir, reachable)...)
 		}
 		actions = append(actions, manifest.CopyAction{
@@ -584,13 +677,26 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 		})
 	}
 	for _, file := range kernelFiles {
+		if kernelFilePruned(pruned, file) {
+			continue
+		}
 		actions = append(actions, manifest.CopyAction{Source: file, Destination: file, Include: []string{}, Exclude: []string{}})
 	}
 	return actions, nil
 }
 
+func kernelFilePruned(pruned map[string][]string, file string) bool {
+	dir := filepath.ToSlash(filepath.Dir(file))
+	for _, name := range pruned[dir] {
+		if name == filepath.Base(file) {
+			return true
+		}
+	}
+	return false
+}
+
 // prunedInDir 把按绝对目录记录的裁剪项转换为相对于复制根目录的路径。
-// 例如 dir="internal/kernel" 时，pruned["internal/kernel/db"] 里的
+// 例如 dir="internal/platform" 时，pruned["internal/platform/db"] 里的
 // "postgres.go" 要转成 "db/postgres.go"，才能被 excludedPath 匹配到。
 func prunedInDir(pruned map[string][]string, dir string) []string {
 	var out []string
@@ -615,18 +721,36 @@ func prunedInDir(pruned map[string][]string, dir string) []string {
 // overlay 隐藏，否则依赖链会经 internal/assembly → internal/app 提前成立。
 func optionalKernelFiles(selected selection) map[string][]string {
 	pruned := map[string][]string{}
-	if len(selected.copy) == 0 {
-		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel.go", "container_otel.go")
+	if !includeObservability(selected) {
+		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel.go", "container_otel.go", "tracing_otel.go")
 	} else {
-		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel_empty.go", "container_otel_empty.go")
+		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel_empty.go", "container_otel_empty.go", "tracing_empty.go")
+	}
+	if includeObservability(selected) {
+		if includeDatabase(selected) {
+			pruned["internal/app"] = append(pruned["internal/app"], "container_otel_nodb.go")
+		} else {
+			pruned["internal/app"] = append(pruned["internal/app"], "container_otel_db.go")
+		}
+	} else {
+		pruned["internal/app"] = append(pruned["internal/app"], "container_otel_db.go", "container_otel_nodb.go")
+	}
+	if includeDatabase(selected) {
+		pruned["internal/app"] = append(pruned["internal/app"], "container_nodb.go")
+		pruned["internal/profiles"] = append(pruned["internal/profiles"], "seed_nodb.go")
+	} else {
+		pruned["internal/app"] = append(pruned["internal/app"], "container_db.go")
+		pruned["internal/profiles"] = append(pruned["internal/profiles"], "seed_db.go")
+		pruned["internal/platform/scheduler"] = append(pruned["internal/platform/scheduler"], "mysql_store.go", "mysql_store_test.go")
 	}
 	if !contains(selected.copy, "access") {
 		pruned["internal/app"] = append(pruned["internal/app"], "seed_casbin.go")
+		pruned["internal/platform/seeding"] = append(pruned["internal/platform/seeding"], "seed_casbin.go")
 	}
 	// Postgres 驱动只在显式选择 db.driver=postgres 时编译；默认 MySQL 项目
 	// 不带 gorm postgres driver 与 pgx（约 1.9 MB）。
 	if selected.dbDriver != "postgres" {
-		pruned["internal/kernel/db"] = append(pruned["internal/kernel/db"], "postgres.go", "postgres_test.go")
+		pruned["internal/platform/db"] = append(pruned["internal/platform/db"], "postgres.go", "postgres_test.go")
 	}
 	// 0 能力项目不连 Redis：去掉引用 go-redis 的那一份，保留空实现的 _
 	// empty 版本（rewriteActions 会去掉它的 build tag）。
@@ -711,7 +835,7 @@ func kernelDirRequired(dir string, reachable map[string]bool) bool {
 	}
 }
 
-// unreachableKernelSubdirs 列出 internal/kernel 下没有任何可达包的子目录。
+// unreachableKernelSubdirs 列出 internal/platform 下没有任何可达包的子目录。
 // 用于把聚合目录的复制收缩到实际编译的部分。
 func unreachableKernelSubdirs(root, dir string, reachable map[string]bool) []string {
 	return unreachableSubdirs(root, dir, dir, reachable)

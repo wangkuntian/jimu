@@ -65,6 +65,7 @@ data:
       rate_limit_rate: 100
       rate_limit_burst: 200
     cache:
+      driver: "redis"
       prefix: "jimu"
     audit:
       queue_size: 1024

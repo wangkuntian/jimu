@@ -182,6 +182,7 @@ var valuesCapabilityKeys = map[string]string{
 	"audit":   "audit",
 	"storage": "storage",
 	"auth":    "auth",
+	"cache":   "cache",
 }
 
 // ValuesSections 返回生成项目 deploy/helm/values.yaml 该保留的顶层键（按源文件顺序）：

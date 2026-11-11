@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"jimu/internal/contract"
-	"jimu/internal/kernel/event"
+	"jimu/internal/platform/event"
 )
 
 type fakeMQFactory struct {

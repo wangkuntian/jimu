@@ -11,8 +11,8 @@ import (
 	"jimu/internal/capabilities/grpc/userinfopb"
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/logger"
-	"jimu/internal/kernel/tlsconf"
+	"jimu/internal/platform/logger"
+	"jimu/internal/platform/tlsconf"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -40,7 +40,7 @@ type Server struct {
 }
 
 // New 创建 gRPC server（不监听，Start 时才绑定端口）。
-// logger 可为 nil（跳过日志输出）；可选传入 Reporter（错误上报，实现见 kernel/reporter）。
+// logger 可为 nil（跳过日志输出）；可选传入 Reporter（错误上报，实现见 platform/reporter）。
 func New(cfg Config, log *logger.Logger, reporters ...Reporter) (*Server, error) {
 	opts := []grpc.ServerOption{}
 	if cfg.TLS.Enabled {

@@ -5,7 +5,7 @@ import (
 	"jimu/internal/capabilities/apikey/infrastructure"
 	"jimu/internal/capabilities/apikey/interfaces"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/http/middleware"
+	"jimu/internal/platform/http/middleware"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

@@ -11,7 +11,7 @@ import (
 	_ "jimu/internal/capabilities/dataops/csv"
 	importdomain "jimu/internal/capabilities/dataops/domain"
 	"jimu/internal/capabilities/dataops/importer"
-	"jimu/internal/kernel/tenant"
+	"jimu/internal/platform/tenant"
 	apperrors "jimu/internal/shared/errors"
 
 	"github.com/stretchr/testify/assert"

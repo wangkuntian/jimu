@@ -9,7 +9,7 @@ import (
 
 	"jimu/internal/capabilities/queue"
 
-	redistore "jimu/internal/kernel/redis"
+	redistore "jimu/internal/platform/redisclient"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"

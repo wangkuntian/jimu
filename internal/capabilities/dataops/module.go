@@ -5,7 +5,7 @@ import (
 	"jimu/internal/capabilities/dataops/infrastructure"
 	"jimu/internal/capabilities/dataops/interfaces"
 	"jimu/internal/contract"
-	"jimu/internal/kernel/http/middleware"
+	"jimu/internal/platform/http/middleware"
 
 	"gorm.io/gorm"
 )

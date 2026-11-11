@@ -1,0 +1,188 @@
+package authz
+
+import (
+	"context"
+	stderrors "errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"jimu/internal/contract"
+
+	"github.com/casbin/casbin/v3"
+	"github.com/gin-gonic/gin"
+)
+
+func TestAuthorizationMiddlewareAllowsRolePolicy(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	enforcer := testEnforcer(t)
+	store := &fakeAuthorizationStore{
+		roles:    []RoleIdentity{{ID: 1, Name: "admin", Scope: contract.RoleScopeTenant}},
+		policies: []Policy{{Role: RoleSubject(1), Resource: "/api/v1/users", Action: http.MethodGet}},
+	}
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", uint64(7))
+		c.Next()
+	})
+	r.Use(AuthorizationMiddleware(store, enforcer))
+	r.GET("/api/v1/users", func(c *gin.Context) {
+		if roles, _ := c.Get("roles"); len(roles.([]string)) != 1 {
+			t.Fatalf("roles = %#v", roles)
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/users", nil))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAuthorizationMiddlewareMarksTenantManagerAsPlatformScope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	enforcer := testEnforcer(t)
+	store := &fakeAuthorizationStore{
+		roles: []RoleIdentity{{ID: 1, Name: "admin", Scope: contract.RoleScopePlatform}},
+		policies: []Policy{
+			{Role: RoleSubject(1), Resource: "/api/v1/users", Action: http.MethodGet},
+		},
+	}
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", uint64(7))
+		c.Next()
+	})
+	r.Use(AuthorizationMiddleware(store, enforcer))
+	r.GET("/api/v1/users", func(c *gin.Context) {
+		platform, _ := c.Get("platform_scope")
+		if platform != true {
+			t.Fatalf("platform_scope = %#v, want true", platform)
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/users", nil))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAuthorizationMiddlewareKeepsTenantAdminScoped(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	enforcer := testEnforcer(t)
+	store := &fakeAuthorizationStore{
+		roles: []RoleIdentity{{ID: 1, Name: "tenant-admin", Scope: contract.RoleScopeTenant}},
+		policies: []Policy{
+			{Role: RoleSubject(1), Resource: "/api/v1/users", Action: http.MethodGet},
+			{Role: RoleSubject(1), Resource: "/api/v1/tenants", Action: http.MethodGet},
+		},
+	}
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", uint64(7))
+		c.Next()
+	})
+	r.Use(AuthorizationMiddleware(store, enforcer))
+	r.GET("/api/v1/users", func(c *gin.Context) {
+		platform, _ := c.Get("platform_scope")
+		if platform != false {
+			t.Fatalf("platform_scope = %#v, want false", platform)
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/users", nil))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAuthorizationMiddlewareIsolatesSameNameRolesByID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	enforcer := testEnforcer(t)
+	store := &fakeAuthorizationStore{
+		roles: []RoleIdentity{{ID: 2, Name: "same-name", Scope: contract.RoleScopeTenant}},
+		policies: []Policy{
+			{Role: RoleSubject(1), Resource: "/api/v1/users", Action: http.MethodGet},
+			{Role: RoleSubject(2), Resource: "/api/v1/audits", Action: http.MethodGet},
+		},
+	}
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", uint64(7))
+		c.Next()
+	})
+	r.Use(AuthorizationMiddleware(store, enforcer))
+	r.GET("/api/v1/users", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/users", nil))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestAuthorizationMiddlewareRejectsMissingRole(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", uint64(7))
+		c.Next()
+	})
+	r.Use(AuthorizationMiddleware(&fakeAuthorizationStore{}, testEnforcer(t)))
+	r.GET("/api/v1/users", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/users", nil))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestAuthorizationMiddlewareHidesStoreErrors(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", uint64(7))
+		c.Next()
+	})
+	r.Use(AuthorizationMiddleware(&fakeAuthorizationStore{rolesErr: stderrors.New("sql password=secret")}, testEnforcer(t)))
+	r.GET("/api/v1/users", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/users", nil))
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+	if got := w.Body.String(); got == "" || stderrors.Is(stderrors.New(got), stderrors.New("sql password=secret")) {
+		t.Fatalf("body = %s", got)
+	}
+}
+
+func testEnforcer(t *testing.T) *casbin.Enforcer {
+	t.Helper()
+	enforcer, err := NewPathEnforcer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return enforcer
+}
+
+type fakeAuthorizationStore struct {
+	roles       []RoleIdentity
+	policies    []Policy
+	rolesErr    error
+	policiesErr error
+}
+
+func (s *fakeAuthorizationStore) RolesForUser(context.Context, uint64) ([]RoleIdentity, error) {
+	return s.roles, s.rolesErr
+}
+
+func (s *fakeAuthorizationStore) Policies(context.Context) ([]Policy, error) {
+	return s.policies, s.policiesErr
+}

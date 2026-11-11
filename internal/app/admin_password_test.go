@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"jimu/internal/app"
+	app "jimu/internal/platform/seeding"
 
 	"github.com/stretchr/testify/require"
 )
