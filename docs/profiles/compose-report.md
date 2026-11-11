@@ -26,19 +26,19 @@
 
 | 形态 | 二进制 (MB) | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 | 重型依赖 |
 |---|---:|---:|---:|---:|---:|---:|---:|---|
-| `full` | 125.2 | 100.0% | 96 | 26 | 23 | 373 | 40371 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
-| `minimal` | 86.3 | 69.0% | 31 | 11 | 9 | 182 | 19079 | - |
+| `full` | 125.7 | 100.0% | 96 | 26 | 23 | 377 | 40466 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
+| `minimal` | 86.3 | 68.7% | 31 | 11 | 9 | 186 | 19174 | - |
 
 ## 验收断言
 
 `go test ./tools/composereport/` 的 `TestMinimalCompiledSurfaceIsMateriallySmaller` 按下面的**实测关系**断言
 （不写死数字，内核膨胀或能力增减只会让真实的裁剪失效暴露出来）：
 
-- 二进制：`minimal` 是 `full` 的 69.0%（要求 ≤ 85%）
+- 二进制：`minimal` 是 `full` 的 68.7%（要求 ≤ 85%）
 - 路由数：`minimal` 31 < `full` 96
 - 表数：`minimal` 9 < `full` 23
-- 本仓 Go 文件：`minimal` 182 < `full` 373
-- 本仓代码行：`minimal` 19079 < `full` 40371
+- 本仓 Go 文件：`minimal` 186 < `full` 377
+- 本仓代码行：`minimal` 19174 < `full` 40466
 
 ## 层②边界：go.mod 直接依赖
 
