@@ -179,6 +179,15 @@ var seedCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
+		// 种子用**声明集**（不含迁移的 schema 依赖），与启动期种子同口径。
+		caps, err := declaredDescriptors()
+		if err != nil {
+			return err
+		}
+		if len(caps) == 0 {
+			fmt.Println("No capabilities selected; nothing to seed")
+			return nil
+		}
 		log := logger.New(cfg.Log)
 		if err := db.InitSnowflake(cfg.ID.WorkerID); err != nil {
 			return fmt.Errorf("failed to init snowflake: %w", err)
@@ -186,11 +195,6 @@ var seedCmd = &cobra.Command{
 		dbConn, err := db.ConnectWithRetry(cfg.DB, log)
 		if err != nil {
 			return fmt.Errorf("failed to connect database: %w", err)
-		}
-		// 种子用**声明集**（不含迁移的 schema 依赖），与启动期种子同口径。
-		caps, err := declaredDescriptors()
-		if err != nil {
-			return err
 		}
 		if err := app.RunSeedWithCasbin(dbConn, caps); err != nil {
 			return fmt.Errorf("seed failed: %w", err)

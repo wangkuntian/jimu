@@ -17,6 +17,9 @@ import (
 // 管理员密码优先从 ADMIN_PASSWORD_FILE 读取，回退到 ADMIN_PASSWORD 环境变量
 // 权限点来自启用集各能力的 Descriptor.Permissions（能力自声明，未启用不种）
 func RunSeed(db *gorm.DB, caps []contract.Descriptor) error {
+	if len(caps) == 0 {
+		return nil
+	}
 	adminPassword := AdminPassword()
 	if adminPassword == "" {
 		return fmt.Errorf("ADMIN_PASSWORD or ADMIN_PASSWORD_FILE is required")
@@ -199,6 +202,9 @@ func SeedCasbinPolicies(db *gorm.DB) error { return seedCasbinPolicies(db) }
 
 // RunSeedWithCasbin 执行完整种子（含 Casbin 策略）
 func RunSeedWithCasbin(db *gorm.DB, caps []contract.Descriptor) error {
+	if len(caps) == 0 {
+		return nil
+	}
 	if err := RunSeed(db, caps); err != nil {
 		return err
 	}

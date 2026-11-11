@@ -203,11 +203,11 @@ func TestRunSeed_UsesAdminPasswordFile(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestRunSeed_MissingAdminPassword(t *testing.T) {
+func TestRunSeed_NoCapabilitiesIsNoOp(t *testing.T) {
 	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "")
 	err := app.RunSeed(nil, nil)
-	require.ErrorContains(t, err, "ADMIN_PASSWORD or ADMIN_PASSWORD_FILE is required")
+	require.NoError(t, err)
 }
 
 func TestRunSeed_PermissionQueryError(t *testing.T) {
@@ -368,11 +368,11 @@ func TestSeedCasbinPolicies_CreateEnforcerError(t *testing.T) {
 	require.ErrorContains(t, err, "create enforcer")
 }
 
-func TestRunSeedWithCasbin_SeedError(t *testing.T) {
+func TestRunSeedWithCasbin_NoCapabilitiesIsNoOp(t *testing.T) {
 	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "")
 	err := app.RunSeedWithCasbin(nil, nil)
-	require.ErrorContains(t, err, "ADMIN_PASSWORD or ADMIN_PASSWORD_FILE is required")
+	require.NoError(t, err)
 }
 
 // TestRunSeedWithCasbin 用 sqlite 内存库端到端跑完整种子（含 casbin 策略）。
