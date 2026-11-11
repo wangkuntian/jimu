@@ -71,7 +71,7 @@ func TestFullAssemblyModulesAreWired(t *testing.T) {
 	}
 }
 
-// TestFullDriverSelection 钉住 full 形态的驱动选中集：四种驱动能力均为全量选中。声明
+// TestFullDriverSelection 钉住 full 形态的驱动选中集：五种驱动能力均为全量选中。声明
 // （assembly.go 的 Drivers）与 blank import（drivers.go）必须逐值一致，由
 // `make check-capabilities` 的「形态选中 == 形态生产 import 闭包」断言守住单侧漂移。
 func TestFullDriverSelection(t *testing.T) {
@@ -81,6 +81,7 @@ func TestFullDriverSelection(t *testing.T) {
 		"queue":   {"redis", "kafka", "rabbitmq"},
 		"dataops": {"csv", "excel"},
 		"cache":   {"redis", "memory"},
+		"search":  {"mysql", "postgres"},
 	}, driverSelection(Assembly()))
 }
 

@@ -13,6 +13,8 @@ import (
 	_ "jimu/internal/capabilities/queue/kafka"
 	_ "jimu/internal/capabilities/queue/rabbitmq"
 	_ "jimu/internal/capabilities/queue/redis"
+	_ "jimu/internal/capabilities/search/mysql"
+	_ "jimu/internal/capabilities/search/postgres"
 	_ "jimu/internal/capabilities/storage/local"
 	_ "jimu/internal/capabilities/storage/s3"
 )

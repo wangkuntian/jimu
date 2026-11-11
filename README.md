@@ -36,7 +36,8 @@ Jimu 不是运行时框架，也不要求业务代码依赖 Jimu SDK。`jimu new
 `auth` 默认用 Redis 保存会话、限流、失败计数和密码重置码；单实例或无 Redis 场景可用
 `jimu new demo --with=auth:memory`，运行时若选 Redis 但客户端不可用会告警并降级到内存。
 
-生成时按需编译底层组件：`--db=mysql|postgres`（默认 `mysql`）只带所选数据库驱动；
+生成时按需编译底层组件：`--db=mysql|postgres`（默认 `mysql`）只带所选数据库驱动，
+`search` 也自动跟随该方言；
 `minimal` 产物不含 Redis、Casbin 与 OTel 导出器，server 二进制约 27 MB。
 
 > `basic-api` 与 `auth-api` 已在 v0.10.0 退役。由它们生成的项目执行 `jimu upgrade` 会硬失败，

@@ -132,11 +132,24 @@ func TestNewProjectFullPresetCarriesEveryCapability(t *testing.T) {
 		"internal/capabilities/storage/local",
 		"internal/capabilities/dataops/excel",
 		"internal/capabilities/dataops/csv",
+		"internal/capabilities/search/mysql",
 	} {
 		assert.DirExists(t, filepath.Join(dir, filepath.FromSlash(rel)),
 			"full must ship driver %s (--with default would drop it)", rel)
 	}
+	assert.NoDirExists(t, filepath.Join(dir, "internal/capabilities/search/postgres"),
+		"default --db=mysql must not ship the postgres search driver")
 	assertManifestProvenance(t, dir, "full")
+}
+
+func TestNewProjectFullPresetFollowsPostgresSearchDriver(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "full-pg")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: "full", Module: "example.com/full-pg", DBDriver: "postgres", NoTidy: true,
+	})
+	require.NoError(t, err)
+	assert.DirExists(t, filepath.Join(dir, "internal/capabilities/search/postgres"))
+	assert.NoDirExists(t, filepath.Join(dir, "internal/capabilities/search/mysql"))
 }
 
 func TestNewProjectLeavesNoPartialTreeOnFailure(t *testing.T) {

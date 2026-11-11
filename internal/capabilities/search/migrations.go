@@ -17,5 +17,7 @@ var Descriptor = contract.Descriptor{
 	Mount:           contract.MountProtected,
 	Migrations:      migrationsFS,
 	Owns:            []string{"search_documents"},
+	Drivers:         []string{"mysql", "postgres"},
+	DriverSpecs:     []contract.DriverSpec{{Name: "mysql"}, {Name: "postgres"}},
 	RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
 }

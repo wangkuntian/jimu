@@ -1,4 +1,4 @@
-package search
+package searchcore
 
 import (
 	"testing"
@@ -21,13 +21,13 @@ func TestContainsCJK(t *testing.T) {
 		{"", false},
 	}
 	for _, tt := range tests {
-		assert.Equal(t, tt.want, containsCJK(tt.query), "query=%q", tt.query)
+		assert.Equal(t, tt.want, ContainsCJK(tt.query), "query=%q", tt.query)
 	}
 }
 
 func TestItoa(t *testing.T) {
-	assert.Equal(t, "0", itoa(0))
-	assert.Equal(t, "2", itoa(2))
-	assert.Equal(t, "42", itoa(42))
-	assert.Equal(t, "-7", itoa(-7))
+	assert.Equal(t, "0", Itoa(0))
+	assert.Equal(t, "2", Itoa(2))
+	assert.Equal(t, "42", Itoa(42))
+	assert.Equal(t, "-7", Itoa(-7))
 }

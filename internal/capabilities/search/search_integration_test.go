@@ -1,9 +1,12 @@
-package search
+package search_test
 
 import (
 	"context"
 	"testing"
 
+	searchmodule "jimu/internal/capabilities/search"
+	_ "jimu/internal/capabilities/search/mysql"
+	_ "jimu/internal/capabilities/search/postgres"
 	"jimu/internal/contract"
 	"jimu/internal/shared/testutil"
 
@@ -14,7 +17,7 @@ import (
 func init() {
 	// 本包集成测试依赖 search_documents 表：注入搜索能力的迁移（迁移文件与 Descriptor 同包）
 	testutil.SetMigrateCaps([]contract.Descriptor{
-		{Name: "search", Migrations: migrationsFS},
+		searchmodule.Descriptor,
 	})
 }
 
@@ -27,14 +30,14 @@ func TestMysqlSearcherIntegration(t *testing.T) {
 	require.NoError(t, tdb.Migrate(), "goose 迁移应成功")
 	require.NoError(t, tdb.Truncate("search_documents"), "清空 search_documents")
 
-	s, err := New(tdb.DB)
+	s, err := searchmodule.New(tdb.DB)
 	require.NoError(t, err)
 
 	ctx := context.Background()
 	require.NoError(t, s.Index(ctx,
-		Document{TenantID: 1, Type: "article", DocID: 1, Title: "golang backend", Body: "structured logging"},
-		Document{TenantID: 1, Type: "article", DocID: 2, Title: "database tuning", Body: "indexes and queries"},
-		Document{TenantID: 2, Type: "article", DocID: 3, Title: "golang elsewhere", Body: "other tenant"},
+		searchmodule.Document{TenantID: 1, Type: "article", DocID: 1, Title: "golang backend", Body: "structured logging"},
+		searchmodule.Document{TenantID: 1, Type: "article", DocID: 2, Title: "database tuning", Body: "indexes and queries"},
+		searchmodule.Document{TenantID: 2, Type: "article", DocID: 3, Title: "golang elsewhere", Body: "other tenant"},
 	))
 
 	// 租户内检索：只命中本租户文档
@@ -49,7 +52,7 @@ func TestMysqlSearcherIntegration(t *testing.T) {
 	assert.Len(t, res, 2)
 
 	// 幂等覆盖：同 租户+类型+文档ID 再次索引不产生重复行
-	require.NoError(t, s.Index(ctx, Document{TenantID: 1, Type: "article", DocID: 1, Title: "golang backend v2", Body: "updated"}))
+	require.NoError(t, s.Index(ctx, searchmodule.Document{TenantID: 1, Type: "article", DocID: 1, Title: "golang backend v2", Body: "updated"}))
 	res, err = s.Search(ctx, 1, "golang", 10)
 	require.NoError(t, err)
 	require.Len(t, res, 1)
@@ -70,14 +73,14 @@ func TestMysqlSearcherCJKFallbackIntegration(t *testing.T) {
 	require.NoError(t, tdb.Migrate(), "goose 迁移应成功")
 	require.NoError(t, tdb.Truncate("search_documents"))
 
-	s, err := New(tdb.DB)
+	s, err := searchmodule.New(tdb.DB)
 	require.NoError(t, err)
 
 	ctx := context.Background()
 	require.NoError(t, s.Index(ctx,
-		Document{TenantID: 1, Type: "article", DocID: 11, Title: "数据库调优", Body: "索引与查询计划"},
-		Document{TenantID: 1, Type: "article", DocID: 12, Title: "golang backend", Body: "结构化日志"},
-		Document{TenantID: 2, Type: "article", DocID: 13, Title: "数据库分片", Body: "其他租户"},
+		searchmodule.Document{TenantID: 1, Type: "article", DocID: 11, Title: "数据库调优", Body: "索引与查询计划"},
+		searchmodule.Document{TenantID: 1, Type: "article", DocID: 12, Title: "golang backend", Body: "结构化日志"},
+		searchmodule.Document{TenantID: 2, Type: "article", DocID: 13, Title: "数据库分片", Body: "其他租户"},
 	))
 
 	// 中文子串命中且标题优先

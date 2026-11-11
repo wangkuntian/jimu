@@ -102,6 +102,7 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 		if err == nil {
 			selected, err = resolvePresetSelection(root, preset)
 			selected.dbDriver = dbDriver
+			applyDBDriverToSearch(&selected)
 			if err == nil {
 				doc, err = buildDocument(root, req.Module, selected, req.Framework)
 			}
@@ -109,6 +110,7 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 	} else {
 		selected, err = resolveSelection(root, req)
 		selected.dbDriver = dbDriver
+		applyDBDriverToSearch(&selected)
 		if err == nil {
 			doc, err = buildDocument(root, req.Module, selected, req.Framework)
 		}
@@ -122,6 +124,18 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 	}
 	doc.Digest = digest
 	return doc, resolutionFor(doc, selected), nil
+}
+
+// applyDBDriverToSearch 让 search 的方言跟随数据库驱动，避免 --db=postgres 项目
+// 编入 MySQL FULLTEXT 实现，或反之。
+func applyDBDriverToSearch(selected *selection) {
+	if !slices.Contains(selected.declared, "search") {
+		return
+	}
+	if selected.drivers == nil {
+		selected.drivers = map[string][]string{}
+	}
+	selected.drivers["search"] = []string{selected.dbDriver}
 }
 
 // normalizeDBDriver 归一化 --db 取值：空值等价 mysql（与 config 默认一致）。

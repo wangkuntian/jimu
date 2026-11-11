@@ -140,6 +140,8 @@ func fixture() []contract.Descriptor {
 			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL},
 			DriverSpecs:     []contract.DriverSpec{{Name: "csv"}, {Name: "excel"}}},
 		{Name: "search", Owns: []string{"search_documents"}, Mount: contract.MountProtected,
+			Drivers:         []string{"mysql", "postgres"},
+			DriverSpecs:     []contract.DriverSpec{{Name: "mysql"}, {Name: "postgres"}},
 			RuntimeServices: []contract.RuntimeService{contract.RuntimeServiceMySQL}},
 		{Name: "captcha", Mount: contract.MountPublic,
 			SoftRequires: []string{"cache"},
@@ -382,6 +384,7 @@ func TestCatalogDriversShape(t *testing.T) {
 		"queue":   {"redis", "kafka", "rabbitmq"},
 		"dataops": {"csv", "excel"},
 		"cache":   {"redis", "memory"},
+		"search":  {"mysql", "postgres"},
 	}
 	got := map[string][]string{}
 	for _, d := range All() {
