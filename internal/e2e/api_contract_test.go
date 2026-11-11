@@ -35,6 +35,7 @@ import (
 	"jimu/internal/platform/event"
 	"jimu/internal/platform/httpclient"
 	"jimu/internal/platform/logger"
+	"jimu/internal/platform/seeding"
 	"jimu/internal/profiles/active"
 
 	"github.com/alicebob/miniredis/v2"
@@ -97,7 +98,7 @@ func newTestAppWithDB(t *testing.T) *testAppDB {
 	// 种子：admin 用户 + 超级管理员角色 + 权限（含 /users、/audits 策略）
 	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "admin123")
-	require.NoError(t, app.RunSeed(gdb, catalog.All()))
+	require.NoError(t, seeding.RunSeed(gdb, catalog.All()))
 
 	mr, err := miniredis.Run()
 	require.NoError(t, err)
@@ -682,7 +683,7 @@ func TestAuthRateLimit(t *testing.T) {
 	require.NoError(t, gdb.Exec(`CREATE TABLE IF NOT EXISTS role_permissions (role_id INTEGER NOT NULL, permission_id INTEGER NOT NULL)`).Error)
 	t.Setenv("ADMIN_PASSWORD_FILE", "")
 	t.Setenv("ADMIN_PASSWORD", "admin123")
-	require.NoError(t, app.RunSeed(gdb, catalog.All()))
+	require.NoError(t, seeding.RunSeed(gdb, catalog.All()))
 
 	mr, err := miniredis.Run()
 	require.NoError(t, err)

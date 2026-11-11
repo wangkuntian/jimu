@@ -4,27 +4,17 @@ import (
 	"fmt"
 	"os"
 
-	"jimu/internal/app"
 	apikeycli "jimu/internal/capabilities/apikey/cli"
 	"jimu/internal/config"
 	"jimu/internal/platform/db"
 	"jimu/internal/platform/logger"
-	"jimu/internal/profiles"
+	"jimu/internal/platform/seeding"
 
 	"github.com/spf13/cobra"
 )
 
 // version 版本号，通过 ldflags 注入：-ldflags "-X main.version=v0.1.0"
 var version = "dev"
-
-func init() {
-	applyVersion()
-}
-
-// Keep generated manifests aligned with the CLI's ldflags-injected release version.
-func applyVersion() {
-	profiles.Version = version
-}
 
 var rootCmd = &cobra.Command{
 	Use:   "jimu",
@@ -196,7 +186,7 @@ var seedCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to connect database: %w", err)
 		}
-		if err := app.RunSeedWithCasbin(dbConn, caps); err != nil {
+		if err := seeding.RunSeedWithCasbin(dbConn, caps); err != nil {
 			return fmt.Errorf("seed failed: %w", err)
 		}
 		fmt.Println("Seed data inserted successfully (with Casbin policies)")

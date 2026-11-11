@@ -1,4 +1,4 @@
-package breaker
+package dbbreaker
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"jimu/internal/config"
+	"jimu/internal/platform/breaker"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -37,7 +38,7 @@ func TestAttachBreakerOpensOnConnectFailure(t *testing.T) {
 	_ = query()
 	// 直接验证熔断状态：实际状态由插件内部的 breaker 持有，这里通过第三次调用的错误判断
 	err = query()
-	assert.ErrorIs(t, err, ErrOpen, "连续连接失败后熔断开启，应快速失败而不是继续等超时")
+	assert.ErrorIs(t, err, breaker.ErrOpen, "连续连接失败后熔断开启，应快速失败而不是继续等超时")
 }
 
 func TestIsDBTransportError(t *testing.T) {
@@ -116,7 +117,7 @@ func TestAttachBreakerCoversReadReplicas(t *testing.T) {
 
 	// 熔断开启后读请求被语句级回调拦截（错误为 ErrOpen，而不是连接失败）
 	var rows []breakerRow
-	assert.ErrorIs(t, db.Find(&rows).Error, ErrOpen,
+	assert.ErrorIs(t, db.Find(&rows).Error, breaker.ErrOpen,
 		"副本路径的失败也应驱动熔断")
 }
 

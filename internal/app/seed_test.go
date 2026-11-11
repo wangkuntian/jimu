@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"jimu/internal/app"
 	roledomain "jimu/internal/capabilities/access/domain"
 	"jimu/internal/capabilities/catalog"
 	tenantdomain "jimu/internal/capabilities/tenant/domain"
 	userdomain "jimu/internal/capabilities/user/domain"
 	"jimu/internal/contract"
+	app "jimu/internal/platform/seeding"
 	"jimu/internal/shared/testutil"
 
 	"github.com/DATA-DOG/go-sqlmock"

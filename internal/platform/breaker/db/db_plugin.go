@@ -1,4 +1,4 @@
-package breaker
+package dbbreaker
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"jimu/internal/config"
+	"jimu/internal/platform/breaker"
 
 	"gorm.io/gorm"
 )
@@ -59,7 +60,7 @@ func AttachDBBreaker(db *gorm.DB, cfg config.BreakerConfig) error {
 	if !cfg.Enabled {
 		return nil
 	}
-	plugin := &breakerPlugin{b: New("db", Config{
+	plugin := &breakerPlugin{b: breaker.New("db", breaker.Config{
 		MaxFailures:  cfg.MaxFailures,
 		ResetTimeout: time.Duration(cfg.ResetTimeoutSec) * time.Second,
 	})}
@@ -71,7 +72,7 @@ func AttachDBBreaker(db *gorm.DB, cfg config.BreakerConfig) error {
 
 // breakerPlugin 以 gorm 插件形式在每种语句处理器的首尾挂载熔断。
 type breakerPlugin struct {
-	b *Breaker
+	b *breaker.Breaker
 }
 
 func (p *breakerPlugin) Name() string { return "jimu:db-breaker" }
@@ -121,7 +122,7 @@ func (p *breakerPlugin) allow(db *gorm.DB) {
 
 // record 结算本次语句：熔断拒绝已计入 rejected，不重复计数。
 func (p *breakerPlugin) record(db *gorm.DB) {
-	if errors.Is(db.Error, ErrOpen) {
+	if errors.Is(db.Error, breaker.ErrOpen) {
 		return
 	}
 	if isDBTransportError(db.Error) {

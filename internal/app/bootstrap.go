@@ -65,13 +65,9 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 		container.Logger.Warnw("capability degraded", "name", d.Capability, "missing", strings.Join(d.Missing, ","))
 	}
 
-	checkers := make([]health.Checker, 0, 2)
-	if container.DB != nil {
-		sqlDB, err := container.DB.DB()
-		if err != nil {
-			return nil, fmt.Errorf("get database pool: %w", err)
-		}
-		checkers = append(checkers, health.NewSQLChecker(sqlDB))
+	checkers, err := container.db.readiness()
+	if err != nil {
+		return nil, err
 	}
 	checkers = append(checkers, redisHealthCheck(container)...)
 	readiness := health.NewReadiness(

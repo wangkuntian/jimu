@@ -141,7 +141,7 @@ flowchart LR
 
 - 配置加载：[internal/config](../../internal/config)、[internal/app.LoadCapabilityConfigs](../../internal/app/capconfig.go)
 - 表与迁移：[internal/contract.Descriptor](../../internal/contract/capability.go)、[internal/capabilities/catalog](../../internal/capabilities/catalog)
-- 种子与迁移执行：[internal/app/seed.go](../../internal/app/seed.go)、[internal/platform/db/migrate.go](../../internal/platform/db/migrate.go)、[catalog.MigrationSchemaDeps](../../internal/capabilities/catalog/migration.go)（由各能力 Descriptor 派生）
+- 种子与迁移执行：[internal/platform/seeding/seed.go](../../internal/platform/seeding/seed.go)、[internal/platform/db/migrate.go](../../internal/platform/db/migrate.go)、[catalog.MigrationSchemaDeps](../../internal/capabilities/catalog/migration.go)（由各能力 Descriptor 派生）
 - 清理与加密：[internal/shared/dbpurge](../../internal/shared/dbpurge)、[internal/capabilities/encryption](../../internal/capabilities/encryption)
 - 验证：配置段单测、迁移集/迁移集成测试、各数据所有者清理测试，以及 `make check-capabilities`
 - 相关设计：[能力架构](capability-architecture.md)、[身份与租户](identity-and-tenancy.md)

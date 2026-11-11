@@ -3,20 +3,16 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"jimu/internal/config"
 	"jimu/internal/contract"
-	"jimu/internal/platform/db"
 	"jimu/internal/platform/event"
 	"jimu/internal/platform/httpclient"
 	"jimu/internal/platform/logger"
 	"jimu/internal/platform/metrics"
 	"jimu/internal/platform/reporter"
 	"jimu/internal/platform/scheduler"
-
-	"gorm.io/gorm"
 )
 
 // Container 只持有内核/基础设施件：能力件一律由各能力的 Wire 经装配上下文构造，
@@ -31,14 +27,16 @@ type Container struct {
 	Enabled map[string]bool
 	// Capabilities 已解析启用集的能力描述符（含依赖闭包，按清单顺序）
 	Capabilities []contract.Descriptor
-	DB           *gorm.DB
-	Logger       *logger.Logger
-	JobRegistry  contract.JobRegistry
-	Scheduler    *scheduler.CronScheduler
-	EventBus     *event.EventBus
-	HTTPClient   *httpclient.Client
-	Reporter     reporter.Reporter
-	DBCollector  *metrics.DBCollector
+	// DB 是 DB-enabled 构建的 *gorm.DB；jimu_nodb 构建里类型为 any 且恒为 nil。
+	DB          DBHandle
+	db          dbState
+	Logger      *logger.Logger
+	JobRegistry contract.JobRegistry
+	Scheduler   *scheduler.CronScheduler
+	EventBus    *event.EventBus
+	HTTPClient  *httpclient.Client
+	Reporter    reporter.Reporter
+	DBCollector *metrics.DBCollector
 	// otel 持有 OTel 追踪/指标/日志出口。类型与构造由两个同名 build-tag 文件提供：
 	// 启用 OTel 的构建引用 OTel SDK 与导出器，0 能力构建为空实现。
 	otel otelState
@@ -64,14 +62,7 @@ func (c *Container) HasMetricsCollector() bool { return c.DBCollector != nil }
 func (c *Container) Stop(ctx context.Context) error {
 	var result error
 	result = errors.Join(result, c.redis.close())
-	if c.DB != nil {
-		sqlDB, err := c.DB.DB()
-		if err != nil {
-			result = errors.Join(result, err)
-		} else {
-			result = errors.Join(result, sqlDB.Close())
-		}
-	}
+	result = errors.Join(result, c.db.close())
 	result = errors.Join(result, c.otel.shutdown(ctx))
 	if c.Reporter != nil {
 		// 优雅停机：给在途错误上报一个发送窗口
@@ -88,22 +79,14 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 	otel := newOTELState(cfg)
 	log := logger.New(cfg.Log, otel.extraCores()...)
 
-	// 雪花 ID：初始化全局生成器后再连库（hook 在 open 时注册）
-	if err := db.InitSnowflake(cfg.ID.WorkerID); err != nil {
-		return nil, err
-	}
 	requiredServices := requiredRuntimeServices(caps)
-	var dbConn *gorm.DB
-	var err error
-	if requiredServices[contract.RuntimeServiceMySQL] {
-		dbConn, err = db.ConnectWithRetry(cfg.DB, log)
-		if err != nil {
-			return nil, err
-		}
+	database, err := newDBState(cfg, log, requiredServices)
+	if err != nil {
+		return nil, err
 	}
 	redis, err := newRedisState(cfg, log, requiredServices[contract.RuntimeServiceRedis])
 	if err != nil {
-		closeGormDB(dbConn)
+		_ = database.close()
 		return nil, err
 	}
 
@@ -115,10 +98,12 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 	}
 	var schedStore scheduler.Store = scheduler.NewMemoryStore()
 	if schedulerCfg.Store == scheduler.StoreMySQL {
-		if dbConn == nil {
-			return nil, fmt.Errorf("scheduler store mysql requires a mysql runtime service")
+		schedStore, err = database.mysqlStore()
+		if err != nil {
+			_ = database.close()
+			_ = redis.close()
+			return nil, err
 		}
-		schedStore = scheduler.NewMySQLStore(dbConn)
 	}
 	var sched *scheduler.CronScheduler
 	if schedulerCfg.Store == scheduler.StoreMySQL {
@@ -140,15 +125,11 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 	eventBus := event.New()
 
 	// DB Metrics Collector
-	var dbCollector *metrics.DBCollector
-	if dbConn != nil {
-		sqlDB, err := dbConn.DB()
-		if err != nil {
-			closeGormDB(dbConn)
-			_ = redis.close()
-			return nil, fmt.Errorf("get database pool: %w", err)
-		}
-		dbCollector = metrics.NewDBCollector(sqlDB, "primary")
+	dbCollector, err := database.collector()
+	if err != nil {
+		_ = database.close()
+		_ = redis.close()
+		return nil, err
 	}
 
 	// 错误上报：启用时输出结构化错误日志（日志链路接入 OpenObserve 后自动汇聚）
@@ -161,7 +142,8 @@ func NewContainer(cfg *config.Config, sections config.SectionDecoder, capCfgs *C
 		CapabilityConfigs: capCfgs,
 		Enabled:           enabled,
 		Capabilities:      caps,
-		DB:                dbConn,
+		DB:                database.handle(),
+		db:                database,
 		redis:             redis,
 		Logger:            log,
 		Reporter:          errorReporter,
@@ -182,15 +164,6 @@ func requiredRuntimeServices(caps []contract.Descriptor) map[contract.RuntimeSer
 		}
 	}
 	return required
-}
-
-func closeGormDB(db *gorm.DB) {
-	if db == nil {
-		return
-	}
-	if sqlDB, err := db.DB(); err == nil {
-		_ = sqlDB.Close()
-	}
 }
 
 // HasRedis 报告容器是否持有 Redis 客户端（未编译 Redis 的构建恒为 false）。

@@ -8,7 +8,6 @@ import (
 	"jimu/internal/platform/observability"
 
 	"github.com/prometheus/client_golang/prometheus"
-	gormotel "gorm.io/plugin/opentelemetry/tracing"
 )
 
 // 独立成文件：生成器按能力集裁剪时，不需要可观测性的项目可以整份排除，
@@ -44,10 +43,8 @@ func setupObservability(container *Container) error {
 	// 启用 OTel 时插桩 DB/Redis，捕获查询子 span。
 	// 必须在 InitTracing 之后：插件创建时固化全局 TracerProvider。
 	if cfg.OTEL.Enabled {
-		if container.DB != nil {
-			if err := container.DB.Use(gormotel.NewPlugin()); err != nil {
-				return err
-			}
+		if err := container.db.instrumentOTel(); err != nil {
+			return err
 		}
 		if err := instrumentRedisTracing(container); err != nil {
 			return err

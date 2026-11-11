@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"jimu/internal/config"
-	"jimu/internal/platform/breaker"
+	dbbreaker "jimu/internal/platform/breaker/db"
 	"jimu/internal/platform/logger"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -86,7 +86,7 @@ func openPostgres(cfg config.DBConfig, log *logger.Logger) (*gorm.DB, error) {
 		}
 	}
 
-	if err := breaker.AttachDBBreaker(db, cfg.Breaker); err != nil {
+	if err := dbbreaker.AttachDBBreaker(db, cfg.Breaker); err != nil {
 		return nil, err
 	}
 

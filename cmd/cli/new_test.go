@@ -7,22 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"jimu/internal/profiles"
-
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestCLIVersionIsSharedWithGenerator(t *testing.T) {
-	oldVersion, oldProfileVersion := version, profiles.Version
-	t.Cleanup(func() {
-		version, profiles.Version = oldVersion, oldProfileVersion
-	})
-	version = "v0.5.0-test"
-	applyVersion()
-	assert.Equal(t, version, profiles.Version)
-}
 
 // TestNewCmdRejectsBothProfileAndWith 钉住 --profile 与 --with 互斥：
 // 用户同时给了两个选择器时应先看到互斥错误。
