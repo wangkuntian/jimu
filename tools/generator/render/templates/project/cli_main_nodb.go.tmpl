@@ -1,0 +1,82 @@
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"jimu/internal/config"
+
+	"github.com/spf13/cobra"
+)
+
+// version 版本号，通过 ldflags 注入：-ldflags "-X main.version=v0.1.0"
+var version = "dev"
+
+var rootCmd = &cobra.Command{
+	Use:   "jimu",
+	Short: "Jimu backend framework CLI",
+}
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print version",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println(version)
+	},
+}
+
+var configCmd = &cobra.Command{
+	Use:   "config",
+	Short: "Configuration commands",
+}
+
+var configCheckCmd = &cobra.Command{
+	Use:   "check",
+	Short: "Load and validate configuration",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := config.Load(); err != nil {
+			return fmt.Errorf("config invalid: %w", err)
+		}
+		fmt.Println("config valid")
+		return nil
+	},
+}
+
+var migrateCmd = &cobra.Command{
+	Use:   "migrate",
+	Short: "Database migration commands",
+}
+
+func noDatabase(feature string) func(*cobra.Command, []string) error {
+	return func(*cobra.Command, []string) error {
+		fmt.Printf("No database configured; %s is a no-op\n", feature)
+		return nil
+	}
+}
+
+var migrateUpCmd = &cobra.Command{Use: "up", RunE: noDatabase("migrate up")}
+var migrateDownCmd = &cobra.Command{Use: "down", RunE: noDatabase("migrate down")}
+var migrateStatusCmd = &cobra.Command{Use: "status", RunE: noDatabase("migrate status")}
+var migrateRedoCmd = &cobra.Command{Use: "redo", RunE: noDatabase("migrate redo")}
+
+var seedCmd = &cobra.Command{
+	Use:   "seed",
+	Short: "Seed initial data",
+	RunE:  noDatabase("seed"),
+}
+
+func init() {
+	migrateCmd.AddCommand(migrateUpCmd, migrateDownCmd, migrateStatusCmd, migrateRedoCmd)
+	configCmd.AddCommand(configCheckCmd)
+	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(migrateCmd)
+	rootCmd.AddCommand(seedCmd)
+	rootCmd.AddCommand(configCmd)
+}
+
+func main() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}

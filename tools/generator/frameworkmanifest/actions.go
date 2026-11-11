@@ -35,6 +35,8 @@ var kernelDirs = []string{
 
 var kernelFiles = []string{
 	"internal/profiles/profiles.go",
+	"internal/profiles/seed_db.go",
+	"internal/profiles/seed_nodb.go",
 	"go.mod",
 	"go.sum",
 	".golangci.yml",
@@ -59,6 +61,7 @@ var kernelExcludes = []string{
 	"cmd/cli/upgrade_test.go",
 	"cmd/cli/capability.go",
 	"cmd/cli/capability_test.go",
+	"cmd/cli/activecaps.go",
 	"cmd/cli/activecaps_test.go",
 	"cmd/cli/source.go",
 }
@@ -146,7 +149,12 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 		"Expected":   strings.Join(selected.roots, " "),
 	}
 	catalogData := catalogTemplateData(selected)
-	cliData := map[string]any{"CLIImports": cliImports(root, selected)}
+	cliImportsData := cliImports(root, selected)
+	cliData := map[string]any{"CLIImports": cliImportsData}
+	cliSource := "cmd/cli/main.go"
+	if !includeDatabase(selected) && len(cliImportsData) == 0 {
+		cliSource = "tools/generator/render/templates/project/cli_main_nodb.go.tmpl"
+	}
 	actions := []manifest.TemplateAction{
 		{Source: "tools/generator/render/templates/project/Makefile.tmpl", Destination: "Makefile", Kind: "build", Data: buildData},
 		{Source: "tools/generator/render/templates/project/Dockerfile.tmpl", Destination: "Dockerfile", Kind: "build", Data: buildData},
@@ -156,8 +164,14 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 		{Source: "tools/generator/render/templates/project/active.go.tmpl", Destination: "internal/profiles/active/assembly.go", Kind: "shape", Data: map[string]any{"Shape": selected.shape}},
 		{Source: "tools/generator/render/templates/project/catalog.go.tmpl", Destination: "internal/capabilities/catalog/catalog.go", Kind: "catalog", Data: catalogData},
 		{Source: "tools/generator/render/templates/project/catalog_migration.go.tmpl", Destination: "internal/capabilities/catalog/migration.go", Kind: "catalog", Data: catalogData},
-		{Source: "cmd/cli/main.go", Destination: "cmd/cli/main.go", Kind: "cli", Data: cliData},
+		{Source: cliSource, Destination: "cmd/cli/main.go", Kind: "cli", Data: cliData},
 		{Source: "tools/generator/render/templates/project/assets_selection.go.tmpl", Destination: "tools/internal/profileassets/selection.go", Kind: "assets", Data: map[string]any{"Files": selectedAssetFiles(root, selected)}},
+	}
+	if includeDatabase(selected) {
+		actions = append(actions,
+			manifest.TemplateAction{Source: "tools/generator/render/templates/project/activecaps.go.tmpl", Destination: "cmd/cli/activecaps.go", Kind: "activecaps"},
+			manifest.TemplateAction{Source: "tools/generator/render/templates/project/selected.go.tmpl", Destination: "internal/profiles/selected/selected.go", Kind: "selected", Data: map[string]any{"Name": selected.shape, "Declared": slices.Clone(selected.declared)}},
+		)
 	}
 	all, _ := allDescriptors()
 	byName := descriptorByName(all)
@@ -261,6 +275,10 @@ func selectionRuntimeServices(selected selection) map[contract.RuntimeService]bo
 // 相关清单，避免默认带上一套与所选能力无关的基础设施。
 func includeObservability(selected selection) bool {
 	return selected.template == "full" || selected.profile == "full"
+}
+
+func includeDatabase(selected selection) bool {
+	return selectionRuntimeServices(selected)[contract.RuntimeServiceMySQL]
 }
 
 func valuesSections(root string, selected selection) []string {
@@ -449,6 +467,16 @@ func rewriteActions(module string, selected selection) []manifest.RewriteAction 
 			})
 		}
 	}
+	if !includeDatabase(selected) {
+		for _, file := range []string{
+			"internal/app/container_nodb.go",
+			"internal/profiles/seed_nodb.go",
+		} {
+			actions = append(actions, manifest.RewriteAction{
+				Kind: "file-patch", From: "//go:build jimu_nodb", To: "// 未启用数据库的构建：由生成器去掉 build tag", Files: []string{file},
+			})
+		}
+	}
 	return actions
 }
 
@@ -614,7 +642,12 @@ func projectName(module string) string {
 //
 // internal/e2e 只有测试文件，Tests=false 下永远不可达，因此 0 能力项目会自动丢掉它。
 func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, error) {
-	seeds := []string{"./internal/assembly", "./internal/capability"}
+	seeds := []string{"./internal/assembly", "./internal/capability", "./internal/platform/db"}
+	if includeDatabase(selected) {
+		// CLI 的 migrate/seed 仍需要数据库连接与种子实现；它们不是 server 依赖，
+		// 但不加入闭包会让 internal/platform 的聚合复制把这两个包漏掉。
+		seeds = append(seeds, "./internal/platform/seeding")
+	}
 	for _, name := range selected.copy {
 		seeds = append(seeds, "./internal/capabilities/"+name)
 	}
@@ -644,9 +677,22 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 		})
 	}
 	for _, file := range kernelFiles {
+		if kernelFilePruned(pruned, file) {
+			continue
+		}
 		actions = append(actions, manifest.CopyAction{Source: file, Destination: file, Include: []string{}, Exclude: []string{}})
 	}
 	return actions, nil
+}
+
+func kernelFilePruned(pruned map[string][]string, file string) bool {
+	dir := filepath.ToSlash(filepath.Dir(file))
+	for _, name := range pruned[dir] {
+		if name == filepath.Base(file) {
+			return true
+		}
+	}
+	return false
 }
 
 // prunedInDir 把按绝对目录记录的裁剪项转换为相对于复制根目录的路径。
@@ -680,8 +726,26 @@ func optionalKernelFiles(selected selection) map[string][]string {
 	} else {
 		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel_empty.go", "container_otel_empty.go", "tracing_empty.go")
 	}
+	if includeObservability(selected) {
+		if includeDatabase(selected) {
+			pruned["internal/app"] = append(pruned["internal/app"], "container_otel_nodb.go")
+		} else {
+			pruned["internal/app"] = append(pruned["internal/app"], "container_otel_db.go")
+		}
+	} else {
+		pruned["internal/app"] = append(pruned["internal/app"], "container_otel_db.go", "container_otel_nodb.go")
+	}
+	if includeDatabase(selected) {
+		pruned["internal/app"] = append(pruned["internal/app"], "container_nodb.go")
+		pruned["internal/profiles"] = append(pruned["internal/profiles"], "seed_nodb.go")
+	} else {
+		pruned["internal/app"] = append(pruned["internal/app"], "container_db.go")
+		pruned["internal/profiles"] = append(pruned["internal/profiles"], "seed_db.go")
+		pruned["internal/platform/scheduler"] = append(pruned["internal/platform/scheduler"], "mysql_store.go", "mysql_store_test.go")
+	}
 	if !contains(selected.copy, "access") {
 		pruned["internal/app"] = append(pruned["internal/app"], "seed_casbin.go")
+		pruned["internal/platform/seeding"] = append(pruned["internal/platform/seeding"], "seed_casbin.go")
 	}
 	// Postgres 驱动只在显式选择 db.driver=postgres 时编译；默认 MySQL 项目
 	// 不带 gorm postgres driver 与 pgx（约 1.9 MB）。

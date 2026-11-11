@@ -388,7 +388,10 @@
       "exclude": [
         "bootstrap_otel.go",
         "bootstrap_redis_empty.go",
+        "container_nodb.go",
         "container_otel.go",
+        "container_otel_db.go",
+        "container_otel_nodb.go",
         "container_redis_empty.go",
         "tracing_otel.go"
       ]
@@ -450,6 +453,7 @@
       "optional": false,
       "include": [],
       "exclude": [
+        "activecaps.go",
         "activecaps_test.go",
         "capability.go",
         "capability_test.go",
@@ -466,6 +470,13 @@
     {
       "source": "internal/profiles/profiles.go",
       "destination": "internal/profiles/profiles.go",
+      "optional": false,
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "internal/profiles/seed_db.go",
+      "destination": "internal/profiles/seed_db.go",
       "optional": false,
       "include": [],
       "exclude": []
@@ -998,6 +1009,27 @@
       }
     },
     {
+      "source": "tools/generator/render/templates/project/activecaps.go.tmpl",
+      "destination": "cmd/cli/activecaps.go",
+      "kind": "activecaps",
+      "data": null
+    },
+    {
+      "source": "tools/generator/render/templates/project/selected.go.tmpl",
+      "destination": "internal/profiles/selected/selected.go",
+      "kind": "selected",
+      "data": {
+        "Declared": [
+          "user",
+          "access",
+          "auth",
+          "encryption",
+          "notification"
+        ],
+        "Name": "minimal"
+      }
+    },
+    {
       "source": "tools/generator/render/templates/project/migration_module.go.tmpl",
       "destination": "internal/capabilities/tenant/module.go",
       "kind": "migration-module",
@@ -1276,7 +1308,6 @@
     "deploy/k8s/service.yaml",
     "go.mod",
     "go.sum",
-    "internal/app/admin_password.go",
     "internal/app/admin_password_test.go",
     "internal/app/application.go",
     "internal/app/application_test.go",
@@ -1289,11 +1320,10 @@
     "internal/app/capconfig.go",
     "internal/app/capconfig_test.go",
     "internal/app/container.go",
+    "internal/app/container_db.go",
     "internal/app/container_http_only_test.go",
     "internal/app/container_otel_empty.go",
     "internal/app/container_redis.go",
-    "internal/app/seed.go",
-    "internal/app/seed_casbin.go",
     "internal/app/seed_test.go",
     "internal/app/tracing_empty.go",
     "internal/assembly/assembly.go",
@@ -1486,8 +1516,8 @@
     "internal/platform/authz/roles_test.go",
     "internal/platform/breaker/breaker.go",
     "internal/platform/breaker/breaker_test.go",
-    "internal/platform/breaker/db_plugin.go",
-    "internal/platform/breaker/db_plugin_test.go",
+    "internal/platform/breaker/db/db_plugin.go",
+    "internal/platform/breaker/db/db_plugin_test.go",
     "internal/platform/db/adopt_test.go",
     "internal/platform/db/concurrency.go",
     "internal/platform/db/concurrency_test.go",
@@ -1616,6 +1646,9 @@
     "internal/platform/scheduler/scheduler_store_test.go",
     "internal/platform/scheduler/store.go",
     "internal/platform/scheduler/store_test.go",
+    "internal/platform/seeding/admin_password.go",
+    "internal/platform/seeding/seed.go",
+    "internal/platform/seeding/seed_casbin.go",
     "internal/platform/seedmodel/seedmodel.go",
     "internal/platform/seedmodel/seedmodel_test.go",
     "internal/platform/tenant/tenant.go",
@@ -1627,6 +1660,8 @@
     "internal/profiles/minimal/drivers.go",
     "internal/profiles/profiles.go",
     "internal/profiles/registry/registry.go",
+    "internal/profiles/seed_db.go",
+    "internal/profiles/selected/selected.go",
     "internal/shared/dbpurge/dbpurge.go",
     "internal/shared/dbpurge/dbpurge_integration_test.go",
     "internal/shared/dbpurge/dbpurge_test.go",
@@ -1697,5 +1732,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:2469fb7a52caa07cad42d9dd77995200ca88f403b6ba7db84c6062bf6d4e2835"
+  "digest": "sha256:ac66687f7fc2e9a5a0f4d8c6211c295fb8fb688e018a43bb409bd65a952c9b85"
 }
