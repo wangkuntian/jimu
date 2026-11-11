@@ -1186,6 +1186,7 @@
     "internal/app/container_http_only_test.go",
     "internal/app/container_otel_empty.go",
     "internal/app/container_redis.go",
+    "internal/app/container_runtime_services_test.go",
     "internal/app/seed_test.go",
     "internal/app/tracing_empty.go",
     "internal/assembly/assembly.go",
@@ -1573,5 +1574,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:5192c6ebd22f8bba3036125cb4fe1c46c1e2d73af688af6754e25466d432adc0"
+  "digest": "sha256:a1428a366cff5e09b3c910ff6694c5fc433c6b4a4427d8edecea0076d15e112e"
 }
