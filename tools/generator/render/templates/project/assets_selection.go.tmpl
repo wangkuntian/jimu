@@ -1,0 +1,13 @@
+package profileassets
+
+// GeneratedSelection lists the asset files copied into this project.
+var GeneratedSelection = []string{
+{{- range .Files }}
+	{{ printf "%q" . }},
+{{- end }}
+}
+
+// SelectedFiles returns the generated asset selection.
+func SelectedFiles() []string {
+	return append([]string(nil), GeneratedSelection...)
+}

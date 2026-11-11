@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"jimu/internal/contract"
 	"jimu/tools/internal/profileassets"
 )
 
@@ -16,13 +17,14 @@ import (
 // 落地、以及 deploy/helm/values.yaml 的顶层键裁剪（S6②）。
 //
 // 归属与派生只有一份来源（tools/internal/profileassets，P2.6）：能力用
-// contract.Descriptor.Assets 声明资产，内核运维/观测资产由具名内核资产组声明（全形态携带），
-// 同一路径按最长前缀取胜。生成器不新增第二套资产表 —— 否则「复制的」与「门禁校验的」会漂移。
+// contract.Descriptor.Assets 声明资产，内核运维/观测资产由具名内核资产组声明，
+// 再按运行时服务与预设裁剪。生成器不新增第二套资产表 —— 否则「复制的」与「门禁校验的」会漂移。
 
 // AssetsFor 返回要复制到生成项目的资产路径（目录或单文件，仓库相对路径，升序去重）。
 // 与 P2.6 的归属派生**同一来源**（tools/internal/profileassets）：
 //
-//	声明集里每个能力的 Assets 并集 ∪ 全部内核资产组（P2.6 裁定 3：内核运维/观测资产全形态携带）。
+//	声明集里每个能力的 Assets 并集 ∪ 适用内核资产组（运维资产按 MySQL 服务裁剪，
+//	观测栈只随 full 预设携带）。
 //
 // **口径是「声明集」，不是「形态」**：`--profile` 的清单在生成时已经展开进 set.Declared，故
 // 形态生成与 `--with` 生成逐路径等价（TestAssetsForMatchesTheAssetTableTheGeneratedProjectDerives
@@ -48,15 +50,65 @@ func AssetsFor(set CapabilitySet) ([]string, error) {
 			}
 		}
 	}
-	// 内核资产组全形态携带（P2.6 裁定 3）。
-	for _, paths := range profileassets.CoreGroups() {
+	services, err := selectedRuntimeServices(set)
+	if err != nil {
+		return nil, err
+	}
+	// 内核运维资产随运行时服务裁剪；观测栈只随 full 形态携带。其余内核资产组
+	// 仍全形态携带，保证生成项目仍有基本的部署描述。
+	for group, paths := range profileassets.CoreGroups() {
+		if group == "observability" && set.Profile != "full" {
+			continue
+		}
 		for _, p := range paths {
 			if canonical := profileassets.Canonical(p); canonical != "" {
+				if canonical == "deploy/backup" && !services[contract.RuntimeServiceMySQL] {
+					continue
+				}
 				selected[canonical] = true
 			}
 		}
 	}
 	return slices.Sorted(maps.Keys(selected)), nil
+}
+
+func selectedRuntimeServices(set CapabilitySet) (map[contract.RuntimeService]bool, error) {
+	services := map[contract.RuntimeService]bool{}
+	if len(set.Declared) == 0 {
+		return services, nil
+	}
+	root, err := frameworkRoot()
+	if err != nil {
+		return nil, err
+	}
+	descs, _, err := capabilityDescriptors(root)
+	if err != nil {
+		return nil, err
+	}
+	byName := make(map[string]contract.Descriptor, len(descs))
+	for _, d := range descs {
+		byName[d.Name] = d
+	}
+	for _, name := range set.Declared {
+		d, ok := byName[name]
+		if !ok {
+			continue
+		}
+		for _, service := range d.RuntimeServices {
+			services[service] = true
+		}
+		for _, driver := range set.Drivers[name] {
+			for _, spec := range d.DriverSpecs {
+				if spec.Name != driver {
+					continue
+				}
+				for _, service := range spec.RuntimeServices {
+					services[service] = true
+				}
+			}
+		}
+	}
+	return services, nil
 }
 
 // CopyAssets 把资产**文件**逐个复制到 dst（保留目录结构与权限位）：先由 assetFiles 求出

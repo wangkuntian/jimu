@@ -337,10 +337,11 @@
       "optional": false,
       "include": [],
       "exclude": [
-        "bootstrap_otel_empty.go",
+        "bootstrap_otel.go",
         "bootstrap_redis_empty.go",
-        "container_otel_empty.go",
-        "container_redis_empty.go"
+        "container_otel.go",
+        "container_redis_empty.go",
+        "tracing_otel.go"
       ]
     },
     {
@@ -532,6 +533,18 @@
       "exclude": [
         "*_test.go"
       ]
+    },
+    {
+      "source": "scripts",
+      "destination": "scripts",
+      "optional": false,
+      "include": [
+        "backup.sh",
+        "restore.sh",
+        "db_common.sh",
+        "install_db_clients.sh"
+      ],
+      "exclude": []
     }
   ],
   "templates": [
@@ -824,6 +837,36 @@
       }
     },
     {
+      "source": "tools/generator/render/templates/project/assets_selection.go.tmpl",
+      "destination": "tools/internal/profileassets/selection.go",
+      "kind": "assets",
+      "data": {
+        "Files": [
+          "deploy/backup/Dockerfile",
+          "deploy/helm/Chart.yaml",
+          "deploy/helm/templates/_helpers.tpl",
+          "deploy/helm/templates/backup-cronjob.yaml",
+          "deploy/helm/templates/configmap.yaml",
+          "deploy/helm/templates/deployment.yaml",
+          "deploy/helm/templates/hpa.yaml",
+          "deploy/helm/templates/ingress.yaml",
+          "deploy/helm/templates/networkpolicy.yaml",
+          "deploy/helm/templates/pdb.yaml",
+          "deploy/helm/templates/secret.yaml",
+          "deploy/helm/templates/service.yaml",
+          "deploy/k8s/backup-cronjob.yaml",
+          "deploy/k8s/configmap.yaml",
+          "deploy/k8s/deployment.yaml",
+          "deploy/k8s/hpa.yaml",
+          "deploy/k8s/ingress.yaml",
+          "deploy/k8s/networkpolicy.yaml",
+          "deploy/k8s/pdb.yaml",
+          "deploy/k8s/secret.yaml",
+          "deploy/k8s/service.yaml"
+        ]
+      }
+    },
+    {
       "source": "tools/generator/render/templates/project/migration_module.go.tmpl",
       "destination": "internal/capabilities/tenant/module.go",
       "kind": "migration-module",
@@ -845,13 +888,11 @@
         "capabilities",
         "db",
         "error_reporting",
-        "grpc",
         "http",
         "http_client",
         "id",
         "log",
         "management",
-        "otel",
         "queue",
         "ratelimit",
         "redis",
@@ -868,13 +909,11 @@
         "capabilities",
         "db",
         "error_reporting",
-        "grpc",
         "http",
         "http_client",
         "id",
         "log",
         "management",
-        "otel",
         "queue",
         "ratelimit",
         "redis",
@@ -902,12 +941,9 @@
         "security",
         "server",
         "log",
-        "otel",
         "backup",
         "db",
-        "redis",
-        "openobserve",
-        "otelCollector"
+        "redis"
       ]
     }
   ],
@@ -965,9 +1001,36 @@
         "deploy/k8s/pdb.yaml",
         "deploy/k8s/networkpolicy.yaml",
         "deploy/k8s/backup-cronjob.yaml",
+        "deploy/k8s/openobserve.yaml",
+        "deploy/k8s/otel-collector.yaml",
         "deploy/helm/Chart.yaml",
         "deploy/helm/values.yaml",
+        "deploy/helm/templates/service.yaml",
         "deploy/backup/Dockerfile"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "//go:build jimu_no_otel",
+      "to": "// 未启用 OTel 的构建：由生成器去掉 build tag",
+      "files": [
+        "internal/app/bootstrap_otel_empty.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "//go:build jimu_no_otel",
+      "to": "// 未启用 OTel 的构建：由生成器去掉 build tag",
+      "files": [
+        "internal/app/container_otel_empty.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "//go:build jimu_no_otel",
+      "to": "// 未启用 OTel 的构建：由生成器去掉 build tag",
+      "files": [
+        "internal/app/tracing_empty.go"
       ]
     }
   ],
@@ -983,50 +1046,20 @@
       "destination": "deploy/helm",
       "include": [],
       "exclude": [
-        "values.yaml"
+        "values.yaml",
+        "templates/openobserve.yaml",
+        "templates/otel-collector.yaml"
       ]
-    },
-    {
-      "source": "deploy/helm/templates/openobserve.yaml",
-      "destination": "deploy/helm/templates/openobserve.yaml",
-      "include": [],
-      "exclude": []
-    },
-    {
-      "source": "deploy/helm/templates/otel-collector.yaml",
-      "destination": "deploy/helm/templates/otel-collector.yaml",
-      "include": [],
-      "exclude": []
     },
     {
       "source": "deploy/k8s",
       "destination": "deploy/k8s",
       "include": [],
-      "exclude": []
-    },
-    {
-      "source": "deploy/k8s/openobserve.yaml",
-      "destination": "deploy/k8s/openobserve.yaml",
-      "include": [],
-      "exclude": []
-    },
-    {
-      "source": "deploy/k8s/otel-collector.yaml",
-      "destination": "deploy/k8s/otel-collector.yaml",
-      "include": [],
-      "exclude": []
-    },
-    {
-      "source": "deploy/openobserve",
-      "destination": "deploy/openobserve",
-      "include": [],
-      "exclude": []
-    },
-    {
-      "source": "deploy/otel-collector.yaml",
-      "destination": "deploy/otel-collector.yaml",
-      "include": [],
-      "exclude": []
+      "exclude": [
+        "config-files.yaml",
+        "openobserve.yaml",
+        "otel-collector.yaml"
+      ]
     }
   ],
   "prune": [
@@ -1092,42 +1125,19 @@
     "deploy/helm/templates/hpa.yaml",
     "deploy/helm/templates/ingress.yaml",
     "deploy/helm/templates/networkpolicy.yaml",
-    "deploy/helm/templates/openobserve.yaml",
-    "deploy/helm/templates/otel-collector.yaml",
     "deploy/helm/templates/pdb.yaml",
     "deploy/helm/templates/secret.yaml",
     "deploy/helm/templates/service.yaml",
     "deploy/helm/values.yaml",
     "deploy/k8s/backup-cronjob.yaml",
-    "deploy/k8s/config-files.yaml",
     "deploy/k8s/configmap.yaml",
     "deploy/k8s/deployment.yaml",
     "deploy/k8s/hpa.yaml",
     "deploy/k8s/ingress.yaml",
     "deploy/k8s/networkpolicy.yaml",
-    "deploy/k8s/openobserve.yaml",
-    "deploy/k8s/otel-collector.yaml",
     "deploy/k8s/pdb.yaml",
     "deploy/k8s/secret.yaml",
     "deploy/k8s/service.yaml",
-    "deploy/openobserve/alerts/destination-webhook.json",
-    "deploy/openobserve/alerts/jimu_circuit_breaker_open.json",
-    "deploy/openobserve/alerts/jimu_db_pool_saturation.json",
-    "deploy/openobserve/alerts/jimu_error_logs_spike.json",
-    "deploy/openobserve/alerts/jimu_http_5xx_rate.json",
-    "deploy/openobserve/alerts/jimu_mysql_threads_high.json",
-    "deploy/openobserve/alerts/jimu_outbox_publish_failures.json",
-    "deploy/openobserve/alerts/jimu_queue_deadletters.json",
-    "deploy/openobserve/alerts/jimu_redis_keys_evicted.json",
-    "deploy/openobserve/alerts/template-http.json",
-    "deploy/openobserve/dashboards-optional/postgresql-metrics.json",
-    "deploy/openobserve/dashboards/jimu-overview.json",
-    "deploy/openobserve/dashboards/mysql-metrics.json",
-    "deploy/openobserve/dashboards/redis-metrics.json",
-    "deploy/openobserve/init-dashboard.sh",
-    "deploy/openobserve/sync-alerts.sh",
-    "deploy/openobserve/sync-dashboard.sh",
-    "deploy/otel-collector.yaml",
     "go.mod",
     "go.sum",
     "internal/app/admin_password.go",
@@ -1137,18 +1147,19 @@
     "internal/app/authz_bootstrap_test.go",
     "internal/app/bootstrap.go",
     "internal/app/bootstrap_http_test.go",
-    "internal/app/bootstrap_otel.go",
+    "internal/app/bootstrap_otel_empty.go",
     "internal/app/bootstrap_redis.go",
     "internal/app/capabilities_handler_test.go",
     "internal/app/capconfig.go",
     "internal/app/capconfig_test.go",
     "internal/app/container.go",
     "internal/app/container_http_only_test.go",
-    "internal/app/container_otel.go",
+    "internal/app/container_otel_empty.go",
     "internal/app/container_redis.go",
     "internal/app/seed.go",
     "internal/app/seed_casbin.go",
     "internal/app/seed_test.go",
+    "internal/app/tracing_empty.go",
     "internal/assembly/assembly.go",
     "internal/assembly/assembly_test.go",
     "internal/assembly/context.go",
@@ -1487,6 +1498,33 @@
     "internal/shared/validator/fuzz_test.go",
     "internal/shared/validator/validator.go",
     "internal/shared/validator/validator_test.go",
+    "scripts/backup.sh",
+    "scripts/bench_ci.sh",
+    "scripts/check_ci_gate.sh",
+    "scripts/check_commit_messages.sh",
+    "scripts/check_coverage_floors.sh",
+    "scripts/check_profiles.sh",
+    "scripts/check_skills.sh",
+    "scripts/clean_room_e2e.sh",
+    "scripts/db_common.sh",
+    "scripts/demo.sh",
+    "scripts/dev.sh",
+    "scripts/ensure-image.sh",
+    "scripts/experiment_v0_8_0.py",
+    "scripts/init-secrets.sh",
+    "scripts/install_db_clients.sh",
+    "scripts/install_skills.sh",
+    "scripts/loadtest.sh",
+    "scripts/observability.sh",
+    "scripts/restore.sh",
+    "scripts/security_upgrade_drill.sh",
+    "scripts/test_backup_restore.sh",
+    "scripts/test_compose_runtime.sh",
+    "scripts/test_config_contracts.sh",
+    "scripts/test_init_secrets.sh",
+    "scripts/test_makefile_contract.sh",
+    "scripts/test_shard_weights.tsv",
+    "scripts/test_shards.sh",
     "tools/checkcapabilities/assets.go",
     "tools/checkcapabilities/composition.go",
     "tools/checkcapabilities/drivers.go",
@@ -1496,10 +1534,11 @@
     "tools/checkcapabilities/structure.go",
     "tools/internal/heavydeps/heavydeps.go",
     "tools/internal/profileassets/profileassets.go",
+    "tools/internal/profileassets/selection.go",
     "tools/internal/projectmetrics/projectmetrics.go",
     "tools/internal/projectmetrics/spec.go",
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:b9bc8618ba3f081ad9d57c1a42424e559c8290cb0d15f43fc338688f31bc2d30"
+  "digest": "sha256:adbdfa192ccf4ca05d98c05bc4bdcaa32e9f25a1ef0c61a3abafc264b335086e"
 }

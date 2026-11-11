@@ -17,10 +17,36 @@ import (
 
 // checkAssets 用真实声明表校验仓库资产归属，并断言每个形态都覆盖全部内核资产组。
 func checkAssets(root string) error {
-	if err := checkAssetsIn(root, profileassets.Declared()); err != nil {
+	declared := profileassets.Declared()
+	selected := profileassets.SelectedFiles()
+	if len(selected) > 0 {
+		declared = filterAssetDeclarations(declared, selected)
+	}
+	if err := checkAssetsIn(root, declared); err != nil {
 		return err
 	}
+	if len(selected) > 0 {
+		// Generated projects intentionally contain a subset of the core groups;
+		// the generated selection is the source of truth there.
+		return nil
+	}
 	return checkProfileCoreCoverage(registry.Names(), profileassets.ForProfile, profileassets.CoreGroups())
+}
+
+func filterAssetDeclarations(declared map[string][]string, files []string) map[string][]string {
+	out := make(map[string][]string, len(declared))
+	for owner, paths := range declared {
+		for _, raw := range paths {
+			path := profileassets.Canonical(raw)
+			for _, file := range files {
+				if file == path || strings.HasPrefix(file, path+"/") {
+					out[owner] = append(out[owner], path)
+					break
+				}
+			}
+		}
+	}
+	return out
 }
 
 // checkAssetsIn 校验资产归属（可传夹具，便于单测）：

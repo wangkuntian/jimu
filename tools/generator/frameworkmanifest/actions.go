@@ -114,6 +114,14 @@ func copyActions(root string, selected selection) ([]manifest.CopyAction, error)
 	for _, source := range copiedTools {
 		actions = append(actions, manifest.CopyAction{Source: source, Destination: source, Include: []string{}, Exclude: []string{"*_test.go"}})
 	}
+	if includeBackup(selected) {
+		actions = append(actions, manifest.CopyAction{
+			Source:      "scripts",
+			Destination: "scripts",
+			Include:     []string{"backup.sh", "restore.sh", "db_common.sh", "install_db_clients.sh"},
+			Exclude:     []string{},
+		})
+	}
 	return actions, nil
 }
 
@@ -149,6 +157,7 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 		{Source: "tools/generator/render/templates/project/catalog.go.tmpl", Destination: "internal/capabilities/catalog/catalog.go", Kind: "catalog", Data: catalogData},
 		{Source: "tools/generator/render/templates/project/catalog_migration.go.tmpl", Destination: "internal/capabilities/catalog/migration.go", Kind: "catalog", Data: catalogData},
 		{Source: "cmd/cli/main.go", Destination: "cmd/cli/main.go", Kind: "cli", Data: cliData},
+		{Source: "tools/generator/render/templates/project/assets_selection.go.tmpl", Destination: "tools/internal/profileassets/selection.go", Kind: "assets", Data: map[string]any{"Files": selectedAssetFiles(root, selected)}},
 	}
 	all, _ := allDescriptors()
 	byName := descriptorByName(all)
@@ -205,7 +214,29 @@ func configSections(selected selection) []string {
 	}
 	// db/redis 段跟随运行时服务需求：0 能力项目不连库，配置里也不该出现。
 	// 否则 minimal 的 app.yaml 会声称需要 MySQL/Redis，与"无外部依赖"自相矛盾。
+	services := selectionRuntimeServices(selected)
+	if !services[contract.RuntimeServiceMySQL] {
+		delete(keep, "db")
+	}
+	if !services[contract.RuntimeServiceRedis] {
+		delete(keep, "redis")
+	}
+	if !includeObservability(selected) {
+		delete(keep, "otel")
+	}
+	if !selectedNames["grpc"] {
+		delete(keep, "grpc")
+	}
+	return sortedStrings(mapsKeys(keep))
+}
+
+func selectionRuntimeServices(selected selection) map[contract.RuntimeService]bool {
 	services := map[contract.RuntimeService]bool{}
+	all, _ := allDescriptors()
+	selectedNames := make(map[string]bool, len(selected.declared))
+	for _, name := range selected.declared {
+		selectedNames[name] = true
+	}
 	for _, descriptor := range all {
 		if !selectedNames[descriptor.Name] {
 			continue
@@ -222,13 +253,14 @@ func configSections(selected selection) []string {
 			}
 		}
 	}
-	if !services[contract.RuntimeServiceMySQL] {
-		delete(keep, "db")
-	}
-	if !services[contract.RuntimeServiceRedis] {
-		delete(keep, "redis")
-	}
-	return sortedStrings(mapsKeys(keep))
+	return services
+}
+
+// includeObservability 决定部署资产是否携带观测栈。当前没有独立的 observability
+// 能力；只有 full 预设携带完整观测栈，minimal/auth 不生成 OpenObserve/OTel
+// 相关清单，避免默认带上一套与所选能力无关的基础设施。
+func includeObservability(selected selection) bool {
+	return selected.template == "full" || selected.profile == "full"
 }
 
 func valuesSections(root string, selected selection) []string {
@@ -241,6 +273,7 @@ func valuesSections(root string, selected selection) []string {
 	for _, name := range selected.declared {
 		selectedNames[name] = true
 	}
+	services := selectionRuntimeServices(selected)
 	capabilityKeys := map[string]string{"audit": "audit", "storage": "storage", "auth": "auth", "cache": "cache"}
 	var sections []string
 	for _, line := range strings.Split(string(content), "\n") {
@@ -251,10 +284,29 @@ func valuesSections(root string, selected selection) []string {
 		if !ok || key == "" {
 			continue
 		}
+		key = strings.TrimSpace(key)
+		switch key {
+		case "db":
+			if !services[contract.RuntimeServiceMySQL] {
+				continue
+			}
+		case "redis":
+			if !services[contract.RuntimeServiceRedis] {
+				continue
+			}
+		case "backup":
+			if !services[contract.RuntimeServiceMySQL] {
+				continue
+			}
+		case "otel", "openobserve", "otelCollector":
+			if !includeObservability(selected) {
+				continue
+			}
+		}
 		if capability, ok := capabilityKeys[strings.TrimSpace(key)]; ok && !selectedNames[capability] {
 			continue
 		}
-		sections = append(sections, strings.TrimSpace(key))
+		sections = append(sections, key)
 	}
 	return sections
 }
@@ -385,9 +437,12 @@ func rewriteActions(module string, selected selection) []manifest.RewriteAction 
 				Kind: "file-patch", From: "//go:build jimu_noredis", To: "// 未启用 Redis 的构建：由生成器去掉 build tag", Files: []string{file},
 			})
 		}
+	}
+	if !includeObservability(selected) {
 		for _, file := range []string{
 			"internal/app/bootstrap_otel_empty.go",
 			"internal/app/container_otel_empty.go",
+			"internal/app/tracing_empty.go",
 		} {
 			actions = append(actions, manifest.RewriteAction{
 				Kind: "file-patch", From: "//go:build jimu_no_otel", To: "// 未启用 OTel 的构建：由生成器去掉 build tag", Files: []string{file},
@@ -411,8 +466,11 @@ func deployFiles() []string {
 		"deploy/k8s/pdb.yaml",
 		"deploy/k8s/networkpolicy.yaml",
 		"deploy/k8s/backup-cronjob.yaml",
+		"deploy/k8s/openobserve.yaml",
+		"deploy/k8s/otel-collector.yaml",
 		"deploy/helm/Chart.yaml",
 		"deploy/helm/values.yaml",
+		"deploy/helm/templates/service.yaml",
 		"deploy/backup/Dockerfile",
 	}
 }
@@ -617,10 +675,10 @@ func prunedInDir(pruned map[string][]string, dir string) []string {
 // overlay 隐藏，否则依赖链会经 internal/assembly → internal/app 提前成立。
 func optionalKernelFiles(selected selection) map[string][]string {
 	pruned := map[string][]string{}
-	if len(selected.copy) == 0 {
-		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel.go", "container_otel.go")
+	if !includeObservability(selected) {
+		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel.go", "container_otel.go", "tracing_otel.go")
 	} else {
-		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel_empty.go", "container_otel_empty.go")
+		pruned["internal/app"] = append(pruned["internal/app"], "bootstrap_otel_empty.go", "container_otel_empty.go", "tracing_empty.go")
 	}
 	if !contains(selected.copy, "access") {
 		pruned["internal/app"] = append(pruned["internal/app"], "seed_casbin.go")

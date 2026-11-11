@@ -60,6 +60,14 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 		"internal/platform/authz",
 		"internal/capabilities/user",
 		"docker-compose.yml",
+		"deploy/backup",
+		"deploy/openobserve",
+		"deploy/otel-collector.yaml",
+		"deploy/k8s/config-files.yaml",
+		"deploy/k8s/openobserve.yaml",
+		"deploy/k8s/otel-collector.yaml",
+		"deploy/helm/templates/secret.yaml",
+		"scripts",
 	} {
 		_, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
 		assert.True(t, os.IsNotExist(statErr), "minimal must not contain %s", rel)
@@ -95,8 +103,22 @@ func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 	for _, rel := range []string{
 		"internal/capabilities/catalog/catalog.go",
 		"cmd/server/main.go",
+		"deploy/backup/Dockerfile",
+		"deploy/helm/templates/secret.yaml",
+		"deploy/k8s/backup-cronjob.yaml",
+		"scripts/backup.sh",
 	} {
 		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "missing auth artifact %s", rel)
+	}
+	for _, rel := range []string{
+		"deploy/openobserve",
+		"deploy/otel-collector.yaml",
+		"deploy/k8s/openobserve.yaml",
+		"deploy/k8s/otel-collector.yaml",
+		"deploy/k8s/config-files.yaml",
+	} {
+		_, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
+		assert.True(t, os.IsNotExist(statErr), "auth must not contain %s", rel)
 	}
 	assertManifestProvenance(t, dir, "auth")
 }
@@ -136,6 +158,17 @@ func TestNewProjectFullPresetCarriesEveryCapability(t *testing.T) {
 	} {
 		assert.DirExists(t, filepath.Join(dir, filepath.FromSlash(rel)),
 			"full must ship driver %s (--with default would drop it)", rel)
+	}
+	assert.DirExists(t, filepath.Join(dir, "deploy", "openobserve"),
+		"full must ship observability asset deploy/openobserve")
+	for _, rel := range []string{
+		"deploy/otel-collector.yaml",
+		"deploy/k8s/openobserve.yaml",
+		"deploy/k8s/otel-collector.yaml",
+		"scripts/backup.sh",
+	} {
+		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)),
+			"full must ship observability asset %s", rel)
 	}
 	assert.NoDirExists(t, filepath.Join(dir, "internal/capabilities/search/postgres"),
 		"default --db=mysql must not ship the postgres search driver")

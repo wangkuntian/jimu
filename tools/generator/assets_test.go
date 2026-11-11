@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"jimu/internal/profiles/registry"
@@ -28,21 +29,24 @@ func TestAssetsForProfilesMatchesProfileassetsOracle(t *testing.T) {
 			require.NoError(t, err)
 			want, err := profileassets.ForProfile(profile)
 			require.NoError(t, err)
-			assert.Equal(t, want, got, "AssetsFor(%s) 必须与形态清单的独立派生一致", profile)
+			assert.Equal(t, prunedExpectedAssets(want, profile), got,
+				"AssetsFor(%s) 必须与形态清单的独立派生一致（内核资产按形态裁剪）", profile)
 		})
 	}
 }
 
-// TestAssetsForMinimalIncludesCoreGroupsButNotOpenapi 钉住 S6②/设计 §3.8：内核资产组
-// （ops/observability）全形态携带，docs/openapi 只在含 apidocs 的选择里出现。
+// TestAssetsForMinimalIncludesCoreGroupsButNotOpenapi 钉住 S6②/设计 §3.8：
+// 内部 minimal 含 DB，因此保留备份；观测栈只随 full 携带。docs/openapi 只在含 apidocs
+// 的选择里出现。
 func TestAssetsForMinimalIncludesCoreGroupsButNotOpenapi(t *testing.T) {
 	set, err := ParseCapabilitySet("minimal", "", "")
 	require.NoError(t, err)
 	got, err := AssetsFor(set)
 	require.NoError(t, err)
 	assert.Contains(t, got, "deploy/k8s")
-	assert.Contains(t, got, "deploy/openobserve")
+	assert.Contains(t, got, "deploy/helm")
 	assert.Contains(t, got, "deploy/backup")
+	assert.NotContains(t, got, "deploy/openobserve")
 	assert.NotContains(t, got, "docs/openapi")
 }
 
@@ -107,8 +111,10 @@ func TestCopyAssetsCopiesExactlyTheOwnedTree(t *testing.T) {
 	owned, err := profileassets.OwnershipIn(dst, profileassets.Declared())
 	require.NoError(t, err)
 	assert.Equal(t, slices.Sorted(maps.Keys(owned)), files)
-	// 内核单文件资产（deploy/otel-collector.yaml）必须真的落地，不是只复制目录。
-	assert.Contains(t, files, "deploy/otel-collector.yaml")
+	// minimal 不带观测栈；基础 Helm/K8s 资产仍必须真的落地。
+	assert.NotContains(t, files, "deploy/otel-collector.yaml")
+	assert.Contains(t, files, "deploy/helm/Chart.yaml")
+	assert.Contains(t, files, "deploy/k8s/deployment.yaml")
 }
 
 // TestAssetsForMatchesTheAssetTableTheGeneratedProjectDerives 是任务铁律 2 的漂移护栏：
@@ -119,11 +125,14 @@ func TestCopyAssetsCopiesExactlyTheOwnedTree(t *testing.T) {
 // 要么静默放过（复制了没声明）。
 func TestAssetsForMatchesTheAssetTableTheGeneratedProjectDerives(t *testing.T) {
 	declared := profileassets.Declared()
-	for _, tc := range []struct{ name, profile, with, shape string }{
-		{"profile minimal", "minimal", "", ""},
-		{"profile full", "full", "", ""},
-		{"with user,access,queue", "", "user,access,queue", "app"},
-		{"with apidocs", "", "apidocs", "app"},
+	for _, tc := range []struct {
+		name, profile, with, shape string
+		mysql, observability       bool
+	}{
+		{"profile minimal", "minimal", "", "", true, false},
+		{"profile full", "full", "", "", true, true},
+		{"with user,access,queue", "", "user,access,queue", "app", true, false},
+		{"with apidocs", "", "apidocs", "app", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			set, err := ParseCapabilitySet(tc.profile, tc.with, tc.shape)
@@ -132,9 +141,16 @@ func TestAssetsForMatchesTheAssetTableTheGeneratedProjectDerives(t *testing.T) {
 			require.NoError(t, err)
 
 			want := map[string]bool{}
-			for _, paths := range profileassets.CoreGroups() {
+			for group, paths := range profileassets.CoreGroups() {
+				if group == "observability" && !tc.observability {
+					continue
+				}
 				for _, p := range paths {
-					want[profileassets.Canonical(p)] = true
+					canonical := profileassets.Canonical(p)
+					if canonical == "deploy/backup" && !tc.mysql {
+						continue
+					}
+					want[canonical] = true
 				}
 			}
 			for _, name := range append(slices.Clone(set.Declared), set.MigrationOnly...) {
@@ -145,6 +161,29 @@ func TestAssetsForMatchesTheAssetTableTheGeneratedProjectDerives(t *testing.T) {
 			assert.Equal(t, slices.Sorted(maps.Keys(want)), got)
 		})
 	}
+}
+
+func prunedExpectedAssets(paths []string, profile string) []string {
+	observability := profileassets.CoreGroups()["observability"]
+	var out []string
+	for _, path := range paths {
+		canonical := profileassets.Canonical(path)
+		if profile != "full" && underAnyAsset(canonical, observability) {
+			continue
+		}
+		out = append(out, canonical)
+	}
+	return out
+}
+
+func underAnyAsset(path string, prefixes []string) bool {
+	for _, raw := range prefixes {
+		prefix := profileassets.Canonical(raw)
+		if path == prefix || (prefix != "" && strings.HasPrefix(path, prefix+"/")) {
+			return true
+		}
+	}
+	return false
 }
 
 // TestAssetsForRejectsUnknownCapability fail-closed：声明集里出现 known 集合之外的能力名时
