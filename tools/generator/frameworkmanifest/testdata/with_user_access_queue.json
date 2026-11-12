@@ -53,8 +53,10 @@
       "logcheck"
     ],
     "deploy": [
+      "compose",
       "helm",
-      "k8s"
+      "k8s",
+      "observability"
     ],
     "cli": "full",
     "cli_ui": "direct"
@@ -1617,5 +1619,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:8202e2bf60729d1e1947094354c40b19b748948b672a257b41d371203506ffae"
+  "digest": "sha256:4c7e520cfa15d8b3a6fbcc27f4987821df6356afc31edc92283319c2e9d9899e"
 }

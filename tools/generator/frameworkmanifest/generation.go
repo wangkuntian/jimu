@@ -63,7 +63,7 @@ func defaultGeneration(profile, with string, declared []string) manifest.Generat
 		RuntimeClosure: true,
 		Tests:          manifest.GenerationTestsSelected,
 		ToolsMode:      manifest.GenerationToolsAuto,
-		Deploy:         []string{},
+		Deploy:         DefaultDeploy(profile),
 		CLI:            manifest.GenerationCLIMinimal,
 		CLIUI:          manifest.GenerationCLIUIDirect,
 	}
@@ -72,17 +72,15 @@ func defaultGeneration(profile, with string, declared []string) manifest.Generat
 		return generation
 	case "auth":
 		generation.ToolsMode = manifest.GenerationToolsAll
-		generation.Deploy = []string{manifest.DeployHelm, manifest.DeployK8s}
 		generation.CLI = manifest.GenerationCLIFull
 		return generation
 	case "full":
 		generation.ToolsMode = manifest.GenerationToolsAll
-		generation.Deploy = []string{manifest.DeployHelm, manifest.DeployK8s, manifest.DeployObservability}
 		generation.CLI = manifest.GenerationCLIFull
 		return generation
 	}
 	if profile == "" && with != "" {
-		generation.Deploy = []string{manifest.DeployHelm, manifest.DeployK8s}
+		generation.Deploy = DefaultDeploy("")
 		if len(declared) > 0 {
 			generation.CLI = manifest.GenerationCLIFull
 		}
@@ -102,31 +100,4 @@ func resolveTools(mode string, declared []string) []string {
 		}
 		return []string{"checkcapabilities", "logcheck"}
 	}
-}
-
-func normalizeDeploy(values []string) ([]string, error) {
-	if len(values) == 0 {
-		return []string{}, nil
-	}
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		switch value {
-		case "none":
-			if len(values) != 1 {
-				return nil, fmt.Errorf("--deploy=none cannot be combined with other components")
-			}
-			return []string{}, nil
-		case "all":
-			if len(values) != 1 {
-				return nil, fmt.Errorf("--deploy=all cannot be combined with other components")
-			}
-			return []string{manifest.DeployCompose, manifest.DeployHelm, manifest.DeployK8s, manifest.DeployObservability}, nil
-		case manifest.DeployCompose, manifest.DeployK8s, manifest.DeployHelm, manifest.DeployObservability:
-			out = append(out, value)
-		default:
-			return nil, fmt.Errorf("--deploy has unknown component %q", value)
-		}
-	}
-	slices.Sort(out)
-	return slices.Compact(out), nil
 }

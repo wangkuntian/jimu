@@ -38,6 +38,7 @@ type NewOptions struct {
 	DBDriver   string
 	Tests      string
 	Tools      string
+	Deploy     string
 	NoTidy     bool
 	DryRun     bool
 	Force      bool
@@ -91,6 +92,7 @@ func NewProject(opts NewOptions) (*Result, error) {
 		DBDriver:   opts.DBDriver,
 		Tests:      opts.Tests,
 		Tools:      opts.Tools,
+		Deploy:     opts.Deploy,
 		Framework:  opts.Framework,
 		Generation: opts.Generation,
 	})
