@@ -122,14 +122,15 @@ func main() {
 	fmt.Println("✅ check-capabilities: 生成器核心仅经 frameworkmanifest 读取框架内部包")
 }
 
-// createdTables 从能力嵌入的 mysql 迁移里提取 CREATE TABLE 的表名（去重排序）。
-// mysql 与 postgres 迁移集保持同名表，本门禁以 mysql 为准。
+// createdTables 从能力嵌入的迁移里提取 CREATE TABLE 的表名（去重排序）。
+// 生成项目只携带所选方言目录，因此遍历 migrations 下的全部方言；mysql 与 postgres
+// 迁移集保持同名表，重复表名在这里去重。
 func createdTables(d contract.Descriptor) ([]string, error) {
 	if d.Migrations == nil {
 		return nil, nil
 	}
 	set := map[string]bool{}
-	err := fs.WalkDir(d.Migrations, "migrations/mysql", func(path string, e fs.DirEntry, err error) error {
+	err := fs.WalkDir(d.Migrations, "migrations", func(path string, e fs.DirEntry, err error) error {
 		if err != nil || e.IsDir() || !strings.HasSuffix(path, ".sql") {
 			return err
 		}

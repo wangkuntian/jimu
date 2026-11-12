@@ -53,6 +53,9 @@ func Execute(ctx Context) ([]string, error) {
 		return nil, err
 	}
 	for _, action := range ctx.Plan.Rewrites {
+		if action.Kind == "asset-file-patch" {
+			continue
+		}
 		if err := applyRewrite(ctx.Destination, ctx.Module, action); err != nil {
 			return nil, err
 		}
@@ -65,9 +68,9 @@ func Execute(ctx Context) ([]string, error) {
 		}
 	}
 	// 部署资产在模块重写之后复制（上面的 /opt/jimu 等框架路径必须保持字面量），
-	// 因此项目标识的重写必须单独放在资产复制之后。
+	// 因此项目标识与资产内容的补丁必须单独放在资产复制之后。
 	for _, action := range ctx.Plan.Rewrites {
-		if action.Kind != "deploy" {
+		if action.Kind != "deploy" && action.Kind != "asset-file-patch" {
 			continue
 		}
 		if err := applyRewrite(ctx.Destination, ctx.Module, action); err != nil {

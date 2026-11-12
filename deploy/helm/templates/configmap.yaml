@@ -132,6 +132,7 @@ data:
 
     {{- if .Values.db }}
     db:
+      driver: {{ .Values.db.driver | quote }}
       host: {{ .Values.db.host | quote }}
       port: {{ .Values.db.port }}
       user: {{ .Values.db.user | quote }}
