@@ -82,6 +82,7 @@ fix(auth): reject expired refresh token
 
 - 发布当日从 release 分支合并到 master 后，在 master tip 打 `vMAJOR.MINOR.PATCH` tag（SemVer，无预发布标签）
 - 发布候选 PR 合并后，在当前 `master` tip 打 `vMAJOR.MINOR.PATCH` tag；tag workflow 会校验 tag 必须指向当前 `master` tip，然后并行构建 4 个平台的 CLI（`jimu-<os>-<arch>`，产物内注入该 tag 作为版本号）与 `template-bundle.json`，生成 checksums 后创建 GitHub Release。**不发布 server 二进制**：Jimu 的交付物是代码，用户用 `jimu new` 拿工程自行构建，不重复运行完整 CI 或 `Scaffold Gate`
+- release note 仓库文件在 release 分支和 PR 阶段保留 `待发布` 或 `发布候选`；tag workflow 生成 Release body 时会自动把首个状态行改写为 `发布（YYYY-MM-DD）`，tag 后不需要再补状态 commit
 - 依赖更新：dependabot 的 PR **直接面向 `master`**（默认分支），minor/patch 由 `.github/workflows/dependabot-auto-merge.yml` 自动合并（major 留人工评估）。依赖 PR 与发布候选 PR 走同一套 master 门禁 —— `PR Gate`/`Image Gate`/`Scaffold Gate` 三道都要过；`Scaffold Gate` 在 PR 上跑 official 档，因此三个预设会当场被验证，完整 `--with`/内部 profile 矩阵由夜间或手动 full 覆盖。自动合并前还有两道守卫（都在该 workflow 内，只调 GitHub API、不 checkout）：①**实测** master 的 ruleset 仍 require 那三道门，读不到或少了任何一门都不启用（并撤销已挂上的 auto-merge），防止 ruleset 被改动后 `--auto` 在零检查下抢跑；②**镜像 tag 形状断言** —— 拒绝裸数字后缀（`-386`）、平台名后缀（`-amd64`/`-arm64`/`-ppc64le`…）、`nightly`/`dev`/`snapshot` 等前缀与完全没有数字的 tag（`latest`），只放行常规版本号（含 `-alpine`/`-noble` 这类发行版后缀）与 `@sha256:` 摘要 pin。②是 PR #167 的产物：它把 otel collector 从 `0.162.0` 换成**同一版本的 i386 单架构 tag** `0.162.0-386`，dependabot 按 tag 字符串当成升级、三道门禁全绿，于是被自动合并
 - 发布流程：`Start Release Branch` workflow（手动触发）**只需输入版本号**，总是从 `master` 切出 `release/<version>`；依赖升级平时已经直接进 master，发布分支天然包含它们，不再有「吸收」步骤
 - 来源白名单：`Scaffold Gate` 的来源白名单维护在 `.github/workflows/ci-scaffold.yml`（official job 的 `head_ref` 守卫与聚合 job 的来源判定），**已同时放行 `release/*`（发布候选）与 `dependabot/*`（依赖升级）**；其余来源一律 fail-closed。PR 只允许 official，full 只允许 `schedule`/`workflow_dispatch`。`dependabot-auto-merge.yml` 的 `branches`/`base.ref` 亦已改为 `master`。注意这两处是**配套**的：若只改 `dependabot.yml` 的 `target-branch` 而不放行白名单，依赖 PR 会在 `Scaffold Gate` 上红且无法合并（master ruleset 没有 bypass actor）
@@ -98,6 +99,8 @@ fix(auth): reject expired refresh token
 
 ```markdown
 # v0.1.0
+
+> 状态：发布候选（YYYY-MM-DD）
 
 ## 亮点
 
@@ -131,6 +134,7 @@ fix(auth): reject expired refresh token
 规则：
 
 - 版本号使用 SemVer：`vMAJOR.MINOR.PATCH`
+- 标题下保留一行状态，取值为 `开发中`、`发布候选（YYYY-MM-DD）`、`发布（YYYY-MM-DD）` 或 `未发布（原因）`；仓库文件可保留 `待发布` 或 `发布候选`，tag workflow 生成 Release body 时会把首个 `> 状态：` 行自动改写为 `发布（YYYY-MM-DD）`（日期取 workflow 运行时的 Asia/Shanghai 日期），不要在打 tag 后再改状态
 - 条目使用中文，面向使用者说明结果，不写内部流水账
 - 没有内容的分类可以省略，但 `亮点`、`验证`、`说明` 必须保留
 - `验证` 必须包含 `make release-check` 的结果，除非明确说明无法运行

@@ -152,9 +152,14 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           NOTES_FILE="docs/releases/${VERSION}.md"
           if [ -f "$NOTES_FILE" ]; then
+            # 仓库中的版本日志保留候选状态，Release body 统一显示实际发布状态。
+            RELEASE_DATE=$(TZ=Asia/Shanghai date +%F)
             {
               echo "body<<EOF"
-              cat "$NOTES_FILE"
+              awk -v status="> 状态：发布（${RELEASE_DATE}）" '
+                !replaced && /^> 状态：/ { print status; replaced=1; next }
+                { print }
+              ' "$NOTES_FILE"
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
           else
