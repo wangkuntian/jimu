@@ -27,8 +27,9 @@ import (
 // coreGroups 内核资产组：不属于任何能力，全形态携带。
 // 生成项目是否携带由 P2.7 的生成器决定；本阶段只表达归属。
 //
-// observability 用更具体的前缀抢走 ops 目录里的观测清单（最长前缀匹配），
-// 因此 deploy/k8s 整体归 ops，而其中的 openobserve/otel 两个文件归 observability。
+// deploy/ 是部署资产的唯一入口：ops 拥有 docker/compose/k8s/helm/backup/scripts，
+// observability 拥有独立的 observability 目录及 K8s/Helm 的观测子树。
+// observability 用更具体的前缀抢走 ops 目录里的观测清单（最长前缀匹配）。
 var coreGroups = map[string][]string{
 	"ops": {
 		"deploy/docker",
