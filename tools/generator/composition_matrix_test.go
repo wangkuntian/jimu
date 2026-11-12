@@ -40,19 +40,19 @@ var compositionMatrixCases = []compositionMatrixCase{
 		name:     "auth-passkey",
 		with:     "passkey",
 		resolved: []string{"user", "access", "auth", "passkey"},
-		drivers:  map[string][]string{},
+		drivers:  map[string][]string{"auth": {"redis"}},
 	},
 	{
 		name:     "auth-grpc",
 		with:     "auth,grpc",
 		resolved: []string{"user", "access", "auth", "grpc"},
-		drivers:  map[string][]string{},
+		drivers:  map[string][]string{"auth": {"redis"}},
 	},
 	{
 		name:     "auth-console-ws",
 		with:     "auth,console,ws",
 		resolved: []string{"user", "access", "auth", "console", "ws"},
-		drivers:  map[string][]string{},
+		drivers:  map[string][]string{"auth": {"redis"}},
 	},
 	{
 		name:     "apikey-storage-s3-uploadsec",
@@ -76,25 +76,25 @@ var compositionMatrixCases = []compositionMatrixCase{
 		name:     "apikey-dataops-excel-search",
 		with:     "apikey,dataops:excel,search",
 		resolved: []string{"apikey", "dataops", "search"},
-		drivers:  map[string][]string{"dataops": {"excel"}},
+		drivers:  map[string][]string{"dataops": {"excel"}, "search": {"mysql"}},
 	},
 	{
 		name:     "auth-captcha-notification",
 		with:     "auth,captcha,notification",
 		resolved: []string{"user", "access", "auth", "captcha", "notification"},
-		drivers:  map[string][]string{},
+		drivers:  map[string][]string{"auth": {"redis"}},
 	},
 	{
 		name:     "oauth-mfa",
 		with:     "oauth,mfa",
 		resolved: []string{"user", "access", "mfa", "auth", "oauth"},
-		drivers:  map[string][]string{},
+		drivers:  map[string][]string{"auth": {"redis"}},
 	},
 	{
 		name:     "auth-breach-encryption",
 		with:     "auth,breach,encryption",
 		resolved: []string{"user", "access", "auth", "breach", "encryption"},
-		drivers:  map[string][]string{},
+		drivers:  map[string][]string{"auth": {"redis"}},
 	},
 }
 
