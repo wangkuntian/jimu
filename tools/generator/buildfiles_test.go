@@ -169,7 +169,7 @@ func TestNewProjectCopiesToolsAndRendersBuildFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, rel := range []string{
-		"Makefile", "Dockerfile",
+		"Makefile", "deploy/docker/Dockerfile",
 		"tools/checkcapabilities/main.go", "tools/checkcapabilities/drivers.go",
 		"tools/checkcapabilities/assets.go",
 		"tools/logcheck/main.go",

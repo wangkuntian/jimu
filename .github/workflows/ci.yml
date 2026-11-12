@@ -67,7 +67,7 @@ jobs:
             echo "go=false" >> "$GITHUB_OUTPUT"
           fi
           # docker：镜像可发布性关心的路径（沿用原 ci-docker.yml 的口径）
-          if grep -Eq '^(Dockerfile$|docker-compose\.yml$|compose\.observability\.yml$|deploy/|scripts/|Makefile$|cmd/|internal/|tools/|go\.mod$|go\.sum$|configs/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
+          if grep -Eq '^(deploy/|scripts/|Makefile$|cmd/|internal/|tools/|go\.mod$|go\.sum$|configs/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
             echo "docker=true" >> "$GITHUB_OUTPUT"
           else
             echo "docker=false" >> "$GITHUB_OUTPUT"
@@ -432,7 +432,7 @@ jobs:
         run: |
           # 客户端版本须 >= 服务端：CI 的 postgres service 是 17，Ubuntu 自带客户端为 16，
           # 因此统一走共享安装脚本（与备份镜像同一份逻辑）
-          sudo PG_CLIENT_VERSION=17 bash scripts/install_db_clients.sh
+          sudo PG_CLIENT_VERSION=17 bash deploy/scripts/install_db_clients.sh
           MODE=host DB_DRIVER=mysql \
             DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root DB_PASSWORD=root DB_NAME=jimu_test \
             ./scripts/test_backup_restore.sh
@@ -460,16 +460,16 @@ jobs:
       - uses: actions/checkout@v7
       - name: "🔐 Initialize Compose secrets"
         run: |
-          bash scripts/init-secrets.sh --no-legacy
+          bash deploy/scripts/init-secrets.sh --no-legacy
           for f in secrets/db_root_password.txt secrets/db_password.txt \
                    secrets/jwt_secret.txt secrets/encryption_key.txt \
                    secrets/audit_hash_secret.txt secrets/admin_password.txt; do
             [ -s "$f" ] || { echo "❌ $f 缺失或为空"; exit 1; }
           done
-      - name: "📐 Validate docker-compose.yml"
-        run: docker compose --env-file /dev/null config --quiet
+      - name: "📐 Validate deploy/compose/docker-compose.yml"
+        run: docker compose --project-directory "$PWD" --env-file /dev/null -f deploy/compose/docker-compose.yml config --quiet
       - name: "🐳 Build Docker image"
-        run: docker build -t jimu:${{ github.sha }} .
+        run: docker build -f deploy/docker/Dockerfile -t jimu:${{ github.sha }} .
       - name: "💾 Save image artifact"
         run: docker save jimu:${{ github.sha }} -o jimu-image.tar
       - name: "📤 Upload image artifact"

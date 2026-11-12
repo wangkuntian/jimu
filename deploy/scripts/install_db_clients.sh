@@ -6,7 +6,7 @@
 # 因此从 PGDG 源安装指定大版本。
 #
 # 用法（需 root 或 sudo）：
-#   sudo PG_CLIENT_VERSION=17 bash scripts/install_db_clients.sh
+#   sudo PG_CLIENT_VERSION=17 bash deploy/scripts/install_db_clients.sh
 # CI（.github/workflows/ci.yml）与备份镜像（deploy/backup/Dockerfile）共用本脚本，
 # 避免两处各写一份 PGDG 配置后再次漂移。
 #

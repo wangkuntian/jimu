@@ -38,8 +38,11 @@ VERSION ?= dev
 APP_VERSION ?= dev
 LDFLAGS := -X main.version=$(APP_VERSION)
 
-COMPOSE = docker compose --env-file /dev/null -f docker-compose.yml
-COMPOSE_ALL = $(COMPOSE) -f compose.observability.yml
+COMPOSE_FILE := deploy/compose/docker-compose.yml
+COMPOSE_ALL_FILE := deploy/compose/compose.observability.yml
+DOCKERFILE := deploy/docker/Dockerfile
+COMPOSE = docker compose --project-directory $(CURDIR) --env-file /dev/null -f $(COMPOSE_FILE)
+COMPOSE_ALL = $(COMPOSE) -f $(COMPOSE_ALL_FILE)
 IMAGE_REPO ?= jimu
 IMAGE_TAG = $(IMAGE_REPO):$(VERSION)
 LATEST_TAG = $(IMAGE_REPO):latest
@@ -87,22 +90,22 @@ init: ## 初始化核心 Secret（旧 .env 仅用于显式迁移）
 	if [ -n "$$legacy_env" ]; then \
 		LEGACY_ENV_FILE="$$legacy_env" SECRETS_DIR=$(JIMU_SECRETS_DIR) \
 		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
-		./scripts/init-secrets.sh; \
+		./deploy/scripts/init-secrets.sh; \
 	else \
 		SECRETS_DIR=$(JIMU_SECRETS_DIR) \
 		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
-		./scripts/init-secrets.sh; \
+		./deploy/scripts/init-secrets.sh; \
 	fi
 
 prepare-secrets:
 	@SECRETS_DIR=$(JIMU_SECRETS_DIR) \
 		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
-		./scripts/init-secrets.sh --no-legacy
+		./deploy/scripts/init-secrets.sh --no-legacy
 
 prepare-observability-secrets:
 	@SECRETS_DIR=$(JIMU_SECRETS_DIR) \
 		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
-		./scripts/init-secrets.sh --observability --no-legacy
+		./deploy/scripts/init-secrets.sh --observability --no-legacy
 
 image: ## 无条件构建版本镜像并更新 latest
 	@PROFILE="$(PROFILE)" VERSION="$(VERSION)" IMAGE_REPO="$(IMAGE_REPO)" \
@@ -123,7 +126,7 @@ demo-e2e: ## 启动 full server 并运行真实后端 demo E2E
 
 up-observability: prepare-observability-secrets ensure-image ## 启动观测栈并初始化 dashboard（配置 webhook 时同步告警）
 	$(COMPOSE_ENV) $(COMPOSE_ALL) up -d --no-build
-	JIMU_SECRETS_DIR=$(JIMU_SECRETS_DIR) ./scripts/observability.sh start
+	JIMU_SECRETS_DIR=$(JIMU_SECRETS_DIR) ./deploy/scripts/observability.sh start
 
 down: ## 停止全部 Compose 服务（保留数据卷）
 	$(COMPOSE_ENV) $(COMPOSE_ALL) down
@@ -155,10 +158,10 @@ migrate-status: ## 在运行中的 server 容器查看迁移状态（不构建�
 	$(COMPOSE_ENV) $(COMPOSE) exec -T server ./jimu migrate status
 
 backup: ## 主机侧备份数据库
-	@./scripts/backup.sh
+	@deploy/scripts/backup.sh
 
 restore: ## 主机侧恢复数据库（BACKUP_FILE=<path>）
-	@./scripts/restore.sh $(BACKUP_FILE)
+	@deploy/scripts/restore.sh $(BACKUP_FILE)
 
 build-backup-image: ## 构建备份任务镜像 jimu-backup
 	docker build -f deploy/backup/Dockerfile -t jimu-backup:latest --build-arg PG_CLIENT_VERSION=$(or $(PG_CLIENT_VERSION),17) .
@@ -300,10 +303,10 @@ smoke-check: ## 校验自动化脚本语法
 	@bash -n scripts/test_shards.sh
 	@bash -n scripts/check_ci_gate.sh
 	@bash -n scripts/test_compose_runtime.sh
-	@bash -n scripts/install_db_clients.sh
-	@bash -n scripts/db_common.sh
-	@bash -n scripts/backup.sh
-	@bash -n scripts/restore.sh
+	@bash -n deploy/scripts/install_db_clients.sh
+	@bash -n deploy/scripts/db_common.sh
+	@bash -n deploy/scripts/backup.sh
+	@bash -n deploy/scripts/restore.sh
 	@bash -n scripts/test_backup_restore.sh
 	@bash -n scripts/test_config_contracts.sh
 	@bash -n scripts/test_init_secrets.sh

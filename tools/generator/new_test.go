@@ -49,7 +49,7 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 		"internal/assembly/assembly.go",
 		"internal/app/container_nodb.go",
 		"internal/profiles/seed_nodb.go",
-		"Dockerfile",
+		"deploy/docker/Dockerfile",
 		"Makefile",
 		"go.mod",
 		".jimu/manifest.json",
@@ -67,11 +67,11 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 		"internal/capabilities/catalog",
 		"docker-compose.yml",
 		"deploy/backup",
-		"deploy/openobserve",
-		"deploy/otel-collector.yaml",
+		"deploy/observability",
+		"deploy/observability/otel-collector.yaml",
 		"deploy/k8s/config-files.yaml",
-		"deploy/k8s/openobserve.yaml",
-		"deploy/k8s/otel-collector.yaml",
+		"deploy/k8s/observability/openobserve.yaml",
+		"deploy/k8s/observability/otel-collector.yaml",
 		"deploy/helm/templates/secret.yaml",
 		"scripts",
 	} {
@@ -115,15 +115,15 @@ func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 		"deploy/backup/Dockerfile",
 		"deploy/helm/templates/secret.yaml",
 		"deploy/k8s/backup-cronjob.yaml",
-		"scripts/backup.sh",
+		"deploy/scripts/backup.sh",
 	} {
 		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "missing auth artifact %s", rel)
 	}
 	for _, rel := range []string{
-		"deploy/openobserve",
-		"deploy/otel-collector.yaml",
-		"deploy/k8s/openobserve.yaml",
-		"deploy/k8s/otel-collector.yaml",
+		"deploy/observability",
+		"deploy/observability/otel-collector.yaml",
+		"deploy/k8s/observability/openobserve.yaml",
+		"deploy/k8s/observability/otel-collector.yaml",
 		"deploy/k8s/config-files.yaml",
 	} {
 		_, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
@@ -168,13 +168,13 @@ func TestNewProjectFullPresetCarriesEveryCapability(t *testing.T) {
 		assert.DirExists(t, filepath.Join(dir, filepath.FromSlash(rel)),
 			"full must ship driver %s (--with default would drop it)", rel)
 	}
-	assert.DirExists(t, filepath.Join(dir, "deploy", "openobserve"),
-		"full must ship observability asset deploy/openobserve")
+	assert.DirExists(t, filepath.Join(dir, "deploy", "observability"),
+		"full must ship observability asset deploy/observability")
 	for _, rel := range []string{
-		"deploy/otel-collector.yaml",
-		"deploy/k8s/openobserve.yaml",
-		"deploy/k8s/otel-collector.yaml",
-		"scripts/backup.sh",
+		"deploy/observability/otel-collector.yaml",
+		"deploy/k8s/observability/openobserve.yaml",
+		"deploy/k8s/observability/otel-collector.yaml",
+		"deploy/scripts/backup.sh",
 	} {
 		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)),
 			"full must ship observability asset %s", rel)

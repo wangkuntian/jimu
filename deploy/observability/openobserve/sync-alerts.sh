@@ -13,7 +13,7 @@
 #     脚本按轮次重试；超限仍缺 stream 的规则跳过并提示（下次运行补齐）
 #
 # 用法:
-#   ./deploy/openobserve/sync-alerts.sh
+#   ./deploy/observability/openobserve/sync-alerts.sh
 # 环境变量:
 #   ZO_HTTP / ZO_ORG / ZO_EMAIL / ZO_PASSWORD（同 sync-dashboard.sh）
 #   ZO_ALERT_WEBHOOK_URL  webhook 通知地址（未设置则跳过整个同步）

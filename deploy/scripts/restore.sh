@@ -5,7 +5,7 @@
 #   docker compose exec -T -e FORCE=1 mariadb bash /opt/jimu/scripts/restore.sh /backups/jimu_20250101_120000.sql.gz
 #   make compose-db-restore FILE=/backups/jimu_20250101_120000.sql.gz
 # 主机用法（本机需有 mariadb/mysql 或 psql，且数据库端口可达）：
-#   ./scripts/restore.sh <backup_file>
+#   ./deploy/scripts/restore.sh <backup_file>
 #
 # 环境变量：
 #   DB_DRIVER                        mysql（默认）/ postgres；未设置时按可用客户端探测
@@ -19,7 +19,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/db_common.sh
+# shellcheck source=deploy/scripts/db_common.sh
 source "${SCRIPT_DIR}/db_common.sh"
 
 if [ $# -lt 1 ]; then

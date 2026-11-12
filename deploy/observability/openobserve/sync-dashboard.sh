@@ -7,11 +7,11 @@
 # 也支持反方向导出：把线上 dashboard JSON 导出到本地文件（UI 微调后同步回 git）。
 #
 # 用法:
-#   ./deploy/openobserve/sync-dashboard.sh                 # 应用 dashboards/*.json 到 OpenObserve
-#   ./deploy/openobserve/sync-dashboard.sh --export 名称    # 导出线上同名 dashboard 为文件
+#   ./deploy/observability/openobserve/sync-dashboard.sh                 # 应用 dashboards/*.json 到 OpenObserve
+#   ./deploy/observability/openobserve/sync-dashboard.sh --export 名称    # 导出线上同名 dashboard 为文件
 # 环境变量:
 #   ZO_HTTP / ZO_ORG / ZO_EMAIL / ZO_PASSWORD（同 init-dashboard.sh）
-#   DASH_DIR  dashboard JSON 目录（默认 deploy/openobserve/dashboards）
+#   DASH_DIR  dashboard JSON 目录（默认 deploy/observability/openobserve/dashboards）
 set -euo pipefail
 
 ZO_HTTP="${ZO_HTTP:-http://localhost:5080}"

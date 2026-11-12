@@ -642,7 +642,7 @@
     },
     {
       "source": "tools/generator/render/templates/project/Dockerfile.tmpl",
-      "destination": "Dockerfile",
+      "destination": "deploy/docker/Dockerfile",
       "kind": "build",
       "data": {
         "Expected": "access auth encryption notification user",
@@ -998,6 +998,9 @@
       "data": {
         "Files": [
           "deploy/backup/Dockerfile",
+          "deploy/compose/compose.observability.yml",
+          "deploy/compose/docker-compose.yml",
+          "deploy/docker/Dockerfile",
           "deploy/helm/Chart.yaml",
           "deploy/helm/templates/_helpers.tpl",
           "deploy/helm/templates/backup-cronjob.yaml",
@@ -1017,7 +1020,13 @@
           "deploy/k8s/networkpolicy.yaml",
           "deploy/k8s/pdb.yaml",
           "deploy/k8s/secret.yaml",
-          "deploy/k8s/service.yaml"
+          "deploy/k8s/service.yaml",
+          "deploy/scripts/backup.sh",
+          "deploy/scripts/db_common.sh",
+          "deploy/scripts/init-secrets.sh",
+          "deploy/scripts/install_db_clients.sh",
+          "deploy/scripts/observability.sh",
+          "deploy/scripts/restore.sh"
         ]
       }
     },
@@ -1156,6 +1165,9 @@
       "from": "jimu",
       "to": "minimal",
       "files": [
+        "deploy/docker/Dockerfile",
+        "deploy/compose/docker-compose.yml",
+        "deploy/compose/compose.observability.yml",
         "deploy/k8s/deployment.yaml",
         "deploy/k8s/service.yaml",
         "deploy/k8s/configmap.yaml",
@@ -1166,12 +1178,20 @@
         "deploy/k8s/pdb.yaml",
         "deploy/k8s/networkpolicy.yaml",
         "deploy/k8s/backup-cronjob.yaml",
-        "deploy/k8s/openobserve.yaml",
-        "deploy/k8s/otel-collector.yaml",
+        "deploy/k8s/observability/openobserve.yaml",
+        "deploy/k8s/observability/otel-collector.yaml",
         "deploy/helm/Chart.yaml",
         "deploy/helm/values.yaml",
+        "deploy/helm/templates/observability/openobserve.yaml",
+        "deploy/helm/templates/observability/otel-collector.yaml",
         "deploy/helm/templates/service.yaml",
-        "deploy/backup/Dockerfile"
+        "deploy/backup/Dockerfile",
+        "deploy/scripts/backup.sh",
+        "deploy/scripts/restore.sh",
+        "deploy/scripts/db_common.sh",
+        "deploy/scripts/install_db_clients.sh",
+        "deploy/scripts/init-secrets.sh",
+        "deploy/scripts/observability.sh"
       ]
     },
     {
@@ -1223,13 +1243,24 @@
       "exclude": []
     },
     {
+      "source": "deploy/compose",
+      "destination": "deploy/compose",
+      "include": [],
+      "exclude": []
+    },
+    {
+      "source": "deploy/docker",
+      "destination": "deploy/docker",
+      "include": [],
+      "exclude": []
+    },
+    {
       "source": "deploy/helm",
       "destination": "deploy/helm",
       "include": [],
       "exclude": [
         "values.yaml",
-        "templates/openobserve.yaml",
-        "templates/otel-collector.yaml"
+        "templates/observability"
       ]
     },
     {
@@ -1238,9 +1269,14 @@
       "include": [],
       "exclude": [
         "config-files.yaml",
-        "openobserve.yaml",
-        "otel-collector.yaml"
+        "observability"
       ]
+    },
+    {
+      "source": "deploy/scripts",
+      "destination": "deploy/scripts",
+      "include": [],
+      "exclude": []
     }
   ],
   "prune": [
@@ -1289,7 +1325,6 @@
   "generated_files": [
     ".gitignore",
     ".golangci.yml",
-    "Dockerfile",
     "Makefile",
     "cmd/cli/activecaps.go",
     "cmd/cli/main.go",
@@ -1298,6 +1333,9 @@
     "configs/app.prod.yaml",
     "configs/app.yaml",
     "deploy/backup/Dockerfile",
+    "deploy/compose/compose.observability.yml",
+    "deploy/compose/docker-compose.yml",
+    "deploy/docker/Dockerfile",
     "deploy/helm/Chart.yaml",
     "deploy/helm/templates/_helpers.tpl",
     "deploy/helm/templates/backup-cronjob.yaml",
@@ -1319,6 +1357,12 @@
     "deploy/k8s/pdb.yaml",
     "deploy/k8s/secret.yaml",
     "deploy/k8s/service.yaml",
+    "deploy/scripts/backup.sh",
+    "deploy/scripts/db_common.sh",
+    "deploy/scripts/init-secrets.sh",
+    "deploy/scripts/install_db_clients.sh",
+    "deploy/scripts/observability.sh",
+    "deploy/scripts/restore.sh",
     "go.mod",
     "go.sum",
     "internal/app/admin_password_test.go",
@@ -1696,7 +1740,6 @@
     "internal/shared/validator/fuzz_test.go",
     "internal/shared/validator/validator.go",
     "internal/shared/validator/validator_test.go",
-    "scripts/backup.sh",
     "scripts/bench_ci.sh",
     "scripts/check_ci_gate.sh",
     "scripts/check_commit_messages.sh",
@@ -1704,17 +1747,12 @@
     "scripts/check_profiles.sh",
     "scripts/check_skills.sh",
     "scripts/clean_room_e2e.sh",
-    "scripts/db_common.sh",
     "scripts/demo.sh",
     "scripts/dev.sh",
     "scripts/ensure-image.sh",
     "scripts/experiment_v0_8_0.py",
-    "scripts/init-secrets.sh",
-    "scripts/install_db_clients.sh",
     "scripts/install_skills.sh",
     "scripts/loadtest.sh",
-    "scripts/observability.sh",
-    "scripts/restore.sh",
     "scripts/security_upgrade_drill.sh",
     "scripts/test_backup_restore.sh",
     "scripts/test_compose_runtime.sh",
@@ -1736,5 +1774,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:280eadd5940df11cc8a851edbd7eb7a35d68cccd1c94ace1af8768e2cd457a1c"
+  "digest": "sha256:adb1db1294da9785fb0302774c3869f8fb8432e0c648e2d3d3a1df4bff2416b7"
 }

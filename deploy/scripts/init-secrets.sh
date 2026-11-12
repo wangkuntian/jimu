@@ -4,7 +4,7 @@ set -euo pipefail
 umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SECRETS_DIR="${SECRETS_DIR:-$ROOT/secrets}"
 LEGACY_ENV_FILE="${LEGACY_ENV_FILE:-}"
 FORCE="${FORCE:-0}"
@@ -27,7 +27,7 @@ while [ "$#" -gt 0 ]; do
       ;;
     *)
       echo "未知参数：$1" >&2
-      echo "用法：scripts/init-secrets.sh [--observability] [--allow-new-security-keys] [--no-legacy]" >&2
+      echo "用法：deploy/scripts/init-secrets.sh [--observability] [--allow-new-security-keys] [--no-legacy]" >&2
       exit 2
       ;;
   esac

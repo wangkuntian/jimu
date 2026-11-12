@@ -11,7 +11,7 @@ services:
     volumes:
       - jimu-mariadb-data:/var/lib/mysql
       # 备份/恢复脚本与输出目录：容器内直接执行，产物落到宿主机 ./backups
-      - ./scripts:/opt/jimu/scripts:ro
+      - ./deploy/scripts:/opt/jimu/scripts:ro
       - ./backups:/backups
     ports:
       - "127.0.0.1:${JIMU_DB_HOST_PORT:-3306}:3306"
@@ -83,7 +83,7 @@ services:
     image: ${JIMU_IMAGE:-jimu:latest}
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/docker/Dockerfile
       args:
         PROFILE: ${PROFILE:-full}
     restart: unless-stopped

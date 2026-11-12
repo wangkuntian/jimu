@@ -392,7 +392,7 @@ func TestAddCapabilityCarriesNewCapabilityAssets(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, after.Assets, "docs/openapi", "marker.assets 必须按前缀口径更新")
 	assert.Contains(t, after.Capabilities, "apidocs")
-	assert.Contains(t, readProjectFile(t, dir, "Dockerfile"), "docs/openapi", "构建文件必须同步（未选中资产不出现）")
+	assert.Contains(t, readProjectFile(t, dir, "deploy/docker/Dockerfile"), "docs/openapi", "构建文件必须同步（未选中资产不出现）")
 }
 
 // TestAddCapabilitySelectsFirstDriverAndFiltersDirectories 钉住 S4 + 驱动目录过滤在 add 上同样成立：

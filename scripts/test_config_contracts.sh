@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+COMPOSE_FILE="$ROOT_DIR/deploy/compose/docker-compose.yml"
+COMPOSE_ALL_FILE="$ROOT_DIR/deploy/compose/compose.observability.yml"
 WORKDIRS=()
 
 cleanup() {
@@ -34,14 +36,14 @@ run_compose_contract() {
   compose_core() {
     env -u JIMU_IMAGE \
       JIMU_SECRETS_DIR="$core_secrets" \
-      docker compose --env-file /dev/null -f "$ROOT_DIR/docker-compose.yml" "$@"
+      docker compose --project-directory "$ROOT_DIR" --env-file /dev/null -f "$COMPOSE_FILE" "$@"
   }
   compose_all() {
     env -u JIMU_IMAGE \
       JIMU_SECRETS_DIR="$all_secrets" \
-      docker compose --env-file /dev/null \
-        -f "$ROOT_DIR/docker-compose.yml" \
-        -f "$ROOT_DIR/compose.observability.yml" "$@"
+      docker compose --project-directory "$ROOT_DIR" --env-file /dev/null \
+        -f "$COMPOSE_FILE" \
+        -f "$COMPOSE_ALL_FILE" "$@"
   }
 
   umask 077
@@ -142,12 +144,12 @@ PY
   cp -R "$all_secrets" "$secrets_without_obs_env"
   rm "$secrets_without_obs_env/openobserve.env"
   env -u JIMU_IMAGE JIMU_SECRETS_DIR="$secrets_without_obs_env" \
-    docker compose --env-file /dev/null \
-      -f "$ROOT_DIR/docker-compose.yml" -f "$ROOT_DIR/compose.observability.yml" config --quiet
+    docker compose --project-directory "$ROOT_DIR" --env-file /dev/null \
+      -f "$COMPOSE_FILE" -f "$COMPOSE_ALL_FILE" config --quiet
 
   poison_dir="$workdir/poison"
   mkdir -p "$poison_dir"
-  cp "$ROOT_DIR/docker-compose.yml" "$ROOT_DIR/compose.observability.yml" "$poison_dir/"
+  cp "$COMPOSE_FILE" "$COMPOSE_ALL_FILE" "$poison_dir/"
   printf 'JIMU_IMAGE=poison:latest\n' >"$poison_dir/.env"
   (
     cd "$poison_dir"
@@ -174,8 +176,9 @@ run_observability_contract() {
   docker_log="$workdir/docker.log"
   init_log="$workdir/init.log"
   hook_log="$workdir/hook.log"
-  mkdir -p "$workdir/bin" "$project_dir/scripts" "$project_dir/deploy/openobserve"
-  cp "$ROOT_DIR/scripts/observability.sh" "$project_dir/scripts/observability.sh"
+  mkdir -p "$workdir/bin" "$project_dir/deploy/scripts" "$project_dir/deploy/compose" "$project_dir/deploy/observability/openobserve"
+  cp "$ROOT_DIR/deploy/scripts/observability.sh" "$project_dir/deploy/scripts/observability.sh"
+  cp "$COMPOSE_FILE" "$COMPOSE_ALL_FILE" "$project_dir/deploy/compose/"
 
   cat >"$workdir/bin/docker" <<'DOCKER'
 #!/usr/bin/env bash
@@ -184,7 +187,7 @@ printf '%s\n' "$*" >>"$DOCKER_LOG"
 DOCKER
   chmod +x "$workdir/bin/docker"
 
-  cat >"$project_dir/scripts/init-secrets.sh" <<'INIT'
+  cat >"$project_dir/deploy/scripts/init-secrets.sh" <<'INIT'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$INIT_LOG"
@@ -193,38 +196,38 @@ printf '%s' 'test-password' >"$SECRETS_DIR/otel_auth_password.txt"
 printf '%s\n' "ZO_ROOT_USER_EMAIL='ops@example.com'" \
   "ZO_ROOT_USER_PASSWORD='test-password'" >"$SECRETS_DIR/openobserve.env"
 INIT
-  chmod +x "$project_dir/scripts/init-secrets.sh"
-  cat >"$project_dir/deploy/openobserve/init-dashboard.sh" <<'HOOK'
+  chmod +x "$project_dir/deploy/scripts/init-secrets.sh"
+  cat >"$project_dir/deploy/observability/openobserve/init-dashboard.sh" <<'HOOK'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'dashboard:%s:%s\n' "$ZO_EMAIL" "$ZO_PASSWORD" >>"$HOOK_LOG"
 HOOK
-  cat >"$project_dir/deploy/openobserve/sync-alerts.sh" <<'HOOK'
+  cat >"$project_dir/deploy/observability/openobserve/sync-alerts.sh" <<'HOOK'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'alerts:%s:%s\n' "$ZO_EMAIL" "$ZO_PASSWORD" >>"$HOOK_LOG"
 HOOK
-  chmod +x "$project_dir"/deploy/openobserve/*.sh
+  chmod +x "$project_dir"/deploy/observability/openobserve/*.sh
 
   run_observability() {
     PATH="$workdir/bin:$PATH" JIMU_SECRETS_DIR="$secrets_dir" \
       DOCKER_LOG="$docker_log" INIT_LOG="$init_log" HOOK_LOG="$hook_log" \
-      bash "$project_dir/scripts/observability.sh" "$@"
+      bash "$project_dir/deploy/scripts/observability.sh" "$@"
   }
 
   : >"$docker_log"
   run_observability status
-  grep -Fq "compose --env-file /dev/null -f $project_dir/docker-compose.yml -f $project_dir/compose.observability.yml ps openobserve otel-collector" "$docker_log"
+  grep -Fq "compose --project-directory $project_dir --env-file /dev/null -f $project_dir/deploy/compose/docker-compose.yml -f $project_dir/deploy/compose/compose.observability.yml ps openobserve otel-collector" "$docker_log"
   [ ! -e "$secrets_dir/otel_auth_password.txt" ]
 
   : >"$docker_log"
   run_observability stop
-  grep -Fq "compose --env-file /dev/null -f $project_dir/docker-compose.yml -f $project_dir/compose.observability.yml down openobserve otel-collector" "$docker_log"
+  grep -Fq "compose --project-directory $project_dir --env-file /dev/null -f $project_dir/deploy/compose/docker-compose.yml -f $project_dir/deploy/compose/compose.observability.yml down openobserve otel-collector" "$docker_log"
   [ ! -e "$secrets_dir/otel_auth_password.txt" ]
 
   run_observability start
   [ "$(cat "$init_log")" = "--observability --no-legacy" ]
-  grep -Fq "compose --env-file /dev/null -f $project_dir/docker-compose.yml -f $project_dir/compose.observability.yml up -d openobserve otel-collector" "$docker_log"
+  grep -Fq "compose --project-directory $project_dir --env-file /dev/null -f $project_dir/deploy/compose/docker-compose.yml -f $project_dir/deploy/compose/compose.observability.yml up -d openobserve otel-collector" "$docker_log"
   grep -Fq 'dashboard:ops@example.com:test-password' "$hook_log"
   grep -Fq 'alerts:ops@example.com:test-password' "$hook_log"
   echo "observability script contract passed"
@@ -246,7 +249,7 @@ run_deployment_contract() {
   }
 
   echo "== OTel Collector token 挂载 =="
-  for file in "$helm_chart/templates/otel-collector.yaml" "$ROOT_DIR/deploy/k8s/otel-collector.yaml"; do
+  for file in "$helm_chart/templates/observability/otel-collector.yaml" "$ROOT_DIR/deploy/k8s/observability/otel-collector.yaml"; do
     assert_contains "$file" "/run/secrets/zo_auth_token" "collector 配置未读取 zo_auth_token"
     assert_contains "$file" "mountPath: /run/secrets/zo_auth_token" "collector 未挂载 zo_auth_token"
     assert_contains "$file" "subPath: zo_auth_token" "collector 挂载缺少 zo_auth_token subPath"
@@ -255,7 +258,7 @@ run_deployment_contract() {
   echo "== Helm 观测凭据条件渲染 =="
   assert_contains "$helm_chart/templates/configmap.yaml" '{{- if .Values.otel.enabled }}' "otel 密码 required 未按开关条件化"
   assert_contains "$helm_chart/templates/secret.yaml" '{{- if or .Values.otel.enabled .Values.otelCollector.enabled }}' "zo_auth_token 未按观测开关条件化"
-  assert_contains "$helm_chart/templates/openobserve.yaml" '{{- if .Values.openobserve.enabled }}' "OpenObserve 资源未按开关条件化"
+  assert_contains "$helm_chart/templates/observability/openobserve.yaml" '{{- if .Values.openobserve.enabled }}' "OpenObserve 资源未按开关条件化"
 
   if command -v helm >/dev/null 2>&1; then
     rendered="$(helm template review "$helm_chart" \

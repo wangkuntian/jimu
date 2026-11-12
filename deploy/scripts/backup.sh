@@ -5,7 +5,7 @@
 #   docker compose exec -T mariadb bash /opt/jimu/scripts/backup.sh /backups
 #   make compose-db-backup
 # 主机用法（本机需有 mariadb-dump/mysqldump 或 pg_dump，且数据库端口可达）：
-#   ./scripts/backup.sh [output_dir]        # 默认 ./backups
+#   ./deploy/scripts/backup.sh [output_dir]        # 默认 ./backups
 #
 # 环境变量：
 #   DB_DRIVER                        mysql（默认）/ postgres；未设置时按可用客户端探测
@@ -20,7 +20,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/db_common.sh
+# shellcheck source=deploy/scripts/db_common.sh
 source "${SCRIPT_DIR}/db_common.sh"
 
 DB_DRIVER="$(resolve_driver)"

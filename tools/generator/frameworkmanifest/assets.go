@@ -49,7 +49,7 @@ func assetActions(_ string, selected selection) []manifest.AssetAction {
 		case "deploy/helm":
 			exclude = append(exclude, "values.yaml")
 			if !includeObservability(selected) {
-				exclude = append(exclude, "templates/openobserve.yaml", "templates/otel-collector.yaml")
+				exclude = append(exclude, "templates/observability")
 			}
 			if !includeBackup(selected) {
 				exclude = append(exclude, "templates/backup-cronjob.yaml")
@@ -58,7 +58,7 @@ func assetActions(_ string, selected selection) []manifest.AssetAction {
 		case "deploy/k8s":
 			exclude = append(exclude, "config-files.yaml")
 			if !includeObservability(selected) {
-				exclude = append(exclude, "openobserve.yaml", "otel-collector.yaml")
+				exclude = append(exclude, "observability")
 			}
 			if !includeBackup(selected) {
 				exclude = append(exclude, "backup-cronjob.yaml")

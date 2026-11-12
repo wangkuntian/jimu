@@ -1,6 +1,6 @@
 #!/bin/bash
 # 备份/恢复脚本的公共逻辑：方言探测、客户端探测、口令读取。
-# 由 scripts/backup.sh 与 scripts/restore.sh source，不单独执行。
+# 由 deploy/scripts/backup.sh 与 deploy/scripts/restore.sh source，不单独执行。
 
 # resolve_driver 返回数据库方言：DB_DRIVER 显式指定，否则按可用客户端探测
 resolve_driver() {

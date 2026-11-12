@@ -60,7 +60,7 @@ build-cli:
 
 ## image: 构建版本镜像并标记 latest
 image:
-	docker build -t $(IMAGE_TAG) .
+	docker build -f deploy/docker/Dockerfile -t $(IMAGE_TAG) .
 	docker tag $(IMAGE_TAG) $(LATEST_TAG)
 
 ##@ 数据库

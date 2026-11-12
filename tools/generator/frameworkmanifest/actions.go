@@ -168,7 +168,7 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 	}
 	actions := []manifest.TemplateAction{
 		{Source: "tools/generator/render/templates/project/Makefile.tmpl", Destination: "Makefile", Kind: "build", Data: buildData},
-		{Source: "tools/generator/render/templates/project/Dockerfile.tmpl", Destination: "Dockerfile", Kind: "build", Data: buildData},
+		{Source: "tools/generator/render/templates/project/Dockerfile.tmpl", Destination: "deploy/docker/Dockerfile", Kind: "build", Data: buildData},
 		{Source: "tools/generator/render/templates/project/registry.go.tmpl", Destination: "internal/profiles/registry/registry.go", Kind: "shape", Data: shapeData},
 		{Source: "tools/generator/render/templates/project/assembly.go.tmpl", Destination: filepath.ToSlash(filepath.Join("internal/profiles", selected.shape, "assembly.go")), Kind: "shape", Data: shapeData},
 		{Source: "tools/generator/render/templates/project/drivers.go.tmpl", Destination: filepath.ToSlash(filepath.Join("internal/profiles", selected.shape, "drivers.go")), Kind: "shape", Data: shapeData},
@@ -586,6 +586,9 @@ func driverRewriteActions(root string, selected selection) []manifest.RewriteAct
 // OpenObserve 资产与告警规则不在内：它们的 jimu_ 前缀是运行期协议名，改名会断开既有仪表盘。
 func deployFiles() []string {
 	return []string{
+		"deploy/docker/Dockerfile",
+		"deploy/compose/docker-compose.yml",
+		"deploy/compose/compose.observability.yml",
 		"deploy/k8s/deployment.yaml",
 		"deploy/k8s/service.yaml",
 		"deploy/k8s/configmap.yaml",
@@ -596,12 +599,20 @@ func deployFiles() []string {
 		"deploy/k8s/pdb.yaml",
 		"deploy/k8s/networkpolicy.yaml",
 		"deploy/k8s/backup-cronjob.yaml",
-		"deploy/k8s/openobserve.yaml",
-		"deploy/k8s/otel-collector.yaml",
+		"deploy/k8s/observability/openobserve.yaml",
+		"deploy/k8s/observability/otel-collector.yaml",
 		"deploy/helm/Chart.yaml",
 		"deploy/helm/values.yaml",
+		"deploy/helm/templates/observability/openobserve.yaml",
+		"deploy/helm/templates/observability/otel-collector.yaml",
 		"deploy/helm/templates/service.yaml",
 		"deploy/backup/Dockerfile",
+		"deploy/scripts/backup.sh",
+		"deploy/scripts/restore.sh",
+		"deploy/scripts/db_common.sh",
+		"deploy/scripts/install_db_clients.sh",
+		"deploy/scripts/init-secrets.sh",
+		"deploy/scripts/observability.sh",
 	}
 }
 

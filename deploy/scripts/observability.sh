@@ -5,10 +5,10 @@
 # 不影响 mariadb / redis / server 等业务容器。
 #
 # 用法:
-#   ./scripts/observability.sh start     # 启动服务并初始化 dashboard；配置 webhook 时同步默认告警
-#   ./scripts/observability.sh stop      # 停止并删除监控栈容器（保留业务容器与数据卷）
-#   ./scripts/observability.sh restart   # 重启监控栈
-#   ./scripts/observability.sh status    # 查看监控栈容器状态
+#   ./deploy/scripts/observability.sh start     # 启动服务并初始化 dashboard；配置 webhook 时同步默认告警
+#   ./deploy/scripts/observability.sh stop      # 停止并删除监控栈容器（保留业务容器与数据卷）
+#   ./deploy/scripts/observability.sh restart   # 重启监控栈
+#   ./deploy/scripts/observability.sh status    # 查看监控栈容器状态
 #
 # 环境变量：
 #   JIMU_SECRETS_DIR / ZO_OBSERVE_HTTP_PORT
@@ -16,13 +16,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SECRETS_DIR="${JIMU_SECRETS_DIR:-$ROOT_DIR/secrets}"
 
 COMPOSE=(
-  docker compose --env-file /dev/null
-  -f "$ROOT_DIR/docker-compose.yml"
-  -f "$ROOT_DIR/compose.observability.yml"
+  docker compose --project-directory "$ROOT_DIR" --env-file /dev/null
+  -f "$ROOT_DIR/deploy/compose/docker-compose.yml"
+  -f "$ROOT_DIR/deploy/compose/compose.observability.yml"
 )
 SERVICES=(openobserve otel-collector)
 ZO_HTTP_PORT="${ZO_OBSERVE_HTTP_PORT:-5080}"
@@ -35,7 +35,7 @@ start() {
   if [ ! -s "$env_file" ]; then
     echo "==> 初始化 observability secret：$SECRETS_DIR"
     SECRETS_DIR="$SECRETS_DIR" \
-      "$ROOT_DIR/scripts/init-secrets.sh" --observability --no-legacy
+      "$ROOT_DIR/deploy/scripts/init-secrets.sh" --observability --no-legacy
   fi
   [ -s "$env_file" ] \
     || { echo "❌ 缺少可用的 $env_file；请通过 make up-observability 重新初始化观测 Secret" >&2; exit 1; }
@@ -55,12 +55,12 @@ start() {
   ZO_HTTP="$ZO_HTTP" \
     ZO_EMAIL="$zo_email" \
     ZO_PASSWORD="$zo_password" \
-    "$ROOT_DIR/deploy/openobserve/init-dashboard.sh"
+    "$ROOT_DIR/deploy/observability/openobserve/init-dashboard.sh"
   echo "==> 同步默认告警（幂等，需 ZO_ALERT_WEBHOOK_URL）"
   ZO_HTTP="$ZO_HTTP" \
     ZO_EMAIL="$zo_email" \
     ZO_PASSWORD="$zo_password" \
-    "$ROOT_DIR/deploy/openobserve/sync-alerts.sh"
+    "$ROOT_DIR/deploy/observability/openobserve/sync-alerts.sh"
   echo "✅ OpenObserve:   $ZO_HTTP （默认账号 ${zo_email}）"
   echo "   OTLP gRPC:    127.0.0.1:${ZO_OBSERVE_GRPC_PORT:-5081}"
   echo "   启用应用推送：make up-observability"

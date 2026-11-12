@@ -21,7 +21,7 @@ fingerprint="$(
   {
     printf 'profile=%s\n' "$PROFILE"
     git ls-files -z --cached --others --exclude-standard -- \
-      Dockerfile go.mod go.sum cmd internal tools configs conf docs/openapi |
+      deploy/docker/Dockerfile go.mod go.sum cmd internal tools configs conf docs/openapi |
       while IFS= read -r -d '' path; do
         [ -f "$path" ] || continue
         printf '%s\0' "$path"
@@ -38,7 +38,7 @@ if [ "${FORCE:-0}" != "1" ] &&
   exit 0
 fi
 
-docker build --build-arg PROFILE="$PROFILE" -t "$IMAGE_TAG" "$ROOT_DIR"
+docker build -f "$ROOT_DIR/deploy/docker/Dockerfile" --build-arg PROFILE="$PROFILE" -t "$IMAGE_TAG" "$ROOT_DIR"
 docker tag "$IMAGE_TAG" "$LATEST_TAG"
 mkdir -p "$IMAGE_STAMP_DIR"
 printf '%s\n' "$fingerprint" >"$STAMP"

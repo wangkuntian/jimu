@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-INIT_SCRIPT="$ROOT/scripts/init-secrets.sh"
+INIT_SCRIPT="$ROOT/deploy/scripts/init-secrets.sh"
 WORK="$(mktemp -d)"
 FAKE_DOCKER_VOLUMES=""
 FAKE_DOCKER_PROBE_EXIT=""
@@ -142,8 +142,8 @@ run_init() {
 
 echo "== 默认不隐式读取仓库根 .env =="
 NO_IMPLICIT_REPO="$WORK/no-implicit-repo"
-mkdir -p "$NO_IMPLICIT_REPO/scripts"
-cp "$INIT_SCRIPT" "$NO_IMPLICIT_REPO/scripts/init-secrets.sh"
+mkdir -p "$NO_IMPLICIT_REPO/deploy/scripts"
+cp "$INIT_SCRIPT" "$NO_IMPLICIT_REPO/deploy/scripts/init-secrets.sh"
 cat > "$NO_IMPLICIT_REPO/.env" <<'ENV'
 DB_ROOT_PASSWORD=implicit-root-sentinel-1234567890
 DB_PASSWORD=implicit-db-sentinel-12345678901
@@ -159,7 +159,7 @@ if env -u LEGACY_ENV_FILE \
   FAKE_DOCKER_PROBE_EXIT="" \
   COMPOSE_MARIADB_VOLUME="jimu-mariadb-data" \
   COMPOSE_OPENOBSERVE_VOLUME="jimu-openobserve-data" \
-  bash "$NO_IMPLICIT_REPO/scripts/init-secrets.sh" </dev/null >"$WORK/no-implicit.out" 2>&1; then
+  bash "$NO_IMPLICIT_REPO/deploy/scripts/init-secrets.sh" </dev/null >"$WORK/no-implicit.out" 2>&1; then
   :
 else
   fail "未设置 LEGACY_ENV_FILE 时初始化不应失败"

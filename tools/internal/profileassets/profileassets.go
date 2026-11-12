@@ -31,17 +31,17 @@ import (
 // 因此 deploy/k8s 整体归 ops，而其中的 openobserve/otel 两个文件归 observability。
 var coreGroups = map[string][]string{
 	"ops": {
+		"deploy/docker",
+		"deploy/compose",
 		"deploy/k8s",
 		"deploy/helm",
 		"deploy/backup",
+		"deploy/scripts",
 	},
 	"observability": {
-		"deploy/openobserve",
-		"deploy/otel-collector.yaml",
-		"deploy/k8s/openobserve.yaml",
-		"deploy/k8s/otel-collector.yaml",
-		"deploy/helm/templates/openobserve.yaml",
-		"deploy/helm/templates/otel-collector.yaml",
+		"deploy/observability",
+		"deploy/k8s/observability",
+		"deploy/helm/templates/observability",
 	},
 }
 

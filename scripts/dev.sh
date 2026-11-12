@@ -13,9 +13,9 @@ export SECRETS_DIR="$JIMU_SECRETS_DIR"
 
 cd "$ROOT"
 
-./scripts/init-secrets.sh --no-legacy
+./deploy/scripts/init-secrets.sh --no-legacy
 
-docker compose --env-file /dev/null -f docker-compose.yml up -d --wait mariadb redis
+docker compose --project-directory "$ROOT" --env-file /dev/null -f deploy/compose/docker-compose.yml up -d --wait mariadb redis
 
 export APP_ENV="$ENV"
 DB_HOST_PORT="${JIMU_DB_HOST_PORT:-3306}"

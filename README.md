@@ -100,7 +100,7 @@ make seed
 make dev
 ```
 
-`auth` 预设不生成 `docker-compose.yml`；数据库与 Redis 需自行提供，连接信息通过 `DB_*`
+`auth` 预设的 Compose 编排位于 `deploy/compose/`；数据库与 Redis 连接信息通过 `DB_*`
 与 `REDIS_*` 环境变量覆盖。首次启动前运行 `make migrate` 与 `make seed`，
 seed 会读取 `ADMIN_PASSWORD`（或 `ADMIN_PASSWORD_FILE`）创建管理员账号。
 

@@ -101,7 +101,7 @@ updates:
   # 注意：`docker` 生态**只读** Dockerfile/Containerfile（按文件名匹配），**不读**
   # docker-compose.yml —— compose 内的镜像由下面独立的 `docker-compose` 生态覆盖。
   - package-ecosystem: "docker"
-    directory: "/"
+    directory: "/deploy/docker"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -123,11 +123,11 @@ updates:
           - "minor"
           - "patch"
 
-  # Docker Compose 镜像（docker-compose.yml）：`docker` 生态不覆盖它，必须独立声明。
+  # Docker Compose 镜像（deploy/compose/docker-compose.yml）：`docker` 生态不覆盖它，必须独立声明。
   # 原先写死的 mariadb/redis/adminer 三个 pattern 之所以从未匹配，正是因为这些镜像只出现在
   # compose 与 deploy/backup/Dockerfile 里。
   - package-ecosystem: "docker-compose"
-    directory: "/"
+    directory: "/deploy/compose"
     schedule:
       interval: "weekly"
       day: "monday"
