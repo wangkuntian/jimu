@@ -145,7 +145,6 @@ func TestCopyToolsCoversEveryBlueprintTree(t *testing.T) {
 		"tools/internal/profileoverlay",
 		"tools/internal/profileassets",
 		"tools/internal/heavydeps",
-		"tools/internal/projectmetrics",
 		"tools/profileoverlay",
 		"tools/profileassets",
 		"tools/checkcapabilities",
@@ -184,6 +183,7 @@ func TestNewProjectCopiesToolsAndRendersBuildFiles(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(dir, "tools", "profileassets"))
 	assert.NoDirExists(t, filepath.Join(dir, "tools", "profileoverlay"))
 	assert.NoDirExists(t, filepath.Join(dir, "tools", "internal", "profileoverlay"))
+	assert.NoDirExists(t, filepath.Join(dir, "tools", "internal", "projectmetrics"))
 	assert.NoFileExists(t, filepath.Join(dir, "scripts", "check_profiles.sh"))
 	assert.NoDirExists(t, filepath.Join(dir, "tools", "generator"), "tools/generator 不得进生成项目")
 	// 框架侧 tools 测试断言框架口径（多形态清单/框架 module path/框架资产表），不复制。

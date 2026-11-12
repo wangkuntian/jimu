@@ -46,7 +46,6 @@ var kernelFiles = []string{
 var copiedTools = []string{
 	"tools/internal/profileassets",
 	"tools/internal/heavydeps",
-	"tools/internal/projectmetrics",
 	"tools/checkcapabilities",
 	"tools/logcheck",
 }

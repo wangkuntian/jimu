@@ -585,15 +585,6 @@
       ]
     },
     {
-      "source": "tools/internal/projectmetrics",
-      "destination": "tools/internal/projectmetrics",
-      "optional": false,
-      "include": [],
-      "exclude": [
-        "*_test.go"
-      ]
-    },
-    {
       "source": "tools/checkcapabilities",
       "destination": "tools/checkcapabilities",
       "optional": false,
@@ -1726,10 +1717,8 @@
     "tools/internal/heavydeps/heavydeps.go",
     "tools/internal/profileassets/profileassets.go",
     "tools/internal/profileassets/selection.go",
-    "tools/internal/projectmetrics/projectmetrics.go",
-    "tools/internal/projectmetrics/spec.go",
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:00f715ac137c6a2ae4e8a9adea39c70739f5f4f03ed11235caa4e6f0225b47c8"
+  "digest": "sha256:cd21f15546e601b8988422b958488148fad4eb461d9cf655de2b61a8b0b60a1e"
 }
