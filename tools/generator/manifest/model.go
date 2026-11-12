@@ -3,8 +3,31 @@ package manifest
 // Schema versions understood by the generator. New manifests always use the
 // current version; the legacy version is read-only and exists for upgrades.
 const (
-	LegacySchemaVersion  = 2
-	CurrentSchemaVersion = 3
+	LegacySchemaVersion   = 2
+	PreviousSchemaVersion = 3
+	CurrentSchemaVersion  = 4
+)
+
+// Generation modes persisted in v4 manifests.
+const (
+	GenerationTestsSelected = "selected"
+	GenerationTestsAll      = "all"
+	GenerationTestsNone     = "none"
+
+	GenerationToolsAuto = "auto"
+	GenerationToolsAll  = "all"
+	GenerationToolsNone = "none"
+
+	GenerationCLIMinimal = "minimal"
+	GenerationCLIFull    = "full"
+
+	GenerationCLIUIDirect = "direct"
+	GenerationCLIUIBoth   = "both"
+
+	DeployCompose       = "compose"
+	DeployK8s           = "k8s"
+	DeployHelm          = "helm"
+	DeployObservability = "observability"
 )
 
 // TemplateContractVersion is the official template contract implemented by this generator.
@@ -31,6 +54,7 @@ type Document struct {
 	Framework           Framework         `json:"framework"`
 	Selection           Selection         `json:"selection"`
 	Composition         *Composition      `json:"composition,omitempty"`
+	Generation          *Generation       `json:"generation,omitempty"`
 	Capabilities        []Capability      `json:"capabilities"`
 	Copy                []CopyAction      `json:"copy"`
 	Templates           []TemplateAction  `json:"templates"`
@@ -42,6 +66,17 @@ type Document struct {
 	GeneratedFiles      []string          `json:"generated_files"`
 	GeneratedFileSHA256 map[string]string `json:"generated_file_sha256"`
 	Digest              string            `json:"digest"`
+}
+
+// Generation is the persisted generation policy for v4 manifests.
+type Generation struct {
+	RuntimeClosure bool     `json:"runtime_closure"`
+	Tests          string   `json:"tests"`
+	ToolsMode      string   `json:"tools_mode"`
+	ToolsResolved  []string `json:"tools_resolved"`
+	Deploy         []string `json:"deploy"`
+	CLI            string   `json:"cli"`
+	CLIUI          string   `json:"cli_ui"`
 }
 
 type Framework struct {

@@ -22,6 +22,15 @@ func validDocument() Document {
 			Validity:        CompositionValidityValid,
 			Support:         CompositionSupportExperimental,
 		},
+		Generation: &Generation{
+			RuntimeClosure: false,
+			Tests:          GenerationTestsAll,
+			ToolsMode:      GenerationToolsAll,
+			ToolsResolved:  []string{"checkcapabilities", "heavydeps", "logcheck", "profileassets"},
+			Deploy:         []string{},
+			CLI:            GenerationCLIFull,
+			CLIUI:          GenerationCLIUIDirect,
+		},
 		Copy:   []CopyAction{{Source: "internal/platform", Destination: "internal/platform", Include: []string{}, Exclude: []string{}}},
 		Report: ReportSpec{Name: "minimal", Capabilities: []string{"tenant", "user"}},
 	}

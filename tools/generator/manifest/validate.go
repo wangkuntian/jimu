@@ -11,27 +11,38 @@ import (
 
 // Validate 检查 manifest 的 schema、路径和动作目标不变量。
 func Validate(doc Document) error {
-	return validate(doc, false)
+	return validateFor(doc, CurrentSchemaVersion)
 }
 
 // validateLegacy checks a read-only schema v2 manifest before it is upgraded.
 func validateLegacy(doc Document) error {
-	return validate(doc, true)
+	return validateFor(doc, LegacySchemaVersion)
 }
 
-func validate(doc Document, legacy bool) error {
+func validatePrevious(doc Document) error {
+	return validateFor(doc, PreviousSchemaVersion)
+}
+
+func validateFor(doc Document, schemaVersion int) error {
 	if doc.SchemaVersion == 0 {
 		return fmt.Errorf("schema_version is required")
 	}
-	if legacy {
-		if doc.SchemaVersion != LegacySchemaVersion {
-			return fmt.Errorf("unsupported legacy schema version %d", doc.SchemaVersion)
-		}
+	if doc.SchemaVersion != schemaVersion {
+		return fmt.Errorf("unsupported schema version %d (want %d)", doc.SchemaVersion, schemaVersion)
+	}
+	if schemaVersion == LegacySchemaVersion {
 		if doc.Composition != nil {
 			return fmt.Errorf("composition is not valid in schema v2")
 		}
-	} else if doc.SchemaVersion != CurrentSchemaVersion {
-		return fmt.Errorf("unsupported schema version %d", doc.SchemaVersion)
+	}
+	if schemaVersion >= PreviousSchemaVersion && doc.Composition == nil {
+		return fmt.Errorf("composition is required")
+	}
+	if schemaVersion == PreviousSchemaVersion && doc.Generation != nil {
+		return fmt.Errorf("generation is not valid in schema v3")
+	}
+	if schemaVersion >= CurrentSchemaVersion && doc.Generation == nil {
+		return fmt.Errorf("generation is required")
 	}
 	if strings.TrimSpace(doc.Framework.Module) == "" {
 		return fmt.Errorf("framework.module is required")
@@ -50,15 +61,17 @@ func validate(doc Document, legacy bool) error {
 	if err := validateCapabilities(doc.Capabilities); err != nil {
 		return err
 	}
-	if !legacy {
-		if doc.Composition == nil {
-			return fmt.Errorf("composition is required")
-		}
+	if schemaVersion >= PreviousSchemaVersion {
 		if err := validateComposition(*doc.Composition); err != nil {
 			return err
 		}
 		if !sameStringSet(doc.Composition.Resolved, doc.Selection.Capabilities) {
 			return fmt.Errorf("composition.resolved does not match selection.capabilities")
+		}
+	}
+	if schemaVersion >= CurrentSchemaVersion {
+		if err := validateGeneration(*doc.Generation); err != nil {
+			return err
 		}
 	}
 
@@ -184,21 +197,19 @@ func validate(doc Document, legacy bool) error {
 
 // ValidateComplete verifies the provenance fields required in a persisted manifest.
 func ValidateComplete(doc Document) error {
-	return validateComplete(doc, false)
+	return validateCompleteFor(doc, CurrentSchemaVersion)
 }
 
 func validateCompleteLegacy(doc Document) error {
-	return validateComplete(doc, true)
+	return validateCompleteFor(doc, LegacySchemaVersion)
 }
 
-func validateComplete(doc Document, legacy bool) error {
-	var err error
-	if legacy {
-		err = validateLegacy(doc)
-	} else {
-		err = Validate(doc)
-	}
-	if err != nil {
+func validateCompletePrevious(doc Document) error {
+	return validateCompleteFor(doc, PreviousSchemaVersion)
+}
+
+func validateCompleteFor(doc Document, schemaVersion int) error {
+	if err := validateFor(doc, schemaVersion); err != nil {
 		return err
 	}
 	if strings.TrimSpace(doc.Framework.Version) == "" {
@@ -213,6 +224,76 @@ func validateComplete(doc Document, legacy bool) error {
 	for _, file := range doc.GeneratedFiles {
 		if _, ok := doc.GeneratedFileSHA256[file]; !ok {
 			return fmt.Errorf("missing generated file hash for %q", file)
+		}
+	}
+	return nil
+}
+
+func validateGeneration(g Generation) error {
+	if err := requireEnum("generation.tests", g.Tests, GenerationTestsSelected, GenerationTestsAll, GenerationTestsNone); err != nil {
+		return err
+	}
+	if err := requireEnum("generation.tools_mode", g.ToolsMode, GenerationToolsAuto, GenerationToolsAll, GenerationToolsNone); err != nil {
+		return err
+	}
+	if err := requireEnum("generation.cli", g.CLI, GenerationCLIMinimal, GenerationCLIFull); err != nil {
+		return err
+	}
+	if err := requireEnum("generation.cli_ui", g.CLIUI, GenerationCLIUIDirect, GenerationCLIUIBoth); err != nil {
+		return err
+	}
+	if err := validateSortedUnique("generation.tools_resolved", g.ToolsResolved); err != nil {
+		return err
+	}
+	for _, tool := range g.ToolsResolved {
+		switch tool {
+		case "logcheck", "checkcapabilities", "profileassets", "heavydeps":
+		default:
+			return fmt.Errorf("generation.tools_resolved has unknown tool %q", tool)
+		}
+	}
+	if err := validateSortedUnique("generation.deploy", g.Deploy); err != nil {
+		return err
+	}
+	for _, component := range g.Deploy {
+		switch component {
+		case DeployCompose, DeployK8s, DeployHelm, DeployObservability:
+		case "none":
+			return fmt.Errorf("generation.deploy must use an empty list instead of %q", component)
+		default:
+			return fmt.Errorf("generation.deploy has unknown component %q", component)
+		}
+	}
+	return nil
+}
+
+func requireEnum(field, value string, allowed ...string) error {
+	if value == "" {
+		return fmt.Errorf("%s is required", field)
+	}
+	for _, candidate := range allowed {
+		if value == candidate {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s has unknown value %q", field, value)
+}
+
+func validateSortedUnique(field string, values []string) error {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(values))
+	for i, value := range values {
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("%s contains an empty value", field)
+		}
+		if seen[value] {
+			return fmt.Errorf("%s contains duplicate %q", field, value)
+		}
+		seen[value] = true
+		if i > 0 && values[i-1] > value {
+			return fmt.Errorf("%s must be sorted", field)
 		}
 	}
 	return nil

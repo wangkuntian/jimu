@@ -47,6 +47,17 @@ func Load(path string) (Document, error) {
 			return Document{}, err
 		}
 		return doc, nil
+	case PreviousSchemaVersion:
+		if err := validatePersistedFields(b, PreviousSchemaVersion); err != nil {
+			return Document{}, err
+		}
+		if err := validateCompletePrevious(doc); err != nil {
+			return Document{}, err
+		}
+		if err := validateDigestPrevious(doc); err != nil {
+			return Document{}, err
+		}
+		return upgradeFromV3(doc)
 	case LegacySchemaVersion:
 		if err := validatePersistedFields(b, LegacySchemaVersion); err != nil {
 			return Document{}, err
@@ -91,6 +102,20 @@ func validateDigestLegacy(doc Document) error {
 	return nil
 }
 
+func validateDigestPrevious(doc Document) error {
+	if doc.Digest == "" {
+		return fmt.Errorf("manifest digest is required")
+	}
+	expected, err := digestPreviousV3(doc)
+	if err != nil {
+		return err
+	}
+	if doc.Digest != expected {
+		return fmt.Errorf("manifest digest mismatch: got %q, want %q", doc.Digest, expected)
+	}
+	return nil
+}
+
 func validatePersistedFields(content []byte, schemaVersion int) error {
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(content, &root); err != nil {
@@ -99,6 +124,11 @@ func validatePersistedFields(content []byte, schemaVersion int) error {
 	if schemaVersion == LegacySchemaVersion {
 		if _, ok := root["composition"]; ok {
 			return fmt.Errorf("composition is not valid in schema v2")
+		}
+	}
+	if schemaVersion == PreviousSchemaVersion {
+		if _, ok := root["generation"]; ok {
+			return fmt.Errorf("generation is not valid in schema v3")
 		}
 	}
 	if err := requireJSONField(root, "generated_file_sha256"); err != nil {
@@ -118,7 +148,7 @@ func validatePersistedFields(content []byte, schemaVersion int) error {
 	if err := requireJSONField(selection, "template_version"); err != nil {
 		return fmt.Errorf("selection.%w", err)
 	}
-	if schemaVersion == CurrentSchemaVersion {
+	if schemaVersion >= PreviousSchemaVersion {
 		if err := requireJSONField(root, "composition"); err != nil {
 			return err
 		}
@@ -129,6 +159,20 @@ func validatePersistedFields(content []byte, schemaVersion int) error {
 		for _, field := range []string{"contract_version", "requested", "resolved", "auto_added", "drivers", "validity", "support"} {
 			if err := requireJSONField(composition, field); err != nil {
 				return fmt.Errorf("composition.%w", err)
+			}
+		}
+	}
+	if schemaVersion == CurrentSchemaVersion {
+		if err := requireJSONField(root, "generation"); err != nil {
+			return err
+		}
+		var generation map[string]json.RawMessage
+		if err := json.Unmarshal(root["generation"], &generation); err != nil {
+			return fmt.Errorf("decode generation fields: %w", err)
+		}
+		for _, field := range []string{"runtime_closure", "tests", "tools_mode", "tools_resolved", "deploy", "cli", "cli_ui"} {
+			if err := requireJSONField(generation, field); err != nil {
+				return fmt.Errorf("generation.%w", err)
 			}
 		}
 	}
@@ -187,13 +231,27 @@ func digestLegacyV2(doc Document) (string, error) {
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
+// digestPreviousV3 verifies a v3 manifest with the v3 JSON shape: composition
+// present, generation absent.
+func digestPreviousV3(doc Document) (string, error) {
+	if err := validatePrevious(doc); err != nil {
+		return "", err
+	}
+	doc.Digest = ""
+	b, err := marshalCanonical(doc)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(b)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
 // upgradeFromV2 converts a verified legacy manifest into the current schema in
 // memory. Schema v2 has no explicit composition block, so its declared
 // capability set is the resolved set and no dependency is known to be auto-added.
 // v2 manifests could only be written after preflight, so validity is derived as
 // valid; consumers that need current validity must re-run the resolver.
 func upgradeFromV2(doc Document) (Document, error) {
-	doc.SchemaVersion = CurrentSchemaVersion
 	doc.Composition = &Composition{
 		ContractVersion: CompositionContractVersion,
 		Requested:       sortedClone(doc.Selection.Capabilities),
@@ -203,6 +261,19 @@ func upgradeFromV2(doc Document) (Document, error) {
 		Validity:        CompositionValidityValid,
 		Support:         compositionSupportFromLegacy(doc.Selection.Support),
 	}
+	return upgradeFromLegacy(doc)
+}
+
+// upgradeFromV3 converts a verified v3 manifest into the current schema in
+// memory. v3 has composition but no generation block.
+func upgradeFromV3(doc Document) (Document, error) {
+	return upgradeFromLegacy(doc)
+}
+
+func upgradeFromLegacy(doc Document) (Document, error) {
+	doc.SchemaVersion = CurrentSchemaVersion
+	generation := GenerationDefaults(doc)
+	doc.Generation = &generation
 	doc.Digest = ""
 	digest, err := Digest(doc)
 	if err != nil {
@@ -210,6 +281,44 @@ func upgradeFromV2(doc Document) (Document, error) {
 	}
 	doc.Digest = digest
 	return doc, nil
+}
+
+// GenerationDefaults returns the generation policy implied by a v2/v3
+// manifest. It is deliberately conservative: no compose, no TUI, and the
+// tools/tests that older projects actually carried.
+func GenerationDefaults(doc Document) Generation {
+	generation := Generation{
+		RuntimeClosure: false,
+		Tests:          GenerationTestsAll,
+		ToolsMode:      GenerationToolsAll,
+		ToolsResolved:  []string{"checkcapabilities", "heavydeps", "logcheck", "profileassets"},
+		Deploy:         []string{},
+		CLI:            GenerationCLIMinimal,
+		CLIUI:          GenerationCLIUIDirect,
+	}
+	if doc.Selection.Template == "minimal" || doc.Selection.Profile == "minimal" {
+		return generation
+	}
+	generation.Deploy = []string{DeployHelm, DeployK8s}
+	if hasRuntimeService(doc, "mysql") {
+		generation.CLI = GenerationCLIFull
+	}
+	if doc.Selection.Template == "full" || doc.Selection.Profile == "full" {
+		generation.Deploy = []string{DeployHelm, DeployK8s, DeployObservability}
+		generation.CLI = GenerationCLIFull
+	}
+	return generation
+}
+
+func hasRuntimeService(doc Document, service string) bool {
+	for _, capability := range doc.Capabilities {
+		for _, value := range capability.RuntimeServices {
+			if value == service {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func compositionSupportFromLegacy(support string) string {
@@ -251,6 +360,12 @@ func Write(path string, doc Document) error {
 func normalize(doc Document) Document {
 	doc.Selection.Capabilities = nonNilClone(doc.Selection.Capabilities)
 	doc.Selection.Drivers = cloneSortedDriverMap(doc.Selection.Drivers)
+	if doc.Generation != nil {
+		generation := *doc.Generation
+		generation.ToolsResolved = sortedClone(generation.ToolsResolved)
+		generation.Deploy = sortedClone(generation.Deploy)
+		doc.Generation = &generation
+	}
 	if doc.Composition != nil {
 		composition := *doc.Composition
 		composition.Requested = sortedClone(composition.Requested)
