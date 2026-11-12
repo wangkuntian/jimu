@@ -2,6 +2,7 @@
 package workspace
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,14 @@ import (
 
 const manifestRel = ".jimu/manifest.json"
 
+type RuntimePrune struct {
+	Enabled   bool
+	Module    string
+	Roots     []string
+	Platforms []Platform
+	Tests     string
+}
+
 type CreateOptions struct {
 	Target     string
 	SourceRoot string
@@ -26,6 +35,7 @@ type CreateOptions struct {
 	NoTidy     bool
 	DryRun     bool
 	Report     bool
+	Prune      RuntimePrune
 
 	// NoSelfCheck is reserved for package-level tests and callers that provide
 	// their own verification. The CLI keeps the default fail-closed behavior.
@@ -41,6 +51,7 @@ type UpdateOptions struct {
 	NoTidy      bool
 	NoSelfCheck bool
 	Report      bool
+	Prune       RuntimePrune
 }
 
 type Result struct {
@@ -95,7 +106,17 @@ func Create(doc manifest.Document, opts CreateOptions) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	doc.GeneratedFiles = slices.Clone(rendered)
+	if opts.Prune.Enabled {
+		if err := Tidy(staging); err != nil {
+			return Result{}, fmt.Errorf("go mod tidy before closure: %w", err)
+		}
+		if err := pruneStage(staging, opts.Prune); err != nil {
+			return Result{}, err
+		}
+		doc.GeneratedFiles = listFiles(staging)
+	} else {
+		doc.GeneratedFiles = slices.Clone(rendered)
+	}
 	if !opts.NoTidy {
 		if err := Tidy(staging); err != nil {
 			return Result{}, fmt.Errorf("go mod tidy: %w", err)
@@ -121,8 +142,7 @@ func Create(doc manifest.Document, opts CreateOptions) (Result, error) {
 	if err := replaceDirectory(target, staging); err != nil {
 		return Result{}, err
 	}
-	sort.Strings(rendered)
-	result.Files = append(rendered, manifestRel)
+	result.Files = append(slices.Clone(doc.GeneratedFiles), manifestRel)
 	sort.Strings(result.Files)
 	result.FileCount = len(result.Files)
 	return result, nil
@@ -166,6 +186,14 @@ func Update(previous manifest.Document, next manifest.Document, opts UpdateOptio
 		Plan:        executionPlan,
 	}); err != nil {
 		return Result{}, err
+	}
+	if opts.Prune.Enabled {
+		if err := Tidy(staging); err != nil {
+			return Result{}, fmt.Errorf("go mod tidy before closure: %w", err)
+		}
+		if err := pruneStage(staging, opts.Prune); err != nil {
+			return Result{}, err
+		}
 	}
 	rendered := listFiles(staging)
 	next.GeneratedFiles = slices.Clone(rendered)
@@ -223,6 +251,29 @@ func Update(previous manifest.Document, next manifest.Document, opts UpdateOptio
 		return Result{}, err
 	}
 	return result, nil
+}
+
+func pruneStage(dir string, opts RuntimePrune) error {
+	module := opts.Module
+	if module == "" {
+		return fmt.Errorf("runtime prune module is empty")
+	}
+	tests := opts.Tests
+	if tests == "" {
+		tests = "selected"
+	}
+	closure, err := ComputePackageClosure(context.Background(), dir, ClosureOptions{
+		Roots: opts.Roots, Module: module, Platforms: opts.Platforms,
+	})
+	if err != nil {
+		return fmt.Errorf("compute runtime closure: %w", err)
+	}
+	if _, err := PrunePackages(dir, PruneOptions{
+		Module: module, Tests: tests, Runtime: closure.Runtime, TestDeps: closure.Tests,
+	}); err != nil {
+		return fmt.Errorf("prune runtime closure: %w", err)
+	}
+	return nil
 }
 
 func listFiles(root string) []string {

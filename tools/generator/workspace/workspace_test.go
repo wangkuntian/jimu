@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"jimu/tools/generator/manifest"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreateWritesManifestAndRejectsNonEmptyTarget(t *testing.T) {
@@ -104,6 +106,41 @@ func TestCreateRenderFailureLeavesExistingTarget(t *testing.T) {
 	}
 }
 
+func TestCreatePrunesRuntimeUnreachablePackage(t *testing.T) {
+	source := t.TempDir()
+	writeFile(t, source, "go.mod", "module example.com/app\n\ngo 1.26\n")
+	writeFile(t, source, "cmd/server/main.go", "package main\n\nfunc main() {}\n")
+	writeFile(t, source, "internal/unreachable/unreachable.go", "package unreachable\n")
+	doc := fixtureDocument("generated.txt", "config.yaml")
+	doc.Copy = []manifest.CopyAction{
+		{Source: "go.mod", Destination: "go.mod"},
+		{Source: "cmd/server", Destination: "cmd/server"},
+		{Source: "internal/unreachable", Destination: "internal/unreachable"},
+	}
+	doc.Merges = nil
+	doc.Rewrites = nil
+	doc.GeneratedFiles = []string{"go.mod", "cmd/server/main.go", "internal/unreachable/unreachable.go"}
+	dir := filepath.Join(t.TempDir(), "project")
+	_, err := Create(doc, CreateOptions{
+		Target: dir, SourceRoot: source, Module: "example.com/app",
+		NoTidy: true, NoSelfCheck: true,
+		Prune: RuntimePrune{
+			Enabled: true, Module: "example.com/app",
+			Roots:     []string{"example.com/app/cmd/server"},
+			Platforms: []Platform{{GOOS: "linux", GOARCH: "amd64"}},
+			Tests:     "selected",
+		},
+	})
+	require.NoError(t, err)
+	require.FileExists(t, filepath.Join(dir, "cmd/server/main.go"))
+	require.NoFileExists(t, filepath.Join(dir, "internal/unreachable/unreachable.go"))
+	loaded, err := LoadProjectManifest(dir)
+	require.NoError(t, err)
+	require.NotContains(t, loaded.GeneratedFiles, "internal/unreachable/unreachable.go")
+	require.NotContains(t, loaded.GeneratedFileSHA256, "internal/unreachable/unreachable.go")
+	require.NoError(t, manifest.ValidateComplete(loaded))
+}
+
 func TestUpdatePreservesUserFilesEditedConfigAndIsIdempotent(t *testing.T) {
 	source := t.TempDir()
 	writeFile(t, source, "input.txt", "generated\n")
@@ -192,6 +229,14 @@ func fixtureDocument(generated, config string) manifest.Document {
 			Drivers:         map[string][]string{},
 			Validity:        manifest.CompositionValidityValid,
 			Support:         manifest.CompositionSupportExperimental,
+		},
+		Generation: &manifest.Generation{
+			Tests:         manifest.GenerationTestsAll,
+			ToolsMode:     manifest.GenerationToolsAll,
+			ToolsResolved: []string{},
+			Deploy:        []string{},
+			CLI:           manifest.GenerationCLIFull,
+			CLIUI:         manifest.GenerationCLIUIDirect,
 		},
 		Copy:           []manifest.CopyAction{{Source: "input.txt", Destination: generated}},
 		Merges:         []manifest.MergeAction{{Source: config, Destination: config, Strategy: "sections"}},
