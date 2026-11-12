@@ -44,6 +44,7 @@ type NewOptions struct {
 	Report     bool
 	SourceRoot string
 	Framework  *manifest.Framework
+	Generation *manifest.Generation
 
 	// NoSelfCheck 只供本仓构建类测试使用；CLI 始终执行自检。
 	NoSelfCheck bool
@@ -87,10 +88,11 @@ func NewProject(opts NewOptions) (*Result, error) {
 	}
 	doc, resolution, err := frameworkmanifest.ExportDetailed(frameworkmanifest.Request{
 		Root: root, Template: opts.Template, Profile: opts.Profile, With: opts.With, Shape: opts.Shape, Module: module,
-		DBDriver:  opts.DBDriver,
-		Tests:     opts.Tests,
-		Tools:     opts.Tools,
-		Framework: opts.Framework,
+		DBDriver:   opts.DBDriver,
+		Tests:      opts.Tests,
+		Tools:      opts.Tools,
+		Framework:  opts.Framework,
+		Generation: opts.Generation,
 	})
 	if err != nil {
 		return nil, err

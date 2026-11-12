@@ -45,7 +45,7 @@
     "support": "experimental"
   },
   "generation": {
-    "runtime_closure": false,
+    "runtime_closure": true,
     "tests": "selected",
     "tools_mode": "auto",
     "tools_resolved": [
@@ -521,8 +521,17 @@
       "exclude": []
     },
     {
-      "source": "tools/internal/profileassets",
-      "destination": "tools/internal/profileassets",
+      "source": "tools/checkcapabilities",
+      "destination": "tools/checkcapabilities",
+      "optional": false,
+      "include": [],
+      "exclude": [
+        "*_test.go"
+      ]
+    },
+    {
+      "source": "tools/logcheck",
+      "destination": "tools/logcheck",
       "optional": false,
       "include": [],
       "exclude": [
@@ -539,17 +548,8 @@
       ]
     },
     {
-      "source": "tools/checkcapabilities",
-      "destination": "tools/checkcapabilities",
-      "optional": false,
-      "include": [],
-      "exclude": [
-        "*_test.go"
-      ]
-    },
-    {
-      "source": "tools/logcheck",
-      "destination": "tools/logcheck",
+      "source": "tools/internal/profileassets",
+      "destination": "tools/internal/profileassets",
       "optional": false,
       "include": [],
       "exclude": [
@@ -577,6 +577,8 @@
       "data": {
         "Expected": "access queue user",
         "HasAPIdocs": false,
+        "HasCheckcapabilities": true,
+        "HasLogcheck": true,
         "Shape": "app"
       }
     },
@@ -587,6 +589,8 @@
       "data": {
         "Expected": "access queue user",
         "HasAPIdocs": false,
+        "HasCheckcapabilities": true,
+        "HasLogcheck": true,
         "Shape": "app"
       }
     },
@@ -997,22 +1001,6 @@
     },
     {
       "kind": "file-patch",
-      "from": "const modulePath = \"jimu\"",
-      "to": "const modulePath = \"example.com/with\"",
-      "files": [
-        "tools/checkcapabilities/drivers.go"
-      ]
-    },
-    {
-      "kind": "file-patch",
-      "from": "\"jimu/tools/logcheck\"",
-      "to": "\"example.com/with/tools/logcheck\"",
-      "files": [
-        "tools/logcheck/main.go"
-      ]
-    },
-    {
-      "kind": "file-patch",
       "from": "Use:   \"jimu\",",
       "to": "Use:   \"with\",",
       "files": [
@@ -1048,6 +1036,22 @@
         "deploy/helm/values.yaml",
         "deploy/helm/templates/service.yaml",
         "deploy/backup/Dockerfile"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "const modulePath = \"jimu\"",
+      "to": "const modulePath = \"example.com/with\"",
+      "files": [
+        "tools/checkcapabilities/drivers.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "\"jimu/tools/logcheck\"",
+      "to": "\"example.com/with/tools/logcheck\"",
+      "files": [
+        "tools/logcheck/main.go"
       ]
     },
     {
@@ -1575,5 +1579,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:ad0a00642af3c0446b75ef1e8d80f40bca3cd10adbc00226a0a7a4cb46077881"
+  "digest": "sha256:b0b0eb0974d6b505507683a9131978430c9b86ed7ac8862b5451d71470ec757d"
 }

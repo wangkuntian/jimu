@@ -64,7 +64,9 @@ flowchart LR
 
 生成器从框架读取能力、profile、contract 和资产信息的唯一适配层是 [`tools/generator/frameworkmanifest`](../../tools/generator/frameworkmanifest)。适配层导出校验后的 manifest；计划、渲染、文件工作区和报告逻辑消费 manifest，不直接依赖框架内部包。唯一例外是叶子包 [`internal/capability`](../../internal/capability)：它只 import `internal/contract`，提供组合 resolver 与结构化诊断，不携带能力、形态或资产事实；`preflight` 复用该包以保持生成器与 `jimu check` 同一套组合规则。
 
-manifest 记录项目选择、复制与模板动作、合并和重写规则、资产、测试裁剪、生成文件及摘要；它也是识别生成产物和 `jimu capability add` 增量更新的依据。schema v3 在 schema v2 的 provenance 字段（`framework.version`、`framework.commit`、`framework.dirty`、官方模板的 `selection.template_version`、`generated_file_sha256`）之外持久化组合结果：`composition.contract_version`、`requested`、`resolved`、`auto_added`、驱动选择、`validity` 与 `support`。`composition` 是升级与诊断的事实来源，`--dry-run` 与 `jimu check` 的 support 也读取该字段；组合状态的完整定义见[能力组合](capability-composition.md)。生成时只写 `validity: valid`，支持级别使用 `certified|validated|experimental`，内部 profile 统一映射为 `experimental`。schema v2 只读：加载时先按 v2 校验 digest，再在内存中确定性地补齐 `composition`（declared 集即 requested/resolved，无 auto-added，驱动取自 `selection.drivers`）并换为 v3；v2 只可能在预检通过后写出，因此推导 `validity: valid`，需要当前合法性时应重新运行 resolver。writer 拒绝 v2，schema v1 继续 fail-closed。commit 只通过 `git rev-parse --verify HEAD^{commit}` 从框架根解析，因此普通 clone 与 linked worktree 使用同一路径；解析或 dirty 检查失败时在写目标前终止。生成文件哈希在 tidy、自检和配置合并后计算，排除 manifest 与报告自身。更新能力时，生成器根据新的选择重算产物，并保留受支持的用户配置合并规则。
+manifest 记录项目选择、复制与模板动作、合并和重写规则、资产、测试裁剪、生成文件及摘要；它也是识别生成产物和 `jimu capability add` 增量更新的依据。schema v3 在 schema v2 的 provenance 字段（`framework.version`、`framework.commit`、`framework.dirty`、官方模板的 `selection.template_version`、`generated_file_sha256`）之外持久化组合结果：`composition.contract_version`、`requested`、`resolved`、`auto_added`、驱动选择、`validity` 与 `support`。schema v4 再增加 `generation`：`runtime_closure`、`tests`、`tools_mode`、`tools_resolved`、`deploy`、`cli`、`cli_ui`。`composition` 是升级与诊断的事实来源，`--dry-run` 与 `jimu check` 的 support 也读取该字段；组合状态的完整定义见[能力组合](capability-composition.md)。生成时只写 `validity: valid`，支持级别使用 `certified|validated|experimental`，内部 profile 统一映射为 `experimental`。schema v2 只读：加载时先按 v2 校验 digest，再在内存中确定性地补齐 `composition`（declared 集即 requested/resolved，无 auto-added，驱动取自 `selection.drivers`）并换为当前 schema；v2 只可能在预检通过后写出，因此推导 `validity: valid`，需要当前合法性时应重新运行 resolver。schema v3 同样只读，加载时按保守默认补齐 `generation`（保留旧项目的测试/工具，不启用 compose 或 TUI）。writer 拒绝旧 schema，schema v1 继续 fail-closed。commit 只通过 `git rev-parse --verify HEAD^{commit}` 从框架根解析，因此普通 clone 与 linked worktree 使用同一路径；解析或 dirty 检查失败时在写目标前终止。生成文件哈希在 tidy、自检和配置合并后计算，排除 manifest 与报告自身。更新能力时，生成器根据新的选择重算产物，并保留受支持的用户配置合并规则。
+
+`jimu new` 的生成策略由 `--tests=selected|all|none` 与 `--tools=auto|all|none` 控制。`minimal` 默认 `tests=selected`、`tools=auto`（无能力时只带 `logcheck`；有受门控能力时带 `checkcapabilities` 及其编译依赖）；`auth`/`full` 默认保留全部工具。`tools=none` 同时移除生成项目的工具目录和 Makefile 中的对应目标。`generation.tools_mode` 记录用户模式，`generation.tools_resolved` 记录解析后的实际工具，`capability add` 在能力集变化后重算后者。运行时裁剪先在暂存树内执行一次容错 tidy，再按 `cmd/server`、`cmd/cli` 与显式工具入口计算多平台 package 闭包；`--no-tidy` 只跳过最后一次 tidy，闭包计算、裁剪、构建和门禁仍执行。`capability add` 与 `upgrade` 保留既有 `generation`；v3 项目升级时使用保守默认，不因升级启用 Compose 或 TUI。
 
 项目先写入暂存目录，再执行依赖整理、构建和能力门禁自检；通过后才发布到目标路径。失败时清理暂存内容。`make check-templates` 检查生成模板与当前框架结构的一致性。
 
@@ -99,13 +101,13 @@ flowchart TD
     I -->|失败| R[恢复已备份文件]
 ```
 
-新增能力复用与 `jimu new` / `jimu check` 相同的组合 resolver 和 preflight：硬依赖必须已经在项目装配集中，不会静默追加依赖；冲突、端口、驱动、迁移、运行时配置和中间件问题都在创建暂存目录或写目标文件前失败。组合结果保留既有 `requested` / `auto_added` 与驱动选择，并以 schema v3 `composition` 写回。未使用 `--force` 且项目 manifest 摘要已变化时，追加操作拒绝继续。
+新增能力复用与 `jimu new` / `jimu check` 相同的组合 resolver 和 preflight：硬依赖必须已经在项目装配集中，不会静默追加依赖；冲突、端口、驱动、迁移、运行时配置和中间件问题都在创建暂存目录或写目标文件前失败。组合结果保留既有 `requested` / `auto_added` 与驱动选择，并以当前 schema 的 `composition` 写回；`generation` 的测试模式、部署组件和 CLI 形态保持不变，只按新能力集重算 `tools_resolved`。未使用 `--force` 且项目 manifest 摘要已变化时，追加操作拒绝继续。
 
 更新仅安装生成器管理的差异文件，并保留现有配置值；落盘复用 `jimu upgrade` 的 manifest 事务：先备份所有受影响文件，逐文件安装，manifest 最后写入，任一失败按原字节恢复。该增量追加流程不执行新建项目使用的 `go mod tidy` 和构建自检，支持级别保持 `experimental`。预设项目是裁剪起点，可以继续 `capability add`；只有已退役的 `basic-api` / `auth-api` 项目会被拒绝。
 
 ### 显式升级规划
 
-`jimu upgrade` 是独立的显式升级入口，不复用 `capability add` 或隐式重生成。规划阶段只读：读取现有 manifest（schema v2 在内存升级为 v3），按 `selection.template`、`selection.profile` 或 `composition.requested` 重建当前框架下的目标 manifest；`--with` 项目同时透传 `composition.drivers`，保留非默认驱动选择。随后把目标产物渲染到系统临时目录；项目已有 `docs/profiles/generated-report.md` 时，在同一暂存树重算报告并纳入比较。规划器比较三份事实：manifest 的 `generated_file_sha256` 基线、项目当前文件、目标模板产物（含重算后的报告）。
+`jimu upgrade` 是独立的显式升级入口，不复用 `capability add` 或隐式重生成。规划阶段只读：读取现有 manifest（schema v2/v3 在内存补齐 `composition` 与保守 `generation`），按 `selection.template`、`selection.profile` 或 `composition.requested` 重建当前框架下的目标 manifest；`--with` 项目同时透传 `composition.drivers`，保留非默认驱动选择。`generation` 原样带入目标请求，不因升级把旧项目扩成 Compose/TUI。随后把目标产物渲染到系统临时目录；启用 `runtime_closure` 的目标先做容错 tidy，再按运行时入口裁剪并做最终 tidy。项目已有 `docs/profiles/generated-report.md` 时，在同一暂存树重算报告并纳入比较。规划器比较三份事实：manifest 的 `generated_file_sha256` 基线、项目当前文件、目标模板产物（含重算后的报告）。
 
 | 分类 | 判定 | 动作 |
 |---|---|---|

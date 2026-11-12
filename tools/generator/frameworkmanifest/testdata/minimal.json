@@ -53,7 +53,7 @@
     "support": "experimental"
   },
   "generation": {
-    "runtime_closure": false,
+    "runtime_closure": true,
     "tests": "selected",
     "tools_mode": "auto",
     "tools_resolved": [
@@ -579,8 +579,17 @@
       "exclude": []
     },
     {
-      "source": "tools/internal/profileassets",
-      "destination": "tools/internal/profileassets",
+      "source": "tools/checkcapabilities",
+      "destination": "tools/checkcapabilities",
+      "optional": false,
+      "include": [],
+      "exclude": [
+        "*_test.go"
+      ]
+    },
+    {
+      "source": "tools/logcheck",
+      "destination": "tools/logcheck",
       "optional": false,
       "include": [],
       "exclude": [
@@ -597,17 +606,8 @@
       ]
     },
     {
-      "source": "tools/checkcapabilities",
-      "destination": "tools/checkcapabilities",
-      "optional": false,
-      "include": [],
-      "exclude": [
-        "*_test.go"
-      ]
-    },
-    {
-      "source": "tools/logcheck",
-      "destination": "tools/logcheck",
+      "source": "tools/internal/profileassets",
+      "destination": "tools/internal/profileassets",
       "optional": false,
       "include": [],
       "exclude": [
@@ -635,6 +635,8 @@
       "data": {
         "Expected": "access auth encryption notification user",
         "HasAPIdocs": false,
+        "HasCheckcapabilities": true,
+        "HasLogcheck": true,
         "Shape": "minimal"
       }
     },
@@ -645,6 +647,8 @@
       "data": {
         "Expected": "access auth encryption notification user",
         "HasAPIdocs": false,
+        "HasCheckcapabilities": true,
+        "HasLogcheck": true,
         "Shape": "minimal"
       }
     },
@@ -1133,22 +1137,6 @@
     },
     {
       "kind": "file-patch",
-      "from": "const modulePath = \"jimu\"",
-      "to": "const modulePath = \"example.com/minimal\"",
-      "files": [
-        "tools/checkcapabilities/drivers.go"
-      ]
-    },
-    {
-      "kind": "file-patch",
-      "from": "\"jimu/tools/logcheck\"",
-      "to": "\"example.com/minimal/tools/logcheck\"",
-      "files": [
-        "tools/logcheck/main.go"
-      ]
-    },
-    {
-      "kind": "file-patch",
       "from": "Use:   \"jimu\",",
       "to": "Use:   \"minimal\",",
       "files": [
@@ -1184,6 +1172,22 @@
         "deploy/helm/values.yaml",
         "deploy/helm/templates/service.yaml",
         "deploy/backup/Dockerfile"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "const modulePath = \"jimu\"",
+      "to": "const modulePath = \"example.com/minimal\"",
+      "files": [
+        "tools/checkcapabilities/drivers.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "\"jimu/tools/logcheck\"",
+      "to": "\"example.com/minimal/tools/logcheck\"",
+      "files": [
+        "tools/logcheck/main.go"
       ]
     },
     {
@@ -1732,5 +1736,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:e491d1b8a8960a953d5f93950099a42ad7c2f484ce9ff7b0685a67097aa5e05c"
+  "digest": "sha256:280eadd5940df11cc8a851edbd7eb7a35d68cccd1c94ace1af8768e2cd457a1c"
 }

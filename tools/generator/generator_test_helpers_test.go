@@ -59,6 +59,15 @@ func writeManifestWithTemplate(t *testing.T, template string) string {
 			Validity:        manifest.CompositionValidityValid,
 			Support:         manifest.CompositionSupportCertified,
 		},
+		Generation: &manifest.Generation{
+			RuntimeClosure: false,
+			Tests:          manifest.GenerationTestsAll,
+			ToolsMode:      manifest.GenerationToolsAll,
+			ToolsResolved:  []string{"checkcapabilities", "heavydeps", "logcheck", "profileassets"},
+			Deploy:         []string{},
+			CLI:            manifest.GenerationCLIMinimal,
+			CLIUI:          manifest.GenerationCLIUIDirect,
+		},
 		Rewrites: []manifest.RewriteAction{{Kind: "module", From: "jimu", To: "example.com/legacy", Files: []string{}}},
 	}
 	if err := os.MkdirAll(filepath.Join(dir, ".jimu"), 0o755); err != nil {

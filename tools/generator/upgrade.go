@@ -157,6 +157,22 @@ func planUpgrade(opts UpgradeOptions) (*plannedUpgrade, error) {
 	if err != nil {
 		return nil, fmt.Errorf("render target template: %w", err)
 	}
+	if target.Generation.RuntimeClosure {
+		if _, statErr := os.Stat(filepath.Join(staging, "go.mod")); statErr == nil {
+			if err := workspace.TidyForClosure(staging); err != nil {
+				return nil, fmt.Errorf("target go mod tidy before closure: %w", err)
+			}
+			if err := workspace.PruneRuntime(staging, workspace.RuntimePrune{
+				Enabled: true, Module: request.Module, Roots: runtimeRoots(request.Module, target.Generation),
+				Platforms: defaultClosurePlatforms, Tests: target.Generation.Tests,
+			}); err != nil {
+				return nil, fmt.Errorf("target runtime closure: %w", err)
+			}
+			rendered = workspace.Files(staging)
+		} else if !os.IsNotExist(statErr) {
+			return nil, fmt.Errorf("inspect staged go.mod: %w", statErr)
+		}
+	}
 	if !opts.NoTidy {
 		if _, statErr := os.Stat(filepath.Join(staging, "go.mod")); statErr == nil {
 			if err := workspace.Tidy(staging); err != nil {
@@ -262,6 +278,12 @@ func upgradeRequest(previous manifest.Document, root, projectDir string, framewo
 		return frameworkmanifest.Request{}, fmt.Errorf("cannot determine project module: manifest has no module rewrite and go.mod is unreadable")
 	}
 	request := frameworkmanifest.Request{Root: root, Module: module, Framework: framework}
+	if previous.Generation != nil {
+		generation := *previous.Generation
+		generation.ToolsResolved = slices.Clone(previous.Generation.ToolsResolved)
+		generation.Deploy = slices.Clone(previous.Generation.Deploy)
+		request.Generation = &generation
+	}
 	switch {
 	case previous.Selection.Template != "":
 		request.Template = previous.Selection.Template

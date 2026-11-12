@@ -37,19 +37,19 @@ func PrunePackages(dir string, opts PruneOptions) (PruneResult, error) {
 	if err != nil {
 		return PruneResult{}, err
 	}
+	keepPackages := clonePackageSet(opts.Runtime)
+	if opts.Tests != "none" {
+		if err := expandTestClosure(dir, dirs, opts.Module, keepPackages, opts.TestDeps); err != nil {
+			return PruneResult{}, err
+		}
+	}
 	var result PruneResult
 	for _, packageDir := range dirs {
 		importPath := importPathForDir(dir, packageDir, opts.Module)
-		keep := opts.Runtime[importPath]
-		if !keep && opts.Tests == "all" && opts.TestDeps[importPath] {
-			keep, err = nonTestImportsSafe(packageDir, opts.Module, opts.Runtime)
-			if err != nil {
-				return PruneResult{}, err
-			}
-		}
+		keep := keepPackages[importPath]
 		dropTestFiles := false
-		if opts.Tests != "none" && (keep || (opts.Tests == "all" && opts.TestDeps[importPath])) {
-			dropTestFiles, err = testFilesHaveMissingImport(packageDir, opts.Module, opts.Runtime)
+		if opts.Tests != "none" && keep {
+			dropTestFiles, err = testFilesHaveMissingImport(packageDir, opts.Module, keepPackages)
 			if err != nil {
 				return PruneResult{}, err
 			}
@@ -73,7 +73,7 @@ func PrunePackages(dir string, opts PruneOptions) (PruneResult, error) {
 				case "none":
 					remove = true
 				case "selected":
-					remove = !opts.Runtime[importPath]
+					remove = !keep
 					if !remove && dropTestFiles {
 						remove = true
 					}
@@ -177,6 +177,85 @@ func testFilesHaveMissingImport(dir, module string, runtime map[string]bool) (bo
 		}
 	}
 	return false, nil
+}
+
+func clonePackageSet(values map[string]bool) map[string]bool {
+	out := make(map[string]bool, len(values))
+	for name, value := range values {
+		if value {
+			out[name] = true
+		}
+	}
+	return out
+}
+
+// expandTestClosure keeps test-only packages whose non-test files stay inside
+// the runtime closure. Tests of retained packages are scanned repeatedly so a
+// test helper package can be followed by its own test-only imports.
+func expandTestClosure(root string, dirs []string, module string, keep map[string]bool, testDeps map[string]bool) error {
+	byImport := make(map[string]string, len(dirs))
+	for _, packageDir := range dirs {
+		byImport[importPathForDir(root, packageDir, module)] = packageDir
+	}
+	for name := range testDeps {
+		if keep[name] {
+			continue
+		}
+		importDir, ok := byImport[name]
+		if !ok {
+			continue
+		}
+		safe, err := nonTestImportsSafe(importDir, module, keep)
+		if err != nil {
+			return err
+		}
+		if safe {
+			keep[name] = true
+		}
+	}
+	for {
+		changed := false
+		for _, packageDir := range dirs {
+			importPath := importPathForDir(root, packageDir, module)
+			if !keep[importPath] {
+				continue
+			}
+			entries, err := os.ReadDir(packageDir)
+			if err != nil {
+				return fmt.Errorf("read package dir %s: %w", packageDir, err)
+			}
+			for _, entry := range entries {
+				if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_test.go") {
+					continue
+				}
+				file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(packageDir, entry.Name()), nil, parser.ImportsOnly)
+				if err != nil {
+					return fmt.Errorf("parse %s: %w", entry.Name(), err)
+				}
+				for _, spec := range file.Imports {
+					name := strings.Trim(spec.Path.Value, `"`)
+					if !belongsToModule(name, module) || keep[name] {
+						continue
+					}
+					importDir, ok := byImport[name]
+					if !ok {
+						continue
+					}
+					safe, err := nonTestImportsSafe(importDir, module, keep)
+					if err != nil {
+						return err
+					}
+					if safe {
+						keep[name] = true
+						changed = true
+					}
+				}
+			}
+		}
+		if !changed {
+			return nil
+		}
+	}
 }
 
 func removeEmptyDirs(root string) ([]string, error) {

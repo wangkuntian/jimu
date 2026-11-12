@@ -92,6 +92,18 @@ func TestAddCapabilityRefreshesGeneratedReport(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(plain, filepath.FromSlash(reportRelPath)))
 }
 
+func TestAddCapabilityKeepsTestsAndRecomputesTools(t *testing.T) {
+	dir := generateForTest(t, NewOptions{Template: "minimal", Tests: "selected", Tools: "auto"})
+	before := readManifestForTest(t, dir)
+	_, err := AddCapability(AddOptions{Dir: dir, Name: "apidocs"})
+	require.NoError(t, err)
+	after := readManifestForTest(t, dir)
+	require.Equal(t, "selected", after.Generation.Tests)
+	require.Equal(t, "auto", after.Generation.ToolsMode)
+	require.ElementsMatch(t, []string{"checkcapabilities", "logcheck"}, after.Generation.ToolsResolved)
+	require.Equal(t, before.Generation.CLIUI, after.Generation.CLIUI)
+}
+
 // reportGeneratedCount 从报告文本里取出「生成文件数」的实测值（解析失败即 fail）。
 func reportGeneratedCount(t *testing.T, report string) int {
 	t.Helper()
@@ -527,6 +539,15 @@ func TestManifestSaveLoadRoundTrip(t *testing.T) {
 			Drivers:         map[string][]string{"queue": {"redis"}},
 			Validity:        manifest.CompositionValidityValid,
 			Support:         manifest.CompositionSupportExperimental,
+		},
+		Generation: &manifest.Generation{
+			RuntimeClosure: false,
+			Tests:          manifest.GenerationTestsAll,
+			ToolsMode:      manifest.GenerationToolsAll,
+			ToolsResolved:  []string{"checkcapabilities", "heavydeps", "logcheck", "profileassets"},
+			Deploy:         []string{},
+			CLI:            manifest.GenerationCLIMinimal,
+			CLIUI:          manifest.GenerationCLIUIDirect,
 		},
 		Capabilities:        []manifest.Capability{},
 		Copy:                []manifest.CopyAction{},

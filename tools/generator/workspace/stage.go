@@ -188,7 +188,7 @@ func Update(previous manifest.Document, next manifest.Document, opts UpdateOptio
 		return Result{}, err
 	}
 	if opts.Prune.Enabled {
-		if err := Tidy(staging); err != nil {
+		if err := TidyForClosure(staging); err != nil {
 			return Result{}, fmt.Errorf("go mod tidy before closure: %w", err)
 		}
 		if err := pruneStage(staging, opts.Prune); err != nil {
@@ -276,6 +276,12 @@ func pruneStage(dir string, opts RuntimePrune) error {
 	return nil
 }
 
+// PruneRuntime applies the generation policy's runtime closure to a staged
+// project. Callers own the surrounding tidy steps.
+func PruneRuntime(dir string, opts RuntimePrune) error {
+	return pruneStage(dir, opts)
+}
+
 func listFiles(root string) []string {
 	var files []string
 	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
@@ -293,6 +299,11 @@ func listFiles(root string) []string {
 	})
 	sort.Strings(files)
 	return files
+}
+
+// Files returns the relative file list of a staged project.
+func Files(root string) []string {
+	return listFiles(root)
 }
 
 func moduleFromDocument(doc manifest.Document, override string) string {

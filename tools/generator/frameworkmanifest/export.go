@@ -119,7 +119,11 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 	if req.Generation != nil {
 		selected.generation = *req.Generation
 	} else {
-		selected.generation, err = ResolveGeneration(selected.profile, req.With, selected.declared, GenerationRequest{
+		generationProfile := selected.profile
+		if generationProfile == "" {
+			generationProfile = selected.template
+		}
+		selected.generation, err = ResolveGeneration(generationProfile, req.With, selected.declared, GenerationRequest{
 			Tests: req.Tests,
 			Tools: req.Tools,
 		})
@@ -288,12 +292,29 @@ func ExportForAdd(root string, previous manifest.Document, name, driver string, 
 		// otherwise an idempotent --force run would rewrite only metadata.
 		profile = previous.Selection.Profile
 	}
+	resolvedNames := make([]string, 0, len(composed.Resolved))
+	for _, descriptor := range composed.Resolved {
+		resolvedNames = append(resolvedNames, descriptor.Name)
+	}
+	generation, err := ResolveGeneration(profile, with, resolvedNames, GenerationRequest{
+		Tests:  previous.Generation.Tests,
+		Tools:  previous.Generation.ToolsMode,
+		Deploy: slices.Clone(previous.Generation.Deploy),
+		CLI:    previous.Generation.CLI,
+		CLIUI:  previous.Generation.CLIUI,
+	})
+	if err != nil {
+		return manifest.Document{}, err
+	}
 	if profile != "" {
-		return Export(Request{Root: root, Profile: profile, Module: module, Drivers: composed.Drivers, Framework: framework})
+		return Export(Request{
+			Root: root, Profile: profile, Module: module, Drivers: composed.Drivers,
+			Generation: &generation, Framework: framework,
+		})
 	}
 	return Export(Request{
 		Root: root, Profile: profile, With: with, Shape: previous.Selection.Shape, Module: module, Drivers: composed.Drivers,
-		Framework: framework,
+		Generation: &generation, Framework: framework,
 	})
 }
 

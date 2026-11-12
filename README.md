@@ -78,6 +78,10 @@ cd demo && make dev
 
 `minimal` 生成项目不需要数据库、Redis 或其他外部服务。
 
+默认只保留选中运行时包可达的源码与测试；需要调整生成面时使用
+`--tests=selected|all|none` 和 `--tools=auto|all|none`。`--no-tidy` 只跳过最后一次
+`go mod tidy`，运行时闭包裁剪、构建和自检仍会执行。
+
 生成项目默认编译 MySQL 驱动。需要 PostgreSQL 时加 `--db=postgres`：
 只编译所选驱动与对应方言的迁移，另一套驱动不会进入产物。
 
