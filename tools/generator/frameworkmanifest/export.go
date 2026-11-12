@@ -31,7 +31,8 @@ type Request struct {
 	DBDriver  string
 	Framework *manifest.Framework
 	// Drivers 保留既有项目的驱动选择；未列出的能力由默认驱动规则补齐。
-	Drivers map[string][]string
+	Drivers    map[string][]string
+	Generation *manifest.Generation
 }
 
 type selection struct {
@@ -51,6 +52,7 @@ type selection struct {
 	drivers    map[string][]string
 	ungated    map[string]bool
 	assemblies []assembly.Capability
+	generation manifest.Generation
 }
 
 // Resolution 是 `jimu new --dry-run` 与后续 manifest composition（P0-3）共用的解析摘要。
@@ -103,18 +105,24 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 			selected, err = resolvePresetSelection(root, preset)
 			selected.dbDriver = dbDriver
 			applyDBDriverToSearch(&selected)
-			if err == nil {
-				doc, err = buildDocument(root, req.Module, selected, req.Framework)
-			}
 		}
 	} else {
 		selected, err = resolveSelection(root, req)
 		selected.dbDriver = dbDriver
 		applyDBDriverToSearch(&selected)
-		if err == nil {
-			doc, err = buildDocument(root, req.Module, selected, req.Framework)
+	}
+	if err != nil {
+		return manifest.Document{}, Resolution{}, err
+	}
+	if req.Generation != nil {
+		selected.generation = *req.Generation
+	} else {
+		selected.generation, err = ResolveGeneration(selected.profile, req.With, selected.declared, GenerationRequest{})
+		if err != nil {
+			return manifest.Document{}, Resolution{}, err
 		}
 	}
+	doc, err = buildDocument(root, req.Module, selected, req.Framework)
 	if err != nil {
 		return manifest.Document{}, Resolution{}, err
 	}
@@ -310,6 +318,7 @@ func buildDocument(root, module string, selected selection, frameworkOverride *m
 			Capabilities: slices.Clone(selected.declared), Drivers: cloneDrivers(selected.drivers),
 		},
 		Composition:    compositionFor(selected),
+		Generation:     generationFor(selected),
 		Capabilities:   capabilityFacts(root, selected),
 		Copy:           copyActionsValue,
 		Templates:      templateActions(root, selected),
@@ -328,6 +337,13 @@ func buildDocument(root, module string, selected selection, frameworkOverride *m
 		return manifest.Document{}, err
 	}
 	return doc, nil
+}
+
+func generationFor(selected selection) *manifest.Generation {
+	generation := selected.generation
+	generation.ToolsResolved = append([]string(nil), generation.ToolsResolved...)
+	generation.Deploy = append([]string(nil), generation.Deploy...)
+	return &generation
 }
 
 func compositionFor(selected selection) *manifest.Composition {

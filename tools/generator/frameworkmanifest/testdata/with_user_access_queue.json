@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "framework": {
     "module": "jimu",
     "version": "dev",
@@ -43,6 +43,21 @@
     },
     "validity": "valid",
     "support": "experimental"
+  },
+  "generation": {
+    "runtime_closure": false,
+    "tests": "selected",
+    "tools_mode": "auto",
+    "tools_resolved": [
+      "checkcapabilities",
+      "logcheck"
+    ],
+    "deploy": [
+      "helm",
+      "k8s"
+    ],
+    "cli": "full",
+    "cli_ui": "direct"
   },
   "capabilities": [
     {
@@ -1560,5 +1575,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:0f8b34daf255ca55724dbbf0300c06d516f72987e2e96329b14ec530970a0e3e"
+  "digest": "sha256:ad0a00642af3c0446b75ef1e8d80f40bca3cd10adbc00226a0a7a4cb46077881"
 }
