@@ -22,20 +22,34 @@ func selectedAssets(selected selection) []string {
 			}
 		}
 	}
-	for _, group := range profileassets.CoreGroups() {
-		for _, value := range group {
-			if canonical := profileassets.Canonical(value); canonical != "" {
-				if canonical == "deploy/backup" && !includeBackup(selected) {
-					continue
-				}
-				paths[canonical] = true
-			}
+	add := func(value string) {
+		if canonical := profileassets.Canonical(value); canonical != "" {
+			paths[canonical] = true
 		}
 	}
-	if !includeObservability(selected) {
-		for _, value := range profileassets.CoreGroups()["observability"] {
-			delete(paths, profileassets.Canonical(value))
+	deploy := selected.generation.Deploy
+	if HasDeploy(deploy, manifest.DeployCompose) {
+		add("deploy/scripts")
+	}
+	if HasDeploy(deploy, manifest.DeployK8s) {
+		add("deploy/k8s")
+		add("deploy/scripts")
+	}
+	if HasDeploy(deploy, manifest.DeployHelm) {
+		add("deploy/helm")
+		add("deploy/scripts")
+	}
+	if HasDeploy(deploy, manifest.DeployObservability) {
+		add("deploy/observability")
+		if HasDeploy(deploy, manifest.DeployK8s) {
+			add("deploy/k8s/observability")
 		}
+		if HasDeploy(deploy, manifest.DeployHelm) {
+			add("deploy/helm/templates/observability")
+		}
+	}
+	if includeBackup(selected) && (HasDeploy(deploy, manifest.DeployCompose) || HasDeploy(deploy, manifest.DeployK8s) || HasDeploy(deploy, manifest.DeployHelm)) {
+		add("deploy/backup")
 	}
 	return slices.Sorted(maps.Keys(paths))
 }
@@ -74,6 +88,16 @@ func selectedAssetFiles(root string, selected selection) []string {
 	seen := map[string]bool{}
 	for _, action := range assetActions(root, selected) {
 		collectFiles(root, action.Source, action.Exclude, seen)
+	}
+	deploy := selected.generation.Deploy
+	if HasDeploy(deploy, manifest.DeployCompose) || HasDeploy(deploy, manifest.DeployK8s) || HasDeploy(deploy, manifest.DeployHelm) {
+		seen["deploy/docker/Dockerfile"] = true
+	}
+	if HasDeploy(deploy, manifest.DeployCompose) {
+		seen["deploy/compose/docker-compose.yml"] = true
+		if HasDeploy(deploy, manifest.DeployObservability) {
+			seen["deploy/compose/compose.observability.yml"] = true
+		}
 	}
 	roots := profileassets.AssetRoots()
 	out := make([]string, 0, len(seen))

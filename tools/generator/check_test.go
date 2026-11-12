@@ -39,7 +39,7 @@ func TestCheckProjectFastReportsHealthyLifecycleAndIsReadOnly(t *testing.T) {
 }
 
 func TestCheckProjectFastWarnsOnManagedDriftWithoutFailing(t *testing.T) {
-	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	dir := generateForTest(t, NewOptions{Template: "minimal", Deploy: "compose"})
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "deploy", "docker", "Dockerfile"), []byte("local change\n"), 0o644))
 	require.NoError(t, os.Remove(filepath.Join(dir, "Makefile")))
 	before := hashTree(t, dir)

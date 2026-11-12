@@ -49,7 +49,6 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 		"internal/assembly/assembly.go",
 		"internal/app/container_nodb.go",
 		"internal/profiles/seed_nodb.go",
-		"deploy/docker/Dockerfile",
 		"Makefile",
 		"go.mod",
 		".jimu/manifest.json",
@@ -65,6 +64,8 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 		"internal/profiles/seed_db.go",
 		"internal/capabilities/user",
 		"internal/capabilities/catalog",
+		"deploy/docker/Dockerfile",
+		"Dockerfile",
 		"docker-compose.yml",
 		"deploy/backup",
 		"deploy/observability",
@@ -112,9 +113,8 @@ func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 		"internal/app/container_db.go",
 		"internal/platform/scheduler/mysql_store.go",
 		"internal/profiles/seed_db.go",
+		"deploy/compose/docker-compose.yml",
 		"deploy/backup/Dockerfile",
-		"deploy/helm/templates/secret.yaml",
-		"deploy/k8s/backup-cronjob.yaml",
 		"deploy/scripts/backup.sh",
 	} {
 		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "missing auth artifact %s", rel)
@@ -125,11 +125,71 @@ func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 		"deploy/k8s/observability/openobserve.yaml",
 		"deploy/k8s/observability/otel-collector.yaml",
 		"deploy/k8s/config-files.yaml",
+		"deploy/helm",
+		"deploy/k8s",
 	} {
 		_, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
 		assert.True(t, os.IsNotExist(statErr), "auth must not contain %s", rel)
 	}
+	compose := readFileForTest(t, filepath.Join(dir, "deploy/compose/docker-compose.yml"))
+	assert.Contains(t, string(compose), "mariadb:")
+	assert.Contains(t, string(compose), "jimu-init:")
+	assert.Contains(t, string(compose), "redis:")
+	assert.Contains(t, string(compose), "dockerfile: deploy/docker/Dockerfile")
+	assert.NoFileExists(t, filepath.Join(dir, "deploy/compose/compose.observability.yml"))
 	assertManifestProvenance(t, dir, "auth")
+}
+
+func TestNewProjectComposeWithoutServicesOmitsMariadbAndRedis(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "compose")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: "minimal", Deploy: "compose", Module: "example.com/compose", NoTidy: true,
+	})
+	require.NoError(t, err)
+
+	compose := string(readFileForTest(t, filepath.Join(dir, "deploy/compose/docker-compose.yml")))
+	assert.NotContains(t, compose, "mariadb:")
+	assert.NotContains(t, compose, "jimu-init:")
+	assert.NotContains(t, compose, "redis:")
+	assert.Contains(t, compose, "dockerfile: deploy/docker/Dockerfile")
+}
+
+func TestNewProjectDeployComponentsControlBuildArtifacts(t *testing.T) {
+	tests := []struct {
+		name       string
+		deploy     string
+		dockerfile bool
+		compose    bool
+		k8s        bool
+	}{
+		{name: "none", deploy: "none"},
+		{name: "compose", deploy: "compose", dockerfile: true, compose: true},
+		{name: "k8s", deploy: "k8s", dockerfile: true, k8s: true},
+		{name: "observability", deploy: "observability"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), tt.name)
+			_, err := newProjectForTest(t, NewOptions{
+				Dir: dir, Template: "minimal", Deploy: tt.deploy, Module: "example.com/" + tt.name, NoTidy: true,
+			})
+			require.NoError(t, err)
+
+			assertFileState(t, filepath.Join(dir, "deploy/docker/Dockerfile"), tt.dockerfile)
+			assertFileState(t, filepath.Join(dir, "deploy/compose/docker-compose.yml"), tt.compose)
+			assertFileState(t, filepath.Join(dir, "deploy/k8s"), tt.k8s)
+		})
+	}
+}
+
+func assertFileState(t *testing.T, path string, want bool) {
+	t.Helper()
+	_, err := os.Stat(path)
+	if want {
+		assert.NoError(t, err, "missing %s", path)
+		return
+	}
+	assert.True(t, os.IsNotExist(err), "%s must be absent", path)
 }
 
 func TestNewProjectAuthMemoryDriverNeedsNoRedis(t *testing.T) {
@@ -199,7 +259,7 @@ func TestNewProjectFullPresetFollowsPostgresSearchDriver(t *testing.T) {
 func TestNewProjectAuthPresetFollowsPostgresDriver(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "auth-pg")
 	_, err := newProjectForTest(t, NewOptions{
-		Dir: dir, Template: "auth", Module: "example.com/auth-pg", DBDriver: "postgres", NoTidy: true,
+		Dir: dir, Template: "auth", Deploy: "all", Module: "example.com/auth-pg", DBDriver: "postgres", NoTidy: true,
 	})
 	require.NoError(t, err)
 	assert.DirExists(t, filepath.Join(dir, "internal/capabilities/user/migrations/postgres"))

@@ -147,16 +147,34 @@ func kernelExcludesFor(root string) []string {
 	return sortedStrings(out)
 }
 
-func templateActions(root string, selected selection) []manifest.TemplateAction {
+func templateActions(root, module string, selected selection) []manifest.TemplateAction {
 	shapeData := map[string]any{
 		"Shape":        selected.shape,
 		"Capabilities": shapeCapabilities(selected),
 	}
+	services := selectionRuntimeServices(selected)
+	hasMySQL := services[contract.RuntimeServiceMySQL]
+	hasRedis := services[contract.RuntimeServiceRedis]
+	hasCompose := HasDeploy(selected.generation.Deploy, manifest.DeployCompose)
+	hasK8s := HasDeploy(selected.generation.Deploy, manifest.DeployK8s)
+	hasHelm := HasDeploy(selected.generation.Deploy, manifest.DeployHelm)
+	hasObservability := HasDeploy(selected.generation.Deploy, manifest.DeployObservability)
+	hasDockerfile := hasCompose || hasK8s || hasHelm
+	hasScripts := hasCompose || hasK8s || hasHelm
 	buildData := map[string]any{
 		"Shape":                selected.shape,
 		"HasAPIdocs":           contains(selected.copy, "apidocs"),
 		"HasLogcheck":          contains(selected.generation.ToolsResolved, "logcheck"),
 		"HasCheckcapabilities": contains(selected.generation.ToolsResolved, "checkcapabilities"),
+		"HasDockerfile":        hasDockerfile,
+		"HasCompose":           hasCompose,
+		"HasMySQL":             hasMySQL,
+		"HasRedis":             hasRedis,
+		"HasScripts":           hasScripts,
+		"HasBackup":            hasMySQL,
+		"WithObservability":    hasObservability,
+		"ProjectName":          projectName(module),
+		"Module":               module,
 		"Expected":             strings.Join(selected.roots, " "),
 	}
 	catalogData := catalogTemplateData(selected)
@@ -168,7 +186,6 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 	}
 	actions := []manifest.TemplateAction{
 		{Source: "tools/generator/render/templates/project/Makefile.tmpl", Destination: "Makefile", Kind: "build", Data: buildData},
-		{Source: "tools/generator/render/templates/project/Dockerfile.tmpl", Destination: "deploy/docker/Dockerfile", Kind: "build", Data: buildData},
 		{Source: "tools/generator/render/templates/project/registry.go.tmpl", Destination: "internal/profiles/registry/registry.go", Kind: "shape", Data: shapeData},
 		{Source: "tools/generator/render/templates/project/assembly.go.tmpl", Destination: filepath.ToSlash(filepath.Join("internal/profiles", selected.shape, "assembly.go")), Kind: "shape", Data: shapeData},
 		{Source: "tools/generator/render/templates/project/drivers.go.tmpl", Destination: filepath.ToSlash(filepath.Join("internal/profiles", selected.shape, "drivers.go")), Kind: "shape", Data: shapeData},
@@ -176,6 +193,24 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 		{Source: "tools/generator/render/templates/project/catalog.go.tmpl", Destination: "internal/capabilities/catalog/catalog.go", Kind: "catalog", Data: catalogData},
 		{Source: "tools/generator/render/templates/project/catalog_migration.go.tmpl", Destination: "internal/capabilities/catalog/migration.go", Kind: "catalog", Data: catalogData},
 		{Source: cliSource, Destination: "cmd/cli/main.go", Kind: "cli", Data: cliData},
+	}
+	if hasDockerfile {
+		actions = append(actions, manifest.TemplateAction{
+			Source: "tools/generator/render/templates/project/Dockerfile.tmpl", Destination: "deploy/docker/Dockerfile",
+			Kind: "build", Data: buildData,
+		})
+	}
+	if hasCompose {
+		actions = append(actions, manifest.TemplateAction{
+			Source: "tools/generator/render/templates/project/docker-compose.yml.tmpl", Destination: "deploy/compose/docker-compose.yml",
+			Kind: "compose", Data: buildData,
+		})
+	}
+	if hasCompose && hasObservability {
+		actions = append(actions, manifest.TemplateAction{
+			Source: "tools/generator/render/templates/project/compose.observability.yml.tmpl", Destination: "deploy/compose/compose.observability.yml",
+			Kind: "compose", Data: buildData,
+		})
 	}
 	if contains(copiedTools(selected.generation.ToolsResolved), "profileassets") {
 		actions = append(actions, manifest.TemplateAction{
@@ -302,11 +337,9 @@ func selectionRuntimeServices(selected selection) map[contract.RuntimeService]bo
 	return services
 }
 
-// includeObservability 决定部署资产是否携带观测栈。当前没有独立的 observability
-// 能力；只有 full 预设携带完整观测栈，minimal/auth 不生成 OpenObserve/OTel
-// 相关清单，避免默认带上一套与所选能力无关的基础设施。
+// includeObservability 决定部署资产是否携带观测栈；由 deploy 组件选择控制。
 func includeObservability(selected selection) bool {
-	return selected.template == "full" || selected.profile == "full"
+	return HasDeploy(selected.generation.Deploy, manifest.DeployObservability)
 }
 
 func includeDatabase(selected selection) bool {
@@ -460,11 +493,17 @@ func cliImports(root string, selected selection) []map[string]any {
 
 func mergeActions(root string, selected selection) []manifest.MergeAction {
 	sections := configSections(selected)
-	return []manifest.MergeAction{
+	actions := []manifest.MergeAction{
 		{Source: "configs/app.yaml", Destination: "configs/app.yaml", Strategy: "sections", Sections: slices.Clone(sections)},
 		{Source: "configs/app.prod.yaml", Destination: "configs/app.prod.yaml", Strategy: "sections", Sections: slices.Clone(sections)},
-		{Source: "deploy/helm/values.yaml", Destination: "deploy/helm/values.yaml", Strategy: "sections", Sections: valuesSections(root, selected)},
 	}
+	if HasDeploy(selected.generation.Deploy, manifest.DeployHelm) {
+		actions = append(actions, manifest.MergeAction{
+			Source: "deploy/helm/values.yaml", Destination: "deploy/helm/values.yaml",
+			Strategy: "sections", Sections: valuesSections(root, selected),
+		})
+	}
+	return actions
 }
 
 func rewriteActions(root, module string, selected selection) []manifest.RewriteAction {
@@ -562,21 +601,23 @@ func driverRewriteActions(root string, selected selection) []manifest.RewriteAct
 		}
 	}
 
-	values := valuesSections(root, selected)
-	if slices.Contains(values, "cache") {
-		if driver := chosen("cache", "redis"); driver != "" {
-			add("file-patch", "deploy/helm/values.yaml", `  driver: redis`, `  driver: `+driver)
+	if HasDeploy(selected.generation.Deploy, manifest.DeployHelm) {
+		values := valuesSections(root, selected)
+		if slices.Contains(values, "cache") {
+			if driver := chosen("cache", "redis"); driver != "" {
+				add("file-patch", "deploy/helm/values.yaml", `  driver: redis`, `  driver: `+driver)
+			}
+		}
+		if slices.Contains(values, "storage") {
+			if driver := chosen("storage", "local"); driver != "" {
+				add("file-patch", "deploy/helm/values.yaml", `  type: local`, `  type: `+driver)
+			}
+		}
+		if (slices.Contains(values, "db") || slices.Contains(values, "backup")) && selected.dbDriver == "postgres" {
+			add("file-patch", "deploy/helm/values.yaml", `  driver: mysql`, `  driver: postgres`)
 		}
 	}
-	if slices.Contains(values, "storage") {
-		if driver := chosen("storage", "local"); driver != "" {
-			add("file-patch", "deploy/helm/values.yaml", `  type: local`, `  type: `+driver)
-		}
-	}
-	if (slices.Contains(values, "db") || slices.Contains(values, "backup")) && selected.dbDriver == "postgres" {
-		add("file-patch", "deploy/helm/values.yaml", `  driver: mysql`, `  driver: postgres`)
-	}
-	if includeBackup(selected) && selected.dbDriver == "postgres" {
+	if HasDeploy(selected.generation.Deploy, manifest.DeployK8s) && includeBackup(selected) && selected.dbDriver == "postgres" {
 		add("asset-file-patch", "deploy/k8s/backup-cronjob.yaml", `value: "mysql"`, `value: "postgres"`)
 	}
 	return actions
@@ -625,7 +666,7 @@ func generatedFiles(root string, selected selection) ([]string, error) {
 	for _, action := range actions {
 		collectFiles(root, action.Source, action.Exclude, seen)
 	}
-	for _, action := range templateActions(root, selected) {
+	for _, action := range templateActions(root, "", selected) {
 		seen[action.Destination] = true
 	}
 	for _, action := range mergeActions(root, selected) {

@@ -356,7 +356,7 @@ func buildDocument(root, module string, selected selection, frameworkOverride *m
 		Generation:     generationFor(selected),
 		Capabilities:   capabilityFacts(root, selected),
 		Copy:           copyActionsValue,
-		Templates:      templateActions(root, selected),
+		Templates:      templateActions(root, module, selected),
 		Merges:         mergeActions(root, selected),
 		Rewrites:       rewriteActions(root, module, selected),
 		Assets:         assetActions(root, selected),

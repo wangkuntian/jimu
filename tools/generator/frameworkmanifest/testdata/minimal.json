@@ -635,21 +635,18 @@
       "data": {
         "Expected": "access auth encryption notification user",
         "HasAPIdocs": false,
+        "HasBackup": true,
         "HasCheckcapabilities": true,
+        "HasCompose": false,
+        "HasDockerfile": false,
         "HasLogcheck": true,
-        "Shape": "minimal"
-      }
-    },
-    {
-      "source": "tools/generator/render/templates/project/Dockerfile.tmpl",
-      "destination": "deploy/docker/Dockerfile",
-      "kind": "build",
-      "data": {
-        "Expected": "access auth encryption notification user",
-        "HasAPIdocs": false,
-        "HasCheckcapabilities": true,
-        "HasLogcheck": true,
-        "Shape": "minimal"
+        "HasMySQL": true,
+        "HasRedis": true,
+        "HasScripts": false,
+        "Module": "example.com/minimal",
+        "ProjectName": "minimal",
+        "Shape": "minimal",
+        "WithObservability": false
       }
     },
     {
@@ -996,38 +993,7 @@
       "destination": "tools/internal/profileassets/selection.go",
       "kind": "assets",
       "data": {
-        "Files": [
-          "deploy/backup/Dockerfile",
-          "deploy/compose/compose.observability.yml",
-          "deploy/compose/docker-compose.yml",
-          "deploy/docker/Dockerfile",
-          "deploy/helm/Chart.yaml",
-          "deploy/helm/templates/_helpers.tpl",
-          "deploy/helm/templates/backup-cronjob.yaml",
-          "deploy/helm/templates/configmap.yaml",
-          "deploy/helm/templates/deployment.yaml",
-          "deploy/helm/templates/hpa.yaml",
-          "deploy/helm/templates/ingress.yaml",
-          "deploy/helm/templates/networkpolicy.yaml",
-          "deploy/helm/templates/pdb.yaml",
-          "deploy/helm/templates/secret.yaml",
-          "deploy/helm/templates/service.yaml",
-          "deploy/k8s/backup-cronjob.yaml",
-          "deploy/k8s/configmap.yaml",
-          "deploy/k8s/deployment.yaml",
-          "deploy/k8s/hpa.yaml",
-          "deploy/k8s/ingress.yaml",
-          "deploy/k8s/networkpolicy.yaml",
-          "deploy/k8s/pdb.yaml",
-          "deploy/k8s/secret.yaml",
-          "deploy/k8s/service.yaml",
-          "deploy/scripts/backup.sh",
-          "deploy/scripts/db_common.sh",
-          "deploy/scripts/init-secrets.sh",
-          "deploy/scripts/install_db_clients.sh",
-          "deploy/scripts/observability.sh",
-          "deploy/scripts/restore.sh"
-        ]
+        "Files": []
       }
     },
     {
@@ -1109,31 +1075,6 @@
         "security",
         "server",
         "sms"
-      ]
-    },
-    {
-      "source": "deploy/helm/values.yaml",
-      "destination": "deploy/helm/values.yaml",
-      "strategy": "sections",
-      "sections": [
-        "image",
-        "replicaCount",
-        "environment",
-        "resources",
-        "autoscaling",
-        "pdb",
-        "networkPolicy",
-        "service",
-        "ingress",
-        "http",
-        "management",
-        "security",
-        "server",
-        "log",
-        "auth",
-        "backup",
-        "db",
-        "redis"
       ]
     }
   ],
@@ -1235,50 +1176,7 @@
       ]
     }
   ],
-  "assets": [
-    {
-      "source": "deploy/backup",
-      "destination": "deploy/backup",
-      "include": [],
-      "exclude": []
-    },
-    {
-      "source": "deploy/compose",
-      "destination": "deploy/compose",
-      "include": [],
-      "exclude": []
-    },
-    {
-      "source": "deploy/docker",
-      "destination": "deploy/docker",
-      "include": [],
-      "exclude": []
-    },
-    {
-      "source": "deploy/helm",
-      "destination": "deploy/helm",
-      "include": [],
-      "exclude": [
-        "values.yaml",
-        "templates/observability"
-      ]
-    },
-    {
-      "source": "deploy/k8s",
-      "destination": "deploy/k8s",
-      "include": [],
-      "exclude": [
-        "config-files.yaml",
-        "observability"
-      ]
-    },
-    {
-      "source": "deploy/scripts",
-      "destination": "deploy/scripts",
-      "include": [],
-      "exclude": []
-    }
-  ],
+  "assets": [],
   "prune": [
     {
       "kind": "test-import",
@@ -1332,37 +1230,6 @@
     "conf/rbac_model.conf",
     "configs/app.prod.yaml",
     "configs/app.yaml",
-    "deploy/backup/Dockerfile",
-    "deploy/compose/compose.observability.yml",
-    "deploy/compose/docker-compose.yml",
-    "deploy/docker/Dockerfile",
-    "deploy/helm/Chart.yaml",
-    "deploy/helm/templates/_helpers.tpl",
-    "deploy/helm/templates/backup-cronjob.yaml",
-    "deploy/helm/templates/configmap.yaml",
-    "deploy/helm/templates/deployment.yaml",
-    "deploy/helm/templates/hpa.yaml",
-    "deploy/helm/templates/ingress.yaml",
-    "deploy/helm/templates/networkpolicy.yaml",
-    "deploy/helm/templates/pdb.yaml",
-    "deploy/helm/templates/secret.yaml",
-    "deploy/helm/templates/service.yaml",
-    "deploy/helm/values.yaml",
-    "deploy/k8s/backup-cronjob.yaml",
-    "deploy/k8s/configmap.yaml",
-    "deploy/k8s/deployment.yaml",
-    "deploy/k8s/hpa.yaml",
-    "deploy/k8s/ingress.yaml",
-    "deploy/k8s/networkpolicy.yaml",
-    "deploy/k8s/pdb.yaml",
-    "deploy/k8s/secret.yaml",
-    "deploy/k8s/service.yaml",
-    "deploy/scripts/backup.sh",
-    "deploy/scripts/db_common.sh",
-    "deploy/scripts/init-secrets.sh",
-    "deploy/scripts/install_db_clients.sh",
-    "deploy/scripts/observability.sh",
-    "deploy/scripts/restore.sh",
     "go.mod",
     "go.sum",
     "internal/app/admin_password_test.go",
@@ -1774,5 +1641,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:adb1db1294da9785fb0302774c3869f8fb8432e0c648e2d3d3a1df4bff2416b7"
+  "digest": "sha256:96ac88f1f2d8e04bda44a5b3dbd23b5ffef0a0ea0343c1dd95052b65b86eeaf1"
 }

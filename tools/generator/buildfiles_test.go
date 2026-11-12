@@ -165,7 +165,7 @@ func TestCopyToolsCoversEveryBlueprintTree(t *testing.T) {
 // 都在生成项目里，且 modulePath 定点改写已生效、框架侧 tools 测试未被复制。
 func TestNewProjectCopiesToolsAndRendersBuildFiles(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Deploy: "compose", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 
 	for _, rel := range []string{

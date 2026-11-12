@@ -265,7 +265,7 @@ func TestAddCapabilityKeepsMigrationCarryAndKnownNames(t *testing.T) {
 // app.yaml 为底、用蓝本补齐新增段，否则用户手改的段值会被静默覆盖。
 func TestAddCapabilityPreservesEditedConfigSectionsAndIsIdempotent(t *testing.T) {
 	root := frameworkRootForTest(t)
-	dir := generateForTest(t, NewOptions{Profile: "minimal"})
+	dir := generateForTest(t, NewOptions{Profile: "minimal", Deploy: "helm"})
 
 	const appRel = "configs/app.yaml"
 	const prodRel = "configs/app.prod.yaml"
@@ -379,7 +379,7 @@ func TestAddCapabilityRejectsExistingCapability(t *testing.T) {
 // add 后必须经 AssetsFor/assetFiles 重派生并把新增能力的资产复制进 deploy/**（apidocs → docs/openapi）。
 func TestAddCapabilityCarriesNewCapabilityAssets(t *testing.T) {
 	root := frameworkRootForTest(t)
-	dir := generateForTest(t, NewOptions{Profile: "minimal"})
+	dir := generateForTest(t, NewOptions{Template: "auth"})
 	before, err := LoadMarker(dir)
 	require.NoError(t, err)
 	assert.NotContains(t, before.Assets, "docs/openapi")

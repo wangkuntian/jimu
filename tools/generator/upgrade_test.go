@@ -117,7 +117,7 @@ func TestApplyUpgradeVerifyFailureRollsBackByteForByte(t *testing.T) {
 }
 
 func TestApplyUpgradeInstallFailureRestoresEveryFile(t *testing.T) {
-	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	dir := generateForTest(t, NewOptions{Template: "minimal", Deploy: "compose"})
 	induceModifiedFile(t, dir, "Makefile")
 	induceModifiedFile(t, dir, "deploy/docker/Dockerfile")
 	before := hashTree(t, dir)
