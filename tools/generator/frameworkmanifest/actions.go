@@ -43,11 +43,11 @@ var kernelFiles = []string{
 	".gitignore",
 }
 
-var copiedTools = []string{
-	"tools/internal/profileassets",
-	"tools/internal/heavydeps",
-	"tools/checkcapabilities",
-	"tools/logcheck",
+var toolSources = map[string]string{
+	"profileassets":     "tools/internal/profileassets",
+	"heavydeps":         "tools/internal/heavydeps",
+	"checkcapabilities": "tools/checkcapabilities",
+	"logcheck":          "tools/logcheck",
 }
 
 var kernelExcludes = []string{
@@ -66,7 +66,7 @@ var kernelExcludes = []string{
 }
 
 func copyActions(root string, selected selection) ([]manifest.CopyAction, error) {
-	actions := make([]manifest.CopyAction, 0, len(kernelDirs)+len(kernelFiles)+len(selected.copy)+len(copiedTools)+len(selected.migration)+len(selected.domain))
+	actions := make([]manifest.CopyAction, 0, len(kernelDirs)+len(kernelFiles)+len(selected.copy)+len(selected.generation.ToolsResolved)+len(selected.migration)+len(selected.domain))
 	kernelActions, err := kernelCopyActions(root, selected)
 	if err != nil {
 		return nil, err
@@ -119,7 +119,11 @@ func copyActions(root string, selected selection) ([]manifest.CopyAction, error)
 		base := filepath.ToSlash(filepath.Join("internal/capabilities", name, "domain"))
 		actions = append(actions, manifest.CopyAction{Source: base, Destination: base, Include: []string{}, Exclude: []string{}})
 	}
-	for _, source := range copiedTools {
+	for _, tool := range copiedTools(selected.generation.ToolsResolved) {
+		source, ok := toolSources[tool]
+		if !ok {
+			return nil, fmt.Errorf("unknown generated tool %q", tool)
+		}
 		actions = append(actions, manifest.CopyAction{Source: source, Destination: source, Include: []string{}, Exclude: []string{"*_test.go"}})
 	}
 	if includeBackup(selected) {
@@ -149,9 +153,11 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 		"Capabilities": shapeCapabilities(selected),
 	}
 	buildData := map[string]any{
-		"Shape":      selected.shape,
-		"HasAPIdocs": contains(selected.copy, "apidocs"),
-		"Expected":   strings.Join(selected.roots, " "),
+		"Shape":                selected.shape,
+		"HasAPIdocs":           contains(selected.copy, "apidocs"),
+		"HasLogcheck":          contains(selected.generation.ToolsResolved, "logcheck"),
+		"HasCheckcapabilities": contains(selected.generation.ToolsResolved, "checkcapabilities"),
+		"Expected":             strings.Join(selected.roots, " "),
 	}
 	catalogData := catalogTemplateData(selected)
 	cliImportsData := cliImports(root, selected)
@@ -170,7 +176,14 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 		{Source: "tools/generator/render/templates/project/catalog.go.tmpl", Destination: "internal/capabilities/catalog/catalog.go", Kind: "catalog", Data: catalogData},
 		{Source: "tools/generator/render/templates/project/catalog_migration.go.tmpl", Destination: "internal/capabilities/catalog/migration.go", Kind: "catalog", Data: catalogData},
 		{Source: cliSource, Destination: "cmd/cli/main.go", Kind: "cli", Data: cliData},
-		{Source: "tools/generator/render/templates/project/assets_selection.go.tmpl", Destination: "tools/internal/profileassets/selection.go", Kind: "assets", Data: map[string]any{"Files": selectedAssetFiles(root, selected)}},
+	}
+	if contains(copiedTools(selected.generation.ToolsResolved), "profileassets") {
+		actions = append(actions, manifest.TemplateAction{
+			Source:      "tools/generator/render/templates/project/assets_selection.go.tmpl",
+			Destination: "tools/internal/profileassets/selection.go",
+			Kind:        "assets",
+			Data:        map[string]any{"Files": selectedAssetFiles(root, selected)},
+		})
 	}
 	if includeDatabase(selected) {
 		actions = append(actions,
@@ -196,6 +209,20 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 		})
 	}
 	return actions
+}
+
+// copiedTools expands tools with their compile-time support packages without
+// changing the user-facing resolved set persisted in the manifest.
+func copiedTools(tools []string) []string {
+	out := slices.Clone(tools)
+	if contains(out, "checkcapabilities") {
+		for _, support := range []string{"heavydeps", "profileassets"} {
+			if !contains(out, support) {
+				out = append(out, support)
+			}
+		}
+	}
+	return out
 }
 
 func configSections(selected selection) []string {
@@ -443,11 +470,19 @@ func mergeActions(root string, selected selection) []manifest.MergeAction {
 func rewriteActions(root, module string, selected selection) []manifest.RewriteAction {
 	actions := []manifest.RewriteAction{
 		{Kind: "module", From: "jimu", To: module, Files: []string{}},
-		{Kind: "file-patch", From: `const modulePath = "jimu"`, To: `const modulePath = "` + module + `"`, Files: []string{"tools/checkcapabilities/drivers.go"}},
-		{Kind: "file-patch", From: `"jimu/tools/logcheck"`, To: `"` + module + `/tools/logcheck"`, Files: []string{"tools/logcheck/main.go"}},
 		{Kind: "file-patch", From: `Use:   "jimu",`, To: `Use:   "` + projectName(module) + `",`, Files: []string{"cmd/cli/main.go"}},
 		{Kind: "file-patch", From: `Short: "Jimu backend framework CLI",`, To: `Short: "` + projectName(module) + ` backend CLI",`, Files: []string{"cmd/cli/main.go"}},
 		{Kind: "deploy", From: "jimu", To: projectName(module), Files: deployFiles()},
+	}
+	if contains(selected.generation.ToolsResolved, "checkcapabilities") {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch", From: `const modulePath = "jimu"`, To: `const modulePath = "` + module + `"`, Files: []string{"tools/checkcapabilities/drivers.go"},
+		})
+	}
+	if contains(selected.generation.ToolsResolved, "logcheck") {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch", From: `"jimu/tools/logcheck"`, To: `"` + module + `/tools/logcheck"`, Files: []string{"tools/logcheck/main.go"},
+		})
 	}
 	// 0 能力项目只剩空实现的 Redis 文件，去掉它们的 build tag 才能参与编译。
 	if len(selected.copy) == 0 {

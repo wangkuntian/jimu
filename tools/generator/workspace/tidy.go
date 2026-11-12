@@ -13,6 +13,12 @@ func Tidy(dir string) error {
 	return runGo(dir, []string{"GOFLAGS=-mod=mod", "GOWORK=off"}, "mod", "tidy")
 }
 
+// TidyForClosure tolerates missing local imports while the candidate tree still
+// contains tests that will be pruned. The final Tidy remains strict.
+func TidyForClosure(dir string) error {
+	return runGo(dir, []string{"GOFLAGS=-mod=mod", "GOWORK=off"}, "mod", "tidy", "-e")
+}
+
 func runGo(dir string, env []string, args ...string) error {
 	cmd := exec.CommandContext(context.Background(), "go", args...)
 	cmd.Dir = dir

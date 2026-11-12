@@ -273,6 +273,7 @@ func resolvePresetSelection(root string, preset Preset) (selection, error) {
 	selected := selection{
 		shape:    preset.Name,
 		template: preset.Name,
+		profile:  preset.Name,
 		support:  preset.Support,
 		drivers:  composed.Drivers,
 		ungated:  map[string]bool{},

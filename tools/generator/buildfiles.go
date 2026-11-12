@@ -20,9 +20,11 @@ import (
 
 // buildData 是三份构建文件模板的数据。
 type buildData struct {
-	Shape      string // 本项目唯一形态名
-	HasAPIdocs bool   // 选中集是否含 apidocs（catalog 之外、只在 full 清单里的 Ungated 能力）
-	Expected   string // 本形态闭包 golden（能力根包，空格分隔）；逐值相等即「不含非预期能力」
+	Shape                string // 本项目唯一形态名
+	HasAPIdocs           bool   // 选中集是否含 apidocs（catalog 之外、只在 full 清单里的 Ungated 能力）
+	HasLogcheck          bool
+	HasCheckcapabilities bool
+	Expected             string // 本形态闭包 golden（能力根包，空格分隔）；逐值相等即「不含非预期能力」
 }
 
 // RenderMakefile 渲染生成项目的 Makefile。
@@ -51,9 +53,11 @@ func renderBuildFile(rel string, set CapabilitySet) ([]byte, error) {
 // newBuildData 把能力集折算成构建文件模板的数据（纯函数，便于单测）。
 func newBuildData(set CapabilitySet) buildData {
 	return buildData{
-		Shape:      set.Shape,
-		HasAPIdocs: slices.Contains(set.Copy, "apidocs"),
-		Expected:   strings.Join(expectedRoots(set), " "),
+		Shape:                set.Shape,
+		HasAPIdocs:           slices.Contains(set.Copy, "apidocs"),
+		HasLogcheck:          true,
+		HasCheckcapabilities: true,
+		Expected:             strings.Join(expectedRoots(set), " "),
 	}
 }
 

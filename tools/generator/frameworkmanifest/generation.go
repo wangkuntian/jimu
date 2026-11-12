@@ -60,7 +60,7 @@ func ResolveGeneration(profile, with string, declared []string, raw GenerationRe
 
 func defaultGeneration(profile, with string, declared []string) manifest.Generation {
 	generation := manifest.Generation{
-		RuntimeClosure: false,
+		RuntimeClosure: true,
 		Tests:          manifest.GenerationTestsSelected,
 		ToolsMode:      manifest.GenerationToolsAuto,
 		Deploy:         []string{},

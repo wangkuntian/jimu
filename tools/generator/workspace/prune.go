@@ -47,6 +47,13 @@ func PrunePackages(dir string, opts PruneOptions) (PruneResult, error) {
 				return PruneResult{}, err
 			}
 		}
+		dropTestFiles := false
+		if opts.Tests != "none" && (keep || (opts.Tests == "all" && opts.TestDeps[importPath])) {
+			dropTestFiles, err = testFilesHaveMissingImport(packageDir, opts.Module, opts.Runtime)
+			if err != nil {
+				return PruneResult{}, err
+			}
+		}
 		files, err := os.ReadDir(packageDir)
 		if err != nil {
 			return PruneResult{}, fmt.Errorf("read package dir %s: %w", packageDir, err)
@@ -67,8 +74,11 @@ func PrunePackages(dir string, opts PruneOptions) (PruneResult, error) {
 					remove = true
 				case "selected":
 					remove = !opts.Runtime[importPath]
+					if !remove && dropTestFiles {
+						remove = true
+					}
 				case "all":
-					remove = !keep
+					remove = !keep || dropTestFiles
 				}
 			}
 			if !remove {
@@ -144,6 +154,29 @@ func nonTestImportsSafe(dir, module string, runtime map[string]bool) (bool, erro
 		}
 	}
 	return true, nil
+}
+
+func testFilesHaveMissingImport(dir, module string, runtime map[string]bool) (bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, fmt.Errorf("read package dir %s: %w", dir, err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, entry.Name()), nil, parser.ImportsOnly)
+		if err != nil {
+			return false, fmt.Errorf("parse %s: %w", entry.Name(), err)
+		}
+		for _, spec := range file.Imports {
+			importPath := strings.Trim(spec.Path.Value, `"`)
+			if belongsToModule(importPath, module) && !runtime[importPath] {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func removeEmptyDirs(root string) ([]string, error) {

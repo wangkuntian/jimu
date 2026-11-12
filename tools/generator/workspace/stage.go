@@ -107,7 +107,7 @@ func Create(doc manifest.Document, opts CreateOptions) (Result, error) {
 		return Result{}, err
 	}
 	if opts.Prune.Enabled {
-		if err := Tidy(staging); err != nil {
+		if err := TidyForClosure(staging); err != nil {
 			return Result{}, fmt.Errorf("go mod tidy before closure: %w", err)
 		}
 		if err := pruneStage(staging, opts.Prune); err != nil {
@@ -118,7 +118,7 @@ func Create(doc manifest.Document, opts CreateOptions) (Result, error) {
 		doc.GeneratedFiles = slices.Clone(rendered)
 	}
 	if !opts.NoTidy {
-		if err := Tidy(staging); err != nil {
+		if err := TidyForClosure(staging); err != nil {
 			return Result{}, fmt.Errorf("go mod tidy: %w", err)
 		}
 	}

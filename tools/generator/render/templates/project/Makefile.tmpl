@@ -1,5 +1,7 @@
 .PHONY: help build build-server build-cli dev image test vet fmt fmt-check lint clean ci
-.PHONY: check-log-usage check-capabilities
+{{if .HasLogcheck}}.PHONY: check-log-usage
+{{end}}{{if .HasCheckcapabilities}}.PHONY: check-capabilities
+{{end}}
 .PHONY: migrate migrate-down migrate-status seed
 {{if .HasAPIdocs}}.PHONY: swagger swagger-check
 {{end}}
@@ -116,15 +118,15 @@ lint:
 		go vet ./...; \
 	fi
 
-## check-log-usage: 检查日志调用符合结构化规范（logcheck 静态分析：防粘连 R1 /
+{{if .HasLogcheck}}## check-log-usage: 检查日志调用符合结构化规范（logcheck 静态分析：防粘连 R1 /
 ## 禁动态 key R2 / 字段词汇表 R3 / 禁嵌套对象 R4；规则与 AGENTS.md 日志调用规范同步）
 check-log-usage:
 	@go run ./tools/logcheck "./internal/..." "./cmd/..." "./tools/..."
-
-## check-capabilities: 校验能力自描述（Owns）与迁移归属一致，并静态门禁驱动选择
+{{end}}{{if .HasCheckcapabilities}}## check-capabilities: 校验能力自描述（Owns）与迁移归属一致，并静态门禁驱动选择
 ##                      （可用集目录存在、核心零驱动、唯一形态选中集==import 闭包、驱动归属）
 check-capabilities:
 	@go run ./tools/checkcapabilities
+{{end}}
 
 ## clean: 清理构建产物
 clean:
@@ -132,7 +134,7 @@ clean:
 	rm -f coverage.out coverage.html
 
 ## ci: 本地 CI 检查（无外部依赖部分）
-ci: fmt-check vet lint check-log-usage test check-capabilities{{if .HasAPIdocs}} swagger-check{{end}} build
+ci: fmt-check vet lint{{if .HasLogcheck}} check-log-usage{{end}} test{{if .HasCheckcapabilities}} check-capabilities{{end}}{{if .HasAPIdocs}} swagger-check{{end}} build
 	@echo "✅ All local CI checks passed"
 
 {{if .HasAPIdocs}}##@ API 文档

@@ -30,6 +30,8 @@ type Request struct {
 	// DBDriver 选择编译进项目的数据库驱动（mysql 默认，postgres 可选）。
 	DBDriver  string
 	Framework *manifest.Framework
+	Tests     string
+	Tools     string
 	// Drivers 保留既有项目的驱动选择；未列出的能力由默认驱动规则补齐。
 	Drivers    map[string][]string
 	Generation *manifest.Generation
@@ -117,7 +119,10 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 	if req.Generation != nil {
 		selected.generation = *req.Generation
 	} else {
-		selected.generation, err = ResolveGeneration(selected.profile, req.With, selected.declared, GenerationRequest{})
+		selected.generation, err = ResolveGeneration(selected.profile, req.With, selected.declared, GenerationRequest{
+			Tests: req.Tests,
+			Tools: req.Tools,
+		})
 		if err != nil {
 			return manifest.Document{}, Resolution{}, err
 		}

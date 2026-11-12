@@ -47,7 +47,6 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 		"cmd/cli/main.go",
 		"internal/platform/http/server.go",
 		"internal/assembly/assembly.go",
-		"internal/capabilities/catalog/catalog.go",
 		"internal/app/container_nodb.go",
 		"internal/profiles/seed_nodb.go",
 		"Dockerfile",
@@ -65,6 +64,7 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 		"internal/platform/scheduler/mysql_store.go",
 		"internal/profiles/seed_db.go",
 		"internal/capabilities/user",
+		"internal/capabilities/catalog",
 		"docker-compose.yml",
 		"deploy/backup",
 		"deploy/openobserve",
@@ -320,10 +320,11 @@ func TestNewProjectCopiesKernelAndSelectedCapabilities(t *testing.T) {
 		assert.True(t, os.IsNotExist(statErr), "未选中驱动 queue/%s 不应出现", drv)
 	}
 
-	// S2 迁移携带：tenant 带 migrations/ + domain/（app/seed 的编译期依赖）+ 生成的 module.go；
+	// S2 迁移携带：tenant 带 migrations/ + 生成的 module.go；
+	// domain 只被测试引用，selected 模式裁剪后不保留；
 	// application/infrastructure/interfaces/wire/cli 仍不复制。
 	assert.DirExists(t, filepath.Join(dir, "internal/capabilities/tenant/migrations"))
-	assert.DirExists(t, filepath.Join(dir, "internal/capabilities/tenant/domain"))
+	assert.NoDirExists(t, filepath.Join(dir, "internal/capabilities/tenant/domain"))
 	assert.FileExists(t, filepath.Join(dir, "internal/capabilities/tenant/module.go"))
 	for _, absent := range []string{"wire.go", "cli", "application", "infrastructure", "interfaces"} {
 		_, statErr := os.Stat(filepath.Join(dir, "internal/capabilities/tenant", absent))
