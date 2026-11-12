@@ -514,14 +514,18 @@
       "destination": "internal/capabilities/access",
       "optional": false,
       "include": [],
-      "exclude": []
+      "exclude": [
+        "migrations/postgres"
+      ]
     },
     {
       "source": "internal/capabilities/auth",
       "destination": "internal/capabilities/auth",
       "optional": false,
       "include": [],
-      "exclude": []
+      "exclude": [
+        "migrations/postgres"
+      ]
     },
     {
       "source": "internal/capabilities/encryption",
@@ -542,7 +546,9 @@
       "destination": "internal/capabilities/user",
       "optional": false,
       "include": [],
-      "exclude": []
+      "exclude": [
+        "migrations/postgres"
+      ]
     },
     {
       "source": "internal/capabilities/tenant/migrations",
@@ -1370,9 +1376,6 @@
     "internal/capabilities/access/migrations/mysql/001_roles_permissions.sql",
     "internal/capabilities/access/migrations/mysql/008_role_version.sql",
     "internal/capabilities/access/migrations/mysql/009_role_system_metadata.sql",
-    "internal/capabilities/access/migrations/postgres/001_roles_permissions.sql",
-    "internal/capabilities/access/migrations/postgres/008_role_version.sql",
-    "internal/capabilities/access/migrations/postgres/009_role_system_metadata.sql",
     "internal/capabilities/access/module.go",
     "internal/capabilities/access/module_test.go",
     "internal/capabilities/access/provisioning_port.go",
@@ -1418,8 +1421,6 @@
     "internal/capabilities/auth/memory/session.go",
     "internal/capabilities/auth/migrations/mysql/011_login_histories.sql",
     "internal/capabilities/auth/migrations/mysql/012_password_histories.sql",
-    "internal/capabilities/auth/migrations/postgres/011_login_histories.sql",
-    "internal/capabilities/auth/migrations/postgres/012_password_histories.sql",
     "internal/capabilities/auth/module.go",
     "internal/capabilities/auth/module_test.go",
     "internal/capabilities/auth/redis/driver.go",
@@ -1478,9 +1479,6 @@
     "internal/capabilities/user/migrations/mysql/001_users.sql",
     "internal/capabilities/user/migrations/mysql/004_user_totp.sql",
     "internal/capabilities/user/migrations/mysql/008_user_version.sql",
-    "internal/capabilities/user/migrations/postgres/001_users.sql",
-    "internal/capabilities/user/migrations/postgres/004_user_totp.sql",
-    "internal/capabilities/user/migrations/postgres/008_user_version.sql",
     "internal/capabilities/user/module.go",
     "internal/capabilities/user/module_test.go",
     "internal/capabilities/user/userinfo_port.go",
@@ -1733,5 +1731,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:43311b034698258e7bd0625bca4139568225a1493811ee532e6647bdef993d03"
+  "digest": "sha256:00f715ac137c6a2ae4e8a9adea39c70739f5f4f03ed11235caa4e6f0225b47c8"
 }

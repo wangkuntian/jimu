@@ -10,6 +10,7 @@ import (
 	"jimu/tools/generator/manifest"
 	"jimu/tools/generator/workspace"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -191,6 +192,45 @@ func TestNewProjectFullPresetFollowsPostgresSearchDriver(t *testing.T) {
 	require.NoError(t, err)
 	assert.DirExists(t, filepath.Join(dir, "internal/capabilities/search/postgres"))
 	assert.NoDirExists(t, filepath.Join(dir, "internal/capabilities/search/mysql"))
+}
+
+// TestNewProjectAuthPresetFollowsPostgresDriver 钉住 certified auth 预设的 --db=postgres：
+// 生成项目的自检不能只认 mysql 迁移目录，配置与备份资产也必须切到 postgres。
+func TestNewProjectAuthPresetFollowsPostgresDriver(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "auth-pg")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: "auth", Module: "example.com/auth-pg", DBDriver: "postgres", NoTidy: true,
+	})
+	require.NoError(t, err)
+	assert.DirExists(t, filepath.Join(dir, "internal/capabilities/user/migrations/postgres"))
+	assert.NoDirExists(t, filepath.Join(dir, "internal/capabilities/user/migrations/mysql"))
+	assert.Equal(t, "postgres", generatedConfigValue(t, dir, "configs/app.yaml", "db.driver"))
+	assert.Equal(t, "postgres", generatedConfigValue(t, dir, "deploy/helm/values.yaml", "db.driver"))
+	assert.Equal(t, "postgres", generatedConfigValue(t, dir, "deploy/helm/values.yaml", "backup.driver"))
+	assert.Contains(t, string(readFileForTest(t, filepath.Join(dir, "deploy/k8s/backup-cronjob.yaml"))), `value: "postgres"`)
+}
+
+// TestNewProjectDriverSelectionMatchesGeneratedConfig 覆盖 v0.12 驱动拆分的生成侧闭环：
+// 选中的驱动必须同时进入复制树与配置文件，cache:memory 的 platform 依赖也不能漏。
+func TestNewProjectDriverSelectionMatchesGeneratedConfig(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "combo")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, With: "apikey,queue:kafka,storage:s3,cache:memory",
+		Module: "example.com/combo", NoTidy: true,
+	})
+	require.NoError(t, err)
+	assert.DirExists(t, filepath.Join(dir, "internal/capabilities/queue/kafka"))
+	assert.NoDirExists(t, filepath.Join(dir, "internal/capabilities/queue/redis"))
+	assert.DirExists(t, filepath.Join(dir, "internal/capabilities/storage/s3"))
+	assert.NoDirExists(t, filepath.Join(dir, "internal/capabilities/storage/local"))
+	assert.DirExists(t, filepath.Join(dir, "internal/capabilities/cache/memory"))
+	assert.NoDirExists(t, filepath.Join(dir, "internal/capabilities/cache/redis"))
+	assert.FileExists(t, filepath.Join(dir, "internal/platform/cachemem/cachemem.go"))
+	assert.Equal(t, "kafka", generatedConfigValue(t, dir, "configs/app.yaml", "queue.type"))
+	assert.Equal(t, "s3", generatedConfigValue(t, dir, "configs/app.yaml", "storage.type"))
+	assert.Equal(t, "memory", generatedConfigValue(t, dir, "configs/app.yaml", "cache.driver"))
+	assert.Equal(t, "memory", generatedConfigValue(t, dir, "deploy/helm/values.yaml", "cache.driver"))
+	assert.Equal(t, "s3", generatedConfigValue(t, dir, "deploy/helm/values.yaml", "storage.type"))
 }
 
 func TestNewProjectLeavesNoPartialTreeOnFailure(t *testing.T) {
@@ -479,4 +519,12 @@ func assertManifestProvenance(t *testing.T, dir, template string) {
 	assert.Equal(t, manifest.TemplateContractVersion, document.Selection.TemplateVersion)
 	assert.NotEmpty(t, document.Framework.Version)
 	assert.NotEmpty(t, document.Framework.Commit)
+}
+
+func generatedConfigValue(t *testing.T, dir, rel, key string) string {
+	t.Helper()
+	v := viper.New()
+	v.SetConfigFile(filepath.Join(dir, filepath.FromSlash(rel)))
+	require.NoError(t, v.ReadInConfig())
+	return v.GetString(key)
 }

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract_version": "v0.1",
-  "target_product_version": "v0.11.0",
+  "target_product_version": "v0.12.1",
   "enforcement": "release-blocking",
   "measurement": {
     "generated_files": "all files in the generated tree, including .jimu/manifest.json",

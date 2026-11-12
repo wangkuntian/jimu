@@ -88,6 +88,12 @@ func copyActions(root string, selected selection) ([]manifest.CopyAction, error)
 				}
 			}
 		}
+		if selected.dbDriver != "postgres" && directoryExists(root, filepath.ToSlash(filepath.Join("internal/capabilities", name, "migrations", "postgres"))) {
+			exclude = append(exclude, "migrations/postgres")
+		}
+		if selected.dbDriver != "mysql" && directoryExists(root, filepath.ToSlash(filepath.Join("internal/capabilities", name, "migrations", "mysql"))) {
+			exclude = append(exclude, "migrations/mysql")
+		}
 		actions = append(actions, manifest.CopyAction{
 			Source:      filepath.ToSlash(filepath.Join("internal/capabilities", name)),
 			Destination: filepath.ToSlash(filepath.Join("internal/capabilities", name)),
@@ -435,7 +441,7 @@ func mergeActions(root string, selected selection) []manifest.MergeAction {
 	}
 }
 
-func rewriteActions(module string, selected selection) []manifest.RewriteAction {
+func rewriteActions(root, module string, selected selection) []manifest.RewriteAction {
 	actions := []manifest.RewriteAction{
 		{Kind: "module", From: "jimu", To: module, Files: []string{}},
 		{Kind: "file-patch", From: `const modulePath = "jimu"`, To: `const modulePath = "` + module + `"`, Files: []string{"tools/checkcapabilities/drivers.go"}},
@@ -476,6 +482,68 @@ func rewriteActions(module string, selected selection) []manifest.RewriteAction 
 				Kind: "file-patch", From: "//go:build jimu_nodb", To: "// 未启用数据库的构建：由生成器去掉 build tag", Files: []string{file},
 			})
 		}
+	}
+	actions = append(actions, driverRewriteActions(root, selected)...)
+	return actions
+}
+
+// driverRewriteActions 让生成项目的配置跟随本次选择的驱动。蓝本 configs/*.yaml
+// 与 deploy/helm/values.yaml 写的是框架默认值（mysql/redis/local）；生成项目只编入
+// 所选驱动时，继续沿用蓝本值会在运行期报「驱动未编译进本构建」。
+func driverRewriteActions(root string, selected selection) []manifest.RewriteAction {
+	var actions []manifest.RewriteAction
+	add := func(kind, file, from, to string) {
+		if from != to {
+			actions = append(actions, manifest.RewriteAction{Kind: kind, From: from, To: to, Files: []string{file}})
+		}
+	}
+	chosen := func(name, fallback string) string {
+		drivers := selected.drivers[name]
+		if slices.Contains(drivers, fallback) {
+			return fallback
+		}
+		if len(drivers) > 0 {
+			return drivers[0]
+		}
+		return ""
+	}
+
+	sections := configSections(selected)
+	if slices.Contains(sections, "db") && selected.dbDriver == "postgres" {
+		add("file-patch", "configs/app.yaml", `  driver: "mysql"`, `  driver: "postgres"`)
+	}
+	if slices.Contains(sections, "cache") {
+		if driver := chosen("cache", "redis"); driver != "" {
+			add("file-patch", "configs/app.yaml", `  driver: "redis"`, `  driver: "`+driver+`"`)
+		}
+	}
+	if slices.Contains(sections, "queue") {
+		if driver := chosen("queue", "redis"); driver != "" {
+			add("file-patch", "configs/app.yaml", `  type: "redis"`, `  type: "`+driver+`"`)
+		}
+	}
+	if slices.Contains(sections, "storage") {
+		if driver := chosen("storage", "local"); driver != "" {
+			add("file-patch", "configs/app.yaml", `  type: "local"`, `  type: "`+driver+`"`)
+		}
+	}
+
+	values := valuesSections(root, selected)
+	if slices.Contains(values, "cache") {
+		if driver := chosen("cache", "redis"); driver != "" {
+			add("file-patch", "deploy/helm/values.yaml", `  driver: redis`, `  driver: `+driver)
+		}
+	}
+	if slices.Contains(values, "storage") {
+		if driver := chosen("storage", "local"); driver != "" {
+			add("file-patch", "deploy/helm/values.yaml", `  type: local`, `  type: `+driver)
+		}
+	}
+	if (slices.Contains(values, "db") || slices.Contains(values, "backup")) && selected.dbDriver == "postgres" {
+		add("file-patch", "deploy/helm/values.yaml", `  driver: mysql`, `  driver: postgres`)
+	}
+	if includeBackup(selected) && selected.dbDriver == "postgres" {
+		add("asset-file-patch", "deploy/k8s/backup-cronjob.yaml", `value: "mysql"`, `value: "postgres"`)
 	}
 	return actions
 }
@@ -650,6 +718,9 @@ func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, 
 	}
 	for _, name := range selected.copy {
 		seeds = append(seeds, "./internal/capabilities/"+name)
+		for _, driver := range selected.drivers[name] {
+			seeds = append(seeds, "./internal/capabilities/"+name+"/"+driver)
+		}
 	}
 	// 可选文件必须先于闭包计算剔除：internal/assembly 引用 internal/app，
 	// 若 seed_casbin.go 仍在，闭包会把 platform/authz 与 Casbin 算成可达，

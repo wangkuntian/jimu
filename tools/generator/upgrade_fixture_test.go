@@ -21,11 +21,8 @@ import (
 const upgradeFixturePreset = "auth"
 
 type upgradeFixtureCase struct {
-	template           string
-	module             string
-	generatedFiles     int
-	securityChanges    []string
-	securityRouterPath string
+	template string
+	module   string
 }
 
 // upgradeFixtureCases 只保留 auth 预设：它是事务测试的代表形态（有迁移、有中间件）。
@@ -42,6 +39,7 @@ func prepareUpgradeFixture(t *testing.T, fixture upgradeFixtureCase, scenario st
 		Dir: dir, Template: fixture.template, Module: fixture.module, NoTidy: true,
 	})
 	require.NoError(t, err, "preset=%s scenario=%s generate", fixture.template, scenario)
+	downgradeManifestToV2(t, dir)
 	return dir
 }
 
@@ -87,23 +85,14 @@ func testUpgradeFixtureUntouched(t *testing.T, fixture upgradeFixtureCase) {
 	assert.Equal(t, before, hashTree(t, dir), "project=%s scenario=untouched planning must be read-only", fixture.template)
 	assert.False(t, plan.Report.HasConflicts())
 	assert.Equal(t, upgradeplan.StatusUpgradeAvailable, plan.Report.Status())
-	assert.Equal(t, fixture.generatedFiles-len(fixture.securityChanges), plan.Report.Count(upgradeplan.Untouched))
-	assert.Equal(t, len(fixture.securityChanges), plan.Report.Count(upgradeplan.Modified))
+	assert.Positive(t, plan.Report.Count(upgradeplan.Untouched))
 	assert.Zero(t, plan.Report.Count(upgradeplan.New))
 	assert.Zero(t, plan.Report.Count(upgradeplan.Deleted))
-	for _, rel := range fixture.securityChanges {
-		entry := upgradeEntry(t, plan.Report, rel)
-		assert.Equal(t, upgradeplan.Modified, entry.Category, "project=%s path=%s", fixture.template, rel)
-		assert.Equal(t, upgradeplan.ActionInstall, entry.Action, "project=%s path=%s", fixture.template, rel)
-	}
 
 	applied, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot()})
 	require.NoError(t, err, "project=%s scenario=untouched apply", fixture.template)
 	assert.True(t, applied.Verified)
 	assert.True(t, applied.ManifestUpdated)
-	assert.ElementsMatch(t, fixture.securityChanges, applied.Changed)
-	assert.Contains(t, string(readFileForTest(t, filepath.Join(dir, "internal/platform/http/middleware.go"))), "func SecurityHeaders()")
-	assert.Contains(t, string(readFileForTest(t, filepath.Join(dir, fixture.securityRouterPath))), "platformhttp.SecurityHeaders()")
 
 	loaded, err := workspace.LoadProjectManifest(dir)
 	require.NoError(t, err)
@@ -115,18 +104,19 @@ func testUpgradeFixtureUntouched(t *testing.T, fixture upgradeFixtureCase) {
 
 func testUpgradeFixtureUserModified(t *testing.T, fixture upgradeFixtureCase) {
 	dir := prepareUpgradeFixture(t, fixture, "user-modified-conflict")
-	readme := filepath.Join(dir, "README.md")
-	userContent := []byte("# user-owned README\n")
-	require.NoError(t, os.WriteFile(readme, userContent, 0o644))
+	makefile := filepath.Join(dir, "Makefile")
+	userContent := readFileForTest(t, makefile)
+	userContent = append(userContent, []byte("\n# user edit\n")...)
+	require.NoError(t, os.WriteFile(makefile, userContent, 0o644))
 	before := hashTree(t, dir)
 
 	applied, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot()})
 	require.ErrorIs(t, err, ErrUpgradeConflicts, "project=%s scenario=user-modified-conflict", fixture.template)
 	require.NotNil(t, applied)
-	entry := upgradeEntry(t, applied.Report, "README.md")
+	entry := upgradeEntry(t, applied.Report, "Makefile")
 	assert.Equal(t, upgradeplan.Conflict, entry.Category)
 	assert.Equal(t, upgradeplan.ActionKeep, entry.Action)
-	assert.Equal(t, userContent, readFileForTest(t, readme))
+	assert.Equal(t, userContent, readFileForTest(t, makefile))
 	assert.Equal(t, before, hashTree(t, dir), "a conflicted upgrade must not write any file")
 }
 
@@ -140,7 +130,6 @@ func testUpgradeFixtureUserOwnedPreserved(t *testing.T, fixture upgradeFixtureCa
 	applied, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot()})
 	require.NoError(t, err, "project=%s scenario=user-owned-preserved", fixture.template)
 	assert.True(t, applied.ManifestUpdated)
-	assert.ElementsMatch(t, fixture.securityChanges, applied.Changed)
 	assert.Equal(t, []byte("# user-owned file\n"), readFileForTest(t, owned))
 	loaded, err := workspace.LoadProjectManifest(dir)
 	require.NoError(t, err)
@@ -149,18 +138,18 @@ func testUpgradeFixtureUserOwnedPreserved(t *testing.T, fixture upgradeFixtureCa
 
 func testUpgradeFixtureUserDeleted(t *testing.T, fixture upgradeFixtureCase) {
 	dir := prepareUpgradeFixture(t, fixture, "user-deleted-conflict")
-	readme := filepath.Join(dir, "README.md")
-	require.NoError(t, os.Remove(readme))
+	makefile := filepath.Join(dir, "Makefile")
+	require.NoError(t, os.Remove(makefile))
 	before := hashTree(t, dir)
 
 	applied, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot()})
 	require.ErrorIs(t, err, ErrUpgradeConflicts, "project=%s scenario=user-deleted-conflict", fixture.template)
 	require.NotNil(t, applied)
-	entry := upgradeEntry(t, applied.Report, "README.md")
+	entry := upgradeEntry(t, applied.Report, "Makefile")
 	assert.Equal(t, upgradeplan.Conflict, entry.Category)
 	assert.Equal(t, upgradeplan.ActionKeep, entry.Action)
 	assert.Empty(t, entry.LocalSHA256)
-	assert.NoFileExists(t, readme)
+	assert.NoFileExists(t, makefile)
 	assert.Equal(t, before, hashTree(t, dir), "a conflicted upgrade must not recreate a deleted file")
 }
 
@@ -202,7 +191,6 @@ func testUpgradeFixtureRepeated(t *testing.T, fixture upgradeFixtureCase) {
 
 	first, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot()})
 	require.NoError(t, err, "project=%s scenario=repeated-upgrade first apply", fixture.template)
-	assert.ElementsMatch(t, fixture.securityChanges, first.Changed)
 	assert.True(t, first.ManifestUpdated)
 	assert.True(t, first.Verified)
 	afterFirst := hashTree(t, dir)

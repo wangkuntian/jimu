@@ -38,7 +38,7 @@ func applyRewrite(root, module string, action manifest.RewriteAction) error {
 			continue
 		}
 		from, to := action.From, action.To
-		if action.Kind == "file-patch" {
+		if action.Kind == "file-patch" || action.Kind == "asset-file-patch" {
 			updated := strings.ReplaceAll(string(content), from, to)
 			if updated == string(content) {
 				return fmt.Errorf("rewrite target %s: patch source %q was not found", rel, from)

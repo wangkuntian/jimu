@@ -343,6 +343,8 @@ for needle in \
   'template-bundle.json' \
   'sha256sum' \
   'jimu-${GITHUB_REF_NAME}-checksums.txt' \
+  '> 状态：发布（${RELEASE_DATE}）' \
+  '!replaced && /^> 状态：/' \
   '--repo "$GITHUB_REPOSITORY"' \
   'goos: linux' \
   'goarch: amd64' \

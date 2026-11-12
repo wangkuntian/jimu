@@ -112,6 +112,13 @@ func TestCreatedTables(t *testing.T) {
 			},
 			want: nil,
 		},
+		{
+			name: "postgres-only generated project",
+			fsys: fstest.MapFS{
+				"migrations/postgres/001_users.sql": {Data: []byte("CREATE TABLE users (id BIGINT PRIMARY KEY);\n")},
+			},
+			want: []string{"users"},
+		},
 	}
 
 	for _, tt := range tests {
