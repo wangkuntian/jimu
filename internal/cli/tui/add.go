@@ -8,7 +8,6 @@ import (
 	"jimu/internal/cli/actions"
 	"jimu/tools/generator"
 
-	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -57,7 +56,7 @@ func newAddWizard(opts Options, ctx context.Context, run addRunFunc) *addWizard 
 		input.Prompt = label + ": "
 		input.CharLimit = 512
 		input.Width = 60
-		input.Cursor.SetMode(cursor.CursorStatic)
+		configureTextInput(&input, opts.NoColor)
 		inputs[index] = input
 	}
 	inputs[0].SetValue(".")
@@ -183,7 +182,9 @@ func (m *addWizard) formView() string {
 	b.WriteString(titleStyle.Render("Add capability"))
 	b.WriteString("\n\n")
 	for index := range m.inputs {
-		line := m.inputs[index].View()
+		input := m.inputs[index]
+		prepareTextInput(&input, index == m.focus)
+		line := input.View()
 		if index == m.focus {
 			b.WriteString(selectedStyle.Render(line))
 		} else {

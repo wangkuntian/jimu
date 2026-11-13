@@ -9,7 +9,6 @@ import (
 	"jimu/internal/cli/actions"
 	"jimu/tools/generator"
 
-	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -102,10 +101,10 @@ var newFields = []newField{
 	{label: "Profile", defaultValue: "minimal"},
 	{label: "Capabilities", help: "e.g. user,access,auth · custom preset only · comma-separated names"},
 	{label: "Shape", help: "e.g. app · custom preset only · defaults to app"},
-	{label: "Database", defaultValue: "mysql", help: "mysql or postgres"},
-	{label: "Tests", defaultValue: "selected", help: "selected, all, or none"},
-	{label: "Tools", defaultValue: "auto", help: "auto, all, or none"},
-	{label: "Deploy", help: "blank uses the profile default"},
+	{label: "Database", defaultValue: "mysql", help: "single choice · ←/→ change"},
+	{label: "Tests", defaultValue: "selected", help: "single choice · ←/→ change"},
+	{label: "Tools", defaultValue: "auto", help: "single choice · ←/→ change"},
+	{label: "Deploy", help: "multi-select · ←/→ move · space toggle · blank = profile default"},
 }
 
 var (
@@ -154,8 +153,7 @@ func newNewWizard(opts Options, ctx context.Context, run newRunFunc) *newWizard 
 		input.CharLimit = 512
 		input.Width = 60
 		input.PromptStyle = mutedStyle
-		input.Cursor.Style = selectedStyle
-		input.Cursor.SetMode(cursor.CursorStatic)
+		configureTextInput(&input, opts.NoColor)
 		inputs = append(inputs, input)
 	}
 	spin := spinner.New(spinner.WithSpinner(spinner.MiniDot))
@@ -680,18 +678,16 @@ func (m *newWizard) formView() string {
 	b.WriteString(promptBlank())
 	b.WriteString(promptLine(mutedStyle.Render("Template  ") + selectedStyle.Render(m.preset().label) + mutedStyle.Render("  ·  "+m.preset().detail)))
 	b.WriteString(promptBlank())
+	if m.advanced {
+		b.WriteString(promptLine(mutedStyle.Render("Selectors: ←/→ single choice · Deploy: space toggles")))
+		b.WriteString(promptBlank())
+	}
 
 	fields := m.visibleFields()
 	for row, index := range fields {
 		b.WriteString(promptLine(m.renderField(index, row == m.focus)))
 		if row == m.focus {
 			help := newFields[index].help
-			if m.isChoiceField(index) {
-				help += " · ←/→ choose"
-			}
-			if index == newFieldDeploy {
-				help += " · space toggle"
-			}
 			b.WriteString(promptLine(mutedStyle.Render("  " + help)))
 		}
 	}
@@ -721,6 +717,7 @@ func (m *newWizard) renderField(index int, focused bool) string {
 		return m.renderDeploy(focused)
 	}
 	input := m.inputs[index]
+	prepareTextInput(&input, focused)
 	if focused {
 		input.Prompt = "❯ " + newFields[index].label + ": "
 		input.PromptStyle = selectedStyle
@@ -773,6 +770,8 @@ func (m *newWizard) renderDeploy(focused bool) string {
 		item := marker + " " + option
 		if optionIndex == m.deployCursor {
 			item = selectedStyle.Render(item)
+		} else if m.deployOptionSelected(option) {
+			item = successStyle.Render(item)
 		} else {
 			item = mutedStyle.Render(item)
 		}

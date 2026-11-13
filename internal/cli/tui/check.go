@@ -8,7 +8,6 @@ import (
 	"jimu/internal/cli/actions"
 	"jimu/tools/generator"
 
-	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -53,7 +52,7 @@ func newCheckWizard(opts Options, ctx context.Context, run checkRunFunc) *checkW
 	dir.SetValue(".")
 	dir.CharLimit = 512
 	dir.Width = 60
-	dir.Cursor.SetMode(cursor.CursorStatic)
+	configureTextInput(&dir, opts.NoColor)
 	dir.Focus()
 	return &checkWizard{opts: opts, ctx: ctx, run: run, dir: dir}
 }
@@ -152,8 +151,10 @@ func (m *checkWizard) formView() string {
 	if m.focus == 1 {
 		prefix = "› "
 	}
+	dir := m.dir
+	prepareTextInput(&dir, m.focus == 0)
 	return titleStyle.Render("Check project") + "\n\n" +
-		m.dir.View() + "\n" +
+		dir.View() + "\n" +
 		prefix + "Deep check " + deep + "\n\n" +
 		helpStyle.Render("tab next · space toggle · enter run · esc back · ctrl+c quit")
 }

@@ -99,7 +99,8 @@ func TestNewWizardAdvancedOptionsAreCollapsedByDefault(t *testing.T) {
 	wizard := enterNewDetails(t, newNewWizard(Options{}, context.Background(), nil))
 	require.NotContains(t, wizard.View(), "Database")
 	require.Contains(t, wizard.View(), "Advanced settings [ ]")
-	require.Equal(t, cursor.CursorStatic, wizard.inputs[newFieldDir].Cursor.Mode())
+	require.Equal(t, cursor.CursorBlink, wizard.inputs[newFieldDir].Cursor.Mode())
+	require.Equal(t, cursor.CursorStatic, newNewWizard(Options{NoColor: true}, context.Background(), nil).inputs[newFieldDir].Cursor.Mode())
 
 	updated, _, _ := wizard.Update(tea.KeyMsg{Type: tea.KeyTab})
 	updated, _, _ = updated.Update(tea.KeyMsg{Type: tea.KeyTab})
@@ -107,6 +108,7 @@ func TestNewWizardAdvancedOptionsAreCollapsedByDefault(t *testing.T) {
 	require.True(t, updated.advanced)
 	require.Contains(t, updated.View(), "Database")
 	require.Contains(t, updated.View(), "Advanced settings [x]")
+	require.Contains(t, updated.View(), "Selectors:")
 }
 
 func TestNewWizardChoiceFieldsUseSelectors(t *testing.T) {
