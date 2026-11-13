@@ -2,19 +2,16 @@ package scaffold
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 
+	"jimu/internal/cli/actions"
 	"jimu/internal/templatesource"
 	"jimu/tools/generator"
 	upgradeplan "jimu/tools/generator/upgrade"
 
 	"github.com/spf13/cobra"
 )
-
-var errUpgradeModes = errors.New("--dry-run and --check are mutually exclusive")
-var errUpgradeDiagnosticModes = errors.New("--json and --diff require --dry-run or --check")
 
 func NewUpgradeCommand(resolve templatesource.Resolver) *cobra.Command {
 	cmd := &cobra.Command{
@@ -48,40 +45,28 @@ manifest 基线哈希、项目当前内容、目标模板产物。
 			if len(args) > 0 {
 				dir = args[0]
 			}
-			dryRun, _ := cmd.Flags().GetBool("dry-run")
-			check, _ := cmd.Flags().GetBool("check")
-			noTidy, _ := cmd.Flags().GetBool("no-tidy")
-			jsonOutput, _ := cmd.Flags().GetBool("json")
-			diffOutput, _ := cmd.Flags().GetBool("diff")
-			if dryRun && check {
-				return errUpgradeModes
-			}
+			dryRun := flagBool(cmd, "dry-run")
+			check := flagBool(cmd, "check")
+			jsonOutput := flagBool(cmd, "json")
+			diffOutput := flagBool(cmd, "diff")
 			if (jsonOutput || diffOutput) && !dryRun && !check {
-				return errUpgradeDiagnosticModes
-			}
-			if dryRun == check {
-				source, cleanup, err := resolveSource(cmd, resolve)
-				if err != nil {
-					return err
-				}
-				defer func() { _ = cleanup() }()
-				applied, err := generator.ApplyUpgrade(generator.UpgradeOptions{
-					Dir: dir, From: source.Root, Framework: source.Framework, NoTidy: noTidy,
-				})
-				if applied != nil && (err == nil || applied.Report.HasConflicts()) {
-					printUpgradeApply(cmd.OutOrStdout(), applied)
-				}
-				return err
+				return actions.ErrUpgradeDiagnosticModes
 			}
 			source, cleanup, err := resolveSource(cmd, resolve)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = cleanup() }()
-			result, err := generator.PlanUpgrade(generator.UpgradeOptions{
-				Dir: dir, From: source.Root, Framework: source.Framework, NoTidy: noTidy,
-				IncludeDiff: diffOutput,
+			result, applied, err := actions.RunUpgrade(cmd.Context(), actions.UpgradeInput{
+				Dir: dir, SourceRoot: source.Root, Framework: source.Framework,
+				NoTidy: flagBool(cmd, "no-tidy"), DryRun: dryRun, Check: check, IncludeDiff: diffOutput,
 			})
+			if applied != nil && (err == nil || applied.Report.HasConflicts()) {
+				printUpgradeApply(cmd.OutOrStdout(), applied)
+			}
+			if result == nil {
+				return err
+			}
 			if err != nil {
 				return err
 			}

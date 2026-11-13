@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"jimu/internal/cli/actions"
 	"jimu/internal/templatesource"
 	"jimu/tools/generator"
 
@@ -34,23 +35,22 @@ go test ./...，不运行 Make 目标或业务脚本。检查过程不会更新 
 配置。--json 输出 schema version 1，并复用同一份检查事实。`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dir := "."
-			if len(args) > 0 {
-				dir = args[0]
-			}
-			deep, _ := cmd.Flags().GetBool("deep")
-			jsonOutput, _ := cmd.Flags().GetBool("json")
 			source, cleanup, err := resolveSource(cmd, resolve)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = cleanup() }()
-			result, err := generator.CheckProject(generator.CheckOptions{
-				Dir: dir, From: source.Root, Framework: source.Framework, Deep: deep,
+			dir := "."
+			if len(args) > 0 {
+				dir = args[0]
+			}
+			result, err := actions.RunCheck(cmd.Context(), actions.CheckInput{
+				Dir: dir, SourceRoot: source.Root, Framework: source.Framework, Deep: flagBool(cmd, "deep"),
 			})
 			if err != nil {
 				return err
 			}
+			jsonOutput := flagBool(cmd, "json")
 			if jsonOutput {
 				if err := printCheckJSON(cmd.OutOrStdout(), result); err != nil {
 					return err

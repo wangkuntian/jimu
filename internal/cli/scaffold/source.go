@@ -27,3 +27,13 @@ func addSourceFlag(cmd *cobra.Command) {
 	cmd.Flags().String("from", "", "template bundle source root (development/test only)")
 	_ = cmd.Flags().MarkHidden("from")
 }
+
+func flagString(cmd *cobra.Command, name string) string {
+	value, _ := cmd.Flags().GetString(name)
+	return value
+}
+
+func flagBool(cmd *cobra.Command, name string) bool {
+	value, _ := cmd.Flags().GetBool(name)
+	return value
+}
