@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"jimu/internal/cli/actions"
 	"jimu/tools/generator"
@@ -30,6 +31,10 @@ type newRunMsg struct {
 	result *generator.Result
 	err    error
 }
+
+type newExitMsg struct{}
+
+var newExitDelay = 1200 * time.Millisecond
 
 type newRunFunc func(context.Context, actions.NewInput) (*generator.Result, error)
 
@@ -248,6 +253,14 @@ func (m *newWizard) Update(msg tea.Msg) (newWizard, tea.Cmd, bool) {
 		}
 		m.step = newStepDone
 		m.result = msg.result
+		m.progress.SetContent("")
+		return *m, tea.Tick(newExitDelay, func(time.Time) tea.Msg {
+			return newExitMsg{}
+		}), false
+	case newExitMsg:
+		if m.step == newStepDone {
+			return *m, tea.Quit, false
+		}
 		return *m, nil, false
 	case tea.KeyMsg:
 		switch m.step {
@@ -850,8 +863,7 @@ func (m *newWizard) doneView() string {
 		b.WriteString(promptLine(fmt.Sprintf("files       %d", m.result.FileCount)))
 	}
 	b.WriteString(promptBlank())
-	b.WriteString(promptBlock(m.progress.View()))
-	b.WriteString(promptLine(helpStyle.Render("esc menu · ctrl+c quit")))
+	b.WriteString(promptLine(mutedStyle.Render("returning to shell...")))
 	b.WriteString(promptBottom())
 	return b.String()
 }

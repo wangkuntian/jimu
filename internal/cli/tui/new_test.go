@@ -208,11 +208,17 @@ func TestNewWizardSubmitsOnceAndShowsResult(t *testing.T) {
 	require.Equal(t, newStepRunning, updated.step)
 
 	msg := findNewRunMsg(t, cmd())
-	updated, _, _ = updated.Update(msg)
+	updated, exitCmd, _ := updated.Update(msg)
 	require.Equal(t, newStepDone, updated.step)
+	require.NotNil(t, exitCmd)
 	require.Equal(t, 1, calls)
 	require.NotNil(t, updated.result)
 	require.Contains(t, updated.View(), "Project created")
+	require.NotContains(t, updated.View(), "validating inputs")
+	require.NotContains(t, updated.View(), "generating project")
+
+	_, quitCmd, _ := updated.Update(newExitMsg{})
+	require.NotNil(t, quitCmd)
 }
 
 func findNewRunMsg(t *testing.T, msg tea.Msg) newRunMsg {

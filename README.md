@@ -120,7 +120,7 @@ make dev
 模板列表支持直接输入搜索，
 目录和模块输入有焦点条、常亮光标与示例提示；数据库、测试、工具用左右键选择，部署组件用
 空格多选；这些高级选项默认收进“高级设置”；
-生成过程中显示动画进度。
+生成过程中显示动画进度，成功后短暂展示结果并自动返回 shell。
 
 生成项目由 `jimu new --cli=both|direct` 选择 CLI 形态：`both` 同时编入直接命令和 TUI，
 `direct` 不引入 Bubble Tea。`minimal` 默认 `direct`，`auth`、`full` 与 `--with` 默认
