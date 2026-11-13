@@ -47,7 +47,7 @@ flowchart LR
 
 三个预设都从**当前主代码仓库**按 import 闭包裁剪，而不是维护独立的模板树：
 
-- `minimal` — 0 能力，只保留最小内核。`internal/platform`/`internal/shared`/`config`/`contract` 都不依赖能力，唯一耦合点曾是与能力 domain 共享的种子模型，现已抽到 `internal/platform/seedmodel`。生成项目不含数据库/Redis 客户端、数据库 SQL 测试夹具、`internal/e2e`、Dockerfile 或 `deploy/` 部署资产，配置也不含 `db`/`redis` 段；无数据库时 CLI 不注册 `migrate`/`seed`，`conf/rbac_model.conf` 只在 `access` 能力存在时生成；0 能力项目还不复制能力端口与系统角色定义（`contract/ports.go`、`contract/systemroles.go`）及 `assembly/context_auth.go`。`go build`、`go test`、`go run` 都不需要外部服务，`GET /api/v1/ping` 由内核提供。
+- `minimal` — 0 能力，只保留最小内核。`internal/platform`/`internal/shared`/`config`/`contract` 都不依赖能力，唯一耦合点曾是与能力 domain 共享的种子模型，现已抽到 `internal/platform/seedmodel`。生成项目不含数据库/Redis 客户端、数据库 SQL 测试夹具、`internal/e2e`、Dockerfile 或 `deploy/` 部署资产，配置也不含 `db`/`redis`/`id`/`ratelimit`/`capabilities` 段；无数据库时 CLI 不注册 `migrate`/`seed`，`conf/rbac_model.conf` 只在 `access` 能力存在时生成；0 能力项目还不复制能力端口与系统角色定义（`contract/ports.go`、`contract/systemroles.go`）及 `assembly/context_auth.go`。`go build`、`go test`、`go run` 都不需要外部服务，`GET /api/v1/ping` 由内核提供。
 - `auth` — `user` + `access` + `auth`（含 `tenant` 编译闭包），支持级别 `certified`。生成 MySQL/Redis 客户端、迁移与默认 Compose（`deploy/compose/`、`deploy/docker/Dockerfile`），不生成 K8s/Helm/observability；需要其他目标时通过 `--deploy` 指定。
 - `full` — 全部 24 个能力 + 完整驱动集（`s3`/`local`、`kafka`/`rabbitmq`/`redis`、`cache:redis`/`cache:memory`、`excel`/`csv`），支持级别 `validated`，默认生成 `compose,k8s,helm,observability` 全套部署资产。`--with` 的缺省驱动只取首个，无法表达完整驱动集，因此 `full` 改成从 `internal/profiles/full/assembly.go` 派生。
 

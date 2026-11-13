@@ -304,15 +304,23 @@ func configSections(selected selection) []string {
 	services := selectionRuntimeServices(selected)
 	if !services[contract.RuntimeServiceMySQL] {
 		delete(keep, "db")
+		// 雪花 ID 只在数据库状态初始化时使用；无 DB 的 minimal 不需要 worker_id。
+		delete(keep, "id")
 	}
 	if !services[contract.RuntimeServiceRedis] {
 		delete(keep, "redis")
+		// 租户维度限流是 Redis 滑动窗口；无 Redis 时该段没有消费者。
+		delete(keep, "ratelimit")
 	}
 	if !includeObservability(selected) {
 		delete(keep, "otel")
 	}
 	if !selectedNames["grpc"] {
 		delete(keep, "grpc")
+	}
+	if len(selected.copy) == 0 {
+		// 0 能力形态没有可门控的能力；capabilities.enabled 只会引入未知能力错误。
+		delete(keep, "capabilities")
 	}
 	if selected.generation.Runtime == manifest.GenerationRuntimeLean {
 		delete(keep, "http_client")
