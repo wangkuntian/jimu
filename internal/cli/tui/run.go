@@ -56,8 +56,15 @@ func Run(ctx context.Context, opts Options) error {
 	model := newRootModel(opts)
 	model.ctx = ctx
 	model.screen = opts.Initial
-	if model.screen == ScreenNew {
+	switch model.screen {
+	case ScreenNew:
 		model.newWizard = newNewWizard(opts, ctx, nil)
+	case ScreenCheck:
+		model.checkWizard = newCheckWizard(opts, ctx, nil)
+	case ScreenUpgrade:
+		model.upgradeWizard = newUpgradeWizard(opts, ctx, nil)
+	case ScreenAdd:
+		model.addWizard = newAddWizard(opts, ctx, nil)
 	}
 	_, err := tea.NewProgram(model, programOptions...).Run()
 	return err

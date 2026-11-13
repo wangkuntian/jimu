@@ -48,12 +48,15 @@ var keys = keyMap{
 }
 
 type rootModel struct {
-	opts      Options
-	ctx       context.Context
-	cursor    int
-	screen    Screen
-	quit      bool
-	newWizard *newWizard
+	opts          Options
+	ctx           context.Context
+	cursor        int
+	screen        Screen
+	quit          bool
+	newWizard     *newWizard
+	checkWizard   *checkWizard
+	upgradeWizard *upgradeWizard
+	addWizard     *addWizard
 }
 
 func newRootModel(opts Options) rootModel {
@@ -71,14 +74,44 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.quit = true
 		return m, tea.Quit
 	}
-	if m.screen == ScreenNew && m.newWizard != nil {
-		updated, cmd, back := m.newWizard.Update(msg)
-		m.newWizard = &updated
-		if back {
-			m.screen = ScreenMenu
-			m.newWizard = nil
+	switch m.screen {
+	case ScreenNew:
+		if m.newWizard != nil {
+			updated, cmd, back := m.newWizard.Update(msg)
+			m.newWizard = &updated
+			if back {
+				m.screen = ScreenMenu
+				m.newWizard = nil
+			}
+			return m, cmd
 		}
-		return m, cmd
+	case ScreenCheck:
+		if m.checkWizard != nil {
+			cmd, back := m.checkWizard.Update(msg)
+			if back {
+				m.screen = ScreenMenu
+				m.checkWizard = nil
+			}
+			return m, cmd
+		}
+	case ScreenUpgrade:
+		if m.upgradeWizard != nil {
+			cmd, back := m.upgradeWizard.Update(msg)
+			if back {
+				m.screen = ScreenMenu
+				m.upgradeWizard = nil
+			}
+			return m, cmd
+		}
+	case ScreenAdd:
+		if m.addWizard != nil {
+			cmd, back := m.addWizard.Update(msg)
+			if back {
+				m.screen = ScreenMenu
+				m.addWizard = nil
+			}
+			return m, cmd
+		}
 	}
 	switch {
 	case key.Matches(keyMsg, keys.Back):
@@ -96,8 +129,15 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case m.screen == ScreenMenu && key.Matches(keyMsg, keys.Enter):
 		m.screen = menuItems[m.cursor].screen
-		if m.screen == ScreenNew {
+		switch m.screen {
+		case ScreenNew:
 			m.newWizard = newNewWizard(m.opts, m.ctx, nil)
+		case ScreenCheck:
+			m.checkWizard = newCheckWizard(m.opts, m.ctx, nil)
+		case ScreenUpgrade:
+			m.upgradeWizard = newUpgradeWizard(m.opts, m.ctx, nil)
+		case ScreenAdd:
+			m.addWizard = newAddWizard(m.opts, m.ctx, nil)
 		}
 		return m, nil
 	default:
@@ -120,8 +160,23 @@ func (m rootModel) View() string {
 	b.WriteByte('\n')
 
 	if m.screen != ScreenMenu {
-		if m.screen == ScreenNew && m.newWizard != nil {
-			return m.newWizard.View()
+		switch m.screen {
+		case ScreenNew:
+			if m.newWizard != nil {
+				return m.newWizard.View()
+			}
+		case ScreenCheck:
+			if m.checkWizard != nil {
+				return m.checkWizard.View()
+			}
+		case ScreenUpgrade:
+			if m.upgradeWizard != nil {
+				return m.upgradeWizard.View()
+			}
+		case ScreenAdd:
+			if m.addWizard != nil {
+				return m.addWizard.View()
+			}
 		}
 		b.WriteString(selectedStyle.Render(menuItems[m.screen-1].label))
 		b.WriteByte('\n')

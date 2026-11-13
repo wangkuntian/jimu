@@ -9,4 +9,7 @@ var (
 	helpStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	errorStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
 	successStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5"))
+	passStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
+	warnStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
+	failStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5"))
 )
