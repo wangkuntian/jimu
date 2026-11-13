@@ -8,6 +8,7 @@ import (
 	"jimu/internal/cli/actions"
 	"jimu/tools/generator"
 
+	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -52,6 +53,7 @@ func newCheckWizard(opts Options, ctx context.Context, run checkRunFunc) *checkW
 	dir.SetValue(".")
 	dir.CharLimit = 512
 	dir.Width = 60
+	dir.Cursor.SetMode(cursor.CursorStatic)
 	dir.Focus()
 	return &checkWizard{opts: opts, ctx: ctx, run: run, dir: dir}
 }

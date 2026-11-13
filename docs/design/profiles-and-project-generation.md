@@ -85,7 +85,7 @@ CLI 的默认产品形态是可直接脚本化的 Cobra 命令，TUI 只是同�
 
 生成项目由 manifest 的 `generation.cli_ui` 控制：`both` 同时编入直接命令和 `cmd/cli/tui.go`，`direct` 只保留直接命令。`minimal` 默认 `direct`，避免把 Bubble Tea 和 lipgloss 依赖带回最小项目；`auth`、`full` 与 `--with` 默认 `both`，显式 `--cli=direct` 可收缩依赖。TUI 代码不进入 `cmd/server` 的 package 闭包，因此不增加服务二进制。`upgrade` 原样携带 `cli_ui`，v3 项目的保守默认保持 `direct`。
 
-`jimu new` 的 TUI 按“模板 → 项目信息 → 确认”分步，首屏只暴露模板选择；目录和模块字段带焦点条、光标和示例提示，高级测试/工具/部署选项默认折叠。生成阶段用动画进度反馈，避免长任务看起来卡住。TUI 状态同时使用符号、文字和颜色，不依赖红绿二色。`--no-color` 或非空 `NO_COLOR` 会关闭全部 ANSI 样式；非 TTY 的直接命令输出也保持无 ANSI。
+`jimu new` 的 TUI 按“模板 → 项目信息 → 确认”分步，首屏只暴露模板选择；目录和模块字段带焦点条、常亮光标和示例提示，数据库/测试/工具用左右键选择，部署组件用空格多选，高级选项默认折叠。生成阶段用动画进度反馈，避免长任务看起来卡住。TUI 状态同时使用符号、文字和颜色，不依赖红绿二色。`--no-color` 或非空 `NO_COLOR` 会关闭全部 ANSI 样式；非 TTY 的直接命令输出也保持无 ANSI。
 
 ### 新建项目流程
 

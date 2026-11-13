@@ -8,6 +8,7 @@ import (
 	"jimu/internal/cli/actions"
 	"jimu/tools/generator"
 
+	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -99,8 +100,16 @@ var newFields = []newField{
 	{label: "Database", defaultValue: "mysql", help: "mysql or postgres"},
 	{label: "Tests", defaultValue: "selected", help: "selected, all, or none"},
 	{label: "Tools", defaultValue: "auto", help: "auto, all, or none"},
-	{label: "Deploy", help: "e.g. compose,k8s · or all/none · blank uses the profile default"},
+	{label: "Deploy", help: "blank uses the profile default"},
 }
+
+var (
+	newDBOptions     = []string{"mysql", "postgres"}
+	newTestsOptions  = []string{"selected", "all", "none"}
+	newToolsOptions  = []string{"auto", "all", "none"}
+	newDeployParts   = []string{"compose", "k8s", "helm", "observability"}
+	newDeployOptions = []string{"compose", "k8s", "helm", "observability", "none", "all"}
+)
 
 type newWizard struct {
 	opts         Options
@@ -111,6 +120,12 @@ type newWizard struct {
 	inputs       []textinput.Model
 	focus        int
 	advanced     bool
+	dbChoice     int
+	testsChoice  int
+	toolsChoice  int
+	deployCursor int
+	deploy       map[string]bool
+	deployNone   bool
 	step         newStep
 	err          string
 	progress     viewport.Model
@@ -135,6 +150,7 @@ func newNewWizard(opts Options, ctx context.Context, run newRunFunc) *newWizard 
 		input.Width = 60
 		input.PromptStyle = mutedStyle
 		input.Cursor.Style = selectedStyle
+		input.Cursor.SetMode(cursor.CursorStatic)
 		inputs = append(inputs, input)
 	}
 	spin := spinner.New(spinner.WithSpinner(spinner.MiniDot))
@@ -147,6 +163,7 @@ func newNewWizard(opts Options, ctx context.Context, run newRunFunc) *newWizard 
 		inputs:   inputs,
 		progress: progress,
 		spinner:  spin,
+		deploy:   map[string]bool{},
 	}
 }
 
@@ -160,13 +177,29 @@ func (m *newWizard) input() actions.NewInput {
 		Profile:    value(newFieldProfile),
 		With:       value(newFieldWith),
 		Shape:      value(newFieldShape),
-		DBDriver:   value(newFieldDB),
-		Tests:      value(newFieldTests),
-		Tools:      value(newFieldTools),
-		Deploy:     value(newFieldDeploy),
+		DBDriver:   newDBOptions[m.dbChoice],
+		Tests:      newTestsOptions[m.testsChoice],
+		Tools:      newToolsOptions[m.toolsChoice],
+		Deploy:     m.deployValue(),
 		SourceRoot: m.opts.SourceRoot,
 		Framework:  m.opts.Framework,
 	}
+}
+
+func (m *newWizard) deployValue() string {
+	if m.deployNone {
+		return "none"
+	}
+	var selected []string
+	for _, part := range newDeployParts {
+		if m.deploy[part] {
+			selected = append(selected, part)
+		}
+	}
+	if len(selected) == len(newDeployParts) {
+		return "all"
+	}
+	return strings.Join(selected, ",")
 }
 
 func (m *newWizard) preset() newPreset {
@@ -321,15 +354,35 @@ func (m *newWizard) updateForm(msg tea.KeyMsg) (newWizard, tea.Cmd, bool) {
 		return *m, m.setFocus((m.focus + 1) % (len(fields) + 1)), false
 	case "shift+tab", "up":
 		return *m, m.setFocus((m.focus - 1 + len(fields) + 1) % (len(fields) + 1)), false
+	case "left", "right":
+		index, ok := m.focusedFieldIndex()
+		if !ok {
+			return *m, nil, false
+		}
+		direction := 1
+		if msg.String() == "left" {
+			direction = -1
+		}
+		m.cycleChoice(index, direction)
+		return *m, nil, false
 	case " ":
 		if m.focus == len(fields) {
 			return *m, m.toggleAdvanced(), false
+		}
+		index, ok := m.focusedFieldIndex()
+		if ok && m.isChoiceField(index) {
+			if index == newFieldDeploy {
+				m.toggleDeploy()
+			} else {
+				m.cycleChoice(index, 1)
+			}
+			return *m, nil, false
 		}
 	case "enter":
 		if m.focus == len(fields) {
 			return *m, m.toggleAdvanced(), false
 		}
-		index, ok := m.focusedInputIndex()
+		index, ok := m.focusedFieldIndex()
 		if !ok {
 			return *m, nil, false
 		}
@@ -410,12 +463,78 @@ func (m *newWizard) visibleFields() []int {
 	return append(fields, newFieldDB, newFieldTests, newFieldTools, newFieldDeploy)
 }
 
-func (m *newWizard) focusedInputIndex() (int, bool) {
+func (m *newWizard) focusedFieldIndex() (int, bool) {
 	fields := m.visibleFields()
 	if m.focus < 0 || m.focus >= len(fields) {
 		return 0, false
 	}
 	return fields[m.focus], true
+}
+
+func (m *newWizard) focusedInputIndex() (int, bool) {
+	index, ok := m.focusedFieldIndex()
+	if !ok || !m.isTextInput(index) {
+		return 0, false
+	}
+	return index, true
+}
+
+func (m *newWizard) isTextInput(index int) bool {
+	switch index {
+	case newFieldDir, newFieldModule, newFieldWith, newFieldShape:
+		return true
+	default:
+		return false
+	}
+}
+
+func (m *newWizard) isChoiceField(index int) bool {
+	switch index {
+	case newFieldDB, newFieldTests, newFieldTools, newFieldDeploy:
+		return true
+	default:
+		return false
+	}
+}
+
+func (m *newWizard) cycleChoice(index, direction int) {
+	switch index {
+	case newFieldDB:
+		m.dbChoice = cycleIndex(m.dbChoice, len(newDBOptions), direction)
+	case newFieldTests:
+		m.testsChoice = cycleIndex(m.testsChoice, len(newTestsOptions), direction)
+	case newFieldTools:
+		m.toolsChoice = cycleIndex(m.toolsChoice, len(newToolsOptions), direction)
+	case newFieldDeploy:
+		m.deployCursor = cycleIndex(m.deployCursor, len(newDeployOptions), direction)
+	}
+}
+
+func cycleIndex(current, length, direction int) int {
+	return (current + direction + length) % length
+}
+
+func (m *newWizard) toggleDeploy() {
+	option := newDeployOptions[m.deployCursor]
+	switch option {
+	case "none":
+		m.deployNone = !m.deployNone
+		if m.deployNone {
+			clear(m.deploy)
+		}
+	case "all":
+		allSelected := true
+		for _, part := range newDeployParts {
+			allSelected = allSelected && m.deploy[part]
+		}
+		for _, part := range newDeployParts {
+			m.deploy[part] = !allSelected
+		}
+		m.deployNone = false
+	default:
+		m.deploy[option] = !m.deploy[option]
+		m.deployNone = false
+	}
 }
 
 func (m *newWizard) setFocus(row int) tea.Cmd {
@@ -553,7 +672,14 @@ func (m *newWizard) formView() string {
 	for row, index := range fields {
 		b.WriteString(promptLine(m.renderField(index, row == m.focus)))
 		if row == m.focus {
-			b.WriteString(promptLine(mutedStyle.Render("  " + newFields[index].help)))
+			help := newFields[index].help
+			if m.isChoiceField(index) {
+				help += " · ←/→ choose"
+			}
+			if index == newFieldDeploy {
+				help += " · space toggle"
+			}
+			b.WriteString(promptLine(mutedStyle.Render("  " + help)))
 		}
 	}
 	b.WriteString(promptLine(m.advancedLine(len(fields))))
@@ -571,6 +697,16 @@ func (m *newWizard) formView() string {
 }
 
 func (m *newWizard) renderField(index int, focused bool) string {
+	switch index {
+	case newFieldDB:
+		return m.renderChoice(index, newDBOptions, m.dbChoice, focused)
+	case newFieldTests:
+		return m.renderChoice(index, newTestsOptions, m.testsChoice, focused)
+	case newFieldTools:
+		return m.renderChoice(index, newToolsOptions, m.toolsChoice, focused)
+	case newFieldDeploy:
+		return m.renderDeploy(focused)
+	}
 	input := m.inputs[index]
 	if focused {
 		input.Prompt = "❯ " + newFields[index].label + ": "
@@ -581,6 +717,71 @@ func (m *newWizard) renderField(index int, focused bool) string {
 	}
 	input.Cursor.Style = selectedStyle
 	return input.View()
+}
+
+func (m *newWizard) renderChoice(index int, options []string, selected int, focused bool) string {
+	label := newFields[index].label
+	if !focused {
+		return "  " + label + "  " + options[selected]
+	}
+	var b strings.Builder
+	b.WriteString("❯ " + label + "  ")
+	for optionIndex, option := range options {
+		if optionIndex > 0 {
+			b.WriteString("  ")
+		}
+		marker := "○"
+		item := marker + " " + option
+		if optionIndex == selected {
+			marker = "◉"
+			item = selectedStyle.Render(marker + " " + option)
+		} else {
+			item = mutedStyle.Render(item)
+		}
+		b.WriteString(item)
+	}
+	return b.String()
+}
+
+func (m *newWizard) renderDeploy(focused bool) string {
+	if !focused {
+		return "  Deploy  " + valueOrDefault(m.deployValue(), "profile default")
+	}
+	var b strings.Builder
+	b.WriteString("❯ Deploy  ")
+	for optionIndex, option := range newDeployOptions {
+		if optionIndex > 0 {
+			b.WriteString("  ")
+		}
+		marker := "◻"
+		if m.deployOptionSelected(option) {
+			marker = "◼"
+		}
+		item := marker + " " + option
+		if optionIndex == m.deployCursor {
+			item = selectedStyle.Render(item)
+		} else {
+			item = mutedStyle.Render(item)
+		}
+		b.WriteString(item)
+	}
+	return b.String()
+}
+
+func (m *newWizard) deployOptionSelected(option string) bool {
+	switch option {
+	case "none":
+		return m.deployNone
+	case "all":
+		for _, part := range newDeployParts {
+			if !m.deploy[part] {
+				return false
+			}
+		}
+		return true
+	default:
+		return m.deploy[option]
+	}
 }
 
 func (m *newWizard) advancedLine(toggleRow int) string {

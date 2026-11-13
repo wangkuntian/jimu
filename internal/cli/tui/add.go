@@ -8,6 +8,7 @@ import (
 	"jimu/internal/cli/actions"
 	"jimu/tools/generator"
 
+	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -56,6 +57,7 @@ func newAddWizard(opts Options, ctx context.Context, run addRunFunc) *addWizard 
 		input.Prompt = label + ": "
 		input.CharLimit = 512
 		input.Width = 60
+		input.Cursor.SetMode(cursor.CursorStatic)
 		inputs[index] = input
 	}
 	inputs[0].SetValue(".")

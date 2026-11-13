@@ -8,6 +8,7 @@ import (
 	"jimu/internal/cli/actions"
 	"jimu/tools/generator"
 
+	"github.com/charmbracelet/bubbles/cursor"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
@@ -96,15 +97,53 @@ func TestNewWizardFormRequiresDirectory(t *testing.T) {
 
 func TestNewWizardAdvancedOptionsAreCollapsedByDefault(t *testing.T) {
 	wizard := enterNewDetails(t, newNewWizard(Options{}, context.Background(), nil))
-	require.NotContains(t, wizard.View(), "Database:")
+	require.NotContains(t, wizard.View(), "Database")
 	require.Contains(t, wizard.View(), "Advanced settings [ ]")
+	require.Equal(t, cursor.CursorStatic, wizard.inputs[newFieldDir].Cursor.Mode())
 
 	updated, _, _ := wizard.Update(tea.KeyMsg{Type: tea.KeyTab})
 	updated, _, _ = updated.Update(tea.KeyMsg{Type: tea.KeyTab})
 	updated, _, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	require.True(t, updated.advanced)
-	require.Contains(t, updated.View(), "Database:")
+	require.Contains(t, updated.View(), "Database")
 	require.Contains(t, updated.View(), "Advanced settings [x]")
+}
+
+func TestNewWizardChoiceFieldsUseSelectors(t *testing.T) {
+	wizard := enterNewDetails(t, newNewWizard(Options{}, context.Background(), nil))
+	for range 2 {
+		updated, _, _ := wizard.Update(tea.KeyMsg{Type: tea.KeyTab})
+		wizard = &updated
+	}
+	updated, _, _ := wizard.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	wizard = &updated
+	require.True(t, wizard.advanced)
+
+	updated, _, _ = wizard.Update(tea.KeyMsg{Type: tea.KeyRight})
+	wizard = &updated
+	require.Equal(t, "postgres", wizard.input().DBDriver)
+	require.Contains(t, wizard.View(), "◉ postgres")
+
+	updated, _, _ = wizard.Update(tea.KeyMsg{Type: tea.KeyTab})
+	wizard = &updated
+	updated, _, _ = wizard.Update(tea.KeyMsg{Type: tea.KeyRight})
+	wizard = &updated
+	require.Equal(t, "all", wizard.input().Tests)
+
+	updated, _, _ = wizard.Update(tea.KeyMsg{Type: tea.KeyTab})
+	wizard = &updated
+	updated, _, _ = wizard.Update(tea.KeyMsg{Type: tea.KeySpace})
+	wizard = &updated
+	require.Equal(t, "all", wizard.input().Tools)
+
+	updated, _, _ = wizard.Update(tea.KeyMsg{Type: tea.KeyTab})
+	wizard = &updated
+	updated, _, _ = wizard.Update(tea.KeyMsg{Type: tea.KeySpace})
+	wizard = &updated
+	require.Equal(t, "compose", wizard.input().Deploy)
+	updated, _, _ = wizard.Update(tea.KeyMsg{Type: tea.KeySpace})
+	wizard = &updated
+	require.Equal(t, "", wizard.input().Deploy)
 }
 
 func TestNewWizardCustomPresetRequiresCapability(t *testing.T) {

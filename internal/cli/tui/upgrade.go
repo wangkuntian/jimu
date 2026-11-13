@@ -9,6 +9,7 @@ import (
 	"jimu/tools/generator"
 	upgradeplan "jimu/tools/generator/upgrade"
 
+	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -66,6 +67,7 @@ func newUpgradeWizard(opts Options, ctx context.Context, run upgradeRunFunc) *up
 	dir.SetValue(".")
 	dir.CharLimit = 512
 	dir.Width = 60
+	dir.Cursor.SetMode(cursor.CursorStatic)
 	dir.Focus()
 	return &upgradeWizard{opts: opts, ctx: ctx, run: run, dir: dir}
 }
