@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"jimu/internal/platform/httpclient"
+	"jimu/internal/contract"
 
 	"golang.org/x/oauth2"
 )
@@ -23,12 +23,12 @@ type GitHubConfig struct {
 // GitHubProvider GitHub OAuth 实现
 type GitHubProvider struct {
 	config      *oauth2.Config
-	client      *httpclient.Client
+	client      contract.HTTPClient
 	userInfoURL string // 未导出，测试可覆盖
 }
 
 // NewGitHubProvider 创建 GitHub Provider
-func NewGitHubProvider(cfg GitHubConfig, client *httpclient.Client) *GitHubProvider {
+func NewGitHubProvider(cfg GitHubConfig, client contract.HTTPClient) *GitHubProvider {
 	return &GitHubProvider{
 		config: &oauth2.Config{
 			ClientID:     cfg.ClientID,

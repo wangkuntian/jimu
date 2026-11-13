@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"time"
 
-	"jimu/internal/platform/httpclient"
+	"jimu/internal/contract"
 )
 
 // WebhookConfig Webhook 配置
@@ -27,11 +27,11 @@ type WebhookConfig struct {
 // Webhook Webhook 通知实现
 type Webhook struct {
 	config WebhookConfig
-	client *httpclient.Client
+	client contract.HTTPClient
 }
 
 // NewWebhook 创建 Webhook 通知（复用统一出站 client：超时/重试/trace 注入）
-func NewWebhook(config WebhookConfig, client *httpclient.Client) *Webhook {
+func NewWebhook(config WebhookConfig, client contract.HTTPClient) *Webhook {
 	return &Webhook{config: config, client: client}
 }
 

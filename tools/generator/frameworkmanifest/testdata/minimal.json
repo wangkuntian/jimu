@@ -54,6 +54,7 @@
   },
   "generation": {
     "runtime_closure": true,
+    "runtime": "standard",
     "tests": "selected",
     "tools_mode": "auto",
     "tools_resolved": [
@@ -388,6 +389,8 @@
       "exclude": [
         "db/postgres.go",
         "db/postgres_test.go",
+        "http/middleware/observability_lean.go",
+        "http/middleware/ratelimit_lean.go",
         "cachemem",
         "observability"
       ]
@@ -398,13 +401,16 @@
       "optional": false,
       "include": [],
       "exclude": [
+        "bootstrap_metrics_empty.go",
         "bootstrap_otel.go",
         "bootstrap_redis_empty.go",
+        "container_mysql_store_nodb.go",
         "container_nodb.go",
         "container_otel.go",
         "container_otel_db.go",
         "container_otel_nodb.go",
         "container_redis_empty.go",
+        "container_runtime_empty.go",
         "tracing_otel.go"
       ]
     },
@@ -416,7 +422,8 @@
       "exclude": [
         "portflow.go",
         "portflow_test.go",
-        "context_redis_empty.go"
+        "context_redis_empty.go",
+        "context_runtime_empty.go"
       ]
     },
     {
@@ -1171,6 +1178,14 @@
       "files": [
         "internal/app/tracing_empty.go"
       ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "//go:build !jimu_lean \u0026\u0026 !jimu_nodb",
+      "to": "// 标准内核：由生成器去掉 build tag",
+      "files": [
+        "internal/app/container_mysql_store.go"
+      ]
     }
   ],
   "assets": [],
@@ -1235,6 +1250,7 @@
     "internal/app/authz_bootstrap_test.go",
     "internal/app/bootstrap.go",
     "internal/app/bootstrap_http_test.go",
+    "internal/app/bootstrap_metrics.go",
     "internal/app/bootstrap_otel_empty.go",
     "internal/app/bootstrap_redis.go",
     "internal/app/capabilities_handler_test.go",
@@ -1243,8 +1259,10 @@
     "internal/app/container.go",
     "internal/app/container_db.go",
     "internal/app/container_http_only_test.go",
+    "internal/app/container_mysql_store.go",
     "internal/app/container_otel_empty.go",
     "internal/app/container_redis.go",
+    "internal/app/container_runtime.go",
     "internal/app/container_runtime_services_test.go",
     "internal/app/seed_test.go",
     "internal/app/tracing_empty.go",
@@ -1252,6 +1270,7 @@
     "internal/assembly/assembly_test.go",
     "internal/assembly/context.go",
     "internal/assembly/context_redis.go",
+    "internal/assembly/context_runtime.go",
     "internal/assembly/context_test.go",
     "internal/assembly/wirefor_test.go",
     "internal/capabilities/access/application/crud_test.go",
@@ -1411,11 +1430,13 @@
     "internal/contract/composition.go",
     "internal/contract/composition_test.go",
     "internal/contract/events.go",
+    "internal/contract/job.go",
     "internal/contract/module.go",
     "internal/contract/openapi.go",
     "internal/contract/openapi_test.go",
     "internal/contract/outbox_mq_port.go",
     "internal/contract/ports.go",
+    "internal/contract/runtime.go",
     "internal/contract/systemroles.go",
     "internal/contract/systemroles_test.go",
     "internal/platform/authz/casbin.go",
@@ -1611,5 +1632,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:6e1587632b9980f10afb29c3135228c0a267d0e7c958c93e9d968ec0d63bb33a"
+  "digest": "sha256:67269cf2bf8b8a8f9003b940dbb6024efa277eb2a27bd85d0ee9a6f379b05777"
 }

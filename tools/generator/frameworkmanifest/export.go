@@ -34,6 +34,7 @@ type Request struct {
 	Tools     string
 	Deploy    string
 	CLIUI     string
+	Runtime   string
 	// Drivers 保留既有项目的驱动选择；未列出的能力由默认驱动规则补齐。
 	Drivers    map[string][]string
 	Generation *manifest.Generation
@@ -133,10 +134,11 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 			}
 		}
 		selected.generation, err = ResolveGeneration(generationProfile, req.With, selected.declared, GenerationRequest{
-			Tests:  req.Tests,
-			Tools:  req.Tools,
-			Deploy: deploy,
-			CLIUI:  req.CLIUI,
+			Tests:   req.Tests,
+			Tools:   req.Tools,
+			Deploy:  deploy,
+			CLIUI:   req.CLIUI,
+			Runtime: req.Runtime,
 		})
 		if err != nil {
 			return manifest.Document{}, Resolution{}, err
@@ -307,12 +309,17 @@ func ExportForAdd(root string, previous manifest.Document, name, driver string, 
 	for _, descriptor := range composed.Resolved {
 		resolvedNames = append(resolvedNames, descriptor.Name)
 	}
+	runtime := previous.Generation.Runtime
+	if runtime == manifest.GenerationRuntimeLean && len(resolvedNames) > 0 {
+		runtime = manifest.GenerationRuntimeStandard
+	}
 	generation, err := ResolveGeneration(profile, with, resolvedNames, GenerationRequest{
-		Tests:  previous.Generation.Tests,
-		Tools:  previous.Generation.ToolsMode,
-		Deploy: slices.Clone(previous.Generation.Deploy),
-		CLI:    previous.Generation.CLI,
-		CLIUI:  previous.Generation.CLIUI,
+		Tests:   previous.Generation.Tests,
+		Tools:   previous.Generation.ToolsMode,
+		Deploy:  slices.Clone(previous.Generation.Deploy),
+		CLI:     previous.Generation.CLI,
+		CLIUI:   previous.Generation.CLIUI,
+		Runtime: runtime,
 	})
 	if err != nil {
 		return manifest.Document{}, err

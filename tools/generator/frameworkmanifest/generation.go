@@ -10,11 +10,12 @@ import (
 // GenerationRequest is the raw, user-facing generation policy. Deploy is nil
 // when the caller wants the profile default; a non-nil empty slice means none.
 type GenerationRequest struct {
-	Tests  string
-	Tools  string
-	Deploy []string
-	CLI    string
-	CLIUI  string
+	Tests   string
+	Tools   string
+	Deploy  []string
+	CLI     string
+	CLIUI   string
+	Runtime string
 }
 
 // ResolveGeneration turns raw flags into the policy persisted in a v4
@@ -55,17 +56,34 @@ func ResolveGeneration(profile, with string, declared []string, raw GenerationRe
 		}
 		generation.CLIUI = raw.CLIUI
 	}
+	explicitRuntime := raw.Runtime != ""
+	if explicitRuntime {
+		if !slices.Contains([]string{manifest.GenerationRuntimeLean, manifest.GenerationRuntimeStandard}, raw.Runtime) {
+			return manifest.Generation{}, fmt.Errorf("--runtime must be lean or standard")
+		}
+		generation.Runtime = raw.Runtime
+	}
+	if explicitRuntime && generation.Runtime == manifest.GenerationRuntimeLean && len(declared) > 0 {
+		return manifest.Generation{}, fmt.Errorf("--runtime=lean requires a project without capabilities")
+	}
+	if explicitRuntime && generation.Runtime == manifest.GenerationRuntimeLean && slices.Contains(generation.Deploy, manifest.DeployObservability) {
+		return manifest.Generation{}, fmt.Errorf("--runtime=lean cannot be combined with --deploy=observability")
+	}
 	return generation, nil
 }
 
 func defaultGeneration(profile, with string, declared []string) manifest.Generation {
 	generation := manifest.Generation{
 		RuntimeClosure: true,
+		Runtime:        manifest.GenerationRuntimeStandard,
 		Tests:          manifest.GenerationTestsSelected,
 		ToolsMode:      manifest.GenerationToolsAuto,
 		Deploy:         DefaultDeploy(profile),
 		CLI:            manifest.GenerationCLIMinimal,
 		CLIUI:          manifest.GenerationCLIUIDirect,
+	}
+	if len(declared) == 0 {
+		generation.Runtime = manifest.GenerationRuntimeLean
 	}
 	switch profile {
 	case "minimal":

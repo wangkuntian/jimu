@@ -1,3 +1,5 @@
+//go:build !jimu_lean
+
 package middleware
 
 import (

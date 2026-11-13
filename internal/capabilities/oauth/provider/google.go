@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"jimu/internal/platform/httpclient"
+	"jimu/internal/contract"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -24,12 +24,12 @@ type GoogleConfig struct {
 // GoogleProvider Google OAuth 实现
 type GoogleProvider struct {
 	config      *oauth2.Config
-	client      *httpclient.Client
+	client      contract.HTTPClient
 	userInfoURL string // 未导出，测试可覆盖
 }
 
 // NewGoogleProvider 创建 Google Provider
-func NewGoogleProvider(cfg GoogleConfig, client *httpclient.Client) *GoogleProvider {
+func NewGoogleProvider(cfg GoogleConfig, client contract.HTTPClient) *GoogleProvider {
 	return &GoogleProvider{
 		config: &oauth2.Config{
 			ClientID:     cfg.ClientID,

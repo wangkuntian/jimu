@@ -1,15 +1,14 @@
 package scheduler
 
-import "fmt"
+import (
+	"fmt"
 
-// Job 是能力经装配接缝贡献的定时任务定义：由组合根在内建任务之外一并注册。
-// ID 全仓唯一（重名报错），Name/Spec 语义与 CronScheduler.AddNamedFunc 一致。
-type Job struct {
-	ID   string
-	Name string
-	Spec string
-	Run  func()
-}
+	"jimu/internal/contract"
+)
+
+// Job 是能力经装配接缝贡献的定时任务定义；类型归 contract，避免根包与生成期
+// 裁剪被迫引入 scheduler 实现。
+type Job = contract.Job
 
 // 调度器存储类型取值（原 queue.SchedulerConfig，P2.4 归位内核：调度器是内核件，
 // 其配置段由 queue 能力声明，但类型不属任何能力）。

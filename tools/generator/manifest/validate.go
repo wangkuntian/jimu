@@ -230,6 +230,9 @@ func validateCompleteFor(doc Document, schemaVersion int) error {
 }
 
 func validateGeneration(g Generation) error {
+	if g.Runtime != "" && g.Runtime != GenerationRuntimeLean && g.Runtime != GenerationRuntimeStandard {
+		return fmt.Errorf("generation.runtime must be lean or standard")
+	}
 	if err := requireEnum("generation.tests", g.Tests, GenerationTestsSelected, GenerationTestsAll, GenerationTestsNone); err != nil {
 		return err
 	}

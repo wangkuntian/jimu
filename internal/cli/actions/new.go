@@ -16,7 +16,7 @@ var (
 // NewInput is the shared input for direct and TUI scaffolding.
 type NewInput struct {
 	Dir, Module, Profile, With, Shape, DBDriver string
-	Tests, Tools, Deploy, CLIUI                 string
+	Tests, Tools, Deploy, CLIUI, Runtime        string
 	NoTidy, DryRun, Force, Report               bool
 	SourceRoot                                  string
 	Framework                                   *manifest.Framework
@@ -41,6 +41,7 @@ func RunNew(ctx context.Context, in NewInput) (*generator.Result, error) {
 		Tools:      in.Tools,
 		Deploy:     in.Deploy,
 		CLIUI:      in.CLIUI,
+		Runtime:    in.Runtime,
 		NoTidy:     in.NoTidy,
 		DryRun:     in.DryRun,
 		Force:      in.Force,

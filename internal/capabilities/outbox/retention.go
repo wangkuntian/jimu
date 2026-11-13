@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"jimu/internal/contract"
 	"jimu/internal/platform/logger"
-	"jimu/internal/platform/scheduler"
 	"jimu/internal/shared/dbpurge"
 
 	"gorm.io/gorm"
@@ -41,16 +41,16 @@ func outboxRetentionRules(cfg RetentionConfig) []dbpurge.Rule {
 	}}
 }
 
-func newOutboxRetentionJob(db *gorm.DB, cfg RetentionConfig, log *logger.Logger) (scheduler.Job, bool) {
+func newOutboxRetentionJob(db *gorm.DB, cfg RetentionConfig, log *logger.Logger) (contract.Job, bool) {
 	if db == nil || !cfg.Enabled {
-		return scheduler.Job{}, false
+		return contract.Job{}, false
 	}
 	spec := cfg.Cron
 	if spec == "" {
 		spec = "30 3 * * *"
 	}
 	service := dbpurge.New(db, cfg.BatchSize)
-	return scheduler.Job{
+	return contract.Job{
 		ID:   "outbox_retention",
 		Name: "Published Outbox Event Retention",
 		Spec: spec,

@@ -7,7 +7,6 @@ import (
 	"jimu/internal/capabilities/queue/interfaces"
 	"jimu/internal/contract"
 	"jimu/internal/platform/http/middleware"
-	"jimu/internal/platform/scheduler"
 
 	"gorm.io/gorm"
 )
@@ -17,12 +16,12 @@ import (
 type Module struct {
 	jobRepo  domain.JobRepository
 	deadRepo domain.DeadLetterRepository
-	sched    *scheduler.CronScheduler
+	sched    contract.Scheduler
 }
 
 // NewModule 创建队列模块（模块实例，区别于按类型建队列的 New）。
 // sched 为空时任务端点仍注册，但调用返回错误。
-func NewModule(db *gorm.DB, sched *scheduler.CronScheduler) *Module {
+func NewModule(db *gorm.DB, sched contract.Scheduler) *Module {
 	return &Module{
 		jobRepo:  infrastructure.NewMysqlJobRepository(db),
 		deadRepo: infrastructure.NewMysqlDeadLetterRepository(db),

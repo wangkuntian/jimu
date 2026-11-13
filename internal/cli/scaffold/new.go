@@ -72,6 +72,7 @@ func NewCommand(resolve templatesource.Resolver) *cobra.Command {
 				Tools:      flagString(cmd, "tools"),
 				Deploy:     flagString(cmd, "deploy"),
 				CLIUI:      flagString(cmd, "cli"),
+				Runtime:    flagString(cmd, "runtime"),
 				NoTidy:     flagBool(cmd, "no-tidy"),
 				DryRun:     flagBool(cmd, "dry-run"),
 				Force:      flagBool(cmd, "force"),
@@ -98,6 +99,7 @@ func NewCommand(resolve templatesource.Resolver) *cobra.Command {
 	cmd.Flags().String("tools", "", "generated tools: auto, all, or none (default: auto)")
 	cmd.Flags().String("deploy", "", "deploy components: compose,k8s,helm,observability, all, or none")
 	cmd.Flags().String("cli", "", "project CLI UI: both or direct (default: profile-derived)")
+	cmd.Flags().String("runtime", "", "kernel runtime: lean or standard (default: lean for minimal, standard otherwise)")
 	cmd.Flags().Bool("no-tidy", false, "skip go mod tidy after generation (default: tidy runs and a failing tidy aborts)")
 	cmd.Flags().Bool("dry-run", false, "print the plan without writing anything")
 	cmd.Flags().Bool("force", false, "overwrite an existing generated project (requires .jimu/manifest.json)")

@@ -24,6 +24,9 @@ const (
 	GenerationCLIUIDirect = "direct"
 	GenerationCLIUIBoth   = "both"
 
+	GenerationRuntimeLean     = "lean"
+	GenerationRuntimeStandard = "standard"
+
 	DeployCompose       = "compose"
 	DeployK8s           = "k8s"
 	DeployHelm          = "helm"
@@ -70,13 +73,17 @@ type Document struct {
 
 // Generation is the persisted generation policy for v4 manifests.
 type Generation struct {
-	RuntimeClosure bool     `json:"runtime_closure"`
-	Tests          string   `json:"tests"`
-	ToolsMode      string   `json:"tools_mode"`
-	ToolsResolved  []string `json:"tools_resolved"`
-	Deploy         []string `json:"deploy"`
-	CLI            string   `json:"cli"`
-	CLIUI          string   `json:"cli_ui"`
+	RuntimeClosure bool `json:"runtime_closure"`
+	// Runtime selects the generated kernel runtime: standard keeps the
+	// scheduler, outbound HTTP client, error reporter and Prometheus metrics;
+	// lean omits all four. Empty means standard (schema v4 compatibility).
+	Runtime       string   `json:"runtime,omitempty"`
+	Tests         string   `json:"tests"`
+	ToolsMode     string   `json:"tools_mode"`
+	ToolsResolved []string `json:"tools_resolved"`
+	Deploy        []string `json:"deploy"`
+	CLI           string   `json:"cli"`
+	CLIUI         string   `json:"cli_ui"`
 }
 
 type Framework struct {

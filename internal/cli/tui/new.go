@@ -86,6 +86,7 @@ const (
 	newFieldDB
 	newFieldTests
 	newFieldTools
+	newFieldRuntime
 	newFieldDeploy
 )
 
@@ -104,38 +105,41 @@ var newFields = []newField{
 	{label: "Database", defaultValue: "mysql", help: "single choice · ←/→ change"},
 	{label: "Tests", defaultValue: "selected", help: "single choice · ←/→ change"},
 	{label: "Tools", defaultValue: "auto", help: "single choice · ←/→ change"},
+	{label: "Runtime", defaultValue: "lean", help: "single choice · lean omits scheduler, HTTP client, reporter and metrics"},
 	{label: "Deploy", help: "multi-select · ←/→ move · space toggle · blank = profile default"},
 }
 
 var (
-	newDBOptions     = []string{"mysql", "postgres"}
-	newTestsOptions  = []string{"selected", "all", "none"}
-	newToolsOptions  = []string{"auto", "all", "none"}
-	newDeployParts   = []string{"compose", "k8s", "helm", "observability"}
-	newDeployOptions = []string{"compose", "k8s", "helm", "observability", "none", "all"}
+	newDBOptions      = []string{"mysql", "postgres"}
+	newTestsOptions   = []string{"selected", "all", "none"}
+	newToolsOptions   = []string{"auto", "all", "none"}
+	newRuntimeOptions = []string{"lean", "standard"}
+	newDeployParts    = []string{"compose", "k8s", "helm", "observability"}
+	newDeployOptions  = []string{"compose", "k8s", "helm", "observability", "none", "all"}
 )
 
 type newWizard struct {
-	opts         Options
-	ctx          context.Context
-	run          newRunFunc
-	presetCursor int
-	presetQuery  string
-	inputs       []textinput.Model
-	focus        int
-	advanced     bool
-	dbChoice     int
-	testsChoice  int
-	toolsChoice  int
-	deployCursor int
-	deploy       map[string]bool
-	deployNone   bool
-	step         newStep
-	err          string
-	progress     viewport.Model
-	spinner      spinner.Model
-	result       *generator.Result
-	submits      int
+	opts          Options
+	ctx           context.Context
+	run           newRunFunc
+	presetCursor  int
+	presetQuery   string
+	inputs        []textinput.Model
+	focus         int
+	advanced      bool
+	dbChoice      int
+	testsChoice   int
+	toolsChoice   int
+	runtimeChoice int
+	deployCursor  int
+	deploy        map[string]bool
+	deployNone    bool
+	step          newStep
+	err           string
+	progress      viewport.Model
+	spinner       spinner.Model
+	result        *generator.Result
+	submits       int
 }
 
 func newNewWizard(opts Options, ctx context.Context, run newRunFunc) *newWizard {
@@ -183,6 +187,7 @@ func (m *newWizard) input() actions.NewInput {
 		DBDriver:   newDBOptions[m.dbChoice],
 		Tests:      newTestsOptions[m.testsChoice],
 		Tools:      newToolsOptions[m.toolsChoice],
+		Runtime:    newRuntimeOptions[m.runtimeChoice],
 		Deploy:     m.deployValue(),
 		SourceRoot: m.opts.SourceRoot,
 		Framework:  m.opts.Framework,
@@ -310,6 +315,10 @@ func (m *newWizard) updatePreset(msg tea.KeyMsg) (newWizard, tea.Cmd, bool) {
 			return *m, nil, false
 		}
 		m.inputs[newFieldProfile].SetValue(preset.name)
+		m.runtimeChoice = 0
+		if preset.name != "minimal" {
+			m.runtimeChoice = 1
+		}
 		m.advanced = preset.name == ""
 		m.err = ""
 		m.step = newStepForm
@@ -471,7 +480,7 @@ func (m *newWizard) visibleFields() []int {
 	if m.preset().name == "" {
 		fields = append(fields, newFieldWith, newFieldShape)
 	}
-	return append(fields, newFieldDB, newFieldTests, newFieldTools, newFieldDeploy)
+	return append(fields, newFieldDB, newFieldTests, newFieldTools, newFieldRuntime, newFieldDeploy)
 }
 
 func (m *newWizard) focusedFieldIndex() (int, bool) {
@@ -501,7 +510,7 @@ func (m *newWizard) isTextInput(index int) bool {
 
 func (m *newWizard) isChoiceField(index int) bool {
 	switch index {
-	case newFieldDB, newFieldTests, newFieldTools, newFieldDeploy:
+	case newFieldDB, newFieldTests, newFieldTools, newFieldRuntime, newFieldDeploy:
 		return true
 	default:
 		return false
@@ -516,6 +525,8 @@ func (m *newWizard) cycleChoice(index, direction int) {
 		m.testsChoice = cycleIndex(m.testsChoice, len(newTestsOptions), direction)
 	case newFieldTools:
 		m.toolsChoice = cycleIndex(m.toolsChoice, len(newToolsOptions), direction)
+	case newFieldRuntime:
+		m.runtimeChoice = cycleIndex(m.runtimeChoice, len(newRuntimeOptions), direction)
 	case newFieldDeploy:
 		m.deployCursor = cycleIndex(m.deployCursor, len(newDeployOptions), direction)
 	}
@@ -713,6 +724,8 @@ func (m *newWizard) renderField(index int, focused bool) string {
 		return m.renderChoice(index, newTestsOptions, m.testsChoice, focused)
 	case newFieldTools:
 		return m.renderChoice(index, newToolsOptions, m.toolsChoice, focused)
+	case newFieldRuntime:
+		return m.renderChoice(index, newRuntimeOptions, m.runtimeChoice, focused)
 	case newFieldDeploy:
 		return m.renderDeploy(focused)
 	}
@@ -824,6 +837,7 @@ func (m *newWizard) summaryView() string {
 		"database    " + valueOrDefault(input.DBDriver, "mysql"),
 		"tests       " + valueOrDefault(input.Tests, "selected"),
 		"tools       " + valueOrDefault(input.Tools, "auto"),
+		"runtime     " + valueOrDefault(input.Runtime, "profile default"),
 		"deploy      " + valueOrDefault(input.Deploy, "profile default"),
 	} {
 		b.WriteString(promptLine("  " + line))

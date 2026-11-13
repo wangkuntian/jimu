@@ -314,6 +314,10 @@ func configSections(selected selection) []string {
 	if !selectedNames["grpc"] {
 		delete(keep, "grpc")
 	}
+	if selected.generation.Runtime == manifest.GenerationRuntimeLean {
+		delete(keep, "http_client")
+		delete(keep, "error_reporting")
+	}
 	return sortedStrings(mapsKeys(keep))
 }
 
@@ -562,6 +566,29 @@ func rewriteActions(root, module string, selected selection) []manifest.RewriteA
 			})
 		}
 	}
+	if selected.generation.Runtime == manifest.GenerationRuntimeLean {
+		for _, file := range []string{
+			"internal/app/container_runtime_empty.go",
+			"internal/app/bootstrap_metrics_empty.go",
+			"internal/assembly/context_runtime_empty.go",
+			"internal/platform/http/middleware/observability_lean.go",
+			"internal/platform/http/middleware/ratelimit_lean.go",
+		} {
+			actions = append(actions, manifest.RewriteAction{
+				Kind: "file-patch", From: "//go:build jimu_lean", To: "// lean 内核：由生成器去掉 build tag", Files: []string{file},
+			})
+		}
+	} else {
+		// 标准内核里 mysqlStore 只剩一种数据库形态；去掉对应的组合 tag，
+		// 另一个变体在 optionalKernelFiles 中已剔除。
+		file, from := "internal/app/container_mysql_store.go", "//go:build !jimu_lean && !jimu_nodb"
+		if !includeDatabase(selected) {
+			file, from = "internal/app/container_mysql_store_nodb.go", "//go:build !jimu_lean && jimu_nodb"
+		}
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch", From: from, To: "// 标准内核：由生成器去掉 build tag", Files: []string{file},
+		})
+	}
 	actions = append(actions, driverRewriteActions(root, selected)...)
 	return actions
 }
@@ -802,7 +829,7 @@ func projectName(module string) string {
 //
 // internal/e2e 只有测试文件，Tests=false 下永远不可达，因此 0 能力项目会自动丢掉它。
 func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, error) {
-	seeds := []string{"./internal/assembly", "./internal/capability", "./internal/platform/db"}
+	seeds := []string{"./internal/assembly", "./internal/capability", "./internal/platform/db", "./internal/platform/lock"}
 	if includeDatabase(selected) {
 		// CLI 的 migrate/seed 仍需要数据库连接与种子实现；它们不是 server 依赖，
 		// 但不加入闭包会让 internal/platform 的聚合复制把这两个包漏掉。
@@ -934,6 +961,29 @@ func optionalKernelFiles(selected selection) map[string][]string {
 			"validate.go",
 			"validate_test.go",
 		)
+	}
+	if selected.generation.Runtime == manifest.GenerationRuntimeLean {
+		pruned["internal/app"] = append(pruned["internal/app"],
+			"container_runtime.go",
+			"container_mysql_store.go",
+			"container_mysql_store_nodb.go",
+			"bootstrap_metrics.go",
+		)
+		pruned["internal/platform/http/middleware"] = append(pruned["internal/platform/http/middleware"],
+			"metrics.go", "metrics_test.go",
+			"concurrency.go", "concurrency_test.go",
+			"ratelimit.go", "ratelimit_test.go",
+		)
+		pruned["internal/assembly"] = append(pruned["internal/assembly"], "context_runtime.go")
+	} else {
+		pruned["internal/app"] = append(pruned["internal/app"], "container_runtime_empty.go", "bootstrap_metrics_empty.go")
+		if includeDatabase(selected) {
+			pruned["internal/app"] = append(pruned["internal/app"], "container_mysql_store_nodb.go")
+		} else {
+			pruned["internal/app"] = append(pruned["internal/app"], "container_mysql_store.go")
+		}
+		pruned["internal/platform/http/middleware"] = append(pruned["internal/platform/http/middleware"], "observability_lean.go", "ratelimit_lean.go")
+		pruned["internal/assembly"] = append(pruned["internal/assembly"], "context_runtime_empty.go")
 	}
 	// Postgres 驱动只在显式选择 db.driver=postgres 时编译；默认 MySQL 项目
 	// 不带 gorm postgres driver 与 pgx（约 1.9 MB）。

@@ -169,6 +169,9 @@ func TestExportDefaultsToMinimalPreset(t *testing.T) {
 	if len(doc.Composition.Requested) != 0 || len(doc.Composition.Resolved) != 0 {
 		t.Fatalf("minimal composition = %#v, want empty selection", doc.Composition)
 	}
+	if doc.Generation.Runtime != manifest.GenerationRuntimeLean {
+		t.Fatalf("minimal runtime = %q, want lean", doc.Generation.Runtime)
+	}
 	if doc.Framework.Commit == "" {
 		t.Fatal("minimal manifest has an empty framework commit")
 	}

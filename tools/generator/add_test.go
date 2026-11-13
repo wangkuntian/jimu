@@ -102,6 +102,7 @@ func TestAddCapabilityKeepsTestsAndRecomputesTools(t *testing.T) {
 	require.Equal(t, "auto", after.Generation.ToolsMode)
 	require.ElementsMatch(t, []string{"checkcapabilities", "logcheck"}, after.Generation.ToolsResolved)
 	require.Equal(t, before.Generation.CLIUI, after.Generation.CLIUI)
+	require.Equal(t, manifest.GenerationRuntimeStandard, after.Generation.Runtime)
 }
 
 // reportGeneratedCount 从报告文本里取出「生成文件数」的实测值（解析失败即 fail）。

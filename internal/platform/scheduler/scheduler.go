@@ -34,17 +34,8 @@ var (
 	schedulerTracer = otel.Tracer("jimu.scheduler")
 )
 
-// JobInfo 注册的任务信息
-type JobInfo struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	Cron       string    `json:"cron"`
-	Enabled    bool      `json:"enabled"`
-	LastRun    time.Time `json:"last_run,omitempty"`
-	LastStatus string    `json:"last_status"`
-	LastError  string    `json:"last_error,omitempty"`
-	RunCount   int64     `json:"run_count"`
-}
+// JobInfo 注册的任务信息；保留别名以维持现有调用点。
+type JobInfo = contract.JobInfo
 
 // CronScheduler 基于 robfig/cron 的定时任务调度器
 type CronScheduler struct {

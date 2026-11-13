@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"jimu/internal/platform/scheduler"
+	"jimu/internal/contract"
 	apperrors "jimu/internal/shared/errors"
 )
 
@@ -31,11 +31,11 @@ type TaskExecution struct {
 
 // AdminTaskService 任务调度管理服务
 type AdminTaskService struct {
-	sched *scheduler.CronScheduler
+	sched contract.Scheduler
 }
 
 // NewAdminTaskService 创建任务调度管理服务
-func NewAdminTaskService(sched *scheduler.CronScheduler) *AdminTaskService {
+func NewAdminTaskService(sched contract.Scheduler) *AdminTaskService {
 	return &AdminTaskService{sched: sched}
 }
 

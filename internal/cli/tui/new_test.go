@@ -142,6 +142,12 @@ func TestNewWizardChoiceFieldsUseSelectors(t *testing.T) {
 	wizard = &updated
 	updated, _, _ = wizard.Update(tea.KeyMsg{Type: tea.KeySpace})
 	wizard = &updated
+	require.Equal(t, "standard", wizard.input().Runtime)
+
+	updated, _, _ = wizard.Update(tea.KeyMsg{Type: tea.KeyTab})
+	wizard = &updated
+	updated, _, _ = wizard.Update(tea.KeyMsg{Type: tea.KeySpace})
+	wizard = &updated
 	require.Equal(t, "compose", wizard.input().Deploy)
 	updated, _, _ = wizard.Update(tea.KeyMsg{Type: tea.KeySpace})
 	wizard = &updated

@@ -84,6 +84,12 @@ SQL 测试夹具，CLI 只保留 `version` 与 `config` 命令；`conf/rbac_mode
 `--tests=selected|all|none` 和 `--tools=auto|all|none`。`--no-tidy` 只跳过最后一次
 `go mod tidy`，运行时闭包裁剪、构建和自检仍会执行。
 
+内核运行面由 `--runtime=lean|standard` 控制：`lean` 不编入调度器、出站 HTTP 客户端、
+错误上报器和 Prometheus 指标，适合 0 能力的 `minimal` 项目；`standard` 保留这些内核组件。
+`minimal` 默认 `lean`，`auth`/`full`/`--with` 默认 `standard`。`lean` 只能用于没有能力的
+项目，也不能和 `--deploy=observability` 组合；后续用 `capability add` 添加能力时会自动
+提升为 `standard`。
+
 部署资产由 `--deploy` 控制：`compose,k8s,helm,observability` 可组合，`all` 与 `none`
 是快捷值。`minimal` 默认不生成部署资产，`auth` 默认 `compose`，`full` 与 `--with`
 默认 `all`；MySQL 能力会自动带上备份资产。`--deploy=none` 不生成 Dockerfile、compose、
@@ -123,7 +129,7 @@ make dev
 
 `jimu new` 的 TUI 是三步向导：选择模板、填写项目信息、确认生成。首屏只要求选择起点，
 模板列表支持直接输入搜索，
-目录和模块输入有焦点条、闪烁光标与示例提示；数据库、测试、工具用左右键单选，部署组件用
+目录和模块输入有焦点条、闪烁光标与示例提示；数据库、测试、工具、运行时用左右键单选，部署组件用
 空格多选；这些高级选项默认收进“高级设置”；
 生成过程中显示动画进度，成功后短暂展示结果并自动返回 shell。
 

@@ -6,8 +6,8 @@ import (
 	"time"
 
 	mfadomain "jimu/internal/capabilities/mfa/domain"
+	"jimu/internal/contract"
 	"jimu/internal/platform/logger"
-	"jimu/internal/platform/scheduler"
 	"jimu/internal/shared/dbpurge"
 
 	"gorm.io/gorm"
@@ -22,16 +22,16 @@ func mfaRetentionRules(cfg RetentionConfig) []dbpurge.Rule {
 	}}
 }
 
-func newMFARetentionJob(db *gorm.DB, cfg RetentionConfig, log *logger.Logger) (scheduler.Job, bool) {
+func newMFARetentionJob(db *gorm.DB, cfg RetentionConfig, log *logger.Logger) (contract.Job, bool) {
 	if db == nil || !cfg.Enabled {
-		return scheduler.Job{}, false
+		return contract.Job{}, false
 	}
 	spec := strings.TrimSpace(cfg.Cron)
 	if spec == "" {
 		spec = "30 3 * * *"
 	}
 	service := dbpurge.New(db, cfg.BatchSize)
-	return scheduler.Job{
+	return contract.Job{
 		ID:   "mfa_retention",
 		Name: "Expired Trusted Device Retention",
 		Spec: spec,

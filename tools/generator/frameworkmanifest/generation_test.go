@@ -17,6 +17,43 @@ func TestResolveGenerationMinimalDefaults(t *testing.T) {
 	require.Empty(t, got.Deploy)
 	require.Equal(t, manifest.GenerationCLIMinimal, got.CLI)
 	require.Equal(t, manifest.GenerationCLIUIDirect, got.CLIUI)
+	require.Equal(t, manifest.GenerationRuntimeLean, got.Runtime)
+}
+
+func TestResolveGenerationRuntimeDefaults(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		profile  string
+		with     string
+		declared []string
+		want     string
+	}{
+		{name: "minimal", profile: "minimal", want: manifest.GenerationRuntimeLean},
+		{name: "auth", profile: "auth", declared: []string{"user"}, want: manifest.GenerationRuntimeStandard},
+		{name: "full", profile: "full", declared: []string{"user"}, want: manifest.GenerationRuntimeStandard},
+		{name: "with", with: "user", declared: []string{"user"}, want: manifest.GenerationRuntimeStandard},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := ResolveGeneration(test.profile, test.with, test.declared, GenerationRequest{})
+			require.NoError(t, err)
+			require.Equal(t, test.want, got.Runtime)
+		})
+	}
+}
+
+func TestResolveGenerationRuntimeOverrides(t *testing.T) {
+	got, err := ResolveGeneration("minimal", "", nil, GenerationRequest{Runtime: manifest.GenerationRuntimeStandard})
+	require.NoError(t, err)
+	require.Equal(t, manifest.GenerationRuntimeStandard, got.Runtime)
+
+	_, err = ResolveGeneration("minimal", "", []string{"user"}, GenerationRequest{Runtime: manifest.GenerationRuntimeLean})
+	require.ErrorContains(t, err, "requires a project without capabilities")
+
+	_, err = ResolveGeneration("minimal", "", nil, GenerationRequest{
+		Runtime: manifest.GenerationRuntimeLean,
+		Deploy:  []string{manifest.DeployObservability},
+	})
+	require.ErrorContains(t, err, "observability")
 }
 
 func TestResolveGenerationProfileCLIUIDefaults(t *testing.T) {

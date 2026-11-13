@@ -289,6 +289,7 @@ func upgradeFromLegacy(doc Document) (Document, error) {
 func GenerationDefaults(doc Document) Generation {
 	generation := Generation{
 		RuntimeClosure: false,
+		Runtime:        GenerationRuntimeStandard,
 		Tests:          GenerationTestsAll,
 		ToolsMode:      GenerationToolsAll,
 		ToolsResolved:  []string{"checkcapabilities", "heavydeps", "logcheck", "profileassets"},

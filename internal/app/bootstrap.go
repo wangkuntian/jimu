@@ -13,10 +13,8 @@ import (
 	"jimu/internal/platform/health"
 	platformhttp "jimu/internal/platform/http"
 	"jimu/internal/platform/logger"
-	"jimu/internal/platform/scheduler"
 
 	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Bootstrap 在全部能力装配完成后接管生命周期：初始化观测、路由、事件与定时任务。
@@ -29,7 +27,7 @@ import (
 // 生成器在不需要可观测性时排除那个文件，这里保留的空实现保证仍能编译。
 var initObservability = func(*Container) error { return nil }
 
-func Bootstrap(container *Container, components []contract.Component, jobs []scheduler.Job, modules ...contract.Module) (*Application, error) {
+func Bootstrap(container *Container, components []contract.Component, jobs []contract.Job, modules ...contract.Module) (*Application, error) {
 	cfg := container.Config
 
 	if err := initObservability(container); err != nil {
@@ -76,7 +74,7 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 	)
 	management := platformhttp.NewManagementServer(
 		cfg.Management,
-		platformhttp.HealthRouter(readiness, promhttp.Handler, cfg.Management.EnablePprof, func(mux *http.ServeMux) {
+		platformhttp.HealthRouter(readiness, metricsHandler, cfg.Management.EnablePprof, func(mux *http.ServeMux) {
 			mux.HandleFunc("/capabilities", capabilitiesHandler(container.Capabilities))
 		}),
 	)
@@ -115,9 +113,9 @@ func Bootstrap(container *Container, components []contract.Component, jobs []sch
 			container.Logger.Infow("module jobs registered", "name", module.Name())
 		}
 
-		jobFns := map[string]scheduler.Job{}
+		jobFns := map[string]contract.Job{}
 		if container.HasMetricsCollector() {
-			jobFns["metrics_collect"] = scheduler.Job{ID: "metrics_collect", Name: "Collect DB Metrics", Spec: "@every 15s", Run: func() {
+			jobFns["metrics_collect"] = contract.Job{ID: "metrics_collect", Name: "Collect DB Metrics", Spec: "@every 15s", Run: func() {
 				container.CollectMetrics()
 			}}
 		}

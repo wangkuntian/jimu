@@ -59,6 +59,14 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 	}
 	for _, rel := range []string{
 		"internal/e2e",
+		"internal/app/container_runtime.go",
+		"internal/app/bootstrap_metrics.go",
+		"internal/platform/http/middleware/metrics.go",
+		"internal/platform/http/middleware/ratelimit.go",
+		"internal/platform/httpclient",
+		"internal/platform/reporter",
+		"internal/platform/scheduler",
+		"internal/platform/metrics",
 		"internal/platform/cache",
 		"internal/platform/authz",
 		"internal/platform/db",
@@ -90,11 +98,33 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 		_, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
 		assert.True(t, os.IsNotExist(statErr), "minimal must not contain %s", rel)
 	}
+	manifestDoc, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, manifest.GenerationRuntimeLean, manifestDoc.Generation.Runtime)
 	config, err := os.ReadFile(filepath.Join(dir, "configs", "app.yaml"))
 	require.NoError(t, err)
 	assert.NotContains(t, string(config), "\ndb:")
 	assert.NotContains(t, string(config), "\nredis:")
+	assert.NotContains(t, string(config), "\nhttp_client:")
+	assert.NotContains(t, string(config), "\nerror_reporting:")
 	assertManifestProvenance(t, dir, "minimal")
+}
+
+func TestNewProjectMinimalCanSelectStandardRuntime(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "min")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: "minimal", Runtime: manifest.GenerationRuntimeStandard, Module: "example.com/min",
+	})
+	require.NoError(t, err)
+
+	manifestDoc, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, manifest.GenerationRuntimeStandard, manifestDoc.Generation.Runtime)
+	assert.FileExists(t, filepath.Join(dir, "internal/app/container_runtime.go"))
+	assert.FileExists(t, filepath.Join(dir, "internal/app/bootstrap_metrics.go"))
+	assert.FileExists(t, filepath.Join(dir, "internal/platform/http/middleware/metrics.go"))
+	assert.FileExists(t, filepath.Join(dir, "internal/platform/http/middleware/ratelimit.go"))
+	assert.NoFileExists(t, filepath.Join(dir, "internal/app/container_runtime_empty.go"))
 }
 
 func TestNewProjectMinimalComposeOmitsDatabaseAndObservabilityScripts(t *testing.T) {
