@@ -1,4 +1,7 @@
-.PHONY: help build build-server build-cli dev image test vet fmt fmt-check lint clean ci
+.PHONY: help build build-server build-cli dev{{if .HasDockerfile}} image{{end}} test vet fmt fmt-check lint clean ci
+{{if .HasCompose}}.PHONY: up down logs status
+{{end}}{{if and .HasCompose .WithObservability}}.PHONY: up-observability
+{{end}}
 {{if .HasLogcheck}}.PHONY: check-log-usage
 {{end}}{{if .HasCheckcapabilities}}.PHONY: check-capabilities
 {{end}}
@@ -26,6 +29,13 @@ LDFLAGS := -X main.version=$(APP_VERSION) -w -s
 IMAGE_REPO ?= jimu
 IMAGE_TAG = $(IMAGE_REPO):$(VERSION)
 LATEST_TAG = $(IMAGE_REPO):latest
+{{if .HasDockerfile}}DOCKERFILE ?= deploy/docker/Dockerfile
+{{end}}{{if .HasCompose}}COMPOSE_FILE ?= deploy/compose/docker-compose.yml
+COMPOSE = docker compose --project-directory $(CURDIR) -f $(COMPOSE_FILE)
+{{if .WithObservability}}COMPOSE_ALL_FILE ?= deploy/compose/compose.observability.yml
+COMPOSE_STACK = $(COMPOSE) -f $(COMPOSE_ALL_FILE)
+{{else}}COMPOSE_STACK = $(COMPOSE)
+{{end}}{{end}}
 # golangci-lint 版本：与框架 .github/workflows/ci.yml 的 GOLANGCI_LINT_VERSION 一致，
 # 使本地 make lint 与 CI 的 lint 结论含义相同。
 LINT_VERSION ?= v2.7.2
@@ -58,10 +68,33 @@ build-cli:
 	@mkdir -p $(BIN_DIR)
 	go build -ldflags "$(LDFLAGS)" -o $(CLI_BIN) $(CLI_PKG)
 
-## image: 构建版本镜像并标记 latest
+{{if .HasCompose}}##@ Compose 生命周期
+
+## up: 构建并启动 Compose 服务
+up:
+	$(COMPOSE) up -d --build
+
+## down: 停止 Compose 服务（保留数据卷）
+down:
+	$(COMPOSE_STACK) down
+
+## logs: 跟踪服务端日志
+logs:
+	$(COMPOSE_STACK) logs -f server
+
+## status: 查看 Compose 服务状态
+status:
+	$(COMPOSE_STACK) ps
+
+{{if .WithObservability}}## up-observability: 启动 Compose 与观测栈
+up-observability:
+	$(COMPOSE) -f $(COMPOSE_ALL_FILE) up -d --build
+
+{{end}}{{end}}{{if .HasDockerfile}}## image: 构建版本镜像并标记 latest
 image:
-	docker build -f deploy/docker/Dockerfile -t $(IMAGE_TAG) .
+	docker build -f $(DOCKERFILE) -t $(IMAGE_TAG) .
 	docker tag $(IMAGE_TAG) $(LATEST_TAG)
+{{end}}
 
 ##@ 数据库
 

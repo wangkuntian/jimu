@@ -24,6 +24,9 @@ type buildData struct {
 	HasAPIdocs           bool   // 选中集是否含 apidocs（catalog 之外、只在 full 清单里的 Ungated 能力）
 	HasLogcheck          bool
 	HasCheckcapabilities bool
+	HasDockerfile        bool
+	HasCompose           bool
+	WithObservability    bool
 	Expected             string // 本形态闭包 golden（能力根包，空格分隔）；逐值相等即「不含非预期能力」
 }
 
@@ -57,7 +60,10 @@ func newBuildData(set CapabilitySet) buildData {
 		HasAPIdocs:           slices.Contains(set.Copy, "apidocs"),
 		HasLogcheck:          true,
 		HasCheckcapabilities: true,
-		Expected:             strings.Join(expectedRoots(set), " "),
+		// RenderMakefile 是模板单测入口，没有 generation 上下文；按历史行为保留 image，
+		// compose 目标由生成项目测试覆盖。生产渲染走 frameworkmanifest 的完整数据。
+		HasDockerfile: true,
+		Expected:      strings.Join(expectedRoots(set), " "),
 	}
 }
 

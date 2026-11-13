@@ -89,6 +89,42 @@ func TestGeneratedMakefileKeepsSwaggerWhenApidocsSelected(t *testing.T) {
 	assert.NotContains(t, string(out), "PROFILE ?=")
 }
 
+func TestGeneratedMakefileDeployTargetsFollowComponents(t *testing.T) {
+	tests := []struct {
+		name      string
+		deploy    string
+		image     bool
+		compose   bool
+		obsTarget bool
+	}{
+		{name: "none", deploy: "none"},
+		{name: "compose", deploy: "compose", image: true, compose: true},
+		{name: "k8s", deploy: "k8s", image: true},
+		{name: "observability", deploy: "observability"},
+		{name: "compose-observability", deploy: "compose,observability", image: true, compose: true, obsTarget: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), tt.name)
+			_, err := newProjectForTest(t, NewOptions{
+				Dir: dir, Template: "minimal", Deploy: tt.deploy, Module: "example.com/" + tt.name, NoTidy: true,
+			})
+			require.NoError(t, err)
+			src := string(readFileForTest(t, filepath.Join(dir, "Makefile")))
+
+			assert.Equal(t, tt.image, strings.Contains(src, "\nimage:"))
+			assert.Equal(t, tt.image, strings.Contains(src, "DOCKERFILE ?= deploy/docker/Dockerfile"))
+			assert.Equal(t, tt.compose, strings.Contains(src, "COMPOSE_FILE ?= deploy/compose/docker-compose.yml"))
+			assert.Equal(t, tt.compose, strings.Contains(src, "\nup:"))
+			assert.Equal(t, tt.compose, strings.Contains(src, "\ndown:"))
+			assert.Equal(t, tt.compose, strings.Contains(src, "\nlogs:"))
+			assert.Equal(t, tt.compose, strings.Contains(src, "\nstatus:"))
+			assert.Equal(t, tt.obsTarget, strings.Contains(src, "COMPOSE_ALL_FILE ?= deploy/compose/compose.observability.yml"))
+			assert.Equal(t, tt.obsTarget, strings.Contains(src, "\nup-observability:"))
+		})
+	}
+}
+
 func TestGeneratedDockerfileHasNoOverlayAndConditionalOpenapi(t *testing.T) {
 	min, err := ParseCapabilitySet("minimal", "", "")
 	require.NoError(t, err)
