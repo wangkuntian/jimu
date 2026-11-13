@@ -2,12 +2,14 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"jimu/internal/cli/actions"
 	"jimu/tools/generator"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
 )
 
@@ -61,6 +63,28 @@ func TestNewWizardPresetSearchFiltersAndSelects(t *testing.T) {
 	updated, _, _ := wizard.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	require.Equal(t, newStepForm, updated.step)
 	require.Equal(t, "auth", updated.inputs[newFieldProfile].Value())
+}
+
+func TestNewWizardPresetColumnsAlign(t *testing.T) {
+	configureStyles(true)
+	t.Cleanup(func() { configureStyles(false) })
+
+	lines := strings.Split(newNewWizard(Options{}, context.Background(), nil).View(), "\n")
+	var columns []int
+	for _, badge := range []string{"lean", "ready", "complete", "expert"} {
+		found := false
+		for _, line := range lines {
+			if index := strings.Index(line, " "+badge); index >= 0 {
+				columns = append(columns, lipgloss.Width(line[:index+1]))
+				found = true
+				break
+			}
+		}
+		require.True(t, found, "missing badge %q", badge)
+	}
+	for _, column := range columns[1:] {
+		require.Equal(t, columns[0], column)
+	}
 }
 
 func TestNewWizardFormRequiresDirectory(t *testing.T) {

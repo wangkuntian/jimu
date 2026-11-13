@@ -70,6 +70,8 @@ var newPresets = []newPreset{
 	},
 }
 
+const presetLabelWidth = 8
+
 const (
 	newFieldDir = iota
 	newFieldModule
@@ -513,11 +515,11 @@ func (m *newWizard) presetView() string {
 			preset := newPresets[index]
 			prefix := "  "
 			radio := "◻"
-			label := preset.label
+			label := fmt.Sprintf("%-*s", presetLabelWidth, preset.label)
 			if index == m.presetCursor {
 				prefix = "❯ "
 				radio = "◼"
-				label = selectedStyle.Render(preset.label)
+				label = selectedStyle.Render(label)
 			}
 			b.WriteString(promptLine(prefix + radio + " " + label + "  " + presetBadge(preset)))
 		}
