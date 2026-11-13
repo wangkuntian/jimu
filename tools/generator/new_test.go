@@ -61,6 +61,15 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 		"internal/e2e",
 		"internal/platform/cache",
 		"internal/platform/authz",
+		"internal/platform/db",
+		"internal/assembly/portflow.go",
+		"internal/assembly/portflow_test.go",
+		"internal/capability/compose.go",
+		"internal/capability/diagnostic.go",
+		"internal/contract/client.go",
+		"internal/platform/http/middleware/admin_auth.go",
+		"internal/platform/http/middleware/signature.go",
+		"internal/platform/http/middleware/validate.go",
 		"internal/app/container_db.go",
 		"internal/platform/scheduler/mysql_store.go",
 		"internal/profiles/seed_db.go",
@@ -88,6 +97,40 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 	assertManifestProvenance(t, dir, "minimal")
 }
 
+func TestNewProjectMinimalComposeOmitsDatabaseAndObservabilityScripts(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "minimal-compose")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: "minimal", Deploy: "compose", Module: "example.com/minimal-compose", NoTidy: true,
+	})
+	require.NoError(t, err)
+
+	assert.FileExists(t, filepath.Join(dir, "deploy/scripts/init-secrets.sh"))
+	for _, rel := range []string{
+		"deploy/scripts/backup.sh",
+		"deploy/scripts/restore.sh",
+		"deploy/scripts/db_common.sh",
+		"deploy/scripts/install_db_clients.sh",
+		"deploy/scripts/observability.sh",
+	} {
+		assert.NoFileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "minimal must not contain %s", rel)
+	}
+	assert.NoFileExists(t, filepath.Join(dir, "conf/rbac_model.conf"))
+	dockerfile := string(readFileForTest(t, filepath.Join(dir, "deploy/docker/Dockerfile")))
+	assert.NotContains(t, dockerfile, "COPY conf/")
+}
+
+func TestNewProjectMinimalObservabilityScriptFollowsDeployComponent(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "minimal-observability")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: "minimal", Deploy: "compose,observability", Module: "example.com/minimal-observability", NoTidy: true,
+	})
+	require.NoError(t, err)
+
+	assert.FileExists(t, filepath.Join(dir, "deploy/scripts/observability.sh"))
+	assert.FileExists(t, filepath.Join(dir, "deploy/compose/compose.observability.yml"))
+	assert.NoFileExists(t, filepath.Join(dir, "deploy/scripts/backup.sh"))
+}
+
 func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "auth")
 	result, err := NewProject(NewOptions{
@@ -107,6 +150,7 @@ func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 	} {
 		assert.DirExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "missing auth artifact %s", rel)
 	}
+	assert.FileExists(t, filepath.Join(dir, "conf/rbac_model.conf"))
 	assert.NoDirExists(t, filepath.Join(dir, "internal/capabilities/auth/memory"),
 		"auth preset selects redis only; memory fallback is not compiled")
 	for _, rel := range []string{
@@ -140,6 +184,8 @@ func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 	assert.Contains(t, string(compose), "redis:")
 	assert.Contains(t, string(compose), "dockerfile: deploy/docker/Dockerfile")
 	assert.NoFileExists(t, filepath.Join(dir, "deploy/compose/compose.observability.yml"))
+	dockerfile := string(readFileForTest(t, filepath.Join(dir, "deploy/docker/Dockerfile")))
+	assert.Contains(t, dockerfile, "COPY conf/")
 	assertManifestProvenance(t, dir, "auth")
 }
 

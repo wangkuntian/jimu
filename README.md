@@ -76,7 +76,9 @@ cd demo && make dev
 - `GET http://127.0.0.1:9090/livez`
 - `GET http://127.0.0.1:9090/readyz`
 
-`minimal` 生成项目不需要数据库、Redis 或其他外部服务。
+`minimal` 生成项目不需要数据库、Redis 或其他外部服务。无数据库项目不会复制数据库
+SQL 测试夹具，CLI 只保留 `version` 与 `config` 命令；`conf/rbac_model.conf` 也只在
+`access` 能力存在时生成。
 
 默认只保留选中运行时包可达的源码与测试；需要调整生成面时使用
 `--tests=selected|all|none` 和 `--tools=auto|all|none`。`--no-tidy` 只跳过最后一次
@@ -86,6 +88,9 @@ cd demo && make dev
 是快捷值。`minimal` 默认不生成部署资产，`auth` 默认 `compose`，`full` 与 `--with`
 默认 `all`；MySQL 能力会自动带上备份资产。`--deploy=none` 不生成 Dockerfile、compose、
 K8s/Helm 或备份资产。
+未选择数据库时，`compose`/`k8s`/`helm` 只复制 `init-secrets.sh`，不会带入
+`backup.sh`/`restore.sh` 等数据库脚本；`observability.sh` 只在 `--deploy=observability`
+时生成。
 
 生成项目默认编译 MySQL 驱动。需要 PostgreSQL 时加 `--db=postgres`：
 只编译所选驱动与对应方言的迁移，另一套驱动不会进入产物。

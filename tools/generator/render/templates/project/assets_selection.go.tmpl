@@ -7,6 +7,9 @@ var GeneratedSelection = []string{
 {{- end }}
 }
 
+// IsGeneratedProject reports whether this file belongs to a generated project.
+func IsGeneratedProject() bool { return true }
+
 // SelectedFiles returns the generated asset selection.
 func SelectedFiles() []string {
 	return append([]string(nil), GeneratedSelection...)

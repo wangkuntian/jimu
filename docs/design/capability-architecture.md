@@ -90,7 +90,7 @@ profile 通过 Go import 图决定哪些能力包和符号进入服务二进制�
 ## 实现映射
 
 - 契约：[internal/contract](../../internal/contract) 与 [`contract.Descriptor`](../../internal/contract/capability.go)
-- 组合解析与诊断：[internal/capability/compose.go](../../internal/capability/compose.go)、[internal/capability/diagnostic.go](../../internal/capability/diagnostic.go)
+- 组合解析与诊断：[internal/capability/compose.go](../../internal/capability/compose.go)、[internal/capability/diagnostic.go](../../internal/capability/diagnostic.go)。生成项目只复制运行时 resolver（`resolve.go`）；`compose.go`/`diagnostic.go` 属于生成器与框架门禁，不进入产物。
 - 组合：[internal/capabilities/catalog](../../internal/capabilities/catalog)、[internal/profiles](../../internal/profiles)、[internal/assembly](../../internal/assembly)
 - 流程与生命周期：[internal/assembly.Run](../../internal/assembly/assembly.go)、[internal/app.Bootstrap](../../internal/app/bootstrap.go)、[internal/app.Application](../../internal/app/application.go)
 - 验证：`go test ./internal/capability/... ./tools/generator/...`、`make check-capabilities`、`make profiles-check`、`make compose-report-check`；已有项目用 `jimu check <dir>` 做只读组合诊断。

@@ -19,13 +19,13 @@ import (
 func checkAssets(root string) error {
 	declared := profileassets.Declared()
 	selected := profileassets.SelectedFiles()
-	if len(selected) > 0 {
+	if profileassets.IsGeneratedProject() {
 		declared = filterAssetDeclarations(declared, selected)
 	}
 	if err := checkAssetsIn(root, declared); err != nil {
 		return err
 	}
-	if len(selected) > 0 {
+	if profileassets.IsGeneratedProject() {
 		// Generated projects intentionally contain a subset of the core groups;
 		// the generated selection is the source of truth there.
 		return nil

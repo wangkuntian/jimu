@@ -32,8 +32,8 @@ WORKDIR /app
 
 COPY --from=builder /app/server .
 COPY --from=builder /app/jimu .
-COPY conf/ ./conf/
-COPY configs/ ./configs/
+{{if .HasConf}}COPY conf/ ./conf/
+{{end}}COPY configs/ ./configs/
 {{if .HasAPIdocs}}COPY docs/openapi/ ./docs/openapi/
 {{end}}RUN mkdir -p logs && chown -R jimu:jimu /app
 

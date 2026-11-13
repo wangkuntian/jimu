@@ -78,6 +78,18 @@ func assetActions(_ string, selected selection) []manifest.AssetAction {
 				exclude = append(exclude, "backup-cronjob.yaml")
 				exclude = append(exclude, "secret.yaml")
 			}
+		case "deploy/scripts":
+			if !includeBackup(selected) {
+				exclude = append(exclude,
+					"backup.sh",
+					"restore.sh",
+					"db_common.sh",
+					"install_db_clients.sh",
+				)
+			}
+			if !includeObservability(selected) {
+				exclude = append(exclude, "observability.sh")
+			}
 		}
 		actions = append(actions, manifest.AssetAction{Source: value, Destination: value, Include: []string{}, Exclude: exclude})
 	}

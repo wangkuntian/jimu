@@ -86,6 +86,19 @@ func TestRenderCLIMainKeepsMigrationAndSeedCommands(t *testing.T) {
 	}
 }
 
+func TestRenderCLIMainOmitsNoopDatabaseCommands(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "proj")
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, Template: "minimal", Module: "example.com/proj", NoTidy: true})
+	require.NoError(t, err)
+
+	imports, commands := parseCLIMain(t, filepath.Join(dir, "cmd/cli/main.go"))
+	assert.ElementsMatch(t, []string{"config", "version"}, commands)
+	for _, imp := range imports {
+		assert.NotContains(t, imp, "/internal/platform/db")
+		assert.NotContains(t, imp, "/internal/platform/seeding")
+	}
+}
+
 // parseCLIMain 解析生成项目的 cmd/cli/main.go，返回（import 路径集合，rootCmd.AddCommand 注册的
 // **命令名**集合）。命令名取变量声明的 `Use:` 字段（即用户敲的那个词）；`<x>cli.Commands()...`
 // 这类没有静态 Use 的参数按源码文本归一化。

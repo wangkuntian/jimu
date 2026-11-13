@@ -6,6 +6,11 @@ package profileassets
 // actually copied.
 var GeneratedSelection []string
 
+// IsGeneratedProject reports whether this file belongs to a generated project.
+// The framework repository leaves it false; the generator's selection template
+// overrides it to true.
+func IsGeneratedProject() bool { return false }
+
 // SelectedFiles returns the generated asset selection, if any.
 func SelectedFiles() []string {
 	return append([]string(nil), GeneratedSelection...)

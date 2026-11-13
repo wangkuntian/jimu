@@ -22,6 +22,7 @@ import (
 type buildData struct {
 	Shape                string // 本项目唯一形态名
 	HasAPIdocs           bool   // 选中集是否含 apidocs（catalog 之外、只在 full 清单里的 Ungated 能力）
+	HasConf              bool   // 是否携带 conf/rbac_model.conf（access 能力）
 	HasLogcheck          bool
 	HasCheckcapabilities bool
 	HasDockerfile        bool
@@ -58,6 +59,7 @@ func newBuildData(set CapabilitySet) buildData {
 	return buildData{
 		Shape:                set.Shape,
 		HasAPIdocs:           slices.Contains(set.Copy, "apidocs"),
+		HasConf:              slices.Contains(set.Copy, "access"),
 		HasLogcheck:          true,
 		HasCheckcapabilities: true,
 		// RenderMakefile 是模板单测入口，没有 generation 上下文；按历史行为保留 image，

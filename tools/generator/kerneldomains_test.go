@@ -41,7 +41,8 @@ func TestMinimalPresetDropsOnlyUnreachableKernelSubpackages(t *testing.T) {
 	require.NoDirExists(t, filepath.Join(dir, "internal/platform", "cache"),
 		"internal/platform/cache is only reachable through capabilities")
 	require.DirExists(t, filepath.Join(dir, "internal/platform", "http"))
-	require.DirExists(t, filepath.Join(dir, "internal/platform", "db"))
+	require.NoDirExists(t, filepath.Join(dir, "internal/platform", "db"),
+		"internal/platform/db is not reachable without a database capability")
 }
 
 func TestFullPresetKeepsEveryKernelPackage(t *testing.T) {

@@ -42,35 +42,9 @@ var configCheckCmd = &cobra.Command{
 	},
 }
 
-var migrateCmd = &cobra.Command{
-	Use:   "migrate",
-	Short: "Database migration commands",
-}
-
-func noDatabase(feature string) func(*cobra.Command, []string) error {
-	return func(*cobra.Command, []string) error {
-		fmt.Printf("No database configured; %s is a no-op\n", feature)
-		return nil
-	}
-}
-
-var migrateUpCmd = &cobra.Command{Use: "up", RunE: noDatabase("migrate up")}
-var migrateDownCmd = &cobra.Command{Use: "down", RunE: noDatabase("migrate down")}
-var migrateStatusCmd = &cobra.Command{Use: "status", RunE: noDatabase("migrate status")}
-var migrateRedoCmd = &cobra.Command{Use: "redo", RunE: noDatabase("migrate redo")}
-
-var seedCmd = &cobra.Command{
-	Use:   "seed",
-	Short: "Seed initial data",
-	RunE:  noDatabase("seed"),
-}
-
 func init() {
-	migrateCmd.AddCommand(migrateUpCmd, migrateDownCmd, migrateStatusCmd, migrateRedoCmd)
 	configCmd.AddCommand(configCheckCmd)
 	rootCmd.AddCommand(versionCmd)
-	rootCmd.AddCommand(migrateCmd)
-	rootCmd.AddCommand(seedCmd)
 	rootCmd.AddCommand(configCmd)
 }
 

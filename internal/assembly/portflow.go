@@ -55,7 +55,7 @@ func ValidatePortFlow(a Assembly) error {
 // ProbeAssembly 在零值内核件上按 enabled 解析形态并试运行全部 Wire，返回解析出的能力名
 // 与各能力实际提供的端口。解析走与 Run 相同的路径：受门控（catalog）条目按
 // capabilities.enabled 裁剪并补齐硬依赖闭包，Ungated 条目恒装配。它不做读取顺序校验
-// （那是 ValidatePortFlow 的职责），供启用子集/延迟构造的回归用例观察装配产物。
+// （那是测试侧 ValidatePortFlow 的职责），供启用子集/延迟构造的回归用例观察装配产物。
 func ProbeAssembly(a Assembly, enabled []string) (ProbeResult, error) {
 	var result ProbeResult
 	err := config.WithWorkingDirectory("", func() error {
@@ -82,7 +82,7 @@ func ProbeAssemblyAt(root string, a Assembly, enabled []string) (ProbeResult, er
 	return result, err
 }
 
-// probeWires 是 ValidatePortFlow 与 ProbeAssembly 的共同实现：解析装配集 → 加载能力
+// probeWires 是 ValidatePortFlow（测试）与 ProbeAssembly 的共同实现：解析装配集 → 加载能力
 // 配置段 → 在临时工作目录内的零值内核件上试运行 Wire，返回观测结果与端口读取违规。
 func probeWires(a Assembly, enabled []string) (ProbeResult, []string, error) {
 	if err := validateAssembly(a); err != nil {

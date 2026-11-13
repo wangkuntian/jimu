@@ -63,6 +63,13 @@ var kernelExcludes = []string{
 	"cmd/cli/activecaps.go",
 	"cmd/cli/activecaps_test.go",
 	"cmd/cli/source.go",
+	"internal/assembly/portflow.go",
+	"internal/assembly/portflow_test.go",
+	"internal/capability/aliases.go",
+	"internal/capability/compose.go",
+	"internal/capability/compose_test.go",
+	"internal/capability/composition_test.go",
+	"internal/capability/diagnostic.go",
 }
 
 func copyActions(root string, selected selection) ([]manifest.CopyAction, error) {
@@ -156,6 +163,7 @@ func templateActions(root, module string, selected selection) []manifest.Templat
 	buildData := map[string]any{
 		"Shape":                selected.shape,
 		"HasAPIdocs":           contains(selected.copy, "apidocs"),
+		"HasConf":              contains(selected.copy, "access"),
 		"HasLogcheck":          contains(selected.generation.ToolsResolved, "logcheck"),
 		"HasCheckcapabilities": contains(selected.generation.ToolsResolved, "checkcapabilities"),
 		"HasDockerfile":        hasDockerfile,
@@ -897,10 +905,35 @@ func optionalKernelFiles(selected selection) map[string][]string {
 		pruned["internal/app"] = append(pruned["internal/app"], "container_db.go")
 		pruned["internal/profiles"] = append(pruned["internal/profiles"], "seed_db.go")
 		pruned["internal/platform/scheduler"] = append(pruned["internal/platform/scheduler"], "mysql_store.go", "mysql_store_test.go")
+		// db 包仍作为 seed 保留到测试裁剪阶段：internal/shared/testutil 会 import 它，
+		// 过早移除会让生成期“生产文件不得 import 缺失包”检查误报。最终无 DB 项目
+		// 的 db Go 文件会被运行时闭包裁掉，这里只需确保 SQL 夹具不进入产物。
+		pruned["internal/platform/db"] = append(pruned["internal/platform/db"], "testdata")
 	}
 	if !contains(selected.copy, "access") {
 		pruned["internal/app"] = append(pruned["internal/app"], "seed_casbin.go")
 		pruned["internal/platform/seeding"] = append(pruned["internal/platform/seeding"], "seed_casbin.go")
+		pruned["conf"] = append(pruned["conf"], "rbac_model.conf")
+	}
+	if len(selected.copy) == 0 {
+		// 0 能力项目没有能力端口、能力请求校验或管理端路由；这些文件只在能力
+		// 装配后才有消费者。保留 contract 的基础接口与 HTTP 内核中间件即可。
+		pruned["internal/contract"] = append(pruned["internal/contract"],
+			"admin_websocket_port.go",
+			"client.go",
+			"client_test.go",
+			"events.go",
+			"openapi.go",
+			"outbox_mq_port.go",
+		)
+		pruned["internal/platform/http/middleware"] = append(pruned["internal/platform/http/middleware"],
+			"admin_auth.go",
+			"admin_auth_test.go",
+			"signature.go",
+			"signature_test.go",
+			"validate.go",
+			"validate_test.go",
+		)
 	}
 	// Postgres 驱动只在显式选择 db.driver=postgres 时编译；默认 MySQL 项目
 	// 不带 gorm postgres driver 与 pgx（约 1.9 MB）。

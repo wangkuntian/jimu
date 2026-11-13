@@ -369,6 +369,8 @@
       "optional": false,
       "include": [],
       "exclude": [
+        "portflow.go",
+        "portflow_test.go",
         "context_redis_empty.go"
       ]
     },
@@ -377,7 +379,13 @@
       "destination": "internal/capability",
       "optional": false,
       "include": [],
-      "exclude": []
+      "exclude": [
+        "aliases.go",
+        "compose.go",
+        "compose_test.go",
+        "composition_test.go",
+        "diagnostic.go"
+      ]
     },
     {
       "source": "internal/contract",
@@ -569,6 +577,7 @@
         "HasBackup": true,
         "HasCheckcapabilities": true,
         "HasCompose": true,
+        "HasConf": true,
         "HasDockerfile": true,
         "HasLogcheck": true,
         "HasMySQL": true,
@@ -858,6 +867,7 @@
         "HasBackup": true,
         "HasCheckcapabilities": true,
         "HasCompose": true,
+        "HasConf": true,
         "HasDockerfile": true,
         "HasLogcheck": true,
         "HasMySQL": true,
@@ -879,6 +889,7 @@
         "HasBackup": true,
         "HasCheckcapabilities": true,
         "HasCompose": true,
+        "HasConf": true,
         "HasDockerfile": true,
         "HasLogcheck": true,
         "HasMySQL": true,
@@ -900,6 +911,7 @@
         "HasBackup": true,
         "HasCheckcapabilities": true,
         "HasCompose": true,
+        "HasConf": true,
         "HasDockerfile": true,
         "HasLogcheck": true,
         "HasMySQL": true,
@@ -1339,7 +1351,6 @@
     "internal/assembly/context.go",
     "internal/assembly/context_redis.go",
     "internal/assembly/context_test.go",
-    "internal/assembly/portflow.go",
     "internal/assembly/wirefor_test.go",
     "internal/capabilities/access/application/crud_test.go",
     "internal/capabilities/access/application/dto.go",
@@ -1455,11 +1466,6 @@
     "internal/capabilities/user/module_test.go",
     "internal/capabilities/user/userinfo_port.go",
     "internal/capabilities/user/wire.go",
-    "internal/capability/aliases.go",
-    "internal/capability/compose.go",
-    "internal/capability/compose_test.go",
-    "internal/capability/composition_test.go",
-    "internal/capability/diagnostic.go",
     "internal/capability/resolve.go",
     "internal/capability/resolve_test.go",
     "internal/config/capsection_test.go",
@@ -1682,5 +1688,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:9f177c0d3cfacff507b5bfd67dd06c007621a4a0ba62c0c58055f0ea1829b69e"
+  "digest": "sha256:95b4490bacca880b473993d1a6af8c379891a69b92f0afbf9c111a625374c960"
 }
