@@ -142,3 +142,30 @@ func TestReleaseCLICheckAndUpgradeNoArgsStayDirectWithoutTTY(t *testing.T) {
 		assert.NotContains(t, out.String(), "Jimu CLI", "non-TTY must stay on the direct path")
 	}
 }
+
+func TestReleaseCLIColorFlag(t *testing.T) {
+	cmd, cleanup := newRootCommand()
+	require.NotNil(t, cmd)
+	if cleanup != nil {
+		t.Cleanup(func() { _ = cleanup() })
+	}
+	require.False(t, noColorFlag(cmd))
+	require.NoError(t, cmd.PersistentFlags().Set("no-color", "true"))
+	require.True(t, noColorFlag(cmd))
+}
+
+func TestReleaseCLINonTTYOutputHasNoANSI(t *testing.T) {
+	cmd, cleanup := newRootCommand()
+	require.NotNil(t, cmd)
+	if cleanup != nil {
+		t.Cleanup(func() { _ = cleanup() })
+	}
+	var out bytes.Buffer
+	cmd.SetIn(bytes.NewBuffer(nil))
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--dry-run", "--no-color"})
+
+	require.NoError(t, cmd.Execute())
+	assert.NotContains(t, out.String(), "\x1b[")
+}

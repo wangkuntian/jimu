@@ -52,10 +52,30 @@ type projectTUIModel struct {
 	err     string
 }
 
-var projectTUITitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
-var projectTUISelected = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
-var projectTUIMuted = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-var projectTUIError = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
+var (
+	projectTUITitle    lipgloss.Style
+	projectTUISelected lipgloss.Style
+	projectTUIMuted    lipgloss.Style
+	projectTUIError    lipgloss.Style
+)
+
+func init() {
+	configureProjectTUIStyles(true)
+}
+
+func configureProjectTUIStyles(color bool) {
+	if !color {
+		projectTUITitle = lipgloss.NewStyle()
+		projectTUISelected = lipgloss.NewStyle()
+		projectTUIMuted = lipgloss.NewStyle()
+		projectTUIError = lipgloss.NewStyle()
+		return
+	}
+	projectTUITitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
+	projectTUISelected = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
+	projectTUIMuted = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	projectTUIError = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
+}
 
 func (m projectTUIModel) Init() tea.Cmd { return nil }
 
@@ -143,17 +163,22 @@ func runProjectTUICommand(args []string) projectTUIMsg {
 }
 
 func projectTUIEnabled(cmd *cobra.Command) bool {
-	flag := cmd.Flags().Lookup("no-tui")
-	if flag == nil {
-		flag = cmd.InheritedFlags().Lookup("no-tui")
-	}
-	noTUI := flag != nil && flag.Value.String() == "true"
+	noTUI := projectTUIBoolFlag(cmd, "no-tui")
 	if noTUI || os.Getenv("JIMU_NO_TUI") == "1" {
 		return false
 	}
 	in, inOK := cmd.InOrStdin().(*os.File)
 	out, outOK := cmd.OutOrStdout().(*os.File)
 	return inOK && outOK && term.IsTerminal(in.Fd()) && term.IsTerminal(out.Fd())
+}
+
+func projectTUIColorEnabled(cmd *cobra.Command) bool {
+	return !projectTUIBoolFlag(cmd, "no-color") && os.Getenv("NO_COLOR") == ""
+}
+
+func projectTUIBoolFlag(cmd *cobra.Command, name string) bool {
+	flag := cmd.Flag(name)
+	return flag != nil && flag.Value.String() == "true"
 }
 
 func newProjectTUICommand() *cobra.Command {
@@ -165,6 +190,7 @@ func newProjectTUICommand() *cobra.Command {
 			if !projectTUIEnabled(cmd) {
 				return fmt.Errorf("tui requires an interactive terminal")
 			}
+			configureProjectTUIStyles(projectTUIColorEnabled(cmd))
 			_, err := tea.NewProgram(projectTUIModel{}, tea.WithInput(cmd.InOrStdin()), tea.WithOutput(cmd.OutOrStdout())).Run()
 			return err
 		},
@@ -173,9 +199,11 @@ func newProjectTUICommand() *cobra.Command {
 
 func init() {
 	rootCmd.PersistentFlags().Bool("no-tui", false, "disable the interactive terminal UI")
+	rootCmd.PersistentFlags().Bool("no-color", false, "disable colored terminal output")
 	rootCmd.AddCommand(newProjectTUICommand())
 	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 && projectTUIEnabled(cmd) {
+			configureProjectTUIStyles(projectTUIColorEnabled(cmd))
 			_, err := tea.NewProgram(projectTUIModel{}, tea.WithInput(cmd.InOrStdin()), tea.WithOutput(cmd.OutOrStdout())).Run()
 			return err
 		}

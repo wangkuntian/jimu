@@ -41,6 +41,14 @@ func TestRootModelViewListsEveryAction(t *testing.T) {
 	}
 }
 
+func TestRootModelViewWithoutColorHasNoANSI(t *testing.T) {
+	configureStyles(true)
+	t.Cleanup(func() { configureStyles(false) })
+
+	view := newRootModel(Options{Version: "test"}).View()
+	require.NotContains(t, view, "\x1b[")
+}
+
 func TestRootModelOpensNewWizard(t *testing.T) {
 	updated, _ := newRootModel(Options{}).Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(rootModel)

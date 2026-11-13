@@ -110,6 +110,19 @@ make dev
 `make migrate` 与 `make seed`，seed 会读取 `ADMIN_PASSWORD`（或 `ADMIN_PASSWORD_FILE`）
 创建管理员账号。
 
+## 交互模式与颜色
+
+`jimu` 同时提供直接命令和 TUI：在交互式终端执行无参数 `jimu`、无目录的 `jimu new`，
+或显式执行 `jimu tui` 会打开 TUI；带参数的命令仍走直接模式。非 TTY、CI 和重定向输出
+永不启动 TUI。`--no-tui` 或 `JIMU_NO_TUI=1` 可强制直接模式。
+
+生成项目由 `jimu new --cli=both|direct` 选择 CLI 形态：`both` 同时编入直接命令和 TUI，
+`direct` 不引入 Bubble Tea。`minimal` 默认 `direct`，`auth`、`full` 与 `--with` 默认
+`both`。需要最小依赖时对 `auth` 项目使用 `--cli=direct`。
+
+TUI 默认使用颜色与符号双重区分状态。设置 `--no-color` 或非空 `NO_COLOR` 后，TUI
+不再输出 ANSI 转义序列；直接命令在非 TTY 环境下也不输出 ANSI。
+
 ## 检查与升级
 
 ```bash

@@ -170,6 +170,9 @@ func TestNewProjectCLIUIDefaultsAndDependencyIsolation(t *testing.T) {
 			require.Equal(t, tt.cliUI, doc.Generation.CLIUI)
 			if tt.tui {
 				assert.FileExists(t, filepath.Join(dir, "cmd/cli/tui.go"))
+				tuiSource := string(readFileForTest(t, filepath.Join(dir, "cmd/cli/tui.go")))
+				assert.Contains(t, tuiSource, `Bool("no-color"`)
+				assert.Contains(t, tuiSource, "configureProjectTUIStyles")
 			} else {
 				assert.NoFileExists(t, filepath.Join(dir, "cmd/cli/tui.go"))
 			}

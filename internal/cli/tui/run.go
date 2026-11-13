@@ -13,6 +13,12 @@ import (
 
 const noTUIEnv = "JIMU_NO_TUI"
 
+// ColorDisabled combines the explicit --no-color flag with the NO_COLOR
+// convention. Any non-empty NO_COLOR value disables color.
+func ColorDisabled(flag bool) bool {
+	return flag || os.Getenv("NO_COLOR") != ""
+}
+
 // Options is the framework CLI's TUI configuration.
 type Options struct {
 	Version     string
@@ -20,6 +26,7 @@ type Options struct {
 	Framework   *manifest.Framework
 	ProjectRoot string
 	Initial     Screen
+	NoColor     bool
 	In          io.Reader
 	Out         io.Writer
 }
@@ -46,6 +53,7 @@ func isTerminal(value any) bool {
 
 // Run starts the Bubble Tea program.
 func Run(ctx context.Context, opts Options) error {
+	configureStyles(opts.NoColor)
 	programOptions := []tea.ProgramOption{tea.WithContext(ctx)}
 	if opts.In != nil {
 		programOptions = append(programOptions, tea.WithInput(opts.In))

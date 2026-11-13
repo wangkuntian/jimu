@@ -17,3 +17,12 @@ func TestAvailableRequiresBothTTYsAndHonorsDisable(t *testing.T) {
 	t.Setenv(noTUIEnv, "1")
 	require.False(t, available(true, true, false))
 }
+
+func TestColorDisabledHonorsFlagAndEnvironment(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	require.False(t, ColorDisabled(false))
+	require.True(t, ColorDisabled(true))
+
+	t.Setenv("NO_COLOR", "1")
+	require.True(t, ColorDisabled(false))
+}

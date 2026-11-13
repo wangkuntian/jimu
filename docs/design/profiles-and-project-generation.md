@@ -72,6 +72,21 @@ manifest 记录项目选择、复制与模板动作、合并和重写规则、�
 
 生成前由组合 resolver 校验硬依赖、冲突、端口、驱动、迁移 schema 依赖、表/迁移、运行时服务/配置、中间件与 plan；诊断统一输出 `code`/`capability`/`path`/`message`/`fix` 并稳定排序，任一非法组合在创建暂存目录前终止，因此不会写目标目录。固定解析顺序和错误码见[能力组合](capability-composition.md)。`jimu check <dir>` 对已有项目的 `.jimu/manifest.json` 复用同一预检，并进一步报告受管文件漂移、当前/目标版本、升级可用性和下一步命令；`--deep` 只在私有临时副本中运行配置、build 和 test。`--with` 与模板路径都经过该预检，且 `--with` 仍标记 `support: experimental`。
 
+### CLI 直接模式与 TUI
+
+CLI 的默认产品形态是可直接脚本化的 Cobra 命令，TUI 只是同一动作层的交互外壳。两者共用 `internal/cli/actions`，TUI 不通过 shell 回调自身。入口规则：
+
+| 场景 | 行为 |
+|---|---|
+| 无参数 `jimu`、无目录 `jimu new`、显式 `jimu tui` | 在 TTY 中打开 TUI |
+| 带完整参数的命令 | 直接执行，不进入 TUI |
+| `--no-tui` 或 `JIMU_NO_TUI=1` | 强制直接模式 |
+| 非 TTY、CI、重定向 | 永不启动 TUI；无参数时打印 help 或返回用法错误 |
+
+生成项目由 manifest 的 `generation.cli_ui` 控制：`both` 同时编入直接命令和 `cmd/cli/tui.go`，`direct` 只保留直接命令。`minimal` 默认 `direct`，避免把 Bubble Tea 和 lipgloss 依赖带回最小项目；`auth`、`full` 与 `--with` 默认 `both`，显式 `--cli=direct` 可收缩依赖。TUI 代码不进入 `cmd/server` 的 package 闭包，因此不增加服务二进制。`upgrade` 原样携带 `cli_ui`，v3 项目的保守默认保持 `direct`。
+
+TUI 状态同时使用符号、文字和颜色，不依赖红绿二色。`--no-color` 或非空 `NO_COLOR` 会关闭全部 ANSI 样式；非 TTY 的直接命令输出也保持无 ANSI。
+
 ### 新建项目流程
 
 ```mermaid
