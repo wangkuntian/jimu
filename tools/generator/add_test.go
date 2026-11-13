@@ -395,6 +395,29 @@ func TestAddCapabilityCarriesNewCapabilityAssets(t *testing.T) {
 	assert.Contains(t, readProjectFile(t, dir, "deploy/docker/Dockerfile"), "docs/openapi", "构建文件必须同步（未选中资产不出现）")
 }
 
+func TestAddCapabilityAddsMySQLBackupAssetsForComposeObservability(t *testing.T) {
+	root := frameworkRootForTest(t)
+	dir := generateForTest(t, NewOptions{Template: "minimal", Deploy: "compose,observability"})
+	require.NoFileExists(t, filepath.Join(dir, "deploy/backup/Dockerfile"))
+
+	userFile := filepath.Join(dir, "CUSTOM.md")
+	require.NoError(t, os.WriteFile(userFile, []byte("user-owned\n"), 0o644))
+
+	_, err := AddCapability(AddOptions{Dir: dir, Name: "apikey", From: root})
+	require.NoError(t, err)
+
+	assert.FileExists(t, filepath.Join(dir, "deploy/backup/Dockerfile"))
+	assert.FileExists(t, filepath.Join(dir, "deploy/scripts/backup.sh"))
+	compose := readProjectFile(t, dir, "deploy/compose/docker-compose.yml")
+	assert.Contains(t, compose, "mariadb:")
+	assert.Contains(t, compose, "jimu-init:")
+	assert.Equal(t, "user-owned\n", readProjectFile(t, dir, "CUSTOM.md"))
+
+	manifestDoc, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"compose", "observability"}, manifestDoc.Generation.Deploy)
+}
+
 // TestAddCapabilitySelectsFirstDriverAndFiltersDirectories 钉住 S4 + 驱动目录过滤在 add 上同样成立：
 // 新增能力的驱动默认取 Descriptor.Drivers 首项，未选中驱动目录不进生成树、声明同步收窄。
 func TestAddCapabilitySelectsFirstDriverAndFiltersDirectories(t *testing.T) {

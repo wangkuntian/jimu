@@ -299,6 +299,29 @@ func TestPlanUpgradeV3MinimalKeepsConservativeGeneration(t *testing.T) {
 	assert.Empty(t, result.Target.Generation.Deploy)
 }
 
+func TestPlanUpgradePreservesDeployComponents(t *testing.T) {
+	dir := generateForTest(t, NewOptions{Template: "minimal", Deploy: "compose,observability"})
+
+	result, err := PlanUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot(), NoTidy: true})
+	require.NoError(t, err)
+	require.NotNil(t, result.Target.Generation)
+	assert.Equal(t, []string{"compose", "observability"}, result.Target.Generation.Deploy)
+}
+
+func TestApplyUpgradeKeepsV3DeployLayout(t *testing.T) {
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	legacyCompose := filepath.Join(dir, "docker-compose.yml")
+	require.NoError(t, os.WriteFile(legacyCompose, []byte("services: {}\n"), 0o644))
+	downgradeManifestToV3(t, dir)
+	stubUpgradeVerify(t, nil)
+
+	result, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot(), NoTidy: true})
+	require.NoError(t, err)
+	assert.FileExists(t, legacyCompose)
+	assert.NoFileExists(t, filepath.Join(dir, "deploy/compose/docker-compose.yml"))
+	assert.Empty(t, result.Target.Generation.Deploy)
+}
+
 // downgradeManifestToV2 rewrites a generated project's manifest into the
 // read-only v2 shape with its legacy digest, so the upgrade path exercises the
 // same compatibility branch as a v0.5 project.

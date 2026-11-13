@@ -82,6 +82,11 @@ cd demo && make dev
 `--tests=selected|all|none` 和 `--tools=auto|all|none`。`--no-tidy` 只跳过最后一次
 `go mod tidy`，运行时闭包裁剪、构建和自检仍会执行。
 
+部署资产由 `--deploy` 控制：`compose,k8s,helm,observability` 可组合，`all` 与 `none`
+是快捷值。`minimal` 默认不生成部署资产，`auth` 默认 `compose`，`full` 与 `--with`
+默认 `all`；MySQL 能力会自动带上备份资产。`--deploy=none` 不生成 Dockerfile、compose、
+K8s/Helm 或备份资产。
+
 生成项目默认编译 MySQL 驱动。需要 PostgreSQL 时加 `--db=postgres`：
 只编译所选驱动与对应方言的迁移，另一套驱动不会进入产物。
 
@@ -100,9 +105,10 @@ make seed
 make dev
 ```
 
-`auth` 预设的 Compose 编排位于 `deploy/compose/`；数据库与 Redis 连接信息通过 `DB_*`
-与 `REDIS_*` 环境变量覆盖。首次启动前运行 `make migrate` 与 `make seed`，
-seed 会读取 `ADMIN_PASSWORD`（或 `ADMIN_PASSWORD_FILE`）创建管理员账号。
+`auth` 预设默认生成 Compose 编排，位于 `deploy/compose/`；`make up` 会构建镜像并启动
+服务。数据库与 Redis 连接信息通过 `DB_*` 与 `REDIS_*` 环境变量覆盖。首次启动前运行
+`make migrate` 与 `make seed`，seed 会读取 `ADMIN_PASSWORD`（或 `ADMIN_PASSWORD_FILE`）
+创建管理员账号。
 
 ## 检查与升级
 
