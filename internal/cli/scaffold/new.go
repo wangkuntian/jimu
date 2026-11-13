@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"jimu/internal/cli/actions"
+	"jimu/internal/cli/tui"
 	"jimu/internal/templatesource"
 	"jimu/tools/generator"
 
@@ -45,8 +46,16 @@ func NewCommand(resolve templatesource.Resolver) *cobra.Command {
 生成顺序：复制/渲染 → go mod tidy → 自检（生成项目内 go build ./... 与
 生成项目测试都必须绿）→ 原子换上 <dir>。产物先写 <dir>.tmp-<rand>，
 任一步失败即整体回滚，绝不留下半成品；--no-tidy 只跳过 tidy，自检仍会跑。`,
-		Args: cobra.ExactArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 && tuiAvailable(cmd) {
+				return nil
+			}
+			return cobra.ExactArgs(1)(cmd, args)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return runTUI(cmd, tui.ScreenNew)
+			}
 			source, cleanup, err := resolveSource(cmd, resolve)
 			if err != nil {
 				return err

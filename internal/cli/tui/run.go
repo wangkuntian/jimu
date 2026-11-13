@@ -19,6 +19,7 @@ type Options struct {
 	SourceRoot  string
 	Framework   *manifest.Framework
 	ProjectRoot string
+	Initial     Screen
 	In          io.Reader
 	Out         io.Writer
 }
@@ -52,6 +53,8 @@ func Run(ctx context.Context, opts Options) error {
 	if opts.Out != nil {
 		programOptions = append(programOptions, tea.WithOutput(opts.Out))
 	}
-	_, err := tea.NewProgram(newRootModel(opts), programOptions...).Run()
+	model := newRootModel(opts)
+	model.screen = opts.Initial
+	_, err := tea.NewProgram(model, programOptions...).Run()
 	return err
 }

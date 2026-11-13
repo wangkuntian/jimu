@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"sort"
 	"testing"
 
@@ -25,7 +26,7 @@ func TestReleaseCLIExposesOnlyScaffoldCommands(t *testing.T) {
 		names = append(names, child.Name())
 	}
 	sort.Strings(names)
-	assert.Equal(t, []string{"capability", "check", "new", "upgrade", "version"}, names)
+	assert.Equal(t, []string{"capability", "check", "new", "tui", "upgrade", "version"}, names)
 
 	capabilityCmd, _, err := cmd.Find([]string{"capability"})
 	require.NoError(t, err)
@@ -87,4 +88,57 @@ func TestReleaseCLIVersionPrintsAllMetadata(t *testing.T) {
 
 	require.NoError(t, cmd.Execute())
 	assert.Equal(t, "jimu v9.9.9\ntemplate bundle v9.9.9\ntemplate contract v0.1\ncommit deadbeef\n", out.String())
+}
+
+func TestReleaseCLINoArgsAndTUIStayDirectWithoutTTY(t *testing.T) {
+	for _, args := range [][]string{
+		{},
+		{"tui"},
+		{"new"},
+		{"capability", "add"},
+	} {
+		cmd, cleanup := newRootCommand()
+		if cleanup != nil {
+			t.Cleanup(func() { _ = cleanup() })
+		}
+		var out bytes.Buffer
+		cmd.SetIn(bytes.NewBuffer(nil))
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs(args)
+
+		err := cmd.Execute()
+		if len(args) == 0 {
+			require.NoError(t, err)
+			assert.Contains(t, out.String(), "Usage:")
+			continue
+		}
+		require.Error(t, err, "args %v must not open a non-TTY TUI", args)
+	}
+}
+
+func TestReleaseCLICheckAndUpgradeNoArgsStayDirectWithoutTTY(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "proj")
+	_, err := generator.NewProject(generator.NewOptions{
+		Dir: dir, Template: "minimal", Module: "example.com/proj", NoTidy: true, NoSelfCheck: true,
+	})
+	require.NoError(t, err)
+	t.Chdir(dir)
+
+	for _, args := range [][]string{
+		{"check"},
+		{"upgrade", "--check", "--no-tidy"},
+	} {
+		cmd, cleanup := newRootCommand()
+		if cleanup != nil {
+			t.Cleanup(func() { _ = cleanup() })
+		}
+		var out bytes.Buffer
+		cmd.SetIn(bytes.NewBuffer(nil))
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs(args)
+		require.NoError(t, cmd.Execute(), "args %v", args)
+		assert.NotContains(t, out.String(), "Jimu CLI", "non-TTY must stay on the direct path")
+	}
 }

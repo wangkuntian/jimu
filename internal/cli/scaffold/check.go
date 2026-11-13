@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"jimu/internal/cli/actions"
+	"jimu/internal/cli/tui"
 	"jimu/internal/templatesource"
 	"jimu/tools/generator"
 
@@ -35,6 +36,9 @@ go test ./...，不运行 Make 目标或业务脚本。检查过程不会更新 
 配置。--json 输出 schema version 1，并复用同一份检查事实。`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 && tuiAvailable(cmd) {
+				return runTUI(cmd, tui.ScreenCheck)
+			}
 			source, cleanup, err := resolveSource(cmd, resolve)
 			if err != nil {
 				return err

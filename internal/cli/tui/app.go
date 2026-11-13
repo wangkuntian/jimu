@@ -7,26 +7,27 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-type screen int
+// Screen identifies a TUI page.
+type Screen int
 
 const (
-	screenMenu screen = iota
-	screenNew
-	screenCheck
-	screenUpgrade
-	screenAdd
+	ScreenMenu Screen = iota
+	ScreenNew
+	ScreenCheck
+	ScreenUpgrade
+	ScreenAdd
 )
 
 type menuItem struct {
 	label  string
-	screen screen
+	screen Screen
 }
 
 var menuItems = []menuItem{
-	{label: "New project", screen: screenNew},
-	{label: "Check project", screen: screenCheck},
-	{label: "Upgrade project", screen: screenUpgrade},
-	{label: "Add capability", screen: screenAdd},
+	{label: "New project", screen: ScreenNew},
+	{label: "Check project", screen: ScreenCheck},
+	{label: "Upgrade project", screen: ScreenUpgrade},
+	{label: "Add capability", screen: ScreenAdd},
 }
 
 type keyMap struct {
@@ -48,7 +49,7 @@ var keys = keyMap{
 type rootModel struct {
 	opts   Options
 	cursor int
-	screen screen
+	screen Screen
 	quit   bool
 }
 
@@ -68,19 +69,19 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.quit = true
 		return m, tea.Quit
 	case key.Matches(keyMsg, keys.Back):
-		m.screen = screenMenu
+		m.screen = ScreenMenu
 		return m, nil
-	case m.screen == screenMenu && key.Matches(keyMsg, keys.Up):
+	case m.screen == ScreenMenu && key.Matches(keyMsg, keys.Up):
 		if m.cursor > 0 {
 			m.cursor--
 		}
 		return m, nil
-	case m.screen == screenMenu && key.Matches(keyMsg, keys.Down):
+	case m.screen == ScreenMenu && key.Matches(keyMsg, keys.Down):
 		if m.cursor < len(menuItems)-1 {
 			m.cursor++
 		}
 		return m, nil
-	case m.screen == screenMenu && key.Matches(keyMsg, keys.Enter):
+	case m.screen == ScreenMenu && key.Matches(keyMsg, keys.Enter):
 		m.screen = menuItems[m.cursor].screen
 		return m, nil
 	default:
@@ -102,7 +103,7 @@ func (m rootModel) View() string {
 	}
 	b.WriteByte('\n')
 
-	if m.screen != screenMenu {
+	if m.screen != ScreenMenu {
 		b.WriteString(selectedStyle.Render(menuItems[m.screen-1].label))
 		b.WriteByte('\n')
 		b.WriteString(mutedStyle.Render("This screen is wired in the next task."))

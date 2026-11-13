@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"jimu/internal/cli/actions"
+	"jimu/internal/cli/tui"
 	"jimu/internal/templatesource"
 	"jimu/tools/generator"
 	upgradeplan "jimu/tools/generator/upgrade"
@@ -41,6 +42,9 @@ manifest 基线哈希、项目当前内容、目标模板产物。
 时副本中的 tidy；真正的升级验证始终执行 tidy/build/test。`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 && tuiAvailable(cmd) {
+				return runTUI(cmd, tui.ScreenUpgrade)
+			}
 			dir := "."
 			if len(args) > 0 {
 				dir = args[0]

@@ -27,11 +27,11 @@ func TestRootModelMenuTransitionsAndBack(t *testing.T) {
 
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = updated.(rootModel)
-	require.Equal(t, screenCheck, model.screen)
+	require.Equal(t, ScreenCheck, model.screen)
 
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model = updated.(rootModel)
-	require.Equal(t, screenMenu, model.screen)
+	require.Equal(t, ScreenMenu, model.screen)
 }
 
 func TestRootModelViewListsEveryAction(t *testing.T) {
