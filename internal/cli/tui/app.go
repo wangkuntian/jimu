@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -47,14 +48,16 @@ var keys = keyMap{
 }
 
 type rootModel struct {
-	opts   Options
-	cursor int
-	screen Screen
-	quit   bool
+	opts      Options
+	ctx       context.Context
+	cursor    int
+	screen    Screen
+	quit      bool
+	newWizard *newWizard
 }
 
 func newRootModel(opts Options) rootModel {
-	return rootModel{opts: opts}
+	return rootModel{opts: opts, ctx: context.Background()}
 }
 
 func (m rootModel) Init() tea.Cmd { return nil }
@@ -64,10 +67,20 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	switch {
-	case key.Matches(keyMsg, keys.Quit):
+	if key.Matches(keyMsg, keys.Quit) {
 		m.quit = true
 		return m, tea.Quit
+	}
+	if m.screen == ScreenNew && m.newWizard != nil {
+		updated, cmd, back := m.newWizard.Update(msg)
+		m.newWizard = &updated
+		if back {
+			m.screen = ScreenMenu
+			m.newWizard = nil
+		}
+		return m, cmd
+	}
+	switch {
 	case key.Matches(keyMsg, keys.Back):
 		m.screen = ScreenMenu
 		return m, nil
@@ -83,6 +96,9 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case m.screen == ScreenMenu && key.Matches(keyMsg, keys.Enter):
 		m.screen = menuItems[m.cursor].screen
+		if m.screen == ScreenNew {
+			m.newWizard = newNewWizard(m.opts, m.ctx, nil)
+		}
 		return m, nil
 	default:
 		return m, nil
@@ -104,6 +120,9 @@ func (m rootModel) View() string {
 	b.WriteByte('\n')
 
 	if m.screen != ScreenMenu {
+		if m.screen == ScreenNew && m.newWizard != nil {
+			return m.newWizard.View()
+		}
 		b.WriteString(selectedStyle.Render(menuItems[m.screen-1].label))
 		b.WriteByte('\n')
 		b.WriteString(mutedStyle.Render("This screen is wired in the next task."))

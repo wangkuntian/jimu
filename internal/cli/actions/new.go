@@ -27,11 +27,8 @@ func RunNew(ctx context.Context, in NewInput) (*generator.Result, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if in.Profile != "" && in.With != "" {
-		return nil, ErrProfileWithMutuallyExclusive
-	}
-	if in.Shape != "" && in.Profile != "" {
-		return nil, ErrShapeRequiresWith
+	if err := ValidateNew(in); err != nil {
+		return nil, err
 	}
 	return generator.NewProject(generator.NewOptions{
 		Dir:        in.Dir,
@@ -50,4 +47,16 @@ func RunNew(ctx context.Context, in NewInput) (*generator.Result, error) {
 		SourceRoot: in.SourceRoot,
 		Framework:  in.Framework,
 	})
+}
+
+// ValidateNew validates the mutually exclusive selectors before any generator
+// work starts.
+func ValidateNew(in NewInput) error {
+	if in.Profile != "" && in.With != "" {
+		return ErrProfileWithMutuallyExclusive
+	}
+	if in.Shape != "" && in.Profile != "" {
+		return ErrShapeRequiresWith
+	}
+	return nil
 }

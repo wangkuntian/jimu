@@ -101,6 +101,7 @@ require (
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.9 // indirect
 	github.com/aliyun/credentials-go v1.4.5 // indirect
 	github.com/andybalholm/brotli v1.3.0 // indirect
+	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.27 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.9 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.12 // indirect

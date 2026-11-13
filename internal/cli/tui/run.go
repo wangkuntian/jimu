@@ -54,7 +54,11 @@ func Run(ctx context.Context, opts Options) error {
 		programOptions = append(programOptions, tea.WithOutput(opts.Out))
 	}
 	model := newRootModel(opts)
+	model.ctx = ctx
 	model.screen = opts.Initial
+	if model.screen == ScreenNew {
+		model.newWizard = newNewWizard(opts, ctx, nil)
+	}
 	_, err := tea.NewProgram(model, programOptions...).Run()
 	return err
 }

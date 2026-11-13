@@ -40,3 +40,12 @@ func TestRootModelViewListsEveryAction(t *testing.T) {
 		require.Contains(t, view, item.label)
 	}
 }
+
+func TestRootModelOpensNewWizard(t *testing.T) {
+	updated, _ := newRootModel(Options{}).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(rootModel)
+	require.Equal(t, ScreenNew, model.screen)
+	require.NotNil(t, model.newWizard)
+	require.Contains(t, model.View(), "New project")
+	require.Contains(t, model.View(), "Directory:")
+}
