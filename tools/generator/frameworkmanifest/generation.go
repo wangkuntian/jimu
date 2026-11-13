@@ -73,14 +73,17 @@ func defaultGeneration(profile, with string, declared []string) manifest.Generat
 	case "auth":
 		generation.ToolsMode = manifest.GenerationToolsAll
 		generation.CLI = manifest.GenerationCLIFull
+		generation.CLIUI = manifest.GenerationCLIUIBoth
 		return generation
 	case "full":
 		generation.ToolsMode = manifest.GenerationToolsAll
 		generation.CLI = manifest.GenerationCLIFull
+		generation.CLIUI = manifest.GenerationCLIUIBoth
 		return generation
 	}
 	if profile == "" && with != "" {
 		generation.Deploy = DefaultDeploy("")
+		generation.CLIUI = manifest.GenerationCLIUIBoth
 		if len(declared) > 0 {
 			generation.CLI = manifest.GenerationCLIFull
 		}

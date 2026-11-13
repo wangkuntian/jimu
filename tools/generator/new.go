@@ -39,6 +39,7 @@ type NewOptions struct {
 	Tests      string
 	Tools      string
 	Deploy     string
+	CLIUI      string
 	NoTidy     bool
 	DryRun     bool
 	Force      bool
@@ -93,6 +94,7 @@ func NewProject(opts NewOptions) (*Result, error) {
 		Tests:      opts.Tests,
 		Tools:      opts.Tools,
 		Deploy:     opts.Deploy,
+		CLIUI:      opts.CLIUI,
 		Framework:  opts.Framework,
 		Generation: opts.Generation,
 	})

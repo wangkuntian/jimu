@@ -1,0 +1,184 @@
+package main
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+
+	"github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/term"
+	"github.com/spf13/cobra"
+)
+
+type projectTUIItem struct {
+	label string
+	args  []string
+}
+
+var projectTUIItems = []projectTUIItem{
+	{label: "config check", args: []string{"config", "check"}},
+	{label: "migrate up", args: []string{"migrate", "up"}},
+	{label: "migrate down", args: []string{"migrate", "down"}},
+	{label: "migrate status", args: []string{"migrate", "status"}},
+	{label: "migrate redo", args: []string{"migrate", "redo"}},
+	{label: "seed", args: []string{"seed"}},
+}
+
+type projectTUIKeys struct {
+	up    key.Binding
+	down  key.Binding
+	enter key.Binding
+	quit  key.Binding
+}
+
+var projectTUIKeyMap = projectTUIKeys{
+	up:    key.NewBinding(key.WithKeys("up", "k")),
+	down:  key.NewBinding(key.WithKeys("down", "j")),
+	enter: key.NewBinding(key.WithKeys("enter")),
+	quit:  key.NewBinding(key.WithKeys("q", "ctrl+c")),
+}
+
+type projectTUIMsg struct {
+	output string
+	err    error
+}
+
+type projectTUIModel struct {
+	cursor  int
+	running bool
+	output  string
+	err     string
+}
+
+var projectTUITitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
+var projectTUISelected = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
+var projectTUIMuted = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+var projectTUIError = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
+
+func (m projectTUIModel) Init() tea.Cmd { return nil }
+
+func (m projectTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case projectTUIMsg:
+		m.running = false
+		m.output = msg.output
+		if msg.err != nil {
+			m.err = msg.err.Error()
+		} else {
+			m.err = ""
+		}
+		return m, nil
+	case tea.KeyMsg:
+		if key.Matches(msg, projectTUIKeyMap.quit) {
+			return m, tea.Quit
+		}
+		if m.running {
+			return m, nil
+		}
+		switch {
+		case key.Matches(msg, projectTUIKeyMap.up):
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case key.Matches(msg, projectTUIKeyMap.down):
+			if m.cursor < len(projectTUIItems)-1 {
+				m.cursor++
+			}
+		case key.Matches(msg, projectTUIKeyMap.enter):
+			m.running = true
+			args := append([]string(nil), projectTUIItems[m.cursor].args...)
+			return m, func() tea.Msg { return runProjectTUICommand(args) }
+		}
+	}
+	return m, nil
+}
+
+func (m projectTUIModel) View() string {
+	var b bytes.Buffer
+	b.WriteString(projectTUITitle.Render("Jimu project CLI"))
+	b.WriteString("\n\n")
+	for index, item := range projectTUIItems {
+		prefix := "  "
+		line := prefix + item.label
+		if index == m.cursor {
+			line = "› " + item.label
+			b.WriteString(projectTUISelected.Render(line))
+		} else {
+			b.WriteString(line)
+		}
+		b.WriteByte('\n')
+	}
+	b.WriteString("\n")
+	if m.running {
+		b.WriteString(projectTUIMuted.Render("running..."))
+		b.WriteByte('\n')
+	}
+	if m.err != "" {
+		b.WriteString(projectTUIError.Render(m.err))
+		b.WriteString("\n\n")
+	}
+	if m.output != "" {
+		b.WriteString(m.output)
+		if b.String()[b.Len()-1] != '\n' {
+			b.WriteByte('\n')
+		}
+		b.WriteByte('\n')
+	}
+	b.WriteString(projectTUIMuted.Render("↑/↓ choose · enter run · q quit"))
+	return b.String()
+}
+
+func runProjectTUICommand(args []string) projectTUIMsg {
+	var output bytes.Buffer
+	rootCmd.SetOut(&output)
+	rootCmd.SetErr(&output)
+	rootCmd.SetArgs(args)
+	err := rootCmd.Execute()
+	rootCmd.SetArgs(nil)
+	rootCmd.SetOut(os.Stdout)
+	rootCmd.SetErr(os.Stderr)
+	return projectTUIMsg{output: output.String(), err: err}
+}
+
+func projectTUIEnabled(cmd *cobra.Command) bool {
+	flag := cmd.Flags().Lookup("no-tui")
+	if flag == nil {
+		flag = cmd.InheritedFlags().Lookup("no-tui")
+	}
+	noTUI := flag != nil && flag.Value.String() == "true"
+	if noTUI || os.Getenv("JIMU_NO_TUI") == "1" {
+		return false
+	}
+	in, inOK := cmd.InOrStdin().(*os.File)
+	out, outOK := cmd.OutOrStdout().(*os.File)
+	return inOK && outOK && term.IsTerminal(in.Fd()) && term.IsTerminal(out.Fd())
+}
+
+func newProjectTUICommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "tui",
+		Short: "Open the interactive project CLI",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !projectTUIEnabled(cmd) {
+				return fmt.Errorf("tui requires an interactive terminal")
+			}
+			_, err := tea.NewProgram(projectTUIModel{}, tea.WithInput(cmd.InOrStdin()), tea.WithOutput(cmd.OutOrStdout())).Run()
+			return err
+		},
+	}
+}
+
+func init() {
+	rootCmd.PersistentFlags().Bool("no-tui", false, "disable the interactive terminal UI")
+	rootCmd.AddCommand(newProjectTUICommand())
+	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 && projectTUIEnabled(cmd) {
+			_, err := tea.NewProgram(projectTUIModel{}, tea.WithInput(cmd.InOrStdin()), tea.WithOutput(cmd.OutOrStdout())).Run()
+			return err
+		}
+		return cmd.Help()
+	}
+}

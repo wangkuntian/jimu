@@ -204,6 +204,12 @@ func templateActions(root, module string, selected selection) []manifest.Templat
 			Kind: "compose", Data: buildData,
 		})
 	}
+	if selected.generation.CLIUI == manifest.GenerationCLIUIBoth {
+		actions = append(actions, manifest.TemplateAction{
+			Source: "tools/generator/render/templates/project/cli_tui.go.tmpl", Destination: "cmd/cli/tui.go",
+			Kind: "cli", Data: map[string]any{},
+		})
+	}
 	if contains(copiedTools(selected.generation.ToolsResolved), "profileassets") {
 		actions = append(actions, manifest.TemplateAction{
 			Source:      "tools/generator/render/templates/project/assets_selection.go.tmpl",

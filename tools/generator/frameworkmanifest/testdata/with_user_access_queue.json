@@ -59,7 +59,7 @@
       "observability"
     ],
     "cli": "full",
-    "cli_ui": "direct"
+    "cli_ui": "both"
   },
   "capabilities": [
     {
@@ -912,6 +912,12 @@
       }
     },
     {
+      "source": "tools/generator/render/templates/project/cli_tui.go.tmpl",
+      "destination": "cmd/cli/tui.go",
+      "kind": "cli",
+      "data": {}
+    },
+    {
       "source": "tools/generator/render/templates/project/assets_selection.go.tmpl",
       "destination": "tools/internal/profileassets/selection.go",
       "kind": "assets",
@@ -1248,6 +1254,7 @@
     "Makefile",
     "cmd/cli/activecaps.go",
     "cmd/cli/main.go",
+    "cmd/cli/tui.go",
     "cmd/server/main.go",
     "conf/rbac_model.conf",
     "configs/app.prod.yaml",
@@ -1675,5 +1682,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:37594af481dce0cfa225920d8aa7c77f8a73a298170c0a80f7ce4feec412d6fc"
+  "digest": "sha256:9f177c0d3cfacff507b5bfd67dd06c007621a4a0ba62c0c58055f0ea1829b69e"
 }

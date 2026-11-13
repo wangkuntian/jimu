@@ -52,7 +52,7 @@
     "full": {
       "limits": {
         "generated_files": 822,
-        "direct_dependencies": 64,
+        "direct_dependencies": 67,
         "go_closure_files": 375,
         "go_closure_lines": 40400,
         "external_services": 4,

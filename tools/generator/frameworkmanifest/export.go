@@ -33,6 +33,7 @@ type Request struct {
 	Tests     string
 	Tools     string
 	Deploy    string
+	CLIUI     string
 	// Drivers 保留既有项目的驱动选择；未列出的能力由默认驱动规则补齐。
 	Drivers    map[string][]string
 	Generation *manifest.Generation
@@ -135,6 +136,7 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 			Tests:  req.Tests,
 			Tools:  req.Tools,
 			Deploy: deploy,
+			CLIUI:  req.CLIUI,
 		})
 		if err != nil {
 			return manifest.Document{}, Resolution{}, err

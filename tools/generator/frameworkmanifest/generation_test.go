@@ -19,6 +19,23 @@ func TestResolveGenerationMinimalDefaults(t *testing.T) {
 	require.Equal(t, manifest.GenerationCLIUIDirect, got.CLIUI)
 }
 
+func TestResolveGenerationProfileCLIUIDefaults(t *testing.T) {
+	for _, test := range []struct {
+		profile string
+		with    string
+		want    string
+	}{
+		{profile: "minimal", want: manifest.GenerationCLIUIDirect},
+		{profile: "auth", want: manifest.GenerationCLIUIBoth},
+		{profile: "full", want: manifest.GenerationCLIUIBoth},
+		{with: "user", want: manifest.GenerationCLIUIBoth},
+	} {
+		got, err := ResolveGeneration(test.profile, test.with, nil, GenerationRequest{})
+		require.NoError(t, err)
+		require.Equal(t, test.want, got.CLIUI)
+	}
+}
+
 func TestResolveGenerationToolsAutoWithCapability(t *testing.T) {
 	got, err := ResolveGeneration("auth", "", []string{"user"}, GenerationRequest{Tools: manifest.GenerationToolsAuto})
 	require.NoError(t, err)

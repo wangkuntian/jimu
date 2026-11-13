@@ -3,8 +3,10 @@ package generator
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"jimu/tools/generator/manifest"
@@ -139,6 +141,59 @@ func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 	assert.Contains(t, string(compose), "dockerfile: deploy/docker/Dockerfile")
 	assert.NoFileExists(t, filepath.Join(dir, "deploy/compose/compose.observability.yml"))
 	assertManifestProvenance(t, dir, "auth")
+}
+
+func TestNewProjectCLIUIDefaultsAndDependencyIsolation(t *testing.T) {
+	tests := []struct {
+		name  string
+		opts  NewOptions
+		cliUI string
+		tui   bool
+	}{
+		{name: "minimal-default", opts: NewOptions{Template: "minimal"}, cliUI: manifest.GenerationCLIUIDirect},
+		{name: "auth-default", opts: NewOptions{Template: "auth"}, cliUI: manifest.GenerationCLIUIBoth, tui: true},
+		{name: "full-default", opts: NewOptions{Template: "full"}, cliUI: manifest.GenerationCLIUIBoth, tui: true},
+		{name: "auth-direct", opts: NewOptions{Template: "auth", CLIUI: "direct"}, cliUI: manifest.GenerationCLIUIDirect},
+		{name: "minimal-both", opts: NewOptions{Template: "minimal", CLIUI: "both"}, cliUI: manifest.GenerationCLIUIBoth, tui: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), tt.name)
+			tt.opts.Dir = dir
+			tt.opts.Module = "example.com/" + tt.name
+			tt.opts.NoTidy = true
+			_, err := newProjectForTest(t, tt.opts)
+			require.NoError(t, err)
+
+			doc, err := workspace.LoadProjectManifest(dir)
+			require.NoError(t, err)
+			require.Equal(t, tt.cliUI, doc.Generation.CLIUI)
+			if tt.tui {
+				assert.FileExists(t, filepath.Join(dir, "cmd/cli/tui.go"))
+			} else {
+				assert.NoFileExists(t, filepath.Join(dir, "cmd/cli/tui.go"))
+			}
+
+			goMod, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+			require.NoError(t, err)
+			assert.Equal(t, tt.tui, strings.Contains(string(goMod), "bubbletea"))
+			serverDeps, err := goListProjectDeps(dir, "./cmd/server")
+			require.NoError(t, err)
+			assert.NotContains(t, serverDeps, "bubbletea")
+			if tt.tui {
+				cliDeps, err := goListProjectDeps(dir, "./cmd/cli")
+				require.NoError(t, err)
+				assert.Contains(t, cliDeps, "bubbletea")
+			}
+		})
+	}
+}
+
+func goListProjectDeps(dir, pkg string) (string, error) {
+	cmd := exec.Command("go", "list", "-deps", pkg)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }
 
 func TestNewProjectComposeWithoutServicesOmitsMariadbAndRedis(t *testing.T) {

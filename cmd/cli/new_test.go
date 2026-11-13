@@ -88,6 +88,22 @@ func TestNewCmdAcceptsTestsAndToolsFlags(t *testing.T) {
 	require.NoError(t, c.Execute())
 }
 
+func TestNewCmdAcceptsCLIUIModes(t *testing.T) {
+	for _, mode := range []string{"both", "direct"} {
+		t.Run(mode, func(t *testing.T) {
+			c := newCommandForTest(&bytes.Buffer{})
+			c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--cli=" + mode, "--dry-run"})
+			require.NoError(t, c.Execute())
+		})
+	}
+}
+
+func TestNewCmdRejectsUnknownCLIUIMode(t *testing.T) {
+	c := newCommandForTest(&bytes.Buffer{})
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--cli=web", "--dry-run"})
+	require.ErrorContains(t, c.Execute(), "--cli")
+}
+
 func TestNewCmdRejectsUnknownTestsMode(t *testing.T) {
 	c := newCommandForTest(&bytes.Buffer{})
 	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=minimal", "--tests=sometimes", "--dry-run"})
