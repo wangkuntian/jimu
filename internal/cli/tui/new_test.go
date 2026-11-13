@@ -43,8 +43,24 @@ func TestNewWizardPresetSelectionAndStepBar(t *testing.T) {
 	updated, _, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	require.Equal(t, newStepForm, updated.step)
 	require.Equal(t, "auth", updated.inputs[newFieldProfile].Value())
-	require.Contains(t, updated.View(), "▌ Directory:")
+	require.Contains(t, updated.View(), "❯ Directory:")
 	require.Contains(t, updated.View(), "the path is created atomically")
+}
+
+func TestNewWizardPresetSearchFiltersAndSelects(t *testing.T) {
+	wizard := newNewWizard(Options{}, context.Background(), nil)
+	for _, ch := range "auth" {
+		updated, _, _ := wizard.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+		wizard = &updated
+	}
+	require.Equal(t, "auth", wizard.presetQuery)
+	require.Equal(t, 1, wizard.presetCursor)
+	require.Contains(t, wizard.View(), "Auth")
+	require.NotContains(t, wizard.View(), "Minimal  lean")
+
+	updated, _, _ := wizard.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	require.Equal(t, newStepForm, updated.step)
+	require.Equal(t, "auth", updated.inputs[newFieldProfile].Value())
 }
 
 func TestNewWizardFormRequiresDirectory(t *testing.T) {
