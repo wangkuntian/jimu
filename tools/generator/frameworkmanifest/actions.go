@@ -952,7 +952,11 @@ func optionalKernelFiles(selected selection) map[string][]string {
 			"events.go",
 			"openapi.go",
 			"outbox_mq_port.go",
+			"ports.go",
+			"systemroles.go",
+			"systemroles_test.go",
 		)
+		pruned["internal/assembly"] = append(pruned["internal/assembly"], "context_auth.go", "context_ports_test.go")
 		pruned["internal/platform/http/middleware"] = append(pruned["internal/platform/http/middleware"],
 			"admin_auth.go",
 			"admin_auth_test.go",

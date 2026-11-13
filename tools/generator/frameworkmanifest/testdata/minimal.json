@@ -1269,6 +1269,8 @@
     "internal/assembly/assembly.go",
     "internal/assembly/assembly_test.go",
     "internal/assembly/context.go",
+    "internal/assembly/context_auth.go",
+    "internal/assembly/context_ports_test.go",
     "internal/assembly/context_redis.go",
     "internal/assembly/context_runtime.go",
     "internal/assembly/context_test.go",
@@ -1632,5 +1634,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:67269cf2bf8b8a8f9003b940dbb6024efa277eb2a27bd85d0ee9a6f379b05777"
+  "digest": "sha256:125e3127f68d020d171498176ceae9358e161c21bd417bcf4e2fbf098973809b"
 }
