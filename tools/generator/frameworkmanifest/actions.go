@@ -126,14 +126,6 @@ func copyActions(root string, selected selection) ([]manifest.CopyAction, error)
 		}
 		actions = append(actions, manifest.CopyAction{Source: source, Destination: source, Include: []string{}, Exclude: []string{"*_test.go"}})
 	}
-	if includeBackup(selected) {
-		actions = append(actions, manifest.CopyAction{
-			Source:      "scripts",
-			Destination: "scripts",
-			Include:     []string{"backup.sh", "restore.sh", "db_common.sh", "install_db_clients.sh"},
-			Exclude:     []string{},
-		})
-	}
 	return actions, nil
 }
 

@@ -556,18 +556,6 @@
       "exclude": [
         "*_test.go"
       ]
-    },
-    {
-      "source": "scripts",
-      "destination": "scripts",
-      "optional": false,
-      "include": [
-        "backup.sh",
-        "restore.sh",
-        "db_common.sh",
-        "install_db_clients.sh"
-      ],
-      "exclude": []
     }
   ],
   "templates": [
@@ -1674,27 +1662,6 @@
     "internal/shared/validator/fuzz_test.go",
     "internal/shared/validator/validator.go",
     "internal/shared/validator/validator_test.go",
-    "scripts/bench_ci.sh",
-    "scripts/check_ci_gate.sh",
-    "scripts/check_commit_messages.sh",
-    "scripts/check_coverage_floors.sh",
-    "scripts/check_profiles.sh",
-    "scripts/check_skills.sh",
-    "scripts/clean_room_e2e.sh",
-    "scripts/demo.sh",
-    "scripts/dev.sh",
-    "scripts/ensure-image.sh",
-    "scripts/experiment_v0_8_0.py",
-    "scripts/install_skills.sh",
-    "scripts/loadtest.sh",
-    "scripts/security_upgrade_drill.sh",
-    "scripts/test_backup_restore.sh",
-    "scripts/test_compose_runtime.sh",
-    "scripts/test_config_contracts.sh",
-    "scripts/test_init_secrets.sh",
-    "scripts/test_makefile_contract.sh",
-    "scripts/test_shard_weights.tsv",
-    "scripts/test_shards.sh",
     "tools/checkcapabilities/assets.go",
     "tools/checkcapabilities/composition.go",
     "tools/checkcapabilities/drivers.go",
@@ -1708,5 +1675,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:196b57855a673a1348d4718451ae8134d45985ce4e1e82d5cacbf2e2e9e8db10"
+  "digest": "sha256:37594af481dce0cfa225920d8aa7c77f8a73a298170c0a80f7ce4feec412d6fc"
 }

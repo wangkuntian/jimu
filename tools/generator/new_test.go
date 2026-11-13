@@ -125,6 +125,7 @@ func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 		"deploy/k8s/observability/openobserve.yaml",
 		"deploy/k8s/observability/otel-collector.yaml",
 		"deploy/k8s/config-files.yaml",
+		"scripts",
 		"deploy/helm",
 		"deploy/k8s",
 	} {
@@ -178,6 +179,35 @@ func TestNewProjectDeployComponentsControlBuildArtifacts(t *testing.T) {
 			assertFileState(t, filepath.Join(dir, "deploy/docker/Dockerfile"), tt.dockerfile)
 			assertFileState(t, filepath.Join(dir, "deploy/compose/docker-compose.yml"), tt.compose)
 			assertFileState(t, filepath.Join(dir, "deploy/k8s"), tt.k8s)
+		})
+	}
+}
+
+func TestNewProjectObservabilityAssetsFollowTargets(t *testing.T) {
+	tests := []struct {
+		name       string
+		deploy     string
+		k8sAsset   bool
+		helmAsset  bool
+		composeAll bool
+	}{
+		{name: "observability-only", deploy: "observability"},
+		{name: "k8s", deploy: "k8s,observability", k8sAsset: true},
+		{name: "helm", deploy: "helm,observability", helmAsset: true},
+		{name: "compose", deploy: "compose,observability", composeAll: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), tt.name)
+			_, err := newProjectForTest(t, NewOptions{
+				Dir: dir, Template: "minimal", Deploy: tt.deploy, Module: "example.com/" + tt.name, NoTidy: true,
+			})
+			require.NoError(t, err)
+
+			assertFileState(t, filepath.Join(dir, "deploy/observability/otel-collector.yaml"), true)
+			assertFileState(t, filepath.Join(dir, "deploy/k8s/observability/openobserve.yaml"), tt.k8sAsset)
+			assertFileState(t, filepath.Join(dir, "deploy/helm/templates/observability/openobserve.yaml"), tt.helmAsset)
+			assertFileState(t, filepath.Join(dir, "deploy/compose/compose.observability.yml"), tt.composeAll)
 		})
 	}
 }
