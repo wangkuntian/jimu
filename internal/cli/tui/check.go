@@ -56,6 +56,8 @@ func newCheckWizard(opts Options, ctx context.Context, run checkRunFunc) *checkW
 	return &checkWizard{opts: opts, ctx: ctx, run: run, dir: dir}
 }
 
+func (m *checkWizard) Init() tea.Cmd { return m.dir.Focus() }
+
 func (m *checkWizard) input() actions.CheckInput {
 	return actions.CheckInput{
 		Dir:        strings.TrimSpace(m.dir.Value()),
@@ -86,6 +88,10 @@ func (m *checkWizard) Update(msg tea.Msg) (tea.Cmd, bool) {
 		case checkStepDone, checkStepFailed:
 			return nil, msg.String() == "esc"
 		}
+	default:
+		var cmd tea.Cmd
+		m.dir, cmd = m.dir.Update(msg)
+		return cmd, false
 	}
 	return nil, false
 }

@@ -63,11 +63,54 @@ func newRootModel(opts Options) rootModel {
 	return rootModel{opts: opts, ctx: context.Background()}
 }
 
-func (m rootModel) Init() tea.Cmd { return nil }
+func (m rootModel) Init() tea.Cmd {
+	switch m.screen {
+	case ScreenNew:
+		if m.newWizard != nil {
+			return m.newWizard.Init()
+		}
+	case ScreenCheck:
+		if m.checkWizard != nil {
+			return m.checkWizard.Init()
+		}
+	case ScreenUpgrade:
+		if m.upgradeWizard != nil {
+			return m.upgradeWizard.Init()
+		}
+	case ScreenAdd:
+		if m.addWizard != nil {
+			return m.addWizard.Init()
+		}
+	}
+	return nil
+}
 
 func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
+		switch m.screen {
+		case ScreenNew:
+			if m.newWizard != nil {
+				updated, cmd, _ := m.newWizard.Update(msg)
+				m.newWizard = &updated
+				return m, cmd
+			}
+		case ScreenCheck:
+			if m.checkWizard != nil {
+				cmd, _ := m.checkWizard.Update(msg)
+				return m, cmd
+			}
+		case ScreenUpgrade:
+			if m.upgradeWizard != nil {
+				cmd, _ := m.upgradeWizard.Update(msg)
+				return m, cmd
+			}
+		case ScreenAdd:
+			if m.addWizard != nil {
+				cmd, _ := m.addWizard.Update(msg)
+				return m, cmd
+			}
+		}
 		return m, nil
 	}
 	if key.Matches(keyMsg, keys.Quit) {
@@ -132,12 +175,16 @@ func (m rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch m.screen {
 		case ScreenNew:
 			m.newWizard = newNewWizard(m.opts, m.ctx, nil)
+			return m, m.newWizard.Init()
 		case ScreenCheck:
 			m.checkWizard = newCheckWizard(m.opts, m.ctx, nil)
+			return m, m.checkWizard.Init()
 		case ScreenUpgrade:
 			m.upgradeWizard = newUpgradeWizard(m.opts, m.ctx, nil)
+			return m, m.upgradeWizard.Init()
 		case ScreenAdd:
 			m.addWizard = newAddWizard(m.opts, m.ctx, nil)
+			return m, m.addWizard.Init()
 		}
 		return m, nil
 	default:

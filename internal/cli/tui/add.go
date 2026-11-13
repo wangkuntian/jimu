@@ -63,6 +63,8 @@ func newAddWizard(opts Options, ctx context.Context, run addRunFunc) *addWizard 
 	return &addWizard{opts: opts, ctx: ctx, run: run, inputs: inputs}
 }
 
+func (m *addWizard) Init() tea.Cmd { return m.inputs[0].Focus() }
+
 func (m *addWizard) input() actions.AddInput {
 	return actions.AddInput{
 		Name:       strings.TrimSpace(m.inputs[1].Value()),
@@ -98,6 +100,12 @@ func (m *addWizard) Update(msg tea.Msg) (tea.Cmd, bool) {
 			return m.updateForm(msg)
 		case addStepDone, addStepFailed:
 			return nil, msg.String() == "esc"
+		}
+	default:
+		if m.focus < len(m.inputs) {
+			var cmd tea.Cmd
+			m.inputs[m.focus], cmd = m.inputs[m.focus].Update(msg)
+			return cmd, false
 		}
 	}
 	return nil, false

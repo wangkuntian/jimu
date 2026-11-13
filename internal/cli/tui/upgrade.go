@@ -70,6 +70,8 @@ func newUpgradeWizard(opts Options, ctx context.Context, run upgradeRunFunc) *up
 	return &upgradeWizard{opts: opts, ctx: ctx, run: run, dir: dir}
 }
 
+func (m *upgradeWizard) Init() tea.Cmd { return m.dir.Focus() }
+
 func (m *upgradeWizard) input() actions.UpgradeInput {
 	return actions.UpgradeInput{
 		Dir:        strings.TrimSpace(m.dir.Value()),
@@ -107,6 +109,10 @@ func (m *upgradeWizard) Update(msg tea.Msg) (tea.Cmd, bool) {
 		case upgradeStepDone, upgradeStepFailed:
 			return nil, msg.String() == "esc"
 		}
+	default:
+		var cmd tea.Cmd
+		m.dir, cmd = m.dir.Update(msg)
+		return cmd, false
 	}
 	return nil, false
 }

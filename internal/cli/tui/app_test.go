@@ -54,6 +54,6 @@ func TestRootModelOpensNewWizard(t *testing.T) {
 	model := updated.(rootModel)
 	require.Equal(t, ScreenNew, model.screen)
 	require.NotNil(t, model.newWizard)
-	require.Contains(t, model.View(), "New project")
-	require.Contains(t, model.View(), "Directory:")
+	require.Contains(t, model.View(), "Create a Jimu project")
+	require.Contains(t, model.View(), "1 Template")
 }

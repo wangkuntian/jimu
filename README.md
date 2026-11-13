@@ -116,6 +116,10 @@ make dev
 或显式执行 `jimu tui` 会打开 TUI；带参数的命令仍走直接模式。非 TTY、CI 和重定向输出
 永不启动 TUI。`--no-tui` 或 `JIMU_NO_TUI=1` 可强制直接模式。
 
+`jimu new` 的 TUI 是三步向导：选择模板、填写项目信息、确认生成。首屏只要求选择起点，
+目录和模块输入有焦点条、光标与示例提示，测试/工具/部署等选项默认收进“高级设置”；
+生成过程中显示动画进度。
+
 生成项目由 `jimu new --cli=both|direct` 选择 CLI 形态：`both` 同时编入直接命令和 TUI，
 `direct` 不引入 Bubble Tea。`minimal` 默认 `direct`，`auth`、`full` 与 `--with` 默认
 `both`。需要最小依赖时对 `auth` 项目使用 `--cli=direct`。
