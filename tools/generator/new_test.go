@@ -114,6 +114,23 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 	assert.NotContains(t, string(config), "\ncapabilities:")
 	assert.NotContains(t, string(config), "\nhttp_client:")
 	assert.NotContains(t, string(config), "\nerror_reporting:")
+	errorsSource := string(readFileForTest(t, filepath.Join(dir, "internal/shared/errors/errors.go")))
+	assert.NotContains(t, errorsSource, "CodeUserNotFound")
+	assert.NotContains(t, errorsSource, "CodeTenantNotFound")
+	i18nSource := string(readFileForTest(t, filepath.Join(dir, "internal/shared/i18n/i18n.go")))
+	assert.NotContains(t, i18nSource, "tenant_not_found")
+	responseSource := string(readFileForTest(t, filepath.Join(dir, "internal/shared/response/response.go")))
+	assert.NotContains(t, responseSource, "CodeQuotaExceeded")
+	for _, rel := range []string{
+		"internal/shared/errors/capability.go",
+		"internal/shared/errors/capability_test.go",
+		"internal/shared/i18n/capability.go",
+		"internal/shared/i18n/capability_test.go",
+		"internal/shared/response/capability.go",
+		"internal/shared/response/capability_test.go",
+	} {
+		assert.NoFileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "minimal must not contain %s", rel)
+	}
 	assertManifestProvenance(t, dir, "minimal")
 }
 

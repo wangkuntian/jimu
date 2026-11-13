@@ -2,16 +2,12 @@ package errors
 
 import (
 	"fmt"
-	"time"
 )
 
 // 错误码定义
 // 编码规则：
 //
 //	1xxx - 通用错误
-//	2xxx - 用户/认证模块
-//	3xxx - OAuth 模块
-//	4xxx - 验证码模块
 //	9xxx - 系统级错误
 //
 // HTTP 映射：
@@ -25,13 +21,7 @@ import (
 //	1007 -> 429 Too Many Requests
 //	1008 -> 504 Gateway Timeout
 //	1009 -> 409 Conflict
-//	2001 -> 404 Not Found
-//	2002 -> 409 Conflict
-//	2003 -> 401 Unauthorized
-//	2004 -> 404 Not Found
-//	2005 -> 400 Bad Request
-//	4001 -> 400 Bad Request
-//	4002 -> 400 Bad Request
+//	1010 -> 503 Service Unavailable
 const (
 	// 通用错误 (1xxx)
 	CodeOK                 = 0    // 成功
@@ -45,34 +35,6 @@ const (
 	CodeTimeout            = 1008 // 请求超时
 	CodeConflict           = 1009 // 资源冲突
 	CodeServiceUnavailable = 1010 // 服务繁忙（负载保护拒绝）
-
-	// 用户/认证模块 (2xxx)
-	CodeUserNotFound               = 2001 // 用户不存在
-	CodeUserExists                 = 2002 // 用户已存在
-	CodeInvalidPassword            = 2003 // 密码错误
-	CodeRoleNotFound               = 2004 // 角色不存在
-	CodeInvalidResetCode           = 2005 // 密码重置验证码无效或已过期
-	CodeMFARequired                = 2006 // 需要提供 TOTP 二次验证码
-	CodeInvalidMFA                 = 2007 // TOTP 验证码无效
-	CodePasswordReused             = 2008 // 新密码与当前或近期使用过的密码重复
-	CodePasswordBreached           = 2009 // 新密码出现在已知数据泄露集合中
-	CodeWebAuthnNoCredential       = 2010 // 该用户未注册通行密钥
-	CodeWebAuthnVerificationFailed = 2011 // 通行密钥校验失败（挑战过期/签名无效）
-
-	// OAuth 模块 (3xxx)
-	CodeOAuthProviderNotFound = 3001 // 第三方登录提供商不存在
-
-	// 验证码模块 (4xxx)
-	CodeCaptchaRequired = 4001 // 缺少验证码
-	CodeCaptchaInvalid  = 4002 // 验证码无效
-
-	// 租户模块 (5xxx)
-	CodeTenantNotFound   = 5001 // 租户不存在
-	CodeTenantExists     = 5002 // 租户已存在
-	CodeTenantProtected  = 5003 // 默认租户受保护，不可停用或删除
-	CodeTenantCodeFormat = 5004 // 租户编码格式无效
-	CodeQuotaExceeded    = 5005 // 租户资源配额已用尽
-	CodePlanNotFound     = 5006 // 套餐不存在
 )
 
 type AppError struct {
@@ -96,18 +58,14 @@ func New(code int, message string) *AppError {
 	return &AppError{Code: code, Message: message}
 }
 
-// AccountLocked 返回账号锁定错误，message 包含剩余锁定时间（分钟）。
-func AccountLocked(remaining time.Duration) *AppError {
-	minutes := int(remaining.Minutes())
-	if minutes < 1 {
-		minutes = 1
-	}
-	return New(CodeForbidden, fmt.Sprintf("account locked due to too many failed attempts, try again in %d minutes", minutes))
-}
-
 func Wrap(code int, message string, cause error) *AppError {
 	return &AppError{Code: code, Message: message, Cause: cause}
 }
+
+var (
+	capabilityHTTPStatus = map[int]int{}
+	capabilityErrorCodes []ErrorInfo
+)
 
 // HTTPStatus 返回错误码对应的 HTTP 状态码
 func HTTPStatus(code int) int {
@@ -116,18 +74,14 @@ func HTTPStatus(code int) int {
 		return 200
 	case CodeInvalidParam:
 		return 400
-	case CodeUnauthorized, CodeInvalidCredentials, CodeInvalidPassword, CodeMFARequired, CodeInvalidMFA:
+	case CodeUnauthorized, CodeInvalidCredentials:
 		return 401
 	case CodeForbidden:
 		return 403
-	case CodeNotFound, CodeUserNotFound, CodeRoleNotFound, CodeOAuthProviderNotFound, CodeTenantNotFound, CodePlanNotFound, CodeWebAuthnNoCredential:
+	case CodeNotFound:
 		return 404
-	case CodeConflict, CodeUserExists, CodeTenantExists, CodeTenantProtected:
+	case CodeConflict:
 		return 409
-	case CodeQuotaExceeded:
-		return 403
-	case CodeCaptchaRequired, CodeCaptchaInvalid, CodeInvalidResetCode, CodeTenantCodeFormat, CodePasswordReused, CodePasswordBreached, CodeWebAuthnVerificationFailed:
-		return 400
 	case CodeRateLimited:
 		return 429
 	case CodeTimeout:
@@ -136,9 +90,11 @@ func HTTPStatus(code int) int {
 		return 503
 	case CodeInternalError:
 		return 500
-	default:
-		return 500
 	}
+	if status, ok := capabilityHTTPStatus[code]; ok {
+		return status
+	}
+	return 500
 }
 
 // IsCode 判断错误码是否匹配
@@ -177,7 +133,7 @@ type ErrorInfo struct {
 
 // AllErrorCodes 返回所有错误码信息（用于 Swagger 文档）
 func AllErrorCodes() []ErrorInfo {
-	return []ErrorInfo{
+	infos := []ErrorInfo{
 		{CodeOK, "成功", 200, "通用"},
 		{CodeInvalidParam, "参数错误", 400, "通用"},
 		{CodeUnauthorized, "未认证", 401, "通用"},
@@ -189,25 +145,6 @@ func AllErrorCodes() []ErrorInfo {
 		{CodeTimeout, "请求超时", 504, "通用"},
 		{CodeConflict, "资源冲突", 409, "通用"},
 		{CodeServiceUnavailable, "服务繁忙", 503, "通用"},
-		{CodeUserNotFound, "用户不存在", 404, "用户"},
-		{CodeUserExists, "用户已存在", 409, "用户"},
-		{CodeInvalidPassword, "密码错误", 401, "用户"},
-		{CodeRoleNotFound, "角色不存在", 404, "角色"},
-		{CodeInvalidResetCode, "密码重置验证码无效或已过期", 400, "用户"},
-		{CodeMFARequired, "需要提供 TOTP 二次验证码", 401, "用户"},
-		{CodeInvalidMFA, "TOTP 验证码无效", 401, "用户"},
-		{CodePasswordReused, "新密码与当前或近期使用过的密码重复", 400, "用户"},
-		{CodePasswordBreached, "新密码出现在已知数据泄露集合中", 400, "用户"},
-		{CodeOAuthProviderNotFound, "第三方登录提供商不存在", 404, "OAuth"},
-		{CodeCaptchaRequired, "缺少验证码", 400, "验证码"},
-		{CodeCaptchaInvalid, "验证码无效", 400, "验证码"},
-		{CodeTenantNotFound, "租户不存在", 404, "租户"},
-		{CodeTenantExists, "租户已存在", 409, "租户"},
-		{CodeTenantProtected, "默认租户受保护，不可停用或删除", 409, "租户"},
-		{CodeTenantCodeFormat, "租户编码格式无效", 400, "租户"},
-		{CodeQuotaExceeded, "租户资源配额已用尽", 403, "租户"},
-		{CodePlanNotFound, "套餐不存在", 404, "租户"},
-		{CodeWebAuthnNoCredential, "该用户未注册通行密钥", 404, "用户"},
-		{CodeWebAuthnVerificationFailed, "通行密钥校验失败", 400, "用户"},
 	}
+	return append(infos, capabilityErrorCodes...)
 }

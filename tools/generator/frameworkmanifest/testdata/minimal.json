@@ -1596,8 +1596,12 @@
     "internal/shared/dbpurge/dbpurge.go",
     "internal/shared/dbpurge/dbpurge_integration_test.go",
     "internal/shared/dbpurge/dbpurge_test.go",
+    "internal/shared/errors/capability.go",
+    "internal/shared/errors/capability_test.go",
     "internal/shared/errors/errors.go",
     "internal/shared/errors/errors_test.go",
+    "internal/shared/i18n/capability.go",
+    "internal/shared/i18n/capability_test.go",
     "internal/shared/i18n/i18n.go",
     "internal/shared/i18n/i18n_test.go",
     "internal/shared/id/benchmark_test.go",
@@ -1606,6 +1610,8 @@
     "internal/shared/id/id_test.go",
     "internal/shared/pagination/pagination.go",
     "internal/shared/pagination/pagination_test.go",
+    "internal/shared/response/capability.go",
+    "internal/shared/response/capability_test.go",
     "internal/shared/response/response.go",
     "internal/shared/response/response_contract_test.go",
     "internal/shared/response/response_test.go",
@@ -1634,5 +1640,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:125e3127f68d020d171498176ceae9358e161c21bd417bcf4e2fbf098973809b"
+  "digest": "sha256:64efe7006fb3a11f09cd2de4914e637028019eea23f4050f24a1d9c9443b406e"
 }

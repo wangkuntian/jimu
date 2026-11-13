@@ -92,6 +92,36 @@ func TestAddCapabilityRefreshesGeneratedReport(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(plain, filepath.FromSlash(reportRelPath)))
 }
 
+func TestAddCapabilityRestoresCapabilityErrorCodes(t *testing.T) {
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	for _, rel := range []string{
+		"internal/shared/errors/capability.go",
+		"internal/shared/i18n/capability.go",
+		"internal/shared/response/capability.go",
+	} {
+		assert.NoFileExists(t, filepath.Join(dir, filepath.FromSlash(rel)))
+	}
+
+	t.Chdir(FrameworkRoot())
+	_, err := AddCapability(AddOptions{Dir: dir, Name: "apidocs"})
+	require.NoError(t, err)
+
+	for _, rel := range []string{
+		"internal/shared/errors/capability.go",
+		"internal/shared/errors/capability_test.go",
+		"internal/shared/i18n/capability.go",
+		"internal/shared/i18n/capability_test.go",
+		"internal/shared/response/capability.go",
+		"internal/shared/response/capability_test.go",
+	} {
+		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "capability add must restore %s", rel)
+	}
+	build := exec.Command("go", "build", "./...")
+	build.Dir = dir
+	output, err := build.CombinedOutput()
+	require.NoError(t, err, "generated project must build after capability add:\n%s", output)
+}
+
 func TestAddCapabilityKeepsTestsAndRecomputesTools(t *testing.T) {
 	dir := generateForTest(t, NewOptions{Template: "minimal", Tests: "selected", Tools: "auto"})
 	before := readManifestForTest(t, dir)

@@ -965,6 +965,14 @@ func optionalKernelFiles(selected selection) map[string][]string {
 			"systemroles_test.go",
 		)
 		pruned["internal/assembly"] = append(pruned["internal/assembly"], "context_auth.go", "context_ports_test.go")
+		// 0 能力项目只有通用错误码和 HTTP 文案；能力错误码及其
+		// i18n/响应映射由独立文件提供，可随能力面一起裁掉。
+		pruned["internal/shared/errors"] = append(pruned["internal/shared/errors"],
+			"capability.go", "capability_test.go")
+		pruned["internal/shared/i18n"] = append(pruned["internal/shared/i18n"],
+			"capability.go", "capability_test.go")
+		pruned["internal/shared/response"] = append(pruned["internal/shared/response"],
+			"capability.go", "capability_test.go")
 		pruned["internal/platform/http/middleware"] = append(pruned["internal/platform/http/middleware"],
 			"admin_auth.go",
 			"admin_auth_test.go",
