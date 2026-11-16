@@ -1,11 +1,11 @@
-.PHONY: help build build-server build-cli dev{{if .HasDockerfile}} image{{end}} test vet fmt fmt-check lint clean ci
+{{if .HasDatabase}}.PHONY: migrate migrate-down migrate-status seed
+{{end}}.PHONY: help build build-server build-cli dev{{if .HasDockerfile}} image{{end}} test vet fmt fmt-check lint clean ci
 {{if .HasCompose}}.PHONY: up down logs status
 {{end}}{{if and .HasCompose .WithObservability}}.PHONY: up-observability
 {{end}}
 {{if .HasLogcheck}}.PHONY: check-log-usage
 {{end}}{{if .HasCheckcapabilities}}.PHONY: check-capabilities
 {{end}}
-.PHONY: migrate migrate-down migrate-status seed
 {{if .HasAPIdocs}}.PHONY: swagger swagger-check
 {{end}}
 # 默认目标
@@ -96,7 +96,7 @@ image:
 	docker tag $(IMAGE_TAG) $(LATEST_TAG)
 {{end}}
 
-##@ 数据库
+{{if .HasDatabase}}##@ 数据库
 
 ## migrate: 本地执行迁移
 migrate:
@@ -114,7 +114,7 @@ migrate-status:
 seed:
 	@$(CLI_RUN) seed
 
-##@ 质量与工具
+{{end}}##@ 质量与工具
 
 ## test: 运行测试
 test:

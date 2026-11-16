@@ -128,9 +128,13 @@ func TestSetupRouterRootPathDebugOnly(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest(stdhttp.MethodGet, "/", nil))
 	assert.Equal(t, stdhttp.StatusOK, w.Code)
 	body := w.Body.String()
-	assert.Contains(t, body, "jimu")
 	assert.Contains(t, body, "2.3.4")
-	assert.Contains(t, body, "/swagger/index.html")
+	assert.Contains(t, body, `"service":"`+serviceName+`"`)
+	if serviceAPIDocs != "" {
+		assert.Contains(t, body, serviceAPIDocs)
+	} else {
+		assert.NotContains(t, body, "api_docs")
+	}
 
 	// release 模式：根路径保持 404（不暴露服务信息）
 	r = SetupRouter(testLogger(),

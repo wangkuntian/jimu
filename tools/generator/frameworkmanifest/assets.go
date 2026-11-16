@@ -79,6 +79,9 @@ func assetActions(_ string, selected selection) []manifest.AssetAction {
 				exclude = append(exclude, "secret.yaml")
 			}
 		case "deploy/scripts":
+			if !includeAuthSecrets(selected) && !includeBackup(selected) {
+				exclude = append(exclude, "init-secrets.sh")
+			}
 			if !includeBackup(selected) {
 				exclude = append(exclude,
 					"backup.sh",
@@ -128,6 +131,17 @@ func selectedAssetFiles(root string, selected selection) []string {
 
 func includeBackup(selected selection) bool {
 	return selectionRuntimeServices(selected)[contract.RuntimeServiceMySQL]
+}
+
+// includeAuthSecrets 只在有认证类能力时生成认证 secret；0 能力项目没有消费者。
+func includeAuthSecrets(selected selection) bool {
+	for _, name := range selected.declared {
+		switch name {
+		case "auth", "user", "access", "mfa", "passkey", "oauth", "captcha":
+			return true
+		}
+	}
+	return false
 }
 
 func assetFiles(root string, selected selection) []string {

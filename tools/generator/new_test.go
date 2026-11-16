@@ -114,6 +114,14 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 	assert.NotContains(t, string(config), "\ncapabilities:")
 	assert.NotContains(t, string(config), "\nhttp_client:")
 	assert.NotContains(t, string(config), "\nerror_reporting:")
+	assert.NotContains(t, string(config), "\n  idempotency_enabled:")
+	assert.NotContains(t, string(config), "\n  idempotency_ttl_sec:")
+	assert.NotContains(t, string(config), "\n  rate_limit_rate:")
+	assert.NotContains(t, string(config), "\n  rate_limit_burst:")
+	makefile := string(readFileForTest(t, filepath.Join(dir, "Makefile")))
+	for _, target := range []string{"\nmigrate:", "\nmigrate-down:", "\nmigrate-status:", "\nseed:", "##@ 数据库"} {
+		assert.NotContains(t, makefile, target, "minimal must not expose database targets")
+	}
 	errorsSource := string(readFileForTest(t, filepath.Join(dir, "internal/shared/errors/errors.go")))
 	assert.NotContains(t, errorsSource, "CodeUserNotFound")
 	assert.NotContains(t, errorsSource, "CodeTenantNotFound")
@@ -158,7 +166,7 @@ func TestNewProjectMinimalComposeOmitsDatabaseAndObservabilityScripts(t *testing
 	})
 	require.NoError(t, err)
 
-	assert.FileExists(t, filepath.Join(dir, "deploy/scripts/init-secrets.sh"))
+	assert.NoFileExists(t, filepath.Join(dir, "deploy/scripts/init-secrets.sh"))
 	for _, rel := range []string{
 		"deploy/scripts/backup.sh",
 		"deploy/scripts/restore.sh",
@@ -168,9 +176,13 @@ func TestNewProjectMinimalComposeOmitsDatabaseAndObservabilityScripts(t *testing
 	} {
 		assert.NoFileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "minimal must not contain %s", rel)
 	}
+	assert.NotContains(t, string(readFileForTest(t, filepath.Join(dir, "deploy/compose/docker-compose.yml"))), "./secrets")
+	assert.NotContains(t, string(readFileForTest(t, filepath.Join(dir, "deploy/docker/Dockerfile"))), "COPY secrets")
 	assert.NoFileExists(t, filepath.Join(dir, "conf/rbac_model.conf"))
 	dockerfile := string(readFileForTest(t, filepath.Join(dir, "deploy/docker/Dockerfile")))
 	assert.NotContains(t, dockerfile, "COPY conf/")
+	assert.Contains(t, dockerfile, "FROM golang:1.26-alpine")
+	assert.FileExists(t, filepath.Join(dir, ".dockerignore"))
 }
 
 func TestNewProjectMinimalObservabilityScriptFollowsDeployComponent(t *testing.T) {

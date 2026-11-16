@@ -163,6 +163,7 @@ type MergeAction struct {
 	Destination string   `json:"destination"`
 	Strategy    string   `json:"strategy"`
 	Sections    []string `json:"sections"`
+	DropKeys    []string `json:"drop_keys,omitempty"`
 }
 
 type RewriteAction struct {

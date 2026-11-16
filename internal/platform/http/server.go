@@ -128,21 +128,7 @@ func SetupRouter(log *logger.Logger, cfg config.HTTPConfig, serverCfg config.Ser
 
 	// 根路径服务信息（替代裸 404）：仅开发模式（debug）注册，生产保持 404
 	if cfg.Mode == config.HTTPModeDebug {
-		serviceVersion := otelCfg.ServiceVersion
-		if serviceVersion == "" {
-			serviceVersion = "dev"
-		}
-		r.GET("/", func(c *gin.Context) {
-			response.OK(c, gin.H{
-				"service":          "jimu",
-				"version":          serviceVersion,
-				"api_docs":         "/swagger/index.html",
-				"api_base":         "/api/v1",
-				"health":           "management 端口 /livez、/readyz（默认 9090）",
-				"metrics":          "management 端口 /metrics（默认 9090）",
-				"observability_ui": "OpenObserve http://localhost:5080（make up-observability 后可用）",
-			})
-		})
+		r.GET("/", serviceInfoHandler(otelCfg))
 	}
 
 	// 业务冒烟入口：内核路由，不属于任何能力，因此 0 能力项目也有。

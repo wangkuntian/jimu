@@ -17,7 +17,7 @@
       "limits": {
         "generated_files": 280,
         "direct_dependencies": 32,
-        "go_closure_files": 86,
+        "go_closure_files": 87,
         "go_closure_lines": 9700,
         "external_services": 0,
         "business_routes": 0,
@@ -35,7 +35,7 @@
       "limits": {
         "generated_files": 420,
         "direct_dependencies": 44,
-        "go_closure_files": 168,
+        "go_closure_files": 169,
         "go_closure_lines": 17800,
         "external_services": 2,
         "business_routes": 31,
@@ -53,7 +53,7 @@
       "limits": {
         "generated_files": 822,
         "direct_dependencies": 67,
-        "go_closure_files": 381,
+        "go_closure_files": 382,
         "go_closure_lines": 40400,
         "external_services": 4,
         "business_routes": 94,

@@ -168,6 +168,7 @@ func templateActions(root, module string, selected selection) []manifest.Templat
 		"HasCheckcapabilities": contains(selected.generation.ToolsResolved, "checkcapabilities"),
 		"HasDockerfile":        hasDockerfile,
 		"HasCompose":           hasCompose,
+		"HasDatabase":          includeDatabase(selected),
 		"HasMySQL":             hasMySQL,
 		"HasRedis":             hasRedis,
 		"HasScripts":           hasScripts,
@@ -193,6 +194,7 @@ func templateActions(root, module string, selected selection) []manifest.Templat
 		{Source: "tools/generator/render/templates/project/catalog.go.tmpl", Destination: "internal/capabilities/catalog/catalog.go", Kind: "catalog", Data: catalogData},
 		{Source: "tools/generator/render/templates/project/catalog_migration.go.tmpl", Destination: "internal/capabilities/catalog/migration.go", Kind: "catalog", Data: catalogData},
 		{Source: cliSource, Destination: "cmd/cli/main.go", Kind: "cli", Data: cliData},
+		{Source: "tools/generator/render/templates/project/dockerignore.tmpl", Destination: ".dockerignore", Kind: "build", Data: map[string]any{}},
 	}
 	if hasDockerfile {
 		actions = append(actions, manifest.TemplateAction{
@@ -511,9 +513,13 @@ func cliImports(root string, selected selection) []map[string]any {
 
 func mergeActions(root string, selected selection) []manifest.MergeAction {
 	sections := configSections(selected)
+	var dropKeys []string
+	if selected.generation.Runtime == manifest.GenerationRuntimeLean {
+		dropKeys = []string{"rate_limit_rate", "rate_limit_burst", "idempotency_enabled", "idempotency_ttl_sec"}
+	}
 	actions := []manifest.MergeAction{
-		{Source: "configs/app.yaml", Destination: "configs/app.yaml", Strategy: "sections", Sections: slices.Clone(sections)},
-		{Source: "configs/app.prod.yaml", Destination: "configs/app.prod.yaml", Strategy: "sections", Sections: slices.Clone(sections)},
+		{Source: "configs/app.yaml", Destination: "configs/app.yaml", Strategy: "sections", Sections: slices.Clone(sections), DropKeys: slices.Clone(dropKeys)},
+		{Source: "configs/app.prod.yaml", Destination: "configs/app.prod.yaml", Strategy: "sections", Sections: slices.Clone(sections), DropKeys: slices.Clone(dropKeys)},
 	}
 	if HasDeploy(selected.generation.Deploy, manifest.DeployHelm) {
 		actions = append(actions, manifest.MergeAction{
@@ -598,6 +604,32 @@ func rewriteActions(root, module string, selected selection) []manifest.RewriteA
 		})
 	}
 	actions = append(actions, driverRewriteActions(root, selected)...)
+	if selected.generation.Runtime == manifest.GenerationRuntimeLean {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch", From: `serviceName            = "jimu"` + "\n",
+			To:    `serviceName            = "` + projectName(module) + `"` + "\n",
+			Files: []string{"internal/platform/http/serviceinfo.go"},
+		})
+	}
+	if !contains(selected.copy, "apidocs") {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch", From: `serviceAPIDocs         = "/swagger/index.html"` + "\n",
+			To: `serviceAPIDocs         = ""` + "\n", Files: []string{"internal/platform/http/serviceinfo.go"},
+		})
+	}
+	if selected.generation.Runtime == manifest.GenerationRuntimeLean {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch", From: `serviceMetrics         = "management 端口 /metrics（默认 9090）"` + "\n",
+			To: `serviceMetrics         = ""` + "\n", Files: []string{"internal/platform/http/serviceinfo.go"},
+		})
+	}
+	if !HasDeploy(selected.generation.Deploy, manifest.DeployObservability) {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch",
+			From: `serviceObservabilityUI = "OpenObserve http://localhost:5080（make up-observability 后可用）"` + "\n",
+			To:   `serviceObservabilityUI = ""` + "\n", Files: []string{"internal/platform/http/serviceinfo.go"},
+		})
+	}
 	return actions
 }
 

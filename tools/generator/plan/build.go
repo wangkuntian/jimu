@@ -100,6 +100,7 @@ func normalizeMerges(values []manifest.MergeAction) []manifest.MergeAction {
 	values = slices.Clone(values)
 	for i := range values {
 		values[i].Sections = sortedClone(values[i].Sections)
+		values[i].DropKeys = sortedClone(values[i].DropKeys)
 	}
 	sort.SliceStable(values, func(i, j int) bool {
 		if values[i].Destination != values[j].Destination {

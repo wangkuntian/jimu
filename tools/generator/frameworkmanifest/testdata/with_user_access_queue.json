@@ -585,6 +585,7 @@
         "HasCheckcapabilities": true,
         "HasCompose": true,
         "HasConf": true,
+        "HasDatabase": true,
         "HasDockerfile": true,
         "HasLogcheck": true,
         "HasMySQL": true,
@@ -865,6 +866,12 @@
       }
     },
     {
+      "source": "tools/generator/render/templates/project/dockerignore.tmpl",
+      "destination": ".dockerignore",
+      "kind": "build",
+      "data": {}
+    },
+    {
       "source": "tools/generator/render/templates/project/Dockerfile.tmpl",
       "destination": "deploy/docker/Dockerfile",
       "kind": "build",
@@ -875,6 +882,7 @@
         "HasCheckcapabilities": true,
         "HasCompose": true,
         "HasConf": true,
+        "HasDatabase": true,
         "HasDockerfile": true,
         "HasLogcheck": true,
         "HasMySQL": true,
@@ -897,6 +905,7 @@
         "HasCheckcapabilities": true,
         "HasCompose": true,
         "HasConf": true,
+        "HasDatabase": true,
         "HasDockerfile": true,
         "HasLogcheck": true,
         "HasMySQL": true,
@@ -919,6 +928,7 @@
         "HasCheckcapabilities": true,
         "HasCompose": true,
         "HasConf": true,
+        "HasDatabase": true,
         "HasDockerfile": true,
         "HasLogcheck": true,
         "HasMySQL": true,
@@ -1182,6 +1192,14 @@
       "files": [
         "internal/app/container_mysql_store.go"
       ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "serviceAPIDocs         = \"/swagger/index.html\"\n",
+      "to": "serviceAPIDocs         = \"\"\n",
+      "files": [
+        "internal/platform/http/serviceinfo.go"
+      ]
     }
   ],
   "assets": [
@@ -1276,6 +1294,7 @@
     "heavy_deps": null
   },
   "generated_files": [
+    ".dockerignore",
     ".gitignore",
     ".golangci.yml",
     "Makefile",
@@ -1599,6 +1618,7 @@
     "internal/platform/http/middleware/validate_test.go",
     "internal/platform/http/server.go",
     "internal/platform/http/server_test.go",
+    "internal/platform/http/serviceinfo.go",
     "internal/platform/httpclient/client.go",
     "internal/platform/httpclient/client_test.go",
     "internal/platform/identity/apikey_context.go",
@@ -1717,5 +1737,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:5140eb221fcea8fdfc9e55bff01142ac3e6f4608562229065447dba7b6f3b0c7"
+  "digest": "sha256:6244224b642620e94fc6c0e0ebff67913668567bb134b4715cad3e5a0f9b0e3b"
 }

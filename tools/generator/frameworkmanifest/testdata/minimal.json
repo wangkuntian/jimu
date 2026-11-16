@@ -642,6 +642,7 @@
         "HasCheckcapabilities": true,
         "HasCompose": false,
         "HasConf": true,
+        "HasDatabase": true,
         "HasDockerfile": false,
         "HasLogcheck": true,
         "HasMySQL": true,
@@ -993,6 +994,12 @@
       }
     },
     {
+      "source": "tools/generator/render/templates/project/dockerignore.tmpl",
+      "destination": ".dockerignore",
+      "kind": "build",
+      "data": {}
+    },
+    {
       "source": "tools/generator/render/templates/project/assets_selection.go.tmpl",
       "destination": "tools/internal/profileassets/selection.go",
       "kind": "assets",
@@ -1186,6 +1193,22 @@
       "files": [
         "internal/app/container_mysql_store.go"
       ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "serviceAPIDocs         = \"/swagger/index.html\"\n",
+      "to": "serviceAPIDocs         = \"\"\n",
+      "files": [
+        "internal/platform/http/serviceinfo.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "serviceObservabilityUI = \"OpenObserve http://localhost:5080（make up-observability 后可用）\"\n",
+      "to": "serviceObservabilityUI = \"\"\n",
+      "files": [
+        "internal/platform/http/serviceinfo.go"
+      ]
     }
   ],
   "assets": [],
@@ -1233,6 +1256,7 @@
     "heavy_deps": null
   },
   "generated_files": [
+    ".dockerignore",
     ".gitignore",
     ".golangci.yml",
     "Makefile",
@@ -1530,6 +1554,7 @@
     "internal/platform/http/middleware/validate_test.go",
     "internal/platform/http/server.go",
     "internal/platform/http/server_test.go",
+    "internal/platform/http/serviceinfo.go",
     "internal/platform/httpclient/client.go",
     "internal/platform/httpclient/client_test.go",
     "internal/platform/identity/apikey_context.go",
@@ -1640,5 +1665,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:64efe7006fb3a11f09cd2de4914e637028019eea23f4050f24a1d9c9443b406e"
+  "digest": "sha256:8ae4c982de24318ae35d935ff2cd76e020565e7578b7df2c94222ddbdcefd96b"
 }
