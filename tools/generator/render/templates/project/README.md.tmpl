@@ -1,0 +1,41 @@
+# {{.ProjectName}}
+
+由 `jimu new` 生成的单形态 Go 后端项目。
+
+## 快速开始
+
+```bash
+make build        # 编译 server 与 CLI
+make test         # 运行全部测试
+make dev          # 本地直接运行服务端
+```
+
+默认配置在 `configs/app.yaml`；生产覆盖在 `configs/app.prod.yaml`，用 `APP_ENV=prod` 启用。
+服务入口为 `cmd/server`，运维 CLI 为 `cmd/cli`（`version`、`config check`）。
+
+{{- if .HasCompose}}
+
+## Compose
+
+```bash
+make up           # 构建并启动
+make logs         # 跟踪服务端日志
+make down         # 停止并移除容器
+```
+{{- end}}
+{{- if .HasDatabase}}
+
+## 数据库
+
+```bash
+make migrate      # 执行迁移
+make seed         # 插入初始数据
+```
+
+数据库与认证所需的 secret 由 `deploy/scripts/init-secrets.sh` 生成。
+{{- end}}
+
+## API
+
+- 健康检查：管理端口 `/livez`、`/readyz`
+- 冒烟入口：`GET /api/v1/ping`

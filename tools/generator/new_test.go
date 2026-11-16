@@ -129,6 +129,8 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 	assert.NotContains(t, i18nSource, "tenant_not_found")
 	responseSource := string(readFileForTest(t, filepath.Join(dir, "internal/shared/response/response.go")))
 	assert.NotContains(t, responseSource, "CodeQuotaExceeded")
+	validateSource := string(readFileForTest(t, filepath.Join(dir, "internal/config/validate.go")))
+	assert.NotContains(t, validateSource, "invalid id.worker_id")
 	for _, rel := range []string{
 		"internal/shared/errors/capability.go",
 		"internal/shared/errors/capability_test.go",
@@ -178,10 +180,15 @@ func TestNewProjectMinimalComposeOmitsDatabaseAndObservabilityScripts(t *testing
 	}
 	assert.NotContains(t, string(readFileForTest(t, filepath.Join(dir, "deploy/compose/docker-compose.yml"))), "./secrets")
 	assert.NotContains(t, string(readFileForTest(t, filepath.Join(dir, "deploy/docker/Dockerfile"))), "COPY secrets")
+	makefile := string(readFileForTest(t, filepath.Join(dir, "Makefile")))
+	assert.Contains(t, makefile, "COMPOSE_PROJECT_NAME ?= minimal-compose")
+	readme := string(readFileForTest(t, filepath.Join(dir, "README.md")))
+	assert.Contains(t, readme, "# minimal-compose")
+	assert.Contains(t, readme, "make up")
 	assert.NoFileExists(t, filepath.Join(dir, "conf/rbac_model.conf"))
 	dockerfile := string(readFileForTest(t, filepath.Join(dir, "deploy/docker/Dockerfile")))
 	assert.NotContains(t, dockerfile, "COPY conf/")
-	assert.Contains(t, dockerfile, "FROM golang:1.26-alpine")
+	assert.Contains(t, dockerfile, "FROM golang:1.26.11-alpine")
 	assert.FileExists(t, filepath.Join(dir, ".dockerignore"))
 }
 

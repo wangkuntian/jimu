@@ -194,6 +194,7 @@ func templateActions(root, module string, selected selection) []manifest.Templat
 		{Source: "tools/generator/render/templates/project/catalog.go.tmpl", Destination: "internal/capabilities/catalog/catalog.go", Kind: "catalog", Data: catalogData},
 		{Source: "tools/generator/render/templates/project/catalog_migration.go.tmpl", Destination: "internal/capabilities/catalog/migration.go", Kind: "catalog", Data: catalogData},
 		{Source: cliSource, Destination: "cmd/cli/main.go", Kind: "cli", Data: cliData},
+		{Source: "tools/generator/render/templates/project/README.md.tmpl", Destination: "README.md", Kind: "text", Data: buildData},
 		{Source: "tools/generator/render/templates/project/dockerignore.tmpl", Destination: ".dockerignore", Kind: "build", Data: map[string]any{}},
 	}
 	if hasDockerfile {
@@ -571,6 +572,11 @@ func rewriteActions(root, module string, selected selection) []manifest.RewriteA
 		}
 	}
 	if !includeDatabase(selected) {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch",
+			From: "\tif c.ID.WorkerID < 0 || c.ID.WorkerID > 1023 {\n\t\treturn errors.New(\"invalid id.worker_id, must be 0-1023\")\n\t}\n",
+			To:   "", Files: []string{"internal/config/validate.go"},
+		})
 		for _, file := range []string{
 			"internal/app/container_nodb.go",
 			"internal/profiles/seed_nodb.go",

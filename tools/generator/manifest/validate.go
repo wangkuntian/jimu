@@ -126,7 +126,7 @@ func validateFor(doc Document, schemaVersion int) error {
 		if strings.TrimSpace(action.From) == "" {
 			return fmt.Errorf("rewrites[%d].from is required", i)
 		}
-		if strings.TrimSpace(action.To) == "" {
+		if action.Kind != "file-patch" && strings.TrimSpace(action.To) == "" {
 			return fmt.Errorf("rewrites[%d].to is required", i)
 		}
 		for j, file := range action.Files {

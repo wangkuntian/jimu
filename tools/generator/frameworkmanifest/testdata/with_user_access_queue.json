@@ -866,6 +866,29 @@
       }
     },
     {
+      "source": "tools/generator/render/templates/project/README.md.tmpl",
+      "destination": "README.md",
+      "kind": "text",
+      "data": {
+        "Expected": "access queue user",
+        "HasAPIdocs": false,
+        "HasBackup": true,
+        "HasCheckcapabilities": true,
+        "HasCompose": true,
+        "HasConf": true,
+        "HasDatabase": true,
+        "HasDockerfile": true,
+        "HasLogcheck": true,
+        "HasMySQL": true,
+        "HasRedis": true,
+        "HasScripts": true,
+        "Module": "example.com/with",
+        "ProjectName": "with",
+        "Shape": "app",
+        "WithObservability": true
+      }
+    },
+    {
       "source": "tools/generator/render/templates/project/dockerignore.tmpl",
       "destination": ".dockerignore",
       "kind": "build",
@@ -1298,6 +1321,7 @@
     ".gitignore",
     ".golangci.yml",
     "Makefile",
+    "README.md",
     "cmd/cli/activecaps.go",
     "cmd/cli/main.go",
     "cmd/cli/tui.go",
@@ -1737,5 +1761,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:6244224b642620e94fc6c0e0ebff67913668567bb134b4715cad3e5a0f9b0e3b"
+  "digest": "sha256:c0747b5e7233157c48b0dd1ade13206029fe8c45170869d1f15ac3a00cf14ea2"
 }
