@@ -26,6 +26,7 @@ func TestGeneratedMakefileHasNoProfileBranch(t *testing.T) {
 	assert.NotContains(t, src, "-overlay=")
 	assert.Contains(t, src, "go build -ldflags", "普通 go build")
 	assert.Contains(t, src, "-w -s", "生成项目默认剥离符号表")
+	assert.Contains(t, src, "rmdir logs", "clean 应清理 compose 创建的空 logs 目录")
 	assert.Contains(t, src, "\ncheck-capabilities:")
 	// 单形态项目不需要多形态资产工具：这两个目标依赖已不随生成项目发布的工具树。
 	assert.NotContains(t, src, "\nprofiles-check:")

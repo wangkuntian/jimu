@@ -165,6 +165,7 @@ check-capabilities:
 ## clean: 清理构建产物
 clean:
 	rm -rf $(BIN_DIR)
+	rmdir logs 2>/dev/null || true
 	rm -f coverage.out coverage.html
 
 ## ci: 本地 CI 检查（无外部依赖部分）
