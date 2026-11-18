@@ -23,6 +23,14 @@ make logs         # 跟踪服务端日志
 make down         # 停止并移除容器
 ```
 {{- end}}
+{{- if .WithObservability}}
+
+### Observability
+
+```bash
+make up-observability   # 同时启动 OpenObserve 与 OTel Collector
+```
+{{- end}}
 {{- if .HasDatabase}}
 
 ## 数据库

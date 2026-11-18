@@ -202,6 +202,7 @@ func TestNewProjectMinimalObservabilityScriptFollowsDeployComponent(t *testing.T
 	assert.FileExists(t, filepath.Join(dir, "deploy/scripts/observability.sh"))
 	assert.FileExists(t, filepath.Join(dir, "deploy/compose/compose.observability.yml"))
 	assert.NoFileExists(t, filepath.Join(dir, "deploy/scripts/backup.sh"))
+	assert.Contains(t, string(readFileForTest(t, filepath.Join(dir, "README.md"))), "make up-observability")
 }
 
 func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
@@ -256,6 +257,9 @@ func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 	assert.Contains(t, string(compose), "jimu-init:")
 	assert.Contains(t, string(compose), "redis:")
 	assert.Contains(t, string(compose), "dockerfile: deploy/docker/Dockerfile")
+	assert.Contains(t, string(compose), "./auth migrate up")
+	assert.Contains(t, string(compose), "volumes:\n  auth-mariadb-data:")
+	assert.Contains(t, string(compose), "auth-redis-data:")
 	assert.NoFileExists(t, filepath.Join(dir, "deploy/compose/compose.observability.yml"))
 	dockerfile := string(readFileForTest(t, filepath.Join(dir, "deploy/docker/Dockerfile")))
 	assert.Contains(t, dockerfile, "COPY conf/")

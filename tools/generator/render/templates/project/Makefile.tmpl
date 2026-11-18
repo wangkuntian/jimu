@@ -71,10 +71,19 @@ build-cli:
 
 {{if .HasCompose}}##@ Compose 生命周期
 
-## up: 构建并启动 Compose 服务
+{{if .HasDatabase}}
+prepare-secrets:
+	@SECRETS_DIR="$(CURDIR)/secrets" \
+		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
+		./deploy/scripts/init-secrets.sh --no-legacy
+
+{{end}}{{if .HasDatabase}}## up: 初始化 Secret、构建并启动 Compose 服务
+up: prepare-secrets
+	$(COMPOSE) up -d --build
+{{else}}## up: 构建并启动 Compose 服务
 up:
 	$(COMPOSE) up -d --build
-
+{{end}}
 ## down: 停止 Compose 服务（保留数据卷）
 down:
 	$(COMPOSE_STACK) down
@@ -88,7 +97,7 @@ status:
 	$(COMPOSE_STACK) ps
 
 {{if .WithObservability}}## up-observability: 启动 Compose 与观测栈
-up-observability:
+up-observability:{{if .HasDatabase}} prepare-secrets{{end}}
 	$(COMPOSE) -f $(COMPOSE_ALL_FILE) up -d --build
 
 {{end}}{{end}}{{if .HasDockerfile}}## image: 构建版本镜像并标记 latest

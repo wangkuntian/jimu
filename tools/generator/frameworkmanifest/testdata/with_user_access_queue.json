@@ -1210,10 +1210,26 @@
     },
     {
       "kind": "file-patch",
+      "from": "//go:build !jimu_no_otel \u0026\u0026 !jimu_nodb",
+      "to": "// 已启用数据库的构建：由生成器去掉 build tag",
+      "files": [
+        "internal/app/container_otel_db.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
       "from": "//go:build !jimu_lean \u0026\u0026 !jimu_nodb",
       "to": "// 标准内核：由生成器去掉 build tag",
       "files": [
         "internal/app/container_mysql_store.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "serviceName            = \"jimu\"\n",
+      "to": "serviceName            = \"with\"\n",
+      "files": [
+        "internal/platform/http/serviceinfo.go"
       ]
     },
     {
@@ -1761,5 +1777,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:c0747b5e7233157c48b0dd1ade13206029fe8c45170869d1f15ac3a00cf14ea2"
+  "digest": "sha256:7dbd03a0f00b9e6555876aecd0e4c480f57d0468f9fe632c20b43789e4c0f4ac"
 }

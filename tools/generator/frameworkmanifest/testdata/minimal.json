@@ -1219,6 +1219,14 @@
     },
     {
       "kind": "file-patch",
+      "from": "serviceName            = \"jimu\"\n",
+      "to": "serviceName            = \"minimal\"\n",
+      "files": [
+        "internal/platform/http/serviceinfo.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
       "from": "serviceAPIDocs         = \"/swagger/index.html\"\n",
       "to": "serviceAPIDocs         = \"\"\n",
       "files": [
@@ -1689,5 +1697,5 @@
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:cf4ff4f3ecea22bf4d15b77af58a0745aace5a2dde187b0a9df86f3afd6e26ae"
+  "digest": "sha256:4f4025999f256a57c75a76ea53c5fc3e9f2450098cc14b19b8110e336cfe08d5"
 }

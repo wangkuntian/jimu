@@ -118,6 +118,17 @@ services:
       - audit_hash_secret
       - admin_password
 {{- end}}
+{{- if or .HasMySQL .HasRedis}}
+volumes:
+{{- if .HasMySQL}}
+  {{.ProjectName}}-mariadb-data:
+    name: ${COMPOSE_MARIADB_VOLUME:-{{.ProjectName}}-mariadb-data}
+{{- end}}
+{{- if .HasRedis}}
+  {{.ProjectName}}-redis-data:
+    name: ${COMPOSE_REDIS_VOLUME:-{{.ProjectName}}-redis-data}
+{{- end}}
+{{- end}}
 {{- if .HasMySQL}}
 secrets:
   db_root_password:

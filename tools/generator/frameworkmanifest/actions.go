@@ -585,6 +585,17 @@ func rewriteActions(root, module string, selected selection) []manifest.RewriteA
 				Kind: "file-patch", From: "//go:build jimu_nodb", To: "// 未启用数据库的构建：由生成器去掉 build tag", Files: []string{file},
 			})
 		}
+		if includeObservability(selected) {
+			actions = append(actions, manifest.RewriteAction{
+				Kind: "file-patch", From: "//go:build !jimu_no_otel && jimu_nodb",
+				To: "// 未启用数据库的构建：由生成器去掉 build tag", Files: []string{"internal/app/container_otel_nodb.go"},
+			})
+		}
+	} else if includeObservability(selected) {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch", From: "//go:build !jimu_no_otel && !jimu_nodb",
+			To: "// 已启用数据库的构建：由生成器去掉 build tag", Files: []string{"internal/app/container_otel_db.go"},
+		})
 	}
 	if selected.generation.Runtime == manifest.GenerationRuntimeLean {
 		for _, file := range []string{
@@ -610,13 +621,11 @@ func rewriteActions(root, module string, selected selection) []manifest.RewriteA
 		})
 	}
 	actions = append(actions, driverRewriteActions(root, selected)...)
-	if selected.generation.Runtime == manifest.GenerationRuntimeLean {
-		actions = append(actions, manifest.RewriteAction{
-			Kind: "file-patch", From: `serviceName            = "jimu"` + "\n",
-			To:    `serviceName            = "` + projectName(module) + `"` + "\n",
-			Files: []string{"internal/platform/http/serviceinfo.go"},
-		})
-	}
+	actions = append(actions, manifest.RewriteAction{
+		Kind: "file-patch", From: `serviceName            = "jimu"` + "\n",
+		To:    `serviceName            = "` + projectName(module) + `"` + "\n",
+		Files: []string{"internal/platform/http/serviceinfo.go"},
+	})
 	if !contains(selected.copy, "apidocs") {
 		actions = append(actions, manifest.RewriteAction{
 			Kind: "file-patch", From: `serviceAPIDocs         = "/swagger/index.html"` + "\n",
