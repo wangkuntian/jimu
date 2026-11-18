@@ -193,18 +193,19 @@ jimu upgrade <dir>                     # 显式升级事务
 
 生成文件数包含 `.jimu/manifest.json`；依赖与闭包按生成项目的 `go list` / `go/packages` 口径统计。内核路由（`/livez`、`/readyz`、`/api/v1/ping`）不计入 `report.routes`，该字段只统计能力注册的业务路由。
 
-v0.5.1 起 `Scaffold Gate` 分为 official 与 full 两档：official 是 `release/*` 和 `dependabot/*` → `master` PR 的必需检查，只跑需要 Docker 的 auth 空库 E2E；full 只在 `workflow_dispatch` 或夜间定时运行，覆盖全部 `--with`、内部 profile 和重型生成器用例。这样普通 PR 不必等待全矩阵，同时保留夜间/发布前的完整回归。
+v0.5.1 起 `Scaffold Gate` 分为 official 与 full 两档：official 是 `release/*` 和 `dependabot/*` → `master` PR 的必需检查，跑 auth 空库 E2E 与 minimal/auth 生成产物审计；full 只在 `workflow_dispatch` 或夜间定时运行，覆盖全部 `--with`、内部 profile 和重型生成器用例。这样普通 PR 不必等待全矩阵，同时保留夜间/发布前的完整回归。
 
 门禁按「需不需要 Docker」分工，同一条用例不在两个 workflow 各跑一遍：
 
 - `CI (PR)` 的 race 分片跑 `TestPresetBudgets` 与 `TestMinimalPresetStartsWithoutDependencies`。它们不需要 Docker，所以每个 PR 都有覆盖，包括不触发 `CI (Scaffold)` 的 `feature/*`。
-- `make test-scaffold-official` 只跑 `TestAuthPresetEmptyDatabaseEndToEnd`（需要 Docker daemon，race 分片里会 skip）。
+- `make test-scaffold-official` 跑 `TestAuthPresetEmptyDatabaseEndToEnd`、`TestOfficialPresetAudit` 与 `TestAuditInitSecretsUsesComposeProjectName`：前者需要 Docker daemon；`TestOfficialPresetAudit` 生成 minimal/auth 两棵真实项目树并检查构建、Compose 与 Secret 接线；`TestAuditInitSecretsUsesComposeProjectName` 用假 docker 钉住卷探测使用 Compose 项目名。两个审计用例只调用 `docker compose config`，不需要 daemon。
 - full 生成器矩阵由 `make test-scaffold-matrix` 在手动触发或夜间定时运行。v0.6.0 在 full 中新增固定 pairwise 组合矩阵。
 
 各条用例的职责：
 
 - `TestPresetBudgets` 直接读取 `budgets.json`，生成 minimal/auth/full 后实测文件数、直接依赖、Go 闭包、外部服务、路由、表、迁移和非代码资产，任一指标超限即失败。
 - `TestMinimalPresetStartsWithoutDependencies` 不启动任何容器，构建并运行生成项目的 server 二进制，在「设置」与「不设置」`ADMIN_PASSWORD` 两种 env 下都验证 `/livez`、`/readyz` 和 `/api/v1/ping`。第二种 env 是空能力集种子的回归钉子：0 能力时 DB 为 nil，种子必须被跳过而不是 panic。
+- `TestOfficialPresetAudit` 一次生成默认 `minimal` 与 `auth --deploy=compose,observability`，对两棵树执行 `go build`/`go vet`/`go test`，并检查 Makefile/Compose/README 接线、`COMPOSE_PROJECT_NAME` 传播、Secret 卷探测和 OpenObserve 凭据；它只调用 `docker compose config`，不启动容器。`TestAuditInitSecretsUsesComposeProjectName` 用假 docker 单独钉住卷探测使用 Compose 项目名。
 - `TestAuthPresetEmptyDatabaseEndToEnd` 用 `docker run` 起独立 MySQL 8.4 与 Redis 7 容器（不使用 Compose），在全新空库上迁移、seed，校验 `/readyz`、`/api/v1/ping` 和管理员登录返回 access token。
 - `TestRepresentativeCompositionMatrix` / `TestCompositionMatrixBudget` / `TestCompositionNegativeMatrix` 运行固定、代表性的 pairwise 清单与冲突负例；组合项目只做 build/vet，不遍历全幂集，也不承诺组合级 E2E。
 - `TestUpgradeFixtures` 现场生成 `auth` 预设作为 fixture（模板退役后无法再用旧模板渲染目标树），覆盖 untouched、用户修改生成文件冲突、用户自有文件保留、用户删除、模板删除、重复升级和验证失败回滚；`TestUpgradeRejectsRetiredTemplates` 钉住旧模板的硬失败路径。

@@ -79,7 +79,9 @@ func assetActions(_ string, selected selection) []manifest.AssetAction {
 				exclude = append(exclude, "secret.yaml")
 			}
 		case "deploy/scripts":
-			if !includeAuthSecrets(selected) && !includeBackup(selected) {
+			// observability 路径也需要 init-secrets.sh 生成 OpenObserve 凭据；
+			// 0 能力 + observability 没有数据库/认证能力，但仍必须携带该脚本。
+			if !includeAuthSecrets(selected) && !includeBackup(selected) && !includeObservability(selected) {
 				exclude = append(exclude, "init-secrets.sh")
 			}
 			if !includeBackup(selected) {

@@ -46,6 +46,13 @@ func TestResolveGenerationRuntimeOverrides(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, manifest.GenerationRuntimeStandard, got.Runtime)
 
+	got, err = ResolveGeneration("minimal", "", nil, GenerationRequest{
+		Deploy: []string{manifest.DeployCompose, manifest.DeployObservability},
+	})
+	require.NoError(t, err)
+	require.Equal(t, manifest.GenerationRuntimeStandard, got.Runtime,
+		"minimal + observability 必须自动提升为 standard，否则 lean 不编 OTel")
+
 	_, err = ResolveGeneration("minimal", "", []string{"user"}, GenerationRequest{Runtime: manifest.GenerationRuntimeLean})
 	require.ErrorContains(t, err, "requires a project without capabilities")
 

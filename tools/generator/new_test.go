@@ -199,9 +199,18 @@ func TestNewProjectMinimalObservabilityScriptFollowsDeployComponent(t *testing.T
 	})
 	require.NoError(t, err)
 
+	document, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, manifest.GenerationRuntimeStandard, document.Generation.Runtime,
+		"observability 需要 standard 运行时的 OTel/reporter/metrics")
+	assert.FileExists(t, filepath.Join(dir, "deploy/scripts/init-secrets.sh"))
 	assert.FileExists(t, filepath.Join(dir, "deploy/scripts/observability.sh"))
 	assert.FileExists(t, filepath.Join(dir, "deploy/compose/compose.observability.yml"))
 	assert.NoFileExists(t, filepath.Join(dir, "deploy/scripts/backup.sh"))
+	makefile := string(readFileForTest(t, filepath.Join(dir, "Makefile")))
+	assert.Contains(t, makefile, "prepare-observability-secrets:")
+	assert.Contains(t, makefile, "up-observability: prepare-observability-secrets")
+	assert.NotContains(t, makefile, "\nprepare-secrets:")
 	assert.Contains(t, string(readFileForTest(t, filepath.Join(dir, "README.md"))), "make up-observability")
 }
 

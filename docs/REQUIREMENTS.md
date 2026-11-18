@@ -31,7 +31,7 @@
 | C2 | P1 | 条件项：fullstack 预览设计 | 未启动（条件项） | 仅当 gate 通过：时间盒 4 周，评估 generated full-stack 的契约与模板边界；不承诺 certified | `v0.10.0+` |
 | C3 | P1 | 条件项：回到路线 A | 未启动（条件项） | 仅当 gate 停止：设计伙伴/真实升级证据或质量加固 | `v0.10.0+` |
 | C4 | P1 | v1.0 评审 | 未启动（条件项） | 路线 A 的真实项目证据满足才发 `v1.0.0`；否则停在 `v0.12.x` | 2027-05 |
-| D2 | P0 | 按裁剪生成项目（三预设） | 已完成 | `minimal`（0 能力 + 闭包裁剪内核）/ `auth`（certified）/ `full`（validated）；`basic-api`、`auth-api` 退役，旧项目 upgrade 硬失败；`make test-scaffold-official` 覆盖三预设 | `v0.10.0` |
+| D2 | P0 | 按裁剪生成项目（三预设） | 已完成 | `minimal`（0 能力 + 闭包裁剪内核）/ `auth`（certified）/ `full`（validated）；`basic-api`、`auth-api` 退役，旧项目 upgrade 硬失败；`make test-scaffold-official` 覆盖 auth 空库 E2E 与 minimal/auth 生成产物审计 | `v0.10.0` |
 | D3 | P1 | Release 只发 CLI | 已完成 | 删除 server 二进制构建；资产 = 4 个平台 CLI + `template-bundle.json` + checksums | `v0.10.0` |
 | D1 | P1 | 每月发布与维护 | 持续 | `make release-check`、安全修复、文档、契约同步；占 20–25% 容量 | 持续 |
 

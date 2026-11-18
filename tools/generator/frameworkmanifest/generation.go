@@ -44,6 +44,12 @@ func ResolveGeneration(profile, with string, declared []string, raw GenerationRe
 		}
 		generation.Deploy = deploy
 	}
+	// Observability 需要 standard 运行时的 OTel/reporter/metrics 组件；minimal 的
+	// 默认 lean 只适用于纯内核。显式 --runtime=lean 仍在下面拒绝，不静默改写用户选择。
+	if raw.Runtime == "" && generation.Runtime == manifest.GenerationRuntimeLean &&
+		slices.Contains(generation.Deploy, manifest.DeployObservability) {
+		generation.Runtime = manifest.GenerationRuntimeStandard
+	}
 	if raw.CLI != "" {
 		if !slices.Contains([]string{manifest.GenerationCLIMinimal, manifest.GenerationCLIFull}, raw.CLI) {
 			return manifest.Generation{}, fmt.Errorf("--cli-commands must be minimal or full")

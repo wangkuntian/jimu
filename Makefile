@@ -4,7 +4,7 @@
 .PHONY: migrate migrate-down migrate-status seed
 .PHONY: backup restore build-backup-image compose-db-backup compose-db-restore test-backup-restore
 .PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race check-makefile check-config
-.PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates bundle-check bundle-meta test-scaffold-official test-scaffold-matrix test-scaffold-upgrade test-scaffold-composition
+.PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates bundle-check bundle-meta test-scaffold-official test-scaffold-audit test-scaffold-matrix test-scaffold-upgrade test-scaffold-composition
 .PHONY: profiles-check compose-report compose-report-check check-skills skills-install
 .PHONY: check-gate-selectors swagger swagger-check smoke-check compose-check govulncheck check ci ci-full release-check release-check-fast clean-room-e2e
 .PHONY: proto bench bench-ci loadtest cli all hooks
@@ -21,15 +21,14 @@ CLI_BIN = $(BIN_DIR)/jimu-cli$(if $(filter-out full,$(PROFILE)),-$(PROFILE),)
 SERVER_CMD := cmd/server/main.go
 CLI_PKG := ./cmd/cli
 
-# official 档只覆盖两个官方模板；full 仍由 test-scaffold-matrix 运行全部生成器用例。
-# 只放「race 分片跑不到」的用例：
-#   - TestAuthPresetEmptyDatabaseEndToEnd 需要 Docker（bare MySQL/Redis 容器），
-#     race 分片里 requireHeavyMatrix 会直接 skip，所以只能在 official 跑；
-#   - TestPresetBudgets 与 TestMinimalPresetStartsWithoutDependencies 不需要 Docker，
-#     已在 CI (PR) 的 race 分片里全量跑过，这里再跑一遍是纯重复（实测 +44s）。
-# 普通 feature/* PR 不触发本 workflow，因此这两条必须留在 race 分片里 —— 这正是
-# 它们不属于 official 的原因，不是遗漏。
-SCAFFOLD_OFFICIAL_TESTS := ^(TestAuthPresetEmptyDatabaseEndToEnd)$
+# official 档覆盖两个官方模板的发布门禁；full 仍由 test-scaffold-matrix 运行全部生成器用例。
+#   - TestAuthPresetEmptyDatabaseEndToEnd 需要 Docker（bare MySQL/Redis 容器）；
+#   - TestOfficialPresetAudit 生成 minimal/auth 两棵树并检查构建、Compose 与 Secret 接线；
+#   - TestAuditInitSecretsUsesComposeProjectName 用假 docker 钉住卷探测使用 Compose 项目名。
+# TestPresetBudgets 与 TestMinimalPresetStartsWithoutDependencies 不需要 Docker，已在
+# CI (PR) 的 race 分片里全量跑过，这里再跑一遍是纯重复（实测 +44s），故不在 official。
+SCAFFOLD_OFFICIAL_TESTS := ^(TestAuthPresetEmptyDatabaseEndToEnd|TestOfficialPresetAudit|TestAuditInitSecretsUsesComposeProjectName)$
+SCAFFOLD_AUDIT_TESTS := ^(TestOfficialPresetAudit|TestAuditInitSecretsUsesComposeProjectName)$
 SCAFFOLD_UPGRADE_TESTS := ^(TestUpgradeFixtures|TestUpgradeRejectsRetiredTemplates)$
 SCAFFOLD_COMPOSITION_TESTS := ^(TestRepresentativeCompositionMatrix|TestCompositionMatrixBudget|TestCompositionNegativeMatrix)$
 
@@ -252,6 +251,9 @@ bundle-meta: ## 生成开发用 template-bundle.json（不入 embedded bundle）
 test-scaffold-official: ## 运行两个官方模板的发布门禁（需 Docker）
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 30m -v -run '$(SCAFFOLD_OFFICIAL_TESTS)'
 
+test-scaffold-audit: ## 审计 minimal/auth 生成产物的构建、Compose 与 Secret 接线
+	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 30m -v -run '$(SCAFFOLD_AUDIT_TESTS)'
+
 test-scaffold-matrix: ## 运行完整生成器矩阵（夜间/手动；需 Docker）
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 60m -v
 
@@ -307,6 +309,7 @@ smoke-check: ## 校验自动化脚本语法
 	@bash -n deploy/scripts/db_common.sh
 	@bash -n deploy/scripts/backup.sh
 	@bash -n deploy/scripts/restore.sh
+	@bash -n deploy/scripts/observability.sh
 	@bash -n scripts/test_backup_restore.sh
 	@bash -n scripts/test_config_contracts.sh
 	@bash -n scripts/test_init_secrets.sh

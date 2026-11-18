@@ -18,9 +18,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SECRETS_DIR="${JIMU_SECRETS_DIR:-$ROOT_DIR/secrets}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-}"
 
-COMPOSE=(
-  docker compose --project-directory "$ROOT_DIR" --env-file /dev/null
+COMPOSE=(docker compose --project-directory "$ROOT_DIR" --env-file /dev/null)
+export JIMU_SECRETS_DIR="$SECRETS_DIR"
+if [ -n "$COMPOSE_PROJECT_NAME" ]; then
+  COMPOSE+=(--project-name "$COMPOSE_PROJECT_NAME")
+fi
+COMPOSE+=(
   -f "$ROOT_DIR/deploy/compose/docker-compose.yml"
   -f "$ROOT_DIR/deploy/compose/compose.observability.yml"
 )
@@ -34,7 +39,7 @@ start() {
 
   if [ ! -s "$env_file" ]; then
     echo "==> 初始化 observability secret：$SECRETS_DIR"
-    SECRETS_DIR="$SECRETS_DIR" \
+    SECRETS_DIR="$SECRETS_DIR" COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" \
       "$ROOT_DIR/deploy/scripts/init-secrets.sh" --observability --no-legacy
   fi
   [ -s "$env_file" ] \

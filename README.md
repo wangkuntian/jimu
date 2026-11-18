@@ -87,8 +87,9 @@ SQL 测试夹具，CLI 只保留 `version` 与 `config` 命令；`conf/rbac_mode
 内核运行面由 `--runtime=lean|standard` 控制：`lean` 不编入调度器、出站 HTTP 客户端、
 错误上报器和 Prometheus 指标，适合 0 能力的 `minimal` 项目；`standard` 保留这些内核组件。
 `minimal` 默认 `lean`，`auth`/`full`/`--with` 默认 `standard`。`lean` 只能用于没有能力的
-项目，也不能和 `--deploy=observability` 组合；后续用 `capability add` 添加能力时会自动
-提升为 `standard`。
+项目；显式 `--deploy=observability` 时默认运行时自动提升为 `standard`，显式
+`--runtime=lean` 仍会被拒绝。后续用 `capability add` 添加能力时也会自动提升为
+`standard`。
 
 部署资产由 `--deploy` 控制：`compose,k8s,helm,observability` 可组合，`all` 与 `none`
 是快捷值。`minimal` 默认不生成部署资产，`auth` 默认 `compose`，`full` 与 `--with`
@@ -187,6 +188,12 @@ make check
 
 ```bash
 make clean-room-e2e
+```
+
+生成产物审计（minimal + auth，检查构建、Compose 与 Secret 接线）：
+
+```bash
+make test-scaffold-audit
 ```
 
 贡献流程见[CONTRIBUTING](docs/CONTRIBUTING.md)；默认分支、发布分支和 tag 规则以该文档为准。
