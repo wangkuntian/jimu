@@ -467,8 +467,10 @@ func unmarshalConfig(v *viper.Viper) (*Config, error) {
 		return nil, err
 	}
 
-	// 敏感配置环境变量覆盖（不使用 JIMU_ 前缀）
-	applyEnvOverrides(&cfg)
+	// 敏感配置环境变量覆盖（不使用 JIMU_ 前缀）。只有配置里声明了对应段才覆盖：
+	// 0 能力/无数据库项目不生成 db段，但 CI 或部署环境仍可能注入 DB_*；
+	// 若照单全收，会把"没配置数据库"变成"半配置"，用全零池参数校验而失败。
+	applyEnvOverrides(&cfg, v)
 
 	if err := cfg.Validate(os.Getenv("APP_ENV")); err != nil {
 		return nil, err
@@ -519,29 +521,31 @@ func (c DBConfig) IsPostgres() bool {
 // applyEnvOverrides 应用**内核段**环境变量覆盖（简洁命名，无 JIMU_ 前缀）。
 // 能力段的环境覆盖由各能力在自己的 ApplyDefaults 中处理（见 config.LoadSection）。
 // 支持 _FILE 后缀从文件读取敏感值（Docker Secrets 兼容）
-func applyEnvOverrides(cfg *Config) {
+func applyEnvOverrides(cfg *Config, v *viper.Viper) {
 	// 认证（JWT）相关覆盖由 auth 能力在自己的 ApplyDefaults 中处理（见 config.LoadSection）。
 	// 数据库
-	if v := os.Getenv("DB_DRIVER"); v != "" {
-		cfg.DB.Driver = v
-	}
-	if v := os.Getenv("DB_HOST"); v != "" {
-		cfg.DB.Host = v
-	}
-	if v := os.Getenv("DB_PORT"); v != "" {
-		if port, err := strconv.Atoi(v); err == nil {
-			cfg.DB.Port = port
+	if v.InConfig("db") {
+		if v := os.Getenv("DB_DRIVER"); v != "" {
+			cfg.DB.Driver = v
 		}
-	}
-	if v := os.Getenv("DB_USER"); v != "" {
-		cfg.DB.User = v
-	}
-	// 密码：优先 DB_PASSWORD_FILE，其次 DB_PASSWORD
-	if v := GetEnvOrFile("DB_PASSWORD_FILE", "DB_PASSWORD"); v != "" {
-		cfg.DB.Password = v
-	}
-	if v := os.Getenv("DB_NAME"); v != "" {
-		cfg.DB.Database = v
+		if v := os.Getenv("DB_HOST"); v != "" {
+			cfg.DB.Host = v
+		}
+		if v := os.Getenv("DB_PORT"); v != "" {
+			if port, err := strconv.Atoi(v); err == nil {
+				cfg.DB.Port = port
+			}
+		}
+		if v := os.Getenv("DB_USER"); v != "" {
+			cfg.DB.User = v
+		}
+		// 密码：优先 DB_PASSWORD_FILE，其次 DB_PASSWORD
+		if v := GetEnvOrFile("DB_PASSWORD_FILE", "DB_PASSWORD"); v != "" {
+			cfg.DB.Password = v
+		}
+		if v := os.Getenv("DB_NAME"); v != "" {
+			cfg.DB.Database = v
+		}
 	}
 	// Redis
 	if v := os.Getenv("REDIS_ADDR"); v != "" {
