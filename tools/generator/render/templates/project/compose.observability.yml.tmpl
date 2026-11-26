@@ -24,7 +24,7 @@ services:
       - "127.0.0.1:${ZO_OBSERVE_GRPC_PORT:-5081}:5081"
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.164.0
+    image: otel/opentelemetry-collector-contrib:0.165.0
     restart: unless-stopped
     command: ["--config=/etc/otelcol/config.yaml"]
     volumes:
