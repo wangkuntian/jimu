@@ -15,6 +15,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEPLOY_SCRIPT_DIR="$(cd "${SCRIPT_DIR}/../deploy/scripts" && pwd)"
 CONTAINER="${1:-${CONTAINER:-}}"
 DB_DRIVER="${DB_DRIVER:-mysql}"
 DB_HOST="${DB_HOST:-127.0.0.1}"
@@ -117,7 +118,7 @@ run_script() {
         docker exec "${envs[@]}" "$CONTAINER" bash "${SCRIPT_PATH_IN_CONTAINER}/${script}" "$@"
     else
         DB_DRIVER="$DB_DRIVER" DB_HOST="$DB_HOST" DB_PORT="$DB_PORT" DB_USER="$DB_USER" DB_PASSWORD="$DB_PASSWORD" DB_NAME="$DB_NAME" \
-            bash "${SCRIPT_DIR}/${script}" "$@"
+            bash "${DEPLOY_SCRIPT_DIR}/${script}" "$@"
     fi
 }
 
