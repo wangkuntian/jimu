@@ -188,7 +188,7 @@ func TestNewProjectMinimalComposeOmitsDatabaseAndObservabilityScripts(t *testing
 	assert.NoFileExists(t, filepath.Join(dir, "conf/rbac_model.conf"))
 	dockerfile := string(readFileForTest(t, filepath.Join(dir, "deploy/docker/Dockerfile")))
 	assert.NotContains(t, dockerfile, "COPY conf/")
-	assert.Contains(t, dockerfile, "FROM golang:1.26.11-alpine")
+	assert.Contains(t, dockerfile, "FROM golang:1.27.4-alpine")
 	assert.FileExists(t, filepath.Join(dir, ".dockerignore"))
 }
 

@@ -4,7 +4,7 @@
 
 ## 开发环境
 
-- Go 1.26+
+- Go 1.27+
 - Docker 24+（含 Compose v2）
 - Air（`go install github.com/air-verse/air@latest`，仅 `make dev` 需要）
 

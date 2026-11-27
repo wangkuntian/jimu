@@ -113,7 +113,7 @@ func TestOfficialPresetAudit(t *testing.T) {
 		assert.NoDirExists(t, filepath.Join(authDir, "deploy/helm"))
 
 		dockerfile := readText(t, filepath.Join(authDir, "deploy/docker/Dockerfile"))
-		assert.Contains(t, dockerfile, "FROM golang:1.26.11-alpine")
+		assert.Contains(t, dockerfile, "FROM golang:1.27.4-alpine")
 		assert.Contains(t, dockerfile, "-o "+authName+" ./cmd/cli")
 		assert.Contains(t, dockerfile, "COPY conf/")
 		assert.NotContains(t, dockerfile, "COPY secrets")
