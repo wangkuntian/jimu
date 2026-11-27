@@ -9,7 +9,7 @@ services:
 
   # OpenObserve 统一承载日志/指标/追踪/告警/仪表盘
   openobserve:
-    image: public.ecr.aws/zinclabs/openobserve:v1.1.2
+    image: public.ecr.aws/zinclabs/openobserve:v1.2.0
     restart: unless-stopped
     env_file:
       - path: ${JIMU_SECRETS_DIR:-./secrets}/openobserve.env
