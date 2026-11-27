@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"jimu/internal/platform/httpclient"
+	"jimu/internal/contract"
 )
 
 // defaultOIDCScopes OIDC 登录所需的最小 scope（未配置 scopes 时使用）
@@ -39,14 +39,14 @@ type OIDCEndpoints struct {
 type OIDCProvider struct {
 	name   string
 	cfg    OIDCConfig
-	client *httpclient.Client
+	client contract.HTTPClient
 
 	mu        sync.Mutex
 	endpoints *OIDCEndpoints // discovery 结果，成功后缓存
 }
 
 // NewOIDCProvider 创建 OIDC 提供商；name 同时是回调路由中的 provider 名
-func NewOIDCProvider(name string, cfg OIDCConfig, client *httpclient.Client) *OIDCProvider {
+func NewOIDCProvider(name string, cfg OIDCConfig, client contract.HTTPClient) *OIDCProvider {
 	return &OIDCProvider{name: name, cfg: cfg, client: client}
 }
 

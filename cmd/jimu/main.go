@@ -7,6 +7,7 @@ import (
 
 	jimuassets "jimu"
 	"jimu/internal/cli/scaffold"
+	"jimu/internal/cli/tui"
 	"jimu/internal/templatesource"
 
 	"github.com/spf13/cobra"
@@ -20,12 +21,22 @@ func newRootCommand() (*cobra.Command, func() error) {
 		Short:         "Generate and upgrade Jimu projects",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 && tuiAvailable(cmd) {
+				return runTUI(cmd, tui.ScreenMenu)
+			}
+			return cmd.Help()
+		},
 	}
+	root.Version = version
+	root.PersistentFlags().Bool("no-tui", false, "disable the interactive terminal UI")
+	root.PersistentFlags().Bool("no-color", false, "disable colored terminal output")
 	root.AddCommand(
 		scaffold.NewCommand(resolveRelease),
 		scaffold.NewCapabilityCommand(resolveRelease),
 		scaffold.NewCheckCommand(resolveRelease),
 		scaffold.NewUpgradeCommand(resolveRelease),
+		newTUICmd(),
 		newVersionCommand(),
 	)
 	return root, func() error { return nil }

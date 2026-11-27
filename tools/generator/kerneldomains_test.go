@@ -27,13 +27,14 @@ func TestMinimalPresetDropsUnreachableKernelPackages(t *testing.T) {
 		"a 0-capability project must not ship capability packages")
 	for _, kept := range []string{
 		"internal/platform/http",
-		"internal/platform/metrics",
 		"internal/assembly",
 		"cmd/server",
 		"cmd/cli",
 	} {
 		require.DirExists(t, filepath.Join(dir, kept), "%s is required by the entrypoint", kept)
 	}
+	require.NoDirExists(t, filepath.Join(dir, "internal/platform/metrics"),
+		"lean minimal has no metrics collector")
 }
 
 func TestMinimalPresetDropsOnlyUnreachableKernelSubpackages(t *testing.T) {
@@ -41,7 +42,8 @@ func TestMinimalPresetDropsOnlyUnreachableKernelSubpackages(t *testing.T) {
 	require.NoDirExists(t, filepath.Join(dir, "internal/platform", "cache"),
 		"internal/platform/cache is only reachable through capabilities")
 	require.DirExists(t, filepath.Join(dir, "internal/platform", "http"))
-	require.DirExists(t, filepath.Join(dir, "internal/platform", "db"))
+	require.NoDirExists(t, filepath.Join(dir, "internal/platform", "db"),
+		"internal/platform/db is not reachable without a database capability")
 }
 
 func TestFullPresetKeepsEveryKernelPackage(t *testing.T) {

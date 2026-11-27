@@ -47,28 +47,47 @@ flowchart LR
 
 三个预设都从**当前主代码仓库**按 import 闭包裁剪，而不是维护独立的模板树：
 
-- `minimal` — 0 能力，只保留最小内核。`internal/platform`/`internal/shared`/`config`/`contract` 都不依赖能力，唯一耦合点曾是与能力 domain 共享的种子模型，现已抽到 `internal/platform/seedmodel`。生成项目不含数据库/Redis 客户端、`internal/e2e` 与 `docker-compose.yml`，配置也不含 `db`/`redis` 段；`go build`、`go test`、`go run` 都不需要外部服务，`GET /api/v1/ping` 由内核提供。
-- `auth` — `user` + `access` + `auth`（含 `tenant` 编译闭包），支持级别 `certified`。生成 MySQL/Redis 客户端与迁移，但不生成 Compose：数据库由使用者提供，连接信息走 `DB_*`/`REDIS_*` 环境变量。
-- `full` — 全部 24 个能力 + 完整驱动集（`s3`/`local`、`kafka`/`rabbitmq`/`redis`、`cache:redis`/`cache:memory`、`excel`/`csv`），支持级别 `validated`。`--with` 的缺省驱动只取首个，无法表达完整驱动集，因此 `full` 改成从 `internal/profiles/full/assembly.go` 派生。
+- `minimal` — 0 能力，只保留最小内核。`internal/platform`/`internal/shared`/`config`/`contract` 都不依赖能力，唯一耦合点曾是与能力 domain 共享的种子模型，现已抽到 `internal/platform/seedmodel`。生成项目不含数据库/Redis 客户端、数据库 SQL 测试夹具、`internal/e2e`、Dockerfile 或 `deploy/` 部署资产，配置也不含 `db`/`redis`/`id`/`ratelimit`/`capabilities` 段；无数据库时 CLI 不注册 `migrate`/`seed`，Makefile 也不生成数据库目标，`conf/rbac_model.conf` 只在 `access` 能力存在时生成；0 能力项目还不复制能力端口与系统角色定义（`contract/ports.go`、`contract/systemroles.go`）、`assembly/context_auth.go`，以及能力错误码、错误文案和响应映射（`shared/{errors,i18n,response}/capability.go`）。`init-secrets.sh` 只在有数据库、认证类能力或 `observability` 组件时复制；lean 配置裁掉 no-op 的 `server.rate_limit_*` 与没有 Redis 消费者的 `security.idempotency_*`，无数据库时也不校验 `id.worker_id`。显式选择 `observability` 时，`minimal` 的默认运行时从 `lean` 自动提升为 `standard`，因为观测栈需要 OTel/reporter/metrics 消费者；显式 `--runtime=lean` 仍会拒绝该组合。生成项目统一带 `.dockerignore` 和按实际能力渲染的 README；Docker builder 与仓库一致固定 `golang:1.26.11-alpine`，Compose 项目名由项目名派生，`make up`/`make up-observability` 会先自动补齐 secrets，`make clean` 只移除空的 `logs/`；`init-secrets.sh` 的卷探测和 Secret 目标显式使用 Compose 项目名，`up-observability` 会初始化观测凭据并调用 `observability.sh start`。根路径服务自述按 `apidocs`/`observability`/运行时形态裁剪。`go build`、`go test`、`go run` 都不需要外部服务，`GET /api/v1/ping` 由内核提供。
+- `auth` — `user` + `access` + `auth`（含 `tenant` 编译闭包），支持级别 `certified`。生成 MySQL/Redis 客户端、迁移与默认 Compose（`deploy/compose/`、`deploy/docker/Dockerfile`），不生成 K8s/Helm/observability；需要其他目标时通过 `--deploy` 指定。
+- `full` — 全部 24 个能力 + 完整驱动集（`s3`/`local`、`kafka`/`rabbitmq`/`redis`、`cache:redis`/`cache:memory`、`excel`/`csv`），支持级别 `validated`，默认生成 `compose,k8s,helm,observability` 全套部署资产。`--with` 的缺省驱动只取首个，无法表达完整驱动集，因此 `full` 改成从 `internal/profiles/full/assembly.go` 派生。
 
 预设只是裁剪起点：manifest 记录 `selection.template`，但 `jimu capability add` 只拒绝已退役的 `basic-api`/`auth-api`，预设项目可以继续加能力。由已退役模板生成的项目执行 `jimu upgrade` 直接硬失败（`ErrRetiredTemplate`），不提供迁移命令。
 
 预设的门禁按「需不需要 Docker」分工，避免重复执行：
 
 - `CI (PR)` 的 race 分片跑 `TestPresetBudgets`（读 `budgets.json` 实测 minimal/auth/full 三份生成树）与 `TestMinimalPresetStartsWithoutDependencies`（两种 env 下起真实进程验 `/livez`、`/readyz`、`/api/v1/ping`）。它们不需要 Docker，因此每个 PR 都有覆盖 —— 包括不触发 `CI (Scaffold)` 的 `feature/*`。
-- `make test-scaffold-official`（`CI (Scaffold)` 的 official 档）**只跑** `TestAuthPresetEmptyDatabaseEndToEnd`：它需要裸 MySQL/Redis 容器，race 分片里 `requireHeavyMatrix` 会直接 skip，只能在这里跑。把前两条也放进来会让同一条用例在两个 workflow 各跑一遍（实测 +44s，CI 放大后约 +170s）。
+- `make test-scaffold-official`（`CI (Scaffold)` 的 official 档）跑 `TestAuthPresetEmptyDatabaseEndToEnd`、`TestOfficialPresetAudit` 与 `TestAuditInitSecretsUsesComposeProjectName`：前者需要裸 MySQL/Redis 容器；`TestOfficialPresetAudit` 生成 minimal/auth 两棵真实项目树并检查构建、Compose 与 Secret 接线；`TestAuditInitSecretsUsesComposeProjectName` 用假 docker 钉住卷探测使用 Compose 项目名。它们在 race 分片里会被 `requireHeavyMatrix` 直接 skip，只能在这里跑。`TestPresetBudgets` 与 `TestMinimalPresetStartsWithoutDependencies` 不需要 Docker，已在 CI (PR) 的 race 分片里全量跑过，放进来只会重复。
 
 `make test-scaffold-matrix` 保留为 full 档，继续覆盖全部 `--with` 与内部 profile 的生成/构建/测试选区，在手动触发或夜间定时运行。
+
+`make test-scaffold-audit` 是一次可重复的生成产物审计：同时生成默认 `minimal` 与 `auth --deploy=compose,observability`，检查两棵树的 `go build`/`go vet`/`go test`、Makefile/Compose/README 接线、`COMPOSE_PROJECT_NAME` 传播、`init-secrets.sh` 的卷探测和观测 Secret；它只需要 Docker CLI（`docker compose config`），不需要 Docker daemon。full 矩阵的 `invariants` shard 也会运行该审计。
 
 官方门禁仍是 `release/*` 与 `dependabot/*` → `master` PR 的必需检查；full 只允许 `workflow_dispatch` 与夜间定时，不回到每个 PR。full 在全部 `--with`/内部 profile 选区之外增加固定、代表性的 pairwise 组合清单和 v0.5 upgrade fixtures。组合清单不遍历全幂集：每个用例最多请求两个代表性能力加必要的受保护中间件提供方，预算最多 10 个生成项目、2 个 CI shard，每个项目只做 build/vet，不承诺组合级 E2E；清单与上限的唯一事实源是 [`composition_matrix_test.go`](../../tools/generator/composition_matrix_test.go)。CI 的每个 shard 把耗时写入 step summary；显式运行时测试必须报告 `PASS`，`SKIP` 视为门禁失败，避免 full 在 CI 中静默跳过。
 
 生成器从框架读取能力、profile、contract 和资产信息的唯一适配层是 [`tools/generator/frameworkmanifest`](../../tools/generator/frameworkmanifest)。适配层导出校验后的 manifest；计划、渲染、文件工作区和报告逻辑消费 manifest，不直接依赖框架内部包。唯一例外是叶子包 [`internal/capability`](../../internal/capability)：它只 import `internal/contract`，提供组合 resolver 与结构化诊断，不携带能力、形态或资产事实；`preflight` 复用该包以保持生成器与 `jimu check` 同一套组合规则。
 
-manifest 记录项目选择、复制与模板动作、合并和重写规则、资产、测试裁剪、生成文件及摘要；它也是识别生成产物和 `jimu capability add` 增量更新的依据。schema v3 在 schema v2 的 provenance 字段（`framework.version`、`framework.commit`、`framework.dirty`、官方模板的 `selection.template_version`、`generated_file_sha256`）之外持久化组合结果：`composition.contract_version`、`requested`、`resolved`、`auto_added`、驱动选择、`validity` 与 `support`。`composition` 是升级与诊断的事实来源，`--dry-run` 与 `jimu check` 的 support 也读取该字段；组合状态的完整定义见[能力组合](capability-composition.md)。生成时只写 `validity: valid`，支持级别使用 `certified|validated|experimental`，内部 profile 统一映射为 `experimental`。schema v2 只读：加载时先按 v2 校验 digest，再在内存中确定性地补齐 `composition`（declared 集即 requested/resolved，无 auto-added，驱动取自 `selection.drivers`）并换为 v3；v2 只可能在预检通过后写出，因此推导 `validity: valid`，需要当前合法性时应重新运行 resolver。writer 拒绝 v2，schema v1 继续 fail-closed。commit 只通过 `git rev-parse --verify HEAD^{commit}` 从框架根解析，因此普通 clone 与 linked worktree 使用同一路径；解析或 dirty 检查失败时在写目标前终止。生成文件哈希在 tidy、自检和配置合并后计算，排除 manifest 与报告自身。更新能力时，生成器根据新的选择重算产物，并保留受支持的用户配置合并规则。
+manifest 记录项目选择、复制与模板动作、合并和重写规则、资产、测试裁剪、生成文件及摘要；它也是识别生成产物和 `jimu capability add` 增量更新的依据。schema v3 在 schema v2 的 provenance 字段（`framework.version`、`framework.commit`、`framework.dirty`、官方模板的 `selection.template_version`、`generated_file_sha256`）之外持久化组合结果：`composition.contract_version`、`requested`、`resolved`、`auto_added`、驱动选择、`validity` 与 `support`。schema v4 再增加 `generation`：`runtime_closure`、`runtime`、`tests`、`tools_mode`、`tools_resolved`、`deploy`、`cli`、`cli_ui`。`runtime` 取 `lean|standard`；省略时按 `standard` 解释，保持旧 schema v4 项目兼容。`composition` 是升级与诊断的事实来源，`--dry-run` 与 `jimu check` 的 support 也读取该字段；组合状态的完整定义见[能力组合](capability-composition.md)。生成时只写 `validity: valid`，支持级别使用 `certified|validated|experimental`，内部 profile 统一映射为 `experimental`。schema v2 只读：加载时先按 v2 校验 digest，再在内存中确定性地补齐 `composition`（declared 集即 requested/resolved，无 auto-added，驱动取自 `selection.drivers`）并换为当前 schema；v2 只可能在预检通过后写出，因此推导 `validity: valid`，需要当前合法性时应重新运行 resolver。schema v3 同样只读，加载时按保守默认补齐 `generation`（保留旧项目的测试/工具，不启用 compose 或 TUI）。writer 拒绝旧 schema，schema v1 继续 fail-closed。commit 只通过 `git rev-parse --verify HEAD^{commit}` 从框架根解析，因此普通 clone 与 linked worktree 使用同一路径；解析或 dirty 检查失败时在写目标前终止。生成文件哈希在 tidy、自检和配置合并后计算，排除 manifest 与报告自身。更新能力时，生成器根据新的选择重算产物，并保留受支持的用户配置合并规则。
+
+`jimu new` 的生成策略由 `--tests=selected|all|none`、`--tools=auto|all|none`、`--runtime=lean|standard` 与 `--deploy` 控制。`minimal` 默认 `tests=selected`、`tools=auto`（无能力时只带 `logcheck`；有受门控能力时带 `checkcapabilities` 及其编译依赖）；`auth`/`full` 默认保留全部工具。`tools=none` 同时移除生成项目的工具目录和 Makefile 中的对应目标。`runtime=lean` 移除调度器、出站 HTTP 客户端、错误上报器、Prometheus 指标与依赖 `golang.org/x/time/rate` 的全局限流实现，只保留并发保护；`standard` 保留全部内核运行期组件。`minimal` 默认 `lean`，`auth`/`full`/`--with` 默认 `standard`；`lean` 不允许搭配声明能力，显式 `--deploy=observability` 时默认运行时自动提升为 `standard`（显式 `--runtime=lean` 仍拒绝），`capability add` 向 lean 项目添加能力时也自动提升为 `standard`。`--deploy` 接收 `compose`、`k8s`、`helm`、`observability` 的逗号组合，或 `all`/`none`；`minimal` 默认 `none`，`auth` 默认 `compose`，`full`/`--with` 默认 `all`。`deploy/` 是部署资产唯一入口；Dockerfile、compose 按组件渲染，K8s/Helm/observability 按组件复制，MySQL 能力派生备份资产。未选择数据库时，compose/k8s/helm 只保留 `init-secrets.sh`，数据库脚本不进入产物；观测脚本只在 `observability` 组件下生成。`generation.tools_mode` 记录用户模式，`generation.tools_resolved` 记录解析后的实际工具，`capability add` 在能力集变化后重算后者。运行时裁剪先在暂存树内执行一次容错 tidy，再按 `cmd/server`、`cmd/cli` 与显式工具入口计算多平台 package 闭包；`--no-tidy` 只跳过最后一次 tidy，闭包计算、裁剪、构建和门禁仍执行。`capability add` 与 `upgrade` 保留既有 `generation`（含 `deploy` 与 `runtime`）；v3 项目升级时使用保守默认，不因升级启用 Compose 或 TUI，也不移动旧部署文件。
 
 项目先写入暂存目录，再执行依赖整理、构建和能力门禁自检；通过后才发布到目标路径。失败时清理暂存内容。`make check-templates` 检查生成模板与当前框架结构的一致性。
 
 生成前由组合 resolver 校验硬依赖、冲突、端口、驱动、迁移 schema 依赖、表/迁移、运行时服务/配置、中间件与 plan；诊断统一输出 `code`/`capability`/`path`/`message`/`fix` 并稳定排序，任一非法组合在创建暂存目录前终止，因此不会写目标目录。固定解析顺序和错误码见[能力组合](capability-composition.md)。`jimu check <dir>` 对已有项目的 `.jimu/manifest.json` 复用同一预检，并进一步报告受管文件漂移、当前/目标版本、升级可用性和下一步命令；`--deep` 只在私有临时副本中运行配置、build 和 test。`--with` 与模板路径都经过该预检，且 `--with` 仍标记 `support: experimental`。
+
+### CLI 直接模式与 TUI
+
+CLI 的默认产品形态是可直接脚本化的 Cobra 命令，TUI 只是同一动作层的交互外壳。两者共用 `internal/cli/actions`，TUI 不通过 shell 回调自身。入口规则：
+
+| 场景 | 行为 |
+|---|---|
+| 无参数 `jimu`、无目录 `jimu new`、显式 `jimu tui` | 在 TTY 中打开 TUI |
+| 带完整参数的命令 | 直接执行，不进入 TUI |
+| `--no-tui` 或 `JIMU_NO_TUI=1` | 强制直接模式 |
+| 非 TTY、CI、重定向 | 永不启动 TUI；无参数时打印 help 或返回用法错误 |
+
+生成项目由 manifest 的 `generation.cli_ui` 控制：`both` 同时编入直接命令和 `cmd/cli/tui.go`，`direct` 只保留直接命令。`minimal` 默认 `direct`，避免把 Bubble Tea 和 lipgloss 依赖带回最小项目；`auth`、`full` 与 `--with` 默认 `both`，显式 `--cli=direct` 可收缩依赖。TUI 代码不进入 `cmd/server` 的 package 闭包，因此不增加服务二进制。`upgrade` 原样携带 `cli_ui`，v3 项目的保守默认保持 `direct`。
+
+`jimu new` 的 TUI 按“模板 → 项目信息 → 确认”分步，首屏只暴露模板选择；目录和模块字段带焦点条、闪烁光标和示例提示，数据库/测试/工具/运行时用左右键单选，部署组件用空格多选，高级选项默认折叠。生成阶段用动画进度反馈，避免长任务看起来卡住；成功后展示结果并自动退出，失败则保留错误页。TUI 状态同时使用符号、文字和颜色，不依赖红绿二色。`--no-color` 或非空 `NO_COLOR` 会关闭全部 ANSI 样式；非 TTY 的直接命令输出也保持无 ANSI。
 
 ### 新建项目流程
 
@@ -99,13 +118,13 @@ flowchart TD
     I -->|失败| R[恢复已备份文件]
 ```
 
-新增能力复用与 `jimu new` / `jimu check` 相同的组合 resolver 和 preflight：硬依赖必须已经在项目装配集中，不会静默追加依赖；冲突、端口、驱动、迁移、运行时配置和中间件问题都在创建暂存目录或写目标文件前失败。组合结果保留既有 `requested` / `auto_added` 与驱动选择，并以 schema v3 `composition` 写回。未使用 `--force` 且项目 manifest 摘要已变化时，追加操作拒绝继续。
+新增能力复用与 `jimu new` / `jimu check` 相同的组合 resolver 和 preflight：硬依赖必须已经在项目装配集中，不会静默追加依赖；冲突、端口、驱动、迁移、运行时配置和中间件问题都在创建暂存目录或写目标文件前失败。组合结果保留既有 `requested` / `auto_added` 与驱动选择，并以当前 schema 的 `composition` 写回；`generation` 的测试模式、部署组件和 CLI 形态保持不变，只按新能力集重算 `tools_resolved`。未使用 `--force` 且项目 manifest 摘要已变化时，追加操作拒绝继续。
 
 更新仅安装生成器管理的差异文件，并保留现有配置值；落盘复用 `jimu upgrade` 的 manifest 事务：先备份所有受影响文件，逐文件安装，manifest 最后写入，任一失败按原字节恢复。该增量追加流程不执行新建项目使用的 `go mod tidy` 和构建自检，支持级别保持 `experimental`。预设项目是裁剪起点，可以继续 `capability add`；只有已退役的 `basic-api` / `auth-api` 项目会被拒绝。
 
 ### 显式升级规划
 
-`jimu upgrade` 是独立的显式升级入口，不复用 `capability add` 或隐式重生成。规划阶段只读：读取现有 manifest（schema v2 在内存升级为 v3），按 `selection.template`、`selection.profile` 或 `composition.requested` 重建当前框架下的目标 manifest；`--with` 项目同时透传 `composition.drivers`，保留非默认驱动选择。随后把目标产物渲染到系统临时目录；项目已有 `docs/profiles/generated-report.md` 时，在同一暂存树重算报告并纳入比较。规划器比较三份事实：manifest 的 `generated_file_sha256` 基线、项目当前文件、目标模板产物（含重算后的报告）。
+`jimu upgrade` 是独立的显式升级入口，不复用 `capability add` 或隐式重生成。规划阶段只读：读取现有 manifest（schema v2/v3 在内存补齐 `composition` 与保守 `generation`），按 `selection.template`、`selection.profile` 或 `composition.requested` 重建当前框架下的目标 manifest；`--with` 项目同时透传 `composition.drivers`，保留非默认驱动选择。`generation` 原样带入目标请求，不因升级把旧项目扩成 Compose/TUI。随后把目标产物渲染到系统临时目录；启用 `runtime_closure` 的目标先做容错 tidy，再按运行时入口裁剪并做最终 tidy。项目已有 `docs/profiles/generated-report.md` 时，在同一暂存树重算报告并纳入比较。规划器比较三份事实：manifest 的 `generated_file_sha256` 基线、项目当前文件、目标模板产物（含重算后的报告）。
 
 | 分类 | 判定 | 动作 |
 |---|---|---|
@@ -146,5 +165,5 @@ profile 选择必须只通过 active 选点进入服务构建；registry 留在�
 - 契约与事务：[manifest model](../../tools/generator/manifest/model.go)、[manifest validation](../../tools/generator/manifest/validate.go)、[workspace staging](../../tools/generator/workspace/stage.go)
 - 升级规划与事务：[upgrade classifier](../../tools/generator/upgrade/classify.go)、[upgrade facade](../../tools/generator/upgrade.go)、[workspace transaction](../../tools/generator/workspace/upgrade.go)
 - 增量追加：[add facade](../../tools/generator/add.go)、[framework manifest export](../../tools/generator/frameworkmanifest/export.go)、共享 [workspace transaction](../../tools/generator/workspace/upgrade.go)
-- 验证：`go test ./tools/generator/...`、`jimu check <generated-dir>`、`jimu upgrade <generated-dir> --dry-run`、`make profiles-check`、`make check-capabilities`、`make test-scaffold-official`、`make test-scaffold-composition`、`make test-scaffold-upgrade`、`make test-scaffold-matrix`
+- 验证：`go test ./tools/generator/...`、`jimu check <generated-dir>`、`jimu upgrade <generated-dir> --dry-run`、`make profiles-check`、`make check-capabilities`、`make test-scaffold-official`、`make test-scaffold-audit`、`make test-scaffold-composition`、`make test-scaffold-upgrade`、`make test-scaffold-matrix`
 - CLI 参数和操作示例见 README「[生成项目](../../README.md#生成项目jimu-new--jimu-capability-add)」；能力声明和运行时装配见[能力架构](capability-architecture.md)。

@@ -3,14 +3,10 @@
 package app
 
 import (
-	"fmt"
-
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/platform/health"
 	"jimu/internal/platform/logger"
-	"jimu/internal/platform/metrics"
-	"jimu/internal/platform/scheduler"
 )
 
 // DBHandle is intentionally opaque in no-DB builds.
@@ -26,10 +22,6 @@ func (dbState) handle() DBHandle { return nil }
 
 func (dbState) close() error { return nil }
 
-func (dbState) mysqlStore() (scheduler.Store, error) {
-	return nil, fmt.Errorf("scheduler store mysql requires a mysql runtime service")
-}
-
-func (dbState) collector() (*metrics.DBCollector, error) { return nil, nil }
+func (dbState) collector() (contract.MetricsCollector, error) { return nil, nil }
 
 func (dbState) readiness() ([]health.Checker, error) { return nil, nil }

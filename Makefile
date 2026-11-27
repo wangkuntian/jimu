@@ -4,7 +4,7 @@
 .PHONY: migrate migrate-down migrate-status seed
 .PHONY: backup restore build-backup-image compose-db-backup compose-db-restore test-backup-restore
 .PHONY: test test-coverage test-cover test-coverage-check test-coverage-check-local test-race check-makefile check-config
-.PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates bundle-check bundle-meta test-scaffold-official test-scaffold-matrix test-scaffold-upgrade test-scaffold-composition
+.PHONY: vet fmt fmt-check lint check-log-usage check-capabilities check-templates bundle-check bundle-meta test-scaffold-official test-scaffold-audit test-scaffold-matrix test-scaffold-upgrade test-scaffold-composition
 .PHONY: profiles-check compose-report compose-report-check check-skills skills-install
 .PHONY: check-gate-selectors swagger swagger-check smoke-check compose-check govulncheck check ci ci-full release-check release-check-fast clean-room-e2e
 .PHONY: proto bench bench-ci loadtest cli all hooks
@@ -21,15 +21,14 @@ CLI_BIN = $(BIN_DIR)/jimu-cli$(if $(filter-out full,$(PROFILE)),-$(PROFILE),)
 SERVER_CMD := cmd/server/main.go
 CLI_PKG := ./cmd/cli
 
-# official 档只覆盖两个官方模板；full 仍由 test-scaffold-matrix 运行全部生成器用例。
-# 只放「race 分片跑不到」的用例：
-#   - TestAuthPresetEmptyDatabaseEndToEnd 需要 Docker（bare MySQL/Redis 容器），
-#     race 分片里 requireHeavyMatrix 会直接 skip，所以只能在 official 跑；
-#   - TestPresetBudgets 与 TestMinimalPresetStartsWithoutDependencies 不需要 Docker，
-#     已在 CI (PR) 的 race 分片里全量跑过，这里再跑一遍是纯重复（实测 +44s）。
-# 普通 feature/* PR 不触发本 workflow，因此这两条必须留在 race 分片里 —— 这正是
-# 它们不属于 official 的原因，不是遗漏。
-SCAFFOLD_OFFICIAL_TESTS := ^(TestAuthPresetEmptyDatabaseEndToEnd)$
+# official 档覆盖两个官方模板的发布门禁；full 仍由 test-scaffold-matrix 运行全部生成器用例。
+#   - TestAuthPresetEmptyDatabaseEndToEnd 需要 Docker（bare MySQL/Redis 容器）；
+#   - TestOfficialPresetAudit 生成 minimal/auth 两棵树并检查构建、Compose 与 Secret 接线；
+#   - TestAuditInitSecretsUsesComposeProjectName 用假 docker 钉住卷探测使用 Compose 项目名。
+# TestPresetBudgets 与 TestMinimalPresetStartsWithoutDependencies 不需要 Docker，已在
+# CI (PR) 的 race 分片里全量跑过，这里再跑一遍是纯重复（实测 +44s），故不在 official。
+SCAFFOLD_OFFICIAL_TESTS := ^(TestAuthPresetEmptyDatabaseEndToEnd|TestOfficialPresetAudit|TestAuditInitSecretsUsesComposeProjectName)$
+SCAFFOLD_AUDIT_TESTS := ^(TestOfficialPresetAudit|TestAuditInitSecretsUsesComposeProjectName)$
 SCAFFOLD_UPGRADE_TESTS := ^(TestUpgradeFixtures|TestUpgradeRejectsRetiredTemplates)$
 SCAFFOLD_COMPOSITION_TESTS := ^(TestRepresentativeCompositionMatrix|TestCompositionMatrixBudget|TestCompositionNegativeMatrix)$
 
@@ -38,8 +37,11 @@ VERSION ?= dev
 APP_VERSION ?= dev
 LDFLAGS := -X main.version=$(APP_VERSION)
 
-COMPOSE = docker compose --env-file /dev/null -f docker-compose.yml
-COMPOSE_ALL = $(COMPOSE) -f compose.observability.yml
+COMPOSE_FILE := deploy/compose/docker-compose.yml
+COMPOSE_ALL_FILE := deploy/compose/compose.observability.yml
+DOCKERFILE := deploy/docker/Dockerfile
+COMPOSE = docker compose --project-directory $(CURDIR) --env-file /dev/null -f $(COMPOSE_FILE)
+COMPOSE_ALL = $(COMPOSE) -f $(COMPOSE_ALL_FILE)
 IMAGE_REPO ?= jimu
 IMAGE_TAG = $(IMAGE_REPO):$(VERSION)
 LATEST_TAG = $(IMAGE_REPO):latest
@@ -87,22 +89,22 @@ init: ## 初始化核心 Secret（旧 .env 仅用于显式迁移）
 	if [ -n "$$legacy_env" ]; then \
 		LEGACY_ENV_FILE="$$legacy_env" SECRETS_DIR=$(JIMU_SECRETS_DIR) \
 		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
-		./scripts/init-secrets.sh; \
+		./deploy/scripts/init-secrets.sh; \
 	else \
 		SECRETS_DIR=$(JIMU_SECRETS_DIR) \
 		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
-		./scripts/init-secrets.sh; \
+		./deploy/scripts/init-secrets.sh; \
 	fi
 
 prepare-secrets:
 	@SECRETS_DIR=$(JIMU_SECRETS_DIR) \
 		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
-		./scripts/init-secrets.sh --no-legacy
+		./deploy/scripts/init-secrets.sh --no-legacy
 
 prepare-observability-secrets:
 	@SECRETS_DIR=$(JIMU_SECRETS_DIR) \
 		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
-		./scripts/init-secrets.sh --observability --no-legacy
+		./deploy/scripts/init-secrets.sh --observability --no-legacy
 
 image: ## 无条件构建版本镜像并更新 latest
 	@PROFILE="$(PROFILE)" VERSION="$(VERSION)" IMAGE_REPO="$(IMAGE_REPO)" \
@@ -123,7 +125,7 @@ demo-e2e: ## 启动 full server 并运行真实后端 demo E2E
 
 up-observability: prepare-observability-secrets ensure-image ## 启动观测栈并初始化 dashboard（配置 webhook 时同步告警）
 	$(COMPOSE_ENV) $(COMPOSE_ALL) up -d --no-build
-	JIMU_SECRETS_DIR=$(JIMU_SECRETS_DIR) ./scripts/observability.sh start
+	JIMU_SECRETS_DIR=$(JIMU_SECRETS_DIR) ./deploy/scripts/observability.sh start
 
 down: ## 停止全部 Compose 服务（保留数据卷）
 	$(COMPOSE_ENV) $(COMPOSE_ALL) down
@@ -155,10 +157,10 @@ migrate-status: ## 在运行中的 server 容器查看迁移状态（不构建�
 	$(COMPOSE_ENV) $(COMPOSE) exec -T server ./jimu migrate status
 
 backup: ## 主机侧备份数据库
-	@./scripts/backup.sh
+	@deploy/scripts/backup.sh
 
 restore: ## 主机侧恢复数据库（BACKUP_FILE=<path>）
-	@./scripts/restore.sh $(BACKUP_FILE)
+	@deploy/scripts/restore.sh $(BACKUP_FILE)
 
 build-backup-image: ## 构建备份任务镜像 jimu-backup
 	docker build -f deploy/backup/Dockerfile -t jimu-backup:latest --build-arg PG_CLIENT_VERSION=$(or $(PG_CLIENT_VERSION),17) .
@@ -249,6 +251,9 @@ bundle-meta: ## 生成开发用 template-bundle.json（不入 embedded bundle）
 test-scaffold-official: ## 运行两个官方模板的发布门禁（需 Docker）
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 30m -v -run '$(SCAFFOLD_OFFICIAL_TESTS)'
 
+test-scaffold-audit: ## 审计 minimal/auth 生成产物的构建、Compose 与 Secret 接线
+	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 30m -v -run '$(SCAFFOLD_AUDIT_TESTS)'
+
 test-scaffold-matrix: ## 运行完整生成器矩阵（夜间/手动；需 Docker）
 	JIMU_HEAVY_MATRIX=1 go test ./tools/generator/ -count=1 -timeout 60m -v
 
@@ -300,10 +305,11 @@ smoke-check: ## 校验自动化脚本语法
 	@bash -n scripts/test_shards.sh
 	@bash -n scripts/check_ci_gate.sh
 	@bash -n scripts/test_compose_runtime.sh
-	@bash -n scripts/install_db_clients.sh
-	@bash -n scripts/db_common.sh
-	@bash -n scripts/backup.sh
-	@bash -n scripts/restore.sh
+	@bash -n deploy/scripts/install_db_clients.sh
+	@bash -n deploy/scripts/db_common.sh
+	@bash -n deploy/scripts/backup.sh
+	@bash -n deploy/scripts/restore.sh
+	@bash -n deploy/scripts/observability.sh
 	@bash -n scripts/test_backup_restore.sh
 	@bash -n scripts/test_config_contracts.sh
 	@bash -n scripts/test_init_secrets.sh

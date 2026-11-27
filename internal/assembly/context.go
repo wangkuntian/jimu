@@ -7,20 +7,8 @@ import (
 	"jimu/internal/config"
 	"jimu/internal/contract"
 	"jimu/internal/platform/event"
-	"jimu/internal/platform/httpclient"
 	"jimu/internal/platform/logger"
-	"jimu/internal/platform/reporter"
-	"jimu/internal/platform/scheduler"
 )
-
-// AuthConfig returns the validated auth section through its contract projection.
-func (c *Context) AuthConfig() contract.AuthConfig {
-	v, ok := c.CapabilityConfigs().Section("auth").(interface{ PortView() contract.AuthConfig })
-	if !ok {
-		return contract.AuthConfig{}
-	}
-	return v.PortView()
-}
 
 // Context 是能力 Wire 的装配上下文：暴露内核件访问器，并持有模块/端口注册表。
 // 由 Run 构造后传给每个能力的 Wire；能力只经它取得依赖 —— 不 import 其它能力包，
@@ -34,7 +22,7 @@ type Context struct {
 	modules     []contract.Module
 	moduleNames map[string]bool
 	components  []contract.Component
-	jobs        []scheduler.Job
+	jobs        []contract.Job
 	jobIDs      map[string]bool
 	// onPort 在每次 Port 读取时回调（ValidatePortFlow 用它观察读取结果；生产路径为 nil）。
 	// provided 表示该端口在读取发生时已注册。
@@ -77,15 +65,6 @@ func (c *Context) Capabilities() []contract.Descriptor { return c.caps }
 
 // EventBus 全局事件总线。
 func (c *Context) EventBus() *event.EventBus { return c.container.EventBus }
-
-// HTTPClient 统一出站 HTTP client。
-func (c *Context) HTTPClient() *httpclient.Client { return c.container.HTTPClient }
-
-// Scheduler 定时任务调度器。
-func (c *Context) Scheduler() *scheduler.CronScheduler { return c.container.Scheduler }
-
-// Reporter 错误上报器。
-func (c *Context) Reporter() reporter.Reporter { return c.container.Reporter }
 
 // Provide 注册一个端口实现，供排在后面的能力经 Port 消费。
 // 同名端口重复注册报错：静默覆盖会让装配顺序的语义变得不可推断。
@@ -155,7 +134,7 @@ func (c *Context) RegisterComponent(component contract.Component) {
 func (c *Context) Components() []contract.Component { return c.components }
 
 // RegisterJob 登记能力贡献的定时任务定义，重名报错（任务 id 全仓唯一）。
-func (c *Context) RegisterJob(job scheduler.Job) error {
+func (c *Context) RegisterJob(job contract.Job) error {
 	if job.ID == "" {
 		return fmt.Errorf("assembly: scheduled job id must not be empty")
 	}
@@ -168,4 +147,4 @@ func (c *Context) RegisterJob(job scheduler.Job) error {
 }
 
 // Jobs 返回已登记的能力定时任务（按登记顺序）。
-func (c *Context) Jobs() []scheduler.Job { return c.jobs }
+func (c *Context) Jobs() []contract.Job { return c.jobs }

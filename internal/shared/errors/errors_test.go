@@ -6,11 +6,11 @@ import (
 )
 
 func TestAppError(t *testing.T) {
-	err := New(CodeUserNotFound, "user not found")
-	if err.Code != CodeUserNotFound {
-		t.Errorf("expected code %d, got %d", CodeUserNotFound, err.Code)
+	err := New(CodeNotFound, "not found")
+	if err.Code != CodeNotFound {
+		t.Errorf("expected code %d, got %d", CodeNotFound, err.Code)
 	}
-	if err.Error() != "[2001] user not found" {
+	if err.Error() != "[1004] not found" {
 		t.Errorf("unexpected error string: %s", err.Error())
 	}
 }

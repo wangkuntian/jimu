@@ -26,23 +26,23 @@
 
 | 形态 | 二进制 (MB) | 相对 full | 路由数 | 迁移数 | 表数 | 本仓 Go 文件 | 本仓代码行 | 重型依赖 |
 |---|---:|---:|---:|---:|---:|---:|---:|---|
-| `full` | 125.7 | 100.0% | 96 | 26 | 23 | 377 | 40466 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
-| `minimal` | 86.3 | 68.7% | 31 | 11 | 9 | 186 | 19174 | - |
+| `full` | 125.3 | 100.0% | 96 | 26 | 23 | 388 | 40684 | amqp091-go, aws-sdk-go-v2, excelize, kafka-go |
+| `minimal` | 86.3 | 68.9% | 31 | 11 | 9 | 197 | 19395 | - |
 
 ## 验收断言
 
 `go test ./tools/composereport/` 的 `TestMinimalCompiledSurfaceIsMateriallySmaller` 按下面的**实测关系**断言
 （不写死数字，内核膨胀或能力增减只会让真实的裁剪失效暴露出来）：
 
-- 二进制：`minimal` 是 `full` 的 68.7%（要求 ≤ 85%）
+- 二进制：`minimal` 是 `full` 的 68.9%（要求 ≤ 85%）
 - 路由数：`minimal` 31 < `full` 96
 - 表数：`minimal` 9 < `full` 23
-- 本仓 Go 文件：`minimal` 186 < `full` 377
-- 本仓代码行：`minimal` 19174 < `full` 40466
+- 本仓 Go 文件：`minimal` 197 < `full` 388
+- 本仓代码行：`minimal` 19395 < `full` 40684
 
 ## 层②边界：go.mod 直接依赖
 
-各形态的 go.mod 直接依赖数**逐形态完全相同**（各 66 个）。这不是漏测：Go 的依赖裁剪
+各形态的 go.mod 直接依赖数**逐形态完全相同**（各 70 个）。这不是漏测：Go 的依赖裁剪
 作用于整个 module —— `go.mod`/`go.sum` 描述 module 而非包，profile 入口包只改变**编进二进制的
 包与符号集合**，不改变 module 依赖图。真正让 `go.mod` 变小的是层①（`jimu new` 生成专属 module
 并 `go mod tidy`），不是层②。设计原文见 §11「层②的边界」。

@@ -103,6 +103,11 @@ func AddCapability(opts AddOptions) (*Result, error) {
 		Force:       opts.Force,
 		DryRun:      opts.DryRun,
 		Report:      reportErr == nil,
+		Prune: workspace.RuntimePrune{
+			Enabled: next.Generation.RuntimeClosure, Module: module,
+			Roots: runtimeRoots(module, next.Generation), Platforms: defaultClosurePlatforms,
+			Tests: next.Generation.Tests,
+		},
 	})
 	if err != nil {
 		return nil, err

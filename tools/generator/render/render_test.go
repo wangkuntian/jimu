@@ -34,6 +34,15 @@ func TestExecuteManifestActions(t *testing.T) {
 			Validity:        manifest.CompositionValidityValid,
 			Support:         manifest.CompositionSupportExperimental,
 		},
+		Generation: &manifest.Generation{
+			RuntimeClosure: false,
+			Tests:          manifest.GenerationTestsSelected,
+			ToolsMode:      manifest.GenerationToolsNone,
+			ToolsResolved:  []string{},
+			Deploy:         []string{},
+			CLI:            manifest.GenerationCLIMinimal,
+			CLIUI:          manifest.GenerationCLIUIDirect,
+		},
 		Copy:           []manifest.CopyAction{{Source: "src/input.txt", Destination: "copied/input.txt", Include: []string{}, Exclude: []string{}}},
 		Templates:      []manifest.TemplateAction{{Source: "template.txt", Destination: "generated.txt", Kind: "text", Data: map[string]any{"module": "example.com/app"}}},
 		Merges:         []manifest.MergeAction{{Source: "configs/app.yaml", Destination: "configs/app.yaml", Strategy: "sections", Sections: []string{}}},
@@ -62,6 +71,50 @@ func TestExecuteManifestActions(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(destination, "src/unsupported_test.go")); !os.IsNotExist(err) {
 		t.Fatalf("unsupported test still exists, stat error = %v", err)
+	}
+}
+
+func TestFilePatchWithEmptyToRemovesWholeLine(t *testing.T) {
+	dir := t.TempDir()
+	rel := "configs/app.yaml"
+	if err := os.MkdirAll(filepath.Join(dir, "configs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, rel)
+	if err := os.WriteFile(path, []byte("security:\n  rate_limit_rate: 100\n  keep: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := applyRewrite(dir, "", manifest.RewriteAction{
+		Kind: "file-patch", From: "  rate_limit_rate: 100\n", To: "", Files: []string{rel},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "security:\n  keep: true\n" {
+		t.Fatalf("unexpected content = %q", got)
+	}
+}
+
+func TestMergeConfigDropsUnusedKeys(t *testing.T) {
+	source := t.TempDir()
+	destination := t.TempDir()
+	writeFixture(t, source, "configs/app.yaml", "server:\n  rate_limit_rate: 100\n  keep: true\n")
+	if err := mergeConfig(source, destination, manifest.MergeAction{
+		Source: "configs/app.yaml", Destination: "configs/app.yaml", Strategy: "sections",
+		DropKeys: []string{"rate_limit_rate"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(destination, "configs/app.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "server:\n  keep: true\n" {
+		t.Fatalf("unexpected content = %q", got)
 	}
 }
 

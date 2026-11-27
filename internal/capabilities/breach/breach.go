@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"strings"
 
-	"jimu/internal/platform/httpclient"
+	"jimu/internal/contract"
 )
 
 // rangeURL 官方范围查询地址，k-匿名协议的固定入口
@@ -33,12 +33,12 @@ type Checker interface {
 }
 
 type hibpChecker struct {
-	client  *httpclient.Client
+	client  contract.HTTPClient
 	baseURL string
 }
 
 // New 创建基于 HIBP 范围查询的检查器
-func New(client *httpclient.Client) Checker {
+func New(client contract.HTTPClient) Checker {
 	return &hibpChecker{client: client, baseURL: rangeURL}
 }
 

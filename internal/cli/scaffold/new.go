@@ -1,20 +1,16 @@
 package scaffold
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"strings"
 
+	"jimu/internal/cli/actions"
+	"jimu/internal/cli/tui"
 	"jimu/internal/templatesource"
 	"jimu/tools/generator"
 
 	"github.com/spf13/cobra"
-)
-
-var (
-	errScaffoldSelectors = errors.New("--profile and --with are mutually exclusive")
-	errShapeRequiresWith = errors.New("--shape is only valid with --with")
 )
 
 func printScaffoldPlan(w io.Writer, res *generator.Result) {
@@ -50,37 +46,45 @@ func NewCommand(resolve templatesource.Resolver) *cobra.Command {
 生成顺序：复制/渲染 → go mod tidy → 自检（生成项目内 go build ./... 与
 生成项目测试都必须绿）→ 原子换上 <dir>。产物先写 <dir>.tmp-<rand>，
 任一步失败即整体回滚，绝不留下半成品；--no-tidy 只跳过 tidy，自检仍会跑。`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			var opts generator.NewOptions
-			opts.Dir = args[0]
-			opts.Template, _ = cmd.Flags().GetString("profile")
-			opts.With, _ = cmd.Flags().GetString("with")
-			opts.Shape, _ = cmd.Flags().GetString("shape")
-			opts.Module, _ = cmd.Flags().GetString("module")
-			opts.DBDriver, _ = cmd.Flags().GetString("db")
-			opts.NoTidy, _ = cmd.Flags().GetBool("no-tidy")
-			opts.DryRun, _ = cmd.Flags().GetBool("dry-run")
-			opts.Force, _ = cmd.Flags().GetBool("force")
-			opts.Report, _ = cmd.Flags().GetBool("report")
-			if opts.Template != "" && opts.With != "" {
-				return errScaffoldSelectors
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 && tuiAvailable(cmd) {
+				return nil
 			}
-			if cmd.Flags().Changed("shape") && opts.Template != "" {
-				return errShapeRequiresWith
+			return cobra.ExactArgs(1)(cmd, args)
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return runTUI(cmd, tui.ScreenNew)
 			}
 			source, cleanup, err := resolveSource(cmd, resolve)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = cleanup() }()
-			opts.SourceRoot = source.Root
-			opts.Framework = source.Framework
-			res, err := generator.NewProject(opts)
+			input := actions.NewInput{
+				Dir:        args[0],
+				Profile:    flagString(cmd, "profile"),
+				With:       flagString(cmd, "with"),
+				Shape:      flagString(cmd, "shape"),
+				Module:     flagString(cmd, "module"),
+				DBDriver:   flagString(cmd, "db"),
+				Tests:      flagString(cmd, "tests"),
+				Tools:      flagString(cmd, "tools"),
+				Deploy:     flagString(cmd, "deploy"),
+				CLIUI:      flagString(cmd, "cli"),
+				Runtime:    flagString(cmd, "runtime"),
+				NoTidy:     flagBool(cmd, "no-tidy"),
+				DryRun:     flagBool(cmd, "dry-run"),
+				Force:      flagBool(cmd, "force"),
+				Report:     flagBool(cmd, "report"),
+				SourceRoot: source.Root,
+				Framework:  source.Framework,
+			}
+			res, err := actions.RunNew(cmd.Context(), input)
 			if err != nil {
 				return err
 			}
-			if opts.DryRun {
+			if input.DryRun {
 				printScaffoldPlan(cmd.OutOrStdout(), res)
 			}
 			return nil
@@ -91,6 +95,11 @@ func NewCommand(resolve templatesource.Resolver) *cobra.Command {
 	cmd.Flags().String("shape", "", "shape name for --with (default \"app\")")
 	cmd.Flags().String("module", "", "Go module path (default: derived from <dir>)")
 	cmd.Flags().String("db", "mysql", "database driver compiled into the project: mysql or postgres")
+	cmd.Flags().String("tests", "", "test pruning: selected, all, or none (default: selected)")
+	cmd.Flags().String("tools", "", "generated tools: auto, all, or none (default: auto)")
+	cmd.Flags().String("deploy", "", "deploy components: compose,k8s,helm,observability, all, or none")
+	cmd.Flags().String("cli", "", "project CLI UI: both or direct (default: profile-derived)")
+	cmd.Flags().String("runtime", "", "kernel runtime: lean or standard (default: lean for minimal, standard otherwise)")
 	cmd.Flags().Bool("no-tidy", false, "skip go mod tidy after generation (default: tidy runs and a failing tidy aborts)")
 	cmd.Flags().Bool("dry-run", false, "print the plan without writing anything")
 	cmd.Flags().Bool("force", false, "overwrite an existing generated project (requires .jimu/manifest.json)")

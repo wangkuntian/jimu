@@ -36,12 +36,18 @@ type NewOptions struct {
 	Shape      string
 	Module     string
 	DBDriver   string
+	Tests      string
+	Tools      string
+	Deploy     string
+	CLIUI      string
+	Runtime    string
 	NoTidy     bool
 	DryRun     bool
 	Force      bool
 	Report     bool
 	SourceRoot string
 	Framework  *manifest.Framework
+	Generation *manifest.Generation
 
 	// NoSelfCheck 只供本仓构建类测试使用；CLI 始终执行自检。
 	NoSelfCheck bool
@@ -85,8 +91,14 @@ func NewProject(opts NewOptions) (*Result, error) {
 	}
 	doc, resolution, err := frameworkmanifest.ExportDetailed(frameworkmanifest.Request{
 		Root: root, Template: opts.Template, Profile: opts.Profile, With: opts.With, Shape: opts.Shape, Module: module,
-		DBDriver:  opts.DBDriver,
-		Framework: opts.Framework,
+		DBDriver:   opts.DBDriver,
+		Tests:      opts.Tests,
+		Tools:      opts.Tools,
+		Deploy:     opts.Deploy,
+		CLIUI:      opts.CLIUI,
+		Runtime:    opts.Runtime,
+		Framework:  opts.Framework,
+		Generation: opts.Generation,
 	})
 	if err != nil {
 		return nil, err
@@ -109,6 +121,13 @@ func NewProject(opts NewOptions) (*Result, error) {
 	created, err := workspace.Create(doc, workspace.CreateOptions{
 		Target: opts.Dir, SourceRoot: root, Module: module, Force: opts.Force,
 		NoTidy: opts.NoTidy, DryRun: opts.DryRun, Report: opts.Report, NoSelfCheck: opts.NoSelfCheck,
+		Prune: workspace.RuntimePrune{
+			Enabled:   doc.Generation != nil && doc.Generation.RuntimeClosure,
+			Module:    module,
+			Roots:     runtimeRoots(module, doc.Generation),
+			Platforms: defaultClosurePlatforms,
+			Tests:     generationTests(doc),
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -126,6 +145,47 @@ func NewProject(opts NewOptions) (*Result, error) {
 		CopySet:      manifestCapabilityNames(doc), Drivers: flattenDrivers(doc.Selection.Drivers),
 		Assets: manifestAssetNames(doc), Files: slices.Clone(created.Files), FileCount: created.FileCount,
 	}, nil
+}
+
+var defaultClosurePlatforms = []workspace.Platform{
+	{GOOS: "linux", GOARCH: "amd64"},
+	{GOOS: "linux", GOARCH: "arm64"},
+	{GOOS: "darwin", GOARCH: "arm64"},
+}
+
+func runtimeRoots(module string, generation *manifest.Generation) []string {
+	roots := []string{module + "/cmd/server", module + "/cmd/cli"}
+	if generation == nil {
+		return roots
+	}
+	tools := slices.Clone(generation.ToolsResolved)
+	if slices.Contains(tools, "checkcapabilities") {
+		for _, support := range []string{"heavydeps", "profileassets"} {
+			if !slices.Contains(tools, support) {
+				tools = append(tools, support)
+			}
+		}
+	}
+	for _, tool := range tools {
+		switch tool {
+		case "profileassets":
+			roots = append(roots, module+"/tools/internal/profileassets")
+		case "heavydeps":
+			roots = append(roots, module+"/tools/internal/heavydeps")
+		case "checkcapabilities":
+			roots = append(roots, module+"/tools/checkcapabilities")
+		case "logcheck":
+			roots = append(roots, module+"/tools/logcheck")
+		}
+	}
+	return roots
+}
+
+func generationTests(doc manifest.Document) string {
+	if doc.Generation != nil {
+		return doc.Generation.Tests
+	}
+	return "selected"
 }
 
 func manifestCapabilityNames(doc manifest.Document) []string {

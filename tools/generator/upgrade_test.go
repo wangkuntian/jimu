@@ -117,9 +117,9 @@ func TestApplyUpgradeVerifyFailureRollsBackByteForByte(t *testing.T) {
 }
 
 func TestApplyUpgradeInstallFailureRestoresEveryFile(t *testing.T) {
-	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	dir := generateForTest(t, NewOptions{Template: "minimal", Deploy: "compose"})
 	induceModifiedFile(t, dir, "Makefile")
-	induceModifiedFile(t, dir, "Dockerfile")
+	induceModifiedFile(t, dir, "deploy/docker/Dockerfile")
 	before := hashTree(t, dir)
 	stubUpgradeVerify(t, nil)
 	original := workspace.UpgradeInstallFile
@@ -246,7 +246,8 @@ func TestPlanUpgradeMergedConfigIsReadOnly(t *testing.T) {
 func TestApplyUpgradeMigratesV2ManifestForOfficialTemplates(t *testing.T) {
 	for _, template := range []string{"minimal", "auth"} {
 		t.Run(template, func(t *testing.T) {
-			dir := generateForTest(t, NewOptions{Template: template})
+			legacy := legacyGeneration(template)
+			dir := generateForTest(t, NewOptions{Template: template, Generation: &legacy})
 			downgradeManifestToV2(t, dir)
 			stubUpgradeVerify(t, nil)
 
@@ -269,6 +270,58 @@ func TestApplyUpgradeMigratesV2ManifestForOfficialTemplates(t *testing.T) {
 	}
 }
 
+func legacyGeneration(template string) manifest.Generation {
+	generation := manifest.Generation{
+		RuntimeClosure: false,
+		Tests:          manifest.GenerationTestsAll,
+		ToolsMode:      manifest.GenerationToolsAll,
+		ToolsResolved:  []string{"checkcapabilities", "heavydeps", "logcheck", "profileassets"},
+		Deploy:         []string{},
+		CLI:            manifest.GenerationCLIMinimal,
+		CLIUI:          manifest.GenerationCLIUIDirect,
+	}
+	if template != "minimal" {
+		generation.Deploy = []string{manifest.DeployHelm, manifest.DeployK8s}
+		generation.CLI = manifest.GenerationCLIFull
+	}
+	return generation
+}
+
+func TestPlanUpgradeV3MinimalKeepsConservativeGeneration(t *testing.T) {
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	downgradeManifestToV3(t, dir)
+
+	result, err := PlanUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot(), NoTidy: true})
+	require.NoError(t, err)
+	require.NotNil(t, result.Target.Generation)
+	assert.Equal(t, manifest.GenerationCLIMinimal, result.Target.Generation.CLI)
+	assert.Equal(t, manifest.GenerationCLIUIDirect, result.Target.Generation.CLIUI)
+	assert.Empty(t, result.Target.Generation.Deploy)
+}
+
+func TestPlanUpgradePreservesDeployComponents(t *testing.T) {
+	dir := generateForTest(t, NewOptions{Template: "minimal", Deploy: "compose,observability"})
+
+	result, err := PlanUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot(), NoTidy: true})
+	require.NoError(t, err)
+	require.NotNil(t, result.Target.Generation)
+	assert.Equal(t, []string{"compose", "observability"}, result.Target.Generation.Deploy)
+}
+
+func TestApplyUpgradeKeepsV3DeployLayout(t *testing.T) {
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	legacyCompose := filepath.Join(dir, "docker-compose.yml")
+	require.NoError(t, os.WriteFile(legacyCompose, []byte("services: {}\n"), 0o644))
+	downgradeManifestToV3(t, dir)
+	stubUpgradeVerify(t, nil)
+
+	result, err := ApplyUpgrade(UpgradeOptions{Dir: dir, From: FrameworkRoot(), NoTidy: true})
+	require.NoError(t, err)
+	assert.FileExists(t, legacyCompose)
+	assert.NoFileExists(t, filepath.Join(dir, "deploy/compose/docker-compose.yml"))
+	assert.Empty(t, result.Target.Generation.Deploy)
+}
+
 // downgradeManifestToV2 rewrites a generated project's manifest into the
 // read-only v2 shape with its legacy digest, so the upgrade path exercises the
 // same compatibility branch as a v0.5 project.
@@ -278,6 +331,25 @@ func downgradeManifestToV2(t *testing.T, dir string) {
 	require.NoError(t, err)
 	doc.SchemaVersion = manifest.LegacySchemaVersion
 	doc.Composition = nil
+	doc.Digest = ""
+	content, err := json.Marshal(doc)
+	require.NoError(t, err)
+	sum := sha256.Sum256(content)
+	doc.Digest = "sha256:" + hex.EncodeToString(sum[:])
+	content, err = json.Marshal(doc)
+	require.NoError(t, err)
+	path := filepath.Join(dir, ".jimu", "manifest.json")
+	require.NoError(t, os.WriteFile(path, append(content, '\n'), 0o644))
+}
+
+// downgradeManifestToV3 rewrites a generated project's manifest into the
+// read-only v3 shape with its legacy digest.
+func downgradeManifestToV3(t *testing.T, dir string) {
+	t.Helper()
+	doc, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	doc.SchemaVersion = manifest.PreviousSchemaVersion
+	doc.Generation = nil
 	doc.Digest = ""
 	content, err := json.Marshal(doc)
 	require.NoError(t, err)

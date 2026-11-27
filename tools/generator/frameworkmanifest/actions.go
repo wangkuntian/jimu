@@ -43,12 +43,11 @@ var kernelFiles = []string{
 	".gitignore",
 }
 
-var copiedTools = []string{
-	"tools/internal/profileassets",
-	"tools/internal/heavydeps",
-	"tools/internal/projectmetrics",
-	"tools/checkcapabilities",
-	"tools/logcheck",
+var toolSources = map[string]string{
+	"profileassets":     "tools/internal/profileassets",
+	"heavydeps":         "tools/internal/heavydeps",
+	"checkcapabilities": "tools/checkcapabilities",
+	"logcheck":          "tools/logcheck",
 }
 
 var kernelExcludes = []string{
@@ -64,10 +63,17 @@ var kernelExcludes = []string{
 	"cmd/cli/activecaps.go",
 	"cmd/cli/activecaps_test.go",
 	"cmd/cli/source.go",
+	"internal/assembly/portflow.go",
+	"internal/assembly/portflow_test.go",
+	"internal/capability/aliases.go",
+	"internal/capability/compose.go",
+	"internal/capability/compose_test.go",
+	"internal/capability/composition_test.go",
+	"internal/capability/diagnostic.go",
 }
 
 func copyActions(root string, selected selection) ([]manifest.CopyAction, error) {
-	actions := make([]manifest.CopyAction, 0, len(kernelDirs)+len(kernelFiles)+len(selected.copy)+len(copiedTools)+len(selected.migration)+len(selected.domain))
+	actions := make([]manifest.CopyAction, 0, len(kernelDirs)+len(kernelFiles)+len(selected.copy)+len(selected.generation.ToolsResolved)+len(selected.migration)+len(selected.domain))
 	kernelActions, err := kernelCopyActions(root, selected)
 	if err != nil {
 		return nil, err
@@ -120,16 +126,12 @@ func copyActions(root string, selected selection) ([]manifest.CopyAction, error)
 		base := filepath.ToSlash(filepath.Join("internal/capabilities", name, "domain"))
 		actions = append(actions, manifest.CopyAction{Source: base, Destination: base, Include: []string{}, Exclude: []string{}})
 	}
-	for _, source := range copiedTools {
+	for _, tool := range copiedTools(selected.generation.ToolsResolved) {
+		source, ok := toolSources[tool]
+		if !ok {
+			return nil, fmt.Errorf("unknown generated tool %q", tool)
+		}
 		actions = append(actions, manifest.CopyAction{Source: source, Destination: source, Include: []string{}, Exclude: []string{"*_test.go"}})
-	}
-	if includeBackup(selected) {
-		actions = append(actions, manifest.CopyAction{
-			Source:      "scripts",
-			Destination: "scripts",
-			Include:     []string{"backup.sh", "restore.sh", "db_common.sh", "install_db_clients.sh"},
-			Exclude:     []string{},
-		})
 	}
 	return actions, nil
 }
@@ -144,15 +146,37 @@ func kernelExcludesFor(root string) []string {
 	return sortedStrings(out)
 }
 
-func templateActions(root string, selected selection) []manifest.TemplateAction {
+func templateActions(root, module string, selected selection) []manifest.TemplateAction {
 	shapeData := map[string]any{
 		"Shape":        selected.shape,
 		"Capabilities": shapeCapabilities(selected),
 	}
+	services := selectionRuntimeServices(selected)
+	hasMySQL := services[contract.RuntimeServiceMySQL]
+	hasRedis := services[contract.RuntimeServiceRedis]
+	hasCompose := HasDeploy(selected.generation.Deploy, manifest.DeployCompose)
+	hasK8s := HasDeploy(selected.generation.Deploy, manifest.DeployK8s)
+	hasHelm := HasDeploy(selected.generation.Deploy, manifest.DeployHelm)
+	hasObservability := HasDeploy(selected.generation.Deploy, manifest.DeployObservability)
+	hasDockerfile := hasCompose || hasK8s || hasHelm
+	hasScripts := hasCompose || hasK8s || hasHelm
 	buildData := map[string]any{
-		"Shape":      selected.shape,
-		"HasAPIdocs": contains(selected.copy, "apidocs"),
-		"Expected":   strings.Join(selected.roots, " "),
+		"Shape":                selected.shape,
+		"HasAPIdocs":           contains(selected.copy, "apidocs"),
+		"HasConf":              contains(selected.copy, "access"),
+		"HasLogcheck":          contains(selected.generation.ToolsResolved, "logcheck"),
+		"HasCheckcapabilities": contains(selected.generation.ToolsResolved, "checkcapabilities"),
+		"HasDockerfile":        hasDockerfile,
+		"HasCompose":           hasCompose,
+		"HasDatabase":          includeDatabase(selected),
+		"HasMySQL":             hasMySQL,
+		"HasRedis":             hasRedis,
+		"HasScripts":           hasScripts,
+		"HasBackup":            hasMySQL,
+		"WithObservability":    hasObservability,
+		"ProjectName":          projectName(module),
+		"Module":               module,
+		"Expected":             strings.Join(selected.roots, " "),
 	}
 	catalogData := catalogTemplateData(selected)
 	cliImportsData := cliImports(root, selected)
@@ -163,7 +187,6 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 	}
 	actions := []manifest.TemplateAction{
 		{Source: "tools/generator/render/templates/project/Makefile.tmpl", Destination: "Makefile", Kind: "build", Data: buildData},
-		{Source: "tools/generator/render/templates/project/Dockerfile.tmpl", Destination: "Dockerfile", Kind: "build", Data: buildData},
 		{Source: "tools/generator/render/templates/project/registry.go.tmpl", Destination: "internal/profiles/registry/registry.go", Kind: "shape", Data: shapeData},
 		{Source: "tools/generator/render/templates/project/assembly.go.tmpl", Destination: filepath.ToSlash(filepath.Join("internal/profiles", selected.shape, "assembly.go")), Kind: "shape", Data: shapeData},
 		{Source: "tools/generator/render/templates/project/drivers.go.tmpl", Destination: filepath.ToSlash(filepath.Join("internal/profiles", selected.shape, "drivers.go")), Kind: "shape", Data: shapeData},
@@ -171,7 +194,40 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 		{Source: "tools/generator/render/templates/project/catalog.go.tmpl", Destination: "internal/capabilities/catalog/catalog.go", Kind: "catalog", Data: catalogData},
 		{Source: "tools/generator/render/templates/project/catalog_migration.go.tmpl", Destination: "internal/capabilities/catalog/migration.go", Kind: "catalog", Data: catalogData},
 		{Source: cliSource, Destination: "cmd/cli/main.go", Kind: "cli", Data: cliData},
-		{Source: "tools/generator/render/templates/project/assets_selection.go.tmpl", Destination: "tools/internal/profileassets/selection.go", Kind: "assets", Data: map[string]any{"Files": selectedAssetFiles(root, selected)}},
+		{Source: "tools/generator/render/templates/project/README.md.tmpl", Destination: "README.md", Kind: "text", Data: buildData},
+		{Source: "tools/generator/render/templates/project/dockerignore.tmpl", Destination: ".dockerignore", Kind: "build", Data: map[string]any{}},
+	}
+	if hasDockerfile {
+		actions = append(actions, manifest.TemplateAction{
+			Source: "tools/generator/render/templates/project/Dockerfile.tmpl", Destination: "deploy/docker/Dockerfile",
+			Kind: "build", Data: buildData,
+		})
+	}
+	if hasCompose {
+		actions = append(actions, manifest.TemplateAction{
+			Source: "tools/generator/render/templates/project/docker-compose.yml.tmpl", Destination: "deploy/compose/docker-compose.yml",
+			Kind: "compose", Data: buildData,
+		})
+	}
+	if hasCompose && hasObservability {
+		actions = append(actions, manifest.TemplateAction{
+			Source: "tools/generator/render/templates/project/compose.observability.yml.tmpl", Destination: "deploy/compose/compose.observability.yml",
+			Kind: "compose", Data: buildData,
+		})
+	}
+	if selected.generation.CLIUI == manifest.GenerationCLIUIBoth {
+		actions = append(actions, manifest.TemplateAction{
+			Source: "tools/generator/render/templates/project/cli_tui.go.tmpl", Destination: "cmd/cli/tui.go",
+			Kind: "cli", Data: map[string]any{},
+		})
+	}
+	if contains(copiedTools(selected.generation.ToolsResolved), "profileassets") {
+		actions = append(actions, manifest.TemplateAction{
+			Source:      "tools/generator/render/templates/project/assets_selection.go.tmpl",
+			Destination: "tools/internal/profileassets/selection.go",
+			Kind:        "assets",
+			Data:        map[string]any{"Files": selectedAssetFiles(root, selected)},
+		})
 	}
 	if includeDatabase(selected) {
 		actions = append(actions,
@@ -197,6 +253,20 @@ func templateActions(root string, selected selection) []manifest.TemplateAction 
 		})
 	}
 	return actions
+}
+
+// copiedTools expands tools with their compile-time support packages without
+// changing the user-facing resolved set persisted in the manifest.
+func copiedTools(tools []string) []string {
+	out := slices.Clone(tools)
+	if contains(out, "checkcapabilities") {
+		for _, support := range []string{"heavydeps", "profileassets"} {
+			if !contains(out, support) {
+				out = append(out, support)
+			}
+		}
+	}
+	return out
 }
 
 func configSections(selected selection) []string {
@@ -237,15 +307,27 @@ func configSections(selected selection) []string {
 	services := selectionRuntimeServices(selected)
 	if !services[contract.RuntimeServiceMySQL] {
 		delete(keep, "db")
+		// 雪花 ID 只在数据库状态初始化时使用；无 DB 的 minimal 不需要 worker_id。
+		delete(keep, "id")
 	}
 	if !services[contract.RuntimeServiceRedis] {
 		delete(keep, "redis")
+		// 租户维度限流是 Redis 滑动窗口；无 Redis 时该段没有消费者。
+		delete(keep, "ratelimit")
 	}
 	if !includeObservability(selected) {
 		delete(keep, "otel")
 	}
 	if !selectedNames["grpc"] {
 		delete(keep, "grpc")
+	}
+	if len(selected.copy) == 0 {
+		// 0 能力形态没有可门控的能力；capabilities.enabled 只会引入未知能力错误。
+		delete(keep, "capabilities")
+	}
+	if selected.generation.Runtime == manifest.GenerationRuntimeLean {
+		delete(keep, "http_client")
+		delete(keep, "error_reporting")
 	}
 	return sortedStrings(mapsKeys(keep))
 }
@@ -276,11 +358,9 @@ func selectionRuntimeServices(selected selection) map[contract.RuntimeService]bo
 	return services
 }
 
-// includeObservability 决定部署资产是否携带观测栈。当前没有独立的 observability
-// 能力；只有 full 预设携带完整观测栈，minimal/auth 不生成 OpenObserve/OTel
-// 相关清单，避免默认带上一套与所选能力无关的基础设施。
+// includeObservability 决定部署资产是否携带观测栈；由 deploy 组件选择控制。
 func includeObservability(selected selection) bool {
-	return selected.template == "full" || selected.profile == "full"
+	return HasDeploy(selected.generation.Deploy, manifest.DeployObservability)
 }
 
 func includeDatabase(selected selection) bool {
@@ -434,21 +514,39 @@ func cliImports(root string, selected selection) []map[string]any {
 
 func mergeActions(root string, selected selection) []manifest.MergeAction {
 	sections := configSections(selected)
-	return []manifest.MergeAction{
-		{Source: "configs/app.yaml", Destination: "configs/app.yaml", Strategy: "sections", Sections: slices.Clone(sections)},
-		{Source: "configs/app.prod.yaml", Destination: "configs/app.prod.yaml", Strategy: "sections", Sections: slices.Clone(sections)},
-		{Source: "deploy/helm/values.yaml", Destination: "deploy/helm/values.yaml", Strategy: "sections", Sections: valuesSections(root, selected)},
+	var dropKeys []string
+	if selected.generation.Runtime == manifest.GenerationRuntimeLean {
+		dropKeys = []string{"rate_limit_rate", "rate_limit_burst", "idempotency_enabled", "idempotency_ttl_sec"}
 	}
+	actions := []manifest.MergeAction{
+		{Source: "configs/app.yaml", Destination: "configs/app.yaml", Strategy: "sections", Sections: slices.Clone(sections), DropKeys: slices.Clone(dropKeys)},
+		{Source: "configs/app.prod.yaml", Destination: "configs/app.prod.yaml", Strategy: "sections", Sections: slices.Clone(sections), DropKeys: slices.Clone(dropKeys)},
+	}
+	if HasDeploy(selected.generation.Deploy, manifest.DeployHelm) {
+		actions = append(actions, manifest.MergeAction{
+			Source: "deploy/helm/values.yaml", Destination: "deploy/helm/values.yaml",
+			Strategy: "sections", Sections: valuesSections(root, selected),
+		})
+	}
+	return actions
 }
 
 func rewriteActions(root, module string, selected selection) []manifest.RewriteAction {
 	actions := []manifest.RewriteAction{
 		{Kind: "module", From: "jimu", To: module, Files: []string{}},
-		{Kind: "file-patch", From: `const modulePath = "jimu"`, To: `const modulePath = "` + module + `"`, Files: []string{"tools/checkcapabilities/drivers.go"}},
-		{Kind: "file-patch", From: `"jimu/tools/logcheck"`, To: `"` + module + `/tools/logcheck"`, Files: []string{"tools/logcheck/main.go"}},
 		{Kind: "file-patch", From: `Use:   "jimu",`, To: `Use:   "` + projectName(module) + `",`, Files: []string{"cmd/cli/main.go"}},
 		{Kind: "file-patch", From: `Short: "Jimu backend framework CLI",`, To: `Short: "` + projectName(module) + ` backend CLI",`, Files: []string{"cmd/cli/main.go"}},
 		{Kind: "deploy", From: "jimu", To: projectName(module), Files: deployFiles()},
+	}
+	if contains(selected.generation.ToolsResolved, "checkcapabilities") {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch", From: `const modulePath = "jimu"`, To: `const modulePath = "` + module + `"`, Files: []string{"tools/checkcapabilities/drivers.go"},
+		})
+	}
+	if contains(selected.generation.ToolsResolved, "logcheck") {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch", From: `"jimu/tools/logcheck"`, To: `"` + module + `/tools/logcheck"`, Files: []string{"tools/logcheck/main.go"},
+		})
 	}
 	// 0 能力项目只剩空实现的 Redis 文件，去掉它们的 build tag 才能参与编译。
 	if len(selected.copy) == 0 {
@@ -474,6 +572,11 @@ func rewriteActions(root, module string, selected selection) []manifest.RewriteA
 		}
 	}
 	if !includeDatabase(selected) {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch",
+			From: "\tif c.ID.WorkerID < 0 || c.ID.WorkerID > 1023 {\n\t\treturn errors.New(\"invalid id.worker_id, must be 0-1023\")\n\t}\n",
+			To:   "", Files: []string{"internal/config/validate.go"},
+		})
 		for _, file := range []string{
 			"internal/app/container_nodb.go",
 			"internal/profiles/seed_nodb.go",
@@ -482,8 +585,66 @@ func rewriteActions(root, module string, selected selection) []manifest.RewriteA
 				Kind: "file-patch", From: "//go:build jimu_nodb", To: "// 未启用数据库的构建：由生成器去掉 build tag", Files: []string{file},
 			})
 		}
+		if includeObservability(selected) {
+			actions = append(actions, manifest.RewriteAction{
+				Kind: "file-patch", From: "//go:build !jimu_no_otel && jimu_nodb",
+				To: "// 未启用数据库的构建：由生成器去掉 build tag", Files: []string{"internal/app/container_otel_nodb.go"},
+			})
+		}
+	} else if includeObservability(selected) {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch", From: "//go:build !jimu_no_otel && !jimu_nodb",
+			To: "// 已启用数据库的构建：由生成器去掉 build tag", Files: []string{"internal/app/container_otel_db.go"},
+		})
+	}
+	if selected.generation.Runtime == manifest.GenerationRuntimeLean {
+		for _, file := range []string{
+			"internal/app/container_runtime_empty.go",
+			"internal/app/bootstrap_metrics_empty.go",
+			"internal/assembly/context_runtime_empty.go",
+			"internal/platform/http/middleware/observability_lean.go",
+			"internal/platform/http/middleware/ratelimit_lean.go",
+		} {
+			actions = append(actions, manifest.RewriteAction{
+				Kind: "file-patch", From: "//go:build jimu_lean", To: "// lean 内核：由生成器去掉 build tag", Files: []string{file},
+			})
+		}
+	} else {
+		// 标准内核里 mysqlStore 只剩一种数据库形态；去掉对应的组合 tag，
+		// 另一个变体在 optionalKernelFiles 中已剔除。
+		file, from := "internal/app/container_mysql_store.go", "//go:build !jimu_lean && !jimu_nodb"
+		if !includeDatabase(selected) {
+			file, from = "internal/app/container_mysql_store_nodb.go", "//go:build !jimu_lean && jimu_nodb"
+		}
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch", From: from, To: "// 标准内核：由生成器去掉 build tag", Files: []string{file},
+		})
 	}
 	actions = append(actions, driverRewriteActions(root, selected)...)
+	actions = append(actions, manifest.RewriteAction{
+		Kind: "file-patch", From: `serviceName            = "jimu"` + "\n",
+		To:    `serviceName            = "` + projectName(module) + `"` + "\n",
+		Files: []string{"internal/platform/http/serviceinfo.go"},
+	})
+	if !contains(selected.copy, "apidocs") {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch", From: `serviceAPIDocs         = "/swagger/index.html"` + "\n",
+			To: `serviceAPIDocs         = ""` + "\n", Files: []string{"internal/platform/http/serviceinfo.go"},
+		})
+	}
+	if selected.generation.Runtime == manifest.GenerationRuntimeLean {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch", From: `serviceMetrics         = "management 端口 /metrics（默认 9090）"` + "\n",
+			To: `serviceMetrics         = ""` + "\n", Files: []string{"internal/platform/http/serviceinfo.go"},
+		})
+	}
+	if !HasDeploy(selected.generation.Deploy, manifest.DeployObservability) {
+		actions = append(actions, manifest.RewriteAction{
+			Kind: "file-patch",
+			From: `serviceObservabilityUI = "OpenObserve http://localhost:5080（make up-observability 后可用）"` + "\n",
+			To:   `serviceObservabilityUI = ""` + "\n", Files: []string{"internal/platform/http/serviceinfo.go"},
+		})
+	}
 	return actions
 }
 
@@ -528,21 +689,23 @@ func driverRewriteActions(root string, selected selection) []manifest.RewriteAct
 		}
 	}
 
-	values := valuesSections(root, selected)
-	if slices.Contains(values, "cache") {
-		if driver := chosen("cache", "redis"); driver != "" {
-			add("file-patch", "deploy/helm/values.yaml", `  driver: redis`, `  driver: `+driver)
+	if HasDeploy(selected.generation.Deploy, manifest.DeployHelm) {
+		values := valuesSections(root, selected)
+		if slices.Contains(values, "cache") {
+			if driver := chosen("cache", "redis"); driver != "" {
+				add("file-patch", "deploy/helm/values.yaml", `  driver: redis`, `  driver: `+driver)
+			}
+		}
+		if slices.Contains(values, "storage") {
+			if driver := chosen("storage", "local"); driver != "" {
+				add("file-patch", "deploy/helm/values.yaml", `  type: local`, `  type: `+driver)
+			}
+		}
+		if (slices.Contains(values, "db") || slices.Contains(values, "backup")) && selected.dbDriver == "postgres" {
+			add("file-patch", "deploy/helm/values.yaml", `  driver: mysql`, `  driver: postgres`)
 		}
 	}
-	if slices.Contains(values, "storage") {
-		if driver := chosen("storage", "local"); driver != "" {
-			add("file-patch", "deploy/helm/values.yaml", `  type: local`, `  type: `+driver)
-		}
-	}
-	if (slices.Contains(values, "db") || slices.Contains(values, "backup")) && selected.dbDriver == "postgres" {
-		add("file-patch", "deploy/helm/values.yaml", `  driver: mysql`, `  driver: postgres`)
-	}
-	if includeBackup(selected) && selected.dbDriver == "postgres" {
+	if HasDeploy(selected.generation.Deploy, manifest.DeployK8s) && includeBackup(selected) && selected.dbDriver == "postgres" {
 		add("asset-file-patch", "deploy/k8s/backup-cronjob.yaml", `value: "mysql"`, `value: "postgres"`)
 	}
 	return actions
@@ -552,6 +715,9 @@ func driverRewriteActions(root string, selected selection) []manifest.RewriteAct
 // OpenObserve 资产与告警规则不在内：它们的 jimu_ 前缀是运行期协议名，改名会断开既有仪表盘。
 func deployFiles() []string {
 	return []string{
+		"deploy/docker/Dockerfile",
+		"deploy/compose/docker-compose.yml",
+		"deploy/compose/compose.observability.yml",
 		"deploy/k8s/deployment.yaml",
 		"deploy/k8s/service.yaml",
 		"deploy/k8s/configmap.yaml",
@@ -562,12 +728,20 @@ func deployFiles() []string {
 		"deploy/k8s/pdb.yaml",
 		"deploy/k8s/networkpolicy.yaml",
 		"deploy/k8s/backup-cronjob.yaml",
-		"deploy/k8s/openobserve.yaml",
-		"deploy/k8s/otel-collector.yaml",
+		"deploy/k8s/observability/openobserve.yaml",
+		"deploy/k8s/observability/otel-collector.yaml",
 		"deploy/helm/Chart.yaml",
 		"deploy/helm/values.yaml",
+		"deploy/helm/templates/observability/openobserve.yaml",
+		"deploy/helm/templates/observability/otel-collector.yaml",
 		"deploy/helm/templates/service.yaml",
 		"deploy/backup/Dockerfile",
+		"deploy/scripts/backup.sh",
+		"deploy/scripts/restore.sh",
+		"deploy/scripts/db_common.sh",
+		"deploy/scripts/install_db_clients.sh",
+		"deploy/scripts/init-secrets.sh",
+		"deploy/scripts/observability.sh",
 	}
 }
 
@@ -580,7 +754,7 @@ func generatedFiles(root string, selected selection) ([]string, error) {
 	for _, action := range actions {
 		collectFiles(root, action.Source, action.Exclude, seen)
 	}
-	for _, action := range templateActions(root, selected) {
+	for _, action := range templateActions(root, "", selected) {
 		seen[action.Destination] = true
 	}
 	for _, action := range mergeActions(root, selected) {
@@ -710,7 +884,7 @@ func projectName(module string) string {
 //
 // internal/e2e 只有测试文件，Tests=false 下永远不可达，因此 0 能力项目会自动丢掉它。
 func kernelCopyActions(root string, selected selection) ([]manifest.CopyAction, error) {
-	seeds := []string{"./internal/assembly", "./internal/capability", "./internal/platform/db"}
+	seeds := []string{"./internal/assembly", "./internal/capability", "./internal/platform/db", "./internal/platform/lock"}
 	if includeDatabase(selected) {
 		// CLI 的 migrate/seed 仍需要数据库连接与种子实现；它们不是 server 依赖，
 		// 但不加入闭包会让 internal/platform 的聚合复制把这两个包漏掉。
@@ -813,10 +987,70 @@ func optionalKernelFiles(selected selection) map[string][]string {
 		pruned["internal/app"] = append(pruned["internal/app"], "container_db.go")
 		pruned["internal/profiles"] = append(pruned["internal/profiles"], "seed_db.go")
 		pruned["internal/platform/scheduler"] = append(pruned["internal/platform/scheduler"], "mysql_store.go", "mysql_store_test.go")
+		// db 包仍作为 seed 保留到测试裁剪阶段：internal/shared/testutil 会 import 它，
+		// 过早移除会让生成期“生产文件不得 import 缺失包”检查误报。最终无 DB 项目
+		// 的 db Go 文件会被运行时闭包裁掉，这里只需确保 SQL 夹具不进入产物。
+		pruned["internal/platform/db"] = append(pruned["internal/platform/db"], "testdata")
 	}
 	if !contains(selected.copy, "access") {
 		pruned["internal/app"] = append(pruned["internal/app"], "seed_casbin.go")
 		pruned["internal/platform/seeding"] = append(pruned["internal/platform/seeding"], "seed_casbin.go")
+		pruned["conf"] = append(pruned["conf"], "rbac_model.conf")
+	}
+	if len(selected.copy) == 0 {
+		// 0 能力项目没有能力端口、能力请求校验或管理端路由；这些文件只在能力
+		// 装配后才有消费者。保留 contract 的基础接口与 HTTP 内核中间件即可。
+		pruned["internal/contract"] = append(pruned["internal/contract"],
+			"admin_websocket_port.go",
+			"client.go",
+			"client_test.go",
+			"events.go",
+			"openapi.go",
+			"outbox_mq_port.go",
+			"ports.go",
+			"systemroles.go",
+			"systemroles_test.go",
+		)
+		pruned["internal/assembly"] = append(pruned["internal/assembly"], "context_auth.go", "context_ports_test.go")
+		// 0 能力项目只有通用错误码和 HTTP 文案；能力错误码及其
+		// i18n/响应映射由独立文件提供，可随能力面一起裁掉。
+		pruned["internal/shared/errors"] = append(pruned["internal/shared/errors"],
+			"capability.go", "capability_test.go")
+		pruned["internal/shared/i18n"] = append(pruned["internal/shared/i18n"],
+			"capability.go", "capability_test.go")
+		pruned["internal/shared/response"] = append(pruned["internal/shared/response"],
+			"capability.go", "capability_test.go")
+		pruned["internal/platform/http/middleware"] = append(pruned["internal/platform/http/middleware"],
+			"admin_auth.go",
+			"admin_auth_test.go",
+			"signature.go",
+			"signature_test.go",
+			"validate.go",
+			"validate_test.go",
+		)
+	}
+	if selected.generation.Runtime == manifest.GenerationRuntimeLean {
+		pruned["internal/app"] = append(pruned["internal/app"],
+			"container_runtime.go",
+			"container_mysql_store.go",
+			"container_mysql_store_nodb.go",
+			"bootstrap_metrics.go",
+		)
+		pruned["internal/platform/http/middleware"] = append(pruned["internal/platform/http/middleware"],
+			"metrics.go", "metrics_test.go",
+			"concurrency.go", "concurrency_test.go",
+			"ratelimit.go", "ratelimit_test.go",
+		)
+		pruned["internal/assembly"] = append(pruned["internal/assembly"], "context_runtime.go")
+	} else {
+		pruned["internal/app"] = append(pruned["internal/app"], "container_runtime_empty.go", "bootstrap_metrics_empty.go")
+		if includeDatabase(selected) {
+			pruned["internal/app"] = append(pruned["internal/app"], "container_mysql_store_nodb.go")
+		} else {
+			pruned["internal/app"] = append(pruned["internal/app"], "container_mysql_store.go")
+		}
+		pruned["internal/platform/http/middleware"] = append(pruned["internal/platform/http/middleware"], "observability_lean.go", "ratelimit_lean.go")
+		pruned["internal/assembly"] = append(pruned["internal/assembly"], "context_runtime_empty.go")
 	}
 	// Postgres 驱动只在显式选择 db.driver=postgres 时编译；默认 MySQL 项目
 	// 不带 gorm postgres driver 与 pgx（约 1.9 MB）。

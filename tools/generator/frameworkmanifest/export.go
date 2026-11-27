@@ -30,8 +30,14 @@ type Request struct {
 	// DBDriver 选择编译进项目的数据库驱动（mysql 默认，postgres 可选）。
 	DBDriver  string
 	Framework *manifest.Framework
+	Tests     string
+	Tools     string
+	Deploy    string
+	CLIUI     string
+	Runtime   string
 	// Drivers 保留既有项目的驱动选择；未列出的能力由默认驱动规则补齐。
-	Drivers map[string][]string
+	Drivers    map[string][]string
+	Generation *manifest.Generation
 }
 
 type selection struct {
@@ -51,6 +57,7 @@ type selection struct {
 	drivers    map[string][]string
 	ungated    map[string]bool
 	assemblies []assembly.Capability
+	generation manifest.Generation
 }
 
 // Resolution 是 `jimu new --dry-run` 与后续 manifest composition（P0-3）共用的解析摘要。
@@ -103,18 +110,41 @@ func ExportDetailed(req Request) (manifest.Document, Resolution, error) {
 			selected, err = resolvePresetSelection(root, preset)
 			selected.dbDriver = dbDriver
 			applyDBDriverToSearch(&selected)
-			if err == nil {
-				doc, err = buildDocument(root, req.Module, selected, req.Framework)
-			}
 		}
 	} else {
 		selected, err = resolveSelection(root, req)
 		selected.dbDriver = dbDriver
 		applyDBDriverToSearch(&selected)
-		if err == nil {
-			doc, err = buildDocument(root, req.Module, selected, req.Framework)
+	}
+	if err != nil {
+		return manifest.Document{}, Resolution{}, err
+	}
+	if req.Generation != nil {
+		selected.generation = *req.Generation
+	} else {
+		generationProfile := selected.profile
+		if generationProfile == "" {
+			generationProfile = selected.template
+		}
+		var deploy []string
+		if req.Deploy != "" {
+			deploy, err = ParseDeploy(req.Deploy)
+			if err != nil {
+				return manifest.Document{}, Resolution{}, err
+			}
+		}
+		selected.generation, err = ResolveGeneration(generationProfile, req.With, selected.declared, GenerationRequest{
+			Tests:   req.Tests,
+			Tools:   req.Tools,
+			Deploy:  deploy,
+			CLIUI:   req.CLIUI,
+			Runtime: req.Runtime,
+		})
+		if err != nil {
+			return manifest.Document{}, Resolution{}, err
 		}
 	}
+	doc, err = buildDocument(root, req.Module, selected, req.Framework)
 	if err != nil {
 		return manifest.Document{}, Resolution{}, err
 	}
@@ -275,12 +305,34 @@ func ExportForAdd(root string, previous manifest.Document, name, driver string, 
 		// otherwise an idempotent --force run would rewrite only metadata.
 		profile = previous.Selection.Profile
 	}
+	resolvedNames := make([]string, 0, len(composed.Resolved))
+	for _, descriptor := range composed.Resolved {
+		resolvedNames = append(resolvedNames, descriptor.Name)
+	}
+	runtime := previous.Generation.Runtime
+	if runtime == manifest.GenerationRuntimeLean && len(resolvedNames) > 0 {
+		runtime = manifest.GenerationRuntimeStandard
+	}
+	generation, err := ResolveGeneration(profile, with, resolvedNames, GenerationRequest{
+		Tests:   previous.Generation.Tests,
+		Tools:   previous.Generation.ToolsMode,
+		Deploy:  slices.Clone(previous.Generation.Deploy),
+		CLI:     previous.Generation.CLI,
+		CLIUI:   previous.Generation.CLIUI,
+		Runtime: runtime,
+	})
+	if err != nil {
+		return manifest.Document{}, err
+	}
 	if profile != "" {
-		return Export(Request{Root: root, Profile: profile, Module: module, Drivers: composed.Drivers, Framework: framework})
+		return Export(Request{
+			Root: root, Profile: profile, Module: module, Drivers: composed.Drivers,
+			Generation: &generation, Framework: framework,
+		})
 	}
 	return Export(Request{
 		Root: root, Profile: profile, With: with, Shape: previous.Selection.Shape, Module: module, Drivers: composed.Drivers,
-		Framework: framework,
+		Generation: &generation, Framework: framework,
 	})
 }
 
@@ -310,9 +362,10 @@ func buildDocument(root, module string, selected selection, frameworkOverride *m
 			Capabilities: slices.Clone(selected.declared), Drivers: cloneDrivers(selected.drivers),
 		},
 		Composition:    compositionFor(selected),
+		Generation:     generationFor(selected),
 		Capabilities:   capabilityFacts(root, selected),
 		Copy:           copyActionsValue,
-		Templates:      templateActions(root, selected),
+		Templates:      templateActions(root, module, selected),
 		Merges:         mergeActions(root, selected),
 		Rewrites:       rewriteActions(root, module, selected),
 		Assets:         assetActions(root, selected),
@@ -328,6 +381,13 @@ func buildDocument(root, module string, selected selection, frameworkOverride *m
 		return manifest.Document{}, err
 	}
 	return doc, nil
+}
+
+func generationFor(selected selection) *manifest.Generation {
+	generation := selected.generation
+	generation.ToolsResolved = append([]string(nil), generation.ToolsResolved...)
+	generation.Deploy = append([]string(nil), generation.Deploy...)
+	return &generation
 }
 
 func compositionFor(selected selection) *manifest.Composition {

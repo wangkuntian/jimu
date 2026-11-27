@@ -1,0 +1,130 @@
+package frameworkmanifest
+
+import (
+	"fmt"
+	"slices"
+
+	"jimu/tools/generator/manifest"
+)
+
+// GenerationRequest is the raw, user-facing generation policy. Deploy is nil
+// when the caller wants the profile default; a non-nil empty slice means none.
+type GenerationRequest struct {
+	Tests   string
+	Tools   string
+	Deploy  []string
+	CLI     string
+	CLIUI   string
+	Runtime string
+}
+
+// ResolveGeneration turns raw flags into the policy persisted in a v4
+// manifest. It is pure and does not inspect the framework or filesystem.
+func ResolveGeneration(profile, with string, declared []string, raw GenerationRequest) (manifest.Generation, error) {
+	generation := defaultGeneration(profile, with, declared)
+
+	if raw.Tests != "" {
+		if !slices.Contains([]string{manifest.GenerationTestsSelected, manifest.GenerationTestsAll, manifest.GenerationTestsNone}, raw.Tests) {
+			return manifest.Generation{}, fmt.Errorf("--tests must be selected, all, or none")
+		}
+		generation.Tests = raw.Tests
+	}
+	if raw.Tools != "" {
+		if !slices.Contains([]string{manifest.GenerationToolsAuto, manifest.GenerationToolsAll, manifest.GenerationToolsNone}, raw.Tools) {
+			return manifest.Generation{}, fmt.Errorf("--tools must be auto, all, or none")
+		}
+		generation.ToolsMode = raw.Tools
+	}
+	generation.ToolsResolved = resolveTools(generation.ToolsMode, declared)
+
+	if raw.Deploy != nil {
+		deploy, err := normalizeDeploy(raw.Deploy)
+		if err != nil {
+			return manifest.Generation{}, err
+		}
+		generation.Deploy = deploy
+	}
+	// Observability 需要 standard 运行时的 OTel/reporter/metrics 组件；minimal 的
+	// 默认 lean 只适用于纯内核。显式 --runtime=lean 仍在下面拒绝，不静默改写用户选择。
+	if raw.Runtime == "" && generation.Runtime == manifest.GenerationRuntimeLean &&
+		slices.Contains(generation.Deploy, manifest.DeployObservability) {
+		generation.Runtime = manifest.GenerationRuntimeStandard
+	}
+	if raw.CLI != "" {
+		if !slices.Contains([]string{manifest.GenerationCLIMinimal, manifest.GenerationCLIFull}, raw.CLI) {
+			return manifest.Generation{}, fmt.Errorf("--cli-commands must be minimal or full")
+		}
+		generation.CLI = raw.CLI
+	}
+	if raw.CLIUI != "" {
+		if !slices.Contains([]string{manifest.GenerationCLIUIDirect, manifest.GenerationCLIUIBoth}, raw.CLIUI) {
+			return manifest.Generation{}, fmt.Errorf("--cli must be both or direct")
+		}
+		generation.CLIUI = raw.CLIUI
+	}
+	explicitRuntime := raw.Runtime != ""
+	if explicitRuntime {
+		if !slices.Contains([]string{manifest.GenerationRuntimeLean, manifest.GenerationRuntimeStandard}, raw.Runtime) {
+			return manifest.Generation{}, fmt.Errorf("--runtime must be lean or standard")
+		}
+		generation.Runtime = raw.Runtime
+	}
+	if explicitRuntime && generation.Runtime == manifest.GenerationRuntimeLean && len(declared) > 0 {
+		return manifest.Generation{}, fmt.Errorf("--runtime=lean requires a project without capabilities")
+	}
+	if explicitRuntime && generation.Runtime == manifest.GenerationRuntimeLean && slices.Contains(generation.Deploy, manifest.DeployObservability) {
+		return manifest.Generation{}, fmt.Errorf("--runtime=lean cannot be combined with --deploy=observability")
+	}
+	return generation, nil
+}
+
+func defaultGeneration(profile, with string, declared []string) manifest.Generation {
+	generation := manifest.Generation{
+		RuntimeClosure: true,
+		Runtime:        manifest.GenerationRuntimeStandard,
+		Tests:          manifest.GenerationTestsSelected,
+		ToolsMode:      manifest.GenerationToolsAuto,
+		Deploy:         DefaultDeploy(profile),
+		CLI:            manifest.GenerationCLIMinimal,
+		CLIUI:          manifest.GenerationCLIUIDirect,
+	}
+	if len(declared) == 0 {
+		generation.Runtime = manifest.GenerationRuntimeLean
+	}
+	switch profile {
+	case "minimal":
+		return generation
+	case "auth":
+		generation.ToolsMode = manifest.GenerationToolsAll
+		generation.CLI = manifest.GenerationCLIFull
+		generation.CLIUI = manifest.GenerationCLIUIBoth
+		return generation
+	case "full":
+		generation.ToolsMode = manifest.GenerationToolsAll
+		generation.CLI = manifest.GenerationCLIFull
+		generation.CLIUI = manifest.GenerationCLIUIBoth
+		return generation
+	}
+	if profile == "" && with != "" {
+		generation.Deploy = DefaultDeploy("")
+		generation.CLIUI = manifest.GenerationCLIUIBoth
+		if len(declared) > 0 {
+			generation.CLI = manifest.GenerationCLIFull
+		}
+	}
+	return generation
+}
+
+func resolveTools(mode string, declared []string) []string {
+	switch mode {
+	case manifest.GenerationToolsNone:
+		return []string{}
+	case manifest.GenerationToolsAll:
+		return []string{"checkcapabilities", "heavydeps", "logcheck", "profileassets"}
+	default:
+		if len(declared) == 0 {
+			return []string{"logcheck"}
+		}
+		return []string{"checkcapabilities", "logcheck"}
+	}
+}

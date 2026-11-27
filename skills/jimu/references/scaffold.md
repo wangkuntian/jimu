@@ -78,6 +78,7 @@
 cd /tmp/sk-demo && go build ./... && go run ./tools/checkcapabilities && go test ./... -count=1
 grep -rn '"jimu/' /tmp/sk-demo --include='*.go'      # 期望 0 命中（module 已重写）
 make check-templates                                 # 本仓模板漂移门禁
+make test-scaffold-audit                             # minimal/auth 两棵生成树的构建、Compose 与 Secret 审计
 make test-scaffold-matrix                            # 官方模板预算 + basic smoke + auth 空库 E2E
 ```
 

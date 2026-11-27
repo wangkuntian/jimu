@@ -13,7 +13,7 @@ func TestRunPrintsProfileAssets(t *testing.T) {
 	var out bytes.Buffer
 	require.NoError(t, run([]string{"full"}, &out))
 	assert.Contains(t, out.String(), "docs/openapi")
-	assert.Contains(t, out.String(), "deploy/openobserve")
+	assert.Contains(t, out.String(), "deploy/observability")
 	assert.Contains(t, out.String(), "deploy/k8s")
 }
 

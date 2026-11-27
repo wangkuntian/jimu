@@ -46,7 +46,7 @@ func TestAssetsForMinimalIncludesCoreGroupsButNotOpenapi(t *testing.T) {
 	assert.Contains(t, got, "deploy/k8s")
 	assert.Contains(t, got, "deploy/helm")
 	assert.Contains(t, got, "deploy/backup")
-	assert.NotContains(t, got, "deploy/openobserve")
+	assert.NotContains(t, got, "deploy/observability")
 	assert.NotContains(t, got, "docs/openapi")
 }
 
@@ -86,10 +86,10 @@ func TestAssetsForWithAPIdocsCarriesTheUngatedAsset(t *testing.T) {
 func TestCopyAssetsCopiesEveryOwnedFile(t *testing.T) {
 	root := frameworkRootForTest(t)
 	dst := t.TempDir()
-	files, err := CopyAssets(root, dst, []string{"deploy/openobserve"})
+	files, err := CopyAssets(root, dst, []string{"deploy/observability/openobserve"})
 	require.NoError(t, err)
 	assert.NotEmpty(t, files)
-	owned, err := profileassets.OwnershipIn(dst, map[string][]string{"group:observability": {"deploy/openobserve"}})
+	owned, err := profileassets.OwnershipIn(dst, map[string][]string{"group:observability": {"deploy/observability/openobserve"}})
 	require.NoError(t, err)
 	assert.Equal(t, slices.Sorted(maps.Keys(owned)), files)
 }
@@ -112,7 +112,7 @@ func TestCopyAssetsCopiesExactlyTheOwnedTree(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, slices.Sorted(maps.Keys(owned)), files)
 	// minimal 不带观测栈；基础 Helm/K8s 资产仍必须真的落地。
-	assert.NotContains(t, files, "deploy/otel-collector.yaml")
+	assert.NotContains(t, files, "deploy/observability/otel-collector.yaml")
 	assert.Contains(t, files, "deploy/helm/Chart.yaml")
 	assert.Contains(t, files, "deploy/k8s/deployment.yaml")
 }
@@ -230,7 +230,7 @@ func TestValuesSectionsPrunesUnselectedCapabilityKeys(t *testing.T) {
 // 改成 /opt/<module>/scripts/（容器内不存在的路径）。资产里的 jimu 是框架自己的名字（裁定 3）。
 func TestCopiedAssetsKeepFrameworkNames(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, Template: "auth", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 	content, err := os.ReadFile(filepath.Join(dir, "deploy", "backup", "Dockerfile"))
 	require.NoError(t, err)

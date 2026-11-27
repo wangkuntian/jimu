@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract_version": "v0.1",
-  "target_product_version": "v0.12.1",
+  "target_product_version": "v0.13.0",
   "enforcement": "release-blocking",
   "measurement": {
     "generated_files": "all files in the generated tree, including .jimu/manifest.json",
@@ -17,7 +17,7 @@
       "limits": {
         "generated_files": 280,
         "direct_dependencies": 32,
-        "go_closure_files": 86,
+        "go_closure_files": 87,
         "go_closure_lines": 9700,
         "external_services": 0,
         "business_routes": 0,
@@ -35,7 +35,7 @@
       "limits": {
         "generated_files": 420,
         "direct_dependencies": 44,
-        "go_closure_files": 165,
+        "go_closure_files": 169,
         "go_closure_lines": 17800,
         "external_services": 2,
         "business_routes": 31,
@@ -52,8 +52,8 @@
     "full": {
       "limits": {
         "generated_files": 822,
-        "direct_dependencies": 64,
-        "go_closure_files": 375,
+        "direct_dependencies": 67,
+        "go_closure_files": 382,
         "go_closure_lines": 40400,
         "external_services": 4,
         "business_routes": 94,

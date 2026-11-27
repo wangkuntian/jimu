@@ -11,7 +11,6 @@ import (
 	"jimu/internal/platform/health"
 	"jimu/internal/platform/logger"
 	"jimu/internal/platform/metrics"
-	"jimu/internal/platform/scheduler"
 
 	"gorm.io/gorm"
 )
@@ -50,14 +49,7 @@ func (s dbState) close() error {
 	return sqlDB.Close()
 }
 
-func (s dbState) mysqlStore() (scheduler.Store, error) {
-	if s.conn == nil {
-		return nil, fmt.Errorf("scheduler store mysql requires a mysql runtime service")
-	}
-	return scheduler.NewMySQLStore(s.conn), nil
-}
-
-func (s dbState) collector() (*metrics.DBCollector, error) {
+func (s dbState) collector() (contract.MetricsCollector, error) {
 	if s.conn == nil {
 		return nil, nil
 	}

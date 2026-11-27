@@ -8,7 +8,6 @@ import (
 	"jimu/internal/capabilities/oauth/interfaces"
 	oauthplatform "jimu/internal/capabilities/oauth/provider"
 	"jimu/internal/contract"
-	"jimu/internal/platform/httpclient"
 	"jimu/internal/platform/identity"
 	authredis "jimu/internal/platform/identity/redisstore"
 
@@ -23,7 +22,7 @@ type Module struct {
 }
 
 // New 创建 OAuth 模块。签发配置与用户账户仓库由装配层提供。
-func New(db *gorm.DB, rdb redistore.Client, oauthCfg Config, authCfg contract.AuthConfig, httpClient *httpclient.Client, users contract.AccountRepository, tenants ...contract.TenantStateSource) *Module {
+func New(db *gorm.DB, rdb redistore.Client, oauthCfg Config, authCfg contract.AuthConfig, httpClient contract.HTTPClient, users contract.AccountRepository, tenants ...contract.TenantStateSource) *Module {
 	bindingRepo := oauthinfra.NewMySQLBindingRepository(db)
 	jwtUtil := identity.NewWithRotation(authCfg.JWTSecret, authCfg.JWTPreviousSecret, authCfg.Issuer, authCfg.AccessExpireMin, authCfg.RefreshExpireDay)
 	sessionStore := authredis.NewSessionStore(rdb)
@@ -32,7 +31,7 @@ func New(db *gorm.DB, rdb redistore.Client, oauthCfg Config, authCfg contract.Au
 }
 
 // buildProviders 按配置构造启用的 OAuth 提供商
-func buildProviders(cfg Config, client *httpclient.Client) map[string]oauthplatform.Provider {
+func buildProviders(cfg Config, client contract.HTTPClient) map[string]oauthplatform.Provider {
 	providers := make(map[string]oauthplatform.Provider)
 	for name, pc := range cfg.Providers {
 		if !pc.Enabled {

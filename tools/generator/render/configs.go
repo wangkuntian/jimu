@@ -28,6 +28,9 @@ func mergeConfig(sourceRoot, destinationRoot string, action manifest.MergeAction
 			return fmt.Errorf("filter merge source %s: %w", action.Source, err)
 		}
 	}
+	if len(action.DropKeys) > 0 {
+		sourceContent = dropConfigKeys(sourceContent, action.DropKeys)
+	}
 	destinationContent, err := os.ReadFile(destination)
 	if os.IsNotExist(err) {
 		destinationContent = nil
@@ -114,6 +117,29 @@ func filterTopLevelSections(content []byte, sections []string) ([]byte, error) {
 		}
 	}
 	return []byte(out.String()), nil
+}
+
+// dropConfigKeys 删除匹配的二级键行；键值按前缀匹配，保留其他内容不变。
+func dropConfigKeys(content []byte, keys []string) []byte {
+	if len(keys) == 0 {
+		return content
+	}
+	lines := strings.SplitAfter(string(content), "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimLeft(line, " \t")
+		drop := false
+		for _, key := range keys {
+			if strings.HasPrefix(trimmed, key+":") || strings.HasPrefix(trimmed, "# "+key+":") {
+				drop = true
+				break
+			}
+		}
+		if !drop {
+			out = append(out, line)
+		}
+	}
+	return []byte(strings.Join(out, ""))
 }
 
 func orderedTopLevelBlocks(content []byte) ([]string, []string, error) {

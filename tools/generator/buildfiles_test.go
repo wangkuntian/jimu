@@ -26,6 +26,7 @@ func TestGeneratedMakefileHasNoProfileBranch(t *testing.T) {
 	assert.NotContains(t, src, "-overlay=")
 	assert.Contains(t, src, "go build -ldflags", "普通 go build")
 	assert.Contains(t, src, "-w -s", "生成项目默认剥离符号表")
+	assert.Contains(t, src, "rmdir logs", "clean 应清理 compose 创建的空 logs 目录")
 	assert.Contains(t, src, "\ncheck-capabilities:")
 	// 单形态项目不需要多形态资产工具：这两个目标依赖已不随生成项目发布的工具树。
 	assert.NotContains(t, src, "\nprofiles-check:")
@@ -89,6 +90,42 @@ func TestGeneratedMakefileKeepsSwaggerWhenApidocsSelected(t *testing.T) {
 	assert.NotContains(t, string(out), "PROFILE ?=")
 }
 
+func TestGeneratedMakefileDeployTargetsFollowComponents(t *testing.T) {
+	tests := []struct {
+		name      string
+		deploy    string
+		image     bool
+		compose   bool
+		obsTarget bool
+	}{
+		{name: "none", deploy: "none"},
+		{name: "compose", deploy: "compose", image: true, compose: true},
+		{name: "k8s", deploy: "k8s", image: true},
+		{name: "observability", deploy: "observability"},
+		{name: "compose-observability", deploy: "compose,observability", image: true, compose: true, obsTarget: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), tt.name)
+			_, err := newProjectForTest(t, NewOptions{
+				Dir: dir, Template: "minimal", Deploy: tt.deploy, Module: "example.com/" + tt.name, NoTidy: true,
+			})
+			require.NoError(t, err)
+			src := string(readFileForTest(t, filepath.Join(dir, "Makefile")))
+
+			assert.Equal(t, tt.image, strings.Contains(src, "\nimage:"))
+			assert.Equal(t, tt.image, strings.Contains(src, "DOCKERFILE ?= deploy/docker/Dockerfile"))
+			assert.Equal(t, tt.compose, strings.Contains(src, "COMPOSE_FILE ?= deploy/compose/docker-compose.yml"))
+			assert.Equal(t, tt.compose, strings.Contains(src, "\nup:"))
+			assert.Equal(t, tt.compose, strings.Contains(src, "\ndown:"))
+			assert.Equal(t, tt.compose, strings.Contains(src, "\nlogs:"))
+			assert.Equal(t, tt.compose, strings.Contains(src, "\nstatus:"))
+			assert.Equal(t, tt.obsTarget, strings.Contains(src, "COMPOSE_ALL_FILE ?= deploy/compose/compose.observability.yml"))
+			assert.Equal(t, tt.obsTarget, strings.Contains(src, "\nup-observability:"))
+		})
+	}
+}
+
 func TestGeneratedDockerfileHasNoOverlayAndConditionalOpenapi(t *testing.T) {
 	min, err := ParseCapabilitySet("minimal", "", "")
 	require.NoError(t, err)
@@ -145,7 +182,6 @@ func TestCopyToolsCoversEveryBlueprintTree(t *testing.T) {
 		"tools/internal/profileoverlay",
 		"tools/internal/profileassets",
 		"tools/internal/heavydeps",
-		"tools/internal/projectmetrics",
 		"tools/profileoverlay",
 		"tools/profileassets",
 		"tools/checkcapabilities",
@@ -166,11 +202,11 @@ func TestCopyToolsCoversEveryBlueprintTree(t *testing.T) {
 // 都在生成项目里，且 modulePath 定点改写已生效、框架侧 tools 测试未被复制。
 func TestNewProjectCopiesToolsAndRendersBuildFiles(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Deploy: "compose", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 
 	for _, rel := range []string{
-		"Makefile", "Dockerfile",
+		"Makefile", "deploy/docker/Dockerfile",
 		"tools/checkcapabilities/main.go", "tools/checkcapabilities/drivers.go",
 		"tools/checkcapabilities/assets.go",
 		"tools/logcheck/main.go",
@@ -184,6 +220,7 @@ func TestNewProjectCopiesToolsAndRendersBuildFiles(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(dir, "tools", "profileassets"))
 	assert.NoDirExists(t, filepath.Join(dir, "tools", "profileoverlay"))
 	assert.NoDirExists(t, filepath.Join(dir, "tools", "internal", "profileoverlay"))
+	assert.NoDirExists(t, filepath.Join(dir, "tools", "internal", "projectmetrics"))
 	assert.NoFileExists(t, filepath.Join(dir, "scripts", "check_profiles.sh"))
 	assert.NoDirExists(t, filepath.Join(dir, "tools", "generator"), "tools/generator 不得进生成项目")
 	// 框架侧 tools 测试断言框架口径（多形态清单/框架 module path/框架资产表），不复制。

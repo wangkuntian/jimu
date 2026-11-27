@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.27-alpine AS builder
+FROM golang:1.26.11-alpine AS builder
 
 # Install git (required by some dependencies for version resolution)
 RUN apk add --no-cache git
@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server ./cmd/server
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o jimu ./cmd/cli
 
 # Runtime stage
-FROM alpine:3.24.1
+FROM alpine:3.24.4
 
 # 升级基础镜像包到最新（修复基线 CVE，如 OpenSSL），再安装所需包
 RUN apk --no-cache upgrade && \
@@ -32,8 +32,8 @@ WORKDIR /app
 
 COPY --from=builder /app/server .
 COPY --from=builder /app/jimu .
-COPY conf/ ./conf/
-COPY configs/ ./configs/
+{{if .HasConf}}COPY conf/ ./conf/
+{{end}}COPY configs/ ./configs/
 {{if .HasAPIdocs}}COPY docs/openapi/ ./docs/openapi/
 {{end}}RUN mkdir -p logs && chown -R jimu:jimu /app
 

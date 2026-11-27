@@ -1,0 +1,140 @@
+services:
+  mariadb:
+    image: mariadb:12.3.3-noble
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+      MARIADB_DATABASE: jimu
+      MARIADB_USER: jimu
+      MARIADB_PASSWORD_FILE: /run/secrets/db_password
+      TZ: Asia/Shanghai
+    volumes:
+      - jimu-mariadb-data:/var/lib/mysql
+      # 备份/恢复脚本与输出目录：容器内直接执行，产物落到宿主机 ./backups
+      - ./deploy/scripts:/opt/jimu/scripts:ro
+      - ./backups:/backups
+    ports:
+      - "127.0.0.1:${JIMU_DB_HOST_PORT:-3306}:3306"
+    healthcheck:
+      # 带 root 密码 ping（读 secret 文件），避免无密码探测产生 Access denied 警告
+      test: ["CMD-SHELL", "mariadb-admin ping -uroot -p\"$$(cat /run/secrets/db_root_password)\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    secrets:
+      - db_root_password
+      - db_password
+
+  redis:
+    image: redis:8.10.3-alpine
+    restart: unless-stopped
+    volumes:
+      - jimu-redis-data:/data
+    ports:
+      - "127.0.0.1:${JIMU_REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  adminer:
+    image: adminer:latest
+    profiles: ["dev"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8080"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+  jimu-init:
+    image: ${JIMU_IMAGE:-jimu:latest}
+    restart: "no"
+    command: /bin/sh -c './jimu migrate up && ./jimu seed'
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      DB_HOST: mariadb
+      DB_PORT: "3306"
+      DB_USER: jimu
+      DB_NAME: jimu
+      REDIS_ADDR: redis:6379
+      REDIS_DB: "0"
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      ENCRYPTION_KEY_FILE: /run/secrets/encryption_key
+      AUDIT_HASH_SECRET_FILE: /run/secrets/audit_hash_secret
+      ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+    volumes:
+      - ./configs:/app/configs
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    secrets:
+      - db_password
+      - jwt_secret
+      - encryption_key
+      - audit_hash_secret
+      - admin_password
+
+  server:
+    image: ${JIMU_IMAGE:-jimu:latest}
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        PROFILE: ${PROFILE:-full}
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      DB_HOST: mariadb
+      DB_PORT: "3306"
+      DB_USER: jimu
+      DB_NAME: jimu
+      REDIS_ADDR: redis:6379
+      REDIS_DB: "0"
+      # 容器内 expose management 端点（/metrics 等，供外部抓取或调试）
+      MANAGEMENT_HOST: "0.0.0.0"
+      # 敏感配置通过文件注入（非环境变量）
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      ENCRYPTION_KEY_FILE: /run/secrets/encryption_key
+      AUDIT_HASH_SECRET_FILE: /run/secrets/audit_hash_secret
+      ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+    ports:
+      - "127.0.0.1:${HTTP_HOST_PORT:-8080}:8080"
+      - "127.0.0.1:${MANAGEMENT_HOST_PORT:-9090}:9090"
+    volumes:
+      - ./configs:/app/configs
+      - ./logs:/app/logs
+    depends_on:
+      jimu-init:
+        condition: service_completed_successfully
+    secrets:
+      - db_password
+      - jwt_secret
+      - encryption_key
+      - audit_hash_secret
+      - admin_password
+
+volumes:
+  jimu-mariadb-data:
+    name: ${COMPOSE_MARIADB_VOLUME:-jimu-mariadb-data}
+  jimu-redis-data:
+    name: ${COMPOSE_REDIS_VOLUME:-jimu-redis-data}
+
+secrets:
+  db_root_password:
+    file: ${JIMU_SECRETS_DIR:-./secrets}/db_root_password.txt
+  db_password:
+    file: ${JIMU_SECRETS_DIR:-./secrets}/db_password.txt
+  jwt_secret:
+    file: ${JIMU_SECRETS_DIR:-./secrets}/jwt_secret.txt
+  encryption_key:
+    file: ${JIMU_SECRETS_DIR:-./secrets}/encryption_key.txt
+  audit_hash_secret:
+    file: ${JIMU_SECRETS_DIR:-./secrets}/audit_hash_secret.txt
+  admin_password:
+    file: ${JIMU_SECRETS_DIR:-./secrets}/admin_password.txt

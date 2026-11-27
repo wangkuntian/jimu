@@ -360,7 +360,7 @@ func sortedCopy(in []string) []string {
 // TestMarkerRecordsFilesAndDiscardedTests Minor 10：marker 的 files/discardedTests 字段。
 func TestMarkerRecordsFilesAndDiscardedTests(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "proj")
-	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Module: "example.com/proj", NoTidy: true})
+	_, err := newProjectForTest(t, NewOptions{Dir: dir, Profile: "minimal", Deploy: "compose", Module: "example.com/proj", NoTidy: true})
 	require.NoError(t, err)
 	m := readMarkerForTest(t, dir)
 	assert.NotEmpty(t, m.Files)
@@ -369,13 +369,8 @@ func TestMarkerRecordsFilesAndDiscardedTests(t *testing.T) {
 	for _, rel := range m.Files {
 		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)))
 	}
-	// T6：assets 是本次复制的资产路径（AssetsFor 的前缀口径）——minimal = 全部内核资产组路径，
-	// 不含 docs/openapi（docs/openapi 只在含 apidocs 的选择里）。
-	set, err := ParseCapabilitySet("minimal", "", "")
-	require.NoError(t, err)
-	wantAssets, err := AssetsFor(set)
-	require.NoError(t, err)
-	assert.Equal(t, wantAssets, m.Assets, "marker.assets 必须与 AssetsFor 同源")
+	// assets 是本次复制的资产根；compose 模板与 Dockerfile 是渲染产物，不属于资产复制。
+	assert.Equal(t, []string{"deploy/backup", "deploy/scripts"}, m.Assets)
 	for _, rel := range m.Assets {
 		_, serr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
 		assert.NoError(t, serr, "资产路径 %s 必须真的落地", rel)

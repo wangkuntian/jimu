@@ -92,6 +92,49 @@ func TestAddCapabilityRefreshesGeneratedReport(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(plain, filepath.FromSlash(reportRelPath)))
 }
 
+func TestAddCapabilityRestoresCapabilityErrorCodes(t *testing.T) {
+	dir := generateForTest(t, NewOptions{Template: "minimal"})
+	for _, rel := range []string{
+		"internal/shared/errors/capability.go",
+		"internal/shared/i18n/capability.go",
+		"internal/shared/response/capability.go",
+	} {
+		assert.NoFileExists(t, filepath.Join(dir, filepath.FromSlash(rel)))
+	}
+
+	t.Chdir(FrameworkRoot())
+	_, err := AddCapability(AddOptions{Dir: dir, Name: "apidocs"})
+	require.NoError(t, err)
+
+	for _, rel := range []string{
+		"internal/shared/errors/capability.go",
+		"internal/shared/errors/capability_test.go",
+		"internal/shared/i18n/capability.go",
+		"internal/shared/i18n/capability_test.go",
+		"internal/shared/response/capability.go",
+		"internal/shared/response/capability_test.go",
+	} {
+		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "capability add must restore %s", rel)
+	}
+	build := exec.Command("go", "build", "./...")
+	build.Dir = dir
+	output, err := build.CombinedOutput()
+	require.NoError(t, err, "generated project must build after capability add:\n%s", output)
+}
+
+func TestAddCapabilityKeepsTestsAndRecomputesTools(t *testing.T) {
+	dir := generateForTest(t, NewOptions{Template: "minimal", Tests: "selected", Tools: "auto"})
+	before := readManifestForTest(t, dir)
+	_, err := AddCapability(AddOptions{Dir: dir, Name: "apidocs"})
+	require.NoError(t, err)
+	after := readManifestForTest(t, dir)
+	require.Equal(t, "selected", after.Generation.Tests)
+	require.Equal(t, "auto", after.Generation.ToolsMode)
+	require.ElementsMatch(t, []string{"checkcapabilities", "logcheck"}, after.Generation.ToolsResolved)
+	require.Equal(t, before.Generation.CLIUI, after.Generation.CLIUI)
+	require.Equal(t, manifest.GenerationRuntimeStandard, after.Generation.Runtime)
+}
+
 // reportGeneratedCount 从报告文本里取出「生成文件数」的实测值（解析失败即 fail）。
 func reportGeneratedCount(t *testing.T, report string) int {
 	t.Helper()
@@ -253,7 +296,7 @@ func TestAddCapabilityKeepsMigrationCarryAndKnownNames(t *testing.T) {
 // app.yaml 为底、用蓝本补齐新增段，否则用户手改的段值会被静默覆盖。
 func TestAddCapabilityPreservesEditedConfigSectionsAndIsIdempotent(t *testing.T) {
 	root := frameworkRootForTest(t)
-	dir := generateForTest(t, NewOptions{Profile: "minimal"})
+	dir := generateForTest(t, NewOptions{Profile: "minimal", Deploy: "helm"})
 
 	const appRel = "configs/app.yaml"
 	const prodRel = "configs/app.prod.yaml"
@@ -367,7 +410,7 @@ func TestAddCapabilityRejectsExistingCapability(t *testing.T) {
 // add 后必须经 AssetsFor/assetFiles 重派生并把新增能力的资产复制进 deploy/**（apidocs → docs/openapi）。
 func TestAddCapabilityCarriesNewCapabilityAssets(t *testing.T) {
 	root := frameworkRootForTest(t)
-	dir := generateForTest(t, NewOptions{Profile: "minimal"})
+	dir := generateForTest(t, NewOptions{Template: "auth"})
 	before, err := LoadMarker(dir)
 	require.NoError(t, err)
 	assert.NotContains(t, before.Assets, "docs/openapi")
@@ -380,7 +423,30 @@ func TestAddCapabilityCarriesNewCapabilityAssets(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, after.Assets, "docs/openapi", "marker.assets 必须按前缀口径更新")
 	assert.Contains(t, after.Capabilities, "apidocs")
-	assert.Contains(t, readProjectFile(t, dir, "Dockerfile"), "docs/openapi", "构建文件必须同步（未选中资产不出现）")
+	assert.Contains(t, readProjectFile(t, dir, "deploy/docker/Dockerfile"), "docs/openapi", "构建文件必须同步（未选中资产不出现）")
+}
+
+func TestAddCapabilityAddsMySQLBackupAssetsForComposeObservability(t *testing.T) {
+	root := frameworkRootForTest(t)
+	dir := generateForTest(t, NewOptions{Template: "minimal", Deploy: "compose,observability"})
+	require.NoFileExists(t, filepath.Join(dir, "deploy/backup/Dockerfile"))
+
+	userFile := filepath.Join(dir, "CUSTOM.md")
+	require.NoError(t, os.WriteFile(userFile, []byte("user-owned\n"), 0o644))
+
+	_, err := AddCapability(AddOptions{Dir: dir, Name: "apikey", From: root})
+	require.NoError(t, err)
+
+	assert.FileExists(t, filepath.Join(dir, "deploy/backup/Dockerfile"))
+	assert.FileExists(t, filepath.Join(dir, "deploy/scripts/backup.sh"))
+	compose := readProjectFile(t, dir, "deploy/compose/docker-compose.yml")
+	assert.Contains(t, compose, "mariadb:")
+	assert.Contains(t, compose, "jimu-init:")
+	assert.Equal(t, "user-owned\n", readProjectFile(t, dir, "CUSTOM.md"))
+
+	manifestDoc, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"compose", "observability"}, manifestDoc.Generation.Deploy)
 }
 
 // TestAddCapabilitySelectsFirstDriverAndFiltersDirectories 钉住 S4 + 驱动目录过滤在 add 上同样成立：
@@ -527,6 +593,15 @@ func TestManifestSaveLoadRoundTrip(t *testing.T) {
 			Drivers:         map[string][]string{"queue": {"redis"}},
 			Validity:        manifest.CompositionValidityValid,
 			Support:         manifest.CompositionSupportExperimental,
+		},
+		Generation: &manifest.Generation{
+			RuntimeClosure: false,
+			Tests:          manifest.GenerationTestsAll,
+			ToolsMode:      manifest.GenerationToolsAll,
+			ToolsResolved:  []string{"checkcapabilities", "heavydeps", "logcheck", "profileassets"},
+			Deploy:         []string{},
+			CLI:            manifest.GenerationCLIMinimal,
+			CLIUI:          manifest.GenerationCLIUIDirect,
 		},
 		Capabilities:        []manifest.Capability{},
 		Copy:                []manifest.CopyAction{},

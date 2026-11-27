@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "framework": {
     "module": "jimu",
     "version": "dev",
@@ -51,6 +51,19 @@
     },
     "validity": "valid",
     "support": "experimental"
+  },
+  "generation": {
+    "runtime_closure": true,
+    "runtime": "standard",
+    "tests": "selected",
+    "tools_mode": "auto",
+    "tools_resolved": [
+      "checkcapabilities",
+      "logcheck"
+    ],
+    "deploy": null,
+    "cli": "minimal",
+    "cli_ui": "direct"
   },
   "capabilities": [
     {
@@ -376,6 +389,8 @@
       "exclude": [
         "db/postgres.go",
         "db/postgres_test.go",
+        "http/middleware/observability_lean.go",
+        "http/middleware/ratelimit_lean.go",
         "cachemem",
         "observability"
       ]
@@ -386,13 +401,16 @@
       "optional": false,
       "include": [],
       "exclude": [
+        "bootstrap_metrics_empty.go",
         "bootstrap_otel.go",
         "bootstrap_redis_empty.go",
+        "container_mysql_store_nodb.go",
         "container_nodb.go",
         "container_otel.go",
         "container_otel_db.go",
         "container_otel_nodb.go",
         "container_redis_empty.go",
+        "container_runtime_empty.go",
         "tracing_otel.go"
       ]
     },
@@ -402,7 +420,10 @@
       "optional": false,
       "include": [],
       "exclude": [
-        "context_redis_empty.go"
+        "portflow.go",
+        "portflow_test.go",
+        "context_redis_empty.go",
+        "context_runtime_empty.go"
       ]
     },
     {
@@ -410,7 +431,13 @@
       "destination": "internal/capability",
       "optional": false,
       "include": [],
-      "exclude": []
+      "exclude": [
+        "aliases.go",
+        "compose.go",
+        "compose_test.go",
+        "composition_test.go",
+        "diagnostic.go"
+      ]
     },
     {
       "source": "internal/contract",
@@ -567,33 +594,6 @@
       "exclude": []
     },
     {
-      "source": "tools/internal/profileassets",
-      "destination": "tools/internal/profileassets",
-      "optional": false,
-      "include": [],
-      "exclude": [
-        "*_test.go"
-      ]
-    },
-    {
-      "source": "tools/internal/heavydeps",
-      "destination": "tools/internal/heavydeps",
-      "optional": false,
-      "include": [],
-      "exclude": [
-        "*_test.go"
-      ]
-    },
-    {
-      "source": "tools/internal/projectmetrics",
-      "destination": "tools/internal/projectmetrics",
-      "optional": false,
-      "include": [],
-      "exclude": [
-        "*_test.go"
-      ]
-    },
-    {
       "source": "tools/checkcapabilities",
       "destination": "tools/checkcapabilities",
       "optional": false,
@@ -612,16 +612,22 @@
       ]
     },
     {
-      "source": "scripts",
-      "destination": "scripts",
+      "source": "tools/internal/heavydeps",
+      "destination": "tools/internal/heavydeps",
       "optional": false,
-      "include": [
-        "backup.sh",
-        "restore.sh",
-        "db_common.sh",
-        "install_db_clients.sh"
-      ],
-      "exclude": []
+      "include": [],
+      "exclude": [
+        "*_test.go"
+      ]
+    },
+    {
+      "source": "tools/internal/profileassets",
+      "destination": "tools/internal/profileassets",
+      "optional": false,
+      "include": [],
+      "exclude": [
+        "*_test.go"
+      ]
     }
   ],
   "templates": [
@@ -632,17 +638,20 @@
       "data": {
         "Expected": "access auth encryption notification user",
         "HasAPIdocs": false,
-        "Shape": "minimal"
-      }
-    },
-    {
-      "source": "tools/generator/render/templates/project/Dockerfile.tmpl",
-      "destination": "Dockerfile",
-      "kind": "build",
-      "data": {
-        "Expected": "access auth encryption notification user",
-        "HasAPIdocs": false,
-        "Shape": "minimal"
+        "HasBackup": true,
+        "HasCheckcapabilities": true,
+        "HasCompose": false,
+        "HasConf": true,
+        "HasDatabase": true,
+        "HasDockerfile": false,
+        "HasLogcheck": true,
+        "HasMySQL": true,
+        "HasRedis": true,
+        "HasScripts": false,
+        "Module": "example.com/minimal",
+        "ProjectName": "minimal",
+        "Shape": "minimal",
+        "WithObservability": false
       }
     },
     {
@@ -985,33 +994,40 @@
       }
     },
     {
+      "source": "tools/generator/render/templates/project/README.md.tmpl",
+      "destination": "README.md",
+      "kind": "text",
+      "data": {
+        "Expected": "access auth encryption notification user",
+        "HasAPIdocs": false,
+        "HasBackup": true,
+        "HasCheckcapabilities": true,
+        "HasCompose": false,
+        "HasConf": true,
+        "HasDatabase": true,
+        "HasDockerfile": false,
+        "HasLogcheck": true,
+        "HasMySQL": true,
+        "HasRedis": true,
+        "HasScripts": false,
+        "Module": "example.com/minimal",
+        "ProjectName": "minimal",
+        "Shape": "minimal",
+        "WithObservability": false
+      }
+    },
+    {
+      "source": "tools/generator/render/templates/project/dockerignore.tmpl",
+      "destination": ".dockerignore",
+      "kind": "build",
+      "data": {}
+    },
+    {
       "source": "tools/generator/render/templates/project/assets_selection.go.tmpl",
       "destination": "tools/internal/profileassets/selection.go",
       "kind": "assets",
       "data": {
-        "Files": [
-          "deploy/backup/Dockerfile",
-          "deploy/helm/Chart.yaml",
-          "deploy/helm/templates/_helpers.tpl",
-          "deploy/helm/templates/backup-cronjob.yaml",
-          "deploy/helm/templates/configmap.yaml",
-          "deploy/helm/templates/deployment.yaml",
-          "deploy/helm/templates/hpa.yaml",
-          "deploy/helm/templates/ingress.yaml",
-          "deploy/helm/templates/networkpolicy.yaml",
-          "deploy/helm/templates/pdb.yaml",
-          "deploy/helm/templates/secret.yaml",
-          "deploy/helm/templates/service.yaml",
-          "deploy/k8s/backup-cronjob.yaml",
-          "deploy/k8s/configmap.yaml",
-          "deploy/k8s/deployment.yaml",
-          "deploy/k8s/hpa.yaml",
-          "deploy/k8s/ingress.yaml",
-          "deploy/k8s/networkpolicy.yaml",
-          "deploy/k8s/pdb.yaml",
-          "deploy/k8s/secret.yaml",
-          "deploy/k8s/service.yaml"
-        ]
+        "Files": []
       }
     },
     {
@@ -1094,31 +1110,6 @@
         "server",
         "sms"
       ]
-    },
-    {
-      "source": "deploy/helm/values.yaml",
-      "destination": "deploy/helm/values.yaml",
-      "strategy": "sections",
-      "sections": [
-        "image",
-        "replicaCount",
-        "environment",
-        "resources",
-        "autoscaling",
-        "pdb",
-        "networkPolicy",
-        "service",
-        "ingress",
-        "http",
-        "management",
-        "security",
-        "server",
-        "log",
-        "auth",
-        "backup",
-        "db",
-        "redis"
-      ]
     }
   ],
   "rewrites": [
@@ -1127,22 +1118,6 @@
       "from": "jimu",
       "to": "example.com/minimal",
       "files": []
-    },
-    {
-      "kind": "file-patch",
-      "from": "const modulePath = \"jimu\"",
-      "to": "const modulePath = \"example.com/minimal\"",
-      "files": [
-        "tools/checkcapabilities/drivers.go"
-      ]
-    },
-    {
-      "kind": "file-patch",
-      "from": "\"jimu/tools/logcheck\"",
-      "to": "\"example.com/minimal/tools/logcheck\"",
-      "files": [
-        "tools/logcheck/main.go"
-      ]
     },
     {
       "kind": "file-patch",
@@ -1165,6 +1140,9 @@
       "from": "jimu",
       "to": "minimal",
       "files": [
+        "deploy/docker/Dockerfile",
+        "deploy/compose/docker-compose.yml",
+        "deploy/compose/compose.observability.yml",
         "deploy/k8s/deployment.yaml",
         "deploy/k8s/service.yaml",
         "deploy/k8s/configmap.yaml",
@@ -1175,12 +1153,36 @@
         "deploy/k8s/pdb.yaml",
         "deploy/k8s/networkpolicy.yaml",
         "deploy/k8s/backup-cronjob.yaml",
-        "deploy/k8s/openobserve.yaml",
-        "deploy/k8s/otel-collector.yaml",
+        "deploy/k8s/observability/openobserve.yaml",
+        "deploy/k8s/observability/otel-collector.yaml",
         "deploy/helm/Chart.yaml",
         "deploy/helm/values.yaml",
+        "deploy/helm/templates/observability/openobserve.yaml",
+        "deploy/helm/templates/observability/otel-collector.yaml",
         "deploy/helm/templates/service.yaml",
-        "deploy/backup/Dockerfile"
+        "deploy/backup/Dockerfile",
+        "deploy/scripts/backup.sh",
+        "deploy/scripts/restore.sh",
+        "deploy/scripts/db_common.sh",
+        "deploy/scripts/install_db_clients.sh",
+        "deploy/scripts/init-secrets.sh",
+        "deploy/scripts/observability.sh"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "const modulePath = \"jimu\"",
+      "to": "const modulePath = \"example.com/minimal\"",
+      "files": [
+        "tools/checkcapabilities/drivers.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "\"jimu/tools/logcheck\"",
+      "to": "\"example.com/minimal/tools/logcheck\"",
+      "files": [
+        "tools/logcheck/main.go"
       ]
     },
     {
@@ -1206,36 +1208,41 @@
       "files": [
         "internal/app/tracing_empty.go"
       ]
-    }
-  ],
-  "assets": [
-    {
-      "source": "deploy/backup",
-      "destination": "deploy/backup",
-      "include": [],
-      "exclude": []
     },
     {
-      "source": "deploy/helm",
-      "destination": "deploy/helm",
-      "include": [],
-      "exclude": [
-        "values.yaml",
-        "templates/openobserve.yaml",
-        "templates/otel-collector.yaml"
+      "kind": "file-patch",
+      "from": "//go:build !jimu_lean \u0026\u0026 !jimu_nodb",
+      "to": "// 标准内核：由生成器去掉 build tag",
+      "files": [
+        "internal/app/container_mysql_store.go"
       ]
     },
     {
-      "source": "deploy/k8s",
-      "destination": "deploy/k8s",
-      "include": [],
-      "exclude": [
-        "config-files.yaml",
-        "openobserve.yaml",
-        "otel-collector.yaml"
+      "kind": "file-patch",
+      "from": "serviceName            = \"jimu\"\n",
+      "to": "serviceName            = \"minimal\"\n",
+      "files": [
+        "internal/platform/http/serviceinfo.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "serviceAPIDocs         = \"/swagger/index.html\"\n",
+      "to": "serviceAPIDocs         = \"\"\n",
+      "files": [
+        "internal/platform/http/serviceinfo.go"
+      ]
+    },
+    {
+      "kind": "file-patch",
+      "from": "serviceObservabilityUI = \"OpenObserve http://localhost:5080（make up-observability 后可用）\"\n",
+      "to": "serviceObservabilityUI = \"\"\n",
+      "files": [
+        "internal/platform/http/serviceinfo.go"
       ]
     }
   ],
+  "assets": [],
   "prune": [
     {
       "kind": "test-import",
@@ -1280,38 +1287,17 @@
     "heavy_deps": null
   },
   "generated_files": [
+    ".dockerignore",
     ".gitignore",
     ".golangci.yml",
-    "Dockerfile",
     "Makefile",
+    "README.md",
     "cmd/cli/activecaps.go",
     "cmd/cli/main.go",
     "cmd/server/main.go",
     "conf/rbac_model.conf",
     "configs/app.prod.yaml",
     "configs/app.yaml",
-    "deploy/backup/Dockerfile",
-    "deploy/helm/Chart.yaml",
-    "deploy/helm/templates/_helpers.tpl",
-    "deploy/helm/templates/backup-cronjob.yaml",
-    "deploy/helm/templates/configmap.yaml",
-    "deploy/helm/templates/deployment.yaml",
-    "deploy/helm/templates/hpa.yaml",
-    "deploy/helm/templates/ingress.yaml",
-    "deploy/helm/templates/networkpolicy.yaml",
-    "deploy/helm/templates/pdb.yaml",
-    "deploy/helm/templates/secret.yaml",
-    "deploy/helm/templates/service.yaml",
-    "deploy/helm/values.yaml",
-    "deploy/k8s/backup-cronjob.yaml",
-    "deploy/k8s/configmap.yaml",
-    "deploy/k8s/deployment.yaml",
-    "deploy/k8s/hpa.yaml",
-    "deploy/k8s/ingress.yaml",
-    "deploy/k8s/networkpolicy.yaml",
-    "deploy/k8s/pdb.yaml",
-    "deploy/k8s/secret.yaml",
-    "deploy/k8s/service.yaml",
     "go.mod",
     "go.sum",
     "internal/app/admin_password_test.go",
@@ -1320,6 +1306,7 @@
     "internal/app/authz_bootstrap_test.go",
     "internal/app/bootstrap.go",
     "internal/app/bootstrap_http_test.go",
+    "internal/app/bootstrap_metrics.go",
     "internal/app/bootstrap_otel_empty.go",
     "internal/app/bootstrap_redis.go",
     "internal/app/capabilities_handler_test.go",
@@ -1328,17 +1315,21 @@
     "internal/app/container.go",
     "internal/app/container_db.go",
     "internal/app/container_http_only_test.go",
+    "internal/app/container_mysql_store.go",
     "internal/app/container_otel_empty.go",
     "internal/app/container_redis.go",
+    "internal/app/container_runtime.go",
     "internal/app/container_runtime_services_test.go",
     "internal/app/seed_test.go",
     "internal/app/tracing_empty.go",
     "internal/assembly/assembly.go",
     "internal/assembly/assembly_test.go",
     "internal/assembly/context.go",
+    "internal/assembly/context_auth.go",
+    "internal/assembly/context_ports_test.go",
     "internal/assembly/context_redis.go",
+    "internal/assembly/context_runtime.go",
     "internal/assembly/context_test.go",
-    "internal/assembly/portflow.go",
     "internal/assembly/wirefor_test.go",
     "internal/capabilities/access/application/crud_test.go",
     "internal/capabilities/access/application/dto.go",
@@ -1483,11 +1474,6 @@
     "internal/capabilities/user/module_test.go",
     "internal/capabilities/user/userinfo_port.go",
     "internal/capabilities/user/wire.go",
-    "internal/capability/aliases.go",
-    "internal/capability/compose.go",
-    "internal/capability/compose_test.go",
-    "internal/capability/composition_test.go",
-    "internal/capability/diagnostic.go",
     "internal/capability/resolve.go",
     "internal/capability/resolve_test.go",
     "internal/config/capsection_test.go",
@@ -1502,11 +1488,13 @@
     "internal/contract/composition.go",
     "internal/contract/composition_test.go",
     "internal/contract/events.go",
+    "internal/contract/job.go",
     "internal/contract/module.go",
     "internal/contract/openapi.go",
     "internal/contract/openapi_test.go",
     "internal/contract/outbox_mq_port.go",
     "internal/contract/ports.go",
+    "internal/contract/runtime.go",
     "internal/contract/systemroles.go",
     "internal/contract/systemroles_test.go",
     "internal/platform/authz/casbin.go",
@@ -1598,6 +1586,7 @@
     "internal/platform/http/middleware/validate_test.go",
     "internal/platform/http/server.go",
     "internal/platform/http/server_test.go",
+    "internal/platform/http/serviceinfo.go",
     "internal/platform/httpclient/client.go",
     "internal/platform/httpclient/client_test.go",
     "internal/platform/identity/apikey_context.go",
@@ -1664,8 +1653,12 @@
     "internal/shared/dbpurge/dbpurge.go",
     "internal/shared/dbpurge/dbpurge_integration_test.go",
     "internal/shared/dbpurge/dbpurge_test.go",
+    "internal/shared/errors/capability.go",
+    "internal/shared/errors/capability_test.go",
     "internal/shared/errors/errors.go",
     "internal/shared/errors/errors_test.go",
+    "internal/shared/i18n/capability.go",
+    "internal/shared/i18n/capability_test.go",
     "internal/shared/i18n/i18n.go",
     "internal/shared/i18n/i18n_test.go",
     "internal/shared/id/benchmark_test.go",
@@ -1674,6 +1667,8 @@
     "internal/shared/id/id_test.go",
     "internal/shared/pagination/pagination.go",
     "internal/shared/pagination/pagination_test.go",
+    "internal/shared/response/capability.go",
+    "internal/shared/response/capability_test.go",
     "internal/shared/response/response.go",
     "internal/shared/response/response_contract_test.go",
     "internal/shared/response/response_test.go",
@@ -1689,33 +1684,6 @@
     "internal/shared/validator/fuzz_test.go",
     "internal/shared/validator/validator.go",
     "internal/shared/validator/validator_test.go",
-    "scripts/backup.sh",
-    "scripts/bench_ci.sh",
-    "scripts/check_ci_gate.sh",
-    "scripts/check_commit_messages.sh",
-    "scripts/check_coverage_floors.sh",
-    "scripts/check_profiles.sh",
-    "scripts/check_skills.sh",
-    "scripts/clean_room_e2e.sh",
-    "scripts/db_common.sh",
-    "scripts/demo.sh",
-    "scripts/dev.sh",
-    "scripts/ensure-image.sh",
-    "scripts/experiment_v0_8_0.py",
-    "scripts/init-secrets.sh",
-    "scripts/install_db_clients.sh",
-    "scripts/install_skills.sh",
-    "scripts/loadtest.sh",
-    "scripts/observability.sh",
-    "scripts/restore.sh",
-    "scripts/security_upgrade_drill.sh",
-    "scripts/test_backup_restore.sh",
-    "scripts/test_compose_runtime.sh",
-    "scripts/test_config_contracts.sh",
-    "scripts/test_init_secrets.sh",
-    "scripts/test_makefile_contract.sh",
-    "scripts/test_shard_weights.tsv",
-    "scripts/test_shards.sh",
     "tools/checkcapabilities/assets.go",
     "tools/checkcapabilities/composition.go",
     "tools/checkcapabilities/drivers.go",
@@ -1726,10 +1694,8 @@
     "tools/internal/heavydeps/heavydeps.go",
     "tools/internal/profileassets/profileassets.go",
     "tools/internal/profileassets/selection.go",
-    "tools/internal/projectmetrics/projectmetrics.go",
-    "tools/internal/projectmetrics/spec.go",
     "tools/logcheck/main.go"
   ],
   "generated_file_sha256": {},
-  "digest": "sha256:00f715ac137c6a2ae4e8a9adea39c70739f5f4f03ed11235caa4e6f0225b47c8"
+  "digest": "sha256:4f4025999f256a57c75a76ea53c5fc3e9f2450098cc14b19b8110e336cfe08d5"
 }

@@ -16,10 +16,7 @@ func TestTDefaultsToChinese(t *testing.T) {
 }
 
 func TestTfFormatsArgs(t *testing.T) {
-	if got := Tf("account_locked", LangZH, 30); got != "账号已被锁定，请 30 分钟后重试" {
-		t.Fatalf("got %q", got)
-	}
-	if got := Tf("account_locked", LangEN, 30); got != "account locked, try again in 30 minutes" {
+	if got := Tf("validation_oneof", LangZH, "status", "a, b"); got != "status 必须为以下值之一：a, b" {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -44,13 +41,13 @@ func TestParseAcceptLanguage(t *testing.T) {
 func TestTfAndDefaultLanguage(t *testing.T) {
 	// 默认语言为中文；Tf 在提供参数时格式化
 	SetDefaultLang(LangZH)
-	assert.Equal(t, "用户名或密码错误", T("invalid_credentials"))
-	assert.Equal(t, "账号已被锁定，请 5 分钟后重试", Tf("account_locked", LangZH, 5))
+	assert.Equal(t, "服务器内部错误", T("internal_error"))
+	assert.Equal(t, "参数错误", T("invalid_param"))
 
 	// 切换默认语言后 T 跟随默认值，显式传参仍以参数为准
 	SetDefaultLang(LangEN)
-	assert.Equal(t, "invalid username or password", T("invalid_credentials"))
-	assert.Equal(t, "用户名或密码错误", T("invalid_credentials", LangZH))
+	assert.Equal(t, "internal server error", T("internal_error"))
+	assert.Equal(t, "服务器内部错误", T("internal_error", LangZH))
 	SetDefaultLang(LangZH)
 }
 

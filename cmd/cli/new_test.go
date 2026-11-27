@@ -82,6 +82,34 @@ func TestNewCmdDefaultsToMinimalPreset(t *testing.T) {
 	assert.Contains(t, out.String(), "support      certified")
 }
 
+func TestNewCmdAcceptsTestsAndToolsFlags(t *testing.T) {
+	c := newCommandForTest(&bytes.Buffer{})
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=minimal", "--tests=none", "--tools=none", "--dry-run"})
+	require.NoError(t, c.Execute())
+}
+
+func TestNewCmdAcceptsCLIUIModes(t *testing.T) {
+	for _, mode := range []string{"both", "direct"} {
+		t.Run(mode, func(t *testing.T) {
+			c := newCommandForTest(&bytes.Buffer{})
+			c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--cli=" + mode, "--dry-run"})
+			require.NoError(t, c.Execute())
+		})
+	}
+}
+
+func TestNewCmdRejectsUnknownCLIUIMode(t *testing.T) {
+	c := newCommandForTest(&bytes.Buffer{})
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--cli=web", "--dry-run"})
+	require.ErrorContains(t, c.Execute(), "--cli")
+}
+
+func TestNewCmdRejectsUnknownTestsMode(t *testing.T) {
+	c := newCommandForTest(&bytes.Buffer{})
+	c.SetArgs([]string{"new", filepath.Join(t.TempDir(), "proj"), "--profile=minimal", "--tests=sometimes", "--dry-run"})
+	require.ErrorContains(t, c.Execute(), "--tests")
+}
+
 func TestNewCmdAcceptsMinimalProfile(t *testing.T) {
 	var out bytes.Buffer
 	c := newCommandForTest(&out)

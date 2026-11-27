@@ -26,6 +26,10 @@ func TestDBPasswordOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
+	if !cfg.DB.configured() {
+		// 0 能力项目不生成 db 段，DB_* 注入按设计被忽略；这里没有可覆盖的目标。
+		t.Skip("project has no db section; DB_* overrides are intentionally ignored")
+	}
 	if cfg.DB.Password != "secret-from-env" {
 		t.Errorf("expected DB_PASSWORD to override, got %q", cfg.DB.Password)
 	}
@@ -326,7 +330,7 @@ func TestApplyEnvOverridesUsesOpenObserveEnvCredentials(t *testing.T) {
 	t.Setenv("ZO_ROOT_USER_PASSWORD", "compose-observed-password")
 
 	var cfg Config
-	applyEnvOverrides(&cfg)
+	applyEnvOverrides(&cfg, viper.New())
 
 	assert.Equal(t, "ops@example.com", cfg.OTEL.AuthEmail)
 	assert.Equal(t, "compose-observed-password", cfg.OTEL.AuthPassword)

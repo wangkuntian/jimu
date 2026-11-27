@@ -25,8 +25,8 @@ compose() {
   JIMU_REDIS_HOST_PORT=0 \
   HTTP_HOST_PORT="$HTTP_HOST_PORT" \
   MANAGEMENT_HOST_PORT="$MANAGEMENT_HOST_PORT" \
-  docker compose --project-name "$PROJECT_NAME" --env-file /dev/null \
-    -f "$ROOT_DIR/docker-compose.yml" "$@"
+  docker compose --project-name "$PROJECT_NAME" --project-directory "$ROOT_DIR" --env-file /dev/null \
+    -f "$ROOT_DIR/deploy/compose/docker-compose.yml" "$@"
 }
 
 cleanup() {

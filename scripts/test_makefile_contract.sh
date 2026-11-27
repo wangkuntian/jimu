@@ -112,12 +112,12 @@ assert_contains "$build_server_app_version_plan" '-X main.version=v1.2.3' "APP_V
 
 up_plan="$(run_make -n up VERSION=v9.9.9)"
 assert_contains "$up_plan" "JIMU_IMAGE=jimu:v9.9.9" "up 未使用版本镜像"
-assert_contains "$up_plan" "docker compose --env-file /dev/null -f docker-compose.yml up -d --no-build" "up 未禁用隐式构建"
-assert_contains "$up_plan" './scripts/init-secrets.sh --no-legacy' "up 未显式禁用旧 .env 迁移"
+assert_contains "$up_plan" "docker compose --project-directory $ROOT --env-file /dev/null -f deploy/compose/docker-compose.yml up -d --no-build" "up 未禁用隐式构建"
+assert_contains "$up_plan" './deploy/scripts/init-secrets.sh --no-legacy' "up 未显式禁用旧 .env 迁移"
 assert_not_contains "$up_plan" "LEGACY_ENV_FILE" "up 不得迁移旧 .env"
 assert_not_contains "$up_plan" "./scripts/observability.sh start" "up 不得启动观测栈"
 printf '%s\n' "$up_plan" >"$WORK/up.plan"
-init_line="$(grep -nF './scripts/init-secrets.sh' "$WORK/up.plan" | head -n 1 | cut -d: -f1)"
+init_line="$(grep -nF './deploy/scripts/init-secrets.sh' "$WORK/up.plan" | head -n 1 | cut -d: -f1)"
 image_line="$(grep -nF './scripts/ensure-image.sh' "$WORK/up.plan" | head -n 1 | cut -d: -f1)"
 up_line="$(grep -nF 'up -d --no-build' "$WORK/up.plan" | head -n 1 | cut -d: -f1)"
 [ -n "$init_line" ] && [ -n "$image_line" ] && [ -n "$up_line" ] || fail "up 计划缺少初始化、镜像或启动步骤"
@@ -128,29 +128,29 @@ grep -Fq '.NOTPARALLEL: up up-observability' "$ROOT/Makefile" \
 
 parallel_up_plan="$(run_make -n -j8 up VERSION=v9.9.9)"
 printf '%s\n' "$parallel_up_plan" >"$WORK/parallel-up.plan"
-parallel_init_line="$(grep -nF './scripts/init-secrets.sh' "$WORK/parallel-up.plan" | head -n 1 | cut -d: -f1)"
+parallel_init_line="$(grep -nF './deploy/scripts/init-secrets.sh' "$WORK/parallel-up.plan" | head -n 1 | cut -d: -f1)"
 parallel_image_line="$(grep -nF './scripts/ensure-image.sh' "$WORK/parallel-up.plan" | head -n 1 | cut -d: -f1)"
 parallel_up_line="$(grep -nF 'up -d --no-build' "$WORK/parallel-up.plan" | head -n 1 | cut -d: -f1)"
 [ "$parallel_init_line" -lt "$parallel_image_line" ] || fail "make -j up 未保证 secret 先于镜像"
 [ "$parallel_image_line" -lt "$parallel_up_line" ] || fail "make -j up 未保证镜像先于 Compose"
 
 observability_plan="$(run_make -n up-observability VERSION=v9.9.9)"
-assert_contains "$observability_plan" './scripts/init-secrets.sh --observability --no-legacy' "up-observability 未初始化观测凭据"
-assert_contains "$observability_plan" '-f compose.observability.yml' "up-observability 未叠加观测栈"
+assert_contains "$observability_plan" './deploy/scripts/init-secrets.sh --observability --no-legacy' "up-observability 未初始化观测凭据"
+assert_contains "$observability_plan" '-f deploy/compose/compose.observability.yml' "up-observability 未叠加观测栈"
 assert_contains "$observability_plan" "JIMU_IMAGE=jimu:v9.9.9" "up-observability 未使用版本镜像"
 assert_contains "$observability_plan" '--no-build' "up-observability 未禁用隐式构建"
-assert_contains "$observability_plan" './scripts/observability.sh start' "up-observability 未初始化 dashboard/告警"
+assert_contains "$observability_plan" './deploy/scripts/observability.sh start' "up-observability 未初始化 dashboard/告警"
 assert_not_contains "$observability_plan" "LEGACY_ENV_FILE" "up-observability 不得迁移旧 .env"
 printf '%s\n' "$observability_plan" >"$WORK/observability.plan"
 observability_up_line="$(grep -nF 'up -d --no-build' "$WORK/observability.plan" | head -n 1 | cut -d: -f1)"
-observability_start_line="$(grep -nF './scripts/observability.sh start' "$WORK/observability.plan" | head -n 1 | cut -d: -f1)"
+observability_start_line="$(grep -nF './deploy/scripts/observability.sh start' "$WORK/observability.plan" | head -n 1 | cut -d: -f1)"
 [ -n "$observability_up_line" ] && [ -n "$observability_start_line" ] || fail "up-observability 计划缺少启动或观测初始化步骤"
 [ "$observability_up_line" -lt "$observability_start_line" ] || fail "up-observability 必须先启动服务再初始化 dashboard/告警"
 
 echo "== 生命周期与运维入口 =="
 for target in down restart status logs; do
   plan="$(run_make -n "$target")"
-  assert_contains "$plan" 'docker compose --env-file /dev/null -f docker-compose.yml -f compose.observability.yml' "$target 未使用完整 Compose 栈"
+  assert_contains "$plan" "docker compose --project-directory $ROOT --env-file /dev/null -f deploy/compose/docker-compose.yml -f deploy/compose/compose.observability.yml" "$target 未使用完整 Compose 栈"
 done
 
 migrate_plan="$(run_make -n migrate PROFILE=minimal VERSION=v9.9.9)"
@@ -190,17 +190,17 @@ assert_contains "$adminer_plan" '--profile dev up -d adminer' "adminer 未显式
 echo "== init 旧 .env 条件迁移 =="
 NO_ENV_DIR="$WORK/init-no-env"
 WITH_ENV_DIR="$WORK/init-with-env"
-mkdir -p "$NO_ENV_DIR/scripts" "$WITH_ENV_DIR/scripts"
+mkdir -p "$NO_ENV_DIR/deploy/scripts" "$WITH_ENV_DIR/deploy/scripts"
 cp "$ROOT/Makefile" "$NO_ENV_DIR/Makefile"
 cp "$ROOT/Makefile" "$WITH_ENV_DIR/Makefile"
-cat >"$NO_ENV_DIR/scripts/init-secrets.sh" <<'FAKE_INIT'
+cat >"$NO_ENV_DIR/deploy/scripts/init-secrets.sh" <<'FAKE_INIT'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'legacy=%s secrets_dir=%s allow_new_security_keys=%s force=%s args=%s\n' \
   "${LEGACY_ENV_FILE-}" "${SECRETS_DIR-}" "${ALLOW_NEW_SECURITY_KEYS-}" "${FORCE-}" "$*"
 FAKE_INIT
-cp "$NO_ENV_DIR/scripts/init-secrets.sh" "$WITH_ENV_DIR/scripts/init-secrets.sh"
-chmod +x "$NO_ENV_DIR/scripts/init-secrets.sh" "$WITH_ENV_DIR/scripts/init-secrets.sh"
+cp "$NO_ENV_DIR/deploy/scripts/init-secrets.sh" "$WITH_ENV_DIR/deploy/scripts/init-secrets.sh"
+chmod +x "$NO_ENV_DIR/deploy/scripts/init-secrets.sh" "$WITH_ENV_DIR/deploy/scripts/init-secrets.sh"
 touch "$WITH_ENV_DIR/.env"
 NO_ENV_REAL="$(cd "$NO_ENV_DIR" && pwd -P)"
 WITH_ENV_REAL="$(cd "$WITH_ENV_DIR" && pwd -P)"
@@ -238,7 +238,7 @@ dev_plan="$(run_make -n dev)"
 assert_contains "$dev_plan" 'ENV=dev PROFILE=full ./scripts/dev.sh' "dev 未按 ENV/PROFILE 调用本地脚本"
 [ -f "$ROOT/scripts/dev.sh" ] || fail "缺少 scripts/dev.sh"
 bash -n "$ROOT/scripts/dev.sh"
-grep -Fq './scripts/init-secrets.sh --no-legacy' "$ROOT/scripts/dev.sh" \
+grep -Fq './deploy/scripts/init-secrets.sh --no-legacy' "$ROOT/scripts/dev.sh" \
   || fail "dev.sh 仍可能迁移旧 .env"
 grep -Fq 'cmd = "go build -overlay=\"$JIMU_OVERLAY\" -o ./tmp/server ./cmd/server"' "$ROOT/.air.toml" \
   || fail ".air.toml 未使用 JIMU_OVERLAY 构建"
@@ -309,7 +309,7 @@ env -u LEGACY_ENV_FILE -u APP_ENV \
 
 grep -Fq 'docker volume inspect jimu-mariadb-data' "$DEV_LOG" \
   || fail "dev.sh 未通过初始化脚本探测 Secret 状态"
-grep -Fq 'docker compose --env-file /dev/null -f docker-compose.yml up -d --wait mariadb redis' "$DEV_LOG" \
+grep -Fq "docker compose --project-directory $ROOT --env-file /dev/null -f deploy/compose/docker-compose.yml up -d --wait mariadb redis" "$DEV_LOG" \
   || fail "dev.sh 未等待 mariadb/redis 健康"
 grep -Fq 'go run ./tools/profileoverlay full' "$DEV_LOG" \
   || fail "dev.sh 未生成 PROFILE overlay"

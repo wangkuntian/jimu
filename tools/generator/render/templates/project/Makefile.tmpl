@@ -1,6 +1,12 @@
-.PHONY: help build build-server build-cli dev image test vet fmt fmt-check lint clean ci
-.PHONY: check-log-usage check-capabilities
-.PHONY: migrate migrate-down migrate-status seed
+{{if .HasDatabase}}.PHONY: migrate migrate-down migrate-status seed
+{{end}}.PHONY: help build build-server build-cli dev{{if .HasDockerfile}} image{{end}} test vet fmt fmt-check lint clean ci
+{{if .HasCompose}}.PHONY: up down logs status
+{{end}}{{if and .HasCompose .HasDatabase}}.PHONY: prepare-secrets
+{{end}}{{if and .HasCompose .WithObservability}}.PHONY: prepare-observability-secrets up-observability
+{{end}}
+{{if .HasLogcheck}}.PHONY: check-log-usage
+{{end}}{{if .HasCheckcapabilities}}.PHONY: check-capabilities
+{{end}}
 {{if .HasAPIdocs}}.PHONY: swagger swagger-check
 {{end}}
 # 默认目标
@@ -24,6 +30,16 @@ LDFLAGS := -X main.version=$(APP_VERSION) -w -s
 IMAGE_REPO ?= jimu
 IMAGE_TAG = $(IMAGE_REPO):$(VERSION)
 LATEST_TAG = $(IMAGE_REPO):latest
+{{if .HasDockerfile}}DOCKERFILE ?= deploy/docker/Dockerfile
+{{end}}{{if .HasCompose}}COMPOSE_FILE ?= deploy/compose/docker-compose.yml
+COMPOSE_PROJECT_NAME ?= {{.ProjectName}}
+JIMU_SECRETS_DIR ?= $(CURDIR)/secrets
+COMPOSE = JIMU_SECRETS_DIR="$(JIMU_SECRETS_DIR)" docker compose --project-name $(COMPOSE_PROJECT_NAME) --project-directory $(CURDIR) -f $(COMPOSE_FILE)
+.NOTPARALLEL: up up-observability
+{{if .WithObservability}}COMPOSE_ALL_FILE ?= deploy/compose/compose.observability.yml
+COMPOSE_STACK = $(COMPOSE) -f $(COMPOSE_ALL_FILE)
+{{else}}COMPOSE_STACK = $(COMPOSE)
+{{end}}{{end}}
 # golangci-lint 版本：与框架 .github/workflows/ci.yml 的 GOLANGCI_LINT_VERSION 一致，
 # 使本地 make lint 与 CI 的 lint 结论含义相同。
 LINT_VERSION ?= v2.7.2
@@ -56,12 +72,51 @@ build-cli:
 	@mkdir -p $(BIN_DIR)
 	go build -ldflags "$(LDFLAGS)" -o $(CLI_BIN) $(CLI_PKG)
 
-## image: 构建版本镜像并标记 latest
-image:
-	docker build -t $(IMAGE_TAG) .
-	docker tag $(IMAGE_TAG) $(LATEST_TAG)
+{{if .HasCompose}}##@ Compose 生命周期
 
-##@ 数据库
+{{if .HasDatabase}}
+prepare-secrets:
+	@SECRETS_DIR="$(JIMU_SECRETS_DIR)" COMPOSE_PROJECT_NAME="$(COMPOSE_PROJECT_NAME)" \
+		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
+		./deploy/scripts/init-secrets.sh --no-legacy
+
+{{end}}{{if .HasDatabase}}## up: 初始化 Secret、构建并启动 Compose 服务
+up: prepare-secrets
+	$(COMPOSE) up -d --build
+{{else}}## up: 构建并启动 Compose 服务
+up:
+	$(COMPOSE) up -d --build
+{{end}}
+## down: 停止 Compose 服务（保留数据卷）
+down:
+	$(COMPOSE_STACK) down
+
+## logs: 跟踪服务端日志
+logs:
+	$(COMPOSE_STACK) logs -f server
+
+## status: 查看 Compose 服务状态
+status:
+	$(COMPOSE_STACK) ps
+
+{{if .WithObservability}}prepare-observability-secrets:
+	@SECRETS_DIR="$(JIMU_SECRETS_DIR)" COMPOSE_PROJECT_NAME="$(COMPOSE_PROJECT_NAME)" \
+		ALLOW_NEW_SECURITY_KEYS="$(ALLOW_NEW_SECURITY_KEYS)" FORCE="$(FORCE)" \
+		./deploy/scripts/init-secrets.sh --observability --no-legacy
+
+## up-observability: 初始化观测 Secret、启动 Compose 与观测栈
+up-observability:{{if .HasDatabase}} prepare-secrets{{end}} prepare-observability-secrets
+	$(COMPOSE_STACK) up -d --build
+	JIMU_SECRETS_DIR="$(JIMU_SECRETS_DIR)" COMPOSE_PROJECT_NAME="$(COMPOSE_PROJECT_NAME)" \
+		./deploy/scripts/observability.sh start
+
+{{end}}{{end}}{{if .HasDockerfile}}## image: 构建版本镜像并标记 latest
+image:
+	docker build -f $(DOCKERFILE) -t $(IMAGE_TAG) .
+	docker tag $(IMAGE_TAG) $(LATEST_TAG)
+{{end}}
+
+{{if .HasDatabase}}##@ 数据库
 
 ## migrate: 本地执行迁移
 migrate:
@@ -79,7 +134,7 @@ migrate-status:
 seed:
 	@$(CLI_RUN) seed
 
-##@ 质量与工具
+{{end}}##@ 质量与工具
 
 ## test: 运行测试
 test:
@@ -116,23 +171,24 @@ lint:
 		go vet ./...; \
 	fi
 
-## check-log-usage: 检查日志调用符合结构化规范（logcheck 静态分析：防粘连 R1 /
+{{if .HasLogcheck}}## check-log-usage: 检查日志调用符合结构化规范（logcheck 静态分析：防粘连 R1 /
 ## 禁动态 key R2 / 字段词汇表 R3 / 禁嵌套对象 R4；规则与 AGENTS.md 日志调用规范同步）
 check-log-usage:
 	@go run ./tools/logcheck "./internal/..." "./cmd/..." "./tools/..."
-
-## check-capabilities: 校验能力自描述（Owns）与迁移归属一致，并静态门禁驱动选择
+{{end}}{{if .HasCheckcapabilities}}## check-capabilities: 校验能力自描述（Owns）与迁移归属一致，并静态门禁驱动选择
 ##                      （可用集目录存在、核心零驱动、唯一形态选中集==import 闭包、驱动归属）
 check-capabilities:
 	@go run ./tools/checkcapabilities
+{{end}}
 
 ## clean: 清理构建产物
 clean:
 	rm -rf $(BIN_DIR)
+	rmdir logs 2>/dev/null || true
 	rm -f coverage.out coverage.html
 
 ## ci: 本地 CI 检查（无外部依赖部分）
-ci: fmt-check vet lint check-log-usage test check-capabilities{{if .HasAPIdocs}} swagger-check{{end}} build
+ci: fmt-check vet lint{{if .HasLogcheck}} check-log-usage{{end}} test{{if .HasCheckcapabilities}} check-capabilities{{end}}{{if .HasAPIdocs}} swagger-check{{end}} build
 	@echo "✅ All local CI checks passed"
 
 {{if .HasAPIdocs}}##@ API 文档

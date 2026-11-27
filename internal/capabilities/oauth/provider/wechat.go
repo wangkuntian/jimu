@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"jimu/internal/platform/httpclient"
+	"jimu/internal/contract"
 
 	"golang.org/x/oauth2"
 )
@@ -23,12 +23,12 @@ type WeChatConfig struct {
 // WeChatProvider 微信 OAuth 实现
 type WeChatProvider struct {
 	config      *oauth2.Config
-	client      *httpclient.Client
+	client      contract.HTTPClient
 	userInfoURL string // 未导出，测试可覆盖
 }
 
 // NewWeChatProvider 创建微信 Provider
-func NewWeChatProvider(cfg WeChatConfig, client *httpclient.Client) *WeChatProvider {
+func NewWeChatProvider(cfg WeChatConfig, client contract.HTTPClient) *WeChatProvider {
 	return &WeChatProvider{
 		config: &oauth2.Config{
 			ClientID:     cfg.ClientID,

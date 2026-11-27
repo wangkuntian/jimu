@@ -3,8 +3,10 @@ package generator
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"jimu/tools/generator/manifest"
@@ -47,10 +49,8 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 		"cmd/cli/main.go",
 		"internal/platform/http/server.go",
 		"internal/assembly/assembly.go",
-		"internal/capabilities/catalog/catalog.go",
 		"internal/app/container_nodb.go",
 		"internal/profiles/seed_nodb.go",
-		"Dockerfile",
 		"Makefile",
 		"go.mod",
 		".jimu/manifest.json",
@@ -59,30 +59,159 @@ func TestNewProjectMinimalPresetHasNoCapabilitiesOrServices(t *testing.T) {
 	}
 	for _, rel := range []string{
 		"internal/e2e",
+		"internal/app/container_runtime.go",
+		"internal/app/bootstrap_metrics.go",
+		"internal/platform/http/middleware/metrics.go",
+		"internal/platform/http/middleware/ratelimit.go",
+		"internal/platform/httpclient",
+		"internal/platform/reporter",
+		"internal/platform/scheduler",
+		"internal/platform/metrics",
 		"internal/platform/cache",
 		"internal/platform/authz",
+		"internal/platform/db",
+		"internal/assembly/portflow.go",
+		"internal/assembly/portflow_test.go",
+		"internal/capability/compose.go",
+		"internal/capability/diagnostic.go",
+		"internal/contract/client.go",
+		"internal/contract/ports.go",
+		"internal/contract/systemroles.go",
+		"internal/assembly/context_auth.go",
+		"internal/assembly/context_ports_test.go",
+		"internal/platform/http/middleware/admin_auth.go",
+		"internal/platform/http/middleware/signature.go",
+		"internal/platform/http/middleware/validate.go",
 		"internal/app/container_db.go",
 		"internal/platform/scheduler/mysql_store.go",
 		"internal/profiles/seed_db.go",
 		"internal/capabilities/user",
+		"internal/capabilities/catalog",
+		"deploy/docker/Dockerfile",
+		"Dockerfile",
 		"docker-compose.yml",
 		"deploy/backup",
-		"deploy/openobserve",
-		"deploy/otel-collector.yaml",
+		"deploy/observability",
+		"deploy/observability/otel-collector.yaml",
 		"deploy/k8s/config-files.yaml",
-		"deploy/k8s/openobserve.yaml",
-		"deploy/k8s/otel-collector.yaml",
+		"deploy/k8s/observability/openobserve.yaml",
+		"deploy/k8s/observability/otel-collector.yaml",
 		"deploy/helm/templates/secret.yaml",
 		"scripts",
 	} {
 		_, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
 		assert.True(t, os.IsNotExist(statErr), "minimal must not contain %s", rel)
 	}
+	manifestDoc, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, manifest.GenerationRuntimeLean, manifestDoc.Generation.Runtime)
 	config, err := os.ReadFile(filepath.Join(dir, "configs", "app.yaml"))
 	require.NoError(t, err)
 	assert.NotContains(t, string(config), "\ndb:")
 	assert.NotContains(t, string(config), "\nredis:")
+	assert.NotContains(t, string(config), "\nid:")
+	assert.NotContains(t, string(config), "\nratelimit:")
+	assert.NotContains(t, string(config), "\ncapabilities:")
+	assert.NotContains(t, string(config), "\nhttp_client:")
+	assert.NotContains(t, string(config), "\nerror_reporting:")
+	assert.NotContains(t, string(config), "\n  idempotency_enabled:")
+	assert.NotContains(t, string(config), "\n  idempotency_ttl_sec:")
+	assert.NotContains(t, string(config), "\n  rate_limit_rate:")
+	assert.NotContains(t, string(config), "\n  rate_limit_burst:")
+	makefile := string(readFileForTest(t, filepath.Join(dir, "Makefile")))
+	for _, target := range []string{"\nmigrate:", "\nmigrate-down:", "\nmigrate-status:", "\nseed:", "##@ 数据库"} {
+		assert.NotContains(t, makefile, target, "minimal must not expose database targets")
+	}
+	errorsSource := string(readFileForTest(t, filepath.Join(dir, "internal/shared/errors/errors.go")))
+	assert.NotContains(t, errorsSource, "CodeUserNotFound")
+	assert.NotContains(t, errorsSource, "CodeTenantNotFound")
+	i18nSource := string(readFileForTest(t, filepath.Join(dir, "internal/shared/i18n/i18n.go")))
+	assert.NotContains(t, i18nSource, "tenant_not_found")
+	responseSource := string(readFileForTest(t, filepath.Join(dir, "internal/shared/response/response.go")))
+	assert.NotContains(t, responseSource, "CodeQuotaExceeded")
+	validateSource := string(readFileForTest(t, filepath.Join(dir, "internal/config/validate.go")))
+	assert.NotContains(t, validateSource, "invalid id.worker_id")
+	for _, rel := range []string{
+		"internal/shared/errors/capability.go",
+		"internal/shared/errors/capability_test.go",
+		"internal/shared/i18n/capability.go",
+		"internal/shared/i18n/capability_test.go",
+		"internal/shared/response/capability.go",
+		"internal/shared/response/capability_test.go",
+	} {
+		assert.NoFileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "minimal must not contain %s", rel)
+	}
 	assertManifestProvenance(t, dir, "minimal")
+}
+
+func TestNewProjectMinimalCanSelectStandardRuntime(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "min")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: "minimal", Runtime: manifest.GenerationRuntimeStandard, Module: "example.com/min",
+	})
+	require.NoError(t, err)
+
+	manifestDoc, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, manifest.GenerationRuntimeStandard, manifestDoc.Generation.Runtime)
+	assert.FileExists(t, filepath.Join(dir, "internal/app/container_runtime.go"))
+	assert.FileExists(t, filepath.Join(dir, "internal/app/bootstrap_metrics.go"))
+	assert.FileExists(t, filepath.Join(dir, "internal/platform/http/middleware/metrics.go"))
+	assert.FileExists(t, filepath.Join(dir, "internal/platform/http/middleware/ratelimit.go"))
+	assert.NoFileExists(t, filepath.Join(dir, "internal/app/container_runtime_empty.go"))
+}
+
+func TestNewProjectMinimalComposeOmitsDatabaseAndObservabilityScripts(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "minimal-compose")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: "minimal", Deploy: "compose", Module: "example.com/minimal-compose", NoTidy: true,
+	})
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, filepath.Join(dir, "deploy/scripts/init-secrets.sh"))
+	for _, rel := range []string{
+		"deploy/scripts/backup.sh",
+		"deploy/scripts/restore.sh",
+		"deploy/scripts/db_common.sh",
+		"deploy/scripts/install_db_clients.sh",
+		"deploy/scripts/observability.sh",
+	} {
+		assert.NoFileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "minimal must not contain %s", rel)
+	}
+	assert.NotContains(t, string(readFileForTest(t, filepath.Join(dir, "deploy/compose/docker-compose.yml"))), "./secrets")
+	assert.NotContains(t, string(readFileForTest(t, filepath.Join(dir, "deploy/docker/Dockerfile"))), "COPY secrets")
+	makefile := string(readFileForTest(t, filepath.Join(dir, "Makefile")))
+	assert.Contains(t, makefile, "COMPOSE_PROJECT_NAME ?= minimal-compose")
+	readme := string(readFileForTest(t, filepath.Join(dir, "README.md")))
+	assert.Contains(t, readme, "# minimal-compose")
+	assert.Contains(t, readme, "make up")
+	assert.NoFileExists(t, filepath.Join(dir, "conf/rbac_model.conf"))
+	dockerfile := string(readFileForTest(t, filepath.Join(dir, "deploy/docker/Dockerfile")))
+	assert.NotContains(t, dockerfile, "COPY conf/")
+	assert.Contains(t, dockerfile, "FROM golang:1.26.11-alpine")
+	assert.FileExists(t, filepath.Join(dir, ".dockerignore"))
+}
+
+func TestNewProjectMinimalObservabilityScriptFollowsDeployComponent(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "minimal-observability")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: "minimal", Deploy: "compose,observability", Module: "example.com/minimal-observability", NoTidy: true,
+	})
+	require.NoError(t, err)
+
+	document, err := workspace.LoadProjectManifest(dir)
+	require.NoError(t, err)
+	assert.Equal(t, manifest.GenerationRuntimeStandard, document.Generation.Runtime,
+		"observability 需要 standard 运行时的 OTel/reporter/metrics")
+	assert.FileExists(t, filepath.Join(dir, "deploy/scripts/init-secrets.sh"))
+	assert.FileExists(t, filepath.Join(dir, "deploy/scripts/observability.sh"))
+	assert.FileExists(t, filepath.Join(dir, "deploy/compose/compose.observability.yml"))
+	assert.NoFileExists(t, filepath.Join(dir, "deploy/scripts/backup.sh"))
+	makefile := string(readFileForTest(t, filepath.Join(dir, "Makefile")))
+	assert.Contains(t, makefile, "prepare-observability-secrets:")
+	assert.Contains(t, makefile, "up-observability: prepare-observability-secrets")
+	assert.NotContains(t, makefile, "\nprepare-secrets:")
+	assert.Contains(t, string(readFileForTest(t, filepath.Join(dir, "README.md"))), "make up-observability")
 }
 
 func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
@@ -104,6 +233,7 @@ func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 	} {
 		assert.DirExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "missing auth artifact %s", rel)
 	}
+	assert.FileExists(t, filepath.Join(dir, "conf/rbac_model.conf"))
 	assert.NoDirExists(t, filepath.Join(dir, "internal/capabilities/auth/memory"),
 		"auth preset selects redis only; memory fallback is not compiled")
 	for _, rel := range []string{
@@ -112,24 +242,174 @@ func TestNewProjectAuthPresetCarriesAuthCapabilities(t *testing.T) {
 		"internal/app/container_db.go",
 		"internal/platform/scheduler/mysql_store.go",
 		"internal/profiles/seed_db.go",
+		"deploy/compose/docker-compose.yml",
 		"deploy/backup/Dockerfile",
-		"deploy/helm/templates/secret.yaml",
-		"deploy/k8s/backup-cronjob.yaml",
-		"scripts/backup.sh",
+		"deploy/scripts/backup.sh",
 	} {
 		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)), "missing auth artifact %s", rel)
 	}
 	for _, rel := range []string{
-		"deploy/openobserve",
-		"deploy/otel-collector.yaml",
-		"deploy/k8s/openobserve.yaml",
-		"deploy/k8s/otel-collector.yaml",
+		"deploy/observability",
+		"deploy/observability/otel-collector.yaml",
+		"deploy/k8s/observability/openobserve.yaml",
+		"deploy/k8s/observability/otel-collector.yaml",
 		"deploy/k8s/config-files.yaml",
+		"scripts",
+		"deploy/helm",
+		"deploy/k8s",
 	} {
 		_, statErr := os.Stat(filepath.Join(dir, filepath.FromSlash(rel)))
 		assert.True(t, os.IsNotExist(statErr), "auth must not contain %s", rel)
 	}
+	compose := readFileForTest(t, filepath.Join(dir, "deploy/compose/docker-compose.yml"))
+	assert.Contains(t, string(compose), "mariadb:")
+	assert.Contains(t, string(compose), "jimu-init:")
+	assert.Contains(t, string(compose), "redis:")
+	assert.Contains(t, string(compose), "dockerfile: deploy/docker/Dockerfile")
+	assert.Contains(t, string(compose), "./auth migrate up")
+	assert.Contains(t, string(compose), "volumes:\n  auth-mariadb-data:")
+	assert.Contains(t, string(compose), "auth-redis-data:")
+	assert.NoFileExists(t, filepath.Join(dir, "deploy/compose/compose.observability.yml"))
+	dockerfile := string(readFileForTest(t, filepath.Join(dir, "deploy/docker/Dockerfile")))
+	assert.Contains(t, dockerfile, "COPY conf/")
 	assertManifestProvenance(t, dir, "auth")
+}
+
+func TestNewProjectCLIUIDefaultsAndDependencyIsolation(t *testing.T) {
+	tests := []struct {
+		name  string
+		opts  NewOptions
+		cliUI string
+		tui   bool
+	}{
+		{name: "minimal-default", opts: NewOptions{Template: "minimal"}, cliUI: manifest.GenerationCLIUIDirect},
+		{name: "auth-default", opts: NewOptions{Template: "auth"}, cliUI: manifest.GenerationCLIUIBoth, tui: true},
+		{name: "full-default", opts: NewOptions{Template: "full"}, cliUI: manifest.GenerationCLIUIBoth, tui: true},
+		{name: "auth-direct", opts: NewOptions{Template: "auth", CLIUI: "direct"}, cliUI: manifest.GenerationCLIUIDirect},
+		{name: "minimal-both", opts: NewOptions{Template: "minimal", CLIUI: "both"}, cliUI: manifest.GenerationCLIUIBoth, tui: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), tt.name)
+			tt.opts.Dir = dir
+			tt.opts.Module = "example.com/" + tt.name
+			tt.opts.NoTidy = true
+			_, err := newProjectForTest(t, tt.opts)
+			require.NoError(t, err)
+
+			doc, err := workspace.LoadProjectManifest(dir)
+			require.NoError(t, err)
+			require.Equal(t, tt.cliUI, doc.Generation.CLIUI)
+			if tt.tui {
+				assert.FileExists(t, filepath.Join(dir, "cmd/cli/tui.go"))
+				tuiSource := string(readFileForTest(t, filepath.Join(dir, "cmd/cli/tui.go")))
+				assert.Contains(t, tuiSource, `Bool("no-color"`)
+				assert.Contains(t, tuiSource, "configureProjectTUIStyles")
+			} else {
+				assert.NoFileExists(t, filepath.Join(dir, "cmd/cli/tui.go"))
+			}
+
+			goMod, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+			require.NoError(t, err)
+			assert.Equal(t, tt.tui, strings.Contains(string(goMod), "bubbletea"))
+			serverDeps, err := goListProjectDeps(dir, "./cmd/server")
+			require.NoError(t, err)
+			assert.NotContains(t, serverDeps, "bubbletea")
+			if tt.tui {
+				cliDeps, err := goListProjectDeps(dir, "./cmd/cli")
+				require.NoError(t, err)
+				assert.Contains(t, cliDeps, "bubbletea")
+			}
+		})
+	}
+}
+
+func goListProjectDeps(dir, pkg string) (string, error) {
+	cmd := exec.Command("go", "list", "-deps", pkg)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func TestNewProjectComposeWithoutServicesOmitsMariadbAndRedis(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "compose")
+	_, err := newProjectForTest(t, NewOptions{
+		Dir: dir, Template: "minimal", Deploy: "compose", Module: "example.com/compose", NoTidy: true,
+	})
+	require.NoError(t, err)
+
+	compose := string(readFileForTest(t, filepath.Join(dir, "deploy/compose/docker-compose.yml")))
+	assert.NotContains(t, compose, "mariadb:")
+	assert.NotContains(t, compose, "jimu-init:")
+	assert.NotContains(t, compose, "redis:")
+	assert.Contains(t, compose, "dockerfile: deploy/docker/Dockerfile")
+}
+
+func TestNewProjectDeployComponentsControlBuildArtifacts(t *testing.T) {
+	tests := []struct {
+		name       string
+		deploy     string
+		dockerfile bool
+		compose    bool
+		k8s        bool
+	}{
+		{name: "none", deploy: "none"},
+		{name: "compose", deploy: "compose", dockerfile: true, compose: true},
+		{name: "k8s", deploy: "k8s", dockerfile: true, k8s: true},
+		{name: "observability", deploy: "observability"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), tt.name)
+			_, err := newProjectForTest(t, NewOptions{
+				Dir: dir, Template: "minimal", Deploy: tt.deploy, Module: "example.com/" + tt.name, NoTidy: true,
+			})
+			require.NoError(t, err)
+
+			assertFileState(t, filepath.Join(dir, "deploy/docker/Dockerfile"), tt.dockerfile)
+			assertFileState(t, filepath.Join(dir, "deploy/compose/docker-compose.yml"), tt.compose)
+			assertFileState(t, filepath.Join(dir, "deploy/k8s"), tt.k8s)
+		})
+	}
+}
+
+func TestNewProjectObservabilityAssetsFollowTargets(t *testing.T) {
+	tests := []struct {
+		name       string
+		deploy     string
+		k8sAsset   bool
+		helmAsset  bool
+		composeAll bool
+	}{
+		{name: "observability-only", deploy: "observability"},
+		{name: "k8s", deploy: "k8s,observability", k8sAsset: true},
+		{name: "helm", deploy: "helm,observability", helmAsset: true},
+		{name: "compose", deploy: "compose,observability", composeAll: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), tt.name)
+			_, err := newProjectForTest(t, NewOptions{
+				Dir: dir, Template: "minimal", Deploy: tt.deploy, Module: "example.com/" + tt.name, NoTidy: true,
+			})
+			require.NoError(t, err)
+
+			assertFileState(t, filepath.Join(dir, "deploy/observability/otel-collector.yaml"), true)
+			assertFileState(t, filepath.Join(dir, "deploy/k8s/observability/openobserve.yaml"), tt.k8sAsset)
+			assertFileState(t, filepath.Join(dir, "deploy/helm/templates/observability/openobserve.yaml"), tt.helmAsset)
+			assertFileState(t, filepath.Join(dir, "deploy/compose/compose.observability.yml"), tt.composeAll)
+		})
+	}
+}
+
+func assertFileState(t *testing.T, path string, want bool) {
+	t.Helper()
+	_, err := os.Stat(path)
+	if want {
+		assert.NoError(t, err, "missing %s", path)
+		return
+	}
+	assert.True(t, os.IsNotExist(err), "%s must be absent", path)
 }
 
 func TestNewProjectAuthMemoryDriverNeedsNoRedis(t *testing.T) {
@@ -168,13 +448,13 @@ func TestNewProjectFullPresetCarriesEveryCapability(t *testing.T) {
 		assert.DirExists(t, filepath.Join(dir, filepath.FromSlash(rel)),
 			"full must ship driver %s (--with default would drop it)", rel)
 	}
-	assert.DirExists(t, filepath.Join(dir, "deploy", "openobserve"),
-		"full must ship observability asset deploy/openobserve")
+	assert.DirExists(t, filepath.Join(dir, "deploy", "observability"),
+		"full must ship observability asset deploy/observability")
 	for _, rel := range []string{
-		"deploy/otel-collector.yaml",
-		"deploy/k8s/openobserve.yaml",
-		"deploy/k8s/otel-collector.yaml",
-		"scripts/backup.sh",
+		"deploy/observability/otel-collector.yaml",
+		"deploy/k8s/observability/openobserve.yaml",
+		"deploy/k8s/observability/otel-collector.yaml",
+		"deploy/scripts/backup.sh",
 	} {
 		assert.FileExists(t, filepath.Join(dir, filepath.FromSlash(rel)),
 			"full must ship observability asset %s", rel)
@@ -199,7 +479,7 @@ func TestNewProjectFullPresetFollowsPostgresSearchDriver(t *testing.T) {
 func TestNewProjectAuthPresetFollowsPostgresDriver(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "auth-pg")
 	_, err := newProjectForTest(t, NewOptions{
-		Dir: dir, Template: "auth", Module: "example.com/auth-pg", DBDriver: "postgres", NoTidy: true,
+		Dir: dir, Template: "auth", Deploy: "all", Module: "example.com/auth-pg", DBDriver: "postgres", NoTidy: true,
 	})
 	require.NoError(t, err)
 	assert.DirExists(t, filepath.Join(dir, "internal/capabilities/user/migrations/postgres"))

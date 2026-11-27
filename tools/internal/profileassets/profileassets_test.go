@@ -17,11 +17,14 @@ func TestOwnerUsesLongestPrefix(t *testing.T) {
 	}{
 		{"deploy/k8s/deployment.yaml", "group:ops"},
 		{"deploy/k8s/backup-cronjob.yaml", "group:ops"},
-		{"deploy/k8s/otel-collector.yaml", "group:observability"},
-		{"deploy/k8s/openobserve.yaml", "group:observability"},
+		{"deploy/k8s/observability/otel-collector.yaml", "group:observability"},
+		{"deploy/k8s/observability/openobserve.yaml", "group:observability"},
 		{"deploy/helm/templates/deployment.yaml", "group:ops"},
-		{"deploy/helm/templates/otel-collector.yaml", "group:observability"},
-		{"deploy/openobserve/alerts/jimu_http_5xx_rate.json", "group:observability"},
+		{"deploy/helm/templates/observability/otel-collector.yaml", "group:observability"},
+		{"deploy/observability/openobserve/alerts/jimu_http_5xx_rate.json", "group:observability"},
+		{"deploy/docker/Dockerfile", "group:ops"},
+		{"deploy/compose/docker-compose.yml", "group:ops"},
+		{"deploy/scripts/backup.sh", "group:ops"},
 		{"deploy/backup/Dockerfile", "group:ops"},
 		{"docs/openapi/swagger.json", "cap:apidocs"},
 	}
@@ -60,8 +63,8 @@ func TestOwnerInRejectsEqualLengthTie(t *testing.T) {
 	assert.False(t, ok)
 
 	// 真正的最长前缀仍然获胜（不同长度不构成并列）。
-	table["group:observability"] = []string{"deploy/k8s/openobserve.yaml"}
-	owner, ok := OwnerIn(table, "deploy/k8s/openobserve.yaml")
+	table["group:observability"] = []string{"deploy/k8s/observability/openobserve.yaml"}
+	owner, ok := OwnerIn(table, "deploy/k8s/observability/openobserve.yaml")
 	require.True(t, ok)
 	assert.Equal(t, "group:observability", owner)
 	owner, ok = OwnerIn(table, "deploy/k8s/deployment.yaml")
@@ -75,9 +78,9 @@ func TestForProfileIncludesCapabilityAssetsAndCoreGroups(t *testing.T) {
 	for _, profile := range []string{"full", "minimal"} {
 		got, err := ForProfile(profile)
 		require.NoErrorf(t, err, "ForProfile(%q)", profile)
-		assert.Containsf(t, got, "deploy/openobserve", "%s 应含内核观测资产组", profile)
+		assert.Containsf(t, got, "deploy/observability", "%s 应含内核观测资产组", profile)
 		assert.Containsf(t, got, "deploy/k8s", "%s 应含内核运维资产组", profile)
-		assert.Containsf(t, got, "deploy/helm/templates/otel-collector.yaml", "%s 应含观测清单", profile)
+		assert.Containsf(t, got, "deploy/helm/templates/observability", "%s 应含观测清单", profile)
 	}
 
 	full, err := ForProfile("full")
@@ -96,7 +99,7 @@ func TestForProfileRejectsUnknownProfile(t *testing.T) {
 	require.ErrorContains(t, err, `unknown profile "ghost"`)
 }
 
-// 真实仓库的资产分割必须与设计一致：48 文件 = cap:apidocs 3 / group:observability 22 / group:ops 23。
+// 真实仓库的资产分割必须与设计一致：57 文件 = cap:apidocs 3 / group:observability 22 / group:ops 32。
 func TestOwnershipPartitionsTheRepo(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
 	require.NoError(t, err)
@@ -111,8 +114,8 @@ func TestOwnershipPartitionsTheRepo(t *testing.T) {
 	}
 	assert.Equal(t, 3, counts["cap:apidocs"])
 	assert.Equal(t, 22, counts["group:observability"])
-	assert.Equal(t, 23, counts["group:ops"])
-	assert.Len(t, got, 48)
+	assert.Equal(t, 32, counts["group:ops"])
+	assert.Len(t, got, 57)
 	assert.NotContains(t, got, "configs/app.yaml", "configs 不纳入资产根")
 }
 

@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/dataops/domain"
+	"jimu/internal/contract"
 	"jimu/internal/platform/logger"
-	"jimu/internal/platform/scheduler"
 	"jimu/internal/shared/dbpurge"
 
 	"gorm.io/gorm"
@@ -24,16 +24,16 @@ func dataopsRetentionRules(cfg RetentionConfig) []dbpurge.Rule {
 	}}
 }
 
-func newDataopsRetentionJob(db *gorm.DB, cfg RetentionConfig, log *logger.Logger) (scheduler.Job, bool) {
+func newDataopsRetentionJob(db *gorm.DB, cfg RetentionConfig, log *logger.Logger) (contract.Job, bool) {
 	if db == nil || !cfg.Enabled {
-		return scheduler.Job{}, false
+		return contract.Job{}, false
 	}
 	spec := strings.TrimSpace(cfg.Cron)
 	if spec == "" {
 		spec = "30 3 * * *"
 	}
 	service := dbpurge.New(db, cfg.BatchSize)
-	return scheduler.Job{
+	return contract.Job{
 		ID:   "dataops_retention",
 		Name: "Import Job Retention",
 		Spec: spec,

@@ -76,7 +76,28 @@ cd demo && make dev
 - `GET http://127.0.0.1:9090/livez`
 - `GET http://127.0.0.1:9090/readyz`
 
-`minimal` 生成项目不需要数据库、Redis 或其他外部服务。
+`minimal` 生成项目不需要数据库、Redis 或其他外部服务。无数据库项目不会复制数据库
+SQL 测试夹具，CLI 只保留 `version` 与 `config` 命令；`conf/rbac_model.conf` 也只在
+`access` 能力存在时生成。
+
+默认只保留选中运行时包可达的源码与测试；需要调整生成面时使用
+`--tests=selected|all|none` 和 `--tools=auto|all|none`。`--no-tidy` 只跳过最后一次
+`go mod tidy`，运行时闭包裁剪、构建和自检仍会执行。
+
+内核运行面由 `--runtime=lean|standard` 控制：`lean` 不编入调度器、出站 HTTP 客户端、
+错误上报器和 Prometheus 指标，适合 0 能力的 `minimal` 项目；`standard` 保留这些内核组件。
+`minimal` 默认 `lean`，`auth`/`full`/`--with` 默认 `standard`。`lean` 只能用于没有能力的
+项目；显式 `--deploy=observability` 时默认运行时自动提升为 `standard`，显式
+`--runtime=lean` 仍会被拒绝。后续用 `capability add` 添加能力时也会自动提升为
+`standard`。
+
+部署资产由 `--deploy` 控制：`compose,k8s,helm,observability` 可组合，`all` 与 `none`
+是快捷值。`minimal` 默认不生成部署资产，`auth` 默认 `compose`，`full` 与 `--with`
+默认 `all`；MySQL 能力会自动带上备份资产。`--deploy=none` 不生成 Dockerfile、compose、
+K8s/Helm 或备份资产。
+未选择数据库时，`compose`/`k8s`/`helm` 只复制 `init-secrets.sh`，不会带入
+`backup.sh`/`restore.sh` 等数据库脚本；`observability.sh` 只在 `--deploy=observability`
+时生成。
 
 生成项目默认编译 MySQL 驱动。需要 PostgreSQL 时加 `--db=postgres`：
 只编译所选驱动与对应方言的迁移，另一套驱动不会进入产物。
@@ -96,9 +117,29 @@ make seed
 make dev
 ```
 
-`auth` 预设不生成 `docker-compose.yml`；数据库与 Redis 需自行提供，连接信息通过 `DB_*`
-与 `REDIS_*` 环境变量覆盖。首次启动前运行 `make migrate` 与 `make seed`，
-seed 会读取 `ADMIN_PASSWORD`（或 `ADMIN_PASSWORD_FILE`）创建管理员账号。
+`auth` 预设默认生成 Compose 编排，位于 `deploy/compose/`；`make up` 会构建镜像并启动
+服务。数据库与 Redis 连接信息通过 `DB_*` 与 `REDIS_*` 环境变量覆盖。首次启动前运行
+`make migrate` 与 `make seed`，seed 会读取 `ADMIN_PASSWORD`（或 `ADMIN_PASSWORD_FILE`）
+创建管理员账号。
+
+## 交互模式与颜色
+
+`jimu` 同时提供直接命令和 TUI：在交互式终端执行无参数 `jimu`、无目录的 `jimu new`，
+或显式执行 `jimu tui` 会打开 TUI；带参数的命令仍走直接模式。非 TTY、CI 和重定向输出
+永不启动 TUI。`--no-tui` 或 `JIMU_NO_TUI=1` 可强制直接模式。
+
+`jimu new` 的 TUI 是三步向导：选择模板、填写项目信息、确认生成。首屏只要求选择起点，
+模板列表支持直接输入搜索，
+目录和模块输入有焦点条、闪烁光标与示例提示；数据库、测试、工具、运行时用左右键单选，部署组件用
+空格多选；这些高级选项默认收进“高级设置”；
+生成过程中显示动画进度，成功后短暂展示结果并自动返回 shell。
+
+生成项目由 `jimu new --cli=both|direct` 选择 CLI 形态：`both` 同时编入直接命令和 TUI，
+`direct` 不引入 Bubble Tea。`minimal` 默认 `direct`，`auth`、`full` 与 `--with` 默认
+`both`。需要最小依赖时对 `auth` 项目使用 `--cli=direct`。
+
+TUI 默认使用颜色与符号双重区分状态。设置 `--no-color` 或非空 `NO_COLOR` 后，TUI
+不再输出 ANSI 转义序列；直接命令在非 TTY 环境下也不输出 ANSI。
 
 ## 检查与升级
 
@@ -147,6 +188,12 @@ make check
 
 ```bash
 make clean-room-e2e
+```
+
+生成产物审计（minimal + auth，检查构建、Compose 与 Secret 接线）：
+
+```bash
+make test-scaffold-audit
 ```
 
 贡献流程见[CONTRIBUTING](docs/CONTRIBUTING.md)；默认分支、发布分支和 tag 规则以该文档为准。

@@ -8,7 +8,6 @@ import (
 	"jimu/internal/contract"
 	"jimu/internal/platform/event"
 	"jimu/internal/platform/logger"
-	"jimu/internal/platform/scheduler"
 )
 
 // Wire 装配 outbox 能力：构造事件存储与发布器，把 *Outbox 暴露为端口供 user/auth 写入
@@ -35,7 +34,7 @@ func Wire(ctx *assembly.Context) (contract.Module, error) {
 	if err := ctx.Provide(PortName, processor); err != nil {
 		return nil, fmt.Errorf("provide outbox port: %w", err)
 	}
-	if err := ctx.RegisterJob(scheduler.Job{ID: "outbox_process", Name: "Process Outbox Events", Spec: "@every 10s", Run: func() {
+	if err := ctx.RegisterJob(contract.Job{ID: "outbox_process", Name: "Process Outbox Events", Spec: "@every 10s", Run: func() {
 		n, err := processor.Process(context.Background(), 100)
 		if err != nil {
 			ctx.Logger().Errorw("outbox process error", "error", err.Error())

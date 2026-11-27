@@ -185,6 +185,7 @@ func rewriteDeployIdentifiers(content, name string) string {
 		{"existingSecret: jimu-secrets", "existingSecret: " + name + "-secrets"},
 		{"claimName: jimu-db-backups", "claimName: " + name + "-db-backups"},
 		{"command: [\"./jimu\", \"migrate\", \"up\"]", "command: [\"./" + name + "\", \"migrate\", \"up\"]"},
+		{"command: /bin/sh -c './jimu migrate up && ./jimu seed'", "command: /bin/sh -c './" + name + " migrate up && ./" + name + " seed'"},
 		{"registry.example.com/jimu:", "registry.example.com/" + name + ":"},
 		{"registry.example.com/jimu-backup:", "registry.example.com/" + name + "-backup:"},
 		{"mariadb.jimu.svc.cluster.local", "mariadb." + name + ".svc.cluster.local"},

@@ -21,6 +21,15 @@ func validDocument() manifest.Document {
 			Validity:        manifest.CompositionValidityValid,
 			Support:         manifest.CompositionSupportExperimental,
 		},
+		Generation: &manifest.Generation{
+			RuntimeClosure: false,
+			Tests:          manifest.GenerationTestsSelected,
+			ToolsMode:      manifest.GenerationToolsNone,
+			ToolsResolved:  []string{},
+			Deploy:         []string{},
+			CLI:            manifest.GenerationCLIMinimal,
+			CLIUI:          manifest.GenerationCLIUIDirect,
+		},
 		Copy: []manifest.CopyAction{
 			{Source: "z", Destination: "z", Include: []string{}, Exclude: []string{}},
 			{Source: "a", Destination: "a", Include: []string{}, Exclude: []string{}},

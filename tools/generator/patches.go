@@ -13,7 +13,6 @@ var copyTools = []string{
 	"tools/internal/profileoverlay",
 	"tools/internal/profileassets",
 	"tools/internal/heavydeps",
-	"tools/internal/projectmetrics",
 	"tools/profileoverlay",
 	"tools/profileassets",
 	"tools/checkcapabilities",

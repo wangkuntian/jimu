@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"jimu/internal/capabilities/queue/domain"
+	"jimu/internal/contract"
 	"jimu/internal/platform/logger"
-	"jimu/internal/platform/scheduler"
 	"jimu/internal/shared/dbpurge"
 
 	"gorm.io/gorm"
@@ -42,16 +42,16 @@ func queueRetentionRules(cfg RetentionConfig) []dbpurge.Rule {
 	}
 }
 
-func newQueueRetentionJob(db *gorm.DB, cfg RetentionConfig, log *logger.Logger) (scheduler.Job, bool) {
+func newQueueRetentionJob(db *gorm.DB, cfg RetentionConfig, log *logger.Logger) (contract.Job, bool) {
 	if db == nil || !cfg.Enabled {
-		return scheduler.Job{}, false
+		return contract.Job{}, false
 	}
 	spec := cfg.Cron
 	if spec == "" {
 		spec = "30 3 * * *"
 	}
 	service := dbpurge.New(db, cfg.BatchSize)
-	return scheduler.Job{
+	return contract.Job{
 		ID:   "queue_retention",
 		Name: "Queue History Retention",
 		Spec: spec,

@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 
+	"jimu/internal/cli/actions"
+	"jimu/internal/cli/tui"
 	"jimu/internal/templatesource"
 	"jimu/tools/generator"
 
@@ -44,27 +46,31 @@ manifest 事务，任一失败按原字节回滚，不留半成品。
 auto-added 语义会保留，支持级别保持 experimental。
 能力已在 catalog entries 里时用 --force 才允许重建。预设（minimal/auth/full）是裁剪起点，
 可以继续追加能力；带驱动的能力用 --driver 指定实现。`,
-		Args: cobra.ExactArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 && tuiAvailable(cmd) {
+				return nil
+			}
+			return cobra.ExactArgs(1)(cmd, args)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var opts generator.AddOptions
-			opts.Name = args[0]
-			opts.Driver, _ = cmd.Flags().GetString("driver")
-			opts.Dir, _ = cmd.Flags().GetString("dir")
-			opts.Module, _ = cmd.Flags().GetString("module")
-			opts.Force, _ = cmd.Flags().GetBool("force")
-			opts.DryRun, _ = cmd.Flags().GetBool("dry-run")
+			if len(args) == 0 {
+				return runTUI(cmd, tui.ScreenAdd)
+			}
 			source, cleanup, err := resolveSource(cmd, resolve)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = cleanup() }()
-			opts.From = source.Root
-			opts.Framework = source.Framework
-			res, err := generator.AddCapability(opts)
+			input := actions.AddInput{
+				Name: args[0], Driver: flagString(cmd, "driver"), Dir: flagString(cmd, "dir"),
+				Module: flagString(cmd, "module"), SourceRoot: source.Root, Framework: source.Framework,
+				Force: flagBool(cmd, "force"), DryRun: flagBool(cmd, "dry-run"),
+			}
+			res, err := actions.RunAddCapability(cmd.Context(), input)
 			if err != nil {
 				return err
 			}
-			printAddPlan(cmd.OutOrStdout(), res, opts.DryRun)
+			printAddPlan(cmd.OutOrStdout(), res, input.DryRun)
 			return nil
 		},
 	}
